@@ -1,5 +1,5 @@
 // One document's read surface, as facts (Docs handoff Part 2 §6–§8;
-// issue #821).
+// #821).
 //
 // `DocumentRead` is ONE route that forks by kind — "the fork is a fact about
 // the document, not two places" (navigation.ts). The fork itself lives here,
@@ -37,13 +37,13 @@ export function readSurfaceFor(doc: DocFields): ReadSurface {
   return "facts";
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Inline text bodies, decoded without `atob` (Hermes ships neither `atob`
 // nor a guaranteed TextDecoder). The vault mints text content as
 // `data:text/…;charset=utf-8,` + encodeURIComponent (blob/mint.ts), so the
 // percent path is the real one; the base64 branch exists for foreign data
 // URIs and decodes through percent-escapes so multi-byte UTF-8 survives.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -106,12 +106,12 @@ export function docBytesUrl(
   )}/${encodeURIComponent(doc.content_id)}`;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The reading view's status sentence (§6): `Version 7 · edited two hours ago`.
 // The sample's third clause — "only you have opened this" — is WITHHELD:
 // nothing in this product records an opening (that is a design boundary, not
 // a gap), so no surface may claim to know who has.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
@@ -154,10 +154,10 @@ export function readStatus(
   return clauses.join(" · ");
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The facts panel (§7) — every row a replica fact, and the two rows the
 // phone cannot fill are absent with the absence explained by the screen.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface FactRow {
   key: string;

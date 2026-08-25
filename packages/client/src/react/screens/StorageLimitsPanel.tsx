@@ -16,17 +16,17 @@ import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./StorageLimitsPanel.module.css";
 
-// Capacity → the ledger limit (issue #544).
+// Capacity → the ledger limit (#544).
 //
-// ONE LIMIT, because only one of them is a limit. The panel used to offer two
-// side by side, in identical form, with the copy carrying the whole difference:
+// ONE LIMIT, because only one of them is a limit. Offering two side by side,
+// in identical form, leaves the copy carrying the whole difference:
 //
 //   Disk budget  — warn-only. Nothing was ever blocked; setting it degraded a
 //                  health component and turned this page amber, then red.
 //   Ledger limit — actuating. It makes conversation/audit archival run early
 //                  and reach further back. Archival seals cold rows into the
 //                  content-addressed store; the delete half is already gated
-//                  behind proven custody (issue #438), and it never reaches
+//                  behind proven custody (#438), and it never reaches
 //                  inside the last 7 days.
 //
 // A control that looks exactly like a ceiling and is not one is worse than no
@@ -37,10 +37,10 @@ import styles from "./StorageLimitsPanel.module.css";
 // that can unset a stored value is a one-way door, and a warning threshold
 // somebody set once and can no longer clear is worse again.
 //
-// NO SECTION OF ITS OWN. "Limits" was a second head under Capacity restating
-// the same subject — how much room there is, and where the line is — as though
-// it were a different question, and on a read-only seat it was a whole bordered
-// card whose entire content was the word "Off" twice.
+// NO SECTION OF ITS OWN. A "Limits" head under Capacity is a second head
+// restating the same subject — how much room there is, and where the line is —
+// as though it were a different question, and on a read-only seat a whole
+// bordered card whose entire content is the word "Off" twice.
 
 /** Presets, in bytes. Chosen to be recognisable rather than round in binary —
  *  the owner is thinking about their ledger, not about powers. */

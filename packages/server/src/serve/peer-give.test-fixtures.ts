@@ -1,9 +1,9 @@
-// Shared fixture vocabulary for the "two gateways, one process" peer-give
-// suites (#726 P3): `peer-remote-give.test.ts` (decisions 7/9) and
-// `share-refusal-outbox.test.ts` (decision 9's refusal-reaches-origin gap).
-// Both stand up the SAME shape of fixture — a gateway.db + vault pair linked
+// Shared fixture vocabulary for the "two gateways, one process" peer suites
+// (#726) — the commons pull, sweep, notices, observability, recovery-route
+// and steward-loss-drill suites that import `makeSide` / `link` / `seedPhoto`.
+// They stand up the SAME shape of fixture — a gateway.db + vault pair linked
 // over the in-process `transportTo` double `peer-link-ceremony.test.ts`
-// establishes — so splitting the suites by concern should not mean
+// establishes — so splitting the suites by concern does not mean
 // copy-pasting this setup into each file.
 import crypto from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -53,9 +53,9 @@ export interface Side {
   ownerId: string;
   deviceId: string;
   /** The vault's own `Gateway`, with the task commands registered — what a
-   *  write-capable live edge invokes through (#726 P5). */
+   *  write-capable live edge invokes through (#726). */
   gateway: VaultGateway;
-  /** The founding owner-device credential (#726 P5) — what confirms a
+  /** The founding owner-device credential (#726) — what confirms a
    *  parked invocation. */
   ownerCredential: { kind: "device"; deviceId: string; deviceKey: string };
 }

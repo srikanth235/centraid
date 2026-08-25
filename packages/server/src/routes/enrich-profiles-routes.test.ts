@@ -1,5 +1,5 @@
 /*
- * The engine-profiles route (issue #807): one read of gateway prefs, no
+ * The engine-profiles route (#807): one read of gateway prefs, no
  * spawns, and a wire shape the Settings surface renders directly.
  */
 

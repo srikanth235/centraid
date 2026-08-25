@@ -1,6 +1,6 @@
 /*
  * How much memory ONE mounted vault may occupy, and how that budget is
- * divided (issue #659 L8).
+ * divided (#659).
  *
  * This lives beside `db.ts` rather than inside it because the division is a
  * PUBLIC concept with two callers that must never disagree: `openVaultDb`
@@ -15,9 +15,9 @@ import type { DatabaseSync } from "node:sqlite";
 
 /**
  * The memory one mounted vault may occupy, as a TOTAL across the database
- * files `openVaultDb` opens (issue #659 L8).
+ * files `openVaultDb` opens (#659).
  *
- * The numbers were tuned for one vault on a Pi-class host (#456 S1) and then
+ * The numbers were tuned for one vault on a Pi-class host (#456) and then
  * became per-FILE constants: each mounted plane opens `vault.db` and
  * `journal.db`, so a host mounting N vaults multiplied them by 2N with no way
  * to say otherwise. A total is the useful contract for that host — mounting
@@ -89,7 +89,7 @@ export interface AppliedVaultFootprint {
 /**
  * Apply a per-vault footprint budget to ONE open database connection —
  * the same split `openVaultDb` performs, factored out so it can be
- * re-applied to a live handle (issue #659 L8).
+ * re-applied to a live handle (#659).
  *
  * Dividing at open time is not enough, because a household grows one vault at
  * a time: vault 1 opens holding the whole budget, vault 2 a half, and the sum

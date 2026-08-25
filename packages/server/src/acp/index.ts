@@ -4,7 +4,7 @@
  * Engine layer for Centraid's harness surfaces. Every harness kind runs
  * through ONE integration path — the Agent Client Protocol (ACP): JSON-RPC
  * 2.0 over stdio, spoken natively by most kinds and via a first-party adapter
- * for claude-code and codex (issue #479). A single backend normalizes every
+ * for claude-code and codex (#479). A single backend normalizes every
  * kind's stream into the same `TurnStreamEvent` shape, so downstream surfaces
  * don't need to know which harness ran a given turn.
  *
@@ -20,10 +20,9 @@
  *     implementations in the repo — the other is the gateway's
  *     `makeUnifiedConversationRunner`.
  *
- * The package also ships a tiny `centraid` CLI bin (subcommands:
- * `sql describe/read/write`, `preview snapshot`) that harness shell tools
- * can invoke when they need host-side capabilities (reading the
- * per-app sqlite or checking the preview snapshot's freshness).
+ * The package also ships a tiny `centraid` CLI bin (subcommand:
+ * `preview snapshot`) that harness shell tools can invoke when they need
+ * host-side capabilities.
  */
 
 export {
@@ -59,8 +58,8 @@ export {
   VAULT_CONTENT_TOOL,
 } from "./vault-sql-tool.js";
 
-// The single turn-driving path (issue #479). codex and claude-code no longer
-// have bespoke backends — they are ACP entries whose adapter is launched by
+// The single turn-driving path (#479). codex and claude-code have no
+// bespoke backends — they are ACP entries whose adapter is launched by
 // `AcpAdapterSpec`, same as every other kind.
 export {
   runAcpTurn,
@@ -99,7 +98,7 @@ export {
   compareSemver,
 } from "./preflight.js";
 
-// Per-harness model catalog (issue #188). The pure read (`readHarnessModels`) is
+// Per-harness model catalog (#188). The pure read (`readHarnessModels`) is
 // exposed so the gateway can surface each harness's models for the per-harness
 // picker in Settings → Agents and the active harness via harness-status; the
 // `CatalogWarmer` owns enumeration (boot + Refresh) and `deriveStatus` turns
@@ -114,17 +113,17 @@ export {
 } from "./models/catalog-warmer.js";
 export { enumerateHarnessModels } from "./models/enumerators.js";
 
-// Local-side per-fire orchestrator for automations (issue #90 model-B).
+// Local-side per-fire orchestrator for automations (#90 model-B).
 // Looks up the user-owned automation and runs its handler against a live
 // dispatch surface. The only billed rail is `ctx.delegate` — a bounded model
-// turn routed through the harness registry (issue #479); the deterministic
+// turn routed through the harness registry (#479); the deterministic
 // rails (`ctx.vault` / `ctx.fetch` / `ctx.state` / `ctx.runs`) run in-process.
 export {
   runAutomation,
   type RunAutomationOptions,
 } from "./automation/run-automation.js";
 
-// Scheduling lives in `@centraid/server/automation` now (issue #149): the gateway
+// Scheduling lives in `@centraid/server/automation` (#149): the gateway
 // owns an in-process cron `InProcessScheduler` and fires automations while it
-// runs. The OS scheduler (launchd / systemd / Task Scheduler) and its
-// `centraid run-automation` entry point are gone.
+// runs. There is no OS scheduler (launchd / systemd / Task Scheduler) and no
+// `centraid run-automation` entry point.

@@ -1,11 +1,9 @@
 // The phone's bottom band, rendered (Photos v4 handoff §3.1, CHANGELOG §F/§G).
 //
-// Opaque paper, never glass — which is now simply what the whole app is, so
-// this file no longer has to argue the case. The blur idiom is gone from the
-// tree entirely (`GlassBar` deleted, `expo-blur` dropped); the handoff carries
-// no `backdrop-filter`, no `blur()` and no soft shadow on any product surface.
+// Opaque paper, never glass — what the whole app is. No `backdrop-filter`, no
+// `blur()` and no soft shadow on any product surface.
 //
-// The reason survives the component that used to violate it: this bar sits over
+// The reason: this bar sits over
 // unpredictable photographs, so label contrast, the 2px ink active mark and the
 // focus ring must not depend on what the member photographed — a white bar over
 // a white beach loses all three — and `prefers-reduced-transparency` would need
@@ -52,7 +50,7 @@ import { BAND_CAPSULE, resolveBand } from "./photos-band";
 import type { BandDestinationKey } from "./photos-band";
 
 /** The GROUP PLATE's inner gutter (:4959 — `padding:0 2px`, `gap:2px`). The 2pt
- *  the capsule used to carry as a `marginStart` lives here instead. */
+ *  lives here, never as a `marginStart` on the capsule. */
 const GROUP_GUTTER = 2;
 /** The gap between the two plates (:4955 — `gap: R.gap.s`). */
 const PLATE_GAP = 8;
@@ -89,12 +87,12 @@ export default function PhotosBand({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const band = resolveBand(owner);
   if (band.owner !== "app") {
-    // HANDED BACK, BUT NOT STRANDED (issue #712 E3). This used to `return
-    // null` outright, on the premise that "the frame's own band takes over" —
+    // HANDED BACK, BUT NOT STRANDED (#712). This must not `return
+    // null` outright on the premise that "the frame's own band takes over" —
     // true on web, where the shell renders its stem band underneath, and false
     // on the phone, where the frame's band lives on Home and a Photos stack
-    // screen has none. Rendering nothing left the member inside Photos with no
-    // way out but the OS back gesture, and §3.1 says the way home is the one
+    // screen has none. Rendering nothing leaves the member inside Photos with
+    // no way out but the OS back gesture, and §3.1 says the way home is the one
     // thing an app may never take away. So the capsule stays: the app's tab
     // group is what the member handed back, not the frame's control.
     return (
@@ -123,10 +121,9 @@ export default function PhotosBand({
     <View
       style={[
         styles.band,
-        // The home-indicator inset lifts the FLOAT. It was a margin when the
-        // band was one plate; now that the 12pt bottom inset is the container's
-        // own padding, the lift goes there too — same total distance off the
-        // bottom of the screen, same as HomeBand.
+        // The home-indicator inset lifts the FLOAT. The 12pt bottom inset is
+        // the container's own padding, so the lift goes there too — same total
+        // distance off the bottom of the screen, same as HomeBand.
         { paddingBottom: BAND_INSET + insets.bottom },
       ]}
     >
@@ -208,9 +205,9 @@ const makeStyles = (colors: ThemeColors) =>
     },
     band: {
       // TRANSPARENT (:4956). The band's grounds live on the two plates below;
-      // this row only positions them. It used to be a plate itself — one
-      // rectangle with the capsule floating inside it — which is a shape the
-      // handoff never draws.
+      // this row only positions them. It is not a plate itself: one rectangle
+      // with the capsule floating inside it is a shape the handoff never
+      // draws.
       alignItems: "stretch",
       backgroundColor: "transparent",
       flexDirection: "row",
@@ -228,9 +225,9 @@ const makeStyles = (colors: ThemeColors) =>
       // shell and every app in it (no per-app surface tone), so `colors.bg`
       // is the frame's page and Photos' page at once: the capsule is the
       // frame's control sitting inside the app's band, and its ground is the
-      // one thing that says so. It used to wear `toneMat` on a `bg` band —
-      // the two colours swapped, which made the capsule read as the app's
-      // and the band as the frame's, the opposite of the truth.
+      // one thing that says so. Swapping the two — `toneMat` on the capsule
+      // over a `bg` band — makes the capsule read as the app's and the band
+      // as the frame's, the opposite of the truth.
       backgroundColor: colors.bg,
       borderColor: colors.lineStrong,
       borderRadius: BAND_RADIUS,

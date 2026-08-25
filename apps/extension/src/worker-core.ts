@@ -1,5 +1,5 @@
 /**
- * Service-worker pure helpers (issue #545 C10) — approval badge text and
+ * Service-worker pure helpers (#545) — approval badge text and
  * warm/message routing without chrome APIs.
  */
 

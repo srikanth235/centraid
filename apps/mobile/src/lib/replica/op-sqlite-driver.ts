@@ -129,7 +129,7 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
   }
 
   /**
-   * Whether this build was compiled with sqlite-vec (issue #721's B4
+   * Whether this build was compiled with sqlite-vec (#721's B4
    * follow-on — vector search over photo embeddings), the same shape
    * `assertCapabilities` uses to probe FTS5 above.
    *

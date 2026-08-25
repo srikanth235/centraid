@@ -7,7 +7,7 @@
  * (accept, `@centraid/tunnel`) on one side, `startPeerDial` (dial,
  * `./peer-dial.js`, this package's production implementation of
  * `PeerRequest`/`PeerDial`) on the other — complete a link ceremony, verify a
- * signed route assertion, and see the retired give frame refused on the wire.
+ * signed route assertion, and see a give frame refused on the wire.
  * No `transportTo`-style handler call anywhere here.
  *
  * `relays: "disabled"` keeps this offline and fast (loopback UDP, no n0
@@ -304,11 +304,10 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
   }, 30_000);
 
   /*
-   * Copy-as-share retired (#825, ruling G-copy), so the give plane is gone
-   * from the peer wire. Proved HERE, over the real QUIC transport, because
-   * the retirement has to hold on the wire and not merely in a handler
-   * double: every frame the plane ever served answers `not_found`, and the
-   * audience adopts nothing.
+   * The peer wire serves no give plane (#825, ruling G-copy). Proved HERE,
+   * over the real QUIC transport, because that has to hold on the wire and
+   * not merely in a handler double: every give frame answers `not_found`,
+   * and the audience adopts nothing.
    */
   test("every retired give frame answers not_found over the real transport", async () => {
     const photo = seedPhoto(origin, "retired-give");

@@ -1,10 +1,10 @@
-// Publishers for the enrichment spine (issue #299 §4): how model-derived
+// Publishers for the enrichment spine (#299): how model-derived
 // candidates become vault rows. Enrichment invents no tables — captions land
 // as knowledge.annotation, scene tags as core.tag under the machine schemes,
 // face proposals as media.face_region, trip albums as core.collection, and
 // filing/rename proposals as core.content_item updates.
 //
-// The derived-data contract (issue #299 §1) is enforced here, structurally:
+// The derived-data contract (#299) is enforced here, structurally:
 //   - ATTRIBUTED: an annotation names its author party (the enricher's
 //     enrolled agent party, injected server-side by `sync.stage_rows`);
 //     machine tags carry confidence and no `tagged_by_party_id` — an owner
@@ -90,7 +90,7 @@ const annotationPublisher: Publisher = {
   entityType: "knowledge.annotation",
   probe(vault, payload) {
     // Read-only lookup — the runtime schema gate covers WRITE paths
-    // (create/update, issue #374 Tier 3); probe never touches SQLite with
+    // (create/update, #374 Tier 3); probe never touches SQLite with
     // payload-derived values beyond a domain-native key lookup.
     const p = payload as unknown as AnnotationPayload;
     if (!p.author_party_id) return null;
@@ -267,10 +267,11 @@ const faceRegionPublisher: Publisher = {
   },
   update(vault, entityId, payload) {
     const p = assertPayload<FaceRegionPayload>("FaceRegionPayload", payload);
-    // AN ANSWERED REGION IS TERMINAL (issue #712). The guard used to read
-    // `confirmed_by_party_id IS NULL`, which only protected a confirm; a
-    // rejection was a DELETE, so the next run re-created the same face as a
-    // brand-new proposal and the member re-answered it for ever. Now every
+    // AN ANSWERED REGION IS TERMINAL (#712). The guard reads
+    // `review_state = 'proposed'`, not `confirmed_by_party_id IS NULL`: a
+    // null-check on the confirm protects only a confirm, and a rejection kept
+    // as a DELETE lets the next run re-create the same face as a brand-new
+    // proposal for the member to answer for ever. Every
     // answer — confirmed, rejected, dismissed — leaves the row in place with
     // a non-`proposed` state, and the enricher may only refresh a region the
     // owner has not yet answered. This one WHERE clause is the whole
@@ -486,7 +487,7 @@ const contentItemPublisher: Publisher = {
     const p = assertPayload<FilingPayload>("FilingPayload", payload);
     const wrote: PublishedWrite[] = [];
     // A wrapped content item's display title and folder tag live on its
-    // core_document (issue #352) — the content item is the HEAD revision,
+    // core_document (#352) — the content item is the HEAD revision,
     // not the document's identity. Only the exact current head resolves;
     // filing never mints a document (create() above still throws), so a
     // proposal against a superseded revision or a still-unwrapped content

@@ -1,12 +1,12 @@
 /**
  * Theme registry invariants (#608 group O).
  *
- * The registry used to carry twelve presets while every shell stylesheet
- * keyed literally on `[data-theme='dark']`. Picking Nord or Monokai took the
- * dark tokens and left the toast + connection brand-mark rules unfired —
- * light chrome painted over a dark surface, with nothing in the UI to
- * explain it. The cut to two presets makes the literal selector correct
- * again; these tests keep it correct.
+ * The registry carries exactly two presets, and every shell stylesheet keys
+ * literally on `[data-theme='dark']`. A further preset would take the dark
+ * tokens and leave the connection brand-mark rules unfired — light chrome
+ * painted over a dark surface, with nothing in the UI to explain it. Two
+ * presets are what makes the literal selector correct; these tests keep it
+ * correct.
  */
 import { describe, expect, test } from "vitest";
 
@@ -28,9 +28,9 @@ describe("theme registry", () => {
   });
 
   test("a registry key equals its kind, so `[data-theme='dark']` is exact", () => {
-    // Load-bearing: `toast.module.css` and `SettingsConnectionsScreen
-    // .module.css` select on the theme NAME but mean the theme KIND. While
-    // the two coincide, no dark preset can slip past those rules.
+    // Load-bearing: `SettingsConnectionsScreen.module.css` and
+    // `RecoverScreen.module.css` select on the theme NAME but mean the theme
+    // KIND. While the two coincide, no dark preset can slip past those rules.
     for (const [name, theme] of Object.entries(themes)) {
       expect(theme.kind, `theme '${name}' declares kind '${theme.kind}'`).toBe(
         name
@@ -42,12 +42,11 @@ describe("theme registry", () => {
   });
 
   test("both ramps are literal — there is no derived surface anchor", () => {
-    // The dark ramp used to derive every surface from one `--bg-l` lightness
-    // through `hsl(0 0% calc(...))`. That was the right mechanism for a pure
-    // greyscale ramp; the Binding Layer's dark paper is warm-tinted
-    // (`#171716`, not `hsl(0 0% 9%)`), which a one-knob greyscale calc cannot
-    // express. The knob retired rather than being faked with a saturation
-    // parameter, so every surface is now a value you can read.
+    // No surface derives from a `--bg-l` lightness through
+    // `hsl(0 0% calc(...))`: the dark paper is warm-tinted (`#171716`, not
+    // `hsl(0 0% 9%)`), which a one-knob greyscale calc cannot express and
+    // which is not faked with a saturation parameter. Every surface is a
+    // value you can read.
     for (const theme of Object.values(themes)) {
       for (const surface of [
         theme.bg,

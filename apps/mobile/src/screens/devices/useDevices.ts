@@ -1,4 +1,4 @@
-// The Devices place's data half (issue #765).
+// The Devices place's data half (#765).
 //
 // Shape follows `apps/automations/useAutomations.ts`: an explicit state union
 // rather than try/catch soup, a loader that lives outside the hook so it

@@ -117,8 +117,8 @@ describe("web-host", () => {
     await window.CentraidApi.redeemGatewayPairing({ ticket: ticket() });
 
     // A browser restart drops sessionStorage and nothing else. Declining the
-    // offline copy used to put the enrollment there, so the next launch asked
-    // for a pairing ticket a device that was already paired.
+    // offline copy must NOT put the enrollment there, or the next launch asks
+    // an already-paired device for a fresh pairing ticket.
     sessionStorage.clear();
 
     await expect(window.CentraidApi.getGatewayAuth()).resolves.toMatchObject({

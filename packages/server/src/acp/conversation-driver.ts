@@ -8,7 +8,7 @@
  * worktree, no authoring grounding, no post-turn side effects — those are
  * the builder chat's job (`makeUnifiedConversationRunner`).
  *
- * It is a thin config over `makeConversationRunnerCore` (issue #147, Concern 1):
+ * It is a thin config over `makeConversationRunnerCore` (#147, Concern 1):
  * the shared per-turn spine lives there; this file only supplies the
  * data-chat seams (cwd = data dir, default prompt pass-through).
  *
@@ -60,7 +60,6 @@ export function makeConversationRunner(
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: opts.getDispatcher,
     providerEgressConsent: opts.providerEgressConsent,
-    // The local codex/claude turn driver.
     runTurn,
     // Data chat runs in the app's data dir; the route preamble is passed
     // through unchanged (no authoring grounding) and there's no post-turn

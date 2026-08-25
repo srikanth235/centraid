@@ -2,9 +2,9 @@
  * Electron wiring around gateway-outage-log-core.ts's pure NDJSON logic —
  * persists the gateway-monitor's alert-worthy events under Electron
  * userData so the Gateway page's Alerts tab keeps a history across
- * restarts (issue #351 wave 4; crash-log.ts is the sibling pattern for
- * process crashes, and this follows the same "pure core + thin shell"
- * split — see crash-log-core.ts / gateway-outage-log-core.ts).
+ * restarts. crash-log.ts is the sibling pattern for process crashes, and
+ * this follows the same "pure core + thin shell" split — see
+ * crash-log-core.ts / gateway-outage-log-core.ts.
  *
  * Read-modify-rewrite on every append, unlike crash-log.ts's size-based
  * rotation: alert events are occasional (probes run every 5s, but
@@ -34,8 +34,8 @@ function outageLogPath(): string {
 
 /**
  * Load the persisted log at boot. Best-effort — a missing file (first
- * launch, or a launch before this wave) or a corrupt one just starts
- * empty rather than blocking the monitor.
+ * launch) or a corrupt one just starts empty rather than blocking the
+ * monitor.
  */
 export function loadOutageLog(): OutageLogEvent[] {
   try {
@@ -59,7 +59,7 @@ export function loadOutageLog(): OutageLogEvent[] {
  * ticks have nothing to log.
  *
  * Rewriting drops any legacy `projection-mark` lines a schema-3 file still
- * carries (issue #665) — they are no longer written and nothing reads them.
+ * carries (#665); never write one again.
  */
 export function persistOutageEvents(
   existing: readonly OutageLogEvent[],

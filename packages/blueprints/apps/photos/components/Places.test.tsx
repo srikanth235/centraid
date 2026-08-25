@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// THE PLACES SHELF'S TRAILING "NO LOCATION" SECTION (issue #816).
+// THE PLACES SHELF'S TRAILING "NO LOCATION" SECTION (#816).
 //
 // The photographs nobody told where they were taken were in the library and on
 // no shelf: every section on Places stands for a place, so the set was reachable

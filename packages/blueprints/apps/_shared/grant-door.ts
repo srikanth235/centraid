@@ -1,5 +1,5 @@
 /**
- * ONE WRITE DOOR OVER THE GRANT PLANE (issue #825).
+ * ONE WRITE DOOR OVER THE GRANT PLANE (#825).
  *
  * Each seat can only reach the gateway its own way — the web blueprint kit
  * through the shell's `window.centraid` bridge (the PWA rides an iroh tunnel,

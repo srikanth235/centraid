@@ -5,7 +5,7 @@
  * `ConversationHistoryStore.recordTurn` writes these shapes; `getSession` reads them
  * back to reconstruct the renderer transcript. (The inbound user message is a
  * first-class `message_in` item — its text is read directly, no codec — so
- * there is no `parseUserMessage` anymore; issue #190.) Kept in its own file so
+ * there is no `parseUserMessage`; #190.) Kept in its own file so
  * the store stays focused on SQL. Every parser tolerates malformed or absent
  * JSON — a corrupt row degrades to an empty message, never throws.
  */
@@ -14,7 +14,7 @@ import type { Turn } from "./schema.js";
 
 /**
  * Group a conversation's turns (seq ASC) into retry families for the
- * linear-with-retry transcript (issue #420). A family is a root turn plus every
+ * linear-with-retry transcript (#420). A family is a root turn plus every
  * turn that (transitively) `retryOf`-chains back to it; families come back in
  * root-seq order, each family seq-ordered (oldest attempt first, newest last).
  * A `retryOf` that doesn't resolve to a turn in this set starts its own family,

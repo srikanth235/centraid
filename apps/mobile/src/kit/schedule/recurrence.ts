@@ -87,7 +87,7 @@ export function expandEvent(
     semantics,
     maxInstances: max,
   });
-  // Unsupported FREQ (e.g. HOURLY) used to vanish entirely; fall back to the
+  // Unsupported FREQ (e.g. HOURLY) expands to nothing; fall back to the
   // single anchor occurrence so free-text RRULE mistakes stay visible.
   const instances = applyRecurrenceExceptions(
     expanded.length > 0

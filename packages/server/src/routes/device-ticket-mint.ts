@@ -1,12 +1,10 @@
 /*
  * `POST /centraid/_gateway/devices/ticket` — mint a one-time pairing ticket
  * (the inverse of revoke; the wire twin of `cli/device-admin.ts`'s `pair`).
- * Split out of `devices-routes.ts` (issue #726 P1 — the *Add someone* mint
- * lane grew this branch past the file-size cap) purely to keep files small;
- * it shares `devices-routes.ts`'s deps/caller-scope shape exactly.
+ * Shares `devices-routes.ts`'s deps/caller-scope shape exactly.
  *
  * The *Add someone* lane (`body.forPerson`, #726 P1) is a durable PROVISION
- * (issue #750): it preflights every refusable condition — including the iroh
+ * (#750): it preflights every refusable condition — including the iroh
  * endpoint capability — BEFORE creating anything, and it is idempotent under
  * a client-chosen `operationId` (see `executeForPersonMint`).
  */
@@ -59,7 +57,7 @@ function readProvisionOperation(
 }
 
 /**
- * Fingerprint of the provisioning request's defining inputs (issue #750
+ * Fingerprint of the provisioning request's defining inputs (#750
  * audit): an explicit, ORDERED field list — never an object — so key order
  * can never perturb the hash. An `operationId` replayed with a matching hash
  * replays the recorded result; a different hash means the id names a
@@ -79,7 +77,7 @@ function hashProvisionRequest(input: {
 }
 
 /**
- * The *Add someone* durable workflow (issue #750): owner → vault → ownership
+ * The *Add someone* durable workflow (#750): owner → vault → ownership
  * → ticket → operation record. Atomicity is by CONSTRUCTION, not by resume:
  *
  *   1. The ONE non-transactional step — the vault dir on disk, its SQLite
@@ -240,7 +238,7 @@ function handleForPersonMint(
     if (recorded.requestHash !== requestHash) {
       // The id already names a DIFFERENT request: replaying it here would
       // hand the caller someone else's result while recording nothing of
-      // their own — refuse instead (issue #750 audit).
+      // their own — refuse instead (#750 audit).
       return sendJson(res, 409, {
         error: "operation_id_conflict",
         message:
@@ -354,7 +352,7 @@ export async function handleTicketMint(
       message: "vaultIds must be a list of vault ids",
     });
   }
-  // Endpoint-capability PREFLIGHT (issue #750): `gw` is required in
+  // Endpoint-capability PREFLIGHT (#750): `gw` is required in
   // `PairingTicketPayload` — a ticket without the iroh endpoint pin can't be
   // redeemed. It runs BEFORE any invitation resolution or minting, so an
   // endpoint-less gateway refuses without creating anything (everything

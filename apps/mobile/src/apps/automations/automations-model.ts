@@ -98,7 +98,6 @@ export interface AutomationRowCopy {
   streak: FailureStreak | null;
 }
 
-/** One run, worded. */
 export interface RunRowCopy {
   key: string;
   ref: string;
@@ -234,8 +233,8 @@ export function automationSub(row: AutomationRow, context: RunContext): string {
 /**
  * One automation, worded.
  *
- * The manifest description that used to sit under the name is deliberately not
- * here: the row's second line is what fires it and how it last went (spec §3),
+ * The manifest description is deliberately NOT under the name: the row's
+ * second line is what fires it and how it last went (spec §3),
  * and the description is the automation's own prose, which belongs where the
  * automation is opened rather than repeated eleven times down a list.
  */
@@ -362,7 +361,7 @@ export function worstFailure(
 }
 
 // The empty and error states are the same words the desktop overview says, so
-// they come from `@centraid/client/automations-copy` (issue #805), re-exported
+// they come from `@centraid/client/automations-copy` (#805), re-exported
 // under this file's own names.
 export {
   AUTOMATIONS_EMPTY_ACTION as EMPTY_ACTION,

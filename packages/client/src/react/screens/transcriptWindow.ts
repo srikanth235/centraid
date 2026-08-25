@@ -1,4 +1,4 @@
-// How much of a transcript is mounted at once (issue #659).
+// How much of a transcript is mounted at once (#659).
 //
 // A long conversation is thousands of message rows, and an answer row is not a
 // cheap one: it injects HTML and re-hydrates ref chips and copy buttons on

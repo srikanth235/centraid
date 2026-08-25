@@ -8,7 +8,6 @@
  * string so the mapper never branches on block shape.
  */
 
-/** Extract text from an ACP content block or array of blocks. */
 export function textOf(content: unknown): string {
   if (!content) return "";
   if (typeof content === "string") return content;

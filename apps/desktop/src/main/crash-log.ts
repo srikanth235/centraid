@@ -1,13 +1,6 @@
 /*
- * Crash capture (issue #351) — electron wiring around the pure core in
+ * Crash capture (#351) — electron wiring around the pure core in
  * crash-log-core.ts.
- *
- * Before this module, main.ts had no `uncaughtException`/`unhandledRejection`
- * handlers at all: an unexpected error in a background timer, IPC handler,
- * or promise chain would either crash the whole desktop app (dropping
- * SQLite state without the graceful WAL-checkpoint quit path ever running)
- * or, for an unhandled rejection, just vanish depending on the Node
- * version's default. Neither leaves a post-mortem trail.
  *
  * The posture here is deliberate: log + persist + CONTINUE, never
  * `process.exit()`. A desktop shell has long-lived background work
@@ -83,7 +76,7 @@ export function installCrashHandlers(): void {
   process.on("unhandledRejection", (reason) => {
     recordCrash("unhandledRejection", reason);
   });
-  // Renderer / GPU / utility process exits (issue #468 K12).
+  // Renderer / GPU / utility process exits (#468).
   app.on("render-process-gone", (_event, webContents, details) => {
     recordCrash(
       "render-process-gone",

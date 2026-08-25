@@ -1,4 +1,4 @@
-// THE LOCATION, TAKEN OUT OF THE BYTES THEMSELVES (issue #816).
+// THE LOCATION, TAKEN OUT OF THE BYTES THEMSELVES (#816).
 //
 // A share sheet that omits a place from the UI and hands the operating system
 // the original file has disclosed the place anyway: the fix is in the file's

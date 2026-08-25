@@ -1,16 +1,13 @@
 // The `/placements` → `/edges` wire translation `centraid-inline.ts`'s
-// `place()` needs (#726 P2), extracted to keep that file under the 500-line
-// cap. `place()` keeps its pre-#726-P2 signature and result shape — every
-// existing caller (photos' `copyToVault`, `AudiencePlacement`, the mobile
-// outbox) still reads `result.status === "executed"` / `result.reason`, so
-// none of them needed an edit; this module is the whole translation.
+// `place()` needs (#726). `place()`'s result shape is the `/placements`
+// vocabulary, and callers read `result.status === "executed"` /
+// `result.reason` — this module is the whole translation, and the only place
+// the two vocabularies are allowed to meet.
 
 /**
- * `/edges`' wire status vocabulary (queued|in-flight|established|parked|
- * denied|revoked|completed|failed) succeeded `/placements`' narrower one
- * (…|executed|…). Every existing caller of `place()` checks for `executed`
- * — translate the one terminal-success value it renamed, and pass every
- * other value through unchanged.
+ * `/edges` answers queued|in-flight|established|parked|denied|revoked|
+ * completed|failed; `/placements` callers check for `executed`. Translate the
+ * one terminal-success value and pass every other value through unchanged.
  */
 export function toPlacementStatus(status: unknown): string {
   return status === "completed" || status === "established"

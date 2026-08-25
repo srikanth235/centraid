@@ -4,7 +4,6 @@ import { Appearance, View, Pressable, StyleSheet } from "react-native";
 
 import { toNativeTheme } from "@centraid/design";
 
-// React Native error boundary (issue #468 K1) — class component required.
 import { Text } from "./kit/components/NativeText";
 import { radii, t } from "./kit/theme";
 
@@ -16,7 +15,7 @@ interface State {
   error: Error | null;
 }
 
-/* eslint-disable react/no-set-state, react/state-in-constructor -- (#468) React error boundaries require a class component */
+/* oxlint-disable react/no-set-state, react/state-in-constructor -- (#468) React error boundaries require a class component */
 export default class ErrorBoundary extends Component<Props, State> {
   static readonly displayName = "ErrorBoundary";
 
@@ -88,4 +87,4 @@ const styles = StyleSheet.create({
     ...t("bodyStrong"),
   },
 });
-/* eslint-enable react/no-set-state, react/state-in-constructor */
+/* oxlint-enable react/no-set-state, react/state-in-constructor */

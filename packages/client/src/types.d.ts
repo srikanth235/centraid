@@ -77,17 +77,14 @@ declare global {
     /** Open the running app's settings directly on its vault-access pane. */
     openAppVaultSettings?: () => void;
     /**
-     * Opens the per-app actions menu from outside `app.ts` (e.g. the
-     * builder's sidebar rows). Resolves the id against the home shell's
-     * known apps/drafts, so the verb set is identical to what users see
-     * on the home grid.
+     * Opens the per-app actions menu from a surface other than the home grid.
+     * Resolves the id against the home shell's known apps/drafts, so the verb
+     * set is identical to what users see on the grid.
      */
     openAppContext: (id: string, anchor: MenuAnchor) => void;
     /** Navigate to the Insights (usage analytics) page. */
     openInsights: () => void;
-    /** Navigate to the Starred apps page. */
     openStarred: () => void;
-    /** Navigate to the Automations page. */
     openAutomations: () => void;
     /** Navigate to the Connectors (vault data sources) page. */
     openConnectors: () => void;
@@ -122,8 +119,8 @@ declare global {
    * Where the home/sidebar context menu should anchor. `point` is a raw
    * cursor location (right-click); `rect` is a trigger element's bounding
    * box (the hover-revealed `•••` button) so the menu drops below it with
-   * predictable edge-flipping. Shared across `app.ts` and `chrome.ts` so
-   * the sidebar can hand the right-click event off to the home shell.
+   * predictable edge-flipping. Mirrored by `ShellMenuAnchor` (shell) and
+   * `HomeMenuAnchor` (screen contracts), which carry the same two shapes.
    */
   type MenuAnchor =
     | { kind: "point"; x: number; y: number }

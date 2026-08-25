@@ -1,5 +1,5 @@
 /*
- * Gateway side of the iroh transport (issue #289 phase 3).
+ * Gateway side of the iroh transport (#289).
  *
  * The gateway daemon binds one iroh endpoint whose EndpointId is the
  * gateway's PERMANENT identity — no domain, no TLS cert, no exposed HTTP
@@ -17,7 +17,7 @@
  *    `centraid-gateway pair` over SSH); the injected `pair` callback
  *    verifies + burns the ticket and enrolls the caller's device key.
  *
- *  - `centraid/gw-link/1`: the PEER plane (#726 P3). Another gateway, acting
+ *  - `centraid/gw-link/1`: the PEER plane (#726). Another gateway, acting
  *    for its own vault, reaches `/centraid/_peer/*` and nothing else. It has
  *    its own admission decision and its own identity headers; sharing either
  *    with the device lane would make a link indistinguishable from a paired
@@ -94,8 +94,6 @@ export interface GatewayPairRequest {
    * There is deliberately NO owner OR vault field here. Both are baked into
    * the server-minted invitation and read back from `tickets` at redemption;
    * a joining device never gets to name its own principal or its own reach.
-   * A `trust?` field used to sit here — never read by the host, but it read
-   * as if the client could pick.
    */
   /** Optional module capability profile for a constrained companion device. */
   grantProfile?: string[];
@@ -162,7 +160,7 @@ export interface GatewayEndpointOptions {
   requestHeaders?: (endpointId: string) => Record<string, string>;
   /**
    * Admit a PEER (gateway↔gateway) connection from this endpoint? Separate
-   * from `authorize` on purpose (#726 P3): the device predicate answers "is
+   * from `authorize` on purpose (#726): the device predicate answers "is
    * this one of my owner's devices", which a linked gateway must never be
    * able to answer yes to. Omitting it means this endpoint does not speak
    * the peer plane at all — the ALPN is not even advertised.
@@ -387,7 +385,7 @@ class GatewayEndpoint {
       await respondError(send, 400, "bad_request");
       return;
     }
-    // Trap 1, JS half (#726 P3). `target` is peer-supplied and is pasted onto
+    // Trap 1, JS half (#726). `target` is peer-supplied and is pasted onto
     // the loopback base URL below, so on the peer plane it must be proved
     // confined to `/centraid/_peer/` BEFORE anything else — including before
     // the upstream lookup, so the refusal cannot vary with gateway state. The

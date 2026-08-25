@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#406) consent selection, temporal membership, and opaque row identity form one security boundary
-// Server-derived replica shapes (issue #406): existing app consent scopes
+// Server-derived replica shapes (#406): existing app consent scopes
 // intersected with the acting owner's write authority. There is no replica field
 // in app manifests; this module projects the grants already enforced by the
 // vault gateway into a row/column-minimized offline shape.
@@ -82,9 +82,10 @@ interface TemporalFingerprintCacheEntry {
   epoch: string;
   /**
    * The last replica-log seq that touched THIS entity — not the global
-   * watermark (issue #659 G7). Keyed on the watermark, the cache was invalid
-   * after any commit anywhere in the vault, so a note edit forced a full-table
-   * scan + sha256 of the calendar's temporal membership on the very next poll.
+   * watermark (#659). Keyed on the watermark, the cache would be
+   * invalid after any commit anywhere in the vault, so a note edit would force
+   * a full-table scan + sha256 of the calendar's temporal membership on the
+   * very next poll.
    */
   entitySeq: number;
   computedAt: number;

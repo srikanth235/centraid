@@ -1,4 +1,4 @@
-// Verifiable commons history (issue #731). The steward's per-grant op log is a
+// Verifiable commons history (#731). The steward's per-grant op log is a
 // hash chain; every checkpoint carries a signed digest of the projected state.
 // A member verifies both before it applies anything, so a steward that rewound
 // (restore-from-backup), forked, or shipped a mutated op becomes a NAMED fault
@@ -516,7 +516,7 @@ export function verifyCommonsFrameHistory(input: {
 
 /**
  * Verify an increment's ops-since-cursor against the point this seat already
- * PROVED, before anything is applied (issue #750 invariant 7). The anchor is
+ * PROVED, before anything is applied (#750 invariant 7). The anchor is
  * the seat's own `share_commons_verified` head — which itself chains back to
  * a signed checkpoint from the last full bootstrap — so an increment needs no
  * checkpoint of its own: it either extends the proven chain hash-for-hash or

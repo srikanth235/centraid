@@ -1,4 +1,4 @@
-// The Atlas census/graph/pulse builders (issue #441 Part B). The load-bearing
+// The Atlas census/graph/pulse builders (#441). The load-bearing
 // test is the ghost invariant the issue demands: a NOT NULL FK column on a
 // non-empty child table is NEVER reported as a ghost. Expected edge counts
 // are derived from the PRAGMA walk itself — never asserted as literals (no

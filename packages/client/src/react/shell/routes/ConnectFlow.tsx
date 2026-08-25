@@ -25,7 +25,7 @@ import controlsCss from "../../styles/controls.module.css";
 import buttonCss from "../../ui/Button.module.css";
 import styles from "./ConnectFlow.module.css";
 
-// The shared connect wizard (issue #382) — two top-level methods (This Mac /
+// The shared connect wizard (#382) — two top-level methods (This Mac /
 // Existing vault), a connectivity-test "handshake ladder"
 // (HandshakeLadder.tsx), then a vault pick/create step, then commit. Both
 // hosts reach it through `ConnectTicketPanel`: onboarding's ticket path and
@@ -37,7 +37,7 @@ import styles from "./ConnectFlow.module.css";
 export interface ConnectFlowProps {
   /** Only the commit button's copy ("Enter Centraid" vs "Connect") — the
    *  steps themselves are identical. First run no longer auto-commits a local
-   *  connect (issue #603): a fresh gateway founds two vaults, so "which one"
+   *  connect (#603): a fresh gateway founds two vaults, so "which one"
    *  is a real question and the desktop chooser answers it before we get
    *  here. */
   context: "onboarding" | "switcher";
@@ -46,7 +46,7 @@ export interface ConnectFlowProps {
    *  re-offering it wouldn't add a connection. */
   methods?: readonly ConnectMethod[];
   /** Skip the method grid and open straight into this method's first step —
-   *  for hosts that already made the choice (issue #603 first run). */
+   *  for hosts that already made the choice (#603 first run). */
   initialMethod?: ConnectMethod;
   onDone: (result: ConnectFlowResult) => void;
   /** Omit to hide the "Start over" affordance (the onboarding host returns

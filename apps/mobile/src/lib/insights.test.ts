@@ -1,6 +1,6 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Insights owner (issue #545 C6) — pure format helpers the Insights screen uses.
+ * Insights owner (#545) — pure format helpers the Insights screen uses.
  * Gateway fetch helpers are mocked so vitest never loads react-native.
  */
 import { describe, expect, it, vi } from "vitest";

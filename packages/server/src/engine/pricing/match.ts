@@ -1,5 +1,5 @@
 /*
- * Model-id matching (issue #445), following ccusage's rules so an id the
+ * Model-id matching (#445), following ccusage's rules so an id the
  * adapter reports resolves to the same catalog row a human would pick:
  *
  *   1. exact id

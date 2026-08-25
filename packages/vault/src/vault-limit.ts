@@ -1,5 +1,5 @@
 /*
- * The size ladder for `vault.db` (issue #659 L3) — the same shape
+ * The size ladder for `vault.db` (#659) — the same shape
  * `journal-limit.ts` gives `journal.db`, for the file that had no ladder at
  * all.
  *

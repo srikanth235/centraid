@@ -1,6 +1,6 @@
 /*
  * Owner-facing Resource mode (#521) — one durable preference that feeds the
- * existing hardware-profile resolver (issue #456 A7). Modes never invent a
+ * existing hardware-profile resolver (#456). Modes never invent a
  * second policy path: Conserve/Balanced/Performance only select class and
  * throughput tier; Auto keeps boot-time detection.
  *
@@ -21,7 +21,7 @@ export const RESOURCE_MODES: readonly ResourceMode[] = [
 export const RESOURCE_MODE_PREF_KEY = "gateway.resourceMode";
 
 /**
- * Prioritized per-knob UI overrides (#528 Phase F). These sit alongside the
+ * Prioritized per-knob UI overrides (#528). These sit alongside the
  * Resource *mode*: mode selects a budget preset; these four keys let the owner
  * pin an individual throughput knob above/below that preset from the shell.
  * An absent key means "Linked" (follow the preset). Precedence per knob is

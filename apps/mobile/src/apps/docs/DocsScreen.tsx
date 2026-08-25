@@ -1,5 +1,5 @@
 // The frame every Docs surface sits in (Binding Layer v12 handoff Part 2;
-// issue #821) — the same shell shape `PhotosScreen.tsx` proved: a screen that
+// #821) — the same shell shape `PhotosScreen.tsx` proved: a screen that
 // wraps itself in it cannot forget the band, cannot forget the Home capsule,
 // and cannot forget to reserve the band's height out of its own content.
 //

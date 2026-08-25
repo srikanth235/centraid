@@ -1,5 +1,5 @@
-// Remote read-through for framed sealed blobs (issue #405 §1 ranged read, §4
-// single-flight). Split out of custody.ts so the facade stays under the
+// Remote read-through for framed sealed blobs (#405 §1 ranged read, §4
+// single-flight). Kept out of custody.ts so the facade stays under the
 // governance line-cap and the "how do we read a remote frame" logic sits in
 // one place. Everything here is stateless per call EXCEPT the in-flight maps,
 // which `BlobCustody` owns and passes in — coalescing is per mounted vault.
@@ -16,7 +16,7 @@ import { resolveRange } from "./store.js";
 import type { BlobRange, BlobStore } from "./store.js";
 
 /**
- * Fetch a whole remote object and return its PLAINTEXT (issue #405 §4): one
+ * Fetch a whole remote object and return its PLAINTEXT (#405): one
  * provider GET of the entire object, unsealed whole (or passed through when
  * the tier is unsealed). The caller verifies the whole-blob sha and promotes
  * into the local tier — this only does the I/O + unseal so the single-flight
@@ -34,7 +34,7 @@ export async function fetchRemoteWhole(
 }
 
 /**
- * Read a framed sealed object's footer (issue #405 §1): HEAD for the size, a
+ * Read a framed sealed object's footer (#405): HEAD for the size, a
  * suffix GET for the fixed trailer, then a GET for exactly the directory. Two
  * small ranged requests — never the whole object. Returns null when the
  * object is absent (a raced delete), so the ranged path can fall back cleanly.
@@ -63,7 +63,7 @@ export async function fetchFrameDirectory(
 
 /**
  * Serve a byte range of a framed sealed object by fetching ONLY the covering
- * frames (issue #405 §1) — never the whole object, and deliberately NOT
+ * frames (#405) — never the whole object, and deliberately NOT
  * promoting into the local tier (a partial read can't verify the whole-blob
  * sha, so caching an unverifiable whole would be wrong; per-frame GCM+AAD is
  * the integrity story for the bytes actually served). The directory is passed

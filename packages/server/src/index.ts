@@ -1,8 +1,8 @@
 /*
  * @centraid/server
  *
- * Host-agnostic centraid gateway. `serve()` wires `app-engine` +
- * the historical `agent-runtime` package + stores + conversation runner against injected paths and
+ * Host-agnostic centraid gateway. `serve()` wires app-engine, the ACP harness
+ * layer, the stores and the conversation runner against injected paths and
  * secrets, and starts an HTTP server in front of it. Two callers ship
  * today:
  *
@@ -161,7 +161,7 @@ export {
 } from "./routes/push-wake-routes.js";
 // The vault-register tool runners, giving chat turns `vault_sql` /
 // `vault_invoke` / `vault_content` capability through the same
-// consent/receipt pipeline the Codex/Claude harnesses use (issue #319).
+// consent/receipt pipeline the Codex/Claude harnesses use (#319).
 export {
   makeVaultToolRunners,
   assistantCwd,
@@ -173,7 +173,7 @@ export {
   type VaultRequestContext,
   type DeviceAccess,
 } from "./serve/vault-context.js";
-// The preview ladder's raster codec (issue #405 §2): pure-JS jpeg-js/pngjs
+// The preview ladder's raster codec (#405): pure-JS jpeg-js/pngjs
 // downscaler the host injects into vault planes so the blob sweep's backstop
 // can generate missing tiny/medium derivatives for imported / weak-client /
 // server-ingested images.
@@ -191,7 +191,7 @@ export {
 // How the desktop reaches a daemon it did not spawn — an OS-service install
 // derives its loopback bearer from custody rather than an env pin (#568 F).
 export { landlordBearerForDataDir } from "./cli/landlord-auth.js";
-// Host-only capability gate (issue #568 items A/B). Embedders wire this into
+// Host-only capability gate (#568 items A/B). Embedders wire this into
 // `serve({isHostCustody})` so the host-only lanes — pairing-ticket mint,
 // owner administration, scopes — refuse anything a forwarder delivered to
 // loopback.

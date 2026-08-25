@@ -27,7 +27,6 @@ import type { AgendaScreenProps } from "../../navigation";
 import AgendaEventEditor from "./AgendaEventEditor";
 import { useAgenda } from "./useAgenda";
 
-/** The three answers, in the words the product uses. */
 const RSVP: readonly { partstat: string; label: string }[] = [
   { partstat: "accepted", label: "Going" },
   { partstat: "declined", label: "Not going" },

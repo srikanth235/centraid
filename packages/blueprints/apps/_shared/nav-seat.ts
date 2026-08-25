@@ -2,12 +2,11 @@
 // answers, and never two at once.
 //
 // Photos and Docs each have more than four destinations of their own, so each
-// draws them in one of three places depending on the seat. Before v16 the
-// choice was two independent conditions in two render functions, and the rule
-// they were both trying to express — EXACTLY ONE NAVIGATION FOR ONE SET OF
-// DESTINATIONS — lived in neither of them. It lives here now, so a seat that
-// draws none (a destination reachable from nowhere) and a seat that draws two
-// (one place named twice) are both impossible rather than merely unobserved.
+// draws them in one of three places depending on the seat. EXACTLY ONE
+// NAVIGATION FOR ONE SET OF DESTINATIONS is the rule, and it lives here rather
+// than as a condition inside each render function, so a seat that draws none
+// (a destination reachable from nowhere) and a seat that draws two (one place
+// named twice) are both impossible rather than merely unobserved.
 //
 // BOTH SIGNALS ARE READ, and the reason is a bug this repo already had: a
 // layout signal may hide a navigation only where it knows the replacement

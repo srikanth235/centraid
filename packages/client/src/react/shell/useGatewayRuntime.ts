@@ -9,7 +9,7 @@ import type { GatewayRuntimeSnapshot } from "./routes/gatewayData.js";
 // holds its own cheap subscription.
 /**
  * Just the reachability verdict, re-rendering ONLY when it actually changes
- * (issue #659).
+ * (#659).
  *
  * The monitor broadcasts a full snapshot every 5 seconds, and most of it moves
  * every tick by design — latency, uptime, the probe strip, the check counters.
@@ -58,7 +58,7 @@ export function useGatewayStatus():
  *
  * Same narrowing discipline as {@link useGatewayStatus}: the caller is a single
  * `<span>` at the foot of the frame, so it re-renders on the poll while the
- * shell root above it does not (issue #659).
+ * shell root above it does not (#659).
  */
 export function useGatewayCheck(): {
   status: GatewayRuntimeSnapshot["status"] | undefined;

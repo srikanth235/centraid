@@ -1,5 +1,5 @@
 /*
- * The grant plane's FULFILLMENT ENGINE (issue #825). The store above it holds
+ * The grant plane's FULFILLMENT ENGINE (#825). The store above it holds
  * the MEANING of a share; this holds the act of keeping it true.
  *
  * View is ORIGIN-AUTHORITATIVE RE-PROJECTION, not a merge (ruling G-view).
@@ -418,7 +418,7 @@ export function propagateShareGrantRevocation(
     // to a peer that received nothing.
     //
     // The question is asked of `delivered_at`, the durable memory, NOT of the
-    // live state (#846 P1). Reading it off the state made a delivered grant
+    // live state (#846). Reading it off the state made a delivered grant
     // whose peer the host merely lost reach for — `fulfillShareGrant` drops
     // such a row back to `syncing`, honestly, about freshness — settle
     // `removed` on the reachable path while the audience vault still held the

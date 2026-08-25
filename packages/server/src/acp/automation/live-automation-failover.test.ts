@@ -1,5 +1,5 @@
 /*
- * Opt-in live automation-fire failover smoke for issue #567. The primary is
+ * Opt-in live automation-fire failover smoke for #567. The primary is
  * deliberately configured with a missing binary; the fallback is a real,
  * locally-authenticated provider. The test then audits the shared ledger to
  * prove the failed and successful attempts are distinct turns and that the

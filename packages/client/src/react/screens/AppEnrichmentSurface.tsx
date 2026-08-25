@@ -18,14 +18,14 @@ import appSettingsCss from "../styles/appSettings.module.css";
 import panelCss from "./AppSettingsPanel.module.css";
 import styles from "./SettingsEnrichmentScreen.module.css";
 
-// The app popover's Enrichment surface (issue #807) — a PROJECTION of the one
+// The app popover's Enrichment surface (#807) — a PROJECTION of the one
 // policy store onto the app in front of you, and never a second store.
 //
 // It shows the EFFECTIVE answer per capability, which is what the gateway's
 // single resolver would fold for this app's domain right now; every knob that
 // could change it lives on Settings → Enrichment, one deep link away. The only
 // act offered here is a one-shot: "run this capability's engine over this app's
-// data, once". Per issue #807 Q4 a one-shot is never promoted into a standing
+// data, once". Per #807 Q4 a one-shot is never promoted into a standing
 // rule — a rule is authored where the cascade is visible.
 
 /** One capability's effective answer, joined to the profile it names. */
@@ -48,7 +48,7 @@ export interface AppEnrichmentSurfaceProps {
    * Absent when nothing on this host can enqueue it: the vault command behind a
    * one-shot (`enrich.request_enrichment`) is reached by an app's own action,
    * and no owner-plane seam offers it for an arbitrary capability yet, so the
-   * picker states that instead of pretending. See issue #807.
+   * picker states that instead of pretending. See #807.
    */
   onEnrichOnce?: (profile: EnrichEngineProfile) => void;
 }

@@ -519,11 +519,10 @@ describe("turn-routes", () => {
   });
 
   test("conversationLocks are per-runtime — two runtimes sharing appId+conversationId do not cross-block (#113)", async () => {
-    // Cross-gateway isolation harness. Pre-#113 `conversationLocks` was a
-    // module-level Map keyed by `${appId}::${conversationId}` with no gateway
-    // scoping; two profiles installing the same template app would share
-    // a single lock and serialise across users. The fix moves the map to
-    // the Runtime instance — this test would have failed before #113.
+    // Cross-gateway isolation harness. `conversationLocks` belongs to the
+    // Runtime instance, never a module-level map keyed by
+    // `${appId}::${conversationId}`: unscoped, two profiles installing the same
+    // template app share one lock and serialise across users (#113).
     //
     // Setup: two runtimes A and B, each with their own apps dir + HTTP
     // server. Both register the same `appId` ('demo') and both receive a
@@ -709,7 +708,7 @@ describe("turn-routes", () => {
     expect(seenPrompt).not.toMatch(/manifest unavailable/u);
   });
 
-  // ---------- Ask-model picker (GET/PUT /centraid/<appId>/_turn/model) ----------
+  // ────────── Ask-model picker (GET/PUT /centraid/<appId>/_turn/model) ──────────
 
   /** An in-memory `AskModelPrefs` fake — mirrors the gateway's prefs-store + catalog wiring. */
   function fakeAskModel(opts?: {

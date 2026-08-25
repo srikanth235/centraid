@@ -6,11 +6,9 @@ import {
   listTemplates,
 } from "../../../gateway-client.js";
 
-// Template catalog data layer — ports the vanilla loadAvailableTemplates
-// (app-cards.ts) + loadAutomationTemplates (app-automations-templates.ts) +
-// cloneTemplate (app-cards.ts). The one gateway catalog splits on kind: the app
-// slice is now read-only (it says which ids are BUNDLED, which is how an app
-// route tells a first-party fixture from a code-store app), while the automation
+// Template catalog data layer. The one gateway catalog splits on kind: the app
+// slice is read-only (it says which ids are BUNDLED, which is how an app route
+// tells a first-party fixture from a code-store app), while the automation
 // gallery keeps its own richer slice and its clone verb.
 
 /** App templates only (the automation slice has its own surface). */
@@ -81,8 +79,8 @@ export async function loadOverviewSuggestions(
 }
 
 /** Clone an automation template on the gateway, returning the new automation id
- *  + any once-only webhook secrets for the caller to surface (vanilla
- *  adoptTemplate, minus the navigation). Throws on clone failure. */
+ *  + any once-only webhook secrets for the caller to surface. Navigation is
+ *  the caller's. Throws on clone failure. */
 export async function cloneAutomationTemplate(tmpl: TemplateEntry): Promise<{
   automationId: string;
   /** The `<ownerApp>/<id>` handle the automation-view (thread) and editor
@@ -115,7 +113,7 @@ export function surfaceMintedWebhook(w: { url: string; secret: string }): void {
   void w;
 }
 
-/* `installAppTemplate` left with Discover (issue #708). Installing a first-party
+/* `installAppTemplate` left with Discover (#708). Installing a first-party
    app one at a time was the catalogue's whole verb, and there is no catalogue:
    every bundled app is installed at vault mount by the gateway, so the client
    has nothing left to ask for. The wire call it wrapped (`installTemplate`)

@@ -13,7 +13,7 @@
 // here too: a batch is one member act, but one bad item must not strand every
 // later item in that act.
 //
-// THE THIRD TARGET IS *COPY TO ⟨VAULT⟩* (issue #726). The caller supplies the
+// THE THIRD TARGET IS *COPY TO ⟨VAULT⟩* (#726). The caller supplies the
 // caption because only the caller knows the destination — another mounted
 // writable scope, named by its own label; there is no Sharing place and no
 // default share-target pointer to derive one from.
@@ -221,7 +221,6 @@ export function toggleSelectionRange(
   return next;
 }
 
-/** Select every visible key when empty; otherwise clear the selection. */
 export function toggleAllSelection(
   selected: ReadonlySet<string>,
   visibleKeys: readonly string[]
@@ -229,7 +228,6 @@ export function toggleAllSelection(
   return selected.size > 0 ? new Set() : new Set(visibleKeys);
 }
 
-/** Drop selection keys that are no longer present in the rendered shelf. */
 export function pruneSelection(
   selected: ReadonlySet<string>,
   presentKeys: readonly string[]

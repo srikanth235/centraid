@@ -1,4 +1,4 @@
-// Pure row/state helpers for the Data route's records section (issue #441 B3),
+// Pure row/state helpers for the Data route's records section (#441),
 // split out of the component so it reads as UI, not plumbing.
 // Nothing here touches React or the network — it classifies cell values and
 // computes row identity from column metadata so the table, the editor and the

@@ -93,7 +93,7 @@ export function buildOutageRows(
 }
 
 /** One durable alert-history row (Alerts tab) — the persisted counterpart
- *  of `OutageRowDTO`, spanning restarts (issue #351 wave 4). */
+ *  of `OutageRowDTO`, spanning restarts (#351). */
 export interface AlertHistoryRowDTO {
   id: string;
   kind: GatewayRuntimeSnapshot["alertHistory"][number]["kind"];
@@ -126,8 +126,7 @@ export function alertKindLabel(
 /** Alert-history rows, newest first. `alertHistory` arrives oldest-last from
  *  main (mirrors `outages`' ordering) — this is the display-order reversal,
  *  same shape as `buildOutageRows`. Falls back to an empty list for a
- *  snapshot fixture that predates this field (older tests, gateway-monitor
- *  before wave 4). */
+ *  snapshot that omits the field. */
 export function buildAlertHistoryRows(
   snapshot: GatewayRuntimeSnapshot
 ): AlertHistoryRowDTO[] {

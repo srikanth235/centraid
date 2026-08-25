@@ -1,5 +1,5 @@
 /*
- * In-process run-event bus (issue #158).
+ * In-process run-event bus (#158).
  *
  * The streaming transport for automation runs is a plain `runId`-keyed
  * emitter living in the gateway process — no new worker IPC. A fire

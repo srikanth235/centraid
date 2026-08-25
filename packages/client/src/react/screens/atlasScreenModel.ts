@@ -1,4 +1,4 @@
-// The Data route's derivations (v9 §6, issue #765) — census, pulse, graph and
+// The Data route's derivations (v9 §6, #765) — census, pulse, graph and
 // browse payloads turned into the block list's rows, sub lines, count line and
 // health sentence. Pure: no React, no network, so every sentence the page says
 // about the vault is testable on its own.
@@ -433,8 +433,8 @@ export function censusStamp(readAt: string | null): string | undefined {
 /**
  * The line under the grid (v9 §9) — the numbers are live, and so is the order.
  *
- * "Newest first" used to be a constant in this sentence because the read was.
- * A caption that kept saying it while a member had sorted by name would be the
+ * The order is a PARAMETER, never a constant in this sentence: a caption that
+ * kept saying "newest first" while a member had sorted by name would be the
  * page telling them something they can see is false.
  */
 export function tableCaption(

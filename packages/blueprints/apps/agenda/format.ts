@@ -39,7 +39,7 @@ export function toLocalInput(dateish: string | number | Date): string {
 // pinned against a NAMED locale (a 12-hour locale reads "2:05 PM" where a
 // 24-hour one reads "14:05"), instead of against whatever ICU default the
 // machine running the suite happens to carry. See the time-zoo suite in
-// `format-locale.test.ts` (issue #839).
+// `format-locale.test.ts` (#839).
 
 export function fmtTime(
   iso: string | number | Date,

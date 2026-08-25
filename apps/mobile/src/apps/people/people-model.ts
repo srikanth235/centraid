@@ -54,9 +54,9 @@ const truthy = (row: Row, key: string): boolean => Boolean(row[key]);
 const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The avatar colour, round-tripped with the web surface.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** The stored spelling the web editor writes for a chosen hue. It is a CSS
  *  custom-property EXPRESSION because the ring moves between light and dark;
@@ -101,9 +101,9 @@ export function avatarFill(
   return ringFor(identityHueKey(person.party_id));
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The roster window (`queries/people.ts`) and trash (`queries/trash.ts`).
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface RosterInput {
   /** Every `people.profile` row in the replica, trashed ones included. */
@@ -243,11 +243,11 @@ export function projectRoster(input: RosterInput): RosterProjection {
   return { people, trash, lists, linksAvailable };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The roster filter and the row's second line — the web renderer's own rules
 // (`components/RosterRoute.tsx`), restated here because that module is a
 // render file this app may not import.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** A row whose link fact is unknown answers NEITHER link chip: unknown is not
  *  "unlinked", and a shelf that quietly counted it as one would be guessing. */
@@ -301,10 +301,10 @@ export function searchRoster(
   });
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The keep-in-touch summary (`queries/dashboard.ts`), client-side over the
 // same window — the same judgment, so Touch and the roster cannot disagree.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface DashboardInput {
   people: readonly PersonRow[];
@@ -416,13 +416,13 @@ export function projectDashboard(input: DashboardInput): DashboardData {
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // One person in full (`queries/person.ts`), from the replica's own tables.
 // Only the sections the handoff draws are projected — channels, dates, notes,
 // interactions and the sharing plane. The query also answers lists, tasks,
 // gifts, debts and relationships; the handoff excludes them and bans their
 // placeholders, so nothing here carries them.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface PersonDetailInput {
   /** The person's roster row — name, role, star, cadence come from it. */

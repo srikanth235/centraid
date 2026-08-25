@@ -86,7 +86,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     return true;
   }
 
-  // ---------- The star ----------
+  // ────────── The star ──────────
 
   /** Star and unstar are each other's reverse, so this is the clearest Undo in
    *  the app: the same pair of commands, run the other way round. */
@@ -117,7 +117,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     });
   }
 
-  // ---------- Trash and restore ----------
+  // ────────── Trash and restore ──────────
 
   async function trashPerson(person: {
     party_id: string;
@@ -139,7 +139,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.restored(person.name));
   }
 
-  // ---------- The person record ----------
+  // ────────── The person record ──────────
 
   /**
    * Save the edit/new form.
@@ -223,7 +223,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     });
   }
 
-  // ---------- The most repeated act in the app ----------
+  // ────────── The most repeated act in the app ──────────
 
   /** Logging stamps last-contacted to zero and prepends the touch to Recent.
    *  No Undo: nothing in the contract un-logs an interaction, and a button
@@ -237,7 +237,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.logged(draft.kind, name));
   }
 
-  // ---------- The person screen's sections ----------
+  // ────────── The person screen's sections ──────────
 
   async function addNote(
     partyId: string,
@@ -310,7 +310,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.channelRemoved(channel.kind));
   }
 
-  // ---------- Merge ----------
+  // ────────── Merge ──────────
 
   /** The one act with no reverse at all, which is why it is behind a modal
    *  confirm rather than behind an Undo. */

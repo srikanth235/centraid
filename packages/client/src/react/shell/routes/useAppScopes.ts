@@ -1,4 +1,4 @@
-// Which scopes an inline app mounts over (issue #599).
+// Which scopes an inline app mounts over (#599).
 //
 // An owner owns their own vault and every audience vault the household added
 // them to (#726: ownership, not a role). `GET /_vault/scopes?app=<id>`
@@ -59,7 +59,7 @@ function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
       // Carried through EXACTLY as the gateway answered: an app's "somewhere
       // other than my own" marker is `personal === false`, so an older
       // gateway that omits it leaves every scope unmarked rather than marking
-      // every scope (issue #711 item H).
+      // every scope (#711).
       ...(entry.personal === undefined ? {} : { personal: entry.personal }),
       ...(entry.color ? { color: entry.color } : {}),
       ...(entry.icon ? { icon: entry.icon } : {}),

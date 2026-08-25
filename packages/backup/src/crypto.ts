@@ -5,7 +5,7 @@
  * the exact info strings FORMAT.md specifies — changing either string would
  * silently re-key every vault, so they're `const`, not templated loosely.
  *
- * Format /1 (issue #408) makes every object nonce DETERMINISTIC — derived by HKDF
+ * Format /1 (#408) makes every object nonce DETERMINISTIC — derived by HKDF
  * from the object's identity rather than `randomBytes` — so a retried upload
  * is byte-identical to the first attempt (G7). Safety rests on the derivation
  * inputs never repeating with different plaintext: chunk nonces derive from
@@ -124,9 +124,9 @@ export function chunkId(dedupKey: Uint8Array, plain: Uint8Array): string {
     .digest("hex");
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Keyring (FORMAT.md § Key custody — epochs)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Mutation ownership for #532 is the pure seal/HKDF surface above (property
 // suite). Keyring I/O is covered by crypto.test.ts unit tests, not the
 // property/mutation mutate set.
@@ -166,7 +166,7 @@ export function masterKeyForEpoch(keyring: Keyring, epoch: number): Uint8Array {
 }
 
 /** Validate an untyped JSON value as a `Keyring` (FORMAT.md § Key custody).
- *  Exported (issue #439) so the recovery-kit reader can validate the keyring
+ *  Exported (#439) so the recovery-kit reader can validate the keyring
  *  it carries with the SAME rules `loadKeyring` holds a file to — a kit whose
  *  keyring is malformed is rejected before a single provider call. */
 export function validateKeyring(value: unknown): Keyring {

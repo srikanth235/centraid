@@ -6,15 +6,13 @@
 // handoff row this sheet still does NOT carry — see the comment on
 // `PHOTOS_MORE_ROWS` (photos-band.ts) for why a missing row beats a lying one.
 //
-// It no longer carries **Tile size**. That stepper passed through here on its
-// way from a permanent toolbar row (44 points over the timeline, for a
-// preference a member sets rarely) to its present home — the Library's own
-// header menu (`photos-library-menu.ts`, drawn as an anchored card by
+// **Tile size** does NOT belong here. It lives in the Library's own header
+// menu (`photos-library-menu.ts`, drawn as an anchored card by
 // `kit/components/AnchoredMenu.tsx`), opened from the round control beside
-// Select on `PhotosHome`'s header, iOS-Photos-style. It sits there now beside
-// the other things that shape what the grid shows (the filter), which this
-// sheet has no opinion about at all. This sheet is left with exactly one job:
-// Backup, a cross-stack link that menu has no reason to carry.
+// Select on `PhotosHome`'s header — beside the other things that shape what
+// the grid shows (the filter), which this sheet has no opinion about at all.
+// This sheet has exactly one job: Backup, a cross-stack link that menu has no
+// reason to carry.
 
 import React, { useMemo } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
@@ -34,15 +32,13 @@ export interface PhotosMoreSheetProps {
 }
 
 /*
- * NO META MAP HERE ANY MORE.
+ * NO META MAP HERE.
  *
- * This file used to derive live counts for five rows — favourites, trash,
- * duplicate clusters, places, shared — by reading the timeline, the place
- * table and the share target, so each row could carry the mono figure the
- * prototype puts beside it. All five of those rows are sections of
- * Collections now, where the same counts are stated beside the same shelves,
- * over the shelf's own covers. Deriving them twice meant two places that had
- * to agree about what a duplicate cluster is.
+ * This file derives no live counts. Favourites, trash, duplicate clusters,
+ * places and shared are sections of Collections, where the counts are stated
+ * beside the same shelves, over the shelf's own covers. Reading the timeline,
+ * the place table and the share target here to repeat those mono figures would
+ * be two places that have to agree about what a duplicate cluster is.
  *
  * Backup, the one row left, deliberately carries no meta: the figure it would
  * show comes from a network round trip and a durable-queue read this sheet has

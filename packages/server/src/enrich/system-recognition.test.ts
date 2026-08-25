@@ -1,5 +1,5 @@
 /*
- * The system recognition lane (#816 adds `place-names` to it).
+ * The system recognition lane, `place-names` included (#816).
  *
  * This list is small and load-bearing in three different places, and one of them
  * is easy to get backwards: membership here is what makes the scheduler reconcile

@@ -1,5 +1,5 @@
 /*
- * Pricing catalog warmer (issue #445).
+ * Pricing catalog warmer (#445).
  *
  * The app-engine pricing seam ships a committed LiteLLM snapshot so costing
  * works offline from process start. This warmer overlays a FRESH table: it

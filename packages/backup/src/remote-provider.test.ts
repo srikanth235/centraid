@@ -273,7 +273,7 @@ describe("remote-provider", () => {
       )
     )("%s", async (_name, testCase) => {
       await testCase.run();
-      // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496 E5).
+      // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496).
       expect(true).toBe(true);
     });
   });

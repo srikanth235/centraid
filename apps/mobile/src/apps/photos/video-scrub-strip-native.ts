@@ -2,8 +2,8 @@
 // the SAME `expo-video-thumbnails` call `generateDeviceDerivatives`
 // (`lib/upload/derivatives-native.ts`) already uses for a video's single
 // upload-time poster — this asks it for several timestamps down one clip
-// instead of one at `time: 0`. No new native dependency: the package was
-// already in `apps/mobile/package.json` before this issue.
+// instead of one at `time: 0`. No native dependency beyond the one
+// `apps/mobile/package.json` already carries.
 //
 // PLATFORM HONESTY. `expo-video-thumbnails` documents frame extraction as
 // working on iOS and Android; it has no web implementation (the package's own

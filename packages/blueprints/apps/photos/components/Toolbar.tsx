@@ -98,7 +98,7 @@ export function ToolbarView(props: ToolbarProps) {
 /**
  * Tile size: ONE property with four rungs, XS–L (§4.2), drawn as four segments.
  *
- * WHY FOUR SEGMENTS AND NOT − / + (issue #765). The stepper made a member
+ * WHY FOUR SEGMENTS AND NOT − / + (#765). The stepper made a member
  * press twice to cross the range and never showed them where the range ended;
  * the four rungs are named, few and fixed, so every one of them can be a
  * target. The MODEL is unchanged: this is still one member preference walked

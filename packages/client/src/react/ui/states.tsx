@@ -1,4 +1,4 @@
-// The Binding Layer's designed states (issue #708, section A), in the brief's
+// The Binding Layer's designed states (#708, section A), in the brief's
 // own language and as reusable client components.
 //
 // Three of the four live here. The fourth — OFFLINE — is not a component: it

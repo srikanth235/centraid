@@ -1,7 +1,7 @@
 import fss, { promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#408) the replay e2e suite drives one real mini-shipper fixture through every damage/PITR/coordination case; sharding would duplicate the shipper per file
 /*
- * End-to-end WAL replay tests (FORMAT.md § WAL segments — /1, issue #408).
+ * End-to-end WAL replay tests (FORMAT.md § WAL segments — /1, #408).
  *
  * These tests run the REAL pipeline: a mini shipper drives a real
  * `node:sqlite` database in WAL mode (autocheckpoint off, TRUNCATE-only
@@ -50,7 +50,7 @@ import { replayWalSegments } from "./wal-restore.js";
 const DATA_KEY = new Uint8Array(32).fill(0x6b);
 const VAULT_ID = "vault-restore-test";
 
-/* eslint-disable max-classes-per-file -- (#354) TickClock is a tiny clock stub
+/* oxlint-disable max-classes-per-file -- (#354) TickClock is a tiny clock stub
    colocated with the MiniShipper test rig it drives. */
 /** Deterministic monotonic capture clock — segments of one round share a tick. */
 class TickClock {
@@ -315,9 +315,9 @@ async function forgeChecksumInvalidSegment(
   await store.put(key, sealWalSegment(DATA_KEY, VAULT_ID, addr, plain));
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Single-database scenario: 2 groups, 5 segments, 5 ticks.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 interface VaultScenario {
   store: FsObjectStore;
@@ -678,9 +678,9 @@ describe("replayWalSegments — damage degrades to an earlier consistent state (
   });
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Two databases, one store: coordinated damage cut (G8)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 describe("replayWalSegments — coordinated two-database restore (G8)", () => {
   interface PairScenario {
@@ -827,9 +827,9 @@ describe("replayWalSegments — coordinated two-database restore (G8)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// The receipt pair: what coordination is actually FOR (issue #408 G8).
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
+// The receipt pair: what coordination is actually FOR (#408).
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * A journal row `receipt:X` is a receipt naming vault row `X`. A restored pair

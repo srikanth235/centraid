@@ -1,4 +1,4 @@
-// Phase-A eligibility (issue #438 decision 1). Selects the cold turn-ranges a
+// Phase-A eligibility (#438 decision 1). Selects the cold turn-ranges a
 // conversation can seal away WITHOUT ever touching a live, pinned, in-flight, or
 // already-archived turn. Reads only — no lock held, no mutation.
 

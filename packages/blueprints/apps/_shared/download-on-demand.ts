@@ -19,7 +19,7 @@
 //
 // OBJECT URL LIFECYCLE. `URL.createObjectURL` leaks until revoked, and photos'
 // own `upload.ts` already carries a `revokeObjectURL` pairing for the local
-// preview it makes before a write lands (issue #296's blob write path — a
+// preview it makes before a write lands (#296's blob write path — a
 // DIFFERENT direction, device to gateway, but the same browser API). This
 // module is that same discipline for the DOWN direction: a fresh `start()`
 // revokes whatever object URL the previous fetch produced before requesting a
@@ -27,15 +27,6 @@
 // to unmount or move to a different asset. Nothing here revokes a URL a
 // caller has itself gone on to use elsewhere — ownership stays with whichever
 // `DownloadOnDemand` produced it.
-//
-// WIRING NOT DONE HERE. Photos' actual "Load the original" today
-// (`Lightbox.tsx`'s `onLoadOriginal`) only posts a notice string — the image
-// element's own `src` does the real fetching, transparently, the moment
-// `ViewerStage.tsx`'s `<img>`/`<video>` mounts with a gateway URL. Routing
-// that through this module (so the fetch becomes explicit and the bytes
-// resolve to an object URL instead of a bare `src`) needs edits in
-// `Lightbox.tsx` and `ViewerStage.tsx` — outside this pass's ownership. See
-// the wiring note this task's report carries for the exact call sites.
 
 /** The three request phases a caller renders through. No fourth "loading"
  *  spinner phase exists on purpose — `fetching` IS the loading phase, and a
@@ -225,7 +216,6 @@ export class DownloadOnDemand {
   }
 }
 
-/** Convenience constructor mirroring the module's own name. */
 export function createDownloadOnDemand(
   url: string,
   deps?: DownloadOnDemandDeps

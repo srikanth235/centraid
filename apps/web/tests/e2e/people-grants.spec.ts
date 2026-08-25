@@ -6,8 +6,7 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// PEOPLE'S PERSON SCREEN AS THE GRANT DASHBOARD, in a real browser (#825,
-// wave 7).
+// PEOPLE'S PERSON SCREEN AS THE GRANT DASHBOARD, in a real browser (#825).
 //
 // The shipped section is mounted over the shipped design tokens and the
 // shipped `kit.css`, with the grant plane stubbed at the ONE seam it was built
@@ -17,9 +16,9 @@ import { toCss } from "@centraid/design";
 // the destructive confirm paint at the app's own recipes, the reach line reads
 // as an invitation opportunity rather than an error, and `Share` on a person
 // this vault has NEVER REACHED is one gesture — no link ceremony is drawn
-// anywhere in the flow, which is the acceptance item this wave closes.
+// anywhere in the flow, which is the acceptance item this spec settles.
 //
-// The capture is the #825 People UI-impact evidence.
+// The capture is the People UI-impact evidence (#825).
 
 declare global {
   interface Window {

@@ -5,7 +5,7 @@
 // them in whatever order it is given. That leaves a HOLE whenever a 1×1 is
 // followed by a full-width tile: the small takes the leading half of a row, the
 // wide tile cannot fit beside it, and the trailing half stays blank. On a
-// seeded vault the page read Notes / People + hole / Photos / Locker + Tally /
+// seeded vault the page reads Notes / People + hole / Photos / Locker + Tally /
 // Tasks + hole / Docs / Agenda + hole — three blanks that look like tiles that
 // failed to render.
 //

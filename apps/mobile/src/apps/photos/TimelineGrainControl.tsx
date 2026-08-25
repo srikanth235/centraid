@@ -1,8 +1,8 @@
-// THE LIBRARY'S GRAIN CONTROL — Years · Months · All (issue #712 iOS parity).
+// THE LIBRARY'S GRAIN CONTROL — Years · Months · All (#712 iOS parity).
 //
-// PERMANENT. This is the rebuild of a control that used to appear only while
-// the member was scrolling and withdraw 3.2 seconds after the last gesture, and
-// the defect it exists to prevent is worth stating plainly: the maintainer used
+// PERMANENT — never armed by scroll and withdrawn 3.2 seconds after the last
+// gesture. The defect that arrangement causes is worth stating plainly: the
+// maintainer used
 // this app against native iOS Photos and never discovered that Years and Months
 // existed at all. The scroll-arming was defended as rent — 44 points of
 // photographs for a control touched a few times a session — and the accounting

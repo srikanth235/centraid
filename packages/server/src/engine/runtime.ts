@@ -104,7 +104,7 @@ export interface RuntimeOptions {
    */
   harnessStatus?: (opts?: HarnessStatusOptions) => Promise<HarnessStatus>;
   /**
-   * Optional code-dir resolver (issue #137). When provided, the runtime
+   * Optional code-dir resolver (#137). When provided, the runtime
    * runs handlers from whatever dir this returns for an
    * app id — the gateway injects an apps-store-backed resolver pointing
    * at the live git worktree (`worktrees/main/<sha>/apps/<id>/`) instead
@@ -114,7 +114,7 @@ export interface RuntimeOptions {
    */
   codeDirOverride?: (appId: string) => Promise<string | undefined>;
   /**
-   * Optional DRAFT code-dir resolver (issue #141, draft preview). When
+   * Optional DRAFT code-dir resolver (#141, draft preview). When
    * provided, RPC requests under `/centraid/_draft/<sessionId>/<appId>/…`
    * run handlers from whatever dir this returns for `(appId, sessionId)` —
    * the gateway injects an apps-store-backed resolver pointing at the
@@ -149,7 +149,7 @@ export interface RuntimeOptions {
    */
   askModel?: AskModelPrefs;
   /**
-   * Optional per-vault turn-concurrency gate (issue #420). Resolved per request
+   * Optional per-vault turn-concurrency gate (#420). Resolved per request
    * so it bounds running turns per ambient vault. Wired by the gateway; absent
    * in embedded/hermetic hosts → unbounded.
    */
@@ -250,7 +250,7 @@ const noopLogger: RuntimeLogger = {
  */
 export class Runtime {
   /**
-   * Declared-handler dispatcher (issue #107). Exposed so hosts can
+   * Declared-handler dispatcher (#107). Exposed so hosts can
    * delegate here (the app RPC routes for app UIs do) rather than
    * re-implementing the manifest + validation surface.
    */
@@ -302,10 +302,10 @@ export class Runtime {
   private readonly conversationWorkspaceRoots?: RuntimeOptions["conversationWorkspaceRoots"];
   /**
    * Per-runtime (and therefore per-gateway) chat-session lock map for the
-   * `(appId, conversationId)` chat serialization. Was a module-level map in
-   * `chat-routes.ts` until issue #113 — moved here so two gateways that
-   * happen to share an `appId` (same template installed in two profiles)
-   * don't collide on the same lock key.
+   * `(appId, conversationId)` chat serialization. Per-runtime and not
+   * module-level (#113) so two gateways that happen to share an
+   * `appId` (same template installed in two profiles) don't collide on the
+   * same lock key.
    */
   private readonly conversationLocks = new Map<string, Promise<void>>();
 
@@ -443,7 +443,7 @@ export class Runtime {
     entry: RegistryEntry
   ): Promise<string | undefined> {
     // Mirrors `Dispatcher.resolveCodeDir`: the git-store override resolves
-    // an app's live code dir (issue #137). No override → no servable code.
+    // an app's live code dir (#137). No override → no servable code.
     return this.codeDirOverride ? this.codeDirOverride(entry.id) : undefined;
   }
 
@@ -452,7 +452,7 @@ export class Runtime {
   }
 
   /**
-   * App RPC handler-invocation route (issue #505, retiring the
+   * App RPC handler-invocation route (#505, retiring the
    * `/centraid/_tool/centraid_*` shim). Serves
    * `POST /centraid/<appId>/actions/<action>` and
    * `POST /centraid/<appId>/queries/<query>`: the app id + handler name ride
@@ -543,7 +543,7 @@ export class Runtime {
   }
 
   /**
-   * App describe route (issue #505, replacing `centraid_describe`):
+   * App describe route (#505, replacing `centraid_describe`):
    * `GET /centraid/<appId>/_describe` returns the app's manifest; an optional
    * `?action=<name>`/`?query=<name>` narrows to one declared handler.
    */
@@ -591,7 +591,7 @@ export class Runtime {
   }
 
   /**
-   * Draft preview (issue #141): resolve the session worktree's code dir so a
+   * Draft preview (#141): resolve the session worktree's code dir so a
    * `/centraid/_draft/<sessionId>/…` invocation runs against the app's live
    * data. Live requests (no draft session) resolve to `undefined`.
    */
@@ -607,7 +607,7 @@ export class Runtime {
   /**
    * Map an MCP-shaped `ToolResult` to an HTTP response. The handler JSON is
    * the headline compressible payload (a query result can be large) — so
-   * negotiate br/gzip off the request's Accept-Encoding (issue #404). Skips
+   * negotiate br/gzip off the request's Accept-Encoding (#404). Skips
    * small bodies internally; the PWA service-worker path never forwards
    * Accept-Encoding, so it opts out and receives raw JSON — see
    * http/compression.ts.
@@ -635,7 +635,7 @@ export class Runtime {
    * app-engine does not enforce its own auth.
    */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // Draft preview (issue #141): a `/centraid/_draft/<sessionId>/…` request
+    // Draft preview (#141): a `/centraid/_draft/<sessionId>/…` request
     // runs the session worktree's handlers against the app's live data. The
     // session id rides through to the RPC/describe cases, which resolve it
     // via `draftOverride`.

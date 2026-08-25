@@ -1,5 +1,5 @@
 /**
- * THE GRANT PLANE, AS A SURFACE READS IT (issue #825).
+ * THE GRANT PLANE, AS A SURFACE READS IT (#825).
  *
  * A share is a standing grant: who may see or edit which subject, from when,
  * until it is revoked. `packages/server/src/routes/grant-routes.ts` is the one

@@ -132,7 +132,7 @@ interface InlineAppMountProps {
   appId: string;
   cacheKey: string;
   descriptorPromise: Promise<{ default: InlineAppModule }>;
-  /** Mounted scopes, primary first (issue #599). */
+  /** Mounted scopes, primary first (#599). */
   scopes: readonly ResolvedAppScope[];
   /** The frame's contribution channel — app bar, status line, compact band. */
   frame: InlineFrame;
@@ -157,7 +157,7 @@ function InlineAppMount({
   onOpenApprovals,
   onOpenApp,
 }: InlineAppMountProps): JSX.Element {
-  // ONLY the primary scope blocks first paint (issue #599). Every audience is
+  // ONLY the primary scope blocks first paint (#599). Every audience is
   // hydrated after the app is on screen, so a household with several shared
   // scopes still paints as fast as a single-scope one.
   const primary = scopes[0]!;
@@ -364,10 +364,10 @@ export default function InlineAppRoute({
     []
   );
 
-  // THE FRAME CONTRIBUTES NOTHING TO THE BAR. It used to add a settings gear
-  // ahead of the app's own actions; every bundled app now draws its bar to a
-  // design handoff, and none of those handoffs has a frame control in it.
-  // What the gear opened — rename, delete, reveal, per-app automations, the
+  // THE FRAME CONTRIBUTES NOTHING TO THE BAR — no settings gear ahead of the
+  // app's own actions. Every bundled app draws its bar to a design handoff,
+  // and none of those handoffs has a frame control in it.
+  // What a gear would open — rename, delete, reveal, per-app automations, the
   // enrichment settings link and the appearance knobs — has no other door and
   // is unreachable until one is designed. `AppSettingsController.tsx` and
   // `inlineAppFlows.ts` are kept unmounted for that day rather than deleted,
@@ -385,7 +385,7 @@ export default function InlineAppRoute({
     () => (refused ? undefined : loadDescriptor(cacheKey, loader)),
     [cacheKey, loader, refused]
   );
-  // The mount key gains a SCOPE-SET axis (issue #599, docs/client-keying.md):
+  // The mount key gains a SCOPE-SET axis (#599, docs/client-keying.md):
   // the same app over a different set of scopes is a different mount, because
   // `window.centraid` and every replica lease it holds are per scope set.
   const scopesState = useAppScopes(appId);

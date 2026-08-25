@@ -126,7 +126,7 @@ export function PlaceMap({
   const drawHeight = height ?? Math.round(drawWidth * 0.66);
   // The pins are photographs now, so they need real room: the projection's
   // padding has to clear half of the largest pin or the northernmost picture
-  // hangs off the top edge. It was 18 when a pin was a 13px dot.
+  // hangs off the top edge.
   const { pins, meridians, parallels, scale, tier } = projectPlaces(points, {
     width: drawWidth,
     height: drawHeight,

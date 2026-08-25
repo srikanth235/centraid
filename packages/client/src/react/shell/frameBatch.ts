@@ -1,11 +1,11 @@
 // Coalesce a burst of "state changed, re-project" calls into at most one run
-// per animation frame (issue #659).
+// per animation frame (#659).
 //
-// The assistant stream fires an event per token. Each one used to re-project
-// the WHOLE transcript and push it into React synchronously, so a 900-token
-// answer did 900 full projections and 900 renders — work the display could
-// never show, since it only paints ~60 times a second. Batching bounds that to
-// one projection per frame while keeping the last write visible: the batched
+// The assistant stream fires an event per token. Re-projecting the WHOLE
+// transcript per event and pushing it into React synchronously would make a
+// 900-token answer do 900 full projections and 900 renders — work the display
+// can never show, since it only paints ~60 times a second. Batching bounds that
+// to one projection per frame while keeping the last write visible: the batched
 // callback reads live state when it runs, so nothing is ever dropped, only
 // skipped ahead of.
 //

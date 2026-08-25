@@ -18,7 +18,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "../serve/serve.ts";
 import type { GatewayServeHandle } from "../serve/serve.ts";
-// lifecycle-automation-routes is exercised through serve() HTTP paths below (#545 B3).
+// lifecycle-automation-routes is exercised through serve() HTTP paths below (#545).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -338,7 +338,7 @@ describe("lifecycle-automation-routes scenarios", () => {
     expect(json.error).toBe("not_found");
   });
 
-  // ---- update-route WIRING (#656 1D) --------------------------------------
+  // ──── update-route WIRING (#656 1D) ──────────────────────────────────────
   // Trigger legality is the manifest validator's law
   // (`packages/server/src/automation/manifest/manifest.test.ts`). The two tests below
   // prove only that the update handler runs its own kind pre-check and that a
@@ -394,16 +394,14 @@ describe("lifecycle-automation-routes scenarios", () => {
     const { compileTurnId } = (await res.json()) as { compileTurnId: string };
     expect(compileTurnId).toContain(":compile:");
 
-    // Wait on a wall-clock deadline, not an iteration count. A compile spawns a
-    // real app-server subprocess; the old 20x25ms budget was 500ms, which a
-    // loaded CI harness blows through routinely. When it expired the loop simply
-    // fell through and the assertions below still passed against a run row that
-    // had not ended yet — so the test proved nothing it claimed, and afterEach
-    // then deleted the data dir while the compile was still writing objects into
-    // code/apps.git, surfacing as ENOTEMPTY from an unrelated-looking rm.
+    // Wait on a wall-clock deadline, not an iteration count (#496). A
+    // compile spawns a real app-server subprocess, and a fixed-iteration budget
+    // a loaded CI harness blows through simply falls through: the assertions
+    // below would then pass against a run row that had not ended yet, and
+    // afterEach would delete the data dir while the compile was still writing
+    // objects into code/apps.git (ENOTEMPTY from an unrelated-looking rm).
     // Asserting endedAt is what makes the wait real: the run must be over before
     // this test returns, which is also what makes teardown safe.
-    // #496 H1 — poll with vi.waitFor rather than a fixed-sleep loop.
     await vi.waitFor(
       async () => {
         const feed = await fetch(

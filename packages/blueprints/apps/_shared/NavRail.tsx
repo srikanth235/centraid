@@ -80,7 +80,6 @@ export type NavRailItem =
       onSelect?: () => void;
     };
 
-/** Is this item a row a member can actually land on? */
 function isDestination(
   item: NavRailItem
 ): item is Extract<NavRailItem, { kind: "row" }> & { onSelect: () => void } {

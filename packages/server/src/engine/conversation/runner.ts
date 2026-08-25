@@ -121,7 +121,7 @@ export type TurnStreamEvent =
     }
   /**
    * A non-fatal, human-readable notice about the turn — surfaced in the
-   * transcript and folded into the ledger as a notice step (issue #420).
+   * transcript and folded into the ledger as a notice step (#420).
    * A harness that can't consume an attachment kind (e.g. Codex silently drops
    * PDF `document` blocks) emits `code:'attachment_unsupported'` so the user
    * sees "this harness can't read PDF attachments" instead of nothing. Both
@@ -129,7 +129,7 @@ export type TurnStreamEvent =
    */
   | { type: "notice"; level: "warn" | "info"; code?: string; message: string }
   /**
-   * Webhook secrets minted as a post-turn step (issue #141, Phase 3). When
+   * Webhook secrets minted as a post-turn step (#141). When
    * a unified-chat turn authors an automation with a pending webhook
    * trigger, the gateway mints the route id + shared secret after the turn
    * settles (the harness can't generate crypto-random credentials) and
@@ -166,7 +166,7 @@ export type TurnStreamEvent =
       cacheWriteTokens?: number;
       /**
        * USD cost: harness/ACP-reported when present; otherwise filled at the SSE
-       * seam from the catalog (issue #514). See `costSource`.
+       * seam from the catalog (#514). See `costSource`.
        */
       costUsd?: number;
       /** Where `costUsd` came from — harness report vs catalog estimate. */
@@ -204,7 +204,7 @@ export interface ConversationTurnInput {
   sessionFile: string;
   message: string;
   /**
-   * Which chat register the turn belongs to (issue #286 phase 2). `'ask'`
+   * Which chat register the turn belongs to (#286). `'ask'`
    * marks the user-facing app copilot ("operate/ask about my data") —
    * hosts may route vault-backed apps' ask turns onto the vault register
    * (vault_sql/vault_invoke with an app lens). Absent/`'build'` keeps the
@@ -213,7 +213,7 @@ export interface ConversationTurnInput {
   register?: "ask" | "build";
   /**
    * Files attached to this turn's inbound message — already landed in the
-   * per-app blob CAS; `path` is the absolute blob path (issue #190). The
+   * per-app blob CAS; `path` is the absolute blob path (#190). The
    * route resolves these from the turn POST body's attachment refs; the
    * turn plane threads them into the harness as multimodal content blocks.
    */
@@ -364,7 +364,7 @@ export interface ConversationRunner {
    * driver (draft worktree + file-edit tools + authoring prompt) reports
    * `'build'`; the data-only driver leaves it unset (the route defaults to
    * `'chat'`). Read statically by the route, so the kind is recorded even
-   * when a turn errors and returns no `ConversationTurnResult` (issue #181).
+   * when a turn errors and returns no `ConversationTurnResult` (#181).
    */
   readonly runKind?: RunKind;
   /** Drive one turn. Resolves when the model has emitted its final reply

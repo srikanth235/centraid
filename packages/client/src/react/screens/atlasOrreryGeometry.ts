@@ -1,4 +1,4 @@
-// Pure, deterministic geometry for the Relations orrery (issue #441 B2). Kept
+// Pure, deterministic geometry for the Relations orrery (#441). Kept
 // out of the component so tests can hit the maths directly — bearing
 // allocation, hop BFS, ring radius, fill→width mapping and edge paths are all
 // side-effect-free functions of their inputs. The one invariant everything here
@@ -429,7 +429,7 @@ const r1 = (n: number): string => n.toFixed(1);
  * handled by the caller (bow 1 = straight radial); for everything else the bow
  * deepens with angular separation. Two neighbours on the same ring get a
  * near-straight chord — a fixed bow there folds the short chord into a hairpin
- * loop (the "scribble" artifact the sync island used to draw); two kinds on
+ * loop (the "scribble" artifact); two kinds on
  * opposite sides arc well clear of the plate.
  */
 export function edgeBow(fromDeg: number, toDeg: number): number {

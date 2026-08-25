@@ -79,7 +79,7 @@ export function parseVaultIds(raw: unknown): string[] | null {
 
 /**
  * `body.operationId` — the client-chosen idempotency key the *Add someone*
- * mint lane requires (issue #750). Shape-checked here so a typo'd id can
+ * mint lane requires (#750). Shape-checked here so a typo'd id can
  * never silently start a second provision: 8–128 chars of `[A-Za-z0-9._-]`
  * (a UUID fits). `undefined` = absent; `null` = malformed.
  */
@@ -182,7 +182,7 @@ export function resolveInvitation(
       : undefined;
   // An UNOWNED target on the host lane is founding-completion, not an
   // invitation into someone's vault: the owner is minted below, and
-  // redemption claims the vault (issue #603's headless first-enroll, kept).
+  // redemption claims the vault (#603's headless first-enroll, kept).
   const hostFounding =
     input.hostCustody &&
     requestedOwner === undefined &&

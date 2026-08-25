@@ -53,7 +53,7 @@ const CLASSES: AssistantRichClassOverrides = {
 // Answers are re-projected on every streamed token and on every re-render of
 // the transcript, but an answer's text→HTML mapping is pure and an ALREADY
 // FINISHED answer's text never changes. Without a cache a 900-token turn
-// re-parsed every earlier answer in the thread 900 times (issue #659). The cap
+// re-parsed every earlier answer in the thread 900 times (#659). The cap
 // is generous enough to cover a long visible transcript and bounded so a long
 // session cannot grow it without limit.
 const RICH_ANSWER_CACHE_ENTRIES = 200;

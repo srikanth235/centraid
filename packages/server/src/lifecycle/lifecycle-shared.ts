@@ -1,8 +1,7 @@
 // Shared options + helpers for the gateway-owned app lifecycle routes
-// (issue #141, Phase 2). Split out of `lifecycle-routes.ts` so the app
-// handlers (create/clone/meta) and the automation handlers
-// (create/set-enabled/delete) can each stay under the repo file-size
-// limit while sharing the stage-vs-publish fork and error mapping.
+// (#141): the app handlers (create/clone/meta) and the
+// automation handlers (create/set-enabled/delete) share the
+// stage-vs-publish fork and error mapping from here.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -39,10 +38,10 @@ export interface LifecycleRouteOptions {
    */
   deregister: (appId: string) => Promise<void>;
   /** Reconcile the gateway's in-process cron scheduler after a publish
-   *  changed the live set (issue #149/#150). */
+   *  changed the live set (#149/#150). */
   reconcile: () => void;
   /**
-   * The vault plane's ext-band operations (issue #286 phase 2). Injected
+   * The vault plane's ext-band operations (#286). Injected
    * so a lifecycle publish applies the staged app's declared extension
    * tables to the vault before the ff-merge — symmetric to the apps-store
    * publish route. Omitted on hosts without a vault plane.
@@ -62,7 +61,7 @@ export interface LifecycleRouteOptions {
     compileTurnId: string;
   }) => void;
   /**
-   * True when `id` is a bundled blueprint app id (issue #434). Bundled ids are
+   * True when `id` is a bundled blueprint app id (#434). Bundled ids are
    * RESERVED — scaffold/clone reject or avoid them so a code-store app can
    * never shadow the shipped blueprint the resolver serves in place.
    */
@@ -74,7 +73,7 @@ export interface LifecycleRouteOptions {
   /** Release-owned code-store app ids (the container of a system recipe). */
   isSystemManagedApp?: (appId: string) => boolean;
   /**
-   * Install a bundled blueprint app in place (issue #434): enroll the
+   * Install a bundled blueprint app in place (#434): enroll the
    * `consent.app` record (origin 'installed') + register in the runtime +
    * grant the manifest-declared scopes — no git, no id minting. Idempotent
    * (an already-installed app returns its existing registration). Resolves
@@ -85,7 +84,7 @@ export interface LifecycleRouteOptions {
     templateId: string
   ) => Promise<InstalledBundledApp | undefined>;
   /**
-   * Set/clear an installed bundled app's per-vault rename (issue #434), since
+   * Set/clear an installed bundled app's per-vault rename (#434), since
    * its code is read-only. Returns true when handled (the id is an installed
    * bundled app); false lets the meta route fall through to the code-store
    * app.json rewrite. Omitted on hosts with no vault plane.
@@ -100,7 +99,7 @@ export interface InstalledBundledApp {
   description?: string;
   iconKey?: string;
   colorKey?: string;
-  /** True when the app was already installed — the install was a no-op. */
+  /** True when the app is already installed — the install is a no-op. */
   alreadyInstalled: boolean;
 }
 
@@ -167,7 +166,7 @@ export function defaultSessionId(appId: string): string {
 /**
  * Coerce a wire value into an {@link automation.HistoryKeep}, or undefined.
  *
- * `"all"` is deliberately NOT accepted (issue #659 L9): the manifest validator
+ * `"all"` is deliberately NOT accepted (#659): the manifest validator
  * rejects it, and this direct-API lane must not be the door that reintroduces
  * unbounded run history. An unrecognized value reads as "unset", which falls
  * back to the bounded default rather than to keeping everything.
@@ -191,7 +190,7 @@ export function parseHistoryKeep(
  * Optionally close a one-shot session afterward.
  *
  * Every lifecycle mutation that publishes funnels through here so no route
- * hand-sequences `publish → ensureRegistered → reconcile` itself (issue #147,
+ * hand-sequences `publish → ensureRegistered → reconcile` itself (#147,
  * Concern 3) — the apps-store publish route already centralizes the same
  * sequence via its `onAppLive` hook.
  */
@@ -213,7 +212,7 @@ export async function publishAndReconcile(
   if (validationError)
     throw new AppScaffoldError("invalid_manifest", validationError);
   // Apply the staged app's declared ext tables to the vault as part of the
-  // publish (issue #286 phase 2). The `beforeMerge` hook runs inside the
+  // publish (#286). The `beforeMerge` hook runs inside the
   // store's mutex, post-rebase + pre-ff-merge, against the final worktree
   // tree. A refused spec throws and aborts the publish, vault untouched.
   const ext = opts.ext;
@@ -267,7 +266,7 @@ export async function stageAndMaybePublish(
     message: string;
     /**
      * When true, close the session after a successful publish — the session
-     * was a one-shot `lifecycle-<appId>` (see {@link prepareLifecycleSession}),
+     * is a one-shot `lifecycle-<appId>` (see {@link prepareLifecycleSession}),
      * not the renderer's persistent editing session, so leaving it open would
      * orphan a worktree. No-op on the staged (`publish:false`) path: a staged
      * draft must keep its session so it stays previewable.
@@ -317,7 +316,7 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
   }
   if (err instanceof ExtSpecError) {
     // A declared ext table the vault refuses (bad shape, unsupported
-    // change) aborts the publish (issue #286 phase 2) — a bad request.
+    // change) aborts the publish (#286) — a bad request.
     return sendJson(res, 400, {
       error: "invalid_ext_spec",
       message: err.message,

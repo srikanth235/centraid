@@ -428,7 +428,7 @@ export default function PhotoTimeline({
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     // A place is prose, not a figure — so it takes the day label's own sans
-    // face rather than the mono/tabular register the counts used to sit in.
+    // face rather than the mono/tabular register a count sits in.
     place: { ...t("small"), color: colors.textFaint },
     day: {
       alignItems: "baseline",

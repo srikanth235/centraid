@@ -57,7 +57,7 @@ export interface LogsBridgeProps {
   focusQuery?: { text: string; nonce: number };
   /**
    * Save `/centraid/_gateway/diagnostics` through a native save dialog
-   * (issue #351). Omitted → the toolbar button doesn't render (keeps this
+   * (#351). Omitted → the toolbar button doesn't render (keeps this
    * screen usable standalone, e.g. in a future non-desktop host).
    */
   onExportDiagnostics?: () => Promise<
@@ -72,7 +72,7 @@ type StreamStatus = "connecting" | "live" | "reconnecting";
 const MAX_ENTRIES = 2000;
 
 /**
- * How many matching lines are in the DOM at once (issue #659).
+ * How many matching lines are in the DOM at once (#659).
  *
  * The panel holds up to {@link MAX_ENTRIES} lines and painted every one of
  * them, so a busy gateway put two thousand flex rows on screen and re-laid all
@@ -219,7 +219,7 @@ export default function LogsScreen({
     );
   }, [entries, filter, query]);
 
-  // Windowing (issue #659). Reading is anchored at the newest line, so the
+  // Windowing (#659). Reading is anchored at the newest line, so the
   // window is the TAIL of the matches; asking for more grows it a page at a
   // time and a filter change starts over.
   const [windowSize, setWindowSize] = useState(LOG_WINDOW);

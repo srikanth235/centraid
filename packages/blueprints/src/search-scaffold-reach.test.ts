@@ -1,4 +1,4 @@
-// SearchScaffold's per-scope reach panel (issue #726 D10/D11 finding 3),
+// SearchScaffold's per-scope reach panel (#726 D10/D11 finding 3),
 // loaded by file URL like `photos-shelves-v4.test.ts` does for the rest of
 // Photos' `.tsx` rendering — `apps/**/*.test.ts` is this package's own test
 // include glob (`vitest.config.ts`), which does not pick up `.tsx` files as

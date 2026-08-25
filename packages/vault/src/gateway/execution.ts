@@ -2,7 +2,7 @@
 // S3 + S4 + S5 for one invocation whose consent already allowed: contract
 // validation, precondition checks recorded before anything mutates, the ACID
 // execution boundary with postcondition rollback, then the evidence trail.
-// Split from gateway.ts only for file size; the Gateway is still the sole
+// Kept out of gateway.ts only for file size; the Gateway is the sole
 // caller.
 
 import { createHash } from "node:crypto";
@@ -62,7 +62,7 @@ import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
 
 /**
  * A registered command as the gateway executes it: the handler plus the
- * sealed-class declarations (issue #293) that never leave process memory —
+ * sealed-class declarations (#293) that never leave process memory —
  * `sealedInput` drives journal redaction, `unseals` gates `ctx.unseal`.
  */
 export interface RegisteredCommand {
@@ -147,7 +147,7 @@ export function pkColumn(vault: DatabaseSync, physical: string): string {
 }
 
 /**
- * §10 S4 + issue #272: hard-deleting an entity end-dates every live link
+ * §10 S4 + #272: hard-deleting an entity end-dates every live link
  * touching it, in exactly one place — no delete command carries its own
  * sweep, and no projection ever sees a live link to a vanished row. Soft
  * deletes keep their links (the row remains; the card resolver reports it
@@ -197,7 +197,7 @@ export function sweepDanglingLinks(
 }
 
 /**
- * The seal sweep (issue #293): every command write passes this chokepoint,
+ * The seal sweep (#293): every command write passes this chokepoint,
  * so a plaintext secret in a sealed column becomes ciphertext BEFORE the
  * transaction may commit — even when the handler was careless. Values that
  * are already sealed (re-writes of untouched columns) pass through.
@@ -240,7 +240,7 @@ export function sealWrites(
     }
   }
   // The moment this vault first holds a sealed cell, the key's fingerprint
-  // is stamped into core_vault settings (issue #298 item 1) — inside the
+  // is stamped into core_vault settings (#298) — inside the
   // same transaction, so "has secrets" and the secrets themselves commit
   // together. From here on, opening without the matching key fails loudly.
   if (sealedAny) stampSealKeyFingerprint(db.vault, db.sealKey);
@@ -303,9 +303,9 @@ export function insertInvocation(
       command.command_id,
       identity.callerId,
       grantId,
-      // The journal is append-only (issue #293): declared secret inputs land
+      // The journal is append-only (#293): declared secret inputs land
       // as keyed hash tokens, never as values — a leak here is permanent.
-      // Command-aware so the ext trio's nested secrets redact too (#298 item 9).
+      // Command-aware so the ext trio's nested secrets redact too (#298).
       JSON.stringify(
         redactCommandInput(
           db.sealKey,
@@ -509,7 +509,7 @@ export function runContractAndExecute(
     deterministicIdSeed?: string;
   } = {}
 ): InvokeOutcome {
-  // The purpose that applies (issue #306 decision 4) — journaled even when
+  // The purpose that applies (#306 decision 4) — journaled even when
   // the caller declared none.
   const purpose = request.purpose ?? DEFAULT_PURPOSE;
   const denyContract = (
@@ -544,7 +544,7 @@ export function runContractAndExecute(
   // Contract version negotiation (§10 S3, R07): this gateway serves exactly
   // one ontology version; compatibility windows for older contracts are a
   // seam. Refusing beats guessing.
-  // v0 stance (issue #310 C5): version compatibility is EQUALITY, on
+  // v0 stance (#310): version compatibility is EQUALITY, on
   // purpose — there is no data to migrate and no third-party apps to keep
   // rendering, so a mismatch means a stale registration, not a client on an
   // old contract. R07's compatibility windows (serving version ranges
@@ -561,10 +561,10 @@ export function runContractAndExecute(
     );
   }
   const sealedInput = commands.get(command.name)?.sealedInput ?? [];
-  // Error surfaces get the same discipline as input_json (issue #298 item
+  // Error surfaces get the same discipline as input_json (#298 item
   // 7): any text derived from runtime values passes through the sealed
   // scrub before it reaches the journal, the receipt or the HTTP response.
-  // Command-aware so the ext trio's nested secrets scrub too (#298 item 9).
+  // Command-aware so the ext trio's nested secrets scrub too (#298).
   const secretValues = sealedValuesForCommand(
     command.name,
     request.input,
@@ -623,7 +623,7 @@ export function runContractAndExecute(
   if (!registered)
     return denyContract("handler missing", { stage: "execution" });
   const handler = registered.handler;
-  // Cells this command decrypted internally (issue #293) — receipted as
+  // Cells this command decrypted internally (#293) — receipted as
   // column names, never values.
   const unsealed = new Set<string>();
   // Handlers mint ids in a fixed order for a fixed input, so indexing the seed
@@ -674,7 +674,7 @@ export function runContractAndExecute(
           )
         : value;
     },
-    // Blob custody inside the transaction (issue #296): claims and spills
+    // Blob custody inside the transaction (#296): claims and spills
     // are row work — bytes already sit in (or synchronously enter) the
     // local CAS, so a rollback leaves the stage intact and orphans at
     // worst a content-addressed file the staging sweep reclaims.
@@ -721,7 +721,7 @@ export function runContractAndExecute(
     // end-date their inbound/outbound links (after validation — a swept
     // link points at the deleted row by design).
     sweepDanglingLinks(db.vault, writes, ctx.now);
-    // The seal sweep (issue #293): plaintext in sealed columns becomes
+    // The seal sweep (#293): plaintext in sealed columns becomes
     // ciphertext inside the same transaction — no committed row ever holds a
     // clear secret, however the handler wrote it.
     sealWrites(db, writes);
@@ -777,7 +777,7 @@ export function runContractAndExecute(
     }
     // Demo-register writes join the seed registry INSIDE the transaction —
     // a committed demo row that escaped the registry would be unpurgeable
-    // and visible to triggers (issue #290 phase 1).
+    // and visible to triggers (#290).
     if (request.demo) {
       const seedStmt = db.vault.prepare(
         `INSERT INTO consent_seed_row (seed_id, app_id, target_type, target_id, seeded_at)
@@ -832,10 +832,10 @@ export function runContractAndExecute(
       provenance,
       receiptDetail: {
         ...(request.intentId ? {} : { output: durableOutput }),
-        // L4 attribution (issue #599 decision 8) — WHO, not just what.
+        // L4 attribution (#599 decision 8) — WHO, not just what.
         ...actingOwnerDetail(identity, request),
         writes: writes.map((write) => ({ ...write })),
-        // The salience marker (issue #306 decision 2): what the review feed
+        // The salience marker (#306 decision 2): what the review feed
         // surfaces first, now that risk no longer gates execution.
         risk: command.risk,
         ...(unsealed.size > 0 ? { unsealed: [...unsealed] } : {}),
@@ -861,7 +861,7 @@ export function runContractAndExecute(
     setInvocationStatus(db, invocationId, "failed");
     // A handler (or SQLite constraint message) that echoes its input would
     // put a submitted secret into the journal and the HTTP error — scrub
-    // declared sealed inputs out of the text first (issue #298 item 7).
+    // declared sealed inputs out of the text first (#298).
     const reason = scrub(
       error instanceof Error ? error.message : String(error)
     );

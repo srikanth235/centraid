@@ -10,9 +10,9 @@ export interface AssistantConversationsController {
   refresh: () => Promise<void>;
   /**
    * Rename / pin / archive, applied to the sidebar row before the wire call
-   * (issue #659). These used to await the PATCH and then refetch the whole
-   * list, so a rename took a round trip to appear and a pin rebuilt the
-   * sidebar. A rejected commit restores the list exactly and rethrows.
+   * (#659). Awaiting the PATCH and refetching the whole list would make
+   * a rename cost a round trip to appear and a pin rebuild the sidebar. A
+   * rejected commit restores the list exactly and rethrows.
    */
   mutate: (
     apply: (
@@ -22,8 +22,8 @@ export interface AssistantConversationsController {
   ) => Promise<void>;
 }
 
-// The shell sidebar's "Chats" list state — the vault assistant's persisted
-// conversations (issue: sidebar-as-conversation-list). Held in the shell's
+// The shell sidebar's conversation list state — the vault assistant's
+// persisted conversations. Held in the shell's
 // shared query cache so it survives AssistantRoute unmounting (navigating away
 // and back shouldn't re-fetch) and so a vault switch drops it wholesale.
 const CONVERSATIONS_KEY = "assistant:conversations";

@@ -104,7 +104,7 @@ describe("ConnectFlow scenarios", () => {
   }
 
   // Every radio in the flow is a native <input type="radio"> wrapped in the
-  // styled <label> that carries the visible text (issue #573).
+  // styled <label> that carries the visible text (#573).
   function radios(el: HTMLElement, name: string): HTMLInputElement[] {
     return [...el.querySelectorAll("label")]
       .filter((l) => l.textContent?.includes(name))
@@ -316,7 +316,7 @@ describe("ConnectFlow scenarios", () => {
       });
     });
 
-    // Issue #603 D10: a ticket that decodes but names no vault used to land
+    // Issue #603 D10: a ticket that decodes but names no vault must not land
     // on an empty, actionless list with "Enter Centraid" still enabled.
     it("a ticket that grants no vault explains itself and blocks the CTA", async () => {
       testGatewayConnection.mockResolvedValue({

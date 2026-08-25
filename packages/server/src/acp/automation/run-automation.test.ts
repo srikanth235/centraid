@@ -1,7 +1,7 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Direct unit test naming run-automation.ts (issue #545 B11).
- * Mocks the automation fire spine so we assert openDispatch wiring without a full fire.
+ * Mocks the automation fire spine, so `openDispatch` wiring is asserted
+ * without a full fire (#545).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";

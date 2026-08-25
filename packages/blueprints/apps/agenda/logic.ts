@@ -122,7 +122,7 @@ export function createLogic({
     return false;
   }
 
-  // ---------- Event commands ----------
+  // ────────── Event commands ──────────
 
   async function proposeEvent(
     input: CreatePayload
@@ -222,7 +222,7 @@ export function createLogic({
     return outcome;
   }
 
-  // ---------- Attachments ----------
+  // ────────── Attachments ──────────
 
   let attachTarget: string | null = null;
   const setAttachTarget = (eventId: string): void => {
@@ -240,7 +240,7 @@ export function createLogic({
     return outcome;
   }
 
-  // ---------- Search ----------
+  // ────────── Search ──────────
   // Searching asks the VAULT, not the loaded window: the FTS5 index matches
   // over every event, so the app never greps an unbounded table in memory.
 

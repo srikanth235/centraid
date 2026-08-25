@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit single wire-client module (#647 added the notifications/decision endpoints); pending split of the notifications client into a sibling module
-// Mobile gateway client (issue #263). Base-URL resolution order:
+// Mobile gateway client (#263). Base-URL resolution order:
 //   (a) the paired tunnel — a localhost proxy that forwards every request
 //       over iroh to the desktop, which attaches the bearer on its side;
 //   (b) the manual gateway URL from Settings → Advanced — a developer
@@ -136,7 +136,7 @@ export function authHeader(): Record<string, string> {
 }
 
 /**
- * The `x-centraid-vault` header addressing the active Vault's vault (issue #289
+ * The `x-centraid-vault` header addressing the active Vault's vault (#289
  * addressing model). Every RN-side gateway fetch carries it so the whole app —
  * app grid, Settings → Vault, approvals — follows whichever vault the Vaults
  * switcher has active, instead of floating to the gateway's implied default.

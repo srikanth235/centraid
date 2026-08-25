@@ -1,5 +1,5 @@
 /*
- * Idempotency replay (issue #420, Wave 6). When a turn POST arrives with an
+ * Idempotency replay (#420). When a turn POST arrives with an
  * `idempotencyKey` that already names a recorded turn on the conversation, the
  * route must NOT re-run the model — it replays the recorded answer as a short
  * SSE stream the client consumes exactly like a fresh turn.

@@ -16,12 +16,6 @@
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
- *
- * TS conversion note: the vault read/resolve surface returns
- * `Record<string, unknown>` rows (see HandlerCtx.vault), so each raw row set is
- * cast once to a typed shape (`as unknown as X[]`) at its read site — the only
- * place unknown vault columns become named fields. Handler logic is otherwise
- * byte-for-byte the pre-conversion JS.
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
@@ -120,7 +114,7 @@ function decodeBody(uri: unknown): string {
 
 // The list only needs a short preview + the checklist tally, never the whole
 // body — shipping every note's full body on every doorbell was the cost this
-// projection existed to pay (issue #404). The editor pulls the canonical body
+// projection existed to pay (#404). The editor pulls the canonical body
 // on open via the `note` query. `previewOf` mirrors format.ts's previewText
 // (flatten the first blocks, glyph the checklist/bullets) capped to ~200
 // chars; `checkOf` mirrors checkStats via the same checklist regex. Both are
@@ -180,7 +174,7 @@ function attachmentsBySubject(
   attachments: AttachmentRow[],
   contentById: Map<string, ContentRow>
 ) {
-  // Blob-backed bytes serve as same-origin URLs (issue #296).
+  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: ContentRow | undefined) =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -220,7 +214,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       await Promise.all([
         ctx.vault.read({
           entity: "knowledge.note",
-          // Trashed notes (issue #308: delete is reversible) stay out of the library.
+          // Trashed notes (#308: delete is reversible) stay out of the library.
           where: [{ column: "deleted_at", op: "is-null" }],
           orderBy: { column: "updated_at", dir: "desc" },
           limit: window,
@@ -243,7 +237,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           limit: 200,
           purpose,
         }),
-        // Notebooks are collections (issue #274) — the one curation mechanism.
+        // Notebooks are collections (#274) — the one curation mechanism.
         ctx.vault.read({ entity: "core.collection", purpose }),
         // The journal marker set, resolved by its own bounded reads. It rides
         // this Promise.all so the exclusion costs no extra round trip.
@@ -286,7 +280,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const noteIds = windowed.map((n) => n.note_id);
 
     // Joins are `in`-bounded by the window — placements, attachment edges,
-    // live outbound links (issue #272), then one content pull covering both
+    // live outbound links (#272), then one content pull covering both
     // bodies and attachment bytes.
     const [placements, attachments, links, backlinks, tags] = await Promise.all(
       [
@@ -395,7 +389,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         ].map((ref) => [`${ref.type}/${ref.id}`, ref])
       ).values(),
     ];
-    // Standoff anchors (issue #282): the inline locator a link may carry.
+    // Standoff anchors (#282): the inline locator a link may carry.
     // Resolution to text spans is presentation — the app/kit does it; this
     // projection only ships each live link's selector alongside its card.
     const [resolved, anchors] = await Promise.all([

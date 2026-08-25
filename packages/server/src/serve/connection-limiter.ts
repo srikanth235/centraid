@@ -1,8 +1,8 @@
 /*
- * Per-connection rate gate + the auth-dead marker error, split out of
- * `connection-broker.ts` (issue #304). Kept as a sibling so the broker file
- * stays a single class (the `ConnectionBroker` connection lifecycle); these
- * helpers are self-contained and carry no broker dependency.
+ * Per-connection rate gate + the auth-dead marker error (#304). A
+ * sibling of `connection-broker.ts` so that file stays a single class (the
+ * `ConnectionBroker` connection lifecycle); these helpers are self-contained
+ * and carry no broker dependency.
  */
 
 /**
@@ -28,7 +28,7 @@ export function delay(ms: number): Promise<void> {
  * Tiny per-connection rate gate: at most `maxConcurrent` injected requests
  * in flight and `minIntervalMs` between request STARTS, shared across every
  * fire on the connection — several automations on one Google connection
- * queue here instead of stampeding one quota (issue #304 decision 5).
+ * queue here instead of stampeding one quota (#304 decision 5).
  */
 export class ConnectionLimiter {
   private inFlight = 0;

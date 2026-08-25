@@ -32,7 +32,7 @@ import {
 } from "./connectorPlatform.js";
 import type { ProviderCapabilitiesDTO } from "./connectorPlatform.js";
 
-// Connectors data layer (issue #304 renderer half; screen now lives on the
+// Connectors data layer (#304 renderer half; screen now lives on the
 // primary Connectors sidebar route): maps the gateway's broker-owned OAuth /
 // BYO-client connections surface (`gateway-client-connections.ts`) onto the
 // screen's own DTOs, and hosts
@@ -289,7 +289,7 @@ export async function installSyncForConnection(input: {
 }
 
 /** Attach a BYO credential for one connector kind — creates the `(kind,
- *  label)` connection row if it doesn't exist yet (issue #304's
+ *  label)` connection row if it doesn't exist yet (#304's
  *  `sync.configure_credential`). Returns `connectionId` so oauth2 can
  *  immediately start the browser authorize step. */
 export async function submitConnectionForm(
@@ -356,7 +356,7 @@ export async function completeAssistReturnLink(
 }
 
 /**
- * Remove is a real, irreversible delete (issue #304's missing renderer
+ * Remove is a real, irreversible delete (#304's missing renderer
  * half — `sync.remove_connection`, distinct from the credential-only detach
  * `configure_credential({cred_kind:'none'})` performs): it rides the same
  * promise-based confirm dialog the Vaults page uses before deleting a vault.

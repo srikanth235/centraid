@@ -1,4 +1,4 @@
-// The LOCAL orphan reclaim (issue #599 decision 11 / issue #439 R4).
+// The LOCAL orphan reclaim (#599 decision 11 / #439 R4).
 //
 // Two shipped passes already shed bytes, and neither reclaims a local-only
 // orphan:
@@ -60,11 +60,11 @@ export interface LocalOrphanSweepOptions {
   now?: number;
   /**
    * Additional reachability roots the caller authenticated — retained backup
-   * snapshot manifests (issue #436 §6). A sha named here is never an orphan.
+   * snapshot manifests (#436). A sha named here is never an orphan.
    */
   extraLiveRoots?: ReadonlySet<string>;
   /**
-   * Entries this pass may examine (issue #659 L5). A CAS with 100k objects
+   * Entries this pass may examine (#659). A CAS with 100k objects
    * should not turn one hourly tick into 100k membership tests and up to
    * 100k unlinks; the pass walks a bounded window and hands back a cursor.
    * Unset = the whole directory, the pre-#659 behaviour.
@@ -101,7 +101,7 @@ export function sweepLocalOrphans(
   options: LocalOrphanSweepOptions
 ): LocalOrphanSweepResult {
   const now = options.now ?? Date.now();
-  // The live set is shared and read-only (issue #659 L5): the other root sets
+  // The live set is shared and read-only (#659): the other root sets
   // are consulted beside it rather than unioned into it, so the memo can be
   // handed to the backup tick unchanged instead of being rebuilt per caller.
   const live = liveBlobShasCached(db.vault);

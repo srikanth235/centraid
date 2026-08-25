@@ -1,4 +1,4 @@
-// The Devices place, as pure model (issue #765, spec §7).
+// The Devices place, as pure model (#765, spec §7).
 //
 // Everything the screen SAYS is derived here so the copy contract is under
 // test without a renderer — the split `screens/home/home-status.ts` and

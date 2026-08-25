@@ -1,24 +1,17 @@
-// Agenda's HOST-LOCALE surface (issue #839, gap G12).
+// Agenda's HOST-LOCALE surface (#839, gap G12).
 //
-// `format.ts` is the app's only text projection of a time, and until now it had
-// no suite of its own — `stryker.agenda.config.mjs` says so in as many words
-// ("no suite of its own yet — its callers are asserted through
-// views/day-context"). What those callers assert is which day a thing lands on,
-// never what the member READS, so the entire locale surface was unpinned: every
-// formatter handed `undefined` as its locale and took whatever the host's ICU
-// default happened to be.
+// `format.ts` is the app's only text projection of a time, and its other
+// callers (views, day-context) assert which day a thing lands on, never what
+// the member READS. The host's ICU default is not a cosmetic detail: it decides
+// whether an event at 14:05 reads "2:05 PM" or "14:05" — a twelve-hour locale
+// and a twenty-four-hour one produce strings a member could misread by twelve
+// hours. A suite that lets the runner pick the locale cannot see that, and
+// green on a US-English CI box says nothing about a member in Dublin or Tokyo.
 //
-// That default is not a cosmetic detail. It decides whether an event at 14:05
-// reads "2:05 PM" or "14:05" — a twelve-hour locale and a twenty-four-hour one
-// produce strings a member could misread by twelve hours. A suite that lets the
-// runner pick the locale cannot see that, and green on a US-English CI box
-// says nothing about a member in Dublin or Tokyo.
-//
-// So the formatters take an optional trailing `locale` (default `undefined` —
-// byte-identical to the previous behaviour, no call site changed), and the
-// tests below pin what each NAMED locale renders. The default path is pinned
-// too, as equality with the explicit-`undefined` call, so the seam cannot drift
-// away from the product behaviour it was carved out of.
+// So the formatters take an optional trailing `locale` (default `undefined`,
+// the product behaviour), and the tests below pin what each NAMED locale
+// renders. The default path is pinned too, as equality with the
+// explicit-`undefined` call, so the seam cannot drift away from it.
 //
 // Dates are built from LOCAL components (`new Date(2026, 2, 8, 14, 5)`) rather
 // than from `Z` instants: these formatters read the host zone, and a local

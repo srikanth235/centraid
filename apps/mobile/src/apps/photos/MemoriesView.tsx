@@ -1,9 +1,8 @@
-// Memories, full screen (issue #724 W7, "Memories v0").
+// Memories, full screen (#724, "Memories v0").
 //
 // Reached from Collections' "Memories" heading (`PhotosCollectionsView.tsx`'s
-// `open()`), which used to have nowhere to send a heading tap because no
-// "all memories" surface existed. Now one does: three sections — On this
-// day, Trips, Similar moments — read straight off the vault's
+// `open()`). Three sections — On this day, Trips, Similar moments — read
+// straight off the vault's
 // `media.memory` / `media.memory_member` projection (`memories-model.ts`
 // does the pure grouping; this file is only its frame).
 //
@@ -16,13 +15,13 @@
 // empty shelves — the same law `photos-collections.ts`'s Memories shelf has
 // always kept, extended to cover Trips and Similar moments too.
 
-// A TRIP IS NAMED AND SKETCHED (issue #816). The block used to be headed by
-// the place row's raw name — which is the coordinate `findOrCreatePlaceTx`
-// minted until somebody renames it — or by "Away from home" when even that was
-// missing. It is now headed by the phrase ladder's own sentence, computed in
-// `trips.ts` and therefore identical to the web strip's, and it carries a small
-// route sketch drawn from `projectPlaces`: the same arithmetic the Places map
-// runs, with no basemap, no tile request and no URL of any kind in it.
+// A TRIP IS NAMED AND SKETCHED (#816). The block is headed by the phrase
+// ladder's own sentence, computed in `trips.ts` and therefore identical to the
+// web strip's — never the place row's raw name, which is the coordinate
+// `findOrCreatePlaceTx` mints until somebody renames it, and never a bare
+// "Away from home". It carries a small route sketch drawn from `projectPlaces`:
+// the same arithmetic the Places map runs, with no basemap, no tile request and
+// no URL of any kind in it.
 import React, { useMemo } from "react";
 import {
   Pressable,

@@ -14,13 +14,12 @@ import type { HarnessFailureClass } from "@centraid/server/engine";
 import { AUTH_REQUIRED_CODE } from "./connection.js";
 import type { AcpTurnConfig } from "./types.js";
 
-export { type HarnessFailureClass } from "@centraid/server/engine";
-
 /**
  * The taxonomy is owned by `@centraid/server/engine` (the `TurnStreamEvent`
  * contract the breakers key off). Re-exported, never re-declared — two copies
  * of the union is how the classifier and the harness drift apart.
  */
+export { type HarnessFailureClass } from "@centraid/server/engine";
 
 /** ACP JSON-RPC "Internal error" — often a stand-in for "not configured". */
 const INTERNAL_ERROR_CODE = -32603;
@@ -149,7 +148,7 @@ export function classifyHarnessFailureDetail(
  *   4. keywords in stderr.
  *
  * Order matters: a crashed harness whose stderr happens to mention "timeout"
- * used to be classified `timeout`, and the timeout breaker tripped for a
+ * must not be classified `timeout`, or the timeout breaker trips for a
  * crash. stderr is the weakest signal because it is unstructured vendor
  * output, so it is only consulted when nothing else decided.
  */

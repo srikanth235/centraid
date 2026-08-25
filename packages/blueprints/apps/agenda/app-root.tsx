@@ -353,7 +353,7 @@ export function Root({
     [compact, rootRef]
   );
 
-  // ---- navigation ----
+  // ──── navigation ────
   const view = resolveView(state.view, compact || narrow);
 
   const setView = useCallback(
@@ -409,7 +409,7 @@ export function Root({
     bump();
   }, []);
 
-  // ---- overlays ----
+  // ──── overlays ────
   const openEvent = useCallback((ev: AgEvent) => {
     stateRef.current.selectedId = rowKey(ev);
     bump();
@@ -491,7 +491,7 @@ export function Root({
     []
   );
 
-  // ---- chrome wiring: attach input, doorbell, focus, width ----
+  // ──── chrome wiring: attach input, doorbell, focus, width ────
   useEffect(() => {
     const attachInput = attachInputRef.current;
     if (attachInput)
@@ -517,10 +517,10 @@ export function Root({
       for (const stop of liveUnsubRef.current) stop();
       liveUnsubRef.current = [];
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#834)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#834)
   }, []);
 
-  // ---- derive ----
+  // ──── derive ────
   const events = visibleEvents(
     state.searchResults ?? data.events,
     state.hiddenCals
@@ -540,7 +540,7 @@ export function Root({
     : null;
   const searching = state.search.trim() !== "";
 
-  // ---- the day-context seams ----
+  // ──── the day-context seams ────
   // Both are plain closures over this render's facts, so switching a layer off
   // removes its ribbon or its shelf on the next paint and touches nothing else.
   const dayContext = dayContextRef.current;
@@ -655,7 +655,7 @@ export function Root({
       </>
     ) : null;
 
-  // ---- frame contributions, from EFFECTS only ----
+  // ──── frame contributions, from EFFECTS only ────
   useEffect(() => {
     frame.setAppBar(
       appBar({

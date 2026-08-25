@@ -1,5 +1,5 @@
 /*
- * `materializeSnapshotBlobs` (issue #439 R5) — pull SPECIFIC blob shas out of an
+ * `materializeSnapshotBlobs` (#439) — pull SPECIFIC blob shas out of an
  * already-authenticated snapshot and write them into a vault's on-disk blob
  * store, reusing the EXACT chunk-streaming / decrypt / keyed-id-verify path
  * `restoreSnapshot` uses (`engine.ts`). It exists so the adopt-time inventory

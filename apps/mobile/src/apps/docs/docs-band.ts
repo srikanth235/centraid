@@ -1,5 +1,5 @@
 // The phone's bottom band, as Docs claims it (Binding Layer v12 handoff,
-// Part 2 §"The band"; issue #821).
+// Part 2 §"The band"; #821).
 //
 // Docs claims the band with FIVE destinations — `All · Folders · Coming due ·
 // Search · More` — which is the invariant's exact cap (five destinations, of
@@ -115,10 +115,10 @@ export function resolveDocsBand(owner: BandOwner): ResolvedDocsBand {
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The More sheet (handoff Part 2 §"The band": "The sheet lists: Recently
 // changed, Starred, Trash, Storage, What Docs may read, Add to Docs.")
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** Every key the sheet carries — a closed union so `resolveDocsMoreRoute`
  *  switches exhaustively; a new row fails to typecheck before it can dangle. */

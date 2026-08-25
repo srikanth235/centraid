@@ -417,7 +417,6 @@ function flagAnomaly(ctx: HandlerCtx): Record<string, unknown> {
   return { tag_id: tagId };
 }
 
-/** Register the finance domain's commands on a gateway. */
 export function registerFinanceCommands(gateway: Gateway): void {
   gateway.registerCommand(CATEGORIZE_TXN);
   gateway.registerCommand(SPLIT_TXN);

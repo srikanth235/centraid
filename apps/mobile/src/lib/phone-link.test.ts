@@ -68,8 +68,8 @@ describe(parsePairingInput, () => {
   });
 
   it("rejects unknown gateway ticket kinds — the pair ticket is the only ticket (#603)", () => {
-    // The retired founding-ticket kind lands in this bucket too: the parser
-    // no longer special-cases it, so any non-pair kind is refused the same way.
+    // The founding-ticket kind lands in this bucket too: the parser
+    // special-cases no kind, so any non-pair kind is refused the same way.
     const token = Buffer.from(
       JSON.stringify({
         v: 1,

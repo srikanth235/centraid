@@ -1,9 +1,9 @@
 // One shared timeline instance for the whole Photos stack (#419, finding 5).
 //
-// Every Photos screen used to run its own `usePhotoTimeline`, so opening the
-// lightbox or the library kicked off another full replica read *and* another
-// 50k-row MediaLibrary re-walk, with several concurrent copies of the merged
-// array alive under the native stack. This module is that work, done once: a
+// A `usePhotoTimeline` per Photos screen makes opening the lightbox or the
+// library kick off another full replica read *and* another 50k-row
+// MediaLibrary re-walk, with several concurrent copies of the merged array
+// alive under the native stack. This module is that work, done once: a
 // process-singleton engine that reads the replica, walks the camera roll and
 // folds the upload queue in, then publishes an immutable snapshot every screen
 // subscribes to via `useSyncExternalStore`. It is driven imperatively (the

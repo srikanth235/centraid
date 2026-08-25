@@ -1,5 +1,5 @@
 // A document's version chain, walked over THIS DEVICE'S replica rows
-// (issue #821, spec §10: "every change is a version and nothing is ever
+// (#821, spec §10: "every change is a version and nothing is ever
 // overwritten").
 //
 // The web seat asks the gateway (`queries/history.ts`); the phone holds the

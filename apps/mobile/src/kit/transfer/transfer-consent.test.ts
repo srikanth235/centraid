@@ -1,4 +1,4 @@
-// The consent latch (#711, S4). The gate is the safety property of the whole
+// The consent latch (#711). The gate is the safety property of the whole
 // automatic-backup model, so it is tested as a predicate rather than through a
 // screen: if `automaticTransferAllowed` can ever say yes to a device that did
 // not answer, no amount of UI review makes the product honest.

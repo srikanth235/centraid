@@ -1,4 +1,4 @@
-// Password-manager CSV parsing (issue #293 phase 2 of the sealed class):
+// Password-manager CSV parsing (#293 phase 2 of the sealed class):
 // the common export shapes — Chrome/1Password (`name,url,username,password`)
 // and Bitwarden (`login_uri,login_username,login_password,login_totp`) —
 // via header aliases, same discipline as the bank-statement parser. A CSV

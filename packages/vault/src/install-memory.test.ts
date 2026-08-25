@@ -1,4 +1,4 @@
-// Consent memory (issue #308 A4): what an owner approval does — and does NOT
+// Consent memory (#308): what an owner approval does — and does NOT
 // do — to a standing revocation. The direction of `scopeCovers` is the whole
 // invariant: a "no" only dies to a "yes" that covers it.
 

@@ -1,4 +1,4 @@
-// The cross-scope merge (issue #599, generalised for issue #726 D11 to
+// The cross-scope merge (#599, generalised for #726 D11 to
 // apps/_shared/scope-merge.ts): k-way ordering, cross-scope dedupe, the
 // shared safe horizon, and the null-keyed tail bucket. Loaded by file URL
 // like the other blueprint-app fixtures.
@@ -272,7 +272,7 @@ describe("Photos-shaped merge (#599, #726)", () => {
   });
 });
 
-// A record-only app (apps/tasks' declared shape, issue #726 D11 task 3): no
+// A record-only app (apps/tasks' declared shape, #726 D11 task 3): no
 // separate content identity, so `sortKey` and `dedupeIdentity` both read the
 // row's own id, ascending (oldest/lowest first — the mirror image of
 // Photos' newest-first).

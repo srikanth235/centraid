@@ -7,7 +7,7 @@
  * dedup consecutive bases at ~O(changed pages) via the existing HMAC content
  * addressing — CDC's insert-resilience bought nothing here while costing a
  * frozen gear table and a cross-repo parameter-unification liability
- * (#405 §1). Part boundaries are unchanged by /2's entropy-gated compression:
+ * (#405). Part boundaries are unchanged by /2's entropy-gated compression:
  * ids and boundaries key off RAW plaintext, and compression lives INSIDE the
  * per-part seal (compress.ts), downstream of splitting. Part size is part of
  * the format: same bytes must produce the same part ids everywhere, so it MUST

@@ -1,7 +1,6 @@
 // `<aside class="v-side">` — nav rail: top shortcuts, categories, tags,
 // trash, lock + theme. A pure projection of props; clicks call straight back
-// into the callbacks app.tsx wired to logic.ts — the React port of app.js's
-// `LockerSidebar` Lit component.
+// into the callbacks app.tsx wired to logic.ts.
 import type { ReactNode } from "react";
 
 import { CAT_ORDER, CATS } from "../format.ts";

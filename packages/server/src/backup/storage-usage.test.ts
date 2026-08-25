@@ -1,7 +1,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 /*
- * Coverage for the provider-usage poller (issue #367 §D1) against a REAL
+ * Coverage for the provider-usage poller (#367) against a REAL
  * in-process HTTP fake implementing just `GET /v1/storage/vaults/:id/usage`
  * (PROTOCOL.md § Usage) — same "fake mirrors the real gateway" philosophy
  * `remote-provider.test.ts` uses, scoped down to the one route this module

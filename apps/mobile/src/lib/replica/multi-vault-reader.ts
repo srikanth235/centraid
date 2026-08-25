@@ -85,7 +85,7 @@ export interface MountedReplicaScope {
   canWrite: boolean;
   databaseName: string;
   /** Whether this is the member's OWN vault — the founding marker, straight
-   *  from the vault record (issue #711 item H). Undefined only for a scope
+   *  from the vault record (#711). Undefined only for a scope
    *  mounted before the gateway answered, which reads as their own. */
   personal?: boolean;
 }

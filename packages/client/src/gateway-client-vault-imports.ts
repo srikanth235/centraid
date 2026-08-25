@@ -1,5 +1,5 @@
 /*
- * The STAGED-IMPORT surface of the owner consent plane (issue #712 P18,
+ * The STAGED-IMPORT surface of the owner consent plane (#712 P18,
  * extracted from ./gateway-client-vault.ts — the same seam
  * `gateway-client-atlas.ts` was cut along).
  *
@@ -25,7 +25,7 @@ import {
   readJson,
 } from "./gateway-client-core.js";
 
-/** One staged import batch as the shell lists it (issue #290 phase 2). */
+/** One staged import batch as the shell lists it (#290). */
 export interface VaultImportBatch {
   batchId: string;
   status: "draft" | "published" | "discarded";
@@ -146,7 +146,6 @@ export async function vaultImportPublish(batchId: string): Promise<{
   return readJson(res, "publish import");
 }
 
-/** Discard a draft batch. */
 export async function vaultImportDiscard(
   batchId: string
 ): Promise<{ receiptId: string }> {

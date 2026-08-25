@@ -1,7 +1,7 @@
 /**
  * Document search as a vault projection: the FTS5 index inside the vault
  * matches against `core.document` (title + the current version's decoded
- * text body, issue #352 — documents are searched under their own identity,
+ * text body, #352 — documents are searched under their own identity,
  * not the raw content item), so the app never pulls the whole table to grep
  * it — vault data has no upper bound. Only the matched rows are joined with
  * their folder tags, and a match is a document only if it carries a
@@ -13,15 +13,10 @@
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state.
  *
- * Phase 4 (issue #352) decorates matches with the same `tags`/`custody_state`
- * joins drive.ts makes (factored into ./_shared.ts) — so a tag filter or a
- * custody badge reads identically whether the row arrived via browse or
- * search. Issue #821 adds `shared_with` on the same terms, denial included.
- *
- * TS conversion note: the vault read/search surface returns
- * `Record<string, unknown>` rows (see HandlerCtx.vault), so each raw row set
- * is cast once to a typed shape at its read site. Handler logic is otherwise
- * byte-for-byte the pre-conversion JS.
+ * Matches are decorated with the same `tags`/`custody_state` joins drive.ts
+ * makes (factored into ./_shared.ts), so a tag filter or a custody badge reads
+ * identically whether the row arrived via browse or search. `shared_with`
+ * (#821) rides on the same terms, denial included.
  */
 
 import {
@@ -81,7 +76,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
     const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
-    // Free-form labels (issue #352 phase 4) share ./_shared.ts's helper with
+    // Free-form labels (#352) share ./_shared.ts's helper with
     // drive.ts — a small extra bounded read over the same matched ids rather
     // than re-deriving from the folder/starred-scoped `tags` read above.
     const tagsByDoc = await readLabelsByDocument({
@@ -107,7 +102,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         folderByDoc.set(t.target_id, t.concept_id);
     }
 
-    // Starred rides the tag read already in hand (issue #274): the flags
+    // Starred rides the tag read already in hand (#274): the flags
     // scheme's `starred` concept against the same matched wrapper ids.
     const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
     const starredConceptId = flagsScheme
@@ -125,7 +120,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     );
 
     // The current content join, bounded by the matched wrappers' own
-    // current_content_id set. Custody (issue #352 phase 4) rides the same set.
+    // current_content_id set. Custody (#352) rides the same set.
     const contentIds = [...new Set(hits.map((d) => d.current_content_id))];
     const [contents, custodyByContent, sharesByDoc] = await Promise.all([
       contentIds.length > 0
@@ -136,7 +131,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           })
         : { rows: [] as Record<string, unknown>[] },
       readCustodyByContent({ ctx, purpose, contentIds }),
-      // Shares (issue #821) are bounded by the matched wrappers that are
+      // Shares (#821) are bounded by the matched wrappers that are
       // actually documents — the same join drive.ts makes, so a "shared with"
       // fact reads identically whether the row arrived via browse or search.
       readSharesByDocument({
@@ -154,7 +149,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       ])
     );
 
-    // Blob-backed bytes serve as same-origin URLs (issue #296).
+    // Blob-backed bytes serve as same-origin URLs (#296).
     const srcOf = (c: ContentRow | undefined) =>
       typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}`

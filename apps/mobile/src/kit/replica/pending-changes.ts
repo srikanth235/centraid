@@ -1,11 +1,11 @@
 // One poll for every status bar on screen, and none while the app is away.
 //
-// `ReplicaStatusBar` renders on sixteen screens and each copy used to own a 5 s
-// `setInterval` that opened the intent outbox. A native stack keeps the screens
-// below the top one mounted, so the phone was running a handful of redundant
-// SQLite reads every five seconds — including all night, because nothing was
-// listening to `AppState`. The queue is device-global, so one ticker can serve
-// every subscriber, and a backgrounded app has nobody to show the answer to.
+// `ReplicaStatusBar` renders on sixteen screens, and a native stack keeps the
+// screens below the top one mounted, so a 5 s `setInterval` per copy is a
+// handful of redundant SQLite reads on the intent outbox every five seconds —
+// all night, if nothing listens to `AppState`. The queue is device-global, so
+// one ticker serves every subscriber, and a backgrounded app has nobody to
+// show the answer to.
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { AppState } from "react-native";

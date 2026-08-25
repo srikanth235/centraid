@@ -335,7 +335,7 @@ export function finalizeReplicaInvocationCommit(
  * Ordinary online commands do not need a durable replica outcome to retain
  * their canonical marker. Once the journal transaction is proven, delete the
  * marker directly in one vault transaction instead of stamping
- * `journal_finalized_at` and deleting it in a second transaction (#456 S2).
+ * `journal_finalized_at` and deleting it in a second transaction (#456).
  * A crash between the journal commit and this delete leaves the NULL marker;
  * replay/startup repair re-verifies the idempotent journal rows before trying
  * the delete again.
@@ -406,7 +406,7 @@ export function settleFinalizedInvocationCommit(
  * provisional until the already-open journal transaction commits: startup
  * repair always re-verifies it, and the next batch reclaims it only after
  * observing the matching executed journal row. This lets a whole arrival
- * window cross exactly one vault + one journal commit boundary (#456 S4).
+ * window cross exactly one vault + one journal commit boundary (#456).
  */
 export function stampFinalizedInvocationCommitInTransaction(
   vault: DatabaseSync,

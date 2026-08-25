@@ -13,7 +13,7 @@ import {
   presentationFor,
 } from "./localUsageView.js";
 
-// The Storage page's presentation derivation (issue #544). Every assertion
+// The Storage page's presentation derivation (#544). Every assertion
 // here is about a claim the UI makes to the owner, so a wrong one is a lie on
 // screen rather than a cosmetic slip.
 

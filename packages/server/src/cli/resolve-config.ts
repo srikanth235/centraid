@@ -2,7 +2,7 @@
  * Shared `--config <path>` / `--data-dir <path>` resolution — `serve` and
  * `backup` both need the daemon's full config (the backup CLI constructs
  * its `BackupService` from the SAME resolved config `serve` boots with),
- * so this is split out of `cli.ts` rather than duplicated.
+ * so it lives here rather than duplicated in each.
  */
 
 import { loadConfigFile, validateConfig, DaemonConfigError } from "./config.js";

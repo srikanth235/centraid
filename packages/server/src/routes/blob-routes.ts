@@ -1,4 +1,4 @@
-// Blob custody routes (issue #296) — the two byte doors of the vault.
+// Blob custody routes (#296) — the two byte doors of the vault.
 //
 //   POST /centraid/_vault/blobs                       stage bytes (no receipt)
 //        raw body (any non-JSON content type) with ?filename=&media_type=

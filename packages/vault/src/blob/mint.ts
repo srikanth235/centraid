@@ -1,4 +1,4 @@
-// The data_uri compatibility door (issue #296 §3): commands still accept a
+// The data_uri compatibility door (#296): commands still accept a
 // small inline payload — one call, no fetch orchestration — but the ROW
 // never swallows binary bytes again. Text stays inline (the FTS triggers
 // decode it in-transaction); anything else spills synchronously into the
@@ -13,9 +13,8 @@ import { sha256OfBytes, blobUriFor } from "./store.js";
 /**
  * Decoded-size cap for the inline door: ~256 KB of content, ~350 KB of
  * base64. Anything larger takes the staging route (POST /_vault/blobs).
- * The old 8 MB `MAX_DATA_URI_CHARS` rows are gone with this — a vault WITH
- * a blob store refuses to swallow big payloads through command JSON, because
- * the journal records every input.
+ * A vault WITH a blob store refuses to swallow big payloads through command
+ * JSON, because the journal records every input.
  */
 export const MAX_INLINE_DATA_URI_CHARS = 360_000;
 

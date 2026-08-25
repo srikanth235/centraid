@@ -223,7 +223,7 @@ describe("createDiskHealthProbe: disk-full tracker (issue #351 wave 4)", () => {
       statfs: statfsReturning(50 * GIB, 100 * GIB),
     });
     // No tracker injected and nothing reported into the shared one in this
-    // test run — must behave exactly like the pre-#351-wave-4 probe.
+    // test run — free space alone decides.
     expect((await probe()).status).toBe("ok");
   });
 });

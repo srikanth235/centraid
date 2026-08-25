@@ -4,9 +4,7 @@
  * gateways (own `GatewayDatabase`, own `VaultLinksStore`) — the same
  * in-process transport pattern `peer-link-ceremony.test.ts` uses for the
  * ceremony itself, wired one layer up so it's this route, not
- * `redeemLinkTicket` directly, doing the dialing. Split out of
- * `vault-links-routes.test.ts` to keep both files under the repo's
- * file-size guidance.
+ * `redeemLinkTicket` directly, doing the dialing.
  */
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";

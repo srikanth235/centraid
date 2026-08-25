@@ -54,16 +54,15 @@ export function barWindow<T>(
   return series.slice(Math.max(0, series.length - count));
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The day fold
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 //
-// Both kits used to fold the daily rollup into columns themselves, with the
-// same subtle rule written twice: days with NO activity are absent from the
-// rollup (it groups by day), so the fold is by CALENDAR OFFSET from the
-// window's first day and never by position in the array — otherwise a quiet
-// week slides the busy days left and the chart claims work happened on days
-// nothing ran. It is one rule and it lives here now.
+// The daily rollup is folded into columns HERE, once, for both kits: days
+// with NO activity are absent from the rollup (it groups by day), so the fold
+// is by CALENDAR OFFSET from the window's first day and never by position in
+// the array — otherwise a quiet week slides the busy days left and the chart
+// claims work happened on days nothing ran.
 
 const DAY_MS = 86_400_000;
 

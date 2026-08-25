@@ -1,4 +1,4 @@
-// The runs chart (v9 §9, issue #765).
+// The runs chart (v9 §9, #765).
 //
 // TWO OUTCOMES, and that is the whole design: succeeded in `--text-faint` ink
 // and failed stacked on top in `--net`. No third colour, no gradient, no grid,
@@ -38,12 +38,10 @@ export interface BarsBlockProps {
   /**
    * The marks along the axis, oldest → newest, spread evenly across the plot.
    *
-   * TWO OR MORE, and the count is the caller's (#775). It was a fixed triple
-   * while the only marks it carried were the relative words "30 days ago /
-   * halfway / today" — words a fold into real dates has no use for, and a
-   * window that is seven days wide has no "halfway" worth naming. A chart that
-   * cannot be told what its own axis says ends up telling the reader nothing
-   * they can check a spike against.
+   * TWO OR MORE, and the count is the caller's (#775) — a window seven days
+   * wide has no "halfway" worth naming. A chart that cannot be told what its
+   * own axis says ends up telling the reader nothing they can check a spike
+   * against.
    */
   axis: readonly string[];
   /**

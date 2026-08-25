@@ -1,4 +1,4 @@
-// P5 durable lifecycle ledger (issue #630). Domain tables remain canonical;
+// P5 durable lifecycle ledger (#630). Domain tables remain canonical;
 // this append-only sidecar records the exact pre-mutation state needed for
 // history and deterministic undo. It deliberately has no polymorphic foreign
 // key: an entity's history must survive its soft-delete grace window and, for

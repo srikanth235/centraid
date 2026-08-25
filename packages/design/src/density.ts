@@ -1,9 +1,9 @@
 // Centraid's fixed spacing scale and the three density tiers.
 //
-// One 4px base, six rungs — 4 / 8 / 12 / 16 / 24 / 32. The 48px rung retired
-// with the Binding Layer flip: the system's largest rhythm step is the 32px
-// desktop content margin, and a seventh rung only ever existed as "one more
-// than the biggest one", which is how a scale stops being a scale.
+// One 4px base, six rungs — 4 / 8 / 12 / 16 / 24 / 32, and the scale STOPS
+// there: the system's largest rhythm step is the 32px desktop content margin,
+// and a seventh rung could only ever be "one more than the biggest one", which
+// is how a scale stops being a scale.
 
 export interface DensityScale {
   1: number;
@@ -26,9 +26,8 @@ export const spacing = {
 /**
  * The only two values below the 4px base, and the reason they are NAMED.
  *
- * v7 measured fifteen sub-base gaps in the reference — 1, 2, 3, 5 and 6px —
- * and folded thirteen of them back onto the scale. Two survive because they
- * are not spacing at all: they are seams, and a seam is a line rather than a
+ * Exactly two sub-base values exist (v7 audit) because they are not spacing
+ * at all: they are seams, and a seam is a line rather than a
  * rhythm step. Naming them is what makes the difference enforceable. A loose
  * `gap: 2px` is indistinguishable from someone eyeballing a rung; a
  * `var(--sp-gutter)` says which of the two exceptions is being claimed.
@@ -56,9 +55,9 @@ export const metrics = {
    * A control on touch, without exception (v7 §C).
    *
    * The one axis the system has is pointer-or-touch, and this is the number
-   * that axis exists to carry. The audit found controls sitting at 34 on the
-   * phone because the surface was re-decided by hand at the call site — under
-   * the 44px floor, on the surface where the floor is not advisory. It is a
+   * that axis exists to carry. Re-deciding the surface by hand at a call site
+   * puts controls at 34 on the phone — under the 44px floor, on the surface
+   * where the floor is not advisory (v7 §C audit). It is a
    * FLOOR, not a preference: `--target-min` starts here and only a `(pointer:
    * fine)` query lowers it to `control`, so a surface that never proves it has
    * a pointer keeps 44.
@@ -81,13 +80,13 @@ export const metrics = {
   /**
    * The navigation stem. Never themed, never scrolled away, never resized.
    *
-   * 240 rather than the 92 the first Binding Layer cut shipped: at 92 the
-   * launcher is a column of chips with a caption under each, so the vault you
-   * are in and the gateway holding it had nowhere to live and were pushed into
-   * Home's app bar — where they are only true on one route. The invariant was
-   * always the RESERVATION (one band, one width, never themed, mirrors under
-   * RTL), not the number; widening it lets identity sit at the head and
-   * Settings at the foot, which is where a member reaches for them.
+   * 240, not something chip-narrow like 92: at 92 the launcher is a column of
+   * chips with a caption under each, so the vault you are in and the gateway
+   * holding it have nowhere to live and get pushed into Home's app bar — where
+   * they are only true on one route. The invariant is the RESERVATION (one
+   * band, one width, never themed, mirrors under RTL), not the number; 240
+   * lets identity sit at the head and Settings at the foot, which is where a
+   * member reaches for them.
    */
   stem: 240,
   /**

@@ -1,8 +1,7 @@
-// THE TRIAGE SESSION (issue #712 D3) — the state machine every "work through
-// a queue of proposals, one at a time" surface in this app was writing for
-// itself, extracted once so the third one does not write a fourth version.
+// THE TRIAGE SESSION (#712) — the one state machine behind every
+// "work through a queue of proposals, one at a time" surface in this app.
 //
-// Two flows already had it, in two different dialects:
+// Two flows read it, in two different dialects:
 //
 //   * FACE REVIEW (components/FaceReview.tsx + the native twin) — DURABLE
 //     answers. Each answer is a vault write; the queue is re-read afterwards
@@ -148,7 +147,6 @@ export function triageRefill<Item>(
   };
 }
 
-/** What the surface prints — see `TriageProgress`. */
 export function triageProgress<Item>(
   session: TriageSession<Item>
 ): TriageProgress {

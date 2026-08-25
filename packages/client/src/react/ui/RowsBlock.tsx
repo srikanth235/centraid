@@ -1,4 +1,4 @@
-// The workhorse row list (v9 §9, issue #765).
+// The workhorse row list (v9 §9, #765).
 //
 // A bordered container on raised paper, rows at the 44px row rung, internal
 // hairlines only, and ONE trailing action per row that is always outlined —

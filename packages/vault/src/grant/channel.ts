@@ -1,5 +1,5 @@
 /*
- * The CHANNEL is not a new table (issue #825). "Can this vault reach that
+ * The CHANNEL is not a new table (#825). "Can this vault reach that
  * person, and over which peer vault" was already answered by
  * `share_party_vault_binding` (#731) plus the pending-invitation fact; this
  * module reframes those rows as one channel state so the grant plane never

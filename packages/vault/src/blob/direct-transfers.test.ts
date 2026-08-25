@@ -1,4 +1,4 @@
-// Direct edge-sealed upload unit tests (issue #545 B6) — mocked remote tier.
+// Direct edge-sealed upload unit tests (#545) — mocked remote tier.
 
 import { createHash, randomBytes } from "node:crypto";
 

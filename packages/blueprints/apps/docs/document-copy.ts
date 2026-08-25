@@ -6,17 +6,13 @@
 // split on: a shelf is a set of rows, and these screens are about one row.
 // Nothing here knows what a shelf is.
 //
-// TWO SECTIONS LEFT THIS FILE WITH THE SCREENS THEY SPOKE FOR. §6.3's seven
-// write outcomes (`DSAVE`) and §6.1's reading-view rows (`READ_OFF`,
-// `THIS_DOCUMENT`, `MACHINE_SUMMARY_EYEBROW`) were the copy of the in-place
-// EDITOR and the reading ROUTE. Docs no longer edits a document of any kind —
-// a new version arrives as a whole file through Replace — and text is read on
-// the stage's paper sheet, so both screens are gone and their words with
-// them.
+// THERE IS NO COPY HERE FOR AN IN-PLACE EDITOR OR A READING ROUTE, and none is
+// owed: Docs edits no document of any kind — a new version arrives as a whole
+// file through Replace — and text is read on the stage's paper sheet.
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Versions (§6.2) and the details rail (§8)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** §6.2 folds Activity INTO the version history, and says so. */
 export const VERSIONS_ACTIVITY_HEAD = "Activity";
@@ -53,7 +49,7 @@ export const RAIL_NOTES = {
 } as const;
 
 /**
- * §8's sharing row (issue #821) — the key, and the note that qualifies one
+ * §8's sharing row (#821) — the key, and the note that qualifies one
  * share's value.
  *
  * THE ROW IS ABSENT, NEVER NEGATIVE. A document nobody has shared says nothing
@@ -86,9 +82,9 @@ export function cannotRenderFact(kindName: string): string {
   return `Docs cannot render ${kindName}`;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The stage (§7's `docsStage`)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The stage's action names, in the handoff's own order: Star, Download,

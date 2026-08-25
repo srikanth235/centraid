@@ -8,9 +8,9 @@
 // not text surfaces"); `--c-<hue>-text` is the rung the design package solves
 // per theme so the same hue can be `color:`.
 //
-// #686 replaced this app's six hand-picked kind hexes with the raw `--c-*`
-// fills. Those literals had been doing solved-contrast work, and five of six
-// dropped below AA as text — `--kind-pdf` from 5.05:1 to 2.24:1. The contrast
+// This app reads the raw `--c-*` rungs, never a hand-picked kind hex (#686):
+// a hex literal doing solved-contrast work by hand is how five of six kinds
+// fall below AA as text — `--kind-pdf` at 2.24:1. The contrast
 // itself is measured in `packages/design/src/contrast.test.ts`, off the emitted
 // CSS, for every hue in both themes. What is checked HERE is the binding those
 // measurements assume: that this app reads the text rung for text and the fill

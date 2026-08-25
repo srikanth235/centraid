@@ -1,5 +1,5 @@
 /*
- * The LOCAL-disk half of the storage surface (issue #544), split out of
+ * The LOCAL-disk half of the storage surface (#544), split out of
  * `storage-routes.ts` so that file stays about provider CONNECTIONS:
  *
  *   GET     /centraid/_gateway/storage/local   — footprint by component for

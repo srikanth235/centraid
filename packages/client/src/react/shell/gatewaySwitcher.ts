@@ -14,7 +14,7 @@ import styles from "./gatewaySwitcher.module.css";
 // A gateway is transport, not something the owner picks: a pairing ticket lands
 // them in a vault and which gateway hosts it is not their problem. So the
 // Gateways section is gone — picking a vault on another gateway switches both
-// pointers in one click. This surface SWITCHES and nothing else (issue #665):
+// pointers in one click. This surface SWITCHES and nothing else (#665):
 // no overflow menus, no management affordances on a row. Leaving a connection
 // is a per-vault act on Settings → Vault ("On this device → Disconnect"), and
 // host plumbing (rename / remove / test connection) lives in the Connections

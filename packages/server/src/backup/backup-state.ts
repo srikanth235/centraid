@@ -1,4 +1,4 @@
-/* Gateway backup target/fencing state in gateway.db (issue #555). */
+/* Gateway backup target/fencing state in gateway.db (#555). */
 
 import { createHmac, randomBytes } from "node:crypto";
 
@@ -35,11 +35,11 @@ export interface BackupTargetState {
   lastError?: string;
   /** Last snapshot-object verification failure; cleared only by a clean verify. */
   lastVerifyError?: string;
-  /** Last SUCCESSFUL restore-verification (issue #408 G9) — a real restore
+  /** Last SUCCESSFUL restore-verification (#408) — a real restore
    *  from the remote into a scratch dir that passed every check. */
   lastRestoreVerifiedAt?: string;
   /**
-   * Why the last restore-verification FAILED (issue #408 G9), cleared on the
+   * Why the last restore-verification FAILED (#408), cleared on the
    * next success. Persisted so the health PROBE (which recomputes from this
    * state at snapshot time and overrides pushed reports — see
    * `HealthRegistry.registerProbe`) stays red on real damage instead of
@@ -48,7 +48,7 @@ export interface BackupTargetState {
   lastRestoreVerifyError?: string;
   /**
    * How many journal receipts the last restore-verification found naming a
-   * vault row absent from the restored vault (issue #408 G8). Not a failed
+   * vault row absent from the restored vault (#408). Not a failed
    * restore — hard-deletes explain it (see `verifyRestoredPair`) — so it is a
    * DEGRADED signal for human review, and persisted for the same reason
    * `lastRestoreVerifyError` is: the health probe recomputes from this state
@@ -58,7 +58,7 @@ export interface BackupTargetState {
    */
   lastRestoreVerifyDangling?: number;
   /**
-   * WAL generation → the keyring epoch it seals under (issue #408): restore
+   * WAL generation → the keyring epoch it seals under (#408): restore
    * derives segment keys from the MANIFEST's `keyEpoch`, so each generation
    * must seal under exactly one epoch for its whole life. Recorded at first
    * drain/registration; rotation forces fresh generations (see
@@ -67,7 +67,7 @@ export interface BackupTargetState {
   walGenerationEpochs?: Record<string, number>;
   /**
    * `"{vaultGeneration}-{journalGeneration}"` → the newest pair-marker tick the
-   * provider has CONFIRMED accepting for that base pair (issue #408).
+   * provider has CONFIRMED accepting for that base pair (#408).
    *
    * Only `drainWalFiles` writes it, and only after a PUT returns — never from
    * local intent. That provenance is the whole point: the value is stamped into

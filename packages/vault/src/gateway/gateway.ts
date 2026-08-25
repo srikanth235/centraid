@@ -3,7 +3,7 @@
 // connections; every read and typed command walks identity → consent →
 // contract → execution → evidence. It stays a thin, mostly declarative
 // interpreter over the consent and capability tables: no domain logic, no
-// reasoning, no rendering. Byte custody (issue #296) rides the same door —
+// reasoning, no rendering. Byte custody (#296) rides the same door —
 // staging is pre-model (no receipt until a command claims), egress is
 // consent-checked resolution; the bytes themselves live behind db.blobs.
 
@@ -163,7 +163,7 @@ import { queryAppView, registerAppView } from "./views.js";
 import type { ViewDefinition, ViewResult } from "./views.js";
 
 /**
- * Structural guard for reading `consent.provenance` (issue #352 phase 3/4 —
+ * Structural guard for reading `consent.provenance` (#352 phase 3/4 —
  * the app-plane activity read). journal.db already carries a full audit
  * trail keyed by (entity_type, entity_id) — every command write stamps one
  * via `writeProvenance` — and `consent.provenance` is a registered logical
@@ -271,7 +271,7 @@ function isCommonsOperationError(value: unknown): boolean {
 }
 
 export class Gateway {
-  /** Registered commands: handler + sealed-class declarations (issue #293). */
+  /** Registered commands: handler + sealed-class declarations (#293). */
   private readonly commands = new Map<string, RegisteredCommand>();
   private readonly lockerAuthentication: LockerAuthentication;
   private activeBatchInvocationIds: string[] | undefined;
@@ -288,7 +288,7 @@ export class Gateway {
 
   /**
    * Host-only Locker authentication plane; app bridges restrict the caller.
-   * ASYNC since issue #659 G11 — the scrypt derivation behind an unlock runs
+   * ASYNC since #659 G11 — the scrypt derivation behind an unlock runs
    * on the threadpool instead of blocking the gateway's event loop, so the
    * caller must await it (the app bridge is already an async dispatcher).
    */
@@ -305,9 +305,9 @@ export class Gateway {
   }
 
   /**
-   * Data-keyed Locker reveal gate (issue #630 review). Lives on the gateway
+   * Data-keyed Locker reveal gate (#630 review). Lives on the gateway
    * so every reveal arm — app bridge, agent bridge, tests — hits the same
-   * lock, not only the locker HTTP path that previously special-cased fill.
+   * lock, not only the locker HTTP path.
    */
   private enforceLockerReveal(
     request: RevealRequest,
@@ -495,7 +495,7 @@ export class Gateway {
       def.risk,
       ONTOLOGY_VERSION,
     ];
-    // Confirmation is a Tier 3/4 property of the COMMAND (issue #306
+    // Confirmation is a Tier 3/4 property of the COMMAND (#306
     // decision 1), not a function of risk — risk is a salience marker.
     const requiresConfirmation = def.confirm === true ? 1 : 0;
     if (existing) {
@@ -620,7 +620,7 @@ export class Gateway {
         `deny (receipt ${receiptId}): ${consent.failing}`
       );
     }
-    // Per-entity activity guard (issue #352 phase 3/4) — see
+    // Per-entity activity guard (#352 phase 3/4) — see
     // provenanceScopeFailure's doc comment for why a table-level grant on
     // consent.provenance alone is not a safe read.
     if (
@@ -690,7 +690,7 @@ export class Gateway {
     );
     const select = applyFieldMask(target, ref.physical, consent.fieldMask);
     const limit = Math.min(Math.max(request.limit ?? 1000, 1), 10_000);
-    // The automation plane never sees demo data (issue #290 phase 1):
+    // The automation plane never sees demo data (#290):
     // condition triggers evaluate agent-credentialed reads, so seeded rows
     // are structurally excluded here — a fake "rent due" row must not fire a
     // real reminder. Owners and apps DO see demo rows: rendering them is the
@@ -712,7 +712,7 @@ export class Gateway {
         ...callerFilter.params,
         ...(demoExclusion ? [request.entity] : [])
       ) as Record<string, unknown>[];
-    // Sealed columns never ride a read (issue #293): default reads show a
+    // Sealed columns never ride a read (#293): default reads show a
     // placeholder; plaintext takes the `reveal` verb and its per-item receipt.
     if (sealedCols.length > 0) {
       for (const row of rows) {
@@ -736,7 +736,7 @@ export class Gateway {
   }
 
   /**
-   * Reveal (issue #293): plaintext of one entity's sealed columns, under the
+   * Reveal (#293): plaintext of one entity's sealed columns, under the
    * `reveal` scope verb — never `read`, never `read+act`. Owner devices pass
    * (they own the model) unless readonly; every reveal writes a receipt
    * naming the item and the columns, so "what looked at my secrets" always
@@ -793,7 +793,7 @@ export class Gateway {
       if (!sealedCols.includes(col))
         return deny(`${col} is not a sealed column`);
     }
-    // Resolve a stable alias to the live item (issue #298 item 4). Only
+    // Resolve a stable alias to the live item (#298). Only
     // locker.item carries aliases; the lookup rides the reveal grant, so no
     // separate read scope is needed for a connector to survive a rotation.
     let entityId = request.entityId;
@@ -838,7 +838,7 @@ export class Gateway {
       return deny(consent.failing, consent.grantId);
     const pk = pkColumn(this.db.vault, ref.physical);
     // The grant's row filter clamps WHICH items are revealable — this is how
-    // a connector's grant names its specific locker items (issue #293 dec 8).
+    // a connector's grant names its specific locker items (#293 dec 8).
     const rowFilter = compileFilters(
       this.db.vault,
       ref.physical,
@@ -955,7 +955,7 @@ export class Gateway {
       purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
     };
     const result = searchEntity(this.db, identity, request);
-    // Search-miss prioritization (issue #299 phase 5): an OWNER search that
+    // Search-miss prioritization (#299): an OWNER search that
     // found nothing records what was wanted; enrichers drain the queue
     // before their backlog. Owner-plane only (an app's misses are its own
     // business), deduped against open requests so repeat searches don't
@@ -980,7 +980,7 @@ export class Gateway {
   }
 
   /**
-   * The card resolver (issue #272): (type, id) references → minimal
+   * The card resolver (#272): (type, id) references → minimal
    * renderable cards, under the resolvable-if-linked consent rule — so a
    * projection renders what the owner linked into its view without holding
    * read scopes on the foreign domain. Receipted per batch; per-ref denials
@@ -1055,7 +1055,7 @@ export class Gateway {
     if (request.cursor !== null) {
       const limit = Math.min(Math.max(request.limit ?? 200, 1), 500);
       const placeholders = request.entities.map(() => "?").join(", ");
-      // Demo writes never reach the feed (issue #290 phase 1): data triggers
+      // Demo writes never reach the feed (#290): data triggers
       // ride this outbox, and scenario data must not fire automations.
       const rows = this.db.journal
         .prepare(
@@ -1103,7 +1103,7 @@ export class Gateway {
   }
 
   /**
-   * THE GRANT PLANE'S ONE SEAM into ordinary writes (issue #825, ruling
+   * THE GRANT PLANE'S ONE SEAM into ordinary writes (#825, ruling
    * G-edit), or `undefined` when the grant plane has nothing to say.
    *
    * ACTOR-AWARENESS IS THE WHOLE POINT. `routeShareGrantEdit` answers about
@@ -1358,7 +1358,7 @@ export class Gateway {
     rawRequest: InvokeRequest,
     deterministicIdSeed?: string
   ): InvokeOutcome {
-    // Purposes are off the critical path (issue #306 decision 4): a caller
+    // Purposes are off the critical path (#306 decision 4): a caller
     // that names none rides the default; the journal records what applied.
     const request = {
       ...rawRequest,
@@ -1420,7 +1420,7 @@ export class Gateway {
         objectId: command.command_id,
         purpose: request.purpose,
         decision: "deny",
-        // A refusal is attributed too (issue #599 decisions 7–8): "the
+        // A refusal is attributed too (#599 decisions 7–8): "the
         // assistant, acting for Sid, was refused" is the row an owner
         // needs to read, not "some agent was refused".
         detail: {
@@ -1471,7 +1471,7 @@ export class Gateway {
       : null;
     if (replayed) return this.trackBatchInvocation(replayed);
 
-    // Confirmation routing (issue #306 decision 2, amending #294 decision 4):
+    // Confirmation routing (#306 decision 2, amending #294 decision 4):
     // an installed caller's declared commands execute under the install-time
     // grant — risk is a salience marker in the journal, never a park trigger.
     // Only a Tier 3/4 command (`confirm: true` → capability row) parks, and
@@ -1764,17 +1764,17 @@ export class Gateway {
     if (owner.kind !== "owner-device")
       throw new GatewayError("consent", "only the owner runs sweeps");
     const result = sweepLifecycle(this.db, owner);
-    // Near-duplicate cluster projection (issue #352 phase 3/4) — a cheap,
+    // Near-duplicate cluster projection (#352 phase 3/4) — a cheap,
     // fully rebuildable recompute; riding the same standing clock as
     // everything else in duties.ts keeps it fresh without a bespoke timer.
     recomputeDuplicateClusters(this.db.vault);
-    // Memories v0 (issue #724 W7) — same rebuildable-projection mold as the
+    // Memories v0 (#724) — same rebuildable-projection mold as the
     // cluster recompute just above; it reads media_asset_phash.cluster_id
     // AFTER that recompute so a phash grouping that changed this sweep is
     // reflected in the same pass's 'similar' memories rather than a sweep
     // behind.
     rebuildMemories(this.db.vault);
-    // Face grouping (issue #724 W5) — the third rebuildable projection on this
+    // Face grouping (#724) — the third rebuildable projection on this
     // clock. It reads media_face_region and the face vectors the gateway's
     // faces sweep wrote, so it runs AFTER nothing in particular here: a pass
     // that finds no new faces writes nothing at all.
@@ -1868,7 +1868,7 @@ export class Gateway {
   }
 
   /**
-   * The ext band (issue #286 phase 2). Diff-apply an app's declared
+   * The ext band (#286). Diff-apply an app's declared
    * extension tables to the live band, keep the typed write trio
    * (`ext.<appId>.insert|update|delete`) registered exactly when the band
    * is non-empty, and receipt the change. Owner-only: DDL comes from the
@@ -2018,7 +2018,7 @@ export class Gateway {
   }
 
   /**
-   * Purge demo data (issue #290 phase 1) — whole vault or one app's
+   * Purge demo data (#290) — whole vault or one app's
    * scenario. Owner-only, receipted; rows a non-demo FK still holds are
    * reported blocked, never force-deleted.
    */
@@ -2036,7 +2036,7 @@ export class Gateway {
   }
 
   /**
-   * File-drop customs (issue #290 phase 2): stage a dropped file into a
+   * File-drop customs (#290): stage a dropped file into a
    * reviewable draft batch on its (kind, filename) connection. Nothing
    * touches a domain table until the owner publishes.
    */
@@ -2073,7 +2073,7 @@ export class Gateway {
   }
 
   /**
-   * Blob ingress (issue #296 §3): hash raw bytes into the local CAS and
+   * Blob ingress (#296): hash raw bytes into the local CAS and
    * record a staging row. NOT a vault write — no receipt, no content item;
    * the command that claims the sha (`core.attach` / `core.add_document` /
    * `media.add_asset` with `staged_sha`) is the write, and mints the
@@ -2092,7 +2092,7 @@ export class Gateway {
   }
 
   /**
-   * Blob egress resolution (issue #296 §5): consent (read on
+   * Blob egress resolution (#296): consent (read on
    * core.content_item, receipted) plus the DERIVED reachability rule — the
    * bytes serve only when some edge in the model claims them. Returns
    * resolution metadata; the transport streams bytes from custody itself
@@ -2152,7 +2152,7 @@ export class Gateway {
   }
 
   /**
-   * Agent content access (issue #299 §2, the #296 §7 seam): the size-bounded
+   * Agent content access (#299 §2, the #296 §7 seam): the size-bounded
    * byte primitive enrichers and the assistant read through. Structural
    * rule: DERIVATIVES EGRESS, NEVER ORIGINALS — the surface only spells
    * `thumb`, `preview` and `text`. Consent is the same read evaluation the
@@ -2231,7 +2231,7 @@ export class Gateway {
   }
 
   /**
-   * Standing duty: blob replication + reconciliation (issue #296 §6).
+   * Standing duty: blob replication + reconciliation (#296).
    * Pushes local bytes the remote tier lacks, deletes remote orphans
    * nothing claims, and reports shas missing from BOTH tiers (integrity
    * errors are surfaced, never papered over). Owner-only, receipted.
@@ -2249,14 +2249,14 @@ export class Gateway {
       throw new GatewayError("consent", "only the owner sweeps blob custody");
     // Archived journal segments are claimed by the manifest chain, not by
     // any core_content_item row — without this union the reconcile sweep
-    // would delete their remote replicas as orphans (issue #367 §E2).
+    // would delete their remote replicas as orphans (#367).
     const live = liveBlobShas(this.db.vault);
     for (const sha of archivedSegmentShas(this.db.journal)) live.add(sha);
-    // Conversation-ledger archive segments are claimed the same way (issue #438
+    // Conversation-ledger archive segments are claimed the same way (#438
     // decision 6) — a pruned segment is the ONLY copy of its rows, so it must
     // read as reachable or the sweep would delete the only durable copy.
     for (const sha of conversationArchiveShas(this.db.journal)) live.add(sha);
-    // Retained-snapshot GC roots (issue #436 §6) pin remote objects the live
+    // Retained-snapshot GC roots (#436) pin remote objects the live
     // model no longer claims but a recovery-to-N would still need. They protect
     // from the orphan delete without joining `live` (which would spuriously
     // re-push a remote-only original the local tier does not hold).
@@ -2265,24 +2265,24 @@ export class Gateway {
       ...(options?.extraLiveRoots
         ? { extraLiveRoots: options.extraLiveRoots }
         : {}),
-      // Orphan-grace window (issue #439 R4): the recovery window N, as ms. The
+      // Orphan-grace window (#439): the recovery window N, as ms. The
       // gateway resolves it from the provider's retention ladder; the delete is
       // deferred until an orphan has been observed for longer than N.
       ...(options?.graceWindowMs === undefined
         ? {}
         : { graceWindowMs: options.graceWindowMs }),
     });
-    // Refresh the app-readable custody-state mirror (issue #352 phase 3/4)
+    // Refresh the app-readable custody-state mirror (#352 phase 3/4)
     // AFTER reconcile — the snapshot reflects the post-sweep steady state,
     // not a stale pre-sweep gap.
     await refreshCustodyState(this.db);
-    // The aggregate rollup (issue #711) reads the mirror that was just written
+    // The aggregate rollup (#711) reads the mirror that was just written
     // AND the replica evidence reconcile just healed against the real remote
     // listing — the same post-reconcile condition BlobCache requires before it
     // will shed an original rather than a preview. Computing it anywhere else
     // in the sweep would grade "safe to release" against stale evidence.
     refreshCustodyRollup(this.db);
-    // Preview backstop (issue #405 §2): fill missing tiny/medium derivatives
+    // Preview backstop (#405): fill missing tiny/medium derivatives
     // for image content a capable client never produced — Takeout imports,
     // weak/old clients, server-side ingestion. Bounded per sweep (cheap edge
     // CPU QoS) and only when the host wired a raster codec (the vault package
@@ -2307,7 +2307,7 @@ export class Gateway {
     // their completion truth. Once an expired/unowned job's rung exists,
     // close it here so queue depth reflects the actual remaining work.
     drainSatisfiedEnrichmentRequests(this.db.vault);
-    // Bounded-cache eviction (issue #405 §3): run LAST, after reconcile has
+    // Bounded-cache eviction (#405): run LAST, after reconcile has
     // healed the replication index and the preview backstop has generated this
     // sweep's new rungs — so the pass evicts against fresh replication evidence
     // and never sheds a tiny it just made. Sheds replicated LRU mediums/
@@ -2327,19 +2327,19 @@ export class Gateway {
       detail: {
         orphansDeleted: result.orphansDeleted.length,
         orphansSkipped: result.orphansSkipped.length,
-        // Orphans held by the recovery-window grace (issue #439 R4) — deferred,
+        // Orphans held by the recovery-window grace (#439) — deferred,
         // not skipped; they delete on a future sweep once the grace elapses.
         orphansGraceHeld: result.orphansGraceHeld.length,
         replicated: result.replicated.length,
         missing: result.missing,
-        // The preview backstop's per-sweep yield (issue #405 §2) — 0 when no
+        // The preview backstop's per-sweep yield (#405) — 0 when no
         // codec is wired or no image was missing a rung.
         previewsGenerated,
         // Inline dHash contributions published beside preview rungs.
         phashesGenerated,
         // Inline ThumbHash placeholders published beside preview rungs.
         thumbhashesGenerated,
-        // The bounded-cache eviction yield (issue #405 §3) — 0 when the spool
+        // The bounded-cache eviction yield (#405) — 0 when the spool
         // is under budget or the vault is local-only.
         evictedBlobs: evicted.evictedBlobs,
         evictedBytes: evicted.evictedBytes,
@@ -2397,8 +2397,8 @@ export class Gateway {
       callerId: p.identity.callerId,
       caller: this.callerName(p.identity),
       // The confirmation surface shows WHAT is asked, never secret material
-      // (issue #293) — sealed inputs ride as hash tokens here too, nested ext
-      // secrets included (issue #298 item 9).
+      // (#293) — sealed inputs ride as hash tokens here too, nested ext
+      // secrets included (#298).
       input: redactCommandInput(
         this.db.sealKey,
         p.commandName,

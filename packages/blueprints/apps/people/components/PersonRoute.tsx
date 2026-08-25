@@ -11,13 +11,12 @@
 // be this screen answering a question nobody could ask
 // (`queries/_shared.ts`).
 //
-// `Share` AND `Revoke` ARE HERE, AND THEY ARE LIVE (#825). Both were withheld
-// while a share could only be a share of a container People does not own; a
-// share is now a standing grant over an audience × subject × capability, so
-// the person screen is the grant dashboard the ruling names it — every live
-// grant reaching this party, with `Revoke` on each row and `Share` on the
-// section that lists them (`PersonGrants.tsx`). `Link vault` is gone rather
-// than withheld: linking is no longer an act a member performs.
+// `Share` AND `Revoke` ARE HERE, AND THEY ARE LIVE (#825). A share is a
+// standing grant over an audience × subject × capability, so the person screen
+// is the grant dashboard the ruling names it — every live grant reaching this
+// party, with `Revoke` on each row and `Share` on the section that lists them
+// (`PersonGrants.tsx`). There is no `Link vault` commit: linking is not an act
+// a member performs.
 //
 // ADDING IS A FIELD WHERE THE ROW WILL BE, never a new screen (handoff
 // deviation 3). The composer's state lives in `app-root.tsx`; this screen only
@@ -352,9 +351,9 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
             // THE ONE ROW THIS SCREEN COMPOSES RATHER THAN CALLS. `Row` sets
             // its name on one ellipsised line, and a note is a body of
             // member-written prose the handoff wraps; `RowProps` carries no
-            // wrap mode and `Shared.tsx` is frozen this wave, so the note
-            // takes the shared `.wrapText` recipe inside the shared row's own
-            // classes — no new geometry, no second row definition.
+            // wrap mode, so the note takes the shared `.wrapText` recipe
+            // inside the shared row's own classes — no new geometry, no second
+            // row definition.
             <div className={shared.row} key={note.annotation_id}>
               <div className={shared.rowMain}>
                 <span className={shared.wrapText}>

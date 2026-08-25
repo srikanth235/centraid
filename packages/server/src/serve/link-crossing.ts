@@ -1,6 +1,6 @@
 /*
  * "May an edge cross from vault A to vault B?" — the ONE answerer, for both
- * localities (issue #726 P2 §3 + P3 decisions 1 and 6).
+ * localities (#726 P2 §3 + P3 decisions 1 and 6).
  *
  * D3 makes locality routing rather than semantics, so this function must not
  * branch into two policies: it asks the same two questions of every pair —

@@ -1,11 +1,10 @@
 /*
- * Shareable support bundle (#842 W8.1).
+ * Shareable support bundle (#842).
  *
- * `gateway-diagnostics.ts` builds the OWNER-facing diagnostics document:
- * it is served behind the host bearer gate to the person who already has
- * the vault, and it carries whatever is useful to them — including their
- * own vault names and raw log lines. This module builds the different
- * artifact: the one an owner may choose to hand to somebody ELSE.
+ * This module builds the artifact an owner may choose to hand to somebody
+ * ELSE — the single diagnostics document `makeDiagnosticsRouteHandler`
+ * serves at `GET /centraid/_gateway/diagnostics` behind the host bearer
+ * gate (#846). Nothing here carries vault names or raw log lines.
  *
  * Two rules define it.
  *

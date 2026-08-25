@@ -3,8 +3,8 @@
  * abstraction 5): both vaults are open in this process, so "delivery" is a
  * direct call into `@centraid/vault`'s share/move doors.
  *
- * It owns no state machine. Every status this file used to write by hand now
- * goes through `applyEdgeSignal` → `share-coordinator.ts`. What remains here
+ * It owns no state machine: every status goes through `applyEdgeSignal` →
+ * `share-coordinator.ts`, never a hand-written UPDATE here. What lives here
  * is the genuinely local part: which vault calls to make, in which order.
  *
  * Since #825 this is the ONLY transport an edge has: copy-as-share retired,

@@ -3,17 +3,15 @@
  *
  * The vault carries a per-domain enrichment tier (`enrich_policy`, mirrored
  * from the owner's settings bag): `off | device | gateway` — ONE axis, three
- * points, ordered by how far the work is allowed to run. Nothing on the
- * execution path used to read that tier, so a client's on-device promise was
- * copy, not behaviour. This module is the rule; `runFire` is the choke point
- * that applies it, and a host supplies the tier through
- * `RunFireOptions.resolveEnrichPolicy`.
+ * points, ordered by how far the work is allowed to run. This module is the
+ * rule; `runFire` is the choke point that applies it, and a host supplies the
+ * tier through `RunFireOptions.resolveEnrichPolicy`.
  *
- * THE LINE THIS RUNTIME ACTUALLY DRAWS — and the one it got wrong before.
+ * THE LINE THIS RUNTIME ACTUALLY DRAWS.
  *
- * The tier used to be read as "does this leave the device", with the
- * gateway itself folded into "leaves" on the theory that it is the thing
- * that performs egress. That conflated two different facts: WHERE a process
+ * The tier is NOT read as "does this leave the device", with the gateway
+ * itself folded into "leaves" on the theory that it is the thing that
+ * performs egress. That conflates two different facts: WHERE a process
  * runs, and WHETHER it talks to a third party. The gateway is the member's
  * own infrastructure — part of their trust domain, same as their phone —
  * and running *on* it is not by itself egress. What IS egress is a harness
@@ -68,7 +66,7 @@
  * enrichers still starts `enabled: false` in its own manifest, so the tier
  * widens what a member's install COULD run, not what runs unasked.
  *
- * THE CASCADE (issue #807, Wave 2). The single per-domain scalar above is now
+ * THE CASCADE (#807). The single per-domain scalar above is now
  * the VAULT-DEFAULT LAYER of a scoped cascade — vault, domain, collection,
  * item — each level able to state, per capability, whether it is enabled,
  * which engine profile computes it, and when it is offered. The fold lives in
@@ -144,7 +142,7 @@ export interface EnrichGateInput {
    */
   readonly tier: EnrichTier | undefined;
   /**
-   * The cascade's answer for this capability (issue #807), when the host
+   * The cascade's answer for this capability (#807), when the host
    * resolved one. Absent → the pre-#807 decision on `tier` alone, which is
    * exactly what this gate did before the cascade existed.
    */
@@ -158,7 +156,7 @@ export interface EnrichGateInput {
   readonly profileEgress?: EnrichEgressClass | undefined;
   /**
    * The vault's ANSWER on record for this capability at an egress class
-   * (issue #807, Wave 3) — `null` when the question was never asked, and a
+   * (#807) — `null` when the question was never asked, and a
    * `declined` record when it was asked and refused. Read only for the
    * `provider` class; see {@link decideEnrichmentGate}'s consent step for why
    * the other two classes are answered by the tier itself.
@@ -186,7 +184,7 @@ export type EnrichGateDecision =
       /**
        * The egress class the selected engine profile will actually use — the
        * key this gate looked up in `enrich_consent` (capability, egress,
-       * scope) when the class needed an answer (issue #807, Wave 3). The check
+       * scope) when the class needed an answer (#807). The check
        * itself already happened: an allowed decision carrying `provider` here
        * means a granted row was found. Present only on profile-aware
        * decisions; downstream surfaces read it to say what an allowed run's

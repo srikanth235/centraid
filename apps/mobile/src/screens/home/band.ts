@@ -1,9 +1,9 @@
 // What the mobile band carries (the Binding Layer, invariant 1).
 //
 // The band lists the places the FRAME can go, and never the installed apps.
-// Which places is no longer a hard-coded five: the handoff's compact spec
-// (:3480) is "Home plus four pinned places plus More", so the band now reads
-// straight off ./places — the SAME eleven-row table and pin state the
+// Which places is NOT a hard-coded five: the handoff's compact spec (:3480) is
+// "Home plus four pinned places plus More", so the band reads straight off
+// ./places — the SAME eleven-row table and pin state the
 // All-apps sheet edits. Pin four different places there and the band follows,
 // in the table's fixed order, exactly as the desktop stem already does for
 // its own launcher (packages/client/src/react/shell/launcherModel.ts).

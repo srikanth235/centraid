@@ -7,8 +7,7 @@
 // can lift an app to the front without a cap and without anything being
 // pushed off the screen.
 //
-// The "and places" half is now the full eleven-row table in ./places, not the
-// two-item stand-in (Assistant, Settings) this used to carry: every place a
+// The "and places" half is the full eleven-row table in ./places: every place a
 // 44px row with its mark, its `what` line, and a pin switch — except Home,
 // which is pinned by law and shows "by law" instead (Home cannot be unpinned,
 // the way a browser cannot unpin its own back button). The Assistant is NOT
@@ -413,9 +412,9 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: 12,
       textTransform: "uppercase",
     },
-    // Elevated ground + a hairline all round (:5976-5978) — the panel used to
-    // sit on the page's own `colors.bg` with no border at all, which made it
-    // read as part of the page rather than a surface floating over it.
+    // Elevated ground + a hairline all round (:5976-5978). On the page's own
+    // `colors.bg` with no border the panel reads as part of the page rather
+    // than a surface floating over it.
     sheet: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,

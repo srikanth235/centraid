@@ -5,8 +5,8 @@
  *   GET     /centraid/<appId>/_turn/model                   ← read the ask-model picker
  *   PUT     /centraid/<appId>/_turn/model                   ← set/clear the ask-model override
  *
- * Surface A is now POST-only. The `conversationId` in the POST body is the
- * `conversations` row id in the per-app runtime SQLite. The desktop persists
+ * Surface A is POST-only. The `conversationId` in the POST body is the
+ * `conversations` row id in the vault's `journal.db`. The desktop persists
  * the transcript itself via Surface B (`/_centraid-conversations`); this route only
  * drives the model turn and records turn completion + the harness-resume
  * handle against the session row.
@@ -105,7 +105,7 @@ export interface TurnRouteContext {
   registry: Registry;
   /**
    * Resolve an app's live code dir, honoring the git-store override
-   * (issue #137): under the store backend there is no legacy `current.json`,
+   * (#137): under the store backend there is no legacy `current.json`,
    * so a version-based lookup always misses. The chat route reads the
    * manifest from here to splice the declared handler catalog into the
    * system prompt. Returns undefined when the app has no live code.
@@ -150,7 +150,7 @@ export interface TurnRouteContext {
    */
   conversationLocks: Map<string, Promise<void>>;
   /**
-   * Optional per-vault turn-concurrency gate (issue #420). Resolved per request
+   * Optional per-vault turn-concurrency gate (#420). Resolved per request
    * (the ambient vault decides which limiter), so it bounds running turns per
    * vault, not per gateway. Absent → unbounded (the pre-#420 behavior).
    */
@@ -206,9 +206,9 @@ interface PostBody {
   harnessKind?: string;
   thinking?: string;
   idempotencyKey?: string;
-  /** Regenerate: the turn id this turn re-runs (issue #420). */
+  /** Regenerate: the turn id this turn re-runs (#420). */
   retryOf?: string;
-  /** Attachments uploaded ahead of this turn (issue #190). */
+  /** Attachments uploaded ahead of this turn (#190). */
   attachments?: TurnAttachmentRef[];
   providerConsent?: unknown;
   workspaceKind?: unknown;
@@ -352,7 +352,7 @@ async function handlePostTurn(
   }
   // A client accumulates provider consents over a conversation and re-sends
   // the whole set, so a second cross-provider switch cannot revoke the first.
-  // A bare string stays wire-valid and means a one-element set (issue #567).
+  // A bare string stays wire-valid and means a one-element set (#567).
   const providerConsent = Array.isArray(body.providerConsent)
     ? body.providerConsent
     : body.providerConsent === undefined
@@ -414,7 +414,7 @@ async function handlePostTurn(
     prevHarnessUsageSnapshot = resume?.usageSnapshot;
   }
 
-  // Attachments uploaded ahead of the turn (issue #190): the bytes already
+  // Attachments uploaded ahead of the turn (#190): the bytes already
   // live in the per-app blob CAS, keyed by sha256. We resolve each to its
   // on-disk path so the harness can build an image/document content block, and
   // keep the refs to record `attachments` rows on the turn's `message_in` item.
@@ -540,7 +540,7 @@ async function handlePostTurn(
  * declared catalog so the harness reaches for the right handler.
  *
  * Resolution goes through the runtime's code-dir resolver so it honors the
- * git-store override (issue #137): the materialized `main` worktree under
+ * git-store override (#137): the materialized `main` worktree under
  * the store backend has no legacy `current.json`, so resolving by active
  * version would always miss and silently drop the catalog.
  */

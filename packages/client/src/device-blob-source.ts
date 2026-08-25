@@ -1,4 +1,4 @@
-// Paired-device direct CAS reader (issue #414 D11/D12). The gateway mints a
+// Paired-device direct CAS reader (#414 D11/D12). The gateway mints a
 // short-lived provider URL + raw per-blob key; ciphertext then travels provider
 // → device, never through the Pi. CBSF frames are fetched and opened one at a
 // time, so JS retains at most one sealed frame beyond the final browser Blob.

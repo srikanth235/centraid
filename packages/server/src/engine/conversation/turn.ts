@@ -2,10 +2,9 @@
  * Turn-driver contract — the host-agnostic interface between a run spine and
  * the harness that actually drives one model turn.
  *
- * These types used to live in `@centraid/server/acp` (the local
- * codex/claude harness). They moved down here so the harness-agnostic run
- * engine (`makeConversationRunnerCore`, the automation fire spine) can speak the
- * turn contract without depending on any harness implementation — agent-runtime and
+ * These types live below every harness implementation so the harness-agnostic
+ * run engine (`makeConversationRunnerCore`, the automation fire spine) can
+ * speak the turn contract without depending on one — agent-runtime and
  * the gateway both inject a concrete `RunTurnFn` that satisfies it. The
  * interface lives here next to `ConversationRunner`; the codex/claude
  * implementation (`runTurn`) stays in agent-runtime.
@@ -16,7 +15,7 @@ import type { TurnStreamEvent } from "./runner.js";
 
 /**
  * Every harness kind the runtime knows how to drive — the single
- * source of truth. Since issue #479 they all share one transport, the
+ * source of truth. Since #479 they all share one transport, the
  * generic ACP (Agent Client Protocol) harness: `gemini`, `qwen`,
  * `opencode`, `grok` and `kimi` speak ACP natively, while `codex` and
  * `claude-code` reach it through their first-party adapters. `acp` is
@@ -98,7 +97,7 @@ export type VaultSqlRunner = (
 ) => Promise<VaultSqlToolResult> | VaultSqlToolResult;
 
 /**
- * The vault assistant's write tool (issue #286 phase 2): one typed vault
+ * The vault assistant's write tool (#286): one typed vault
  * command. The gateway executes it as the enrolled `_assistant` agent, so
  * high-risk commands PARK for owner confirmation — the returned outcome
  * (`executed` / `parked` / `denied` / `failed`) is handed back to the
@@ -110,7 +109,7 @@ export type VaultInvokeRunner = (call: {
 }) => Promise<unknown> | unknown;
 
 /**
- * The vault assistant's content tool (issue #299): the extracted text /
+ * The vault assistant's content tool (#299): the extracted text /
  * inline body of one content item, size-bounded and receipted — how "walk
  * me through this contract" reads the document without unbounded bytes
  * leaving custody. Text-first by design: binary variants stay on the
@@ -145,7 +144,7 @@ export interface ToolContext {
   turnId: string;
   /**
    * Draft code dir for this turn — the session worktree's `apps/<id>/`
-   * (issue #144). When set, the dispatcher serves the draft's handlers AND
+   * (#144). When set, the dispatcher serves the draft's handlers AND
    * its branched `data.sqlite` (data dir = code dir in draft mode), so the
    * harness authoring a migration can exercise it against prod-seeded draft
    * data without touching live rows. Absent on the data-only conversation driver.
@@ -162,12 +161,12 @@ export interface ToolContext {
   vaultSql?: VaultSqlRunner;
   /** The write half of the vault register — only read when `vaultSql` is set. */
   vaultInvoke?: VaultInvokeRunner;
-  /** Document-text access (issue #299) — only read when `vaultSql` is set. */
+  /** Document-text access (#299) — only read when `vaultSql` is set. */
   vaultContent?: VaultContentRunner;
 }
 
 /**
- * A file riding the turn's inbound message (issue #190). The bytes already
+ * A file riding the turn's inbound message (#190). The bytes already
  * live in the per-app blob CAS; `path` is the absolute on-disk blob path the
  * harness reads to build an image/document content block.
  */
@@ -208,7 +207,7 @@ export interface TurnInput {
   /**
    * Files attached to the inbound message. When present, the codex / claude
    * adapters turn the user turn into multimodal content blocks (text + image /
-   * document) instead of a bare text prompt (issue #190).
+   * document) instead of a bare text prompt (#190).
    */
   attachments?: TurnAttachment[];
   /** Harness-specific append point: codex `developerInstructions` / claude `systemPrompt.append`. */

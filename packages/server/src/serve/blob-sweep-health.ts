@@ -1,17 +1,16 @@
 /*
- * Blob custody-sweep health — the `blob-sweep` component (issue #351 wave 4,
+ * Blob custody-sweep health — the `blob-sweep` component (#351 wave 4,
  * #367 prep).
  *
  * `db.blobs.reconcile()` (the standing replication/reconciliation sweep,
  * `packages/vault/src/blob/custody.ts`) already runs on a timer per mounted
- * vault (`VaultPlane.runSweep`, detached, one call per lifecycle tick) — it
- * is NOT unscheduled today, contrary to a "nothing runs this yet" worry.
- * What was missing is a readable trace of its outcome: a failure only ever
- * logged a one-line warn, and nobody could ask "when did this last succeed,
- * and on what". `BlobCustody.sweepStatus()` (this wave) closes that gap; this
- * probe reads it, plus a cheap GROUP BY over the `blob_custody_state` mirror
+ * vault (`VaultPlane.runSweep`, detached, one call per lifecycle tick). What
+ * this component adds is a readable trace of its outcome — "when did this last
+ * succeed, and on what" — which a one-line warn on failure cannot answer.
+ * `BlobCustody.sweepStatus()` is the record; this probe reads it, plus a cheap
+ * GROUP BY over the `blob_custody_state` mirror
  * (`custodyStateCounts`) for the local-only-vs-replicated backlog — the same
- * counts issue #367's Storage UI card will want per vault, so the shape is
+ * counts #367's Storage UI card will want per vault, so the shape is
  * chosen to serve both without a second query.
  *
  * A vault with no `blob_store` configured is not a degraded state — it is

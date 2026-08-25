@@ -58,7 +58,7 @@ describe(createTranscriptProjection, () => {
     expect(rows[0]?.msgId).not.toBe(rows[1]?.msgId);
   });
 
-  // The backfill case (issue #659). Older turns arriving at the FRONT of the
+  // The backfill case (#659). Older turns arriving at the FRONT of the
   // model — a "show earlier" expansion today, a server-paged fetch later —
   // must not disturb what is already on screen. If it did, every mounted row
   // would re-render and re-hydrate its refs and copy buttons at the exact
@@ -100,7 +100,7 @@ describe(createTranscriptProjection, () => {
     expect(after[1]).toMatchObject({ canRegenerate: true });
   });
 
-  // The path that will actually run (issue #659 G5). The three cases above use
+  // The path that will actually run (#659). The three cases above use
   // synthetic arrays; this one drives the projection with rows shaped like the
   // gateway's own paged response and hydrated through the real codec, because
   // that is what `AssistantRoute.loadEarlier` prepends. The gateway's contract

@@ -1,6 +1,6 @@
 /*
  * Pure OS service-unit generators for `centraid-gateway service …`
- * (issue #351 wave 4 — "the headless CLI daemon can run forever but ships
+ * (#351 wave 4 — "the headless CLI daemon can run forever but ships
  * with no service unit, no monitor, no alerts").
  *
  * Everything here is (platform inputs in) -> (unit-file text out). No fs,

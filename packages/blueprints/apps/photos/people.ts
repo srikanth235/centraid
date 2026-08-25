@@ -22,7 +22,7 @@ export interface Person {
   /** Which ones, so the person's own timeline needs no second read. */
   asset_ids: string[];
   /**
-   * The distinct parties whose confirmations built this group (issue #712
+   * The distinct parties whose confirmations built this group (#712
    * P6b) — `media_face_region.confirmed_by_party_id`, which is a different
    * axis from the `party_id` the group is keyed by. A group MAY span more
    * than one, and when it does the two confirmers stay separate entries here:
@@ -35,7 +35,7 @@ export interface Person {
   confirmed_by?: Array<{ party_id: string; name: string | null }>;
 }
 
-/** One unconfirmed face proposal, as the shelf shows it (issue #711 review).
+/** One unconfirmed face proposal, as the shelf shows it (#711 review).
  *  Deliberately has NO `name` field — see `queries/people.ts`'s header for
  *  why a proposal is never resolved to a name, even when `party_id` points
  *  at someone already confirmed elsewhere. */

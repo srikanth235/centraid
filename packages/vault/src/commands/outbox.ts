@@ -1,9 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit the outbox lifecycle is one closed set — stage/decide/record_result validate each other’s risk + state invariants (#306)
-// The outbox commands (issue #306): external writes as artifacts. `stage`
+// The outbox commands (#306): external writes as artifacts. `stage`
 // is risk low — the item is INERT, nothing leaves the vault; `decide` is the
 // owner's act on the thing itself (send / edit-then-send / discard /
 // always-allow); `record_result` is the executor's receipt of one drain.
-// The read-only ceiling on connector fires (issue #304) stands untouched:
+// The read-only ceiling on connector fires (#304) stands untouched:
 // the only path from an outbox row to the network is the gateway-side
 // executor draining APPROVED items via the `allowWrites` lane.
 
@@ -64,7 +64,7 @@ const STAGE: CommandDefinition = {
       // The thing itself, as the owner reads it (to/subject/body, payload…).
       artifact: { type: "object" },
       request: REQUEST_SCHEMA,
-      // Graph joins (issue #310 S2): the canonical row this write is ABOUT
+      // Graph joins (#310): the canonical row this write is ABOUT
       // (both-or-neither), and the resolved destination person. `target`
       // stays the wire address the grant key needs; these are the typed refs
       // an agent can walk.
@@ -124,7 +124,7 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
       `no connection (${input.kind}, ${input.label}) — an outbox item drains through an existing connection's credential`
     );
   }
-  // Typed refs (issue #310 S2): the subject must be a real canonical row —
+  // Typed refs (#310): the subject must be a real canonical row —
   // an opaque pointer would be the old silo back under a new name.
   if ((input.subject_type === undefined) !== (input.subject_id === undefined)) {
     throw new Error("subject_type and subject_id come together or not at all");
@@ -160,7 +160,7 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
   } else {
     recipientPartyId = partyForAddress(ctx, input.target);
   }
-  // Standing grants (issue #306 decision 3, phase 3): a live
+  // Standing grants (#306 decision 3, phase 3): a live
   // (actor, verb, target) rule approves the item at staging time — it still
   // drains through the executor and lands in the review feed, never silently.
   const grant = ctx.db
@@ -277,7 +277,7 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
   };
   // The outbox's whole justification is that the owner approves THE THING
   // ITSELF — an edit that replaces only the human-readable artifact while
-  // the original request goes on the wire breaks that quietly (issue #308
+  // the original request goes on the wire breaks that quietly (#308
   // A5). Both halves replace together or the edit is refused.
   if ((input.artifact === undefined) !== (input.request === undefined)) {
     throw new Error(
@@ -416,7 +416,7 @@ function recordResult(ctx: HandlerCtx): Record<string, unknown> {
       input.item_id
     );
   ctx.wrote("outbox.item", input.item_id);
-  // The drain is not the end of the story (issue #310 S2): a sent
+  // The drain is not the end of the story (#310): a sent
   // message-shaped artifact becomes a canonical social_message, so the
   // owner's own outbound acts are graph facts — not JSON stranded in
   // result_json until a provider sync happens to re-import them.
@@ -617,7 +617,7 @@ const REVOKE_GRANT: CommandDefinition = {
       value: 1,
     },
     {
-      // Revocation retro-invalidates (issue #308 A8): nothing this grant
+      // Revocation retro-invalidates (#308): nothing this grant
       // approved may still be waiting to drain.
       name: "no_approved_items_ride_the_grant",
       sql: `SELECT count(*) AS n FROM outbox_item WHERE grant_id = :grant_id AND status = 'approved'`,
@@ -636,7 +636,7 @@ const REVOKE_GRANT: CommandDefinition = {
       .run(ctx.now, input.grant_id);
     ctx.wrote("outbox.grant", input.grant_id);
     // Items the grant auto-approved but the executor has not yet drained
-    // park back to pending (issue #308 A8): revoking the rule withdraws the
+    // park back to pending (#308): revoking the rule withdraws the
     // consent it minted, not just future matches. Drained items are history.
     const undrained = ctx.db
       .prepare(
@@ -664,7 +664,7 @@ const REVOKE_GRANT: CommandDefinition = {
   },
 };
 
-// Approval staleness (issue #308 A7): consent to THE THING is not consent to
+// Approval staleness (#308): consent to THE THING is not consent to
 // any future moment. The executor calls this when an approved item has sat
 // undrained past the staleness window — the item parks back to pending and
 // the owner decides again with the delay in view. Owner-plane only, like

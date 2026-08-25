@@ -1,4 +1,4 @@
-// Places on the phone, in two modes (Photos v4 handoff §14, §18; issue #816).
+// Places on the phone, in two modes (Photos v4 handoff §14, §18; #816).
 //
 // A shelf reached from the Places grid's Map chip, not a destination of its
 // own. The map is the content; everything this screen adds is a header that

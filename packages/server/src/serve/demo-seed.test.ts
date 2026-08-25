@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-// Scenario seeds end-to-end (issue #290 phase 1): every blueprint seed.js
+// Scenario seeds end-to-end (#290): every blueprint seed.js
 // runs in the real handler worker against a real vault plane through the
 // demo bridge — the same path the demo route drives — then purges clean.
 // This is the schema-drift tripwire: a command a generator calls that no
@@ -133,7 +133,7 @@ describe("demo-seed", () => {
   }, 60_000);
 
   // The photo roll is the one scenario whose bytes ship BESIDE its generator
-  // (issue #708): seed.js reads `sample/*.png` off its own directory through
+  // (#708): seed.js reads `sample/*.png` off its own directory through
   // `import.meta.url`. A missing image, a lost `files:` entry, or a renamed
   // sample would still "seed" — as zero assets — so this asserts the shape the
   // grid, the favorites filter and the album rail actually render.
@@ -175,7 +175,7 @@ describe("demo-seed", () => {
         "SELECT count(DISTINCT strftime('%Y', captured_at)) AS n FROM media_asset"
       )
     ).toBeGreaterThanOrEqual(2);
-    // Face proposals (issue #712): the portrait frames stage regions through
+    // Face proposals (#712): the portrait frames stage regions through
     // the ordinary enrichment publisher, so People and the triage verb have a
     // queue to answer on a fresh vault. Every seeded region must arrive
     // UNANSWERED — a seed that pre-confirmed them would hide the one flow the
@@ -192,9 +192,9 @@ describe("demo-seed", () => {
       )
     ).toBe(0);
     // Places. The shelf reads its sections off `place_id`, so a roll with no
-    // coordinates renders an empty Places on an otherwise full vault — which
-    // is what it did, and which looked like an unbuilt feature rather than
-    // absent data. Pinned as three separate facts because each fails
+    // coordinates renders an empty Places on an otherwise full vault, which
+    // reads as an unbuilt feature rather than as absent data. Pinned as three
+    // separate facts because each fails
     // differently: that frames are located at all, that identical coordinates
     // COLLAPSE (16 located frames over 9 rows — a per-photo place row would
     // make 16 and the shelf a list of duplicates), and that some frames stay

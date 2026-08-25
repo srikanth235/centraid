@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The drive family, the reading/editor pair and the details rail (Docs spec
-// §4.1, §4.2, §4.6, §6, §8) — the rules Stage C introduced, tested where they
-// actually live: in pure modules.
+// §4.1, §4.2, §4.6, §6, §8) — tested where the rules actually live: in pure
+// modules.
 //
 // Every assertion here is on a rule the app would otherwise express as an
 // inline condition in a render function:
@@ -141,7 +141,7 @@ describe("the filter row (§4.2)", () => {
       "source",
     ]);
     // People is in the table and off the screen while nothing is shared: its
-    // options ARE the audiences the rows name (issue #821), so a drive with
+    // options ARE the audiences the rows name (#821), so a drive with
     // no shares has no answerable option and draws no pill.
     expect(filters.liveAxes().map((axis) => axis.id)).toStrictEqual([
       "type",
@@ -275,11 +275,10 @@ describe("the breadcrumb (§1.6)", () => {
   });
 });
 
-// §6.3's seven write outcomes were the EDITOR's save states, and the editor
-// is deleted (docs/design-divergences.md): Docs holds, versions and files a
-// document; it does not open one to type into. `DSAVE` went with it, so the
-// block that policed its seven sentences is gone rather than kept asserting
-// against an export that no longer exists.
+// §6.3's seven write outcomes are the EDITOR's save states, and Docs has no
+// editor (docs/design-divergences.md): it holds, versions and files a
+// document; it does not open one to type into. There is no `DSAVE` export to
+// police here.
 
 describe("what Docs can show (§10.1) and what it asks for (§4.3)", () => {
   it("loads an inline-shell document through the authenticated blob primitive", async () => {

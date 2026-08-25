@@ -6,10 +6,9 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// THE REBUILT AGENDA AND TASKS SURFACES, in a real browser (#834, wave 3).
+// THE REBUILT AGENDA AND TASKS SURFACES, in a real browser (#834).
 //
-// #831 cleared these interfaces whole; #834 drew them again. The two captures
-// here are this umbrella's UI-impact evidence, and each mounts the SHIPPED
+// The two captures here are the UI-impact evidence, and each mounts the SHIPPED
 // component over the SHIPPED design tokens and `kit.css` — nothing is
 // reimplemented, and every string asserted comes from the app's own view-copy
 // rather than being retyped here.

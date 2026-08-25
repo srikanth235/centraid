@@ -1,4 +1,4 @@
-// Blob replication store-class routing (issue #425 Wave 2 Part A). Against a
+// Blob replication store-class routing (#425). Against a
 // `derived`-capable target every replicated thumb/preview/poster must land under
 // the derived prefix and NO derivative object under the cas prefix; the original
 // lands under cas. Against a non-capable target (no derivedPrefix) behavior is
@@ -278,7 +278,7 @@ describe("store-routing", () => {
     }
   });
 
-  // ---------- ReplicaIndex store-column unit coverage ----------
+  // ────────── ReplicaIndex store-column unit coverage ──────────
 
   function memIndex(): ReplicaIndex {
     const db = new DatabaseSync(":memory:");

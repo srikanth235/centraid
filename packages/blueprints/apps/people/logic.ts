@@ -226,7 +226,7 @@ export function createLogic({
     render();
   }
 
-  // ---------- Navigation ----------
+  // ────────── Navigation ──────────
 
   /** Every move goes through here, so the composer, the draft and the confirm
    *  cannot outlive the screen they belong to — a half-typed note reappearing
@@ -266,7 +266,7 @@ export function createLogic({
     render();
   }
 
-  // ---------- Derivations ----------
+  // ────────── Derivations ──────────
 
   /** The numbers the roster's status line and app bar are made of. `linked`
    *  and `toLink` are counted over the SAME window as the rest — the rows in

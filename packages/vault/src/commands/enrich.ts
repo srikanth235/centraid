@@ -1,23 +1,23 @@
 // governance: allow-repo-hygiene file-size-limit (#731) the typed enrichment command pack keeps OCR, transcript, embedding, face, and provenance validation in one derivative-write boundary.
-// The enrichment command pack (issue #299): the typed verbs the spine's
+// The enrichment command pack (#299): the typed verbs the spine's
 // non-staged writes ride. Staged output (captions, tags, faces, albums,
 // filing) lands through `sync.stage_rows` + the enrich publishers; these
 // commands cover what staging cannot express —
 //
 //   - `core.set_extracted_text`: the OCR/extraction result becomes the
 //     content item's inline `text` derivative, so the existing FTS triggers
-//     index the PARENT document in-transaction (issue #296's rule). This is
+//     index the PARENT document in-transaction (#296's rule). This is
 //     how a scanned PDF becomes searchable.
 //   - `media.answer_face_proposal`: the owner's half of the face proposal
 //     loop, as ONE verb with three answers. It replaces the `confirm_face` /
-//     `reject_face` pair outright (issue #712) — see that command's own
+//     `reject_face` pair outright (#712) — see that command's own
 //     header for why two verbs could not finish a review queue.
 //   - `sync.set_connection_trust`: the owner's standing-consent lever — an
 //     `auto-publish` enrichment connection is what lets captions land
 //     without a review click. Risk `high`: an agent proposing to widen its
 //     own trust parks for the owner, structurally.
 //   - `enrich.request_enrichment` / `enrich.upsert_embedding`: the
-//     on-demand queue and the additive vector index (issue #299 phase 5).
+//     on-demand queue and the additive vector index (#299).
 
 import { stampDerivation } from "../enrich/derivation.js";
 import { recordEnrichConsent } from "../enrich/egress-consent.js";
@@ -46,7 +46,7 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
       variant: { type: "string", enum: ["text", "transcript"] },
       capability: { type: "string", minLength: 1 },
       model: { type: "string", minLength: 1 },
-      // Which engine profile produced this text (issue #807, Wave 5). Absent
+      // Which engine profile produced this text (#807). Absent
       // means the bundled engine, which is what every stamp written before
       // profiles existed carries — see `BUILT_IN_PROFILE`.
       profile: { type: "string", minLength: 1 },
@@ -161,7 +161,7 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
  * command, but that check lives in a read-only bundled file, not at the
  * write boundary. `enrich.upsert_faces` already rejects a face box outside
  * its asset; this mirrors that so validation lives at the one gateway-side
- * staged write, not scattered across every caller (issue #731). Unlike a
+ * staged write, not scattered across every caller (#731). Unlike a
  * face — which IS its box — a text region's box is an annotation on top of
  * real text, so an out-of-bounds box is dropped rather than failing the
  * whole write: the text survives, and an absent box (like an absent
@@ -200,7 +200,7 @@ function dropOutOfBoundsRegions(
  * `embed-text`'s bounded cursor walks `derivative_id > cursor`: an in-place
  * update would leave the row's id behind an already-advanced cursor, so the
  * rewritten text would never re-enter the embedding sweep and semantic
- * search would keep serving vectors of the stale text forever (issue #731).
+ * search would keep serving vectors of the stale text forever (#731).
  * A fresh, strictly-later id (derivative ids are UUIDv7, so lexicographic
  * order is creation order) re-enters that sweep exactly once. The row's
  * logical identity is `(content_id, variant)`, enforced by the table's own
@@ -241,7 +241,7 @@ export function writeExtractedText(
 }
 
 /**
- * THE TRIAGE VERB (issue #712). One answer to one proposal, discriminated on
+ * THE TRIAGE VERB (#712). One answer to one proposal, discriminated on
  * `answer` — not three commands that each write a different corner of the
  * same row.
  *
@@ -416,7 +416,7 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
     properties: {
       connection_id: { type: "string", minLength: 1 },
       trust: { type: "string", enum: ["staged", "auto-publish"] },
-      // Per-class standing consent (issue #310 C3): which derived-data
+      // Per-class standing consent (#310): which derived-data
       // classes the trust covers. Omitted = all classes (a full grant);
       // an array narrows it — everything else stages for review.
       enrich_classes: {
@@ -455,7 +455,7 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
     },
   ],
   idempotency: "retry-safe",
-  // The owner's standing-consent lever (issue #306 Tier 4): widening a
+  // The owner's standing-consent lever (#306 Tier 4): widening a
   // connection to auto-publish is a consent-state change — a proposal PARKS.
   risk: "high",
   confirm: true,
@@ -493,7 +493,7 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
     properties: {
       entity_type: { type: "string", minLength: 1 },
       entity_id: { type: "string", minLength: 1 },
-      // `manual` (issue #352 phase 3/4): an owner-driven on-demand ask from
+      // `manual` (#352 phase 3/4): an owner-driven on-demand ask from
       // an app — "detect faces now" — distinct from a passive search-miss
       // or on-view signal.
       reason: { type: "string", enum: ["search-miss", "on-view", "manual"] },
@@ -501,8 +501,8 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
       // CONSENT SCOPE (see schema/enrich.ts `capability`): which enricher
       // this ask is for. Required for `manual` — an owner's "detect faces
       // now" must not read as consent for captioning, screenshot OCR and
-      // every other enabled enricher, which is exactly what an untagged row
-      // used to mean.
+      // every other enabled enricher — which is what an untagged row would
+      // mean.
       capability: { type: "string", minLength: 1, maxLength: 64 },
     },
   },
@@ -554,7 +554,7 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("enrich.request", requestId);
-    // RE-KEY THE ANSWER (issue #807, Wave 3). A `manual` request IS the
+    // RE-KEY THE ANSWER (#807). A `manual` request IS the
     // member's answer to a consent moment — Photos' enrichment panel has
     // exactly one write, and this is it. The panel's answer is the ON-DEVICE
     // one ("what leaves the device: nothing"), so the row it re-keys is
@@ -586,7 +586,7 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
 };
 
 /**
- * THE ONE WRITER of `enrich_consent` (issue #807, Wave 3).
+ * THE ONE WRITER of `enrich_consent` (#807).
  *
  * Egress consent is the member's answer to "may work for THIS capability run
  * on an engine that reaches THIS far" — capability × egress class × scope,
@@ -714,7 +714,7 @@ const UPSERT_EMBEDDING: CommandDefinition = {
       // Which version of the SOURCE the vector was computed from — e.g.
       // `embed-text`'s source `core_content_derivative.derivative_id`. Lets a
       // caller distinguish "this target's embedding is current" from "the
-      // model is current but the source was rewritten since" (issue #731):
+      // model is current but the source was rewritten since" (#731):
       // model-only staleness checks miss a same-model text rewrite.
       // Optional because `embed-image` has no comparable versioned source —
       // its target IS the asset it reads bytes from.

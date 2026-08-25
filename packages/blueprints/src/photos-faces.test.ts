@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
-// The lightbox's own face mini-list (apps/photos/faces.ts, issue #711).
+// The lightbox's own face mini-list (apps/photos/faces.ts, #711).
 //
-// Two rules were broken before this suite existed and are pinned here as a
-// regression net, not a styling snapshot — see faces.ts's own header for the
-// full account:
+// Two rules are pinned here as a regression net, not a styling snapshot — see
+// faces.ts's own header for the full account of how each was broken:
 //
 //   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285). The unconfirmed row
 //      must never contain a `%` character; it reports a match COUNT instead.

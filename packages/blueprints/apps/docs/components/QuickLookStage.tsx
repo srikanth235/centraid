@@ -33,7 +33,7 @@ import { Icon } from "./Shared.tsx";
 import styles from "./QuickLook.module.css";
 
 // The iframe (PDF) / img stage is load-bearing: content_uri is a same-origin
-// vault blob URL or data: URI (CSP `default-src 'self'` — issue #296), and
+// vault blob URL or data: URI (CSP `default-src 'self'` — #296), and
 // re-setting `src` reloads/rescrolls it. React's reconciler gives the
 // short-circuit for free: as long as the doc is unchanged the new element tree
 // has the same type/position/props at every node (including this `src` string,
@@ -98,13 +98,13 @@ function StageMedia({ doc }: { doc: DriveDoc }) {
         src={doc.content_uri}
         title={doc.title ?? "PDF"}
         // NO `sandbox`, and the reason is worth writing down because the
-        // attribute was here for a long time and the frame was BLANK for all
-        // of it. A sandboxed frame cannot instantiate a plugin document, and
-        // the browser's PDF viewer is one — `sandbox=""` did not harden the
-        // preview, it silently replaced it with a white rectangle. (Second
-        // half of the same bug: off the gateway origin the shell's authorizer
-        // rewrites the vault path to a `blob:` URL, which an opaque-origin
-        // frame may not load either.)
+        // attribute looks like free hardening and is not. A sandboxed frame
+        // cannot instantiate a plugin document, and the browser's PDF viewer
+        // is one — `sandbox=""` does not harden the preview, it silently
+        // replaces it with a white rectangle. (Second half of the same trap:
+        // off the gateway origin the shell's authorizer rewrites the vault
+        // path to a `blob:` URL, which an opaque-origin frame may not load
+        // either.)
         //
         // WHAT BOUNDS THIS IS THE CONTENT TYPE, not the attribute. This branch
         // runs only when the document's `media_type` IS `application/pdf`, and

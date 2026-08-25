@@ -1,10 +1,10 @@
 /**
- * Cron timezone resolution and wall-clock field extraction (issue #570).
+ * Cron timezone resolution and wall-clock field extraction (#570).
  *
  * Resolution tiers (n8n-shaped, host-local fallback — no hardcoded geography):
  *   1. per-trigger `tz` (IANA name on the cron trigger)
  *   2. gateway-wide default (`automation.cron.defaultTimezone` pref)
- *   3. host-local (process wall clock — today's pre-#570 behavior)
+ *   3. host-local (process wall clock)
  *
  * DST policy (documented in `docs/cron-timezone.md`):
  *   - Gap (spring-forward): a wall-clock minute that does not exist never

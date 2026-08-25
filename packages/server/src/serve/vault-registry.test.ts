@@ -439,11 +439,9 @@ describe("vault-registry scenarios", () => {
     expect(registry.list()).toHaveLength(2);
   });
 
-  // Issue #351: a corrupt vault used to vanish silently — `scannedDirs` marked
-  // it as handled BEFORE the mount attempt, so a directory that failed to
-  // open was never retried until process restart. These pin the fix: the
-  // failure is recorded, retried (with backoff) on a later `scan()`, and
-  // cleared once the directory becomes mountable.
+  // Issue #351: a corrupt vault must not vanish silently. These pin the
+  // behaviour: the failure is recorded, retried (with backoff) on a later
+  // `scan()`, and cleared once the directory becomes mountable.
   test("a directory that fails to mount is recorded in failedMounts, retried on a later scan (past backoff), and cleared once mountable", async () => {
     const clock = useFakeClock();
     try {
@@ -579,7 +577,7 @@ describe("vault-registry scenarios", () => {
     // Clone the mounted vault's files into a second directory — same
     // vaultId, so it can never cleanly mount alongside the original. The
     // `-wal` siblings are part of the clone: with `wal_autocheckpoint = 0`
-    // (issue #408 — only the WAL shipper checkpoints), a live vault's recent
+    // (#408 — only the WAL shipper checkpoints), a live vault's recent
     // writes live in the WAL until the next shipper checkpoint, so a bare
     // `vault.db` copy would be an EMPTY database that bootstraps fresh under
     // a new id instead of colliding.

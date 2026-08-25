@@ -50,11 +50,11 @@ export interface BootstrappedVault<TDb extends ClosableVault, TBoot> {
 /**
  * Open a vault, bootstrap its owner, and close it exactly once.
  *
- * Ninety-one test files repeated `openVaultDb()` + `bootstrapVault()` + a
- * hand-written `afterEach` close, and the close is the part that drifted: a
- * setup that threw between the two calls leaked the handle, and an on-disk
- * vault leaked the SQLite files with it. Registering the close at the moment
- * the handle exists makes that unrepresentable.
+ * Never hand-roll `openVaultDb()` + `bootstrapVault()` + an `afterEach` close:
+ * the close is the part that drifts — a setup that throws between the two calls
+ * leaks the handle, and an on-disk vault leaks the SQLite files with it.
+ * Registering the close at the moment the handle exists makes that
+ * unrepresentable.
  */
 export function bootstrappedVault<TDb extends ClosableVault, TBoot>(
   api: VaultBootstrapApi<TDb, TBoot>,

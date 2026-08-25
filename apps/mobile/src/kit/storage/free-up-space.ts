@@ -1,7 +1,6 @@
-// FREE UP SPACE IS A FRAME CAPABILITY, NOT A PHOTOS FEATURE (issue #712, B3).
+// FREE UP SPACE IS A FRAME CAPABILITY, NOT A PHOTOS FEATURE (#712).
 //
-// This module was `apps/photos/free-up-space.ts`. Nothing in it was ever about
-// photographs: it decides whether a locally-resident original may be released
+// Nothing in it is about photographs: it decides whether a locally-resident original may be released
 // because a copy is provably held somewhere else, which is the same question
 // for a scan, an attachment, or anything else with bytes on this device.
 // docs/blueprint-seats.md's seat table already says so — "Free up space" is a
@@ -16,7 +15,7 @@
 // enumerates nothing itself, so an app cannot be quietly opted in by a list
 // nobody reviews. An empty list is a real answer — no offer.
 //
-// The DEVICE-SIDE deletion flow is unchanged and still two gates, in order:
+// The DEVICE-SIDE deletion flow is two gates, in order:
 //
 //   1. Compile-time (`selectFreeUpCandidates`): the asset is verifiably backed
 //      up (a `merged` row whose remote CAS is `replicated`), is not pinned to a

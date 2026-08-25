@@ -1,11 +1,11 @@
-// Remote-tier blob sealing — the PUBLIC sealers/unsealers (issue #296 seal,
+// Remote-tier blob sealing — the PUBLIC sealers/unsealers (#296 seal,
 // #367 §C8 streaming, #405 §1 framed/rangeable). The wire format and its
 // low-level frame/directory/trailer primitives live in `seal-frames.ts`; this
 // module is the whole-object face of that format: `sealBlob` (buffered),
 // `sealBlobStream` (streaming, never buffers more than one frame), and
 // `unsealBlob` (whole-object unseal). Ranged remote reads use the same
 // primitives directly (custody-read.ts) so a Range never has to unseal the
-// whole object. Split out of custody.ts purely along the crypto seam so the
+// whole object. Kept out of custody.ts purely along the crypto seam so the
 // facade stays a facade.
 //
 // v0 (centraid-v0-status): the pre-#405 whole-blob envelope is NOT readable
@@ -67,7 +67,7 @@ export function sealBlob(
 }
 
 /**
- * Streaming twin of `sealBlob` (issue #367 §C8 + #405 §1): the replication
+ * Streaming twin of `sealBlob` (#367 §C8 + #405 §1): the replication
  * path pipes a blob's plaintext through this so it never holds the whole blob
  * in memory — at most ONE frame's plaintext is buffered at a time. The total
  * plaintext size is required up front (the local tier knows it via `statSync`
@@ -141,7 +141,7 @@ export function sealBlobStream(
 }
 
 /**
- * Whole-object unseal (issue #405 §1): parse the trailer, open the directory,
+ * Whole-object unseal (#405): parse the trailer, open the directory,
  * then unseal every frame in order and concatenate. Used by the coalesced
  * full read-through (custody-read.ts) which then verifies the whole-blob sha;
  * a RANGED read never comes through here — it fetches only covering frames.

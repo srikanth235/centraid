@@ -1,5 +1,5 @@
 /*
- * The KeyStore credential an installed OS service carries (issue #351,
+ * The KeyStore credential an installed OS service carries (#351,
  * hardened in #568 item E).
  *
  * `service install` moves a data directory's key custody from wherever it

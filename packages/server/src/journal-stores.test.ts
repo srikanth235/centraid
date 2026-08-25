@@ -1,6 +1,6 @@
 /*
- * The per-journal-file store memo (issue #541 review). The regression this
- * guards: a fresh `makeJournalDbProvider` per fire leaked one `DatabaseSync`
+ * The per-journal-file store memo (#541 review). The regression this
+ * guards: a fresh `makeJournalDbProvider` per fire leaks one `DatabaseSync`
  * (plus a 64 MiB mapping and an fd) every time, because
  * `ConversationStore.close()` is a no-op on a host-owned connection.
  */

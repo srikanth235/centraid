@@ -9,12 +9,11 @@
 // band carries the same six destinations, and drawing both would put Trash in
 // a horizontal strip that scrolls out of sight while the band says the same
 // thing better. `bandOwned` is the app's own answer to "did my band claim get
-// honoured", so the strip disappears for exactly the surface that replaced it.
+// honoured", so the strip disappears for exactly the surface that supplants it.
 //
-// This replaces the sidebar's `SmartNav` (All / Recent / Starred). Two
-// navigations for one set of shelves is what the restructure retires: the
-// strip is the one that also carries Folders, Starred and Trash, and it
-// sits where the member is already looking.
+// THE SIDEBAR CARRIES NO SECOND COPY OF THESE SHELVES. Two navigations for one
+// set of shelves is what §1.7 refuses: this strip is the one that also carries
+// Folders, Starred and Trash, and it sits where the member is already looking.
 import { DSHELVES, stripShelf } from "../shelves.ts";
 import type { Shelf, ShelfId } from "../shelves.ts";
 

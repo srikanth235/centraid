@@ -1,5 +1,5 @@
 /*
- * Repricing backfill (issue #445).
+ * Repricing backfill (#445).
  *
  * Prices drift and the catalog gains coverage over time, so `items.cost_usd`
  * frozen under an old (or absent) rate goes wrong: a then-unknown model reads
@@ -10,10 +10,10 @@
  * owning turn's `total_cost_usd` with the same SUM shape `finishTurn` uses.
  *
  * Token columns are the truth and are NEVER touched. `conversation_digest`
- * rows (issue #438 archived rollups) are frozen copies and out of scope — this
+ * rows (#438 archived rollups) are frozen copies and out of scope — this
  * only sees live `items`/`turns`.
  *
- * Harness-reported costs (`cost_source = 'harness'`, issue #514) are never rewritten
+ * Harness-reported costs (`cost_source = 'harness'`, #514) are never rewritten
  * — only catalog estimates and NULL unknowns are revisited.
  *
  * Bounded and resumable: one pass scans at most `maxScan` items from a caller-

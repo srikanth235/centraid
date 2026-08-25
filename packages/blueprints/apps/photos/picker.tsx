@@ -57,7 +57,7 @@ export function createPicker({
   function renderPicker() {
     if (!pickerAlbum) return;
     const album = pickerAlbum;
-    // Albums are own-scope (issue #599), so the picker offers own-scope photos:
+    // Albums are own-scope (#599), so the picker offers own-scope photos:
     // an audience's asset id cannot be added to a collection in another scope.
     const candidates = getAssets().filter(
       (a) => !(a.album_ids ?? []).includes(album.album_id)

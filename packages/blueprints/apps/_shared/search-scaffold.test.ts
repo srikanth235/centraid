@@ -1,4 +1,4 @@
-// The pure half of the search scaffold (issue #712 S1): grouping caps,
+// The pure half of the search scaffold (#712): grouping caps,
 // status derivation, and the copy builders every app's search surface
 // shares. Pure-function assertions, same convention `write-target.test.ts`
 // and `placement-registry.test.ts` use for other `_shared` modules — no

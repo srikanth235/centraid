@@ -79,11 +79,10 @@ function Row({
 }
 
 /**
- * Command palette (⌘K), ported to React (issue #325, Phase 3). React owns the
- * overlay, the search field, and up/down + Enter keyboard navigation; the
- * vanilla side supplies `buildGroups(query)` (data + per-row `run` closures)
- * and `onClose`. Styles are co-located in `PaletteScreen.module.css` (scoped
- * CSS Modules — issue #325 Phase 4).
+ * Command palette (⌘K). This screen owns the overlay, the search field, and
+ * up/down + Enter keyboard navigation; the route supplies `buildGroups(query)`
+ * (data + per-row `run` closures) and `onClose`. Styles are co-located in
+ * `PaletteScreen.module.css`.
  */
 export default function PaletteScreen({
   buildGroups,
@@ -105,7 +104,7 @@ export default function PaletteScreen({
   const groups = buildGroups(query.trim());
   const rows = groups.flatMap((g) => g.items);
 
-  // Empty-state suggestion chips (issue #708 §A) — read only while the field
+  // Empty-state suggestion chips (#708) — read only while the field
   // is empty; a query in progress has its own results to show instead.
   const chips = query.trim() ? [] : (suggestions?.() ?? []);
 

@@ -1,5 +1,5 @@
 /*
- * The CALENDAR half of the time zoo (issue #839, gap G12): the two civil-clock
+ * The CALENDAR half of the time zoo (#839, gap G12): the two civil-clock
  * irregularities that are not DST — the leap day, and the ISO year that has
  * fifty-three weeks in it.
  *

@@ -1,5 +1,5 @@
 /**
- * A member names a place, through media.name_place (issue #816).
+ * A member names a place, through media.name_place (#816).
  *
  * The counterpart to `set-place.ts`, and the only door in this app that writes
  * a place row itself: that one points a photograph at a place, this one says

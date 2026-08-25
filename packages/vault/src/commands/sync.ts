@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit the staging commands and the broker-credential lifecycle commands (#304) are one sync vocabulary — begin/finish/cursor/status and configure/store share the connection state machine, so splitting scatters the invariants
-// The agent-facing staging commands (issue #290 phase 3) — how interactive
+// The agent-facing staging commands (#290) — how interactive
 // one-shot pulls write. An agent with a live harness session (MCP reach)
 // parses whatever it pulled and STAGES it through `sync.stage_rows` (risk
 // low: the staging band holds reviewable state, no domain table moves);
@@ -21,7 +21,7 @@ import type { StageCandidate } from "../ingest/staging.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
 
 /**
- * Derived-data class per stageable entity type (issue #310 C3) — the unit
+ * Derived-data class per stageable entity type (#310) — the unit
  * the owner consents to when narrowing a connection's auto-publish trust.
  * Entity types not named here (plain import types: events, transactions,
  * contacts…) are untouched by class narrowing.
@@ -81,7 +81,7 @@ const STAGE_ROWS: CommandDefinition = {
   postconditions: [
     {
       // Draft for review, or already applied under the connection's
-      // owner-set `auto-publish` trust (issue #299 §3) — never discarded.
+      // owner-set `auto-publish` trust (#299) — never discarded.
       name: "batch_staged_or_auto_published",
       sql: `SELECT count(*) AS n FROM sync_import_batch WHERE batch_id = :batch_id AND status IN ('draft','published')`,
       column: "n",
@@ -114,7 +114,7 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
       );
     }
     // Sealed entity types stage only through the owner's file-drop surface
-    // (issue #293): an agent never carries secret material, even staged.
+    // (#293): an agent never carries secret material, even staged.
     if (sealedColumnsOf(row.entity_type).length > 0) {
       throw new Error(
         `"${row.entity_type}" carries sealed columns — secret material stages only through the owner's import surface (issue #293)`
@@ -124,7 +124,7 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
   const connection = resolveConnectionIdentity(ctx, input);
   const connectionId = connection.connectionId;
   // Attribution is injected server-side, never trusted from source data
-  // (issue #299 §1): an annotation candidate is stamped with the CALLER's
+  // (#299): an annotation candidate is stamped with the CALLER's
   // party — the enricher's enrolled agent party, or the owner running an
   // import by hand. Masquerade is structurally impossible.
   const authorPartyId = ctx.identity.partyId ?? ownerPartyIdOf(ctx);
@@ -136,12 +136,12 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
         ? { ...r.payload, author_party_id: authorPartyId }
         : r.payload,
   }));
-  // The owner's standing consent (issue #299 §3): a connection the owner set
+  // The owner's standing consent (#299): a connection the owner set
   // to `auto-publish` applies its batch in the same command — captions and
   // machine tags land without a review click, still receipted, still
   // provenance-stamped per row. `staged` trust keeps today's behavior.
   //
-  // Per-class narrowing (issue #310 C3): the owner may have consented to
+  // Per-class narrowing (#310): the owner may have consented to
   // captions but not face suggestions. Candidates in classes OUTSIDE the
   // connection's enrich_classes_json auto-publish nothing — they stage as a
   // separate draft batch for review, never silently dropped and never
@@ -280,7 +280,7 @@ const PUBLISH_BATCH: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // An agent-proposed publish PARKS for the owner (issue #306 Tier 4): a
+  // An agent-proposed publish PARKS for the owner (#306 Tier 4): a
   // whole batch landing in domain tables bypasses the staged-trust review,
   // so the pause between draft and land stays the consent gesture.
   risk: "high",
@@ -676,10 +676,10 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
       // The owner's two levers: pause a connector, or resume one (a resumed
       // needs-auth connection re-proves itself on the next begin_run).
       // `needs-auth` is the fire path's flip when a declared secret item is
-      // missing or trashed (issue #293) — same honest-liveness state a
+      // missing or trashed (#293) — same honest-liveness state a
       // principal mismatch shows.
       status: { type: "string", enum: ["paused", "active", "needs-auth"] },
-      // WHY the connection left active (issue #304): "refresh refused",
+      // WHY the connection left active (#304): "refresh refused",
       // "scope withdrawn"… — what the reconnect surface shows the owner.
       note: { type: "string", minLength: 1 },
     },
@@ -711,7 +711,7 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
     },
   ],
   idempotency: "idempotent",
-  // Deliberately NOT confirm-gated (issue #308 A2 sweep): the fire path's
+  // Deliberately NOT confirm-gated (#308 A2 sweep): the fire path's
   // needs-auth honesty flip rides the agent plane and must land unparked,
   // and no status value moves credentials or hosts. Risk medium keeps the
   // act salient in the review feed.
@@ -752,7 +752,7 @@ function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
 // auth. The secret cells are sealed columns; the ONLY consumer is the
 // gateway broker, which injects them into `ctx.fetch` toward the
 // connection's `allowed_hosts` and never hands them to connector code.
-// Both commands here are CONFIRM-GATED (issue #308 A1/A2): risk stopped
+// Both commands here are CONFIRM-GATED (#308 A1/A2): risk stopped
 // parking anything when #306 made confirmation a command property, and
 // these two touch exactly what must never move on a model's say-so —
 // `configure_credential` can rewrite `allowed_hosts` (the #304 structural
@@ -808,7 +808,7 @@ const CONFIGURE_CREDENTIAL: CommandDefinition = {
   idempotency: "idempotent",
   // Attaching a credential decides where secrets may flow: `allowed_hosts`
   // IS the #304 anti-exfiltration pin, so a non-owner proposing this parks
-  // (issue #308 A1 — `confirm`, not risk, is what parks post-#306).
+  // (#308 A1 — `confirm`, not risk, is what parks post-#306).
   risk: "medium",
   confirm: true,
   handler: configureCredential,
@@ -850,7 +850,7 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
     });
     return { connection_id: connectionId, cred_kind: "none", status: "active" };
   }
-  // The host pin is the anti-exfiltration invariant (issue #304 decision 2):
+  // The host pin is the anti-exfiltration invariant (#304 decision 2):
   // a credential without a host list would be injectable anywhere connector
   // code points ctx.fetch, so both kinds refuse to configure without one.
   if (!input.allowed_hosts || input.allowed_hosts.length === 0) {
@@ -984,7 +984,7 @@ const STORE_TOKENS: CommandDefinition = {
   postconditions: [],
   sealedInput: ["access_token", "refresh_token"],
   idempotency: "idempotent",
-  // Low salience but confirm-gated (issue #308 A2): swapping the stored
+  // Low salience but confirm-gated (#308): swapping the stored
   // token pair re-principals every future drain, and only the broker's
   // owner-plane ceremony/refresh has business landing tokens.
   risk: "low",
@@ -1041,13 +1041,13 @@ function storeTokens(ctx: HandlerCtx): Record<string, unknown> {
 // `core.merge_party` uses to find every FK into `core_party` ("no hand-kept
 // table list to rot"):
 //   - `sync_connection_credential` / `sync_connection_health` already carry
-//     `ON DELETE CASCADE` (the issue #304 sidecars) — SQLite drops them with
+//     `ON DELETE CASCADE` (the #304 sidecars) — SQLite drops them with
 //     the parent row. Deleted explicitly here too so the receipt's write
 //     list stays complete even if a future migration drops the cascade.
 //   - `sync_connection_cursor` is pure incremental-sync POSITION — no audit
 //     value, so it is deleted outright alongside the connection.
 //   - `locker_item.connection_id` is a nullable "which service is this
-//     login for" anchor (issue #310 S3) — cleared (`SET NULL`), never a
+//     login for" anchor (#310) — cleared (`SET NULL`), never a
 //     reason to block removal; the login itself is untouched.
 //   - `outbox_item`, `sync_import_batch`, `sync_external_entity` and
 //     `sync_connection_run` are NOT NULL, un-cascaded FKs carrying
@@ -1138,7 +1138,7 @@ const REMOVE_CONNECTION: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Tier 4 (issue #306): irreversible, so it stays loud on purpose — same
+  // Tier 4 (#306): irreversible, so it stays loud on purpose — same
   // stance as core.merge_party.
   risk: "high",
   confirm: true,
@@ -1222,7 +1222,6 @@ function removeConnection(ctx: HandlerCtx): Record<string, unknown> {
   return { connection_id: connectionId };
 }
 
-/** Register the staging + connection-lifecycle commands on a gateway. */
 export function registerSyncCommands(gateway: Gateway): void {
   gateway.registerCommand(STAGE_ROWS);
   gateway.registerCommand(PUBLISH_BATCH);

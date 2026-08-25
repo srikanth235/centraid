@@ -1,5 +1,5 @@
 /*
- * Process-wide performance signals for the gateway (issue #456 M2).
+ * Process-wide performance signals for the gateway (#456).
  *
  * `monitorEventLoopDelay` is the one measurement that sees every source of
  * synchronous work on Node's single event loop, including `node:sqlite` and

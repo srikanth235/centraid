@@ -3,9 +3,9 @@
 // store-sql.ts and the row types into schema.ts.
 /*
  * ConversationStore — the per-vault conversation ledger + automation KV
- * (issue #90, reshaped by #190; moved from per-app `runtime.sqlite` into
- * the vault's `journal.db` by #280 — a conversation binds to its vault
- * at creation, and app scoping is the `app_id` column, not a file).
+ * (#90, #190, #280): the ledger lives in the vault's `journal.db`, a
+ * conversation binds to its vault at creation, and app scoping is the
+ * `app_id` column, not a file.
  *
  * Five ledger tables — `conversations`, `turns`, `items`, `attachments`,
  * `automation_state` — the `CONVERSATION_LEDGER_DDL` shape in `gateway-db.ts`
@@ -93,7 +93,7 @@ export interface InsertTurnInput {
   readonly triggerOrigin?: AutomationTriggerOrigin;
   readonly parentTurnId?: string;
   readonly retryOf?: string;
-  /** Client-supplied idempotency key (issue #420). */
+  /** Client-supplied idempotency key (#420). */
   readonly idempotencyKey?: string;
   readonly note?: string;
   /** Explicit D4 marker: estimated handoff prompt tokens, not ACP usage. */
@@ -151,7 +151,7 @@ export interface InsertItemInput {
   readonly appId?: string;
 }
 
-/** Insert a durable "running" item (issue #158); `closeItem` settles it. */
+/** Insert a durable "running" item (#158); `closeItem` settles it. */
 export interface OpenItemInput {
   readonly itemId: string;
   readonly turnId: string;
@@ -231,18 +231,8 @@ export function conversationMatchExpression(query: string): string | null {
 }
 
 /**
- * Ledger cap for a harness's raw envelope. `args_json` / `output_json` arrive
- * already capped, but `raw_json` carries the SAME payload inside the harness's
- * envelope (an entire file read, a full tool result) and is written TWICE per
- * tool call — once at `openItem`, once at `closeItem`. Uncapped that is
- * megabytes per call into `journal.db`, straight through #544's disk budget
- * and #438's bounded ledger. Enforced here, at the write boundary, so no
- * producer can forget; producers capping their own output is defense in depth,
- * not a substitute.
- */
-/**
- * Hard ceilings on the two unbounded ORDER BYs the request path used to run
- * (issue #659 G11). Neither is a page size — they are the point past which a
+ * Hard ceilings on the request path's two otherwise-unbounded ORDER BYs
+ * (#659). Neither is a page size — they are the point past which a
  * single response stops being renderable at all, so raising them is a product
  * decision and not a tuning knob. Real pagination for transcripts is tracked as
  * the client-side half of #659 G5.
@@ -266,6 +256,16 @@ export interface TurnSeqRange {
 }
 export const MAX_LISTED_CONVERSATIONS = 500;
 
+/**
+ * Ledger cap for a harness's raw envelope. `args_json` / `output_json` arrive
+ * already capped, but `raw_json` carries the SAME payload inside the harness's
+ * envelope (an entire file read, a full tool result) and is written TWICE per
+ * tool call — once at `openItem`, once at `closeItem`. Uncapped that is
+ * megabytes per call into `journal.db`, straight through #544's disk budget
+ * and #438's bounded ledger. Enforced here, at the write boundary, so no
+ * producer can forget; producers capping their own output is defense in depth,
+ * not a substitute.
+ */
 const RAW_JSON_MAX_BYTES = 64 * 1024;
 
 /** A value this short is an identifier, not a payload — worth keeping. */
@@ -480,7 +480,7 @@ export class ConversationStore {
 
   /**
    * FTS5 search over a user's chat/build conversation titles + inbound message
-   * text (issue #420), newest-relevant first. `appId` scopes to one app when
+   * text (#420), newest-relevant first. `appId` scopes to one app when
    * set. Archived threads are excluded. Returns each hit with a highlighted
    * `snippet`.
    */
@@ -1070,7 +1070,7 @@ export class ConversationStore {
 
   /**
    * The most recent recorded turn on `conversationId` that carries
-   * `idempotencyKey`, or undefined (issue #420). Backs replay-on-duplicate at
+   * `idempotencyKey`, or undefined (#420). Backs replay-on-duplicate at
    * the turn route — a re-POST with the same key never re-runs the model.
    */
   getTurnByIdempotencyKey(
@@ -1135,7 +1135,7 @@ export class ConversationStore {
 
   /**
    * The NEWEST turns of a conversation, oldest-first (seq ASC) — a transcript
-   * opens to its tail, so that is the end the ceiling keeps (issue #659 G5).
+   * opens to its tail, so that is the end the ceiling keeps (#659).
    *
    * `limit` is a real ceiling, not a hint: the read is on the transcript
    * request path and a thread grows without bound. The default is the
@@ -1148,7 +1148,7 @@ export class ConversationStore {
 
   /**
    * One page of a transcript, newest-first by window and oldest-first within
-   * it (issue #659 G5).
+   * it (#659).
    *
    * `beforeSeq` walks strictly backwards: a page returns only turns with
    * `seq < beforeSeq`, so successive pages never overlap and never skip.
@@ -1188,7 +1188,7 @@ export class ConversationStore {
   }
 
   /**
-   * Every item of a conversation, grouped by turn — ONE query (issue #659 G5).
+   * Every item of a conversation, grouped by turn — ONE query (#659).
    * Replaces `listItems` called once per turn while folding a transcript.
    */
   listItemsByTurn(
@@ -1216,7 +1216,7 @@ export class ConversationStore {
   }
 
   /**
-   * Every attachment of a conversation, grouped by item — ONE query (#659 G5).
+   * Every attachment of a conversation, grouped by item — ONE query (#659).
    * Most threads have none, so the per-item lookup it replaces was pure
    * overhead paid once per rendered message.
    */
@@ -1292,7 +1292,7 @@ export class ConversationStore {
   /**
    * Every currently executing automation turn across the vault, newest-first.
    * `excludeAutomationRefs`/`onlyAutomationRefs` filter by handle in SQL,
-   * before `LIMIT` (issue #731 M2): a flood of in-flight runs on one handle
+   * before `LIMIT` (#731): a flood of in-flight runs on one handle
    * (e.g. the recognition system lane) must not crowd everything else out of
    * the window, and a lane scoped to just that handle must not be diluted by
    * unrelated in-flight runs either. At most one of the two should be set;
@@ -1337,7 +1337,7 @@ export class ConversationStore {
 
   /**
    * Set (or clear, with `null`) the reader's 👍/👎 on one turn's answer, scoped
-   * to its conversation (issue #420). Returns whether a row was updated — false
+   * to its conversation (#420). Returns whether a row was updated — false
    * when the turn isn't in that conversation.
    */
   setTurnFeedback(
@@ -1529,7 +1529,7 @@ export class ConversationStore {
   }
 
   /**
-   * The archive-index rows for a conversation, seq-ordered (issue #438 wave 3).
+   * The archive-index rows for a conversation, seq-ordered (#438).
    * `pruned` is true once the range's raw turns were custody-gated-deleted — the
    * caller then rehydrates that range from the segment blob; unpruned ranges
    * still have live rows and render as today.

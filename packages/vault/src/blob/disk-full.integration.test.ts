@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 /*
- * REAL disk-full round-trip (issue #351 wave 4). The rest of this package's
+ * REAL disk-full round-trip (#351). The rest of this package's
  * disk-full coverage (../errors.test.ts) induces failures via `PRAGMA
  * max_page_count` (a genuine SQLITE_FULL — no sqlite mocking) or, for the
  * blob-cleanup unit test only, an injected `writeSync` failure (ESM's

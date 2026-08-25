@@ -1,5 +1,5 @@
 /*
- * Persist main window bounds (issue #468 K13).
+ * Persist main window bounds (#468).
  * Debounced writes while resizing; flush sync on close / before-quit.
  * Clamped to a visible display work area so a disconnected monitor
  * cannot hide the window off-screen.

@@ -6,11 +6,6 @@
  * people (those with a people_profile), then decorated into the same row shape
  * the `people` window uses, plus the vault's hit snippet. Name matches rank
  * first, then role, then notes.
- *
- * TS conversion note: the vault read/search surface returns
- * `Record<string, unknown>` rows (see HandlerCtx.vault), so each raw row set is
- * cast once to a typed shape (`as unknown as X[]`) at its read site. Handler
- * logic is otherwise byte-for-byte the pre-conversion JS.
  */
 
 interface PartyHit {

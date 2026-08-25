@@ -29,7 +29,7 @@ export const PLACE_UNNAMED = "A place with no name yet";
 
 /**
  * The trailing Places section/card holding the photographs that carry no place
- * at all (issue #816).
+ * at all (#816).
  *
  * A DIFFERENT sentence from `PLACE_UNNAMED`, and the difference is the whole
  * point: `PLACE_UNNAMED` is a place the vault located and cannot name, this is
@@ -54,7 +54,7 @@ export const PLACE_NO_LOCATION_TERMS: readonly string[] = [
 ];
 
 /**
- * The relative/home vocabulary a place can be FOUND by (issue #816), beside
+ * The relative/home vocabulary a place can be FOUND by (#816), beside
  * whatever it is called: a member who cannot remember the name of the park
  * still knows it was near home. Only the "at home" and "around town" bands
  * answer to these — a photograph 200 km away is not near home in any register.
@@ -115,8 +115,8 @@ export const PHOTOS_SAVE_AS_NEW = "Save as a new photograph";
  * The explanation beside it, at the point of decision.
  *
  * A non-destructive edit is a risk decision, so it keeps its reassurance — but
- * ONE clause of it. It used to close "The original is not touched, and nothing
- * is overwritten", which is the same promise twice.
+ * ONE clause of it: closing with "The original is not touched, and nothing
+ * is overwritten" is the same promise twice.
  */
 export const PHOTOS_SAVE_AS_NEW_EXPLANATION =
   "Saving writes a new photograph dated today; the original is not touched.";

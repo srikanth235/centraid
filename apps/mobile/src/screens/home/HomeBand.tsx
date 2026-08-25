@@ -1,9 +1,9 @@
 // The bottom navigation band (the Binding Layer, invariant 1).
 //
-// One band, never themed by an app, never scrolled away, never a drawer. What
-// changed with the v4 Home is WHAT IT CARRIES: the frame's own destinations —
-// Home plus up to four of the member's pinned places, plus More — and never
-// the installed apps, which live on Home's springboard and in All apps. See
+// One band, never themed by an app, never scrolled away, never a drawer. It
+// carries the frame's own destinations — Home plus up to four of the member's
+// pinned places, plus More — and never the installed apps, which live on
+// Home's springboard and in All apps. See
 // ./band for why, and ./places for the eleven-row table the pins come from.
 //
 // Because none of these is an app, none of them earns a tinted identity chip:
@@ -13,9 +13,9 @@
 // No active bar, either (handoff :5176-5179 — the compact band's `bandLabelCss`
 // carries the whole state: the HELD PAIR `band` (400) → `control` (600) plus
 // full ink when active, the softer `textSoft` when not, and the icon itself
-// steps down to the faintest `textFaint` rather than `textSoft`). The desktop launcher still
-// draws a 2px ink bar for its row-shaped rows; the compact band never did,
-// and this used to draw one anyway, which is the bug this fixes.
+// steps down to the faintest `textFaint` rather than `textSoft`). The desktop
+// launcher draws a 2px ink bar for its row-shaped rows; the compact band draws
+// none.
 //
 // The metaphor is tinted paper, not glass: no blur, no gloss, no drop shadow.
 // That is not this band's local preference — the handoff draws no blur and no
@@ -172,13 +172,12 @@ const makeStyles = (colors: ThemeColors) =>
       // 11/15 rung in 600.
       //
       // NO `fontFamily` OVERRIDE either way: the roles carry their own faces.
-      // The argument this comment used to make — that weight must not be a
-      // second channel, because a label that changes width on tap reflows a
-      // band a member is looking straight at — was right about the reflow and
-      // wrong about the remedy. The ramp now owns the pair, and a held pair is
-      // precisely a weight change with the metrics pinned: same size, same
-      // leading, no reflow. The tab is a flex cell with `numberOfLines={1}`
-      // besides, so even the glyph-advance delta cannot reach a neighbour.
+      // Weight IS the second channel here, and it costs no reflow: the ramp
+      // owns the pair, and a held pair is precisely a weight change with the
+      // metrics pinned — same size, same leading. A label that changed width
+      // on tap would reflow a band a member is looking straight at; this one
+      // cannot. The tab is a flex cell with `numberOfLines={1}` besides, so
+      // even the glyph-advance delta cannot reach a neighbour.
       ...t("band"),
       // `stretch` is what makes `numberOfLines={1}` ellipsize INSIDE the tab
       // (handoff :5178 — `width:100%;min-width:0;text-overflow:ellipsis`).
@@ -254,16 +253,16 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 4,
       // The band FLOATS — the same rectangle a claimed band draws (§G): inset
       // from all three edges, 12 radius, hairline all round, opaque paper. It
-      // used to be a flush edge-to-edge bar with only a top rule, which made
-      // the frame's band and Photos' band visibly different objects.
+      // is never a flush edge-to-edge bar with only a top rule, which would
+      // make the frame's band and Photos' band visibly different objects.
       //
       // The ground is `bgElev` — the handoff's `t.surf` (:5962-5963) — NOT
-      // `bg`. Home's page is `bg`, so a `bg` band was a white plate on a white
-      // page: the float was carried by a hairline and nothing else, and on
-      // device the band did not read as an object at all. A step away from the
-      // page is what makes a floating plate float. `bgChrome` shares `bgElev`'s
-      // LIGHT value (#F5F4F2) so it looked right, but its dark value is a step
-      // BELOW the dark page — the band sank into the page in dark mode.
+      // `bg`. Home's page is `bg`, so a `bg` band is a white plate on a white
+      // page: the float would be carried by a hairline and nothing else, and on
+      // device the band would not read as an object at all. A step away from
+      // the page is what makes a floating plate float. `bgChrome` shares
+      // `bgElev`'s LIGHT value (#F5F4F2), but its dark value is a step BELOW
+      // the dark page — the band sinks into the page in dark mode.
       // `lineStrong` at a full point: the handoff's band draws `1px solid
       // t.line`, and `t.line` is this ramp's `lineStrong` (#E5E4E1) — `t.lineS`
       // is our `line`. This carried the lighter token at a third the width.

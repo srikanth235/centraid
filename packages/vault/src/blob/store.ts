@@ -1,4 +1,4 @@
-// Blob custody (issue #296): content-addressed byte storage beside vault.db.
+// Blob custody (#296): content-addressed byte storage beside vault.db.
 // `core_content_item` stays the only truth ABOUT bytes; what changes is what
 // `content_uri` may hold — text/* bodies stay inline as data: URIs (the FTS
 // triggers decode them in-transaction and cannot do I/O), everything else
@@ -43,7 +43,7 @@ export function assertSha(sha: string): string {
   return sha;
 }
 
-/** sha256 of raw bytes — blob identity (issue #296: never hash the data: URI). */
+/** sha256 of raw bytes — blob identity (#296: never hash the data: URI). */
 export function sha256OfBytes(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -68,7 +68,7 @@ export interface BlobStat {
 export interface BlobStore {
   readonly kind: string;
   /**
-   * `storageClass` (issue #425 Wave 3) is an optional per-write override for the
+   * `storageClass` (#425) is an optional per-write override for the
    * object-creating `x-amz-storage-class` header — it wins over any instance
    * default; absent ⇒ the instance default; both absent ⇒ no header. Local
    * stores ignore it.
@@ -82,12 +82,12 @@ export interface BlobStore {
   list: () => Promise<string[]>;
   stat: (sha256: string) => Promise<BlobStat | null>;
   /**
-   * Optional streaming upload (issue #367 §C8): push `source` without the
+   * Optional streaming upload (#367): push `source` without the
    * caller materializing the whole blob in memory first. Implementations
    * that can't stream simply omit this — callers fall back to `put`.
    * `approxSize` need not be exact; it only informs the multipart-vs-single
    * decision and part sizing. `storageClass` is the same per-write override as
-   * `put` (issue #425 Wave 3), applied to whichever object-creating call the
+   * `put` (#425), applied to whichever object-creating call the
    * size selects (single PUT or CreateMultipartUpload).
    */
   putStream?: (

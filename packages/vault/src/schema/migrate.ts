@@ -1,10 +1,10 @@
 // The schema ladder for vault.db and journal.db. Rung one is the baseline,
 // composed of every owner table's DDL in dependency order, including what
-// issue #726's forward rename and issue #731's Commons control plane used to
-// ship as separate rungs. Rung two (issue #821) is the first genuine upgrade
+// #726's forward rename and #731's Commons control plane used to
+// ship as separate rungs. Rung two (#821) is the first genuine upgrade
 // rung: relaxing a CHECK in the baseline text reaches new files only, so
 // vaults already stamped v1 need a vault-preserving rebuild to get there.
-// Rung three (issue #825) adds the grant plane's tables and restates live
+// Rung three (#825) adds the grant plane's tables and restates live
 // commons grants into them; it is written `IF NOT EXISTS` + backfill so a
 // fresh file, which got the tables from the baseline, walks it as a no-op.
 // `migrate()` applies rungs transactionally and stamps `PRAGMA user_version`,
@@ -75,7 +75,7 @@ import { TIME_ORGANIZE_DDL } from "./time-organize.js";
 
 /**
  * Ontology contract version stamped on rows (rule R07). Bumped to 1.4 for
- * issue #450's canonical People consolidation, target-pair convention, and
+ * #450's canonical People consolidation, target-pair convention, and
  * cross-table invariant guards.
  */
 export const ONTOLOGY_VERSION = "1.4";
@@ -83,7 +83,7 @@ export const ONTOLOGY_VERSION = "1.4";
 // Composition order is dependency order:
 //   - CORE first (everything references the spine), anchors ride with it;
 //   - SHARE_ORIGIN_DDL then its forward rename (shared_by_member -> shared_by,
-//     ex-issue #726 rung two) run back to back: SQLite's ALTER TABLE RENAME
+//     ex-#726 rung two) run back to back: SQLite's ALTER TABLE RENAME
 //     COLUMN rewrites the stored sqlite_schema `sql` text in place, so a fresh
 //     database ends up with a `core_share_origin` whose column has always
 //     been `shared_by` — composing the two here (rather than hand-editing the
@@ -104,7 +104,7 @@ export const ONTOLOGY_VERSION = "1.4";
 //   - BLOB_DDL dead last: it re-creates the document's FTS sync with the
 //     derivative-aware body expression (extracted text feeds the owning
 //     document's row), overriding the generated triggers by name;
-//   - the Commons control plane (ex-issue #731 rung three) and, composed with
+//   - the Commons control plane (ex-#731 rung three) and, composed with
 //     it, the local-only resilience/instrumentation tables that hang off it:
 //     steward-contact state, this device's own link evidence, and recovery
 //     lineage. `SHARE_COMMONS_DDL` alters `social_circle_member` (added by
@@ -150,23 +150,23 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     RENAME_INBOX_NOTICE_DDL,
     SHARE_COMMONS_DDL,
     COMMONS_RESILIENCE_DDL,
-    // The grant plane (issue #825) after the commons plane it is restated
+    // The grant plane (#825) after the commons plane it is restated
     // from: `granted_by` references `core_party`, and rung three's backfill
     // reads `share_circle_grant` and the roster.
     SHARE_GRANT_DDL,
   ].join("\n"),
-  // Rung two (issue #821): the vault-preserving people_profile rebuild that
+  // Rung two (#821): the vault-preserving people_profile rebuild that
   // carries the relaxed `cadence_days >= 0` CHECK to files created before it.
   // See `PEOPLE_PROFILE_CADENCE_FLOOR_DDL` for why a rebuild, and for how the
   // rung handles foreign keys inside the runner's transaction.
   PEOPLE_PROFILE_CADENCE_FLOOR_DDL,
-  // Rung three (issue #825): the grant plane reaches files stamped before it.
+  // Rung three (#825): the grant plane reaches files stamped before it.
   // The DDL is `IF NOT EXISTS` throughout, so a fresh file — which already got
   // the tables from the baseline above — walks this rung as a no-op create
   // plus a backfill that selects from an empty `share_circle_grant`, and the
   // two paths land on the same shape and version.
   SHARE_GRANT_BACKFILL_DDL,
-  // Rung four (issue #846 P1): `share_fulfillment.delivered_at`, the durable
+  // Rung four (#846): `share_fulfillment.delivered_at`, the durable
   // memory of delivery that revocation reads instead of inferring it from the
   // live `state`. A table rebuild rather than an ADD COLUMN so the rung is
   // also a faithful no-op on a fresh file that got the column from the
@@ -231,7 +231,7 @@ export function migrate(db: DatabaseSync, migrations: readonly string[]): void {
 }
 
 /*
- * Batched, resumable data rewrites (issue #659 L7).
+ * Batched, resumable data rewrites (#659).
  *
  * The ladder above is right for DDL: a rung is small, atomic, and its cost is
  * independent of how much is in the vault. It is exactly wrong for a rung

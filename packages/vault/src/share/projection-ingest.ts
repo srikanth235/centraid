@@ -1,4 +1,4 @@
-// PROJECTION IS INGEST (issue #726 decision D11).
+// PROJECTION IS INGEST (#726 decision D11).
 //
 // A row that arrives over a share edge must take the SAME door an authored
 // row takes at the audience. The closure deliberately carries no derived

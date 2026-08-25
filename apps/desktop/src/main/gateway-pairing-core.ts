@@ -1,5 +1,5 @@
 /*
- * Pure core for gateway pairing-ticket redemption (issue #376, desktop half).
+ * Pure core for gateway pairing-ticket redemption (#376, desktop half).
  *
  * The wire format is minted by `centraid-gateway pair --vault <name>`
  * (packages/server/src/serve/pairing-store.ts's `encodePairingTicket`):

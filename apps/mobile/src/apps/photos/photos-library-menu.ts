@@ -1,4 +1,4 @@
-// The Library header menu's MODEL (issue #712).
+// The Library header menu's MODEL (#712).
 //
 // iOS' Library header carries a chip that opens an anchored menu — Sort, then
 // a Filter submenu, then View Options (grid density). This file states which
@@ -29,29 +29,29 @@
 // comment of `photos-collections.ts` for why a shelf that would sometimes come
 // back empty by construction is worse than a shelf that does not exist.
 // `PhotoAsset.kind` DOES carry "video" honestly, and Collections grew a
-// Videos shelf on that fact (issue #721 B3) — but this Filter row did not
+// Videos shelf on that fact (#721) — but this Filter row did not
 // grow a matching entry alongside it: this menu narrows the SECTIONS the
 // Years/Months grains are built from, and Videos already has its own door
 // (Collections' shelf, and `PhotoStateView`'s `videos` mode); adding a second
 // path to the same filter here is a separate, deliberate call rather than a
 // gap in this pass.
 //
-// TILE SIZE came here from `PhotosMoreSheet.tsx` by way of the bottom sheet
-// this menu replaced — see that file's header for why it left the More sheet,
-// and `photos-rungs.ts` for why the value is one shared, persisted member
-// preference rather than menu-local state. Inside a menu it is FOUR CHECKED
-// ROWS, not the stepper the sheet drew: a menu row's whole grammar is "this is
-// the current answer, here are the others", and a `‹ M ›` stepper inside one
-// would be a second, different control idiom in a card that has room for
-// neither. The rows also state where the ends are — at XS there is visibly
-// nothing below it — which the stepper could only say by disabling a chevron.
+// TILE SIZE lives here rather than in the More sheet — see
+// `PhotosMoreSheet.tsx`'s header for why, and `photos-rungs.ts` for why the
+// value is one shared, persisted member preference rather than menu-local
+// state. Inside a menu it is FOUR CHECKED ROWS: a menu row's whole grammar is
+// "this is the current answer, here are the others", and a `‹ M ›` stepper
+// inside one would be a second, different control idiom in a card that has
+// room for neither. The rows also state where the ends are — at XS there is
+// visibly nothing below it — which a stepper could only say by disabling a
+// chevron.
 
-// DETECT FACES (issue #724 W5) is the one row here that is not a view option.
+// DETECT FACES (#724) is the one row here that is not a view option.
 // It is in this menu because the Library header is where a member is LOOKING at
 // the photographs the ask is about, and because the consent moment it leads to
 // (`PhotosPeopleView`'s gate) was otherwise reachable only by opening an empty
 // People shelf — built, correct, and nearly unreachable, which is exactly the
-// state issue #712 C2 moved it out of once already.
+// state #712 moved it out of once already.
 //
 // THE ROW OPENS THE QUESTION; IT DOES NOT ANSWER IT. `onDetectFaces` must lead
 // to the consent gate, never straight to the `request-enrichment` write. A
@@ -85,7 +85,7 @@ export interface LibraryMenuInput {
    *  the Years and Months grains — see below. */
   grain: TimelineGrain;
   /**
-   * Face detection (issue #724 W5). Omitted ⇒ no row at all. `availability`
+   * Face detection (#724). Omitted ⇒ no row at all. `availability`
    * comes from `people-model.ts`'s `detectFacesFor`, which reads the gateway
    * rung — the one that can actually answer the ask — and its `reason` is what
    * the row says instead of pretending to be actionable.

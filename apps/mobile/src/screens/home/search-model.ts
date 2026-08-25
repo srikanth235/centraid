@@ -1,4 +1,4 @@
-// Pure search-surface logic for the mobile Search overlay (issue #708, mobile
+// Pure search-surface logic for the mobile Search overlay (#708, mobile
 // close-out). Kept apart from SearchOverlay.tsx / useSearchRecents.ts (no
 // React, no react-native, no replica imports) for the same reason
 // ./tile-model and ./catalog are: the rule for what shows up and in what

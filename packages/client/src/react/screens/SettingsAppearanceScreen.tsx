@@ -23,8 +23,7 @@ const THEME_MODE_LABELS: Record<SettingsThemeMode, string> = {
 };
 
 /**
- * Settings → You, theme group — the shell's visual treatment (issue #325
- * Phase 3; consolidated in #608).
+ * Settings → You, theme group — the shell's visual treatment (#608).
  *
  * Theme is a three-position segment, not a preview grid: the registry offers
  * exactly Centraid Light and Centraid Dark, and at that size a grid of
@@ -32,14 +31,13 @@ const THEME_MODE_LABELS: Record<SettingsThemeMode, string> = {
  * of the three positions rather than a button that fires a one-shot snap — it
  * is a standing mode the shell keeps tracking.
  *
- * Theme is now this screen's only control, and the screen is no longer a page
- * of its own: it renders under Settings → You, below the profile group, since
- * one segment does not earn a rail entry. Cards arrived here when the former Layout page
- * lost its density control, and left the same way the four before it did
- * (accent swatches, app-tile treatment, the dark ramp's surface temperature,
- * the sidebar switch): a choice the product never needed the owner to make.
- * Card surface keeps its pref and its painting (`html.dataset.cards`, default
- * `outlined`) and simply has no control, exactly as the tile treatment does.
+ * Theme is this screen's only control, and the screen is a group under
+ * Settings → You rather than a page: one segment does not earn a rail entry.
+ * The product deliberately offers the owner NO other appearance choice — no
+ * accent swatches, app-tile treatment, dark-ramp temperature, density, or
+ * sidebar switch. Card surface keeps its pref and its painting
+ * (`html.dataset.cards`, default `outlined`) with no control, as the tile
+ * treatment does; do not add controls back for either.
  */
 export default function SettingsAppearanceScreen({
   themeMode,

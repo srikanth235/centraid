@@ -1,5 +1,5 @@
 // The bound that keeps a stalled SSE client from becoming gateway memory
-// (issue #659 G6). Driven over a real TCP socket with a reader that never
+// (#659). Driven over a real TCP socket with a reader that never
 // reads, because the failure being prevented is Node's own outbound buffering —
 // a mocked ServerResponse would have no writableLength to grow.
 

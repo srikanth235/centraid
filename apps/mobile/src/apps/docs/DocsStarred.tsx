@@ -1,4 +1,4 @@
-// Starred (spec §2; issue #821). One star for the whole product — a
+// Starred (spec §2; #821). One star for the whole product — a
 // photograph starred in Photos carries the SAME flags-scheme tag, but Docs'
 // replica scope reads document wrappers only, so this shelf lists starred
 // DOCUMENTS and its status counts exactly that. The spec's sample adds a

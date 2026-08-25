@@ -92,7 +92,7 @@ describe("nativeBuildNumber (J6)", () => {
       "utf8"
     );
     expect(configSrc).toContain("nativeBuildNumber(VERSION)");
-    // Version is single-sourced from package.json (issue #501), not hardcoded.
+    // Version is single-sourced from package.json (#501), not hardcoded.
     expect(configSrc).toContain("readMobilePackageVersion");
     expect(configSrc).toContain("@centraid/mobile");
     const pkgVersion = JSON.parse(

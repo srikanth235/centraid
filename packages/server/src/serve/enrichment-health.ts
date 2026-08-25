@@ -1,8 +1,8 @@
 /*
- * Enricher-automation health — the `enrichment` component (issue #351
+ * Enricher-automation health — the `enrichment` component (#351
  * wave 4).
  *
- * Enrichers are ordinary automations (issue #299 phases 1-2): each bundled
+ * Enrichers are ordinary automations (#299 phases 1-2): each bundled
  * template (`packages/blueprints/automations/<id>`) ships as its own
  * single-automation app, `enabled: false` by default — enabling one IS the
  * owner's opt-in. That means the generic `automations`/`automation-runs`

@@ -22,7 +22,7 @@ export interface VaultExport {
   /** sha256 over the canonical form of `tables`. */
   verifyHash: string;
   /**
-   * Entities a poisoned row knocked out of this export (issue #374 tier
+   * Entities a poisoned row knocked out of this export (#374 tier
    * 4.3) — e.g. an out-of-range integer `node:sqlite` throws reading back
    * rather than silently truncating. Absent/omitted means every entity made
    * it in. `verifyHash` is computed over `tables` as actually assembled, so
@@ -71,7 +71,7 @@ export function exportVault(
   for (const logical of listVaultEntities(db.vault)) {
     const ref = resolveEntity(logical, db.vault);
     if (!ref) continue;
-    // Per-table isolation (issue #374 tier 4.3): one poisoned row anywhere
+    // Per-table isolation (#374 tier 4.3): one poisoned row anywhere
     // — e.g. an INTEGER past Number.MAX_SAFE_INTEGER, which node:sqlite
     // throws reading back rather than truncating — must not abort every
     // OTHER table's export. Skip just this one, log it in the artifact and

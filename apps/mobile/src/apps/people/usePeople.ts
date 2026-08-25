@@ -310,10 +310,10 @@ export function usePerson(partyId: string): PersonData {
   );
 
   // The sharing plane's two tables — each degrades to absent on its own, and
-  // `projectShareLinks` nulls the whole answer when either is missing. The
-  // commons-grant join that used to sit beside them retired with the
-  // `shared_with_them` projection (#825); standing grants are read live from
-  // the grant plane by `PersonGrants.tsx`.
+  // `projectShareLinks` nulls the whole answer when either is missing. There
+  // is no commons-grant join beside them and no `shared_with_them` projection
+  // (#825); standing grants are read live from the grant plane by
+  // `PersonGrants.tsx`.
   const bindings = useReplicaQuery(
     APP,
     useMemo(() => ({ entity: "share.party_vault_binding" }), [])

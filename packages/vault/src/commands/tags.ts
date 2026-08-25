@@ -1,4 +1,4 @@
-// Generic tagging (core §01, issue #274's "folders-scheme tags" comment):
+// Generic tagging (core §01, #274's "folders-scheme tags" comment):
 // owner-driven, free-form labels on top of the same SKOS mechanism the
 // enrichment pipeline uses for classification (core_concept /
 // core_concept_scheme) and core_tag itself. Distinct from core.collection
@@ -9,10 +9,10 @@
 // One well-known scheme per vault, `centraid:tags:v1`, found by its unique
 // `uri` rather than a hardcoded id — every projection that tags anything
 // shares the same scheme, same posture as attachments sharing one
-// core_content_item pool. Issue #352 widened the original task/note-only
-// reach to documents and media assets — same mechanism, no new table, no
-// second scheme: exactly the "one judgment, one mechanism" rule a `favorite`
-// column or a parallel tags table would have violated.
+// core_content_item pool. The scheme reaches tasks, notes, documents and
+// media assets through that one mechanism — no new table, no second scheme
+// (#352): a `favorite` column or a parallel tags table would violate the
+// "one judgment, one mechanism" rule.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -234,7 +234,6 @@ function untagItem(ctx: HandlerCtx): Record<string, unknown> {
   return { tag_id: input.tag_id };
 }
 
-/** Register the core tagging commands on a gateway. */
 export function registerTagCommands(gateway: Gateway): void {
   gateway.registerCommand(TAG_ITEM);
   gateway.registerCommand(UNTAG_ITEM);

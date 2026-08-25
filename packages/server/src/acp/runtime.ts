@@ -5,7 +5,7 @@
  * `HarnessSpec` from the registry (`./registry.ts`) based on the user's
  * persisted `harness.kind` pref:
  *
- * Since issue #479 every kind uses the same transport — the generic ACP
+ * Since #479 every kind uses the same transport — the generic ACP
  * client over JSON-RPC stdio. They differ only in what is spawned:
  *
  *   - `codex` / `claude-code` → their first-party ACP adapter, which drives
@@ -29,10 +29,10 @@ import type {
 
 import { HARNESSES } from "./registry.js";
 
-// The turn-driver contract (`ToolContext`, `TurnInput/Config/Result`)
-// now lives in `@centraid/server/engine` so the harness-agnostic run engine can
-// speak it. Re-exported here so this package's modules + back-compat
-// consumers keep importing them from `@centraid/server/acp`.
+// The turn-driver contract (`ToolContext`, `TurnInput/Config/Result`) lives
+// in `@centraid/server/engine` so the harness-agnostic run engine can speak
+// it. Re-exported here so this package's modules and consumers keep importing
+// them from `@centraid/server/acp`.
 export type {
   ToolContext,
   TurnInput,

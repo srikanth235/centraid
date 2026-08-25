@@ -1,5 +1,5 @@
 /*
- * Adversarial properties over the policy cascade's resolver (issue #839, G10).
+ * Adversarial properties over the policy cascade's resolver (#839).
  *
  * `enrich-resolve.ts` states four things in prose that nothing checked over
  * arbitrary input: most-specific-wins is per FIELD, a rule may never move the

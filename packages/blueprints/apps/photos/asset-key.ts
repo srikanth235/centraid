@@ -1,4 +1,4 @@
-// The identity of an asset ON A MULTI-SCOPE TIMELINE (issue #599).
+// The identity of an asset ON A MULTI-SCOPE TIMELINE (#599).
 //
 // `asset_id` alone stopped being an identity the moment the grid merged N
 // scopes. Ids are minted PER VAULT, so two scopes can carry the same

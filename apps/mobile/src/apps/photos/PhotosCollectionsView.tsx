@@ -1,12 +1,12 @@
 // Collections — the shape of a member's library, on one page.
 //
-// This is the landing surface of Photos now, and it replaces the destination
-// that used to be called "Albums". Two things were wrong with that name: it
-// described one section of what the screen showed, and the screen it named was
-// a two-column grid of album tiles with a Favorites row bolted above it, while
-// every other shelf this product has — People, Places, Duplicates, Trash —
-// was reachable only from the bottom row of a sheet behind a **More** tab. A
-// member could use Photos for a month without learning that Places existed.
+// This is the landing surface of Photos, and it is NOT called "Albums". Two
+// things are wrong with that name: it describes one section of what the screen
+// shows, and a screen it named would be a two-column grid of album tiles with a
+// Favorites row bolted above it, leaving every other shelf this product has —
+// People, Places, Duplicates, Trash — reachable only from the bottom row of a
+// sheet behind a **More** tab. A member could use Photos for a month without
+// learning that Places existed.
 //
 // So the page is the shelves, all of them, each one a named section over a
 // horizontal rail of covers. The section model — including what each section
@@ -224,14 +224,13 @@ export default function PhotosCollectionsView({
    *  set — its heading and count still render — so this is a display fold,
    *  never a filter.
    *
-   *  OWNED BY `PhotosHome.tsx` now, not this file (issue #712): the page's
-   *  trailing `···` chip that opens Show All / Collapse All moved into the
-   *  header row those two commands share with Library's Sliders chip, so the
-   *  state they act on had to move with it — a menu in one file driving a
-   *  `useState` in another would drift the moment either side changed on its
-   *  own. The per-section chevrons below stayed exactly where they are; they
-   *  just read and write the state through these two props now instead of a
-   *  local `useState`. */
+   *  OWNED BY `PhotosHome.tsx`, not this file (#712): the page's trailing
+   *  `···` chip that opens Show All / Collapse All lives in the header row
+   *  those two commands share with Library's Sliders chip, so the state they
+   *  act on lives there too — a menu in one file driving a `useState` in
+   *  another would drift the moment either side changed on its own. The
+   *  per-section chevrons below read and write that state through these two
+   *  props, never a local `useState`. */
   collapsed: ReadonlySet<CollectionSectionKey>;
   onToggleSection: (key: CollectionSectionKey) => void;
 }): React.JSX.Element {
@@ -276,7 +275,7 @@ export default function PhotosCollectionsView({
           (entry) => String(entry.collection_id) === String(row.collection_id)
         )
         .map((entry) => String(entry.target_id)),
-      // Issue #721 B5: the member's own key-photo choice, straight off the
+      // #721: the member's own key-photo choice, straight off the
       // collection row — `chosenCover` (`photos-collections.ts`) is what
       // turns this into a tile, in preference to the newest member.
       ...(row.cover_content_id
@@ -342,7 +341,7 @@ export default function PhotosCollectionsView({
    * Favorites/Trash have no such destination and say so by opening the
    * tile's own photograph instead (they reach their shelf either way via
    * the tile, or PhotoStateView`'s own filter). Memories DOES have one now
-   * (issue #724 W7, `MemoriesView.tsx`): the heading opens the full surface
+   * (#724, `MemoriesView.tsx`): the heading opens the full surface
    * (On this day, Trips, Similar moments), and a tile keeps opening straight
    * to the photograph it already did.
    */
@@ -363,7 +362,7 @@ export default function PhotosCollectionsView({
             partyId: tile.id,
             personName: tile.label ?? "Unnamed",
           });
-        // People is off the band (issue #712) — the heading pushes the roster
+        // People is off the band (#712) — the heading pushes the roster
         // route directly rather than a `PhotosHome` destination that no
         // longer exists.
         else navigation.navigate("PhotosPeople");
@@ -380,7 +379,7 @@ export default function PhotosCollectionsView({
         navigation.navigate("PhotoStateView", { mode: "favorites" });
         break;
       case "videos":
-        // Same door as Favorites (issue #721 B3): a filter over the same
+        // Same door as Favorites (#721): a filter over the same
         // shelf screen, not a bespoke grid — `PhotoStateView` already knows
         // how to be "the timeline, filtered", and Videos is nothing else.
         navigation.navigate("PhotoStateView", { mode: "videos" });
@@ -399,15 +398,14 @@ export default function PhotosCollectionsView({
   };
 
   return (
-    // No header row of its own anymore (issue #712). This page used to draw
-    // a second trailing `···` chip here, below the real "Photos" header
-    // (`PhotosHome.tsx`) — two stacked trailing controls where iOS Photos
-    // has exactly one. That chip's menu (Show All / Collapse All) moved into
-    // the SAME header slot Library's Sliders chip uses, scoped to whichever
-    // destination is current; see `PhotosHome.tsx`'s `menuGroups` comment.
-    // Only the per-section fold chevrons stay here — they act on `collapsed`
-    // and `onToggleSection`, the two props that now own what used to be this
-    // file's own `useState`.
+    // No header row of its own (#712). A second trailing `···` chip
+    // here, below the real "Photos" header (`PhotosHome.tsx`), would be two
+    // stacked trailing controls where iOS Photos has exactly one. That menu
+    // (Show All / Collapse All) lives in the SAME header slot Library's
+    // Sliders chip uses, scoped to whichever destination is current; see
+    // `PhotosHome.tsx`'s `menuGroups` comment. Only the per-section fold
+    // chevrons stay here — they act on `collapsed` and `onToggleSection`, the
+    // two props that own the fold state, which this file keeps none of.
     <ScrollView
       contentContainerStyle={styles.scroll}
       showsVerticalScrollIndicator={false}

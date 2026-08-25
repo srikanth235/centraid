@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-// Lazy read-only rehydration of archived conversations (issue #438 wave 3).
+// Lazy read-only rehydration of archived conversations (#438).
 // Real journal.db on a temp file + an in-memory content-addressed blob sink
 // standing in for the vault CAS door, shared by the archival engine (writer)
 // and the history store's `archiveBlobReader` (reader). No SQL is mocked.
@@ -163,7 +163,7 @@ function fixture(): Fixture {
   };
 }
 
-/** Strip the wave-3 `fromArchive` marker so archived payloads compare byte-equal. */
+/** Strip the `fromArchive` marker so archived payloads compare byte-equal. */
 function withoutMarker(
   messages: Array<{ payload: unknown; createdAt: number }>
 ): unknown[] {
@@ -460,7 +460,7 @@ async function getViaRoute(
     writeHead(): unknown {
       return res;
     },
-    // The transcript route negotiates compression (#659 G5).
+    // The transcript route negotiates compression (#659).
     setHeader(): void {
       /* headers are not asserted here */
     },

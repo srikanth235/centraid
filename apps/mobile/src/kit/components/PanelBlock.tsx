@@ -32,10 +32,8 @@ import { Text } from "./NativeText";
 import { styles } from "./PanelBlock.styles";
 
 /**
- * `key` IS the displayed uppercase word, not a separate list identity — this
- * kit used to carry both, so the same field name meant the word on one surface
- * and a React key on the other. Fact keys are unique within a panel, so the
- * word is the identity.
+ * `key` IS the displayed uppercase word, not a separate list identity. Fact
+ * keys are unique within a panel, so the word is the identity.
  */
 export type PanelFact = PanelFactData;
 
@@ -67,8 +65,8 @@ export interface PanelBlockProps {
    * `action2` to match the shell rather than `primary` / `secondary`, which
    * read as a promise of filled ink: a panel verb is OUTLINED unless it is the
    * view's one commit, and the view's one commit almost always lives in the app
-   * bar instead. This kit used to force filled ink on the first slot, so every
-   * error panel drew "Try again" as a second filled control.
+   * bar instead. Filled ink is never forced on the first slot: that would draw
+   * every error panel's "Try again" as a second filled control.
    */
   action?: PanelAction;
   action2?: PanelAction;

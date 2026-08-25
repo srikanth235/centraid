@@ -102,10 +102,10 @@ describe("useShellApps", () => {
     });
 
     it("treats a first-party listing row as INSTALLED", async () => {
-      // The #708 law. With no pin store at all — which is every vault now that
-      // the catalogue that wrote pins is retired — the eight bundled apps still
-      // have to arrive as installed apps, which is what left Home empty on a
-      // vault that owned all eight. Any other row is not this shell's to open.
+      // The #708 law. With no pin store at all — which is every vault, since
+      // nothing writes pins — the eight bundled apps still have to arrive as
+      // installed apps, or Home is empty on a vault that owns all eight. Any
+      // other row is not this shell's to open.
       listApps.mockResolvedValue([
         { id: "photos", name: "Photos", kind: "app" },
         { id: "tasks", name: "Tasks", kind: "app" },
@@ -265,10 +265,10 @@ describe("useShellApps", () => {
     });
 
     it("an unknown vault key changes nothing — it is not a vault", async () => {
-      // Offline both reads fail, so the key used to resolve to "", which
-      // compares unequal to every real vault id: the switch branch parked the
-      // member's pins and installed byVault[""] — an empty pin list, written
-      // back, on a launch that never reached the gateway.
+      // Offline both reads fail, so the key is UNKNOWN, not "". An empty
+      // string compares unequal to every real vault id: the switch branch
+      // would park the member's pins and install byVault[""] — an empty pin
+      // list, written back, on a launch that never reached the gateway.
       (window as unknown as { CentraidApi: unknown }).CentraidApi = {
         getGatewayAuth: async () => ({ baseUrl: "", vaultId: "A" }),
       };

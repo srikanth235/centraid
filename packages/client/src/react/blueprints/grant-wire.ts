@@ -1,4 +1,4 @@
-// The shell's transport for the GRANT PLANE (issue #825) —
+// The shell's transport for the GRANT PLANE (#825) —
 // `packages/server/src/routes/grant-routes.ts`, reached the same way
 // `share-wire.ts` reaches the commons routes.
 //

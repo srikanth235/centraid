@@ -1,6 +1,6 @@
 /*
  * The one door that applies a `share-coordinator.ts` transition DURABLY
- * (issue #750 abstraction 5). Every status change on `share_edges` in this
+ * (#750 abstraction 5). Every status change on `share_edges` in this
  * repo goes through `applyEdgeSignal` — there is no second UPDATE anywhere.
  *
  * The whole outcome commits in ONE transaction: the moved state, the access

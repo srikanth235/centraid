@@ -17,11 +17,10 @@ import styles from "./AutomationCompilePane.module.css";
 /*
  * The compiler readout — the right rail of the compile screen.
  *
- * This is the half of the automations UX that was missing. Compiling used to
- * be a fire-and-forget side effect of Save that threw you onto the run screen,
- * so a compile that FAILED had nowhere to be read. Here the loop closes in one
- * place: compile → watch the steps land → read the failure → edit the
- * instructions → recompile → test the plan for real.
+ * Compiling is NOT a fire-and-forget side effect of Save that throws the
+ * member onto the run screen — a compile that FAILS would then have nowhere to
+ * be read. The loop closes in one place: compile → watch the steps land → read
+ * the failure → edit the instructions → recompile → test the plan for real.
  *
  * The rail READS; it does not author. There is exactly one editable surface on
  * this screen — the instructions field in the left column — so a failure here

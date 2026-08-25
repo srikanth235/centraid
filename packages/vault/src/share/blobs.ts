@@ -1,4 +1,4 @@
-// Byte placement for share-by-placement (issue #599 decision 11).
+// Byte placement for share-by-placement (#599 decision 11).
 //
 // Sharing an item into an audience vault must put its bytes in that vault's
 // own CAS, because each vault directory stays self-contained and portable —

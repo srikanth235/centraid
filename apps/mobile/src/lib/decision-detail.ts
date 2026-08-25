@@ -1,10 +1,10 @@
 /**
- * Consent-relevant card body for Notifications decisions (#647 review of PR #655).
+ * Consent-relevant card body for Notifications decisions (#647).
  *
- * The phone cards used to render only "<app> requests access" + purpose, and
- * only "<command> · <caller>" for a parked invocation — so the owner could
- * grant table-level writes, or run a destructive command, without ever seeing
- * WHAT was asked. Web has shown both since #306/#308
+ * A phone card that renders only "<app> requests access" + purpose, or only
+ * "<command> · <caller>" for a parked invocation, lets the owner grant
+ * table-level writes or run a destructive command without ever seeing WHAT was
+ * asked. Web shows both (#306, #308)
  * (packages/client/src/react/shell/routes/approvalsData.ts: `scopeSummary` and
  * `inputPreview`). These helpers produce the same information in one compact
  * secondary line, which is the native equivalent of web's block.

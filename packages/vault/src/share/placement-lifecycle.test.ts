@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 // Share-by-placement lifecycle: failure atomicity, unshare, and the GC
-// interplay between vaults that hardlink the same inode (issue #599 d11).
+// interplay between vaults that hardlink the same inode (#599 d11).
 
 import { describe, afterEach, expect, test } from "vitest";
 
@@ -24,9 +24,9 @@ import {
 describe("placement-lifecycle suite", () => {
   afterEach(closeOpenVaults);
 
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
   // Failure atomicity
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
 
   test("an injected mid-share failure leaves the origin clean and only a reclaimable orphan", () => {
     const { origin, originBoot, audience } = household();
@@ -115,9 +115,9 @@ describe("placement-lifecycle suite", () => {
     expect(statSync(casPath(origin, photo.sha256)).nlink).toBe(1);
   });
 
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
   // Unshare + GC interplay
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
 
   test("unshare removes the projection; the origin row and bytes stay readable", () => {
     const { origin, originBoot, audience } = household();
@@ -282,9 +282,9 @@ describe("placement-lifecycle suite", () => {
     expect(audience.blobs.localPathSync(photo.sha256)).toBeNull();
   });
 
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
   // Guards
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
 
   test("sharing an unknown item is refused before anything is placed", () => {
     const { origin, audience } = household();

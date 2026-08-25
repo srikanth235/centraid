@@ -1,4 +1,4 @@
-// The "corrupt EXIF" trap (issue #721 D1). blob.test.ts proves the happy
+// The "corrupt EXIF" trap (#721). blob.test.ts proves the happy
 // path once, inline; this file is the adversary — every shape a real spool
 // actually receives that is NOT a clean camera JPEG: a truncated upload, a
 // foreign byte-order marker, an offset a bit-flip sent past EOF, an entry

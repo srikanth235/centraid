@@ -11,10 +11,10 @@
 // title for the other four, because those are one state of a screen that
 // normally has rows.
 //
-// This replaces the app's old `emptyStateFor` + kit-empty pair. `.kit-empty`
-// is a centred notice card with no node for a paragraph, so the truth about
-// where a member's bytes go had nowhere to stand; Photos hit the same wall and
-// drew its own block for the same reason (state-honesty.test.ts).
+// NOT `.kit-empty`: that is a centred notice card with no node for a
+// paragraph, so the truth about where a member's bytes go has nowhere to
+// stand in it; Photos draws its own block for the same reason
+// (state-honesty.test.ts).
 //
 // AN ACTION IS RENDERED ONLY WHERE THE APP CAN PERFORM IT. `runFor` returns a
 // handler or nothing, so a variant whose way forward is a route that has not

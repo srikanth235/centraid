@@ -3,7 +3,7 @@ import http from "node:http";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-// The Vault Atlas owner routes (issue #441 Part B): stats / graph / pulse.
+// The Vault Atlas owner routes (#441): stats / graph / pulse.
 // These assert the gateway wires the vault-package builders to owner-gated
 // GET routes and returns the census/graph/pulse payloads. The ghost-semantics
 // and FK≠core_link invariants are proven in packages/vault; here we prove the

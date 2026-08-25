@@ -34,12 +34,12 @@ import styles from "./BackupCard.module.css";
 import gwStyles from "./GatewayScreen.module.css";
 
 // Gateway → Backups: the owner surface over the offsite backup engine. This
-// card now renders EXACTLY the five metrics of the §6 contract (issue #436)
+// card now renders EXACTLY the five metrics of the §6 contract (#436)
 // via `BackupHealthMetrics` — Freshness, Recovery window, Privacy, Cost, Exit —
-// computed ONCE from `computeStorageMetrics`. Everything that used to sit on
-// the primary surface but isn't one of the five (the raw custody clocks, the
-// manual back-up/verify triggers, per-vault policy + the provider inventory)
-// now lives behind the collapsed "Diagnostics" disclosure. The recovery-kit
+// computed ONCE from `computeStorageMetrics`. Everything that is not one of
+// the five (the raw custody clocks, the manual back-up/verify triggers,
+// per-vault policy + the provider inventory) lives behind the collapsed
+// "Diagnostics" disclosure. The recovery-kit
 // gate stays on the primary surface: it is Privacy/Exit-adjacent and blocking-
 // critical — losing the seal key makes every offsite byte unrecoverable.
 
@@ -71,7 +71,7 @@ export interface BackupStatusDTO {
   /** Optional so a pre-wave-4 fixture / stub still type-checks; treated as
    *  "never confirmed" when absent. */
   recoveryKit?: RecoveryKitStatusDTO;
-  /** Provider-declared retention + restore-egress promises (#436 §6) — feeds
+  /** Provider-declared retention + restore-egress promises (#436) — feeds
    *  the Recovery-window and Exit metrics. Absent ⇒ those degrade to neutral. */
   home?: GatewayHomeDiscoveryDTO;
 }
@@ -104,14 +104,14 @@ export interface BackupCardProps {
   }) => Promise<{ confirmedAt: number }>;
   /** Optional setup destination for hosts that expose backup configuration. */
   onOpenSettings?: () => void;
-  /** The paired-device roster (issue #708 A2's device list) — absent only
+  /** The paired-device roster (#708 A2's device list) — absent only
    *  when a caller has no device plane to offer (older embed). */
   loadDevices?: () => Promise<CentraidGatewayDevice[]>;
   /**
    * Restore from an offsite copy. Absent today on every host — restore is
    * still a gateway-side/CLI recovery act (docs/recovery/backup-restore.md),
    * not a wired client action — so the control renders disabled with that
-   * reason rather than being hidden (issue #708 A2: never buried).
+   * reason rather than being hidden (#708 A2: never buried).
    */
   onRestore?: () => void;
   readOnly?: boolean;
@@ -259,7 +259,7 @@ export default function BackupCard({
   useEffect(() => {
     mountedRef.current = true;
     refresh();
-    // Suspended while the tab is hidden and caught up on return (issue #659).
+    // Suspended while the tab is hidden and caught up on return (#659).
     const stop = startVisibilityTicker(refresh, POLL_MS);
     return () => {
       mountedRef.current = false;
@@ -321,7 +321,7 @@ export default function BackupCard({
     (status?.configured ?? false) ||
     (status?.vaults.some((v) => v.lastBackupAt) ?? false);
   const clocks = metrics?.freshness.clocks;
-  // The headline the whole screen leads with (issue #708 A2) — computed from
+  // The headline the whole screen leads with (#708) — computed from
   // the SAME `metrics` every other readout on this surface reads, so it can
   // never disagree with the five-metric health block below it.
   const lossSummary =
@@ -525,9 +525,9 @@ export default function BackupCard({
           ) : (
             <>
               {lossSummary ? <BackupLossSummary summary={lossSummary} /> : null}
-              {/* "Not backed up offsite yet." used to sit here. The summary
-                  rows above now say it four ways, each with the consequence
-                  attached; repeating it as a bare sentence added a line and no
+              {/* NO BARE "Not backed up offsite yet." LINE HERE. The summary
+                  rows above say it four ways, each with the consequence
+                  attached; a bare repeat costs a line and carries no
                   information. */}
               {readOnly ? null : (
                 <RecoveryKitGate

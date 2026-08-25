@@ -101,7 +101,7 @@ test("boots as a PWA and establishes a cookie control session", async ({
 
   const manifest = await page.request.get("/manifest.webmanifest");
   expect(manifest.ok()).toBeTruthy();
-  // Quick capture is retired on this seat — the assistant is the one place a
+  // There is no quick capture on this seat — the assistant is the one place a
   // stray thought goes, so the manifest declares neither a share target nor a
   // capture shortcut and no `?capture=` URL opens anything.
   const manifestBody = (await manifest.json()) as {

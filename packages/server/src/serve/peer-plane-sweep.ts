@@ -40,7 +40,7 @@ export interface PeerPlaneSweepOptions {
   dial: () => PeerDial | undefined;
   /**
    * Re-announce this gateway's EndpointId to linked peers when it changed
-   * and some peer has not heard it yet (issue #750 invariant 3 — the retry
+   * and some peer has not heard it yet (#750 invariant 3 — the retry
    * half of `announceLocalRoutes`; the eager half runs at endpoint start).
    * Must never throw for a network condition.
    */

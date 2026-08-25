@@ -1,5 +1,5 @@
 /*
- * Tripwire for `consent-gate.ts`'s `ENRICH_DOMAINS` (issue #712 C4).
+ * Tripwire for `consent-gate.ts`'s `ENRICH_DOMAINS` (#712).
  *
  * Blueprints cannot import `@centraid/server/automation` (it depends back on
  * `@centraid/blueprints` — see its package.json — and blueprint apps are

@@ -21,7 +21,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   // Repo-root artifacts/ (not apps/desktop/artifacts/) so nightly upload-artifact
-  // `path: artifacts/` and generate.mjs readPlaywright agree (#535 F2).
+  // `path: artifacts/` and generate.mjs readPlaywright agree (#535).
   reporter: process.env.CI
     ? [
         ["list"],

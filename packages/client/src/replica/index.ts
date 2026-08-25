@@ -1,4 +1,4 @@
-/* eslint-disable oxc/no-barrel-file -- (#406) intentional @centraid/client/replica public subpath; governance: allow-no-unjustified-suppressions stable package API boundary */
+/* oxlint-disable oxc/no-barrel-file -- (#406) intentional @centraid/client/replica public subpath; governance: allow-no-unjustified-suppressions stable package API boundary */
 export * from "./coordinator.js";
 export * from "./coordinator-web.js";
 export * from "./digest.js";

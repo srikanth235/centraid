@@ -30,7 +30,7 @@ const DRAFT_PREFIX = "/centraid/_draft/";
 
 /**
  * Parse a request URL, peeling off an optional draft-preview prefix
- * (issue #141). A `/centraid/_draft/<sessionId>/<inner…>` URL is rewritten
+ * (#141). A `/centraid/_draft/<sessionId>/<inner…>` URL is rewritten
  * to its inner `/centraid/<inner…>` form (query string preserved) and
  * parsed normally, with the session id returned alongside so the caller
  * can run the session worktree's handlers instead of the live ones. A
@@ -83,7 +83,7 @@ export function parseRoute(method: string, rawUrl: string): Route {
 
     const sub = decodeURIComponent(segments[2] ?? "");
 
-    // Per-app settings.json (issue #286: the silo's `__centraid_settings`
+    // Per-app settings.json (#286: the silo's `__centraid_settings`
     // table became a file; the renderer reads/writes app-owned keys here).
     if (sub === "settings" && segments.length === 3) {
       if (m === "GET") return { kind: "app-settings-read", appId };
@@ -118,8 +118,8 @@ export function parseRoute(method: string, rawUrl: string): Route {
   const appId = decodeURIComponent(segments[0] ?? "");
   if (!appId || appId.startsWith("_")) return { kind: "not-found" };
 
-  // `/centraid/<id>` names no endpoint. #799 retired the UI-byte plane, so an
-  // app is reached only through the named RPC/stream sub-routes below.
+  // `/centraid/<id>` names no endpoint (#799): an app is reached only through
+  // the named RPC/stream sub-routes below.
   if (segments.length === 1) return { kind: "not-found" };
 
   const second = decodeURIComponent(segments[1] ?? "");
@@ -132,7 +132,7 @@ export function parseRoute(method: string, rawUrl: string): Route {
   }
 
   // /centraid/<id>/actions/<action> and /centraid/<id>/queries/<query> — the
-  // app RPC plane (issue #505, retiring the `/centraid/_tool/centraid_*`
+  // app RPC plane (#505, retiring the `/centraid/_tool/centraid_*`
   // shim). A `POST` invokes the declared handler with a `{ input?, intentId? }`
   // body; the app id + handler name live in the path.
   if (second === "actions" && m === "POST" && segments.length === 3) {

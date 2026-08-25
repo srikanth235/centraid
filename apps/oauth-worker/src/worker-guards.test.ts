@@ -1,11 +1,11 @@
 /**
  * Fail-closed guard laws for the Assist courier (#656 Layer 3 mutation seed).
  *
- * `index.test.ts` proves the happy path and the headline refusals. What it did
+ * `index.test.ts` proves the happy path and the headline refusals. What it does
  * not prove is that each guard's BOUNDARY is where the code says it is: a
  * mutant that unanchors the client-id regex, turns `>= 32` into `> 32`, ORs
  * the loopback checks together, accepts a duplicated scope, or lets `every`
- * become `some` in the scope comparison all survived. Those are the exact
+ * become `some` in the scope comparison survives it. Those are the exact
  * shapes an attacker probes.
  *
  * Every test drives the real `handleRequest` and asserts the refusal (or

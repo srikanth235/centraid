@@ -1,7 +1,7 @@
 // One page of the lightbox pager: the asset itself, its transport when it has
 // one, and the metered-connection gate in front of full-quality bytes.
 //
-// Split out of `PhotoLightbox` because it is a different job. The screen owns
+// Separate from `PhotoLightbox`: that screen owns
 // the pager, the bars and the vault writes; this file owns what a single asset
 // looks like as its quality rung climbs from thumbnail to original, and the
 // decision — per photo, per session — about whether the phone should spend
@@ -119,19 +119,15 @@ function MeteredPlaceholder({
  * Play, a determinate track, a clock, and a micro-caps kind label — for a LIVE
  * PHOTO OR AN AUDIO SCAN.
  *
- * VIDEO DOES NOT GET ONE. It used to: this transport sat UNDER a `VideoView`
- * that already draws the platform's own scrubber, and its `elapsed` was
- * `playing ? Math.min(durationS, 8) : 0` with `playing` passed as the literal
- * `true` — a readout frozen at eight seconds on every video in the vault, over
- * a track that answered no touch. Two transports, one of them a prop. The web
- * made exactly this call in `ViewerStage.tsx` (see its `Transport` doc
- * comment): the native control is accessible, already wired to the element it
- * controls, and free, so a hand-rolled one only earns its place back when it
- * does something the platform's cannot. This one did not.
+ * VIDEO DOES NOT GET ONE. `VideoView` already draws the platform's own
+ * scrubber: it is accessible, already wired to the element it controls, and
+ * free, so a hand-rolled transport earns its place only by doing something
+ * the platform's cannot. The web makes the same call in `ViewerStage.tsx`
+ * (see its `Transport` doc comment).
  *
- * What survives here is the live photo's play affordance, whose track sits at
- * zero because playback genuinely has not started — pressing it hands the
- * companion video to the platform player, which is where the real transport is.
+ * This is the live photo's play affordance, whose track sits at zero because
+ * playback genuinely has not started — pressing it hands the companion video
+ * to the platform player, which is where the real transport is.
  */
 function Transport({
   variantLabel,
@@ -142,7 +138,7 @@ function Transport({
   variantLabel: string;
   durationS: number;
   onPlay: () => void;
-  /** Real poster frames down this clip (issue #724 B2b), or empty wherever
+  /** Real poster frames down this clip (#724), or empty wherever
    *  `expo-video-thumbnails` cannot honestly produce one — see
    *  `video-scrub-strip-native.ts`. An empty strip renders NOTHING here
    *  rather than a placeholder box; the track below is unchanged either way. */
@@ -218,10 +214,10 @@ export function MediaPage({
   networkType: string | undefined;
   /**
    * The member asked for the original — from the stage's status line, which is
-   * the ONE place that offer lives (proto 4645). This page used to carry a
-   * second `Load the original` chip of its own, so the same fetch was offered
-   * twice on one screen, with two different labels and two different states.
-   * The screen owns the ask now; this page owns what to do about it.
+   * the ONE place that offer lives (proto 4645). This page carries no second
+   * `Load the original` chip of its own: the same fetch offered twice on one
+   * screen is two labels and two states for one thing. The screen owns the
+   * ask; this page owns what to do about it.
    */
   originalRequested?: boolean;
   /**
@@ -266,7 +262,7 @@ export function MediaPage({
     fullQualityUnlocked || originalRequested
   );
   const unlockFullQuality = (): void => setFullQualityUnlocked(true);
-  // The scrub-preview strip (issue #724 B2b) — generated once per Live Photo
+  // The scrub-preview strip (#724) — generated once per Live Photo
   // companion, before playback starts, and never for an ordinary video (see
   // `video-scrub-strip.ts`'s header for why the platform's own `VideoView`
   // scrubber is left alone). The async generator resolves into a `.then`

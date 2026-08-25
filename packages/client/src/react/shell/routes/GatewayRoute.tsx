@@ -70,7 +70,7 @@ export default function GatewayRoute({
     | "restart";
   focus?: "backups" | "capacity";
   cause?: "backup-alert";
-  /** Host plumbing for the Components tab's Connections section (issue #665).
+  /** Host plumbing for the Components tab's Connections section (#665).
    *  The three acts open modals the shell root owns (they must sit above every
    *  page), so App hands the callbacks down rather than this route wiring
    *  them; `refreshKey` is bumped once one commits so the list re-reads. */
@@ -81,13 +81,13 @@ export default function GatewayRoute({
   const { health, refresh: refreshHealth } = useGatewayHealth();
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  // Launch-at-login (issue #351) isn't part of the pushed runtime snapshot —
+  // Launch-at-login (#351) isn't part of the pushed runtime snapshot —
   // it's a plain settings field, read once on mount via the generic
   // getSettings() surface (same one saveSettings writes through).
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [savingLaunchAtLogin, setSavingLaunchAtLogin] = useState(false);
 
-  // 1s uptime ticker, suspended while the tab is hidden (issue #528 Phase D
+  // 1s uptime ticker, suspended while the tab is hidden (#528 Phase D
   // wakeup hygiene) so a backgrounded window stops waking the machine.
   useEffect(() => startVisibilityTicker(() => setNow(Date.now())), []);
 
@@ -143,7 +143,7 @@ export default function GatewayRoute({
   const saveResourceMode = useCallback(async (mode: ResourceMode) => {
     await saveUserPrefs({ [RESOURCE_MODE_PREF_KEY]: mode });
   }, []);
-  // L3 "Tune" rung knob overrides (issue #528 Phase F) — plain prefs read/write.
+  // L3 "Tune" rung knob overrides (#528) — plain prefs read/write.
   // Stable identities so the 1s uptime tick doesn't re-fetch or re-create them.
   const loadKnobPrefs = useCallback(
     async (): Promise<ResourceKnobPrefs> =>
@@ -176,10 +176,11 @@ export default function GatewayRoute({
     refreshHealth();
     return res;
   }, [refreshHealth]);
-  // A DRILL-IN IS A HISTORY ENTRY. System's pages used to be local state with a
-  // "‹ System · Back" row drawn at the top of each one — a second back control
-  // sitting under the frame's own back arrow and pointing at the same place.
-  // Routing them means the arrow already works, and a page can be deep-linked.
+  // A DRILL-IN IS A HISTORY ENTRY. System's pages are ROUTES, not local state
+  // under a "‹ System · Back" row drawn at the top of each one — that row is a
+  // second back control sitting under the frame's own back arrow and pointing
+  // at the same place. Routed, the arrow already works and a page can be
+  // deep-linked.
   // `routeKey` keys gateway routes by tab, so each is a distinct entry rather
   // than a repeat of the one before it.
   const openTab = useCallback(

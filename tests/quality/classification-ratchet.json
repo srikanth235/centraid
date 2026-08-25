@@ -1,12 +1,12 @@
 {
-  "approvedDeviation": "Two governed fingerprints are re-pinned by #846. manifest.ts: validateSandbox now fail-closes on an unknown sandbox.lane, so a manifest may declare only model-runtime or media-transcode and anything else is refused at validation rather than at fire time. tests/matrix.json: the sim-revocation-severance joinLaw is added because P1 turned the D1 pin into an ordinary passing test, which grid E must list. No classification was weakened — one file gained a refusal it did not have, the other gained a law, no quality lost a gate, no gate lost its evidence, and the remaining governed fingerprints are unmoved.",
+  "approvedDeviation": "#861 Phase 2 (comments face forward) re-pin: packages/server/src/acp/backends/acp/vault-mcp-server.ts, packages/server/src/automation/manifest/manifest.ts, packages/server/src/serve/health-registry.ts, and packages/vault/src/schema/sealed.ts changed in comment lines only (deletion-first sweep: zero-information and process-narration comments deleted, survivors rewritten to the directive register, citations normalized to bare #N), so their governed fingerprints are re-pinned to the same logic at new bytes. Verified by a TypeScript-parser comment-stripped comparison: the printed code of every re-pinned file is byte-identical to origin/main's branch head. No quality lost a gate, no gate lost its evidence, and every other governed fingerprint is unmoved.",
   "matrixGovernanceFingerprint": "2f4acea8300a63b0fb407307840938bd29af4035239340a3addba62fc81e7b75",
   "fingerprints": {
-    "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "62893489b538f861feb46200dc69a53a7ce02b0809224b93f74e2f39fc32276d",
-    "packages/server/src/automation/manifest/manifest.ts": "e1acf3c249bc869f0aaa19cad157d76a350f7b09c0597749280be8826b20276e",
+    "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "e7c3fcc3cbbafa3c0e5e36dd10a0e82aa088629fd9d790f00c276d8d630ce3ed",
+    "packages/server/src/automation/manifest/manifest.ts": "0d6659e9e823fcea0a0852dc653320a8b73dea559cc3a08a40277dbb7cb2a677",
     "packages/server/src/routes/route-security.ts": "c2fd8dcb6a9687552e4550e3496085b28c1498034472eb6f1173027b4300d82c",
-    "packages/server/src/serve/health-registry.ts": "d1f3fc416ecbe43af2ab4b091fecf3b1041590e52f2002a242e5031c65c9fd04",
-    "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
+    "packages/server/src/serve/health-registry.ts": "14ad4979e4b0adda60f16478522b8edda3606e87caa26a71d389aeaa94b7d4e0",
+    "packages/vault/src/schema/sealed.ts": "d2654ccf52e5b3b403122d2dab39b0ea3e28bb63c6cc3d49c40d7f4e92749aea",
     "tests/quality/fault-points.ts": "2b667efd1354071ab91043ab33f5ebd29cd79a11fcc4716edbe00aeada60f4bd",
     "tests/matrix.json": "fcfdc5772772349475caeae924c40148dbaf7203cc854806d1b7cf1b06651cb6"
   }

@@ -1,5 +1,5 @@
 /*
- * CALENDAR-BOUNDARY injection against the cron matcher and cursor (issue #842,
+ * CALENDAR-BOUNDARY injection against the cron matcher and cursor (#842,
  * W3.3).
  *
  * `time-zoo-calendar.test.ts` (#839) owns the two irregularities that arrive

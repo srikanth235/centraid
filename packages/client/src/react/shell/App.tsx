@@ -262,12 +262,10 @@ export function SettingsRouteRedirect({
   return <PageEmpty message="" />;
 }
 
-// The React shell root — the single component the flip mounts on #root,
-// replacing the vanilla app.ts IIFE + chrome.ts. It owns the real renderer
-// state (appearance prefs, the live app/draft list, starred set) and drives
-// ShellApp, which wires the chrome frame + router. Routes render from the
-// renderRoute switch below; each is ported one at a time from the vanilla
-// app-*.ts modules. NOT yet wired to #root while that work continues.
+// The React shell root — the single component mounted on #root. It owns the
+// real renderer state (appearance prefs, the live app/draft list, starred set)
+// and drives ShellApp, which wires the chrome frame + router. Routes render
+// from the renderRoute switch below.
 export default function App({
   seedSampleOnFirstRun = false,
 }: {
@@ -392,7 +390,7 @@ export default function App({
   }, []);
   // Only the reachability verdict, not the whole 5s heartbeat snapshot — the
   // shell root renders a pill and a banner, and re-rendering the active screen
-  // every five seconds to redraw them was the entire cost (issue #659).
+  // every five seconds to redraw them was the entire cost (#659).
   const gatewayStatus = useGatewayStatus();
   // The ONE read of the gateway's capability map (C1, docs/platform-gating.md).
   // Everything gated below — the launcher, the palette, the ops bar's verbs,
@@ -410,7 +408,7 @@ export default function App({
     []
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // The palette's injected refresh() (issue #420) — held so the async
+  // The palette's injected refresh() (#420) — held so the async
   // conversation-search source can re-run buildPaletteGroups when hits land.
   // Created once per mount; the palette hands it its `refresh()` on mount via
   // `setOnResults` (see `onReady` below), so nothing here has to hold that
@@ -426,7 +424,7 @@ export default function App({
   const paletteEntitySearch = useMemo(() => createPaletteEntitySearch(), []);
   const paletteRecents = useMemo(() => createPaletteRecents(), []);
   const [gatewaySwitcherOpen, setGatewaySwitcherOpen] = useState(false);
-  // The host-plumbing acts (issue #382) — "Test connection…", "Rename…",
+  // The host-plumbing acts (#382) — "Test connection…", "Rename…",
   // "Remove" (Gateway → Components → Connections since #665) and the switcher's
   // footer "Add vault…" all open one of these small modals. They live at the
   // shell root because the Settings dialog is a lower z-index surface they must
@@ -446,7 +444,7 @@ export default function App({
   } | null>(null);
   /**
    * Drop a connection — the unguarded primitive behind BOTH surfaces that can
-   * ask for it (issue #665): the active vault's "On this device → Disconnect",
+   * ask for it (#665): the active vault's "On this device → Disconnect",
    * which confirms in vault words, and Diagnostics' host-framed "Remove". The
    * host falls back to the local gateway and broadcasts `onGatewayChanged`, so
    * the reScope effect below is what lands the shell somewhere sane; nothing
@@ -485,8 +483,8 @@ export default function App({
     [dropGatewayConnection]
   );
 
-  // Document-level shortcuts + external re-scope, ported from the vanilla app.ts
-  // boot block. Bound once against the live nav (navRef, fed by ShellApp). A
+  // Document-level shortcuts + external re-scope. Bound once against the live
+  // nav (navRef, fed by ShellApp). A
   // gateway (#109) or vault (#289) change invalidates every gateway-scoped piece
   // of renderer state — drop it by re-listing apps + bouncing to Home.
   useEffect(() => {
@@ -514,8 +512,8 @@ export default function App({
     document.addEventListener("keydown", onKey);
 
     // The delegated builder (window.openBuilder) reaches back through
-    // window.Centraid for nav actions (optional-chained). React owns routing
-    // now, so publish a nav-backed shim in place of the retired vanilla app.ts.
+    // window.Centraid for nav actions (optional-chained). React owns routing,
+    // so this publishes a nav-backed shim for it to reach.
     const go = (route: ShellRoute) => (): void =>
       void navRef.current?.navigate(route);
     (window as unknown as { Centraid: unknown }).Centraid = {
@@ -567,7 +565,7 @@ export default function App({
     const reScope = (): void => {
       // A different gateway or vault is a different world: every cached answer
       // the shell holds describes the OLD one, and showing a stale row from it
-      // is a correctness bug, not a slow refresh (issue #659).
+      // is a correctness bug, not a slow refresh (#659).
       resetQueryCache();
       // Including the remembered installed set — an offline launch right after
       // a switch must not paint the previous vault's grid.
@@ -579,7 +577,7 @@ export default function App({
     const offVaultScope = window.CentraidApi.onVaultChanged?.(reScope);
 
     return () => {
-      // These two outlived every remount before (issue #659): the shell root
+      // These two outlived every remount before (#659): the shell root
       // subscribed on mount and never unsubscribed, so a re-mounted shell
       // stacked another pair and one gateway change ran N re-scopes.
       offGatewayScope?.();
@@ -597,11 +595,10 @@ export default function App({
     };
   }, [refresh]);
 
-  // Conversation-row delete — mirrors the vanilla AssistantRoute's old
-  // deleteThread confirm pattern. The LEDGER moved back into the assistant
-  // surface in #707, but the shell root still owns the row ACTIONS, because
-  // they reach the router (a deleted open thread has to bounce) and the shared
-  // confirm/prompt overlays. Bounces off the fresh assistant route if the
+  // Conversation-row delete. The LEDGER lives in the assistant surface (#707),
+  // but the shell root owns the row ACTIONS, because they reach the router (a
+  // deleted open thread has to bounce) and the shared confirm/prompt overlays.
+  // Bounces off the fresh assistant route if the
   // conversation being deleted is the one currently open.
   // Delete with a 6s undo grace window (§3): the row hides immediately and the
   // open thread bounces to a fresh one, but the FK-CASCADE delete only commits
@@ -647,7 +644,7 @@ export default function App({
     [assistantConversations]
   );
 
-  // The three ledger row edits are optimistic (issue #659): the row changes on
+  // The three ledger row edits are optimistic (#659): the row changes on
   // the click and the PATCH confirms it, instead of the reader waiting a round
   // trip and then a full list refetch for a name they already typed. A rejected
   // commit puts the list back exactly as it was and says why.
@@ -824,8 +821,8 @@ export default function App({
   // app bar is a display-face title over a mono meta line, and on Home the
   // title names the vault — so the name you would press to change is already
   // standing there at the size the brief gives it. A separate identity row
-  // under the bar was a second answer to the question the title had already
-  // asked.
+  // under the bar would be a second answer to the question the title has
+  // already asked.
   const openVaultSwitcher = useCallback(
     (anchor: DOMRect): void => {
       const activeGatewayId = ownerScopes.gatewayId ?? "";
@@ -879,10 +876,9 @@ export default function App({
       const button = switcherButtonRef.current;
       if (button) openVaultSwitcher(button.getBoundingClientRect());
     };
-    // This effect OWNS the ref. It used to be re-armed as a side effect of
-    // rendering the identity row, which healed itself on every paint; an
-    // effect that runs only when the switcher changes does not, so nothing
-    // else may null it out from a cleanup of its own.
+    // This effect OWNS the ref. It runs only when the switcher changes, so it
+    // does not heal itself on every paint the way a re-arm during render
+    // would — nothing else may null it out from a cleanup of its own.
     return () => {
       switcherActionRef.current = null;
     };
@@ -894,10 +890,10 @@ export default function App({
     : (ownerScopes.gatewayKind === "local"
         ? "This Mac"
         : ownerScopes.gatewayLabel) || "This Mac";
-  // The assistant's conversation ledger. It was the sidebar's Recents zone
-  // until #707; the stem holds the launcher and nothing else, so the ledger
-  // moved into the assistant surface as app content and this is where its data
-  // is shaped. Rows carry their vault only when it is NOT the owner's own — a
+  // The assistant's conversation ledger. The stem holds the launcher and
+  // nothing else (#707), so the ledger lives in the assistant surface as app
+  // content and this is where its data is shaped. Rows carry their vault only
+  // when it is NOT the owner's own — a
   // conversation belongs to one vault for life (#599), and saying so on every
   // row would drown the useful case.
   const assistantLedger = useMemo<AssistantConversationEntry[]>(() => {
@@ -946,9 +942,8 @@ export default function App({
     [blockingCount, notificationsCounts.hasUnreadNotices, gatewayStatus]
   );
 
-  // A newer build on disk used to be a pill pinned above the account row. It
-  // is news, not a place, so it says so once on the line and offers the one
-  // bounded action that acts on it.
+  // A newer build on disk is news, not a place, so it says so once on the line
+  // and offers the one bounded action that acts on it.
   useEffect(() => {
     if (!updateStatus?.available) return;
     const line = `${updatePillTitle(updateStatus)} · v${updateStatus.version}`;
@@ -1326,7 +1321,7 @@ export default function App({
           const app = userApps.find((a) => a.id === id);
           if (!app) return <PageEmpty message="App not found." />;
           const appId = app.centraidAppId ?? app.id;
-          // Every app is an inline route rendered by this shell (issue #799):
+          // Every app is an inline route rendered by this shell (#799):
           // the served-app plane — the sandboxed iframe host and the builder
           // that produced apps for it — is retired, so an id with no inline
           // loader is nothing this client can open.
@@ -1361,7 +1356,6 @@ export default function App({
             />
           );
         default:
-          // Staged: ported one-by-one from the vanilla app-*.ts render fns.
           return (
             <PageEmpty message="This screen is being migrated to React." />
           );
@@ -1471,7 +1465,7 @@ export default function App({
 
   return (
     // The offline verdict travels once, from here, and the shared commit
-    // control reads it (issue #708, C7). It wraps the modals and sheets too —
+    // control reads it (#708). It wraps the modals and sheets too —
     // a dialog's Save is as much a commit as a route's is.
     <CapabilitiesProvider value={capabilities}>
       <CommitAvailabilityProvider value={commitAvailabilityFor(gatewayStatus)}>

@@ -18,8 +18,8 @@
 //      graticule labelled in degrees, which is a chart, not a map.
 //   4. READING A PIN CHANGES THE READOUT, and reading a second one replaces
 //      the first — one place is being read at a time, not a growing list.
-//   5. WHAT LEAVES THE DEVICE, PER MODE. This is the claim that changed with
-//      #816 and it is now mode-shaped rather than absolute. On the private
+//   5. WHAT LEAVES THE DEVICE, PER MODE — mode-shaped, never absolute
+//      (#816). On the private
 //      sketch no map SDK is constructed at all: the screen asks nobody
 //      anything, which is the same claim this file has always carried. With
 //      real maps on, exactly one thing is fetched — the base layer's own style
@@ -284,13 +284,13 @@ function renderMap(): void {
 }
 
 /** Render and let the real map's lazily-imported provider resolve. Real maps
- *  are the default, so this is the ordinary path. Two microticks used to be
- *  enough on an idle worker; a coverage run compiling the provider for the
+ *  are the default, so this is the ordinary path. Two microticks are enough
+ *  only on an idle worker; a coverage run compiling the provider for the
  *  first time is not idle, so wait for the recorder the SDK mock is. */
 async function renderRealMap(): Promise<void> {
   renderMap();
   // Same module `PlacesRealMap` lazy-loads. Awaiting it inside `act` is what
-  // two microticks used to stand in for — coverage compiling that graph is
+  // two microticks only stand in for — coverage compiling that graph is
   // not two ticks.
   await act(async () => {
     await import("./places-map-libre");

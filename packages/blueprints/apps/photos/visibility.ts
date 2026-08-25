@@ -1,4 +1,4 @@
-// What the grid/lightbox consider "currently visible" (issue #352's search
+// What the grid/lightbox consider "currently visible" (#352's search
 // augment lives here): the album filter, then the search filter, plus the
 // asset lookup the lightbox needs to reach an off-window search hit.
 // app.tsx still owns the underlying `assets`/`trash`/`searchResults` arrays
@@ -59,13 +59,12 @@ export function createVisibility({
   }
 
   // Trashed content falls out of the FTS index entirely (a soft-deleted row
-  // never matches), so the trash shelf keeps the old client-only match. For
-  // the live shelves, server hits (queries/search.ts, issue #352) are merged
+  // never matches), so the trash shelf takes the client-only match. For
+  // the live shelves, server hits (queries/search.ts, #352) are merged
   // with the local match: for "All" (no album selected) server hits reach
   // the WHOLE live library, not just this window; for a selected
   // album/Favorites, an off-window server hit is scoped to what's already
-  // loaded here (its album membership isn't known otherwise) — the same
-  // reach search had before.
+  // loaded here (its album membership isn't known otherwise).
   function visibleAssets(): Asset[] {
     const query = getSearchQuery();
     const selectedAlbum = getSelectedAlbum();
@@ -74,7 +73,7 @@ export function createVisibility({
     const scoped = getAlbumAssets();
     // Keyed by (scope, asset) throughout: on a merged timeline a bare
     // `asset_id` is not an identity, so a colliding id across two scopes would
-    // otherwise collapse two different photos into one row here (issue #599).
+    // otherwise collapse two different photos into one row here (#599).
     const scopedKeys = selectedAlbum ? new Set(scoped.map(assetKey)) : null;
     const merged = new Map<string, Asset>();
     for (const a of scoped.filter(matchesSearchLocal))

@@ -1,8 +1,7 @@
-// The full-screen search overlay (issue #498, Slice B change #6; issue #707
-// Phase 5 — "Search everything" from Home's header; issue #711 — rewritten to
-// match the v4 Binding Layer handoff's search anatomy exactly:
-// design_handoff_photos/"Centraid System - Binding Layer v4.dc.html" :3250–
-// 3331 (markup) and :5996–6023 (styles). Local component state, not a nav
+// The full-screen search overlay — "Search everything" from Home's header
+// (#498, #707, #711). It matches the v4 Binding Layer handoff's search anatomy
+// exactly: design_handoff_photos/"Centraid System - Binding Layer v4.dc.html"
+// :3250–3331 (markup) and :5996–6023 (styles). Local component state, not a nav
 // route, so it's cheap to open and dismiss. It autofocuses an input and
 // searches vault OBJECTS across every native app's replica — a note, a doc,
 // a person, an event, a task, a tally entry, a photo. Results group by the
@@ -34,8 +33,8 @@ import type { SearchGroup } from "./search-model";
 import { useSearchRecents } from "./useSearchRecents";
 
 // The brief's `R.margin.m` (:3356) — the mobile content margin every Home
-// surface shares. Was 20 here (issue #711 audit item d), then the literal 18;
-// it is now the shared `pageMargin` token, so no screen can drift again.
+// surface shares. The shared `pageMargin` token, never a literal, so no screen
+// can drift from it (#711).
 const H_PADDING = pageMargin;
 
 // A stable-identity empty array — `hits` falls back to this rather than a
@@ -381,7 +380,7 @@ const makeStyles = (
       paddingTop: 8,
     },
     // Micro-caps role — carries its own uppercase + tracking, so the label
-    // is never hand-uppercased on top of it (issue #711 audit item a/b).
+    // is never hand-uppercased on top of it (#711 audit item a/b).
     groupName: { ...t("eyebrow"), color: colors.textSoft, flex: 1 },
     headerRow: {
       alignItems: "center",

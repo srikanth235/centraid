@@ -1,5 +1,4 @@
 /**
- * Matrix cell agent-runtime.concurrency (#535 coverable-today).
  * lowPriorityCommand is pure per call — concurrent invocations must not share state.
  */
 import { describe, expect, test } from "vitest";

@@ -1,6 +1,6 @@
 /*
  * Maps the gateway's backup-status + storage-usage DTOs onto the ONE normative
- * five-metric derivation (`deriveStorageMetrics`, issue #436 §6) — computed a
+ * five-metric derivation (`deriveStorageMetrics`, #436 §6) — computed a
  * single time here so the Backups health surface never re-derives a slightly
  * different story per readout. Pure and framework-free: given the same DTOs +
  * clock it always returns the same metrics.
@@ -53,7 +53,7 @@ function vaultCadenceMs(vault: BackupVaultStatusDTO): number {
 }
 
 /**
- * "If this device died right now, what would I lose?" (issue #708 A2 — the
+ * "If this device died right now, what would I lose?" (#708 A2 — the
  * Backup screen leads with loss, not exposure). Derived from the same
  * `computeStorageMetrics` output every other part of this surface reads, so
  * the loss line and the freshness metric can never disagree with each other.

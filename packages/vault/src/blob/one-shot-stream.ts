@@ -109,7 +109,7 @@ export async function streamThroughOnce(
     if (actual !== sha) throw new VaultBlobHashMismatchError(sha, actual);
     const head = Buffer.concat(probeChunks, probeBytes);
     const mediaType = sniffMediaType(head, input.mediaType, input.filename);
-    // Direct-to-cold heuristic (issue #425 Wave 3): the CopyObject that mints
+    // Direct-to-cold heuristic (#425): the CopyObject that mints
     // the final CAS object carries STANDARD_IA for an eligible large original.
     // The original's staging row is only written below, after custody, so the
     // media type + size are handed in directly for the resolver.

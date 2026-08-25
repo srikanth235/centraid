@@ -86,7 +86,7 @@ const EXIF_LABELS: Record<string, string> = {
 
 /**
  * The Lightbox details panel's rows: whatever `asset.exif_json` actually
- * carries (issue #352 — today that's captured time/GPS from
+ * carries (#352 — today that's captured time/GPS from
  * packages/vault/src/blob/pipeline.ts's minimal EXIF walk, never camera
  * make/model/ISO/aperture — this vault doesn't parse those tags yet) plus
  * the always-available dimensions/size/captured-time/type every asset row
@@ -144,10 +144,10 @@ export function exifRows(asset: Asset): ExifRow[] {
     // NO Location row, and no coordinate. Where a photograph was taken is a
     // phrase, not a fact in a details grid — `place-phrase.ts` resolves it and
     // the info panel renders it, with the digits behind an explicit "exact
-    // location" action. This row used to print "37.44190, -122.14300" as a link
-    // to a public map host, which handed a third party the exact coordinates of
-    // somebody's photographs to answer a question the app can answer on the
-    // device.
+    // location" action. This row must never print "37.44190, -122.14300" as a
+    // link to a public map host, which hands a third party the exact
+    // coordinates of somebody's photographs to answer a question the app can
+    // answer on the device.
   }
   if (asset.width && asset.height) {
     rows.push({
@@ -185,7 +185,7 @@ export function exifRows(asset: Asset): ExifRow[] {
   return rows;
 }
 
-// The blob custody projection (issue #352 phase 3/4, blob/custody.ts) in
+// The blob custody projection (#352 phase 3/4, blob/custody.ts) in
 // owner-facing words + a tone the CSS keys off (custody-ok/custody-warn/
 // custody-danger). Returns null for a custody-less row (asset has no
 // content_id resolvable to `blob_custody_state`, or the standing sweep
@@ -193,7 +193,7 @@ export function exifRows(asset: Asset): ExifRow[] {
 const CUSTODY_META: Record<string, CustodyMeta> = {
   "local-only": { label: "On this device only", tone: "warn" },
   // A state the projection has always written and this table never had a row
-  // for (issue #712 P6a), so a photograph with an upload still outstanding
+  // for (#712), so a photograph with an upload still outstanding
   // showed NO backup fact at all — silently indistinguishable from one whose
   // custody had never been computed. "warn", not "ok": a queued copy is not a
   // copy.

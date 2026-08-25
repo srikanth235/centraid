@@ -9,7 +9,7 @@ import type { BackupStatusDTO } from "./BackupCard.js";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./BackupCard.module.css";
 
-// The three pillars the brief asks for (issue #708 A2, docs/design/handoff-
+// The three pillars the brief asks for (#708 A2, docs/design/handoff-
 // binding-layer/README.md "Backup"): what is copied, how it is protected,
 // and what is held back — plus the Restore control, wrapped in its own card
 // and headed exactly as the brief has it, OUTLINED destructive and on the

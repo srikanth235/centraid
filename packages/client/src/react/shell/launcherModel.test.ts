@@ -40,10 +40,10 @@ describe("the launcher model", () => {
   });
 
   it("has no catalogue destination — first-party apps are not acquired", () => {
-    // Discover was a place you went to get what you did not have. Every bundled
-    // app is installed at vault mount (#708), so there was nothing left to get:
-    // Home's springboard opens on all eight, and the All-apps sheet arranges
-    // them. Automation templates keep their own gallery — adopting one clones
+    // Every bundled app is installed at vault mount (#708), so there is
+    // nothing to go and acquire: Home's springboard opens on all eight, and
+    // the All-apps sheet arranges them. Automation templates keep their own
+    // gallery — adopting one clones
     // into the code store, which really is an acquisition — but it is a detail
     // route off Automations, not a standing launcher row.
     expect(LAUNCHER_DESTINATIONS.some((d) => d.label === "Discover")).toBe(
@@ -154,9 +154,9 @@ describe("the launcher model", () => {
       expect(
         searchDestinations("activity", CAPABILITIES_ON).map((d) => d.id)
       ).toStrictEqual(["insights"]);
-      // "Copies" merged into Vault and its row is retired from every view, so
-      // the word finds nothing and "Vault" finds exactly one place — never two
-      // rows offering the same surface under two names.
+      // The "Copies" row is retired from every view, so the word finds
+      // nothing and "Vault" finds exactly one place — never two rows offering
+      // the same surface under two names.
       expect(searchDestinations("COPIES", CAPABILITIES_ON)).toHaveLength(0);
       expect(
         searchDestinations("vault", CAPABILITIES_ON).map((d) => d.id)

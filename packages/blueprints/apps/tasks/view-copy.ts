@@ -97,9 +97,9 @@ export function overdueMeta(count: number): string {
   return `${count} · nothing was deleted`;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Re-entry (spec §3, ruling 2)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export function reentryNotice(days: number, due: number): string {
   return `You were away ${days} days · ${due} tasks came due. Nothing was deleted.`;
@@ -123,9 +123,9 @@ export const REENTRY_BUCKETS = {
   sitting: { label: "Sitting since March", verb: "Release all" },
 } as const;
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The row's own words
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export const MISSED_NOTE_A = "One live occurrence.";
 export const MISSED_NOTE_B =
@@ -158,9 +158,9 @@ export function doneNext(day: string): string {
   return `Done · the next one is ${day}`;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The editor
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export const FIELDS = {
   when: "When",
@@ -224,10 +224,10 @@ export function homeVault(vault: string, who: string): string {
 export const HOME_VAULT_NOTE_A = "A task keeps the vault it was born in.";
 export const HOME_VAULT_NOTE_B = "Completion is receipted there.";
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The two confirms. Release is OUTLINED SECONDARY — cancelling a task destroys
 // nothing, and only Delete takes the outlined `net` control (§3).
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export const RELEASE_CONFIRM = {
   title: "Release this task?",
@@ -245,9 +245,9 @@ export const DELETE_CONFIRM = {
 
 export const CANCEL = "Cancel";
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The honest states
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export const PENDING_CHIP = "Saved on this device · queued for the vault";
 export const PENDING_ROW = "not in the vault yet";
@@ -278,9 +278,9 @@ export function inboxMeta(count: number): string {
   return `${count} · nothing is counting at you`;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Capture, search, reminder
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export const QUICK_ADD = {
   pointerPlaceholder: "Name it so it still makes sense on Friday",
@@ -308,10 +308,10 @@ export const NOTIFY_COPY = {
   snoozes: ["10 min", "1 hour", "This evening", "Tomorrow 09:00"],
 } as const;
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Denial (§3, §5). Denial is DATA: the gate names the receipt, the scope and
 // the time, and offers a way to the grant rather than a dead end.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export const DENIED = {
   title: "Tasks cannot read this vault",

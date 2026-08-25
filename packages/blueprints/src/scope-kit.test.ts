@@ -1,5 +1,5 @@
-// What an app asks about its mounted scopes (issue #599, moved to
-// apps/_shared/scope-kit.ts for issue #726 D11). The rule itself is proved
+// What an app asks about its mounted scopes (#599, moved to
+// apps/_shared/scope-kit.ts for #726 D11). The rule itself is proved
 // in write-target.test.ts; what matters here is that the app applies it to
 // the right question — in particular that looking at a read-only audience
 // yields a DISABLED target with a reason, so the control is greyed out

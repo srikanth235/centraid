@@ -1,7 +1,6 @@
 /*
- * Production route-assertion wiring (issue #750 invariant 3; #726 P3
- * decision 4 said "eager, not lazy" but shipped no production caller —
- * `pushRouteAssertion` was reachable only from tests).
+ * Production route-assertion wiring (#750 invariant 3; #726 P3
+ * decision 4's "eager, not lazy").
  *
  * When this gateway's EndpointId becomes known — first endpoint start,
  * rotation of the endpoint key, or recovery onto a new machine — every peer's

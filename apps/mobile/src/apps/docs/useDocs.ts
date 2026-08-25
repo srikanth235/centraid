@@ -1,4 +1,4 @@
-// The Docs read layer (issue #821) — the drive, projected from this device's
+// The Docs read layer (#821) — the drive, projected from this device's
 // consent-shaped replica, exactly the entity set the `docs` manifest's read
 // scopes grant (packages/blueprints/apps/docs/app.json).
 //

@@ -1,5 +1,5 @@
 /**
- * The Devices place's copy and grouping contract (issue #765, spec §7).
+ * The Devices place's copy and grouping contract (#765, spec §7).
  *
  * Pure model, so what is under test is the wording, the roster split and the
  * five states — not a renderer. The rules that are cheap to undo and expensive

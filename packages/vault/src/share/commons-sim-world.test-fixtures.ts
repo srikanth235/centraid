@@ -1,4 +1,4 @@
-// World mechanics for the Commons deterministic simulator (issue #731). This
+// World mechanics for the Commons deterministic simulator (#731). This
 // half owns the seeded PRNG and the physical world — real on-disk vaults, their
 // grants, the single write rail, the pull rail, crash-restart, and snapshot /
 // stale-restore. The schedule and the golden invariants live in
@@ -87,7 +87,7 @@ export interface Seat {
   /** `dpv:ServiceProvision`, the purpose every seeded consent grant names. */
   purposeConceptId: string;
   /**
-   * Commands this seat has marked loud-on-purpose (issue #839). Registration
+   * Commands this seat has marked loud-on-purpose (#839). Registration
    * REWRITES `agent_capability.requires_confirmation` from the definition, so
    * a crash-restart re-registers the tally pack and would silently disarm the
    * gate; `attach` re-arms from this list instead.
@@ -132,14 +132,14 @@ export interface World {
   failures: string[];
   /**
    * Invariant breaks the oracle has PINNED to a named, still-open product
-   * defect (issue #839) instead of failing on. Every entry names the defect;
+   * defect (#839) instead of failing on. Every entry names the defect;
    * an unpinned break is always a failure. The list is printed with the
    * report so a run never hides what it tolerated.
    */
   pinned: string[];
   stats: Record<string, number>;
   step: number;
-  /** The share-grant plane (issue #839), when this program asked for one. */
+  /** The share-grant plane (#839), when this program asked for one. */
   plane?: GrantPlane;
 }
 

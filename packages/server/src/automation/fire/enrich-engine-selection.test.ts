@@ -1,10 +1,10 @@
 /*
- * WHICH ENGINE RUNS (issue #807, Wave 5) — selection as policy.
+ * WHICH ENGINE RUNS (#807) — selection as policy.
  *
- * Before this wave the delegate step was a manifest field a member flipped per
- * recipe. Now the policy cascade's engine profile decides, and the manifest's
- * `delegateStep` block is the capability's DECLARATION that a delegate variant
- * exists at all. These tests pin the four laws that move has to keep:
+ * The policy cascade's engine profile decides which variant runs, and the
+ * manifest's `delegateStep` block is the capability's DECLARATION that a
+ * delegate variant exists at all. These tests pin the four laws that split
+ * keeps:
  *
  *   1. BACK-COMPAT. A vault with no rules and no profiles fires exactly what
  *      it fired before: the deterministic variant, no delegate model.
@@ -188,7 +188,7 @@ describe("engine-profile selection on the fire path", () => {
   });
 
   it("[law 1] a member's per-recipe delegate pin still selects the delegate variant", async () => {
-    // The pre-Wave-5 switch (`lifecycle-automation-routes.ts`) writes
+    // The manifest switch (`lifecycle-automation-routes.ts`) writes
     // `selected: "delegate"` into the manifest. A built-in profile — the
     // answer a vault that has chosen nothing gives — must not revoke it.
     const { outcome } = await fire({

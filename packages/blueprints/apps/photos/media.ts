@@ -17,17 +17,17 @@ export function isRenderableUri(uri: unknown): boolean {
 }
 
 // The grid NEVER fetches a full original. Blob-backed assets carry a server
-// thumb variant (issue #296) — a few KB; a `data:` URI already rode inline
+// thumb variant (#296) — a few KB; a `data:` URI already rode inline
 // with the query row, so painting it costs no relay round trip. Everything
 // else — a thumbless remote original, an unrenderable kind — gets a
 // lightweight placeholder instead of pulling multi-MB bytes just to paint a
 // grid tile. The lightbox still loads originals (a deliberate user action);
-// the medium `preview` rung the ladder now produces (issue #405 §2) is a
+// the medium `preview` rung the ladder now produces (#405) is a
 // ready future swap for that first full-screen paint, left for a follow-up.
 //
 // THUMB_EDGE is the SERVE-side "no thumb was staged below this" ceiling, NOT
 // the client generation edge. It stays at 360 deliberately: the preview
-// ladder (issue #405 §2) drops the client TINY edge to 256 going forward
+// ladder (#405) drops the client TINY edge to 256 going forward
 // (the upload pipeline's shared tiny edge), but assets uploaded under the older 360 edge (or
 // with no thumb at all because they were already small) must not suddenly
 // probe `?variant=thumb`, 404, and flip to a placeholder. Keeping the
@@ -55,7 +55,7 @@ export function gridSrc(asset: Asset): string | null | undefined {
   }
   // No thumb recorded. Two sources are still paintable, and refusing them is
   // what made a freshly imported library render as a wall of grey boxes
-  // (issue #708): `thumb_uri` is only set once the gateway's preview backstop
+  // (#708): `thumb_uri` is only set once the gateway's preview backstop
   // has written the derivative row, so EVERY photo is thumb-less for a while
   // after import — and a library that has never been opened is thumb-less
   // entirely.
@@ -161,7 +161,7 @@ export function fillTileMedia(
   asset: Asset,
   report?: MediaReport
 ): void {
-  // WHICH scope owns these bytes (issue #599). The shell's blob authorizer
+  // WHICH scope owns these bytes (#599). The shell's blob authorizer
   // reads `data-scope` off the element carrying a `/centraid/_vault/blobs/…`
   // reference or its nearest ancestor, and fetches the bytes in that scope.
   // Content ids are minted per scope and collide across scopes BY DESIGN, so an
@@ -195,7 +195,7 @@ export function fillTileMedia(
   }
   // ONE retry against the original before the tile gives up (#708).
   //
-  // Two real failures land here and both used to paint a permanent grey box:
+  // Two real failures land here, and either would paint a permanent grey box:
   //
   //  1. The derivative does not exist YET. `?variant=thumb` answers
   //     `no-variant` → 404 for every photo between import and the gateway's
@@ -274,7 +274,7 @@ export function mountMedia(
   asset: Asset,
   report?: MediaReport
 ): void {
-  // Keyed by SCOPE + asset id (issue #599). Asset ids are minted per scope and
+  // Keyed by SCOPE + asset id (#599). Asset ids are minted per scope and
   // collide across scopes exactly like content ids do, so an id-only guard
   // would treat a Family photo as "already painted" because the member's own
   // library happens to hold that id — and leave the previous scope's bytes and

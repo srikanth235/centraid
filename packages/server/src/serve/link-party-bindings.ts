@@ -1,5 +1,5 @@
 /*
- * The link ceremony's vault-side footprint (issue #821).
+ * The link ceremony's vault-side footprint (#821).
  *
  * A vault link is gateway bookkeeping: `vault_links` says two vaults may
  * exchange, and `permissions_json.commonsPartyIds` remembers which party each

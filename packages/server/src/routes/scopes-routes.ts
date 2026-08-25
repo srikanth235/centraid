@@ -1,6 +1,6 @@
 /*
  * `/centraid/_vault/scopes` — the cross-vault "where may I work" plane
- * (issue #599 Phase 4; ownership since #726).
+ * (#599 Phase 4; ownership since #726).
  *
  * An owner owns one or more vaults (`vault_owners`), and a client needs ONE
  * answer to "which vaults may I switch between, and is this app there?" so a
@@ -66,7 +66,7 @@ export interface ScopeRow {
   label: string;
   /**
    * Whether this is the owner's OWN vault — the durable founding marker
-   * (issue #711 item H). Always present, so an app can derive its "somewhere
+   * (#711). Always present, so an app can derive its "somewhere
    * other than my own" marker as exactly `personal === false` and never from
    * `label`, which the owner is free to rename.
    */

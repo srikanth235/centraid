@@ -3,7 +3,7 @@ import type { IconName } from "@centraid/design";
 import { listVaults } from "../../../gateway-client.js";
 import type { PhoneBridgeProps } from "../../screen-contracts.js";
 
-/** Settings → Vault page data (issue #382) — scoped to the ACTIVE vault
+/** Settings → Vault page data (#382) — scoped to the ACTIVE vault
  *  only; the cross-vault list + gateway "Connections" group both moved to
  *  the switcher, which is the pair manager now. */
 export interface ActiveVaultData {
@@ -18,7 +18,7 @@ export interface ActiveVaultData {
   deletable: boolean;
   /** Present only when this vault is reached over a REMOTE connection — the
    *  primordial local gateway is this machine, so there is nothing to
-   *  disconnect from and the danger-zone action is simply absent (issue #665). */
+   *  disconnect from and the danger-zone action is simply absent (#665). */
   connection?: RemoteConnectionData;
 }
 
@@ -162,8 +162,7 @@ async function loadRemoteConnection(
 
 // Account-page data — the Phone (app-phone.ts) bridge callback wiring for the
 // Settings Account pages. Phone talks to the main process, because the tunnel
-// endpoint outlives renderer reloads. The Import pane's callbacks lived here
-// too until issue #807 removed the hidden Import page.
+// endpoint outlives renderer reloads. There is no Import pane (#807).
 
 export function phoneCallbacks(
   showToast: (m: string) => void

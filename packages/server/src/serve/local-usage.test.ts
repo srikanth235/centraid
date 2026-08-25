@@ -8,7 +8,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { LocalUsageScanner, walkDirBytes } from "./local-usage.js";
 import type { LocalUsageOptions } from "./local-usage.js";
 
-// The component walker (issue #544). What matters here is that the figures
+// The component walker (#544). What matters here is that the figures
 // are attributable — a byte lands under exactly one component — and that the
 // cache actually prevents re-walking, because the whole point of the TTL is
 // that a UI polling every minute must not re-read a blob CAS every minute.

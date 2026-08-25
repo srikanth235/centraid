@@ -16,13 +16,13 @@ describe("resolveSettingsPage", () => {
     ({ resolveSettingsPage } = await import("./SettingsRoute.js"));
   });
 
-  // Three pages were hidden for several releases and are gone (#807), and
-  // `device` retired in #814; their deep links must still land somewhere real
-  // rather than on an empty pane, which is the law this function carries for
-  // EVERY unknown id.
-  // `profile` is here for a different reason: it is not retired but MERGED,
-  // so its deep link has to land on the page that now holds the profile
-  // group rather than on a fallback that happens to be the same id.
+  // `workspace`, `storage`, `import` and `device` are not Settings pages
+  // (#807, #814); their deep links must still land somewhere real rather than
+  // on an empty pane, which is the law this function carries for EVERY
+  // unknown id.
+  // `profile` is here for a different reason: it is not gone but MERGED, so
+  // its deep link has to land on the page that holds the profile group rather
+  // than on a fallback that happens to be the same id.
   it.each([
     "workspace",
     "storage",

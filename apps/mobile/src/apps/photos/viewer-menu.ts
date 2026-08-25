@@ -1,19 +1,16 @@
-// The viewer's `···` — the anchored menu behind the chip (issue #712).
+// The viewer's `···` — the anchored menu behind the chip (#712).
 //
-// The single-photograph viewer already matched iOS' chrome: round back chip,
-// centred date/time stamp, round `···` chip, chip · capsule · chip toolbar.
-// What was missing was the LAYER BEHIND the `···` — iOS opens an anchored
-// popover there, not a bottom sheet, and a bottom sheet answers a different
-// question (see `kit/components/AnchoredMenu.tsx`'s own header for why). This
-// module states which of iOS' rows this vault can honestly carry, as data —
+// The `···` opens an ANCHORED POPOVER, never a bottom sheet: a bottom sheet
+// answers a different question (see `kit/components/AnchoredMenu.tsx`'s own
+// header for why). This module states which of iOS' rows this vault can
+// honestly carry, as data —
 // the same discipline `photos-library-menu.ts` uses for the Library header's
 // menu, so the row set and its enabled/disabled logic can be asserted without
 // a renderer.
 //
-// THE SET, ROW BY ROW — what shipped, and what did not, and why:
+// THE SET, ROW BY ROW — what is carried, what is not, and why:
 //
-//   Slideshow, Download, Send a copy — carried over unchanged from the old
-//   `OVERFLOW_OPTIONS` bottom sheet this menu replaces.
+//   Slideshow, Download, Send a copy — plain rows, no conditions.
 //
 //   Add to Album — a real write (`batchAddToAlbum`,
 //   `photos-selection-writes.ts`), fired here for a selection of one. The
@@ -28,7 +25,7 @@
 //   row spends the ONE text slot the kit component gives an action row to
 //   carry that reason anyway.
 //
-//   Make key photo (issue #721 B5) — the same `set-album-cover` write
+//   Make key photo (#721) — the same `set-album-cover` write
 //   `AlbumDetail.tsx`'s selection-bar "Make cover" fires, reached here without
 //   leaving the viewer. It sits beside Add to Album because it is the same
 //   kind of fact about the same relationship (which album, which cover) and
@@ -123,7 +120,7 @@ export interface ViewerOverflowMenuInput {
   /**
    * The albums THIS photograph already belongs to, resolved by the caller
    * from `core.collection_entry` — the same join `PhotoLightbox.tsx` already
-   * walks for the info sheet's Albums chips (issue #721 B5). Empty when the
+   * walks for the info sheet's Albums chips (#721). Empty when the
    * photograph is in no album, in which case there is no album for "Make key
    * photo" to set a cover ON — the row is omitted entirely rather than shown
    * permanently disabled with a reason nobody asked for (`search-hits.ts`'s
@@ -133,7 +130,7 @@ export interface ViewerOverflowMenuInput {
   onSlideshow: () => void;
   onAddToAlbum: () => void;
   /**
-   * "Make key photo" (issue #721 B5): the same `set-album-cover` write
+   * "Make key photo" (#721): the same `set-album-cover` write
    * `AlbumDetail.tsx`'s "Make cover" control fires, aimed at whichever of
    * `albums` the member means. Takes no argument, the same shape
    * `onAddToAlbum` already has here — WHICH album is a picker concern the
@@ -147,7 +144,7 @@ export interface ViewerOverflowMenuInput {
   onDownload: () => void;
   onSendCopy: () => void;
   /** The same trash the toolbar chip fires — see the Delete row's own comment
-   *  for why the verb now lives in two places, as it does on iOS. */
+   *  for why the verb lives in two places, as it does on iOS. */
   onDelete: () => void;
 }
 
@@ -288,8 +285,8 @@ export function viewerOverflowMenuGroups(
         {
           key: "delete",
           // Delete is in BOTH places on iOS — the toolbar's trash chip and the
-          // bottom of this menu — and this pass takes the parity rather than
-          // the tidier argument it previously made for one door. A member who
+          // bottom of this menu — and that parity outranks the tidier argument
+          // for one door. A member who
           // has the menu open should not have to close it to reach the verb
           // the same menu carries on the phone they came from. The confirm
           // step is where the safety lives (`PhotoLightbox.tsx`), not in the

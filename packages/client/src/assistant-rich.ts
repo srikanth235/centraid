@@ -1,4 +1,4 @@
-// The assistant rich-answer renderer (issue #420) — the ONE string→HTML
+// The assistant rich-answer renderer (#420) — the ONE string→HTML
 // renderer for the assistant transcript. Framework-free so the memoizing shell
 // adapter (react/shell/routes/assistantRich.ts) can call it outside React.
 //
@@ -405,7 +405,7 @@ export function hydrateRefs(
 
 /**
  * Wire one delegated click handler under `host` so every code block's hover
- * "Copy" button copies its `<pre>` text to the clipboard (issue #420).
+ * "Copy" button copies its `<pre>` text to the clipboard (#420).
  * Idempotent: a `data-copy-wired` flag guards against double-binding when a
  * node is re-hydrated.
  */

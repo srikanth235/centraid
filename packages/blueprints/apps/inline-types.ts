@@ -1,4 +1,4 @@
-// The inline-app contract (issue #505).
+// The inline-app contract (#505).
 //
 // A bundled app that mounts INLINE in the shell (no iframe, no served HTML)
 // ships a co-located `app-inline.tsx` whose default export is an
@@ -52,7 +52,7 @@ export interface InlineQueryModule {
 }
 
 /**
- * One mounted scope of a multi-scope app (issue #599). The shell mounts a
+ * One mounted scope of a multi-scope app (#599). The shell mounts a
  * multi-scope app over N scopes at once — the member's own scope plus any
  * shared audience scopes they belong to — and hands the app this descriptor
  * per scope. `label` is the ONLY string an app may render for a scope
@@ -65,14 +65,14 @@ export interface InlineScope {
   label: string;
   /**
    * Whether this is the member's OWN vault — the durable founding marker
-   * (issue #711 item H). An app's "somewhere other than my own" marker is
+   * (#711). An app's "somewhere other than my own" marker is
    * exactly `personal === false`, never a match on `label`, which the owner
    * is free to rename. Undefined means the host did not say (an older
    * gateway, or a solo mount that answered before the marker existed), and
    * that reads as UNMARKED: withholding a hint is harmless, while marking
    * everything says something untrue.
    *
-   * There is no vault "kind" and no `sharing` scope (issue #726): a share's
+   * There is no vault "kind" and no `sharing` scope (#726): a share's
    * place is the recipient's vault, so "shared" is only ever a fact about
    * where a thing sits — any mounted scope other than the member's own.
    */
@@ -198,7 +198,7 @@ export interface InlineAppProps {
 /** The descriptor an inline app default-exports from `app-inline.tsx`. */
 export interface InlineAppModule {
   appId: string;
-  /** Pure action→replica-row projection consumed by every seat (issue #738). */
+  /** Pure action→replica-row projection consumed by every seat (#738). */
   pendingProjection: PendingProjectionDeclaration;
   /** Vault entities this app's queries read — the change-subscription filter. */
   changeTables: string[];
@@ -207,7 +207,7 @@ export interface InlineAppModule {
   /** Ask-panel config, if the app mounts one. */
   kitAsk?: InlineKitAsk;
   /**
-   * Opt in to N-scope mounting (issue #599). When set, the shell mounts this
+   * Opt in to N-scope mounting (#599). When set, the shell mounts this
    * app over every scope the member can see and runs `queries` once per scope;
    * apps without the flag keep the single-scope contract unchanged.
    */

@@ -68,7 +68,7 @@ export function renameVault(db: VaultDb, displayName: string): void {
 }
 
 /**
- * The vault's owner-facing presentation (issue #280 — profiles are vaults).
+ * The vault's owner-facing presentation (#280 — profiles are vaults).
  * Lives in `core_vault.settings_json`: the avatar color, icon, and blurb the
  * desktop switcher shows belong to the VAULT, not to any client's
  * localStorage — they travel with an export and survive device changes.
@@ -161,7 +161,7 @@ export function updateVaultPresentation(
 
 /**
  * Merge a byte-custody patch into `core_vault.settings_json` (owner act,
- * issue #296): the `blob_store` bag (fs | s3 endpoint/bucket/region/prefix/
+ * #296): the `blob_store` bag (fs | s3 endpoint/bucket/region/prefix/
  * encrypt — credentials NEVER live here, they are harness-ambient) and the
  * `media.location` GPS policy (keep | strip). The custody facade re-reads
  * settings on every use, so a change takes effect without a reopen.
@@ -196,8 +196,8 @@ export function updateBlobStoreSettings(
 }
 
 /**
- * Enrichment tier per domain (issue #299 §2, renamed off|local|model →
- * off|device|gateway by issue #712 C5 — one axis: `off` (nothing runs),
+ * Enrichment tier per domain (#299 §2, renamed off|local|model →
+ * off|device|gateway by #712 C5 — one axis: `off` (nothing runs),
  * `device` (the member's own phone/laptop, plus deterministic gateway
  * work), `gateway` (the member's own gateway may additionally do whatever
  * it is already wired to, including a model turn — see
@@ -281,7 +281,7 @@ export function updateEnrichSettings(
     .prepare("UPDATE core_vault SET settings_json = ?")
     .run(JSON.stringify(settings));
   const resolved = readEnrichSettings(db);
-  // Mirror into `enrich_policy` (issue #352 phase 3/4): the JSON settings bag
+  // Mirror into `enrich_policy` (#352 phase 3/4): the JSON settings bag
   // stays owner-only, but apps read this one column of it through the normal
   // consent-checked table read — see schema/enrich.ts's header.
   const now = nowIso();
@@ -659,7 +659,7 @@ export interface InstalledAppRow {
 
 /**
  * Active apps enrolled with `origin = 'installed'` — the bundled blueprints
- * installed in this vault (issue #434). Only the new install-in-place path
+ * installed in this vault (#434). Only the new install-in-place path
  * writes that origin, so this is exactly the git-free install registry.
  * Ordered by install time for a stable listing.
  */
@@ -675,7 +675,7 @@ export function listInstalledApps(db: VaultDb): InstalledAppRow[] {
 
 /**
  * Set (or clear, with null/blank) an installed app's per-vault rename
- * (issue #434). Keyed by the active enrollment's name; a no-op when the app
+ * (#434). Keyed by the active enrollment's name; a no-op when the app
  * isn't enrolled. Trims and coalesces empty strings to NULL so "clear" and
  * "rename to whitespace" both fall back to the manifest name.
  */

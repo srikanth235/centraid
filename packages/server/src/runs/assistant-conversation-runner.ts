@@ -82,9 +82,9 @@ export function assistantCwd(vaults: VaultRegistry): string {
 
 /**
  * The vault-register tool runners, shared by every register that carries
- * them (assistant, ask, and — issue #286 phase 2 — the builder): reads are
+ * them (assistant, ask, and — #286 phase 2 — the builder): reads are
  * the owner's `vault_sql`; writes ride the enrolled `_assistant` agent,
- * so confirm-gated (Tier 3/4, issue #306) commands park for the owner
+ * so confirm-gated (Tier 3/4, #306) commands park for the owner
  * instead of executing.
  */
 export function makeVaultToolRunners(vaults: VaultRegistry): {
@@ -105,7 +105,7 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
         input: call.input,
         purpose: "dpv:ServiceProvision",
       }),
-    // Document-text reads (issue #299): "walk me through this contract"
+    // Document-text reads (#299): "walk me through this contract"
     // resolves the text variant, receipted; the receipt id stays here.
     vaultContent: () => async (call) => {
       const result = (await vaults.current().contentAsOwner(call)) as Record<

@@ -1,4 +1,4 @@
-// MAPKIT, through `expo-maps` — the iOS half of the real map (issue #816).
+// MAPKIT, through `expo-maps` — the iOS half of the real map (#816).
 //
 // iOS only, and that is a choice rather than a platform limit: `expo-maps`
 // draws Google Maps on Android, which means an API key and Play Services. The

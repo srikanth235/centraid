@@ -1,5 +1,5 @@
 /*
- * The grant plane's store (issue #825). `share_grant` holds MEANING — this
+ * The grant plane's store (#825). `share_grant` holds MEANING — this
  * audience may see/edit this subject — and `share_fulfillment` holds
  * MECHANISM, one row per audience vault. Nothing here delivers anything: a
  * fulfillment row is a record of where delivery stands, written by whatever
@@ -72,7 +72,7 @@ export interface ShareFulfillmentRecord {
   /**
    * When the subject first reached this peer; `null` while it never has.
    *
-   * Not derivable from `state`, and that is the point (#846 P1). `state` is a
+   * Not derivable from `state`, and that is the point (#846). `state` is a
    * live freshness reading — a pass that cannot reach the peer drops a
    * `delivered` row back to `syncing` — while this is the durable fact
    * revocation needs: a grant that was delivered and later degraded must still
@@ -409,7 +409,7 @@ export function ensureFulfillment(
 ): ShareFulfillmentRecord {
   // A row opened directly AT `delivered` carries the memory from birth — the
   // rule is that `delivered_at` is maintained wherever the state is written,
-  // never only on the transition path (#846 P1).
+  // never only on the transition path (#846).
   db.prepare(
     `INSERT INTO share_fulfillment
        (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
@@ -436,7 +436,7 @@ export function ensureFulfillment(
  * is supplied and cleared when it is explicitly null.
  *
  * `delivered_at` is maintained here rather than by callers, because it is the
- * one fact about a row nobody may forget to write (#846 P1):
+ * one fact about a row nobody may forget to write (#846):
  *
  *  - moving TO `delivered` stamps it if it is not already stamped. Later
  *    re-deliveries keep the FIRST instant — the question it answers is "has

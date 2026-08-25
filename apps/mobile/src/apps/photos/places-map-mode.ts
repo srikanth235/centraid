@@ -1,4 +1,4 @@
-// WHICH MAP THE MEMBER IS LOOKING AT, as a member preference (issue #816).
+// WHICH MAP THE MEMBER IS LOOKING AT, as a member preference (#816).
 //
 // Places draws two maps off one projection. **Real maps** is the default: the
 // phone's own basemap — MapKit on iOS, MapLibre over OpenFreeMap tiles on

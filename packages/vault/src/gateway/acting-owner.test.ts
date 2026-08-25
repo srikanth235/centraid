@@ -1,4 +1,4 @@
-// L4 attribution + the on-behalf-of cap (issue #599 decisions 7–8; #726).
+// L4 attribution + the on-behalf-of cap (#599 decisions 7–8; #726).
 //
 // Two claims, both about the journal being able to answer "who did this?":
 //   * every write records the acting OWNER, by id, so a rename cannot fork

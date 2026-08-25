@@ -1,36 +1,29 @@
 /*
  * Gateway runtime monitor (main process).
  *
- * The desktop had no live "is the gateway up" signal at all — the renderer
- * only ever learned about an unreachable gateway when a data request failed.
- * This module owns the heartbeat: every {@link GATEWAY_RUNTIME_POLL_MS} it
- * probes the active gateway's `/centraid/_gateway/health` — component-level
- * status — folds the result through the pure core
- * (gateway-monitor-core.ts), broadcasts the snapshot to every window, and
- * fires OS notifications: the existing whole-gateway down/recovered pair
- * (settings-backed threshold, default 2 minutes), a new per-component
- * "this subsystem has been erroring" alert (de-duped, issue #351), and a
- * "gateway failed repeatedly" alert when the embedded local gateway's
- * supervised auto-restart (local-gateway.ts) gives up.
+ * Owns the heartbeat: every {@link GATEWAY_RUNTIME_POLL_MS} it probes the
+ * active gateway's `/centraid/_gateway/health` — component-level status —
+ * folds the result through the pure core (gateway-monitor-core.ts),
+ * broadcasts the snapshot to every window, and fires OS notifications: the
+ * whole-gateway down/recovered pair (settings-backed threshold, default 2
+ * minutes), a de-duped per-component "this subsystem has been erroring"
+ * alert, a de-duped alert the first time a REMOTE gateway's protocol floor
+ * skews, and a "gateway failed repeatedly" alert when the embedded local
+ * gateway's supervised auto-restart (local-gateway.ts) gives up.
  *
  * It lives in main, not the renderer, so the watch survives navigation and
  * alerts land even when the window is backgrounded. Live transition tracking
  * is per-launch; the alert history is durable (gateway-outage-log.ts) and is
  * the only place health outlives the process.
  *
- * Health deliberately does NOT reach the vault Notifications (issue #665). It was
- * dual-written there for one release (#647) and that was wrong: Notifications is
- * for things only the owner can RESOLVE, and no Notifications action un-degrades a
- * gateway. Health's homes are the Gateway page (Overview status card,
+ * Health must NOT reach the vault Notifications (#665): Notifications is for
+ * things only the owner can RESOLVE, and no Notifications action un-degrades
+ * a gateway. Health's homes are the Gateway page (Overview status card,
  * Components tab, durable Alerts history) and the threshold-gated OS
  * notification below.
  *
- * Wave 2 of #351 adds a fourth alert: the version handshake (previously
- * dead code — see version-handshake.ts) is now judged every tick for a
- * REMOTE gateway (a local gateway is embedded in this build and can't
- * skew), and a de-duped notification fires the first time a mismatch is
- * observed. This is v0's "surface loudly" posture, not a hard refusal —
- * see gateway-monitor-core.ts's file header for why.
+ * Skew is surfaced loudly, never hard-refused here — see
+ * gateway-monitor-core.ts's file header.
  */
 
 import { BrowserWindow, Notification } from "electron";
@@ -75,8 +68,8 @@ export const GATEWAY_RUNTIME_POLL_MS = 5000;
 const RUNTIME_EVENT_CHANNEL = "centraid:gateway-runtime:event";
 
 /**
- * One durable alert-history entry as the renderer sees it (issue #351 wave
- * 4) — `previousSession` marks an entry loaded from disk at this launch's
+ * One durable alert-history entry as the renderer sees it —
+ * `previousSession` marks an entry loaded from disk at this launch's
  * boot, vs. one recorded during the current run, so the Alerts tab can
  * label history from before the last restart.
  */
@@ -101,7 +94,7 @@ export interface GatewayRuntimeSnapshot extends Omit<
   alert: GatewayAlertConfig;
   pollIntervalMs: number;
   /**
-   * Durable alert-history log (issue #351 wave 4) — persisted under
+   * Durable alert-history log — persisted under
    * Electron userData, so it survives a restart unlike `outages` above
    * (in-memory, per-launch). Newest-last, capped at
    * {@link import('./gateway-outage-log-core.js').OUTAGE_LOG_CAP}.
@@ -116,7 +109,7 @@ let inFlight: Promise<void> | undefined;
 /** De-dupes the crash-loop OS notification — one per loop-broken episode. */
 const crashLoopNotified = new Set<string>();
 /**
- * Persisted alert-history log (issue #351 wave 4) — lazily loaded once per
+ * Persisted alert-history log — lazily loaded once per
  * launch (first tick), then kept in memory and rewritten to disk as new
  * events land. `historyBootAt` is captured the same moment: any persisted
  * entry older than it predates this launch ("previous session" in the UI).
@@ -140,7 +133,7 @@ function notify(action: GatewayAlertAction, label: string): void {
   n.show();
 }
 
-/** Component-level down alert (issue #351) — de-duped by `applyComponentAlerts`. */
+/** Component-level down alert — de-duped by `applyComponentAlerts`. */
 function notifyComponent(
   action: GatewayComponentAlertAction,
   gatewayLabel: string
@@ -157,7 +150,7 @@ function notifyComponent(
 }
 
 /**
- * Version-skew alert (wave 2 of #351) — fires once when a REMOTE gateway's
+ * Version-skew alert — fires once when a REMOTE gateway's
  * reported version/protocolVersion first diverges from this build's pinned
  * expectations, de-duped by `applyVersionSkewAlert`. v0 policy is
  * "surface loudly", not refuse — see gateway-monitor-core.ts's file header.
@@ -178,7 +171,7 @@ function notifyVersionSkew(
   n.show();
 }
 
-/** Fired once when the embedded local gateway's supervised restart gives up (issue #351). */
+/** Fired once when the embedded local gateway's supervised restart gives up. */
 function notifyCrashLoop(
   gatewayLabel: string,
   lastError: string | undefined
@@ -208,14 +201,12 @@ async function tick(): Promise<void> {
   // `loadSettings()` resolves (and, for a local gateway, lazily boots) the
   // active gateway — it can reject on its own, most notably when the
   // embedded local gateway is mid-backoff or crash-looped (local-gateway.ts's
-  // supervision guard fails fast rather than hanging). Before supervision
-  // existed this rejection just aborted the tick silently every 5s with
-  // nothing visible; now, when we've tracked this gateway before, keep
-  // folding a synthetic down probe through the SAME state so the down
-  // alert / crash-loop notification below still fire. A cold-boot failure
-  // (no prior state at all) has nothing to key tracking off yet — it's
-  // covered separately by main.ts's launch-time error dialog — so this
-  // tick just logs and waits for the next one.
+  // supervision guard fails fast rather than hanging). When this gateway has
+  // been tracked before, keep folding a synthetic down probe through the SAME
+  // state so the down alert / crash-loop notification below still fire. A
+  // cold-boot failure (no prior state at all) has nothing to key tracking off
+  // yet — it's covered separately by main.ts's launch-time error dialog — so
+  // this tick just logs and waits for the next one.
   let settings: Awaited<ReturnType<typeof loadSettings>> | undefined;
   let settingsError: string | undefined;
   try {
@@ -253,8 +244,8 @@ async function tick(): Promise<void> {
   // returned early above when there was no prior state to fall back to.
   const trackedState = state as GatewayRuntimeState;
 
-  // For the embedded local gateway, a crash-looped supervisor (issue #351:
-  // ≥3 failed starts in ~2 minutes) means there's nothing listening and
+  // For the embedded local gateway, a crash-looped supervisor (≥3 failed
+  // starts in ~2 minutes) means there's nothing listening and
   // never will be until a manual restart — skip the network round-trip and
   // report the real startup error as the down reason instead of a generic
   // connection failure. Also covers a `loadSettings()` rejection itself
@@ -297,7 +288,7 @@ async function tick(): Promise<void> {
   if (!probe.ok && activeGatewayKind === "local") {
     await reviveLocalGatewayIfDead(trackedState.gatewayId);
   }
-  // Piggyback the power-context push (#528 Phase D) on the heartbeat so the
+  // Piggyback the power-context push (#528) on the heartbeat so the
   // gateway's live host power posture never approaches its 120s staleness
   // window while the desktop runs. Best-effort and independent of the probe
   // outcome; a transition event nudges an out-of-band tick for immediacy.
@@ -306,7 +297,7 @@ async function tick(): Promise<void> {
   }
 
   // Captured before `applyProbe` folds this tick's probe in — the durable
-  // outage-log derivation below (issue #351 wave 4) needs the BEFORE value
+  // outage-log derivation below needs the BEFORE value
   // to detect a real transition, same as `applyProbe`'s own `transitioned`
   // check does internally for the in-memory `outages` log.
   const prevStatus = trackedState.status;
@@ -338,7 +329,7 @@ async function tick(): Promise<void> {
   state = evaluated.state;
   if (evaluated.action) notify(evaluated.action, state.gatewayLabel);
 
-  // Per-component down alert (issue #351) — same enable switch as the
+  // Per-component down alert — same enable switch as the
   // whole-gateway alert, a longer default threshold (see
   // DEFAULT_COMPONENT_ALERT_SECONDS), de-duped per component.
   const componentAlert: GatewayAlertConfig = {
@@ -354,7 +345,7 @@ async function tick(): Promise<void> {
   for (const action of componentEvaluated.actions)
     notifyComponent(action, state.gatewayLabel);
 
-  // Version-skew alert (wave 2 of #351) — same enable switch, no threshold
+  // Version-skew alert — same enable switch, no threshold
   // (see applyVersionSkewAlert's doc comment for why). `versionSkew` is only
   // ever set for a remote gateway, so this is a no-op for local.
   const skewEvaluated = applyVersionSkewAlert(state, alert, Date.now());
@@ -374,7 +365,7 @@ async function tick(): Promise<void> {
     crashLoopNotified.delete(state.gatewayId);
   }
 
-  // Persist this tick's alert-worthy events (issue #351 wave 4) — durable,
+  // Persist this tick's alert-worthy events — durable,
   // independent of the OS-alert de-dupe above: down/degraded/recovered log
   // on every REAL transition (mirrors the Overview tab's in-session outage
   // log), component-error/version-skew log alongside their OS notification.
@@ -394,7 +385,7 @@ async function tick(): Promise<void> {
       : {}),
     now: Date.now(),
   });
-  // The durable log is the whole story for health (issue #665) — no Notifications
+  // The durable log is the whole story for health (#665) — no Notifications
   // write follows it. See this file's header for why health is not a decision.
   outageHistory = persistOutageEvents(outageHistory, newOutageEvents);
 
@@ -423,11 +414,10 @@ async function tick(): Promise<void> {
     alertHistory,
   };
   broadcast(lastSnapshot);
-  // Keep the tray honest (issue #603 F4). main.ts sets the label once at boot,
-  // when a true first run has DELIBERATELY not started the local gateway yet —
-  // without this it stayed "Gateway: stopped" for the rest of the session. The
-  // heartbeat already knows the truth every tick, so reuse it rather than
-  // adding a second poller.
+  // Keep the tray honest (#603): main.ts sets the label once at boot, when a
+  // true first run has DELIBERATELY not started the local gateway yet, so
+  // without this it reads "Gateway: stopped" for the rest of the session. The
+  // heartbeat already knows the truth every tick — don't add a second poller.
   setTrayGatewayRunning(state.status === "up");
 }
 

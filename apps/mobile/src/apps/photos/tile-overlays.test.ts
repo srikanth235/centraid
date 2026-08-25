@@ -144,9 +144,9 @@ describe("the state slot", () => {
   });
 
   test("an unreachable gateway adds nothing to any tile", () => {
-    // THE OVER-ANNOUNCEMENT THIS PINS. `on the gateway` used to render on
-    // every `remote-only` tile the moment the gateway stopped answering: an
-    // ambient fact printed through a per-tile slot, forty times a screenful.
+    // THE OVER-ANNOUNCEMENT THIS PINS. `on the gateway` rendered on every
+    // `remote-only` tile the moment the gateway stops answering is an ambient
+    // fact printed through a per-tile slot, forty times a screenful.
     // The replica bar states it once, at the top; a tile speaks only for
     // itself.
     for (const backupState of [

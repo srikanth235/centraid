@@ -9,9 +9,8 @@ import type {
 /**
  * Shared address domain for the WAL addressing suites.
  *
- * Split out of `wal-address-properties.test.ts` (#656 Layer 1D) so the
- * addressing laws and the prefix/minting laws can live in separate files
- * without either one re-deriving the domain.
+ * Shared by the addressing-law and prefix/minting-law suites so neither
+ * re-derives the domain (#656).
  */
 
 export const hex32: fc.Arbitrary<string> = fc
@@ -48,7 +47,7 @@ export const closerAddr: fc.Arbitrary<WalGroupCloser> = fc.record({
   endOffset: fc.integer({ min: 1, max: 1_000_000 }),
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Mutation-kill campaign (#656 Layer 1C).
 //
 // The laws below are the ones the addressing surface actually owes its
@@ -65,7 +64,7 @@ export const closerAddr: fc.Arbitrary<WalGroupCloser> = fc.record({
 //                          makes restore read a truncated stream as "idle".
 //   L3 (diagnosability)    A refusal names the field it refused, because the
 //                          operator seeing it is holding a corrupt listing.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** Values outside the non-negative-integer domain every offset/group/tick lives in. */
 export const notNonNegativeInt: fc.Arbitrary<number> = fc.oneof(

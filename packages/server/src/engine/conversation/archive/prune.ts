@@ -1,4 +1,4 @@
-// Phase-B custody-gated prune (issue #438 decision 3). For each archive row not
+// Phase-B custody-gated prune (#438 decision 3). For each archive row not
 // yet pruned, the raw turns in its seq-range delete ONLY when the segment's
 // custody is proven — the delete lives behind the `custodyProven` latch in this
 // one code path, so prune-before-custody is structurally impossible. Items and

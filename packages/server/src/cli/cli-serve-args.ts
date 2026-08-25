@@ -1,5 +1,5 @@
 /*
- * Pure serve-flag parse + loopback-token compare (issue #545 B7).
+ * Pure serve-flag parse + loopback-token compare (#545).
  * Kept free of process.exit / main() so unit tests can import without
  * booting the daemon entrypoint.
  */
@@ -11,7 +11,7 @@ export interface ParsedServe {
   dataDir?: string;
   host?: string;
   port?: number;
-  /** Extra Hostnames from repeated `--allowed-host` (issue #504 packaging). */
+  /** Extra Hostnames from repeated `--allowed-host` (#504 packaging). */
   allowedHosts?: string[];
 }
 

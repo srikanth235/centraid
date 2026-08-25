@@ -10,7 +10,7 @@ export type AppId = string;
  * Every registered app is "uploaded" mode: a wrapper folder under
  * `<appsDir>/<id>/` holding runtime state (logs.jsonl, settings.json,
  * attachment blobs). Code lives in the git store and is resolved through
- * the code-dir override; app data lives in the vault (issue #286).
+ * the code-dir override; app data lives in the vault (#286).
  */
 export interface RegistryEntry {
   id: AppId;

@@ -1,4 +1,4 @@
-// Blob replication store-class routing (issue #425 Wave 2 Part A). The
+// Blob replication store-class routing (#425). The
 // replication layer is SHA-only — the remote key is `{prefix}blobs/sha256/{sha}`
 // and the prefix comes from whichever `S3BlobStore` the write path picks. This
 // module is the single place that decides, purely from the vault's own model,
@@ -77,7 +77,7 @@ export function desiredStoreForSha(
 
 /**
  * Resolve the actual `BlobStore` + recorded store class for a write, applying
- * graceful degradation (issue #425 Wave 2):
+ * graceful degradation (#425):
  *   - `desired === 'derived'` routes to the derived store ONLY when the tier has
  *     one AND the payload fits a single direct PUT; otherwise it falls back to
  *     `cas` (a tier without a derived grant, or an implausibly large "derivative").
@@ -99,7 +99,7 @@ export function resolveWriteStore(
   return { store: storeForClass(remote, storeClass), storeClass };
 }
 
-// --- Direct-to-cold heuristic for large media originals (issue #425 Wave 3) ---
+// --- Direct-to-cold heuristic for large media originals (#425) ---
 
 /** The cold storage class an eligible original's object-creating write carries. */
 export const COLD_ORIGINAL_STORAGE_CLASS = "STANDARD_IA";
@@ -150,7 +150,7 @@ export interface StorageClassForWriteInput {
 
 /**
  * The S3 storage class an eligible original's object-creating write should carry
- * (issue #425 Wave 3 Part B), or undefined to leave the write class-less
+ * (#425), or undefined to leave the write class-less
  * (Standard / the instance-level `BackupPolicy.storageClass`). Pure and
  * unit-testable. Returns `STANDARD_IA` ONLY when ALL hold:
  *   - `desiredStore === 'cas'` (never a derived write — those are read-hot),

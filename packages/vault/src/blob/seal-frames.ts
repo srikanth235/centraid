@@ -1,14 +1,14 @@
-// Framed remote-blob seal format (issue #405 §1 "chunked/rangeable seal").
+// Framed remote-blob seal format (#405 §1 "chunked/rangeable seal").
 //
-// The old remote seal (issue #296) was a single whole-blob AES-GCM envelope:
-// any Range on a `remote-only` blob had to fetch AND unseal the ENTIRE object
-// in RAM before a single byte could be served (custody.ts:176-186). A phone
-// scrolling onto one cold 40 MiB video paid 40 MiB of download + unseal to
-// show a poster frame. This module replaces that envelope with a FRAMED
-// format: the plaintext is cut into fixed-size frames, each frame is
-// independently sealed, and a footer directory records where every sealed
-// frame landed — so a ranged read fetches (trailer + directory + only the
-// frames covering the requested bytes) and never the whole object.
+// The seal is FRAMED, not a single whole-blob AES-GCM envelope (#296):
+// a whole-blob envelope forces any Range on a `remote-only` blob to fetch AND
+// unseal the ENTIRE object in RAM before a single byte can be served, so a
+// phone scrolling onto one cold 40 MiB video would pay 40 MiB of download +
+// unseal to show a poster frame. Here the plaintext is cut into fixed-size
+// frames, each frame is independently sealed, and a footer directory records
+// where every sealed frame landed — so a ranged read fetches (trailer +
+// directory + only the frames covering the requested bytes) and never the
+// whole object.
 //
 // Wire layout (all integers big-endian):
 //
@@ -30,7 +30,7 @@
 // directory + trailer at the end, so `sealBlobStream` never buffers more than
 // a single frame's plaintext.
 //
-// Integrity binding (issue #405 §1 — frames can't be reordered, truncated, or
+// Integrity binding (#405 §1 — frames can't be reordered, truncated, or
 // transplanted): every frame's AAD binds `blob:<sha>`, the format version,
 // the frame index, AND the total frame count — so frame 3-of-5 of blob A can
 // never be replayed as frame 3-of-5 of blob B, as frame 2, or into a 4-frame
@@ -73,7 +73,7 @@ export const HEADER_BYTES = CBSF_HEADER_BYTES;
 export const TRAILER_BYTES = CBSF_TRAILER_BYTES;
 
 /**
- * Default plaintext frame size: 4 MiB. The trade-off (issue #405 §1) is frame
+ * Default plaintext frame size: 4 MiB. The trade-off (#405) is frame
  * count × per-frame GCM overhead (28 bytes: 12 nonce + 16 tag, + 1 algo id +
  * 4 directory bytes ≈ 33 bytes/frame) against range granularity — a ranged
  * read must fetch whole frames, so a byte at offset 0 of a 4 GiB blob costs
@@ -132,7 +132,7 @@ function nonceFor(key: Buffer, aad: Buffer, plaintext: Buffer): Buffer {
 }
 
 /**
- * Entropy-gated compression (issue #405 §1): try the runtime's best codec and
+ * Entropy-gated compression (#405): try the runtime's best codec and
  * keep the result ONLY if it actually shrank the frame — already-compressed
  * media (JPEG, MP4, zip) is incompressible, so paying the CPU AND storing a
  * larger payload would be pure loss. The chosen algorithm id rides as the

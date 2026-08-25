@@ -1,11 +1,10 @@
 // Centraid Light + Dark — the shipping defaults, in the Binding Layer.
 //
-// Both ramps are LITERAL. The dark ramp used to derive every surface from a
-// single `--bg-l` anchor through `hsl(0 0% calc(...))`, which was the right
-// mechanism for a pure-greyscale ramp; the Binding Layer's dark surfaces are
-// warm-tinted paper (`#171716`, not `hsl(0 0% 9%)`), so a one-knob greyscale
-// calc can no longer express them and has been retired rather than faked with
-// a saturation parameter. A surface is now a value you can read.
+// Both ramps are LITERAL. There is no single `--bg-l` anchor derived through
+// `hsl(0 0% calc(...))`: the dark surfaces are warm-tinted paper (`#171716`,
+// not `hsl(0 0% 9%)`), which a one-knob greyscale calc cannot express and
+// which is not faked with a saturation parameter. A surface is a value you
+// can read.
 //
 // The surface order is PAPER, not elevation: in light the raised surface is
 // DARKER than the page, in dark it is LIGHTER. A tile is a sheet laid on the
@@ -79,9 +78,7 @@ export const lightTheme: Theme = {
   skel: "#E4E3E0",
   // Measured against the page: text 18.1:1, soft 6.8:1, faint 5.2:1,
   // ghost 3.5:1 — and against `WALL` (`--bg-app`), the deepest paper and so
-  // the hardest surface in the system: 16.0 / 6.0 / 4.6 / 3.1. The retired
-  // `mat` tone this used to name was one of five per-app surface tones; there
-  // is one page now, and `WALL` is what replaced it as the worst case.
+  // the hardest surface in the system: 16.0 / 6.0 / 4.6 / 3.1.
   // `contrast.test.ts` re-measures both off the emitted CSS.
   text: INK_RAMP.light.text,
   textSoft: INK_RAMP.light.soft,

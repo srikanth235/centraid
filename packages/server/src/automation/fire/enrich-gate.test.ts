@@ -419,7 +419,7 @@ describe("enrichment tier gate", () => {
   // The other side of that law, stated so nobody "fixes" it later: an
   // `on-device` row IS written — the phone's capture-time OCR latch writes one
   // (apps/mobile/src/screens/scan-consent.ts) — and the gate still does not
-  // read it. That latch is per-device by law (#712 C3); enforcing one phone's
+  // read it. That latch is per-device by law (#712); enforcing one phone's
   // "not now" here would bind it to every device and to the gateway. The row
   // is the record Privacy reads back, enforced where it was given.
   it("does not let a device-scoped on-device decline refuse the gateway's own work", async () => {
@@ -631,7 +631,7 @@ describe(decideEnrichmentGate, () => {
     );
   });
 
-  // FAIL-CLOSED OFF THE REGISTRY (issue #807). `manifest.ts` accepts any
+  // FAIL-CLOSED OFF THE REGISTRY (#807). `manifest.ts` accepts any
   // capability string, so a third-party or hand-written enricher can declare
   // one this build carries no contract for. There is then no profile to read
   // an egress class from, and work whose egress class cannot be named cannot

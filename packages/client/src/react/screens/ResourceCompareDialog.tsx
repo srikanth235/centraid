@@ -14,7 +14,7 @@ import a11y from "../styles/a11y.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./ResourceDialogs.module.css";
 
-// Compare dialog (issue #528 follow-up): every resource mode side by side so the
+// Compare dialog (#528 follow-up): every resource mode side by side so the
 // owner sees the consequence BEFORE committing — the gap the inline card left,
 // which only ever showed the already-active mode's numbers. Read from the
 // static preset mirror (resource-presets.ts); selecting + Apply routes back

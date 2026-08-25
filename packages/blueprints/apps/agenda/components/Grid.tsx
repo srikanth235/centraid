@@ -32,7 +32,8 @@ import styles from "./Grid.module.css";
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 const MINUTES_IN_DAY = 24 * 60;
 
-/** What every grid needs from the orchestrator, plus the two wave-2 seams. */
+/** What every grid needs from the orchestrator, plus the two day-context
+ *  seams. */
 export interface GridCommonProps {
   buckets: Map<string, DaySegment[]>;
   hueFor: (calendarId: string | null | undefined) => string | null;

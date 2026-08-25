@@ -564,7 +564,7 @@ describe("build-gateway scenarios", () => {
     }
   });
 
-  // Exit evidence #4 (#726 P1): founding auto-creates only Personal owned by
+  // Exit evidence #4 (#726): founding auto-creates only Personal owned by
   // the founding owner (covered above), AND a fresh boot after the
   // household-migration sweep mints no extra vaults.
   test("household migration mints a vault for every ownerless owner, once (#726 P1)", async () => {

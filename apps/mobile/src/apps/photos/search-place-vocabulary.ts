@@ -1,4 +1,4 @@
-// WHAT A PLACE ANSWERS TO WHEN A MEMBER SEARCHES FOR IT (issue #816).
+// WHAT A PLACE ANSWERS TO WHEN A MEMBER SEARCHES FOR IT (#816).
 //
 // `search-hits.ts` builds the rows above the grid; this module answers the one
 // question those rows ask about a place that is genuinely hard: which WORDS

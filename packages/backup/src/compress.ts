@@ -1,6 +1,6 @@
 /*
  * Entropy-gated payload framing (FORMAT.md § Chunk payload framing —
- * centraid-snapshot/2, issue #405 §1).
+ * centraid-snapshot/2, #405 §1).
  *
  * Compression sits INSIDE encryption: the plaintext a chunk object seals is no
  * longer the raw part bytes but a one-byte-tagged frame `[algo-id][body]`. The
@@ -96,7 +96,7 @@ function frameCompressed(
 /**
  * Frame raw part bytes into the sealed-payload plaintext `[algo-id][body]`.
  *
- * Keep-if-smaller gate (#405 §1): both candidate frames carry the same 1-byte
+ * Keep-if-smaller gate (#405): both candidate frames carry the same 1-byte
  * header, so the comparison reduces to `compressedBody.length < raw.length` —
  * strictly smaller wins, ties and inflation store raw. That bounds the worst
  * case (incompressible input) at exactly one extra byte, never inflation.
@@ -131,7 +131,7 @@ export function frameChunkPayloadAsync(plain: Uint8Array): Promise<Uint8Array> {
  * Reverse `frameChunkPayload`: recover the raw plaintext from a decrypted
  * sealed payload. Handles every id byte a conformant writer could have emitted,
  * regardless of what the LOCAL runtime can compress — a backup is routinely
- * read on a machine other than the one that wrote it (#405 §1).
+ * read on a machine other than the one that wrote it (#405).
  */
 export function unframeChunkPayload(framed: Uint8Array): Uint8Array {
   if (framed.length < 1)

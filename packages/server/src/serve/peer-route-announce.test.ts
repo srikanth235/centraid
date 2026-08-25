@@ -1,5 +1,5 @@
 /*
- * The production route-assertion wiring end to end (issue #750 invariant 3),
+ * The production route-assertion wiring end to end (#750 invariant 3),
  * over the same in-process transport the ceremony tests use: a gateway whose
  * EndpointId rotated announces once, and every peer re-discovers it WITHOUT a
  * new link ceremony. Also proves the retry contract (an unheard peer keeps

@@ -1,4 +1,4 @@
-// Token-purity ratchet allowlist (issue #686, item A2).
+// Token-purity ratchet allowlist (#686).
 //
 // packages/design owns every color, type ramp, radius, and font in the
 // product. Blueprint app CSS is supposed to *consume* those tokens through
@@ -65,32 +65,15 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
     fontFamily: 0,
     customProps: ["--app-hue", "--app-identity"],
   },
-  // `photos/components/Lightbox.module.css` used to sit here with one
-  // `hsl(0 0% 4%)` theater-stage backdrop, waiting on a `--stage` role in
-  // packages/design. That role landed (Photos v4 §2.2 / CHANGELOG §B), the
-  // stylesheet now says `var(--stage)`, and the seam is closed — so the entry
-  // is gone rather than shrunk to an empty budget.
 };
 
 /**
- * Fallback-less `var()` references that resolve to nothing (issue #686).
+ * Fallback-less `var()` references that resolve to nothing (#686).
  *
- * **The debt is cleared — this list is empty and must stay that way.** Each
- * entry was a live latent bug: the declaration is dropped at computed-value
- * time, so the rule silently did not apply. The twelve that predated #686 were
- * all resolved by reading what each site was actually doing:
- *
- *   * the former duplicate container-radius alias (3 refs) — all three sites
- *     are the repo's card idiom (`1px solid var(--line)` + `var(--bg-elev)` +
- *     14px padding), which every peer rounds with `--r-lg`. Normalized to the
- *     one public container-radius name.
- *   * `--acc` — an abbreviation of `--accent` in a focus ring. Bound to
- *     `var(--accent)`, matching every other `:focus-visible` in the apps.
- *   * `--t-label` — the uppercase sidebar section label. The blueprint type
- *     ramp has no `label` rung; every peer section label in every app is
- *     `--t-control`. Bound to that.
- *   * `--bg-l` — genuinely emitted by the blueprint DARK token block (10%) but
- *     absent from the light one, so it is not contract vocabulary. Given the
- *     documented default as an explicit fallback instead.
+ * **This list is empty and must stay that way.** Any entry is a live latent
+ * bug: the declaration is dropped at computed-value time, so the rule silently
+ * does not apply. Resolve a new one by reading what the site is actually doing
+ * — bind the name to the token its peers already use, or give the documented
+ * default as an explicit fallback — rather than listing it here.
  */
 export const UNRESOLVED_VAR_DEBT: readonly string[] = [];

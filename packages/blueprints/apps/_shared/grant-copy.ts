@@ -1,5 +1,5 @@
 /**
- * THE SENTENCES BOTH SEATS SAY ABOUT A GRANT (issue #825).
+ * THE SENTENCES BOTH SEATS SAY ABOUT A GRANT (#825).
  *
  * Same shape and same reason as `shared-copy.ts`: one home for the strings the
  * web `GrantSheet.tsx` and the native `kit/share/GrantSheet.tsx` both print, so
@@ -24,7 +24,6 @@ import type {
   GrantReach,
 } from "./grant-plane.ts";
 
-/** The sheet's own name for the verb. */
 export const GRANT_SHEET_TITLE = "Share";
 
 /** Verb-first labels for the capability picker (DESIGN.md: 1–2 words). */
@@ -158,7 +157,6 @@ export function capabilityUnchangedOutcome(
   return `Already shared with ${audienceLabel} for ${noun}; changing access is not offered yet — revoke and share again to change it.`;
 }
 
-/** The destructive confirm's heading. */
 export function revokeConfirmTitle(audienceLabel: string): string {
   return `Stop sharing with ${audienceLabel}?`;
 }
@@ -172,7 +170,6 @@ export function revokeConfirmBody(audienceLabel: string, noun: string): string {
   return `${audienceLabel} loses access to the ${noun}, and their vault is asked to remove its copy.`;
 }
 
-/** The destructive confirm's two controls. */
 export const REVOKE_CONFIRM_ACTION = "Revoke";
 export const REVOKE_CANCEL_ACTION = "Keep sharing";
 

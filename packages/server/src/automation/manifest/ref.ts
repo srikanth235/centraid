@@ -4,7 +4,7 @@
  * An automation's directory slug (`isValidId`) is unique
  * within its owning app folder; its handle, `<appId>/<id>`, is unique
  * across the whole gateway and is what scheduler labels, webhook
- * routing, and `onFailure` address it by (issue #98).
+ * routing, and `onFailure` address it by (#98).
  */
 
 import { isValidAppId } from "@centraid/server/engine";

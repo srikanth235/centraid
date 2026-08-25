@@ -1,8 +1,8 @@
 // Upload pipeline: perceptual hash + client thumb staging, then the typed
 // `upload` command per file. `runUpload` takes `refresh` and `setUploading`
-// from app.tsx (the only two things here that touch app-level state) — the
+// from app.tsx (the only two things here that touch app-level state); the
 // button/input DOM nodes it mutates for progress text are looked up locally
-// via `$`, exactly like the pre-split code did.
+// via `$`.
 import {
   isPendingOffsite,
   stageDerivative,
@@ -24,7 +24,7 @@ const CLIENT_TINY_EDGE = VIDEO_THUMB_EDGE;
 const CLIENT_MEDIUM_EDGE = VIDEO_POSTER_EDGE;
 
 // Client-side ceiling per file. Bytes stream to the blob staging route
-// (issue #296) — no base64 through command JSON — so a phone video fits;
+// (#296) — no base64 through command JSON — so a phone video fits;
 // the route itself caps at 512 MB.
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
@@ -40,7 +40,7 @@ interface MediaMeta {
   thumbhash?: string;
 }
 
-// 64-bit dHash (issue #299 Tier 0): 9×8 grayscale, each bit = "left pixel
+// 64-bit dHash (#299 Tier 0): 9×8 grayscale, each bit = "left pixel
 // brighter than its right neighbour". The canvas is the client's raster
 // codec, so the phash rides the same decode the thumb already paid for.
 export function dHashFromImage(
@@ -82,7 +82,7 @@ export function dHashFromImage(
 // preview-ladder rung beside the original. No-op (and no upload) when the
 // source is already within `edge` — the client never upscales, and the
 // gateway backstop won't either; a source already small enough IS its own
-// rung. JPEG q0.82 matches the gateway codec's ~0.8 output band (issue #405
+// rung. JPEG q0.82 matches the gateway codec's ~0.8 output band (#405
 // §2). One bad rung never fails the upload.
 async function stageRung(
   bitmap: ImageBitmap,
@@ -104,7 +104,7 @@ async function stageRung(
   await stageDerivative(parentSha, variant, blob, "image/jpeg");
 }
 
-// SCOPE NOTE (issue #599): the derivative door (`stageDerivative`) is not
+// SCOPE NOTE (#599): the derivative door (`stageDerivative`) is not
 // scope-addressed on either the served or the inline kit, so these rungs land
 // in the mount's primary scope even when the original was staged into an
 // audience. The consequence is a missing thumb/preview variant for an audience
@@ -112,7 +112,7 @@ async function stageRung(
 // it), never a wrong or leaked image — the rungs are keyed by the parent sha,
 // which the audience scope does not have.
 //
-// Both preview-ladder rungs (issue #405 §2), produced at upload time on this
+// Both preview-ladder rungs (#405), produced at upload time on this
 // device (the canvas is the one raster codec every client has) and staged as
 // the `thumb` (~256 px, the grid) and `preview` (~2048 px, the lightbox)
 // variants beside the original. Dimensions + perceptual hash ride for free
@@ -278,7 +278,7 @@ export async function runUpload(
     wasTrashed: (assetId: string) => boolean;
   }
 ): Promise<ImportResult> {
-  // WHERE the new photos land (issue #599): whatever the chip selection makes
+  // WHERE the new photos land (#599): whatever the chip selection makes
   // the write target — the member's own library under "All", or the audience
   // they are looking at. A read-only audience never gets here (wireUpload
   // disables the entry points and says why), but the check is repeated because
@@ -327,7 +327,7 @@ export async function runUpload(
     // Determinate, with exact counts, on the ONE status line — never a
     // spinner and never a control that has turned into a label (§14).
     notice(`Importing ${i + 1} of ${accepted.length}…`);
-    // Stage the bytes (issue #296), grow a client thumb beside them, then
+    // Stage the bytes (#296), grow a client thumb beside them, then
     // claim the sha through the typed command — which is where the receipt
     // mints and the library learns about the asset.
     let staged;
@@ -381,12 +381,11 @@ export async function runUpload(
     );
     // One bad file never sinks the batch — count it and keep going.
     if (outcome?.status === "executed") {
-      // A DEDUPE IS NOT AN ADDITION. It used to be counted as one AND as a
-      // dedupe, so a run of four files that were all already here said "Added
-      // 4 photographs (4 already in the library)" — two numbers describing the
-      // same four files, one of them untrue. The branches are exclusive now,
-      // and the pending-offsite question does not arise for bytes the library
-      // already had.
+      // A DEDUPE IS NOT AN ADDITION. Counting it as both makes a run of four
+      // files that are all already here say "Added 4 photographs (4 already in
+      // the library)" — two numbers describing the same four files, one of
+      // them untrue. The branches are exclusive, and the pending-offsite
+      // question does not arise for bytes the library already had.
       if (outcome.output?.deduped) {
         dedupedIds.push(String(outcome.output.asset_id ?? ""));
       } else if (isPendingOffsite(staged)) pendingOffsite += 1;

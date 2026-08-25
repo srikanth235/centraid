@@ -11,21 +11,21 @@ import {
 // Offline search over an unsettled row (#846 P4/P5). The replica answers Docs'
 // `search` query from its own FTS index plus a bounded matcher for rows that
 // are still in the outbox, and that matcher is a MIRROR of the gateway's FTS5
-// grammar — not an approximation of it. Two divergences had opened up, and both
-// were visible to a member rather than merely wrong in the abstract:
+// grammar — not an approximation of it. Two divergences are visible to a
+// member rather than merely wrong in the abstract:
 //
 //  - the token stream. The gateway splits on whitespace only, so `don't` is ONE
-//    token compiling to one quoted prefix phrase. The replica re-split on
-//    Unicode word runs, making it two independent terms — so offline search
-//    returned rows the same query would never return online, and applied the
-//    16-token bound to a different stream on top of that.
-//  - the highlight. Because the second half of that phrase was a separate term,
-//    the marks landed on `don` and stopped, cutting the hit in half on screen.
+//    token compiling to one quoted prefix phrase. Re-splitting on Unicode word
+//    runs makes it two independent terms — offline search then returns rows the
+//    same query would never return online, and applies the 16-token bound to a
+//    different stream on top of that.
+//  - the highlight. With the second half of that phrase as a separate term,
+//    the marks land on `don` and stop, cutting the hit in half on screen.
 //
 // This journey pins both through the production UI: the Docs Search shelf, its
 // own snippet marks, over two pending rows chosen so that the divergence is the
 // difference between them. The decoy holds `don` and a later word starting `t`,
-// adjacent to nothing — the pre-fix matcher returned it, FTS5 never would.
+// adjacent to nothing — a re-splitting matcher returns it, FTS5 never would.
 //
 // The renames are issued through `window.centraid.write` for the same reason
 // offline-reconnect.spec.ts does it: Docs' rename affordances live in the

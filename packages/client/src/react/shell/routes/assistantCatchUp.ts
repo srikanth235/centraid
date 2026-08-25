@@ -1,4 +1,4 @@
-// Reconnect catch-up from the ledger (issue #420, Wave 6). When an assistant
+// Reconnect catch-up from the ledger (#420). When an assistant
 // turn's SSE stream dies mid-turn (connection drop, no terminal `event: end`),
 // the backend still finishes the turn and folds its events into the ledger. The
 // client can't resume the raw stream, but it CAN poll the cheap turn-settle

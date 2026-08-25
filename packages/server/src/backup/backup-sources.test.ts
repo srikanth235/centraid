@@ -66,7 +66,7 @@ describe("backup-sources", () => {
   const PNG =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
-  /** Real bytes through the real staging pipeline (issue #296 door), then claimed by core.attach. */
+  /** Real bytes through the real staging pipeline (#296 door), then claimed by core.attach. */
   function stageAndAttachBigBlob(
     plane: VaultPlane,
     subjectId: string,
@@ -131,7 +131,7 @@ describe("backup-sources", () => {
     const bundleDir = await tempDir("backup-sources-bundle");
     const captured = capturingLogger();
 
-    // The capture tick lives in doRunBackup now — run it here as the service would.
+    // The capture tick lives in doRunBackup — run it here as the service would.
     plane.walTick();
     const entries = await assembleSourceEntries({
       plane,

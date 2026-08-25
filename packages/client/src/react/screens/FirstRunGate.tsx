@@ -8,13 +8,13 @@ import type {
   OnboardingPath,
 } from "./OnboardingScreen.js";
 
-// The chooser is step ZERO of onboarding, so it wears onboarding's sheet. It
-// used to borrow RecoverScreen's module, which is how the product's first
-// screen and its second screen ended up looking like two different apps.
+// The chooser is step ZERO of onboarding, so it wears onboarding's sheet.
+// Borrowing RecoverScreen's module instead is how the product's first screen
+// and its second screen end up looking like two different apps.
 import styles from "./OnboardingScreen.module.css";
 
 /**
- * First run branches on PLATFORM, not on gateway state (issue #603).
+ * First run branches on PLATFORM, not on gateway state (#603).
  *
  * There is no founding ceremony and no "uninitialized" gateway any more: a
  * fresh gateway founds one marked personal vault at construction, so the

@@ -1,14 +1,14 @@
 /*
- * In-process turn concurrency limiter (issue #420, Wave 6). Beyond the
+ * In-process turn concurrency limiter (#420). Beyond the
  * per-conversation lock (`withConversationLock`), which only serializes turns
- * on ONE conversation, nothing bounded how many model turns a vault could run
+ * on ONE conversation, nothing else bounds how many model turns a vault runs
  * at once — N tabs / devices firing distinct conversations would each spawn an
  * adapter subprocess. This is a modest per-vault gate: at most `max` running
  * turns; a turn past the ceiling gets a `429` + `Retry-After` and the client
- * auto-retries. Mirrors the `SseSubscriberCap` shape (issue #351).
+ * auto-retries. Mirrors the `SseSubscriberCap` shape (#351).
  *
  * "Running" spans the whole SSE drive (lock wait + model run), released when
- * the stream ends. The Wave-3 auto-title one-shot checks `atCapacity()` and
+ * the stream ends. The auto-title one-shot checks `atCapacity()` and
  * yields, so titling never steals a slot from an interactive turn.
  */
 

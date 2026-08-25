@@ -31,12 +31,12 @@ import styles from "./SettingsDiagnosticsScreen.module.css";
 // the gateway I/O lives in `routes/settingsDiagnosticsData.ts`. Mounted from
 // the Gateway page's Components drill-in (GatewayScreen.tsx), not Settings.
 //
-// BUILT FROM THE BLOCK KIT (binding layer v11). It used to be a page of its
-// own furniture: a status bar with an inline Refresh, four uppercase metric
-// tiles, one bespoke row per component carrying a coloured dot AND an
-// uppercase HEALTHY/DEGRADED badge, and two uppercase `<div>` sub-heads over
-// two more bespoke panels. Six components read as six shouted words with the
-// actual sentence — WHAT stopped, and WHEN — set smaller than the badge.
+// BUILT FROM THE BLOCK KIT (binding layer v11) — NOT a page of its own
+// furniture: a status bar with an inline Refresh, four uppercase metric tiles,
+// one bespoke row per component carrying a coloured dot AND an uppercase
+// HEALTHY/DEGRADED badge, two uppercase `<div>` sub-heads over two more bespoke
+// panels. That way six components read as six shouted words, with the actual
+// sentence — WHAT stopped, and WHEN — set smaller than the badge.
 //
 // In v11 the page is the same four statements said in the shared vocabulary:
 // the count and the Refresh verb are the SECTION HEAD, the gateway's coarse
@@ -68,7 +68,7 @@ export interface HealthEventDTO {
   message: string;
 }
 
-/** Coarse numeric signals from the gateway health snapshot (issue #521). */
+/** Coarse numeric signals from the gateway health snapshot (#521). */
 export interface HealthMetricsDTO {
   rssBytes: number;
   outboxPending: number;
@@ -82,18 +82,18 @@ export interface HealthMetricsDTO {
   hardwareProfileClass?: string;
   resourceMode?: string;
   /**
-   * Structured resource contract (issue #528 Phase A) — host facts, class,
+   * Structured resource contract (#528) — host facts, class,
    * mode, and the resolved knobs the profile derived. Present on modern
    * gateways only; the Resource card's L1/L2 disclosure gates on it.
    */
   resourceProfile?: ResourceProfileDTO;
   /**
-   * Background-work pause state (issue #528 Phase B). Present on modern
+   * Background-work pause state (#528). Present on modern
    * gateways only; absent hides the Resource card's pause control.
    */
   backgroundPause?: BackgroundPauseDTO;
   /**
-   * Power-context posture (issue #528 Phase D) — the gateway host's battery /
+   * Power-context posture (#528) — the gateway host's battery /
    * mains / server situation. Present on modern gateways only; drives the
    * Resource card's posture note (battery/thermal chrome or a server fact).
    */
@@ -112,7 +112,7 @@ export interface GatewayHealthDTO {
 }
 
 /**
- * Host plumbing, the one place it is allowed to be visible (issue #665).
+ * Host plumbing, the one place it is allowed to be visible (#665).
  *
  * Everywhere else the owner manages vaults; here the machine serving them is
  * the subject, so "host" and "connection" are the right words and the three
@@ -252,7 +252,7 @@ function componentRow(
       ? (row.detail ??
         (row.lastOkAt ? `last ok ${relativeTime(row.lastOkAt)}` : undefined))
       : (row.lastError ?? row.detail);
-  // The error tally used to be its own cell. It belongs in the sentence: "12
+  // The error tally belongs in the sentence, not in a cell of its own: "12
   // errors since it last answered" is a reading; "12 errs" beside a badge is a
   // number the reader has to assemble a meaning for.
   const tally =

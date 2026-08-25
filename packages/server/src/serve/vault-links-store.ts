@@ -1,7 +1,7 @@
 /*
  * The one store answering "may an edge cross between these two vaults" and
- * "where does that vault live" (issue #726 P2 §3 + P3 decisions 1–3; reshaped
- * by issue #750 invariants 1–2).
+ * "where does that vault live" (#726 P2 §3 + P3 decisions 1–3; reshaped
+ * by #750 invariants 1–2).
  *
  * Three tables, three facts, no duplication:
  *
@@ -208,8 +208,7 @@ export class VaultLinksStore {
      * Both vaults are on THIS gateway (unlike the remote ceremony's
      * self-declared label), so their display names are already known and
      * are recorded immediately — #726 P6 gap 3: a same-machine link must not
-     * sit unlabeled forever the way it did before (`propose()` used to write
-     * neither label at all).
+     * sit unlabeled forever.
      */
     fromLabel?: string;
     toLabel?: string;

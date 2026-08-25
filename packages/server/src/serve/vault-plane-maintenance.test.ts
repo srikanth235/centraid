@@ -1,5 +1,5 @@
 /*
- * Sweep wiring for the vault-side collectors (issue #659 L1/L3/L4/L5).
+ * Sweep wiring for the vault-side collectors (#659 L1/L3/L4/L5).
  *
  * `vault.db` is the sovereign asset and is meant to stay small, but two
  * families accreted in it with no collector at all: expired undo snapshots and

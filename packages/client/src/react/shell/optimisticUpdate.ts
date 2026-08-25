@@ -1,4 +1,4 @@
-// The optimistic-mutation contract (issue #659).
+// The optimistic-mutation contract (#659).
 //
 // Every list mutation in the shell was written the same way: await the wire
 // call, then refetch the whole list, then re-render. Renaming a conversation

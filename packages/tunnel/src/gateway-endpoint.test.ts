@@ -1,5 +1,5 @@
 /*
- * Gateway iroh endpoint (issue #289 phase 3).
+ * Gateway iroh endpoint (#289).
  *
  * Boots a real gateway endpoint on loopback (relays disabled — offline),
  * fronted by a fake HTTP gateway that records the headers it receives,

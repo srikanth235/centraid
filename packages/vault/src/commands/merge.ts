@@ -1,4 +1,4 @@
-// core.merge_party (issue #290 phase 2) — the entity-resolution primitive.
+// core.merge_party (#290) — the entity-resolution primitive.
 // Multi-source ingestion inevitably mints duplicate people ("J. Smith" from
 // Takeout, "john.smith@…" from an MBOX); without a merge, every added source
 // DEGRADES the vault. Merging folds party B into party A: every engine FK
@@ -68,7 +68,7 @@ const MERGE_PARTY: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Tier 4 (issue #306): an irreversible merge stays loud on purpose.
+  // Tier 4 (#306): an irreversible merge stays loud on purpose.
   risk: "high",
   confirm: true,
   handler: mergeParty,
@@ -158,7 +158,7 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
 
   // Re-point every live polymorphic mechanism from the same closed registry
   // purge uses. Merge semantics differ from cleanup policies, but the column
-  // set must not drift independently (issue #450).
+  // set must not drift independently (#450).
   for (const poly of POLY_REF_REGISTRY.flatMap((entry) =>
     entry.pairs.map((pair) => ({ table: entry.table, ...pair }))
   )) {
@@ -205,11 +205,10 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
   return { survivor_party_id: survivor, repointed, deduped };
 }
 
-/** Register the merge primitive on a gateway. */
-// The convergence sweep (issue #310 C4): merge_party had no operator —
-// handle→party resolution runs at import time only, so duplicates minted
-// by different sources ("J. Smith" from Takeout, a bare email from MBOX)
-// accumulated with nothing surfacing them. This read-shaped command reports
+// The convergence sweep (#310): handle→party resolution runs at
+// import time only, so duplicates minted by different sources ("J. Smith"
+// from Takeout, a bare email from MBOX) accumulate with nothing else
+// surfacing them. This read-shaped command reports
 // candidate pairs deterministically (case-insensitive display-name
 // collisions among live persons, with each side's identifier schemes so a
 // reviewer sees WHY two rows look like one human). The assistant proposes;

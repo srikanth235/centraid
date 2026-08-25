@@ -8,12 +8,12 @@ import { formatBytes } from "./localUsageView.js";
 /**
  * One row per vault, each drawing its share.
  *
- * IT WAS A `<details>` LABELLED "By vault" (issue #814). Whose bytes these are
- * is the second question anyone asks of a disk figure, and on a gateway hosting
- * someone else's vault it is the first — "2.1 GB · held here for Tom, who can
- * revoke this machine at any time" is a custody fact, and it was folded shut
- * behind a summary nobody opens. The handoff draws these as plain rows for that
- * reason; they are meter rows here so the ordering reads before the numbers do.
+ * NOT A COLLAPSED `<details>` LABELLED "By vault" (#814). Whose bytes these
+ * are is the second question anyone asks of a disk figure, and on a gateway
+ * hosting someone else's vault it is the first — "2.1 GB · held here for Tom,
+ * who can revoke this machine at any time" is a custody fact, and a custody
+ * fact may not be folded shut behind a summary nobody opens. They are meter
+ * rows so the ordering reads before the numbers do.
  *
  * The bar is a share of the LARGEST vault, matching every other meter list in
  * the app: on a gateway holding one big vault and three small ones, shares of
@@ -25,7 +25,7 @@ export default function VaultFootprintRows({
 }: {
   report: LocalUsageReportDTO;
   /** vaultId → owning person's label — what hosting this vault costs THEM
-   *  (issue #726 P1). Absent entries render the vault name alone. */
+   *  (#726). Absent entries render the vault name alone. */
   ownerLabels: ReadonlyMap<string, string>;
 }): JSX.Element | null {
   // ONE VAULT NEEDS NO BREAKDOWN. A single row here is the headline figure
@@ -44,17 +44,17 @@ export default function VaultFootprintRows({
     .toSorted((a, b) => b.bytes - a.bytes)
     .map((vault) => {
       const owner = ownerLabels.get(vault.vaultId);
-      // NEVER A RAW ID AS THE LABEL. An unnamed vault used to render as
-      // `01a00fed`, which is not a name — it is the absence of one, printed.
+      // NEVER A RAW ID AS THE LABEL. An unnamed vault rendered as `01a00fed`
+      // is not a name — it is the absence of one, printed.
       // The person it belongs to is the next best answer, and the id moves to
       // the second line where it is still available to quote at support.
       const named =
         vault.name === undefined || vault.name === "" ? null : vault.name;
-      // The trailing cell is one short reading, not a sentence. The per-vault
-      // COMPONENT split lived here for a moment and wrapped into four lines in
-      // a cell built for the word "Quiet" — and the legend directly above
-      // already breaks the machine down by component, so it was a second
-      // answer to a question already answered. What is NOT above it is how much
+      // The trailing cell is one short reading, not a sentence. A per-vault
+      // COMPONENT split wraps into four lines in a cell built for the word
+      // "Quiet" — and the legend directly above already breaks the machine
+      // down by component, so it would be a second answer to a question
+      // already answered. What is NOT above it is how much
       // of this machine each vault is responsible for, which is the whole point
       // of listing them separately.
       const shareOfMachine =

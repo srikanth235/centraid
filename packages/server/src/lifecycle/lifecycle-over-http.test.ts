@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * Gateway-owned app lifecycle over HTTP (issue #141, Phase 2). The
+ * Gateway-owned app lifecycle over HTTP (#141). The
  * deterministic lifecycle — clone / install / update-meta / automation
  * create+toggle+delete — lives in the gateway, so the renderer states
  * intent and the gateway does the work (scaffolders, webhook minting,
@@ -12,10 +12,10 @@ import crypto from "node:crypto";
  *   - automation create mints a webhook secret (returned once) and the
  *     toggled/deleted automation flows through publish.
  *
- * The blank-app scaffold route (`POST /centraid/_apps`) retired with the
- * served-app plane in #799, so the shared session/publish laws below are
- * driven through the automation create that still rides the same
- * `prepareLifecycleSession` + `stageAndMaybePublish` path.
+ * There is no blank-app scaffold route (`POST /centraid/_apps`) (#799), so
+ * the shared session/publish laws below are driven through the automation
+ * create that rides the same `prepareLifecycleSession` +
+ * `stageAndMaybePublish` path.
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -27,7 +27,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "../serve/serve.ts";
 import type { GatewayServeHandle } from "../serve/serve.ts";
-// lifecycle-routes is exercised through serve() HTTP paths below (#545 B7).
+// lifecycle-routes is exercised through serve() HTTP paths below (#545).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -212,9 +212,9 @@ describe("lifecycle-over-http scenarios", () => {
     expect((await listApps()).some((a) => a.id === "digest")).toBe(false);
 
     // Finding A regression: the data dir is gone too — and NOT resurrected.
-    // The old code called `ensureRegistered` after `deleteApp`, re-creating
-    // the registry entry + data dir for the app just deleted; the fix
-    // deregisters + cleans the data dir instead.
+    // Calling `ensureRegistered` after `deleteApp` re-creates the registry
+    // entry + data dir for the app just deleted; delete deregisters and cleans
+    // the data dir instead.
     await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/u);
   });
 
@@ -313,8 +313,9 @@ describe("lifecycle-over-http scenarios", () => {
     });
     await expect(listSessions()).resolves.toContain("lifecycle-relics");
 
-    // Now create `relics` for real via the defaulting path. Pre-fix this hit
-    // `session_exists` and reused the stale worktree; post-fix it opens fresh.
+    // Now create `relics` for real via the defaulting path. A left-open
+    // one-shot session would hit `session_exists` and reuse the stale
+    // worktree; this opens fresh.
     const res = await createApp({
       id: "relics",
       name: "Relics",

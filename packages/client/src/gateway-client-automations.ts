@@ -1,5 +1,5 @@
 /*
- * Renderer-side client for the automation-turns lane split (issue #731 M2).
+ * Renderer-side client for the automation-turns lane split (#731).
  *
  * `gateway-client.ts`'s `listAutomationTurns` fetches one combined,
  * `boundedLimit`-wide window of every automation turn — member automations

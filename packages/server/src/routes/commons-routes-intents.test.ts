@@ -1,7 +1,6 @@
-// Split from commons-routes.test.ts to stay under the repo's file-size limit
-// (#615). Covers issue #731's gateway plumbing for the two goals vault-side
-// work left undone: goal 1 (the command route carries `based_on_sequence`
-// into `executeCommonsCommand`) and goal 2 (the intent cancel route).
+// Issue #731's gateway plumbing for two goals: goal 1 (the command route
+// carries `based_on_sequence` into `executeCommonsCommand`) and goal 2 (the
+// intent cancel route).
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 

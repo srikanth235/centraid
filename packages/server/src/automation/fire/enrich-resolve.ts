@@ -1,5 +1,5 @@
 /**
- * The policy cascade's RESOLVER (issue #807, Wave 2) — the half of the one
+ * The policy cascade's RESOLVER (#807) — the half of the one
  * gate that folds a scope chain into a single answer.
  *
  * WHY IT LIVES BESIDE `enrich-gate.ts` AND IS RE-EXPORTED THROUGH IT. There is
@@ -144,7 +144,7 @@ export interface EnrichPolicyResolution {
     profileId: string
   ) => EnrichEgressClass | undefined;
   /**
-   * The vault's standing egress ANSWER for this capability (issue #807, Wave
+   * The vault's standing egress ANSWER for this capability (#807, Wave
    * 3), walked over the same scope chain the rules were: most specific first,
    * the vault-wide `''` row last. `null` means the question was never asked,
    * which is not a grant.
@@ -161,13 +161,13 @@ export interface EnrichPolicyResolution {
   ) => EnrichConsentRecord | null | undefined;
   /**
    * The engine binding of a profile id, from the same gateway registry
-   * `egressForProfile` answers from (issue #807, Wave 5). Two lookups over one
+   * `egressForProfile` answers from (#807). Two lookups over one
    * registry on purpose: the GATE reads the egress class and nothing else, and
    * this one is read only after the gate allowed the run — so no engine detail
    * can ever influence a permission decision.
    *
-   * A host that omits it leaves selection where it was before Wave 5: with the
-   * enricher's own `manifest.enrich.delegateStep.selected`.
+   * A host that omits it leaves selection with the enricher's own
+   * `manifest.enrich.delegateStep.selected`.
    */
   readonly engineForProfile?: (
     profileId: string
@@ -175,16 +175,15 @@ export interface EnrichPolicyResolution {
 }
 
 /**
- * HOW the profile the cascade selected computes its capability (issue #807,
+ * HOW the profile the cascade selected computes its capability (#807,
  * Wave 5) — the engine half of `EngineProfile`, flattened to what the fire
  * path may act on.
  *
  * It is deliberately NOT the whole profile: the fire path has no business
  * knowing a profile's label or its computed egress class (the gate already
- * decided on that, from `egressForProfile`). What it needs is the one fact
- * `manifest.enrich.delegateStep` used to hard-code — is this capability being
- * computed by the bundled engine or by a harness, and if a harness, which
- * model/pins the member bound it to.
+ * decided on that, from `egressForProfile`). What it needs is one fact: is
+ * this capability being computed by the bundled engine or by a harness, and
+ * if a harness, which model/pins the member bound it to.
  */
 export interface ResolvedEngineBinding {
   readonly kind: "built-in" | "delegate";

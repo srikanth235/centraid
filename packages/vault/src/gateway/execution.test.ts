@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit #545 cohesive security/ACID suite for one module
-// Direct unit coverage for the S3/S4/S5 invocation bracket (issue #545 B1).
+// Direct unit coverage for the S3/S4/S5 invocation bracket (#545).
 // Imports `execution.ts` by name and exercises contract validation, precondition
 // recording, ACID postcondition rollback, seal sweep, and idempotent replay
 // without going through the full Gateway facade for each path.

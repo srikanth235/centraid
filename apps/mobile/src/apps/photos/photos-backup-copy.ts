@@ -1,6 +1,6 @@
 // What Back up SAYS. Nothing here imports anything.
 //
-// Split out of `photos-backup.ts` because that module owns the run — hooks,
+// Separate from `photos-backup.ts`: that module owns the run — hooks,
 // transfers, react-native — and a sentence should be assertable without
 // standing up a renderer to ask what it says.
 

@@ -1,4 +1,4 @@
-// The bounded storage tier's cache coordinator (issue #405 §3/§7) — budget
+// The bounded storage tier's cache coordinator (#405 §3/§7) — budget
 // evaluation, incremental spool accounting, the ordered eviction pass, the
 // custody-layer eviction boundary that protects originals during admission,
 // the ingest precheck, the process-lifetime metrics counters, and the
@@ -28,7 +28,7 @@ import type { LocalBlobStore } from "./local.js";
 import { OrphanTombstoneIndex } from "./orphan-tombstone.js";
 import { AccessIndex, ReplicaIndex } from "./replica-index.js";
 
-/** The `blob_cache` settings bag (issue #405 §3), camelCase to match `blob_store`. */
+/** The `blob_cache` settings bag (#405), camelCase to match `blob_store`. */
 export interface BlobCacheSettings {
   /**
    * Hard spool budget in bytes. Unset ⇒ derived from disk free space (see
@@ -60,7 +60,7 @@ export function readBlobCacheSettings(vault: DatabaseSync): BlobCacheSettings {
 export const CACHE_BUDGET_FLOOR_BYTES = 1 * 1024 ** 3; // 1 GiB
 /** Free-space ceiling: never let the derived budget grow past this. */
 export const CACHE_BUDGET_CEILING_BYTES = 100 * 1024 ** 3; // 100 GiB
-/** Default concurrent pushes per `replicate()` (issue #405 §4). */
+/** Default concurrent pushes per `replicate()` (#405). */
 export const DEFAULT_REPLICATION_CONCURRENCY = 3;
 
 export function replicationConcurrencyFromEnv(
@@ -80,7 +80,7 @@ export function replicationConcurrencyFromEnv(
   const parsed = Math.trunc(Number(raw));
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 8) : fallback;
 }
-/** Default QoS cooldown after the last interactive read before bulk resumes (issue #405 §7). */
+/** Default QoS cooldown after the last interactive read before bulk resumes (#405). */
 export const DEFAULT_QOS_COOLDOWN_MS = 500;
 /** Default poll interval while replication is parked behind an interactive read. */
 export const DEFAULT_QOS_POLL_MS = 25;
@@ -93,7 +93,7 @@ export interface CacheStatfs {
 
 export interface BlobCacheOptions {
   /**
-   * Volume free-space probe for the derived budget (issue #405 §3). Returns
+   * Volume free-space probe for the derived budget (#405). Returns
    * null (or is absent) ⇒ no disk to measure (a MemoryBlobStore vault): the
    * budget is UNLIMITED unless the settings set it explicitly. FsBlobStore
    * vaults pass a `() => fs.statfsSync(blobsDir)` closure.
@@ -103,7 +103,7 @@ export interface BlobCacheOptions {
   settings?: () => BlobCacheSettings;
   /** One policy owner for cache budget + real-volume headroom (#414). */
   policy?: () => BackupPolicy;
-  /** Concurrent pushes per `replicate()` (default 3, issue #405 §4). */
+  /** Concurrent pushes per `replicate()` (default 3, #405 §4). */
   replicationConcurrency?: number;
   /** Cooldown ms after the last interactive read before bulk resumes (default 500). */
   qosCooldownMs?: number;
@@ -116,7 +116,7 @@ export interface BlobCacheOptions {
 }
 
 /**
- * Process-lifetime custody counters (issue #405 §7). Routes/UI are a later
+ * Process-lifetime custody counters (#405). Routes/UI are a later
  * wave; this is the shape they will read.
  */
 export interface BlobMetrics {
@@ -145,12 +145,12 @@ export interface BlobMetrics {
 export class BlobCache {
   readonly replica: ReplicaIndex;
   readonly access: AccessIndex;
-  /** Orphan-grace tombstones (issue #439 R4) — first-observed-orphaned per sha. */
+  /** Orphan-grace tombstones (#439) — first-observed-orphaned per sha. */
   readonly orphan: OrphanTombstoneIndex;
   /** null until first read — then maintained incrementally (never rescanned). */
   private spool: number | null = null;
 
-  // Process-lifetime counters (issue #405 §7).
+  // Process-lifetime counters (#405).
   private localHits = 0;
   private readThroughs = 0;
   private rangedRemoteReads = 0;
@@ -160,7 +160,7 @@ export class BlobCache {
   private evictedBytes = 0;
   private backpressureEvents = 0;
 
-  // QoS state (issue #405 §7): interactive read-throughs in flight now, and
+  // QoS state (#405): interactive read-throughs in flight now, and
   // when the last finished — bulk replication parks while either is "hot".
   private interactiveReads = 0;
   private lastInteractiveAtMs = 0;
@@ -192,7 +192,7 @@ export class BlobCache {
         }));
   }
 
-  // ---- spool accounting (issue #405 §3/§7) ----
+  // ──── spool accounting (issue #405 §3/§7) ────
 
   /**
    * Live spool occupancy. Initialized ONCE by scanning the local tier (a real
@@ -219,7 +219,7 @@ export class BlobCache {
     if (this.spool !== null) this.spool = Math.max(0, this.spool - size);
   }
 
-  // ---- metrics increments (issue #405 §7), called from the custody facade ----
+  // ──── metrics increments (issue #405 §7), called from the custody facade ────
 
   onLocalHit(bytesServed: number): void {
     this.localHits += 1;
@@ -234,7 +234,7 @@ export class BlobCache {
     this.bytesServedRemote += bytesServed;
   }
 
-  // ---- QoS gate (issue #405 §7) ----
+  // ──── QoS gate (issue #405 §7) ────
 
   /** Mark one interactive read-through in flight — bulk replication yields to it. */
   enterInteractive(): void {
@@ -261,7 +261,7 @@ export class BlobCache {
     return waitUntilClear();
   }
 
-  // ---- budget (issue #405 §3) ----
+  // ──── budget (issue #405 §3) ────
 
   freeBytes(): number | null {
     const stat = this.options.statfs?.();
@@ -296,7 +296,7 @@ export class BlobCache {
     return this.options.settings?.() ?? readBlobCacheSettings(this.db);
   }
 
-  /** Durable evidence that `sha` sits on the remote tier (issue #405 §4). */
+  /** Durable evidence that `sha` sits on the remote tier (#405). */
   isReplicated(sha: string): boolean {
     return this.replica.has(sha);
   }
@@ -304,9 +304,9 @@ export class BlobCache {
   /**
    * Honest admission numbers after both independent limits are applied:
    * the logical cache budget and the REAL currently-available volume bytes
-   * above the policy's reserved headroom. The old derived-budget floor could
-   * say "1 GiB available" on a volume with only 100 MiB free; this projection
-   * is what ingress and its typed error use instead.
+   * above the policy's reserved headroom. A budget-only floor would say
+   * "1 GiB available" on a volume with only 100 MiB free; ingress and its typed
+   * error use this projection instead.
    */
   admissionCapacity(
     reservedBytes = 0,
@@ -334,7 +334,7 @@ export class BlobCache {
     };
   }
 
-  // ---- ingest precheck (issue #405 §5) ----
+  // ──── ingest precheck (issue #405 §5) ────
 
   /**
    * Make room for `incoming` bytes or refuse. Runs an eviction pass if the
@@ -373,7 +373,7 @@ export class BlobCache {
     }
   }
 
-  // ---- eviction (issue #405 §3) ----
+  // ──── eviction (issue #405 §3) ────
 
   /**
    * The eviction pass. Admission may shed only reconstructible LRU previews;
@@ -451,7 +451,7 @@ export class BlobCache {
     return size;
   }
 
-  /** The full process-lifetime metrics snapshot (issue #405 §7). */
+  /** The full process-lifetime metrics snapshot (#405). */
   metrics(): BlobMetrics {
     return {
       localHits: this.localHits,
@@ -468,7 +468,7 @@ export class BlobCache {
   }
 }
 
-/** The zeroed metrics a cache-less custody reports (issue #405 §7). */
+/** The zeroed metrics a cache-less custody reports (#405). */
 export const EMPTY_BLOB_METRICS: BlobMetrics = {
   localHits: 0,
   readThroughs: 0,

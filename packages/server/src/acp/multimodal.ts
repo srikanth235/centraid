@@ -1,13 +1,13 @@
 /*
- * Multimodal content-block construction for harness turns (issue #190).
+ * Multimodal content-block construction for harness turns (#190).
  *
  * A conversation turn can carry attachments (images, PDFs, text/code files)
  * that landed in the per-app blob CAS before the turn. The route resolves
  * each to an on-disk `path`; here we read the bytes and shape them into ACP
- * `ContentBlock`s for `session/prompt` (issue #479).
+ * `ContentBlock`s for `session/prompt` (#479).
  *
- * There is one target shape now, not two: the retired Anthropic-block and
- * codex-`localImage` mappings died with their bespoke backends. Field names
+ * There is one target shape, not two: no provider-block or codex-`localImage`
+ * mapping rides alongside it. Field names
  * below are the ACP schema's, verified against
  * `@agentclientprotocol/sdk`'s generated types — `ImageContent { data,
  * mimeType }` (NOT Anthropic's nested `source.media_type`) and

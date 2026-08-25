@@ -1,4 +1,4 @@
-// The phone's bottom band, as Tasks claims it (Tasks spec §2; issue #834).
+// The phone's bottom band, as Tasks claims it (Tasks spec §2; #834).
 //
 // `Today · Upcoming · Inbox · Projects · More` — four PLACES plus More, which is
 // the invariant's exact cap. Only a place is in the band: Anytime, All, Search,
@@ -106,9 +106,9 @@ export function resolveTasksBand(owner: BandOwner): ResolvedTasksBand {
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The More sheet — the six lenses and acts that are not places
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface TasksMoreRow {
   shelf: ShelfId;

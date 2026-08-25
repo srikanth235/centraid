@@ -40,7 +40,7 @@ export interface HomeRouteProps {
   onAutoSeedStarted?: () => void;
 }
 
-// Home (issue #708). Home is the springboard and nothing else: the app bar
+// Home (#708). Home is the springboard and nothing else: the app bar
 // carries the title, the meta and the two actions, and the body is the content
 // grid. The composer hero and the All/Apps/Automations library shelf that used
 // to sit under it are gone — Home shows you your own content, and the shelf's
@@ -81,7 +81,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     };
   });
 
-  // Cached across visits (issue #659) AND across boots (#708). Home is the
+  // Cached across visits (#659) AND across boots (#708). Home is the
   // app's front door and the most re-entered route in the shell, so it paints
   // from the last known answer and revalidates behind it.
   //
@@ -111,7 +111,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   // chunk.
   const brief =
     briefQuery.state.status === "ready" ? briefQuery.state.data : undefined;
-  // NULL until the brief has settled (issue #708). `useCachedQuery` treats the
+  // NULL until the brief has settled (#708). `useCachedQuery` treats the
   // KEY as the loader's identity — an inline closure that captures a different
   // `brief` is deliberately NOT a change — so running this while the brief was
   // still in flight cached a `tileContent` built from `brief === undefined` and
@@ -292,7 +292,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   });
 
   return (
-    // NOT `flush` (issue #708). `flush` drops the page gutter for a screen whose
+    // NOT `flush` (#708). `flush` drops the page gutter for a screen whose
     // content owns its own spacing — true of the day-one card, which carries
     // `--sp-6` of its own, and false of everything else Home draws. So the
     // moment one tile had content the grid and the start band ran edge to edge

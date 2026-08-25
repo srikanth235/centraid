@@ -19,7 +19,7 @@ const VIRTUAL_PREFIX = "/__centraid_iroh__/";
 // A versioned script URL prevents an older shell worker from being treated as
 // ready merely because it controls the page. The virtual Iroh route only
 // exists in this worker generation. VERSION is shared with public/sw.js and
-// its derived Iroh worker binding via sw-version.ts (issue #468 K8).
+// its derived Iroh worker binding via sw-version.ts (#468).
 const SERVICE_WORKER_URL = `/sw.js?v=${SERVICE_WORKER_VERSION}`;
 
 // Transient tunnel failures (a redialed-then-still-dead connection, a stream
@@ -75,16 +75,16 @@ async function endpoint(): Promise<BrowserEndpoint> {
 
 /**
  * Bring the WASM endpoint up during idle time, ahead of the first request that
- * needs it (issue #659 C3).
+ * needs it (#659).
  *
- * This is a 2 MB download, so the gate is deliberately narrow and was set by
- * measurement, not intuition. An earlier version gated only on "already
- * paired" and cost a returning visit the full 2 MB on EVERY visit
- * (perf-waterfall warm shell 0 B -> 1,995,918 B). Two things fixed that:
+ * This is a 2 MB download, so the gate is deliberately narrow and is set by
+ * measurement, not intuition. Gating only on "already paired" costs a
+ * returning visit the full 2 MB on EVERY visit (perf-waterfall warm shell
+ * 0 B -> 1,995,918 B). Two things prevent that:
  *
- *  1. `public/sw.js` now serves JS-initiated `/assets/` fetches through the
- *     shell cache, so the binary is downloaded once per build rather than once
- *     per visit. Without that, warming can only ever move the cost around.
+ *  1. `public/sw.js` serves JS-initiated `/assets/` fetches through the shell
+ *     cache, so the binary is downloaded once per build rather than once per
+ *     visit. Without that, warming can only ever move the cost around.
  *  2. The gate below also requires that this page will actually ROUTE through
  *     this transport. A page can be paired to an iroh endpoint and still send
  *     its traffic somewhere else — `window.CentraidIroh` is a replaceable seam,
@@ -116,9 +116,9 @@ export function warmIrohTransport(): void {
  *
  * This key IS the enrolled device identity — losing it means the gateway no
  * longer recognises this browser and the only way back is a fresh pairing
- * ticket. It used to live in sessionStorage whenever "Remember this device"
- * was unchecked (the default), so every browser restart silently unpaired.
- * Durability is no longer a consent axis; the offline copy still is.
+ * ticket. It must never live in sessionStorage — "Remember this device" being
+ * unchecked would then silently unpair on every browser restart. Durability is
+ * not a consent axis; the offline copy is.
  */
 export function adoptDurableIrohDeviceKey(): string | null {
   const stored =
@@ -435,7 +435,7 @@ export async function syncIrohWakeConfiguration(): Promise<void> {
     type: "centraid:configure-iroh-wake",
     configuration: currentIrohWakeConfiguration(),
   };
-  // eslint-disable-next-line unicorn/require-post-message-target-origin -- ServiceWorker has no targetOrigin argument (#647)
+  // oxlint-disable-next-line unicorn/require-post-message-target-origin -- ServiceWorker has no targetOrigin argument (#647)
   worker?.postMessage(message);
 }
 
@@ -500,7 +500,7 @@ function postError(port: MessagePort, error: unknown): void {
 }
 
 export function installIrohServiceWorkerBridge(): void {
-  // Eagerly surface the perf counters (issue #404) the moment the shell boots,
+  // Eagerly surface the perf counters (#404) the moment the shell boots,
   // so a probe can tell an instrumented bundle apart from a stale one before
   // any request has run. Creating the object changes no transport behavior.
   irohStats();

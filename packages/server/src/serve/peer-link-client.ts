@@ -1,5 +1,5 @@
 /*
- * The dialing half of the peer plane (issue #726 P3 decisions 3 and 4).
+ * The dialing half of the peer plane (#726 P3 decisions 3 and 4).
  *
  * Direction-free by construction: this module is what the side that SCANS a
  * link ticket runs, and the side that SHOWED one runs `routes/peer-plane.ts`.
@@ -48,8 +48,7 @@ export interface PeerDialRoute {
  * A transport plus the one thing only the caller can mint: an EndpointTicket
  * for a route. Every outbound peer call in this package takes one of these,
  * so nothing below the transport ever learns about iroh. Its home is here
- * because this module IS the dialing half of the peer plane; it lived in the
- * give client until copy-as-share retired that module (#825).
+ * because this module IS the dialing half of the peer plane.
  */
 export interface PeerDial {
   request: PeerRequest;

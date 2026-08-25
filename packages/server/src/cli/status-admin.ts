@@ -1,5 +1,5 @@
 /*
- * `centraid-gateway status [--json]` — one-shot health summary (issue #382),
+ * `centraid-gateway status [--json]` — one-shot health summary (#382),
  * combining two things the desktop's SSH-driven ConnectFlow "handshake
  * ladder" needs from a single round trip:
  *
@@ -87,7 +87,7 @@ interface DataDirSummary {
   endpointTicket?: string;
   daemonRunning?: boolean;
   vaultCount?: number;
-  /** Vault directories present on disk that would not open (issue #603 X1). */
+  /** Vault directories present on disk that would not open (#603). */
   failedMounts?: FailedMount[];
   /** Why the vault root could not be read at all; `vaultCount` is absent then. */
   vaultReadError?: string;
@@ -107,7 +107,7 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
   try {
     const registry = openVaultRegistry({
       // Same custody the daemon uses, or every vault fails to mount and
-      // `status` reports a gateway with zero vaults (issue #568 item D).
+      // `status` reports a gateway with zero vaults (#568).
       keyStore: daemonKeyStore(layout.keysDir),
       rootDir: layout.vaultDir,
       logger: quietLogger,
@@ -166,7 +166,7 @@ export async function commandStatus(
     );
     const dataDir = buildDataDirSummary(config.dataDir);
     if (config.port !== undefined && config.port !== 0) {
-      // Live dial tickets are auth-gated (#568 item C). Present the host
+      // Live dial tickets are auth-gated (#568). Present the host
       // custody bearer when we have the key so `status` can report them;
       // without a key, an anonymous handshake still answers "is the daemon up".
       const endpointSecret = daemonKeyStore(

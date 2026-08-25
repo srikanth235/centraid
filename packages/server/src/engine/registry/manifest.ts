@@ -1,7 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit the manifest types + their one JSON meta-schema + the validator must move together — the ext block (#286) grew all three in lockstep
 /**
  * App manifest — the per-app machine-readable contract the dispatcher
- * routes declared handlers against (issue #107, narrowed by #286 phase 2).
+ * routes declared handlers against (#107, narrowed by #286 phase 2).
  *
  * The manifest lives on disk as `app.json` inside each app's code dir
  * (alongside `actions/`, `queries/`). It is the single source of truth
@@ -41,8 +41,8 @@ export type ManifestValidationCode =
   | "reserved_handler_name";
 
 /**
- * Names starting with `_` are reserved (they once addressed built-ins
- * like `_sql`; the builtins are gone but the namespace stays reserved).
+ * Names starting with `_` are reserved for plugin internals; no built-in
+ * claims one today and the namespace stays reserved regardless.
  * App authors cannot declare an action or query with such a name —
  * `validateManifest` refuses it explicitly at load time.
  */
@@ -143,7 +143,7 @@ export interface ManifestVaultBlock {
 }
 
 /**
- * The ext band (issue #286 phase 2, Lane 2 of the two-lane rule): tables
+ * The ext band (#286 phase 2, Lane 2 of the two-lane rule): tables
  * the app declares and the GATEWAY creates inside vault.db as
  * `ext_<appId>_<table>` — for shapes the canonical ontology genuinely
  * doesn't cover. Structurally mirrors the vault package's `ExtTableSpec`
@@ -203,7 +203,7 @@ export interface ManifestSeatsBlock {
 
 /**
  * The seven canonical designed states every product surface has to be able to
- * be in (issue #839 G7). They are facts about the vault/replica plane, not
+ * be in (#839). They are facts about the vault/replica plane, not
  * per-app inventions:
  *
  *  * `dayone`   — first run: the app holds nothing at all yet.
@@ -244,7 +244,7 @@ export interface ManifestStateExclusion {
 }
 
 /**
- * The designed-state partition (issue #839 G7). Machine-readable so a harness
+ * The designed-state partition (#839). Machine-readable so a harness
  * never has to re-derive "which states does this app owe a member" from copy
  * tables and component names.
  *
@@ -267,9 +267,8 @@ export interface Manifest {
    * What surface the app belongs to. `'automation'` marks a UI-less app
    * that exists only to host automations (it shows on the Automations
    * page, not "My apps"); `'app'` — the default when omitted — is a normal
-   * UI app. This replaces the legacy `auto.`-id-prefix convention: the
-   * manifest, not the folder id, is the source of truth for "is this an
-   * automation app".
+   * UI app. The manifest, not the folder id, is the source of truth for "is
+   * this an automation app".
    */
   readonly kind?: "app" | "automation";
   readonly description?: string;
@@ -287,17 +286,17 @@ export interface Manifest {
    *  every bundled blueprint declares one — see the blueprints package's
    *  `blueprint-seats.test.ts`. */
   readonly seats?: ManifestSeatsBlock;
-  /** Designed-state partition (issue #839 G7). Optional at the schema level so
+  /** Designed-state partition (#839). Optional at the schema level so
    *  UI-less automation manifests keep validating without one; every bundled
    *  blueprint declares one — see `packages/blueprints/src/app-states.test.ts`. */
   readonly states?: ManifestStatesBlock;
 }
 
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 // Meta-schema document — the JSON Schema *for the manifest itself*. Exported
 // so builder consumers (and external tooling) can validate `app.json` against
 // it without depending on our runtime module.
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://centraid.dev/schemas/app-manifest/v1.json",
@@ -499,9 +498,9 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
   },
 };
 
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 // Validators
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 
 /**
  * Shared Ajv instance for input/output schema validation. Configured for

@@ -1,20 +1,19 @@
 // @vitest-environment jsdom
-// The four things the Photos web app used to say that were not true (v4
-// handoff §14, README §14). Each `describe` below is one of them, and each was
-// a real defect on screen before this file existed:
+// The four things the Photos web app must never say that are not true (v4
+// handoff §14, README §14). Each `describe` below is one of them:
 //
-//   1. an un-loaded library rendered as EMPTY — a member with 6,214
-//      photographs was told "No photographs yet";
-//   2. there was no Offline concept at all, so a read failure became one
-//      invented sentence over an unexplained grey grid;
-//   3. Trash silently redirected to Library when it was empty, landing the
-//      member somewhere they had not asked to be;
-//   4. the empty state never said where the bytes go — the load-bearing line
-//      of §14's Empty row — because the shared `.kit-empty` has no node for a
-//      body paragraph.
+//   1. an un-loaded library must not render as EMPTY — a member with 6,214
+//      photographs told "No photographs yet";
+//   2. a read failure gets the Offline concept, not one invented sentence
+//      over an unexplained grey grid;
+//   3. Trash does not silently redirect to Library when it is empty, landing
+//      the member somewhere they had not asked to be;
+//   4. the empty state says where the bytes go — the load-bearing line of
+//      §14's Empty row — even though the shared `.kit-empty` has no node for
+//      a body paragraph.
 //
-// The rules are asserted against `view-state.ts`, which is where they now
-// live as pure functions, plus static renders of the two components and the
+// The rules are asserted against `view-state.ts`, which is where they live as
+// pure functions, plus static renders of the two components and the
 // chrome that draw them. jsdom, not node: these modules reach the shared kit's
 // custom-element base through `format.ts`, and `class X extends HTMLElement`
 // is evaluated at module load — the renders themselves are still
@@ -179,7 +178,7 @@ describe("offline is explained, never left as a grey mosaic (§14)", () => {
   it("names what still renders, and never says the meaning is gone", () => {
     // README §14: "A grey mosaic with no explanation is a bug." The banner is
     // the explanation, and it is explicit about what is still true — in one
-    // sentence since issue #805, which is why it names the class of thing that
+    // sentence since #805, which is why it names the class of thing that
     // still renders rather than listing captions, dates, albums and people.
     for (const phrase of [
       "meaning reads from this device",

@@ -153,7 +153,7 @@ export interface ApprovalsGrantRowDTO {
 }
 
 /**
- * One Recent activity row (issue #552). Pure display DTO — mapping and
+ * One Recent activity row (#552). Pure display DTO — mapping and
  * adjacent-duplicate collapse live in `approvalsData.ts`.
  */
 export interface ApprovalsActivityRowDTO {
@@ -188,7 +188,7 @@ export interface ApprovalsActivityRowDTO {
 }
 
 /**
- * One row of the EGRESS-CONSENT ledger (issue #807, Wave 3) — an answer the
+ * One row of the EGRESS-CONSENT ledger (#807) — an answer the
  * member gave once about how far work for one capability may travel. Display
  * only: this screen is where an answer is READ BACK, never re-given, so the
  * row carries no action. A declined answer renders exactly as legibly as a
@@ -229,13 +229,13 @@ export interface ApprovalsScreenProps {
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
   /**
-   * The store-centric ledger (issue #708 A2) — "who can see my photos?" rather
+   * The store-centric ledger (#708) — "who can see my photos?" rather
    * than "what does this app do?". Every declared store is present, even with
    * zero holders (rendered as "reachable by nothing").
    */
   storeGrants: readonly StoreGroup[];
   /**
-   * The enrichment egress answers on record (issue #807, Wave 3). Reference
+   * The enrichment egress answers on record (#807). Reference
    * material, like the grants ledger above it: the page shows what was
    * answered, and answering again happens where the question is asked.
    */
@@ -249,7 +249,7 @@ export interface ApprovalsScreenProps {
   activity: readonly ApprovalsActivityRowDTO[];
   notices?: readonly NoticeRowDTO[];
   /** Whether the review feed was truncated at the current limit — drives the
-   *  in-place "See all" affordance (issue #552). */
+   *  in-place "See all" affordance (#552). */
   activityTruncated?: boolean;
   /** The itemId/invocationId/requestId/grantId currently mid-flight. */
   busyId: string | null;
@@ -265,7 +265,7 @@ export interface ApprovalsScreenProps {
    * the same item a fresh event.
    */
   refusal?: { itemId: string | null; message: string; nonce: number } | null;
-  /** `artifact` is present only for an edit-then-approve (issue #308 A5) — the
+  /** `artifact` is present only for an edit-then-approve (#308) — the
    *  gateway rebuilds the wire request server-side from it. */
   onApproveOutbox: (
     itemId: string,
@@ -278,7 +278,7 @@ export interface ApprovalsScreenProps {
   onDecideScopeRequest: (requestId: string, approve: boolean) => void;
   onRevokeGrant: (grantId: string) => void;
   /** Revoke one store-ledger holder's grant — the row stays, struck through,
-   *  rather than vanishing (issue #708 A2). */
+   *  rather than vanishing (#708). */
   onRevokeStoreGrant: (holder: StoreHolderDTO) => void;
   onReadNotice?: (noticeId: string) => void;
   onArchiveNotice?: (noticeId: string) => void;
@@ -290,7 +290,7 @@ export interface ApprovalsScreenProps {
   onOpenAlertHistory?: () => void;
   /**
    * A request to bring one staged write into view — what tapping an `outbox`
-   * notice means (#647 D10). `nonce` makes a repeat tap on the SAME item a new
+   * notice means (#647). `nonce` makes a repeat tap on the SAME item a new
    * request; the screen opens that item's card and scrolls to it. A null
    * itemId — or one that is no longer open — clears any filter and leaves the
    * queue as it is, rather than pointing at a card that isn't there.
@@ -306,13 +306,13 @@ export interface ApprovalsScreenProps {
 
 // ── Copy that states a rule ────────────────────────────────────────────────
 // Every sentence both surfaces render lives in `../../approvals-copy.js`
-// (issue #805) — see its header for why the two stopped keeping separate
+// (#805) — see its header for why the two stopped keeping separate
 // copies. What is left here is desktop's alone.
 
 const LEDGER_NOTE =
   "Everything an app can reach — revoking takes effect at once.";
 
-/** The enrichment ledger's note (issue #807). It states the rule the rows
+/** The enrichment ledger's note (#807). It states the rule the rows
  *  obey: each is an answer, asked once and recorded, not a switch on a page. */
 const ENRICH_CONSENT_NOTE =
   "Asked once, answered once, recorded — including the answers that were no.";
@@ -376,7 +376,7 @@ export default function ApprovalsScreen(
   // call deletes the grant row outright, so the next fetch would simply drop it
   // from `storeGrants` — keeping a copy of the row as it looked at the moment
   // of revoke is what lets it stay visible, struck through, instead of
-  // vanishing (issue #708 A2: "the history of the grant stays legible").
+  // vanishing (#708 A2: "the history of the grant stays legible").
   const [revokedStoreHolders, setRevokedStoreHolders] = useState<
     ReadonlyMap<string, StoreHolderDTO>
   >(new Map());
@@ -387,7 +387,7 @@ export default function ApprovalsScreen(
   const focusRef = useRef<HTMLDivElement | null>(null);
   const grantsRef = useRef<HTMLDivElement | null>(null);
 
-  // Honor a deep link from an outbox notice (#647 D10) and the bar's "Review
+  // Honor a deep link from an outbox notice (#647) and the bar's "Review
   // all" verb (#765). Adjusting state while rendering (React's documented
   // "derived from props" escape) rather than in an effect: the move must be
   // part of the same paint as the tap, and a nonce-keyed effect would cascade

@@ -162,9 +162,8 @@ import type {
 import { applyRestoreQuarantine } from "./vault-quarantine.js";
 import type { QuarantineStatus } from "./vault-quarantine.js";
 
-/** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
 /**
- * The default local orphan-grace window (issue #599 decision 11) for a vault
+ * The default local orphan-grace window (#599 decision 11) for a vault
  * with no backup provider to supply a recovery window: one week. A local-only
  * household still deserves the interval the remote rule buys — long enough to
  * notice "I unshared the wrong album" before the bytes go.
@@ -174,10 +173,11 @@ const BLOB_SWEEP_BACKOFF_STEP_MS = 60_000;
 const BLOB_SWEEP_MAX_BACKOFF_MS = 30 * 60_000;
 
 /**
- * Pure backoff decision (issue #367 §C5), extracted out of `runSweep` so it
+ * Pure backoff decision (#367), kept out of `runSweep` so it
  * is unit-testable without a live timer: no failures yet, or the backoff
  * window (since the last ATTEMPT, not the last success) has elapsed →
- * proceed; otherwise skip this tick. Exported for `vault-plane.test.ts`.
+ * proceed; otherwise skip this tick. Exported for
+ * `vault-plane-blob-sweep.test.ts`.
  */
 export function blobSweepBackoff(
   status: { consecutiveFailures: number; lastAttemptedAt: string | null },
@@ -255,16 +255,16 @@ export interface VaultPlaneOptions {
   /** Fail-safe blob-GC gate for network filesystems where cross-host locking is uncertain. */
   skipOrphanDelete?: () => boolean;
   /**
-   * Resolve S3 credentials for a vault's remote blob tier (issue #367 §C3):
+   * Resolve S3 credentials for a vault's remote blob tier (#367):
    * the gateway-level `StorageConnectionStore` wires this to
    * `settings.connectionId` (a cached `requestCasGrant` for the provider
    * connection). Defaults to the legacy
-   * harness-ambient env-var lane (`CENTRAID_S3_*`, issue #296 §2) for hosts
+   * harness-ambient env-var lane (`CENTRAID_S3_*`, #296 §2) for hosts
    * that haven't adopted storage connections yet.
    */
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
   /**
-   * The preview ladder's raster codec (issue #405 §2) — the host's pure-JS
+   * The preview ladder's raster codec (#405) — the host's pure-JS
    * jpeg-js/pngjs downscaler (`createImagePreviewCodec`), forwarded into
    * `openVaultDb` so this plane's blob sweep runs the preview backstop.
    * Omitted for hosts/tests without one: the backstop simply doesn't run.
@@ -287,13 +287,13 @@ export interface VaultPlaneOptions {
   /** Concurrent remote pushes selected by the gateway hardware profile. */
   replicationConcurrency?: number;
   /**
-   * Resource-actuals hook (#528 Phase C): one lifecycle sweep completed —
+   * Resource-actuals hook (#528): one lifecycle sweep completed —
    * `durationMs` is the synchronous sweep portion. Accounting only, never a
    * gate. Detached blob replication reports separately via `onReplicationPass`.
    */
   onSweepPass?: (info: { durationMs: number }) => void;
   /**
-   * Resource-actuals hook (#528 Phase C): one blob-replication pass completed —
+   * Resource-actuals hook (#528): one blob-replication pass completed —
    * `bytesReplicated` is the summed size of newly-replicated objects,
    * `durationMs` the wall-clock of the detached reconcile. Accounting only.
    */
@@ -302,7 +302,7 @@ export interface VaultPlaneOptions {
     durationMs: number;
   }) => void;
   /**
-   * The owner's `journal.db` size limit in bytes (issue #544), or `null` when
+   * The owner's `journal.db` size limit in bytes (#544), or `null` when
    * unset. Read fresh on every sweep so a limit change takes effect without a
    * remount. Over the limit, the sweep bypasses its once-a-day archival gate
    * and narrows the archival window down a fixed ladder — see
@@ -310,14 +310,13 @@ export interface VaultPlaneOptions {
    */
   journalLimitBytes?: () => number | null;
   /**
-   * The owner's `vault.db` size limit in bytes (issue #659 L3), or `null` when
+   * The owner's `vault.db` size limit in bytes (#659), or `null` when
    * unset — which is today's shipped state, since no owner-facing setting
-   * exists yet. `null` means "daily gate, widest retention window", exactly the
-   * behaviour before the ladder was wired.
+   * exists yet. `null` means "daily gate, widest retention window".
    */
   vaultLimitBytes?: () => number | null;
   /**
-   * This plane's share of the host's memory ceiling (issue #659 L8). A TOTAL
+   * This plane's share of the host's memory ceiling (#659). A TOTAL
    * across the vault's two databases — `openVaultDb` splits it — so the host
    * divides one ceiling by the mounted-plane count and does no other
    * arithmetic. Omitted reproduces the pre-#659 per-file pragmas exactly.
@@ -332,7 +331,7 @@ export interface GrantRequest {
   expiresAt?: string;
 }
 
-/** A manifest's declared vault block, as install-time consent (issue #306). */
+/** A manifest's declared vault block, as install-time consent (#306). */
 export interface InstallScopeBlock {
   purpose?: string;
   scopes: readonly {
@@ -344,7 +343,7 @@ export interface InstallScopeBlock {
   }[];
 }
 
-/** One outbox item as the owner surface lists it (issue #306). */
+/** One outbox item as the owner surface lists it (#306). */
 export interface OutboxItemSummary {
   itemId: string;
   actorId: string;
@@ -363,7 +362,7 @@ export interface OutboxItemSummary {
   note: string | null;
 }
 
-/** One review-feed entry: a receipt ranked by risk salience (issue #306). */
+/** One review-feed entry: a receipt ranked by risk salience (#306). */
 export interface ReviewEntry {
   receiptId: string;
   action: string;
@@ -379,13 +378,13 @@ export interface ReviewEntry {
   /**
    * Refined actor kind for the Approvals KindBadge — same vocabulary as the
    * outbox plane (`app` / `agent` / `assistant` / `owner`). Null when no
-   * invocation/actor is on the receipt (issue #552).
+   * invocation/actor is on the receipt (#552).
    */
   actorKind: string | null;
   /** Display name for the actor when the join is free; null falls back to kind. */
   actor: string | null;
   /**
-   * Standing outbox grant that auto-allowed this receipt (issue #552), when
+   * Standing outbox grant that auto-allowed this receipt (#552), when
    * present — enables "Auto-allowed by standing grant" + inline Revoke.
    * Distinct from consent.access_grant on the receipt row.
    */
@@ -421,15 +420,15 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
 /**
  * Declared scopes not yet covered by any active grant. A broad grant covers
  * a narrower row/field request; a narrow grant never covers a broad request.
- * Tombstoned scopes (issue #308 A4) are the owner's standing "no": they are
+ * Tombstoned scopes (#308) are the owner's standing "no": they are
  * neither re-granted nor re-requested, only an explicit owner approval
  * (which clears the tombstone) brings one back.
  */
 // `scopeCovers` is the vault package's canonical extent comparison
-// (`@centraid/vault` → `scope-extent.ts`). It used to be duplicated here with
-// slightly different null handling, which let consent memory and install-grant
-// reconciliation disagree about the same scope; one definition keeps them in
-// lockstep (issue #541 review).
+// (`@centraid/vault` → `scope-extent.ts`), never a local copy with slightly
+// different null handling: one definition keeps consent memory and
+// install-grant reconciliation in lockstep about the same scope (#541
+// review).
 
 function missingScopes(
   grants: GrantSummary[],
@@ -452,7 +451,7 @@ function missingScopes(
     }));
 }
 
-/** The `content` op's request shape (issue #299): one derivative fetch. */
+/** The `content` op's request shape (#299): one derivative fetch. */
 interface AgentContentRequest {
   contentId: string;
   variant: string;
@@ -460,7 +459,7 @@ interface AgentContentRequest {
   purpose?: string;
 }
 
-/** The async twin — the `content` op awaits custody I/O (issue #299). */
+/** The async twin — the `content` op awaits custody I/O (#299). */
 async function asVaultCallResultAsync(
   fn: () => Promise<unknown>
 ): Promise<VaultCallResult> {
@@ -482,18 +481,18 @@ async function asVaultCallResultAsync(
   }
 }
 
-/** Journal archival cadence (issue #367 §E2): once a day is plenty. */
+/** Journal archival cadence (#367): once a day is plenty. */
 const JOURNAL_ARCHIVAL_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Vault-side retention cadence (issue #659 L1/L3/L4). Same daily gate as
+ * Vault-side retention cadence (#659 L1/L3/L4). Same daily gate as
  * journal archival — these collectors reclaim expired undo snapshots and
  * terminal operational rows, neither of which anyone waits on.
  */
 const VAULT_MAINTENANCE_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
- * CAS entries one local-orphan pass may examine (issue #659 L5). Sized so a
+ * CAS entries one local-orphan pass may examine (#659). Sized so a
  * pass is a bounded amount of stat+membership work on the constrained host; a
  * larger CAS simply takes more passes.
  */
@@ -547,7 +546,7 @@ export class VaultPlane {
    */
   readonly quarantine: QuarantineStatus | null;
   /**
-   * The WAL segment shipper (issue #408) — always constructed for a
+   * The WAL segment shipper (#408) — always constructed for a
    * file-backed vault as soon as this process owns the WAL lifecycle.
    * gateway.db's lifetime lock makes that ownership unconditional. The
    * capture clock still sleeps until a backup destination exists, preserving
@@ -564,7 +563,7 @@ export class VaultPlane {
     VaultPlaneOptions["walShipper"]
   >;
   private readonly shouldDeferBackgroundWork: () => boolean;
-  /** Resource-actuals hooks (#528 Phase C) — accounting only, never gates. */
+  /** Resource-actuals hooks (#528) — accounting only, never gates. */
   private readonly onSweepPass:
     | ((info: { durationMs: number }) => void)
     | undefined;
@@ -576,7 +575,7 @@ export class VaultPlane {
     | ((vaultId: string, wake: boolean) => void)
     | undefined;
   private sweepTimer: NodeJS.Timeout | undefined;
-  /** Deferred first sweep (#659 G10); cleared on stop so it cannot outlive the plane. */
+  /** Deferred first sweep (#659); cleared on stop so it cannot outlive the plane. */
   private firstSweep: NodeJS.Immediate | undefined;
   private walTimer: NodeJS.Timeout | undefined;
   private firstWalTick: NodeJS.Immediate | undefined;
@@ -587,13 +586,13 @@ export class VaultPlane {
    *  in-memory by design: a restart re-derives it from the file size. */
   private journalArchiveRung = 0;
   private lastVaultMaintenanceAt = 0;
-  /** The owner's `vault.db` size limit (#659 L3), read fresh each sweep. */
+  /** The owner's `vault.db` size limit (#659), read fresh each sweep. */
   private readonly vaultLimitBytes: () => number | null;
   /** Ladder position for the size-triggered vault sweep — in-memory, like the
    *  journal's, for the same reason. */
   private vaultMaintenanceRung = 0;
   /**
-   * Resume point for the bounded local-orphan sweep (#659 L5); `null` starts
+   * Resume point for the bounded local-orphan sweep (#659); `null` starts
    * from the beginning of the CAS listing. In memory by design — restarting at
    * the top costs one extra pass, never correctness.
    */
@@ -603,7 +602,7 @@ export class VaultPlane {
   private closed = false;
   private displayName: string;
   /**
-   * Retained-snapshot GC-root supplier (issue #436 §6). Set by the
+   * Retained-snapshot GC-root supplier (#436). Set by the
    * `BackupService` for a vault whose backup store is configured; it returns
    * the blob shas every retained snapshot manifest references. The blob sweep
    * feeds these to `sweepBlobs` so a client-owned CAS orphan-delete can never
@@ -614,7 +613,7 @@ export class VaultPlane {
    */
   snapshotBlobRoots?: () => Promise<ReadonlySet<string>>;
   /**
-   * Orphan-grace window supplier (issue #439 R4). Set by the `BackupService`
+   * Orphan-grace window supplier (#439). Set by the `BackupService`
    * alongside `snapshotBlobRoots`; returns the recovery window N in ms — the
    * provider's retention daily rung — or `undefined` when no window is knowable
    * (a non-ladder retention, e.g. a local provider). The blob sweep threads this
@@ -629,8 +628,7 @@ export class VaultPlane {
   /**
    * Whether the journal's conversation-ledger band has been ensured on this
    * plane's handle. The workspace serves the SAME `journal.db` connection the
-   * audit stream uses (the old standalone `transcripts.db` folded in) — the
-   * ledger DDL is idempotent and never touches the audit ladder's
+   * audit stream uses — the ledger DDL is idempotent and never touches the audit ladder's
    * user_version, so ensuring lazily on first workspace use is safe.
    */
   private ledgerReady = false;
@@ -651,7 +649,7 @@ export class VaultPlane {
     // Harness scratch lives in a disposable cache OUTSIDE the vault tree; fall
     // back to the vault dir only for callers that don't supply one (tests).
     this.cacheDir = options.cacheDir ?? options.dir;
-    // S3 blob-store credentials (issue #296 §2, extended #367 §C3): the
+    // S3 blob-store credentials (#296 §2, extended #367 §C3): the
     // default lane stays HARNESS-AMBIENT env vars, never settings — but a
     // host that has wired a `StorageConnectionStore` (build-gateway.ts)
     // injects `options.s3Credentials`, which resolves per `connectionId`
@@ -663,10 +661,10 @@ export class VaultPlane {
       dir: options.dir,
       ...(options.keyStore ? { keyStore: options.keyStore } : {}),
       s3Credentials: options.s3Credentials ?? defaultEnvS3Credentials,
-      // Preview backstop codec (issue #405 §2) — forwarded only when the host
+      // Preview backstop codec (#405) — forwarded only when the host
       // wired one; a codec-less open just never runs the backstop.
       ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
-      // Vector search extension (issue #721 E3). The vault package ships no
+      // Vector search extension (#721). The vault package ships no
       // native binaries, so the gateway supplies the loader; a platform
       // without the extension logs once and searches with the exact JS cosine
       // scan instead. Never fails the open.
@@ -760,11 +758,11 @@ export class VaultPlane {
     registerEnrichCommands(this.gateway);
     registerOutboxCommands(this.gateway);
     registerJudgmentCommands(this.gateway);
-    // The Vault Atlas Browse write trio (issue #441 B3): owner row CRUD that
+    // The Vault Atlas Browse write trio (#441): owner row CRUD that
     // rides the same journalled path so hand-edits ship in the replica log.
     registerAtlasCommands(this.gateway);
     // Re-arm the ext-band write trios for every installed app that
-    // declared extension tables (issue #286 phase 2) — command handlers
+    // declared extension tables (#286) — command handlers
     // live in gateway memory, the contract rows in the vault.
     this.gateway.registerAllExtCommands();
     // Fresh bootstrap is the one safe early checkpoint: all schema/default
@@ -795,7 +793,7 @@ export class VaultPlane {
       // relay just like any other newly created decision.
       this.ringNotificationsChanged(true);
     }
-    // WAL shipper (issue #408). A restored-and-adopted directory has no
+    // WAL shipper (#408). A restored-and-adopted directory has no
     // wal-ship state, so its first tick mints a fresh generation — which is
     // exactly the restore-takeover stream break FORMAT.md rule 6 requires.
     this.walTickOverrideMs = options.walTickMs;
@@ -956,7 +954,7 @@ export class VaultPlane {
   }
 
   /**
-   * Record a bundled blueprint app as installed in this vault (issue #434) —
+   * Record a bundled blueprint app as installed in this vault (#434) —
    * a `consent.app` row with `origin: 'installed'`, the git-free install
    * registry. Idempotent: an already-installed app returns its existing row
    * (only its display name self-heals). Identity only — the declared scopes
@@ -1042,7 +1040,7 @@ export class VaultPlane {
       }
       markAgentRevoked(this.db, agent.agentId);
     }
-    // Standing outbox grants die with the actor (issue #306): an
+    // Standing outbox grants die with the actor (#306): an
     // uninstalled app's "always allow" rules must not outlive it.
     const outboxRevocations: string[] = [];
     for (const actorId of [app?.appId, agent?.agentId]) {
@@ -1074,7 +1072,7 @@ export class VaultPlane {
         `vault plane: revoked standing outbox grant ${revokedGrantId} for "${appId}"`
       );
     }
-    // Uninstall wipes the consent memory (issue #308 A3/A4): the cascade's
+    // Uninstall wipes the consent memory (#308 A3/A4): the cascade's
     // own revocations just tombstoned every scope, but uninstall is "no to
     // the whole app", not "no to these scopes forever" — a reinstall is a
     // fresh install-time consent. Open widening requests go with it.
@@ -1102,7 +1100,7 @@ export class VaultPlane {
       throw new Error("a grant needs at least one scope");
     for (const scope of request.scopes)
       assertExtSchemaOwnership(appId, scope.schema);
-    // An explicit owner approval overrides a past revocation (issue #308 A4).
+    // An explicit owner approval overrides a past revocation (#308).
     clearScopeTombstones(this.db, { appId: app.appId }, request.scopes);
     return createGrant(this.db, {
       appId: app.appId,
@@ -1141,7 +1139,7 @@ export class VaultPlane {
       throw new Error(`unknown purpose notation "${request.purpose}"`);
     if (request.scopes.length === 0)
       throw new Error("a grant needs at least one scope");
-    // An explicit owner approval overrides a past revocation (issue #308 A4).
+    // An explicit owner approval overrides a past revocation (#308).
     clearScopeTombstones(
       this.db,
       { granteePartyId: agent.partyId },
@@ -1157,7 +1155,7 @@ export class VaultPlane {
   }
 
   /**
-   * Install-time scopes (issue #306 decision 2, bounded by issue #308 A3/A4):
+   * Install-time scopes (#306 decision 2, bounded by #308 A3/A4):
    * installing the app WAS the consent — for the scopes declared AT install.
    * The first grant (no consent history) covers the whole declared block;
    * after that the top-up never widens on its own: a manifest declaring
@@ -1225,7 +1223,7 @@ export class VaultPlane {
       );
       return;
     }
-    // Widened beyond the last owner consent (issue #308 A3): park the ask.
+    // Widened beyond the last owner consent (#308): park the ask.
     const nextScopes = missing.map((s) => ({
       schema: s.schema,
       ...(s.table === undefined ? {} : { table: s.table }),
@@ -1250,7 +1248,7 @@ export class VaultPlane {
     );
   }
 
-  /** Open scope-widening requests — blocking items (issue #308 A3). */
+  /** Open scope-widening requests — blocking items (#308). */
   listScopeRequests(): ScopeRequestSummary[] {
     return listOpenScopeRequests(this.db);
   }
@@ -1346,7 +1344,7 @@ export class VaultPlane {
   }
 
   /**
-   * The shell entity picker (issue #272): an OWNER-trust search/browse over
+   * The shell entity picker (#272): an OWNER-trust search/browse over
    * the carded entities (implemented in vault-picker.ts), so an app can let
    * the user reference a foreign entity without ever holding browse scopes on
    * that domain — the act of picking is the consent.
@@ -1402,7 +1400,7 @@ export class VaultPlane {
   }
 
   /**
-   * Move or clear a live link's standoff anchor (issue #282) — the
+   * Move or clear a live link's standoff anchor (#282) — the
    * re-anchor / re-baseline half of inline references. A locator write, not
    * a new judgment.
    */
@@ -1427,7 +1425,7 @@ export class VaultPlane {
   }
 
   /**
-   * The outbox surface (issue #306): items as the owner reads them — the
+   * The outbox surface (#306): items as the owner reads them — the
    * artifact itself, WHO staged it, and where it would go. Host-plane
    * queries like `listParked`; the request_json stays server-side (it is
    * the executor's business, and it may carry placeholder plumbing the
@@ -1536,7 +1534,7 @@ export class VaultPlane {
     });
   }
 
-  /** Standing (actor, verb, target) rules, live first (issue #306 phase 3). */
+  /** Standing (actor, verb, target) rules, live first (#306). */
   listOutboxGrants(): Array<{
     grantId: string;
     actor: string | null;
@@ -1580,7 +1578,7 @@ export class VaultPlane {
   }
 
   /**
-   * The BLOCKING list (issue #306 decision 5): only things actually waiting
+   * The BLOCKING list (#306 decision 5): only things actually waiting
    * on the owner — pending outbox artifacts, needs-auth connections, and
    * Tier 3/4 parked confirmations. Everything else belongs to the review
    * feed, not here.
@@ -1596,7 +1594,7 @@ export class VaultPlane {
       attentionAt: string;
     }>;
     parked: ParkedSummary[];
-    /** Manifest scope-widening asks awaiting the owner (issue #308 A3). */
+    /** Manifest scope-widening asks awaiting the owner (#308). */
     scopeRequests: ScopeRequestSummary[];
   } {
     const needsAuth = this.db.vault
@@ -1651,7 +1649,7 @@ export class VaultPlane {
   }
 
   /**
-   * The review feed (issue #306 decision 5): what HAPPENED, salience-ranked —
+   * The review feed (#306 decision 5): what HAPPENED, salience-ranked —
    * risk-marker-weighted receipts over a recent window, denies surfacing
    * above allows of the same tier. Review-after-the-fact is the Tier 1
    * consent mechanism; this is its surface.
@@ -1707,7 +1705,7 @@ export class VaultPlane {
         // Standing outbox grant id: stage/decide output carries it when a
         // standing (actor, verb, target) rule auto-allowed or was minted.
         // Prefer the explicit output field; fall back to the outbox item row
-        // when the receipt only named the item_id (issue #552).
+        // when the receipt only named the item_id (#552).
         const output =
           detail.output && typeof detail.output === "object"
             ? (detail.output as Record<string, unknown>)
@@ -1779,7 +1777,7 @@ export class VaultPlane {
   }
 
   /**
-   * The install/consent surface for one app (issue #306 phase 4): every
+   * The install/consent surface for one app (#306): every
    * scope its identities hold (app plane + automation agent plane), plus
    * salience highlights — the act commands those scopes reach, risk-ranked,
    * confirm-gated (Tier 3/4) verbs flagged. "This app can delete notes" is
@@ -1885,7 +1883,7 @@ export class VaultPlane {
   }
 
   /**
-   * Resolve the raw identity kind for a review-feed actor id (issue #552).
+   * Resolve the raw identity kind for a review-feed actor id (#552).
    * Invocations store only the row id; kind is recovered by table membership
    * so `refineActorKind` / `actorName` get the same vocabulary as outbox.
    */
@@ -1920,14 +1918,14 @@ export class VaultPlane {
   }
 
   /**
-   * The vault assistant's WRITE tool (issue #286 phase 2): typed commands
+   * The vault assistant's WRITE tool (#286): typed commands
    * riding an enrolled `_assistant` agent — NOT the owner-device
-   * credential, deliberately: Tier 3/4 confirm-gated commands (issue #306)
+   * credential, deliberately: Tier 3/4 confirm-gated commands (#306)
    * park for the owner's explicit say-so in the existing approval surface.
    * Reads bypass the keyhole (sql); writes keep the contract + parking
    * asymmetry for the loud-on-purpose verbs.
    *
-   * THE ASSISTANT'S AUTHORITY, WRITTEN DOWN (issue #308 B3): `_assistant`
+   * THE ASSISTANT'S AUTHORITY, WRITTEN DOWN (#308): `_assistant`
    * holds a standing `act` grant over EVERY command schema — it is a more
    * privileged actor than any installed app, bypassing install-time scoping
    * entirely. This is intentional ("the assistant is the owner's hands"):
@@ -1941,7 +1939,7 @@ export class VaultPlane {
    * assistant is the owner's own hands, so using it IS the consent —
    * scoped to `act` (never widens reads, which don't ride grants here).
    * The owner CAN narrow it durably: a revoked assistant grant tombstones
-   * its schemas (issue #308 A4), and the self-heal below skips tombstoned
+   * its schemas (#308), and the self-heal below skips tombstoned
    * schemas until the owner explicitly re-approves them.
    */
   async invokeAsAssistant(request: InvokeRequest): Promise<InvokeOutcome> {
@@ -1969,7 +1967,7 @@ export class VaultPlane {
           .all(agent.partyId) as { schema_name: string }[]
       ).map((r) => r.schema_name)
     );
-    // The owner's "no" binds the assistant too (issue #308 A4/B3).
+    // The owner's "no" binds the assistant too (#308 A4/B3).
     for (const t of listScopeTombstones(this.db, {
       granteePartyId: agent.partyId,
     })) {
@@ -2017,7 +2015,7 @@ export class VaultPlane {
   }
 
   /**
-   * The assistant's document-text access (issue #299): the `text` variant
+   * The assistant's document-text access (#299): the `text` variant
    * (extracted document text / inline body) of one content item, receipted.
    * Owner-credentialed like `sqlAsOwner` — the assistant IS the owner
    * reading their own document. Text-first by design; binary variants stay
@@ -2053,7 +2051,7 @@ export class VaultPlane {
   }
 
   /**
-   * The ext band (issue #286 phase 2) — the host applies an app's DECLARED
+   * The ext band (#286) — the host applies an app's DECLARED
    * extension tables (manifest `ext.tables`) to the live band; the vault
    * gateway diffs, validates and receipts. Idempotent: same specs → no-op.
    */
@@ -2111,7 +2109,7 @@ export class VaultPlane {
   }
 
   /**
-   * The scenario-seed `ctx.vault` executor (issue #290 phase 1): a seed
+   * The scenario-seed `ctx.vault` executor (#290): a seed
    * generator is the OWNER loading demo data, so calls ride the owner-device
    * credential with the demo register set — every write stamps `seed.demo`
    * provenance and lands in the seed registry, purgeable in one act and
@@ -2163,7 +2161,7 @@ export class VaultPlane {
     };
   }
 
-  /** Purge demo data — whole vault or one app's scenario (issue #290). */
+  /** Purge demo data — whole vault or one app's scenario (#290). */
   purgeDemo(appId?: string): DemoPurgeResult {
     return this.gateway.purgeDemo(this.ownerCredential, appId);
   }
@@ -2183,7 +2181,7 @@ export class VaultPlane {
     // Capture it here so worker-message scheduling cannot lose the binding.
     const replicaIntent = replicaIntentContext();
     const requestDeviceId = vaultContext()?.deviceKey;
-    // L4 attribution (issue #599 decision 8): the acting owner, host-resolved
+    // L4 attribution (#599 decision 8): the acting owner, host-resolved
     // from the device binding exactly like the device id beside it. An offline
     // intent carries its own — the person who made the write on the phone,
     // which is not necessarily whoever's request replayed it.
@@ -2203,7 +2201,7 @@ export class VaultPlane {
         signingKey: app.signingKey,
       };
       if (call.op === "content") {
-        // Derivative fetch (issue #299) — async custody I/O, receipted read.
+        // Derivative fetch (#299) — async custody I/O, receipted read.
         return asVaultCallResultAsync(() =>
           this.gateway.contentForAgent(
             cred,
@@ -2212,7 +2210,7 @@ export class VaultPlane {
         );
       }
       if (call.op === "authenticate") {
-        // Locker unlock (issue #659 G11): the vault's scrypt now runs on the
+        // Locker unlock (#659): the vault's scrypt runs on the
         // threadpool, so this returns a promise and MUST be awaited. It cannot
         // stay in the synchronous switch below — `asVaultCallResult` takes a
         // `() => unknown`, so an unawaited promise typechecks and is wrapped as
@@ -2272,23 +2270,23 @@ export class VaultPlane {
             return this.gateway.discover(cred);
           case "parked":
             // The app's own parked invocations — the "my pending approvals"
-            // surface blueprints used to fake session-locally (issue #260).
+            // surface (#260).
             // Matched on `callerId` (the enrolled row id), not `caller` (a
-            // display name — no longer guaranteed to equal `appId`).
+            // display name, not guaranteed to equal `appId`).
             return this.gateway
               .listParked()
               .filter(
                 (p) => p.callerKind === "app" && p.callerId === app.appId
               );
           case "resolve":
-            // Cross-domain reference cards (issue #272) — resolvable when a
+            // Cross-domain reference cards (#272) — resolvable when a
             // live core.link ties the ref to something this app reads.
             return this.gateway.resolveRefs(
               cred,
               call.payload as unknown as RefRequest
             );
           case "reveal":
-            // Sealed-column plaintext (issue #293) — takes the app's
+            // Sealed-column plaintext (#293) — takes the app's
             // explicit `reveal` scope; every allow is receipted per item.
             // Locker lock/permit enforcement is data-keyed inside
             // `gateway.reveal` so fill, UI, and agent arms share one gate.
@@ -2297,7 +2295,7 @@ export class VaultPlane {
               call.payload as unknown as RevealRequest
             );
           case "authenticate":
-            // Unreachable: the async lane above returns first (issue #659 G11
+            // Unreachable: the async lane above returns first (#659 G11
             // moved locker scrypt off the event loop). Listed so the switch
             // stays exhaustive, exactly like `content`.
             throw new Error("authenticate is handled on the async path above");
@@ -2321,12 +2319,12 @@ export class VaultPlane {
    * The per-automation `ctx.vault` executor — the agent-plane mirror of
    * `bridgeFor`. Fires authenticate as the automation's enrolled
    * `consent.agent` riding the host's owner device (session binding, §12);
-   * Tier 3/4 confirm-gated commands (issue #306) park for owner
+   * Tier 3/4 confirm-gated commands (#306) park for owner
    * confirmation. Credential resolution happens per call so a revocation
    * lands immediately.
    */
   agentBridgeFor(appId: string, block?: InstallScopeBlock): VaultBridge {
-    // The on-behalf-of principal (issue #599 decision 7), captured at bridge
+    // The on-behalf-of principal (#599 decision 7), captured at bridge
     // construction like the intent binding above. Present when the turn rides
     // an owner's request scope; absent for a scheduler-fired automation, which
     // has no human behind it to be capped at. `mayAct` is ownership (#726):
@@ -2373,7 +2371,7 @@ export class VaultPlane {
         ...(onBehalfOfOwner ? { onBehalfOfOwner } : {}),
       };
       if (call.op === "content") {
-        // The recognizer byte primitive (issue #299 §2): visual originals are
+        // The recognizer byte primitive (#299): visual originals are
         // structurally refused; bounded AV originals are the one exception
         // because ASR has no derivative rung to read. Every fetch is still a
         // receipted consent event.
@@ -2414,7 +2412,7 @@ export class VaultPlane {
             // This agent's own invocations awaiting the owner — the handler
             // sees WHAT is pending, never another caller's business. Matched
             // on `callerId` (the enrolled row id), not `caller` (a display
-            // name — no longer guaranteed to equal `appId`).
+            // name, not guaranteed to equal `appId`).
             return this.gateway
               .listParked()
               .filter(
@@ -2426,7 +2424,7 @@ export class VaultPlane {
               call.payload as unknown as RefRequest
             );
           case "reveal":
-            // Connector secrets resolution (issue #293 decision 8): the
+            // Connector secrets resolution (#293 decision 8): the
             // agent's reveal grant names its specific items via row filter.
             return this.gateway.reveal(
               cred,
@@ -2465,7 +2463,7 @@ export class VaultPlane {
   static readonly FALLBACK_CHECKPOINT_WAL_BYTES = 64 * 1024 * 1024;
 
   /**
-   * `journal.db` + its `-wal` on disk, in bytes (issue #544) — the input to
+   * `journal.db` + its `-wal` on disk, in bytes (#544) — the input to
    * the size-triggered archive decision. The WAL counts: pages sitting there
    * are the file's real occupancy until a checkpoint folds them in, and the
    * archival pass ships them first anyway. Missing files count zero (a
@@ -2485,7 +2483,7 @@ export class VaultPlane {
   }
 
   /**
-   * One WAL capture tick (issue #408). Public so the BackupService's drain
+   * One WAL capture tick (#408). Public so the BackupService's drain
    * loop and tests can force a capture at a known instant; the plane's own
    * `walTimer` is just this on a 60 s clock.
    */
@@ -2618,9 +2616,9 @@ export class VaultPlane {
   }
 
   /** Begin the standing-duty clocks: a sweep shortly, then one per interval;
-   *  WAL capture (issue #408/#414) now, then at the current policy RPO. */
+   *  WAL capture (#408/#414) now, then at the current policy RPO. */
   start(): void {
-    // The first sweep is DEFERRED off the mount critical path (issue #659 G10),
+    // The first sweep is DEFERRED off the mount critical path (#659),
     // exactly as the first WAL tick below already is. `start()` is awaited by
     // the boot sequence, and the sweep is a synchronous pass over blob custody,
     // retention, and (on the daily gate) archival — a vault with any real
@@ -2633,8 +2631,8 @@ export class VaultPlane {
     this.firstSweep.unref();
     this.scheduleSweep();
     if (!this.walLifecycleEnabled) return;
-    // Issue #411 action 3: defer the first configured capture off the mount critical
-    // path. On a fresh vault the first tick mints the generation base — a
+    // Defer the first configured capture off the mount critical
+    // path (#411). On a fresh vault the first tick mints the generation base — a
     // TRUNCATE checkpoint + reflink base clone + fsync + sha256 (~150-200 ms
     // /db, #408) — and mount awaits start(). setImmediate runs it after the
     // current I/O phase, so mount only REGISTERS the db; the base is built
@@ -2650,7 +2648,7 @@ export class VaultPlane {
 
   private runSweep(): void {
     if (this.shouldDeferBackgroundWork()) return;
-    // Resource actuals (#528 Phase C): time the SYNCHRONOUS lifecycle work.
+    // Resource actuals (#528): time the SYNCHRONOUS lifecycle work.
     // Detached blob replication (`runBlobSweep`) reports its own busyMs.
     const sweepStartedAt = Date.now();
     try {
@@ -2667,7 +2665,7 @@ export class VaultPlane {
       // The operator log and the journal receipt must tell the same story:
       // a sweep that declines purges because a row is an edit-lineage source
       // touches nothing, yet an operator watching only this log would see
-      // silence while the receipt records the refusal (#712 P12). Blocked
+      // silence while the receipt records the refusal (#712). Blocked
       // lists therefore both gate the line and appear in it verbatim.
       const blockedByLineage =
         result.assetsBlockedByLineage.length +
@@ -2697,11 +2695,11 @@ export class VaultPlane {
             `priorEpochs=${replicaPrune.discardedPriorEpochs} retained=${replicaPrune.retained}`
         );
       }
-      // Blob custody maintenance (issue #296): replicate to the remote tier
+      // Blob custody maintenance (#296): replicate to the remote tier
       // and reconcile orphans, detached — remote latency never blocks the
       // lifecycle sweep, and a vault with no remote tier no-ops.
       //
-      // Failure backoff (issue #367 §C5): a sweep that keeps throwing (dead
+      // Failure backoff (#367): a sweep that keeps throwing (dead
       // credentials, an unreachable endpoint) would otherwise re-attempt on
       // every lifecycle tick — fine at the default hourly cadence, a hot
       // loop at a test's shortened one. `BlobSweepStatus.lastAttemptedAt`
@@ -2719,12 +2717,12 @@ export class VaultPlane {
       } else {
         this.runBlobSweep();
       }
-      // Journal segment archival (issue #367 §E2): slow-cadence — at most
+      // Journal segment archival (#367): slow-cadence — at most
       // once per day per plane; the 90-day window makes it a no-op on young
       // vaults, and the segments it writes join the blob CAS, so the sweep
       // above replicates them remotely on the next pass.
       //
-      // Size-triggered override (issue #544): when the owner has set a
+      // Size-triggered override (#544): when the owner has set a
       // `journal.db` limit and the file is over it, the daily gate is
       // bypassed and the window narrows one rung per sweep down a fixed
       // ladder with a 7-day floor. The whole policy is `decideJournalArchive`
@@ -2753,7 +2751,7 @@ export class VaultPlane {
           // archival VACUUM rewrites the whole file through the WAL, and a
           // generation roll right after (below) absorbs that rewrite into a
           // fresh, now-smaller base instead of shipping a DB-sized WAL
-          // burst (issue #408 — journal archival is the one sanctioned bulk
+          // burst (#408 — journal archival is the one sanctioned bulk
           // rewrite of a shipped database).
           this.walTick();
           const archived = runJournalArchival(this.db, archiveWindow);
@@ -2763,7 +2761,7 @@ export class VaultPlane {
                 `manifests=${archived.manifests.length} vacuum=${archived.reclaim.mode}`
             );
           }
-          // The pass is row-capped (issue #659 L2), so a vault with a backlog
+          // The pass is row-capped (#659), so a vault with a backlog
           // needs more than one. Re-opening the daily gate — rather than
           // looping here — drains it over successive HOURLY sweeps: the point
           // of the cap is that no single tick blocks the event loop for long,
@@ -2774,14 +2772,14 @@ export class VaultPlane {
               "vault plane: journal archival hit its row cap — resuming next sweep"
             );
           }
-          // Conversation-ledger archival (issue #438) rides the SAME daily block:
+          // Conversation-ledger archival (#438) rides the SAME daily block:
           // the ledger band grows at machine speed and is the file that reaches
           // gigabytes. The gateway composes the engine's seams — the vault blob
           // door (`db.blobs`) and the custody-proven latch from vault primitives.
           // A gateway that has never served conversations may not have ensured
           // the ledger band on this journal yet, so ensure it first (idempotent).
           ensureConversationLedger(this.db.journal);
-          // Repricing backfill (issue #445) rides the daily block: the price
+          // Repricing backfill (#445) rides the daily block: the price
           // catalog refreshes at most daily (warmer TTL), so an hourly pass
           // would almost always no-op. Bounded + resumable from a plane-held
           // cursor — corrects NULL-from-then-unknown and stale-rate item costs
@@ -2820,7 +2818,7 @@ export class VaultPlane {
             );
           }
           // One shared generation roll if EITHER engine wrote or pruned rows
-          // (issue #408/#438): both engines VACUUM the same journal.db through
+          // (#408/#438): both engines VACUUM the same journal.db through
           // the WAL, and the vault+journal generations must break TOGETHER so a
           // snapshot never pairs a post-archival journal base with a pre-archival
           // vault base — the producer refuses such a two-instant pair outright.
@@ -2842,7 +2840,7 @@ export class VaultPlane {
         }
       }
 
-      // Vault-side retention (issue #659 L1/L3/L4). `vault.db` is the sovereign
+      // Vault-side retention (#659 L1/L3/L4). `vault.db` is the sovereign
       // asset and is meant to stay small, but two things accreted in it without
       // a collector: expired undo snapshots (`core_entity_revision` rows past
       // their `undo_until`, which no reader will return) and terminal
@@ -2892,12 +2890,12 @@ export class VaultPlane {
   /**
    * The blob-custody half of `runSweep`, split out so the failure-backoff
    * check above can skip it without a nested detached-promise indent. Lease
-   * gating (issue #367 §C6): the orphan-DELETE phase pauses while a second
+   * gating (#367): the orphan-DELETE phase pauses while a second
    * gateway instance appears live against this vault root — pushing new
    * replicas and detecting missing shas still runs either way.
    */
   private runBlobSweep(): void {
-    // Resource actuals (#528 Phase C): time the detached reconcile end-to-end
+    // Resource actuals (#528): time the detached reconcile end-to-end
     // and sum the bytes of newly-replicated objects. Accounting only.
     const replicationStartedAt = Date.now();
     void Promise.all([
@@ -2954,7 +2952,7 @@ export class VaultPlane {
   }
 
   /**
-   * The LOCAL half of the orphan reclaim (issue #599 decision 11). The remote
+   * The LOCAL half of the orphan reclaim (#599 decision 11). The remote
    * reconcile above deletes remote orphans and the cache eviction sheds only
    * replicated bytes, so nothing reclaimed a local-only CAS entry — which
    * share-by-placement now produces routinely (a failed share leaves a link,
@@ -2975,11 +2973,11 @@ export class VaultPlane {
     graceWindowMs: number | undefined;
   }): void {
     if (options.skipOrphanDelete) return;
-    // Bounded window + carried cursor (issue #659 L5). A CAS with 100k objects
-    // used to make every hourly tick a 100k-entry walk; now each tick examines
-    // a fixed slice and the NEXT tick resumes where this one stopped, so sweep
+    // Bounded window + carried cursor (#659). Each tick examines a
+    // fixed slice and the NEXT tick resumes where this one stopped, so sweep
     // cost per tick is constant and total cadence scales with CAS size instead
-    // of the tick doing so.
+    // of the tick doing so — an unbounded sweep makes every hourly tick a
+    // 100k-entry walk on a CAS with 100k objects.
     const result = sweepLocalOrphans(this.db, {
       graceWindowMs: options.graceWindowMs ?? LOCAL_ORPHAN_GRACE_MS,
       maxEntries: LOCAL_ORPHAN_SWEEP_MAX_ENTRIES,
@@ -3000,7 +2998,7 @@ export class VaultPlane {
   }
 
   /**
-   * Resolve the retained-snapshot GC roots for this sweep (issue #436 §6).
+   * Resolve the retained-snapshot GC roots for this sweep (#436).
    * `undefined` → no backup store configured (no snapshots, nothing to pin).
    * `'unavailable'` → the supplier threw (e.g. an unreadable manifest); the
    * caller then skips the orphan-DELETE phase entirely, because a client-owned
@@ -3023,7 +3021,7 @@ export class VaultPlane {
   }
 
   /**
-   * Resolve the orphan-grace window N for this sweep (issue #439 R4), in ms.
+   * Resolve the orphan-grace window N for this sweep (#439), in ms.
    * `undefined` → no window to protect: either no supplier (no backup store, so
    * no snapshots and no recovery-window promise) or a non-ladder retention. The
    * orphan delete then runs immediately, its pre-R4 behavior. A supplier that
@@ -3059,7 +3057,7 @@ export class VaultPlane {
       this.walShipper &&
       this.walCaptureConfigured()
     ) {
-      // Shipper-owned shutdown (issue #408): run optimize + a final ship +
+      // Shipper-owned shutdown (#408): run optimize + a final ship +
       // TRUNCATE inside the shipper (invariant I2 — it is the only
       // checkpointer), then close the handles without a second optimize
       // (whose WAL writes would be folded by SQLite's close-checkpoint

@@ -1,12 +1,10 @@
 /*
- * Pure backoff + crash-loop bookkeeping for the embedded local gateway
- * (issue #351). Extracted from local-gateway.ts so it's unit-testable
- * without pulling in `@centraid/server`'s `serve()`.
+ * Pure backoff + crash-loop bookkeeping for the embedded local gateway. Keep
+ * it free of `@centraid/server`'s `serve()` so it stays unit-testable.
  *
- * Before this module, every failed `serve()` call during lazy startup
- * (settings read, gateway switch, …) was retried immediately and
- * unconditionally on the very next call — a boot failure surfaced as
- * silent retry-storming with no user-visible signal. The model here:
+ * Without this bookkeeping a failed `serve()` during lazy startup (settings
+ * read, gateway switch, …) is retried immediately on the very next call —
+ * silent retry-storming with no user-visible signal. The model:
  *
  *   - each failure is recorded with a timestamp; failures older than
  *     {@link CRASH_LOOP_WINDOW_MS} age out of the window
@@ -133,10 +131,9 @@ export function claimRevival(
  * When a person presses "Try again" they are asserting new information — they
  * just killed the process holding the lock, or put the credential file back —
  * and refusing them because an automatic budget is exhausted strands them on a
- * screen whose only other exit is quitting the app. That is exactly how the
- * startup error screen's one button came to be dead: the supervisor had
- * latched `loopBroken`, so every re-read failed instantly with the same
- * message no matter what the user had fixed.
+ * screen whose only other exit is quitting the app — a latched `loopBroken`
+ * makes the startup error screen's one button dead, failing instantly with
+ * the same message no matter what the user fixed.
  *
  * So an explicit retry clears the give-up state. What it must NOT become is an
  * unbounded respawn loop for a daemon that crashes on every launch, driven by

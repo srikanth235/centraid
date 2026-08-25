@@ -1,6 +1,6 @@
 /*
  * `GET /centraid/_gateway/diagnostics` — a single JSON document a user
- * can save to a file and hand to support (issue #351, Tier 3).
+ * can save to a file and hand to support (#351, Tier 3).
  *
  * Thin wiring: this module matches the route and gates it. Behind the host
  * bearer check like `_gateway/health` (same reasoning: version/health are
@@ -8,7 +8,7 @@
  * squarely owner-facing, not liveness-probe material).
  *
  * The bundle arrives here ALREADY SERIALIZED, and that is deliberate
- * (#846 P8). The document is built by `serve/support-bundle.ts`, whose last
+ * (#846). The document is built by `serve/support-bundle.ts`, whose last
  * gate is a tripwire sweep over the serialized text for literals harvested
  * from the running system. Handing this route an object to re-serialize
  * would throw that sweep away, so the contract is a string and the route

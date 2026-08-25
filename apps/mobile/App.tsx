@@ -89,16 +89,15 @@ import type { RootStackParamList } from "./src/navigation";
 import HomeScreen from "./src/screens/Home";
 import OnboardingScreen from "./src/screens/Onboarding";
 
-// Held until the profile prefs say onboarding vs app — see the comment on the
-// `onboarded === null` gate in App() for why fonts are deliberately *not* part
-// of this condition any more.
+// Held until the profile prefs say onboarding vs app. Fonts are deliberately
+// NOT part of this condition — see the `onboarded === null` gate in App().
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* noop */
 });
 
 // Surface scheduled notifications even when the app is foregrounded —
 // otherwise the OS swallows them silently, which is confusing for things
-// like Focus timers and Hydrate reminders. See issue #14 (Phase C bridges).
+// like Focus timers and Hydrate reminders (#14).
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -130,7 +129,7 @@ function UploadReconciliation(): null {
 }
 
 /**
- * Surfaces ReplicaProvider.error when the session fails to open (issue #468 K2).
+ * Surfaces ReplicaProvider.error when the session fails to open (#468).
  * The "never paired yet" case is expected — Home already invites pairing — so it
  * is suppressed here; only a genuine open failure raises the red bar. The top
  * inset keeps that bar clear of the status bar instead of bleeding under it.
@@ -237,8 +236,8 @@ export default function App(): React.JSX.Element | null {
   const { colors } = resolveTheme(scheme);
   // `null` while the profile prefs hydrate; then true/false gates onboarding.
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
-  // The return tuple is deliberately dropped: nothing gates on it any more (see
-  // the tradeoff note below the effects). `useFonts` still re-renders this
+  // The return tuple is deliberately dropped: nothing gates on it (see the
+  // tradeoff note below the effects). `useFonts` still re-renders this
   // component when the faces land, which is what swaps the system fallback out.
   useFonts({
     InstrumentSans_400Regular,
@@ -257,10 +256,10 @@ export default function App(): React.JSX.Element | null {
     configurePhotoImageCache();
   }, []);
 
-  // Deliberate tradeoff (#659 M3): the splash lifts as soon as the profile has
+  // Deliberate tradeoff (#659): the splash lifts as soon as the profile has
   // hydrated, *without* waiting on the three font faces. Text therefore paints in
   // the system font for the frame or two before `useFonts` resolves and
-  // re-renders. The alternative — the previous `!fontsLoaded` gate — held a
+  // re-renders. The alternative — a `!fontsLoaded` gate — holds a
   // blank screen for the whole font load on every cold start, which is a far
   // more expensive way to avoid a brief typeface swap.
   const onReady = useCallback(async () => {
@@ -275,8 +274,8 @@ export default function App(): React.JSX.Element | null {
     void onReady();
   }, [onReady]);
 
-  // The one gate that survives: it decides onboarding vs app, so there is no
-  // correct tree to render before it resolves.
+  // This gate decides onboarding vs app, so there is no correct tree to
+  // render before it resolves.
   if (onboarded === null) {
     return null;
   }
@@ -329,8 +328,7 @@ export default function App(): React.JSX.Element | null {
                         >
                           <RootStack.Navigator
                             screenOptions={{ headerShown: false }}
-                            // `selection` haptic when a cover opens — preserves the
-                            // vocabulary the old tabPress listener gave.
+                            // `selection` haptic on cover open only —
                             // `closing` guards it to the open transition, not dismissal.
                             screenListeners={{
                               transitionStart: (e) => {

@@ -70,7 +70,7 @@ describe("timeline-50k", () => {
     const { value: merged, elapsedMs } = measureCpuMs(() =>
       mergePhotoAssets(device, remote)
     );
-    // The old indexOf(same) scan was O(n·m); at 50k that is ~2.5B comparisons.
+    // An `indexOf(same)` scan is O(n·m); at 50k that is ~2.5B comparisons.
     // A Map keeps every device copy folded onto its remote in well under budget.
     expect(elapsedMs).toBeLessThan(2_000);
     expect(merged).toHaveLength(50_000);

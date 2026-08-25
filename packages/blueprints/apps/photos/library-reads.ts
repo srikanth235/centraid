@@ -1,4 +1,4 @@
-// The two host adapters the library store needs (issue #599), lifted out of
+// The two host adapters the library store needs (#599), lifted out of
 // app-root.tsx: how a `library` read reaches N scopes on this host, and how a
 // refetch is deferred. Both are pure plumbing with no app state, which is why
 // they live here rather than inside the mount closure.

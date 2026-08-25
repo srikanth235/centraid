@@ -1,5 +1,5 @@
 // THE YEARS AND MONTHS VIEWS — the two summary grains of the Library
-// (issue #712 iOS parity). The All grain is `PhotoTimeline.tsx`; the grouping
+// (#712 iOS parity). The All grain is `PhotoTimeline.tsx`; the grouping
 // they both draw from is `timeline-grains.ts`.
 //
 // A card is a PERIOD, and tapping it is navigation, not selection: Years opens

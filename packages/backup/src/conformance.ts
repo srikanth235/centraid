@@ -213,7 +213,7 @@ export function providerConformanceCases(
     },
 
     {
-      // The snapshot format (issue #408, carried unchanged into /2) stores WAL
+      // The snapshot format (#408, carried unchanged into /2) stores WAL
       // segments as plain data-plane objects under `wal/…` — providers never
       // parse them (and /2's chunk compression does not reach them), but
       // MUST round-trip the deeper key shape and serve ordered prefix LISTs

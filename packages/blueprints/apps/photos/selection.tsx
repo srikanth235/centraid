@@ -27,7 +27,7 @@
 //
 // Keys are COMPOSITE (asset-key.ts), never bare asset ids: the merged timeline
 // can show two scopes' rows that share an `asset_id`, and a bare-id set would
-// tick both and send a batch to the wrong one (issue #599).
+// tick both and send a batch to the wrong one (#599).
 import type { ReactNode } from "react";
 
 import { observeWidth } from "@centraid/design/elements";

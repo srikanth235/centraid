@@ -8,12 +8,12 @@
 //
 // There is NO app bar, NO status line and NO navigation stem here. All three
 // are the frame's, contributed through `frame.tsx`; an app that drew its own
-// would be a second chrome inside the first. The retired global
-// nt-prefixed side/topbar/hamburger selectors are gone for good — they are not
+// would be a second chrome inside the first. The global
+// nt-prefixed side/topbar/hamburger selectors are banned — they are not
 // spelled out here, because the ban is enforced by substring over this whole
 // tree (shared-css.test.ts). The shell's
 // stem is the navigation, and a hamburger opening a sidebar this seat renders
-// `display: none` was chrome pretending to be a way somewhere.
+// `display: none` is chrome pretending to be a way somewhere.
 import type { ReactNode } from "react";
 
 import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";

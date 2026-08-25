@@ -6,16 +6,16 @@ import { build } from "esbuild";
 
 import { apps, toBlueprintCss } from "@centraid/design";
 
-// THE HOME TILE UNDER A MIRRORED WRITING DIRECTION (#842 W0).
+// THE HOME TILE UNDER A MIRRORED WRITING DIRECTION (#842).
 //
-// `AppCard.module.css` moved off physical sides — `text-align: left` became
-// `start`, and the status dot's `right: -3px` became `inset-inline-end: -3px`.
-// Under LTR that migration is a NO-OP by construction, which is exactly what
-// makes it dangerous to review: every existing screenshot, jsdom assertion and
-// class-name check stays green whether the property is physical or logical.
-// The change is only observable when the inline axis flips.
+// `AppCard.module.css` names logical sides, never physical ones —
+// `text-align: start`, and `inset-inline-end: -3px` for the status dot. Under
+// LTR a physical side is indistinguishable from its logical twin, which is
+// exactly what makes the choice dangerous to review: every screenshot, jsdom
+// assertion and class-name check stays green either way. The difference is
+// only observable when the inline axis flips.
 //
-// `lint:logical-insets` proves the SOURCE no longer names a physical side. It
+// `lint:logical-insets` proves the SOURCE names no physical side. It
 // cannot prove the replacement resolves the way the author intended — a
 // `inset-inline-start` typo passes that linter and silently parks the dot on
 // the wrong corner in Arabic and Hebrew. Only a real browser resolving a real
@@ -23,14 +23,14 @@ import { apps, toBlueprintCss } from "@centraid/design";
 //
 // DEMONSTRATED RED: restore `right: -3px` / `text-align: left` in
 // AppCard.module.css and the RTL half below fails while the LTR half stays
-// green — the precise blind spot the migration was made to close.
+// green — the precise blind spot this spec closes.
 //
 // The harness mounts the SHIPPED `AppCard` with the SHIPPED design tokens and
 // reimplements nothing; it needs no gateway and no vault, because a tile is a
 // pure function of its app metadata. Same shape `app-navigation-rail.spec.ts`
 // uses for the rail.
 //
-// The capture is the #842 UI-impact evidence.
+// The capture is the UI-impact evidence (#842).
 
 const here = import.meta.dirname;
 const REPO_ROOT = path.resolve(here, "../../../..");

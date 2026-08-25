@@ -4,7 +4,7 @@ import type { IconName } from "@centraid/design";
 
 /**
  * One matched vault OBJECT — a photo, a doc, a person, a task, an event, a
- * note, a tally entry (issue #708, mobile close-out). Never "open app X": the
+ * note, a tally entry (#708, mobile close-out). Never "open app X": the
  * app is context for the object (the group it belongs to), not the result
  * itself. `kind` is the mono-register word the row leads with ("doc",
  * "person", "event", …); `meta` is the raw ISO instant behind the
@@ -84,7 +84,6 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "task_id",
     labelFields: ["title"],
     detailFields: ["description"],
-    // due_at: already read as a detail field before this change.
     metaField: "due_at",
   },
   {
@@ -138,8 +137,7 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "expense_id",
     labelFields: ["description"],
     detailFields: ["category"],
-    // spent_on: already read as a detail field before this change, and it is
-    // the column useSpringboardTiles filters `expenses` on.
+    // `spent_on` is the column useSpringboardTiles filters `expenses` on.
     metaField: "spent_on",
   },
 ] as const;

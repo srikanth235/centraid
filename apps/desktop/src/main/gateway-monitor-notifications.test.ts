@@ -4,12 +4,12 @@ import type { GatewayProbe } from "./gateway-monitor-core.js";
 import type { OutageLogEvent } from "./gateway-outage-log-core.js";
 
 /**
- * Gateway health never reaches the Notifications (issue #665).
+ * Gateway health never reaches the Notifications (#665).
  *
- * For one release the monitor dual-wrote every transition it persisted into
- * the vault Notifications as well (#647), which produced a card the owner could never
- * resolve by acting on it: marking a persistent "degraded" read does not
- * un-degrade anything, so it simply came back. Health is STATUS — it belongs
+ * Dual-writing a persisted transition into the vault Notifications produces a
+ * card the owner can never resolve by acting on it: marking a persistent
+ * "degraded" read does not un-degrade anything, so it simply comes back
+ * (#647). Health is STATUS — it belongs
  * to the Gateway page (Overview card, Components tab, durable Alerts history)
  * and the threshold-gated OS notification.
  *
@@ -71,8 +71,8 @@ vi.mock(import("./gateway-outage-log.js"), () => ({
   },
 }));
 // A settled install (`onboardingCompletedAt` present, so alerting is live) with
-// an active vault and a reachable gateway URL — precisely the configuration the
-// retired projection required, so its absence here is a real signal.
+// an active vault and a reachable gateway URL — precisely the configuration a
+// Notifications projection would require, so its absence here is a real signal.
 vi.mock(import("./settings.js"), () => ({
   loadSettings: async () => ({
     activeGatewayId: "local",
@@ -123,7 +123,7 @@ describe("gateway monitor: health does not project into the Notifications", () =
     expect(snapshot.alertHistory.map((e) => e.kind)).toStrictEqual(["down"]);
 
     // Half two: no Notifications write, by any spelling. The probe itself is mocked
-    // out, so any surviving fetch would be the retired projection.
+    // out, so any fetch at all would be a Notifications projection.
     expect(fixture.fetched).toStrictEqual([]);
   });
 });

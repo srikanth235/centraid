@@ -132,8 +132,8 @@ describe("the window picker", () => {
 
 describe("the runs chart", () => {
   it("draws ONE COLUMN PER DAY up to the plot's ceiling (#775)", () => {
-    // The chart used to sample every window to ten columns, so one expensive
-    // afternoon was averaged across three ordinary days.
+    // The chart never samples a window to ten columns: one expensive afternoon
+    // must not be averaged across three ordinary days.
     expect(
       buildBars(summaryOf(), 7, ANCHOR, columnCount(7, COLUMNS))
     ).toHaveLength(7);

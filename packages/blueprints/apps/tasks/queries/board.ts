@@ -1,5 +1,5 @@
 /**
- * The task board as a bounded window, never a whole-table pull (issue #262):
+ * The task board as a bounded window, never a whole-table pull (#262):
  * the newest open tasks by task_id (UUIDv7, so creation order; caller-sized,
  * default 500) plus the 50 most recently closed — exactly what the logbook
  * shows, so the read matches the UI instead of hauling the whole closed
@@ -90,7 +90,7 @@ function attachmentsBySubject(
   attachments: RawAttachment[],
   contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
-  // Blob-backed bytes serve as same-origin URLs (issue #296).
+  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`

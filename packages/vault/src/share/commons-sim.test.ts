@@ -1,4 +1,4 @@
-// Seeded deterministic simulation of the Commons sharing plane (issue #731).
+// Seeded deterministic simulation of the Commons sharing plane (#731).
 // Each case runs one randomized program of ~160 steward writes, signed member
 // intents, pulls, roster churn, steward-transfer windows, compaction,
 // crash-restarts, and stale-restores, then forces quiescence and asserts the
@@ -149,7 +149,7 @@ describe("commons deterministic simulation", () => {
   );
 
   /**
-   * The grant plane (issue #839). ONE long program, deliberately not a second
+   * The grant plane (#839). ONE long program, deliberately not a second
    * seed: the world build is the fixed cost, so lengthening a schedule finds
    * more interleavings per second than starting another one. Both planes run
    * over the same four vaults, so a share grant is delivered, edited,
@@ -190,7 +190,7 @@ describe("commons deterministic simulation", () => {
         "grant_tamper_healed",
         // A delivered row degraded back to `syncing` because the host lost
         // reach. This is the precondition of the revocation-severance defect
-        // (#846 P1), so a program that never hit it would hold G1 vacuously.
+        // (#846), so a program that never hit it would hold G1 vacuously.
         "reach_lost_after_delivery",
       ])
         expect(result.stats[leg] ?? 0, `${leg} never fired`).toBeGreaterThan(0);
@@ -202,8 +202,8 @@ describe("commons deterministic simulation", () => {
   );
 
   /**
-   * REGRESSION LOCK for #846 P1, formerly the `test.fails` pin on defect D1
-   * (issue #839) against ruling G-revoke.
+   * REGRESSION LOCK for #846 P1 — defect D1 (#839) against ruling
+   * G-revoke.
    *
    * `fulfillShareGrant` drops a `delivered` fulfillment row back to `syncing`
    * when the host merely cannot reach the peer for one pass — honest, because

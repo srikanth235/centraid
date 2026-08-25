@@ -1,4 +1,4 @@
-// The decision card (binding layer v11, issue #815).
+// The decision card (binding layer v11, #815).
 //
 // A row cannot hold an actor, an artifact, a standing-grant offer and an
 // irreversible verb honestly: it has one line of text, one meta and one verb,

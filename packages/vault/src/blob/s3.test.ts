@@ -1,4 +1,4 @@
-// S3 driver units for issue #405 §6 (storage class) and §4 (retry/backoff),
+// S3 driver units for #405 §6 (storage class) and §4 (retry/backoff),
 // exercised against an in-process fake S3 endpoint (real HTTP, SigV4-signed
 // requests, no SDK). The fake here is a superset of blob.test.ts's private
 // `startFakeS3` — it also speaks multipart, captures the `x-amz-storage-class`
@@ -17,7 +17,7 @@ import { updateBlobStoreSettings } from "../host.js";
 import { MULTIPART_THRESHOLD_BYTES, S3BlobStore } from "./s3.js";
 import { sha256OfBytes } from "./store.js";
 
-// ---------- the fake S3 endpoint ----------
+// ────────── the fake S3 endpoint ──────────
 
 interface FakeRequest {
   method: string;
@@ -66,7 +66,7 @@ function startFakeS3(): Promise<FakeS3> {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
-      // Injected transient faults (issue #405 §4) take precedence over the
+      // Injected transient faults (#405) take precedence over the
       // real behavior so the driver's retry loop is what's under test.
       if (state.failNext > 0) {
         state.failNext -= 1;
@@ -169,7 +169,7 @@ describe("s3", () => {
     await fake.close();
   });
 
-  // ---------- issue #405 §6: storage class ----------
+  // ────────── issue #405 §6: storage class ──────────
 
   test("storage class: PUT carries a signed x-amz-storage-class when configured", async () => {
     const store = new S3BlobStore({
@@ -184,7 +184,7 @@ describe("s3", () => {
     const put = fake.requests.find((r) => r.method === "PUT");
     expect(put?.storageClass).toBe("GLACIER");
     // The header is not merely present — it is part of the SigV4 signature, so
-    // a proxy that dropped it would break the signature (issue #405 §6 accept).
+    // a proxy that dropped it would break the signature (#405 §6 accept).
     expect(signedHeadersOf(put!.authorization)).toContain(
       "x-amz-storage-class"
     );
@@ -231,7 +231,7 @@ describe("s3", () => {
     for (const part of parts) expect(part.storageClass).toBeNull();
   });
 
-  // ---------- issue #405 §4: retry / backoff ----------
+  // ────────── issue #405 §4: retry / backoff ──────────
 
   test("retry: two 503s then 200 ⇒ the PUT succeeds after exactly 3 requests", async () => {
     fake.failNext = 2;
@@ -317,7 +317,7 @@ describe("s3", () => {
     expect(fake.requests.filter((r) => r.method === "PUT")).toHaveLength(3);
   });
 
-  // ---------- settings passthrough: blob_store.storageClass → remoteTier → driver ----------
+  // ────────── settings passthrough: blob_store.storageClass → remoteTier → driver ──────────
 
   test("settings: storageClass flows through and stale encrypt:false still writes mandatory CBSF", async () => {
     const db = openVaultDb({ s3Credentials: CREDS });

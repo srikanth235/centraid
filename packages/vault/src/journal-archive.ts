@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#367) one coherent archival engine — the eligibility closure, segment builder, hash-chained manifest writer, and its verifier are one integrity unit; splitting the chain-hash writer from its verifier invites drift
-// Journal segment archival (issue #367 §E2 — the growth-runway work that
+// Journal segment archival (#367 §E2 — the growth-runway work that
 // keeps "defer remote DB hosting to v2" a safe call). journal.db is
 // append-only and grows without bound; this module seals rows past an
 // active window into a content-addressed segment in the vault's blob CAS
@@ -27,10 +27,10 @@
 //     references them) and archive with their invocation unconditionally.
 //
 // Segments are gzip(JSON) written through `db.blobs.ingestSync` — the SAME
-// local CAS every other blob uses (issue #296) — so `readArchivedSegment` /
+// local CAS every other blob uses (#296) — so `readArchivedSegment` /
 // `verifyArchivedSegment` are the round-trip and integrity proof.
 //
-// NEEDS-WIRING (see issue #367 report): nothing calls `runJournalArchival`
+// NEEDS-WIRING (see #367 report): nothing calls `runJournalArchival`
 // automatically. `VaultPlane.runSweep` (packages/server/src/serve/vault-plane.ts)
 // is the natural home, alongside its existing sweep cadence — that file is
 // owned by a concurrent change in this worktree, so this module ships as a
@@ -54,7 +54,7 @@ export const DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS = 90;
  * tables into JS, closed over them, and gzipped the lot in one shot — a
  * first archival on a vault with a year of history was an unbounded memory
  * spike and a multi-second stall. The cap mirrors the ledger prune's
- * `maxSegments` (issue #438): a pass does bounded work and reports `capped`
+ * `maxSegments` (#438): a pass does bounded work and reports `capped`
  * so the host can simply come back.
  */
 export const DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS = 5_000;
@@ -192,7 +192,7 @@ function selectColumnsByIds<T>(
  * linked receipt (either FK direction) is too young, missing, or shared with
  * an invocation that isn't eligible.
  *
- * Two shapes changed in issue #659 L2, both behaviour-preserving:
+ * Two shapes changed in #659 L2, both behaviour-preserving:
  *
  *   - the link and receipt-time maps are built from id-scoped queries over the candidate
  *     set and the receipts it touches, not from two FULL scans of
@@ -334,7 +334,7 @@ function computeEligibleCluster(
 
 /**
  * prov_id values a LIVE (not-being-archived) agent_evidence row still points
- * at, restricted to the candidates in hand (issue #659 L2 — this used to
+ * at, restricted to the candidates in hand (#659 L2 — this used to
  * scan all of `agent_evidence` regardless of how few rows were in play).
  */
 function liveEvidenceProvRefs(
@@ -386,7 +386,7 @@ interface SegmentBuild {
 
 /**
  * Serialize a segment row-by-row instead of `JSON.stringify`-ing the whole
- * payload (issue #659 L2). One `stringify` over every archived row builds a
+ * payload (#659). One `stringify` over every archived row builds a
  * single string as large as the segment — on top of the row objects it is
  * built from — and only then copies it into a Buffer, so peak memory was
  * roughly three times the segment. Encoding per row keeps the peak at one
@@ -571,7 +571,7 @@ function reclaimModeOf(journal: DatabaseSync): "incremental" | "none" {
 /**
  * Reclaim pages the deletes above freed. `journal.db` is opened with
  * `PRAGMA auto_vacuum = INCREMENTAL` (db.ts openFile + app-engine's openJournalDb,
- * issue #438), so `incremental_vacuum` returns the freelist to the OS without
+ * #438), so `incremental_vacuum` returns the freelist to the OS without
  * rewriting the whole file. Open-time database setup converts any pre-#438
  * file before this path runs; archival never falls back to a whole-file
  * `VACUUM`.

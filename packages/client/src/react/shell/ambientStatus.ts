@@ -1,16 +1,16 @@
 import type { ShellRoute } from "../../app-shell-context.js";
-// The standing sentence on the shell's one status line (issue #707,
+// The standing sentence on the shell's one status line (#707,
 // invariant 5) — extracted from App so the rule can be read, and tested,
 // without mounting the whole shell.
 //
-// The reachability half of it used to be a two-way ternary: "up" said "Synced"
-// and EVERYTHING ELSE said "Ready". That made the line lie in the one state
-// where the shell knows least. "unknown" is not a short blip on the web host —
-// an Iroh dial times out at 15s and is tried three times with backoff, so the
-// window is roughly half a minute — and for all of it a member reading "Ready"
-// was being told an affirmative thing about a gateway we had not reached.
-// Worse, it is the same word the line shows when everything is fine but idle,
-// so the state that most needs to be visible was the state that looked normal.
+// The reachability half of it is NOT a two-way ternary. "up" ⇒ "Synced" with
+// EVERYTHING ELSE ⇒ "Ready" makes the line lie in the one state where the shell
+// knows least. "unknown" is not a short blip on the web host — an Iroh dial
+// times out at 15s and is tried three times with backoff, so the window is
+// roughly half a minute — and for all of it a member reading "Ready" is being
+// told an affirmative thing about a gateway we have not reached. Worse, it is
+// the same word the line shows when everything is fine but idle, so the state
+// that most needs to be visible is the state that looks normal.
 //
 // Three statuses, three sentences. Saying "Checking…" costs nothing when the
 // probe comes back in 200ms and is the truth when it does not.
@@ -149,7 +149,7 @@ export function ambientSignalFor(input: AmbientSignalInput): AmbientSignal {
  * the moment of the last probe and ten minutes after the machine went to
  * sleep. The stamp is rendered by `StatusLine` rather than folded in here,
  * because the age changes every second and the shell root deliberately does
- * not re-render on the heartbeat (issue #659) — but the WORDING stays in this
+ * not re-render on the heartbeat (#659) — but the WORDING stays in this
  * file, which is the one place the line's sentences are written.
  */
 export const SYNCED = "Synced";
@@ -175,7 +175,6 @@ export interface AmbientStatusInput {
   gatewayStatus: "unknown" | "up" | "down" | undefined;
   /** Approvals waiting on a human decision. */
   blockingCount: number;
-  /** Unread notices in the inbox. */
   hasUnreadNotices: boolean;
 }
 

@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit one suite over the enrichment spine — staging, attribution injection, owner auto-publish, and the content primitive share the one bootstrapped vault (#299)
-// The enrichment spine, vault side (issue #299 phases 1–5 plumbing):
+// The enrichment spine, vault side (#299 phases 1–5 plumbing):
 // derived data lands as ontology rows through the staging spine, attribution
 // is injected server-side and owner assertions are terminal, the owner's
 // auto-publish trust is what lets captions land without a review click, and
@@ -451,7 +451,7 @@ describe("enrich", () => {
         answer: "reject",
       });
       expect(rejected.status).toBe("executed");
-      // A rejection is a STATE, not a deletion (issue #712): the row survives
+      // A rejection is a STATE, not a deletion (#712): the row survives
       // so the answer can be remembered, and it drops its proposed party so
       // no per-person count still sees it.
       const afterReject = db.vault
@@ -469,7 +469,7 @@ describe("enrich", () => {
     });
 
     test("an answered face is never re-proposed by a later enricher run", () => {
-      // THE SABOTAGE (issue #712): the enricher runs again, with the same
+      // THE SABOTAGE (#712): the enricher runs again, with the same
       // external id AND with a fresh one, after the owner has dismissed the
       // face. Neither may put the region back in a review queue — a member
       // who deliberately left a stranger unnamed must not meet them again.
@@ -644,7 +644,7 @@ describe("enrich", () => {
     });
 
     test("filing a WRAPPED content item retargets title + folder tag onto its core_document", () => {
-      // issue #352: core_document wraps content items, so a filing proposal
+      // #352: core_document wraps content items, so a filing proposal
       // against a content id that's already a document's current head must
       // land on the document, not the (no-longer-read) content item — else
       // the tag is silently invisible to every document-scoped read path.
@@ -1188,7 +1188,7 @@ describe("enrich", () => {
       ).toThrow(/must be one of/u);
     });
 
-    // issue #352 phase 3/4: the settings bag itself is owner-only (GET/PATCH
+    // #352 phase 3/4: the settings bag itself is owner-only (GET/PATCH
     // /centraid/_vault/enrich); `enrich_policy` mirrors the one column of it —
     // "how far may this domain's enrichment run: off | device | gateway" —
     // apps can actually reach through the normal consent-checked read path.
@@ -1249,7 +1249,7 @@ describe("enrich", () => {
       foreign.close();
     });
 
-    // ONE READ PATH for the one gate (issue #807): the tier and the cascade's
+    // ONE READ PATH for the one gate (#807): the tier and the cascade's
     // rules come back together, off the same host plane, and this read still
     // resolves nothing — it hands the gate its material.
     test("readEnrichPolicyResolutionInput reads tier + the chain's rules, and resolves nothing", () => {
@@ -1416,7 +1416,7 @@ describe("enrich", () => {
       expect(broadcast.capability).toBeNull();
     });
 
-    // EGRESS CONSENT, RE-KEYED (issue #807, Wave 3). The photos consent panel
+    // EGRESS CONSENT, RE-KEYED (#807). The photos consent panel
     // has exactly one write, and it is this verb — so the answer it carries
     // becomes a row in the egress-consent ledger too, keyed capability ×
     // egress class, where Privacy reads it back and the fire gate consults it.

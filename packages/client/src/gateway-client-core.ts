@@ -1,6 +1,6 @@
 /*
  * Shared infrastructure for the renderer-side gateway HTTP client
- * (issue #141). The data-plane methods (`gateway-client.ts`) and the
+ * (#141). The data-plane methods (`gateway-client.ts`) and the
  * editing/lifecycle methods (`gateway-client-editing.ts`) both build on
  * this: auth resolution + caching, the bearer-header helper, the fetch
  * wrapper, and the JSON/error reader. Kept in its own dependency-free
@@ -92,7 +92,7 @@ export function resetGatewayAuthCache(): void {
 // so the next request must re-resolve. Registered once at module load;
 // `window.CentraidApi` is always present before renderer scripts run.
 window.CentraidApi.onGatewayChanged(() => resetGatewayAuthCache());
-// A vault switch (issue #289) keeps the gateway but changes the addressed
+// A vault switch (#289) keeps the gateway but changes the addressed
 // vault — the URL + token are unchanged, only the `x-centraid-vault` header,
 // so re-resolving auth is all that's needed (no wholesale reload).
 window.CentraidApi.onVaultChanged?.(() => resetGatewayAuthCache());
@@ -102,7 +102,7 @@ export async function doFetch(
   pathname: string,
   init: RequestInit
 ): Promise<Response> {
-  // Stamp the addressed vault on every request (issue #289). The caller
+  // Stamp the addressed vault on every request (#289). The caller
   // resolved `auth()` just above, so the cached promise is settled — read
   // the vault id off it and add the header unless the caller set one. This
   // one choke point saves threading the id through every call site.

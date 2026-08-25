@@ -1,4 +1,4 @@
-// The policy cascade's rule store (issue #807) — what a scope may state, what
+// The policy cascade's rule store (#807) — what a scope may state, what
 // the store refuses, and the order a resolver reads rules in.
 
 import { describe, expect, test } from "vitest";

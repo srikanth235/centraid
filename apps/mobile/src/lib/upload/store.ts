@@ -1,4 +1,4 @@
-// The durable upload queue (#419 M0.4) — the correctness kernel.
+// The durable upload queue (#419.4) — the correctness kernel.
 //
 // DB FILE: its own, NOT the replica database. Three reasons:
 //

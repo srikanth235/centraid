@@ -13,7 +13,7 @@ import type { FilterAxis } from "./drive-copy.ts";
 //
 // WHAT THIS FILE REFUSES TO ANSWER IS THE POINT. §4.2 names four properties
 // and 27 options. This drive reads documents, their media type, their times,
-// their byte custody and — since issue #821 — the live shares each one sits
+// their byte custody and — since #821 — the live shares each one sits
 // inside. It still does not read owners, the app a document arrived from, or
 // the people a document names. An option whose predicate cannot be computed is
 // NOT rendered (`liveOptions` below), because a pill that silently matches

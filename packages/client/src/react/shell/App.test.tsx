@@ -174,7 +174,7 @@ describe("App suite", () => {
     it("renders the frame with the stem launcher, opening on Home", async () => {
       const el = await mount();
       expect(el.querySelector(".window")).not.toBeNull();
-      // Home's body is the springboard and nothing else (issue #708). The bar
+      // Home's body is the springboard and nothing else (#708). The bar
       // names the SCREEN and carries no redundant global action — the vault is
       // at the head of the stem, true on every route, so Home does not say it a
       // second time.
@@ -325,7 +325,7 @@ describe("App suite", () => {
       const el = await mount();
       // No builder pencil in the app bar. Home itself has no builder entry
       // point to hide any more — it is the springboard and nothing else
-      // (issue #708), so the pencil and the palette row are the whole surface.
+      // (#708), so the pencil and the palette row are the whole surface.
       expect(el.querySelector('[aria-label="New app"]')).toBeNull();
       // The ⌘K palette lists the app but no "Build a new app…" create row.
       await act(async () => {

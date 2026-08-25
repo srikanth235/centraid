@@ -1,4 +1,4 @@
-// Shared page-side shapes for the photos app (TS conversion). Type-only — no
+// Shared page-side shapes for the photos app. Type-only — no
 // runtime members — so every importer uses `import type`, which esbuild strips
 // at serve time (a value import of this module would 404). Grounded in the
 // query payloads: an `Asset` is one row of `queries/library.js`'s `join()`
@@ -11,7 +11,7 @@
 // without an `any`.
 import type { TripRoutePoint } from "./trips.ts";
 
-/** A free-form label on an asset (core.tag_item, issue #352). */
+/** A free-form label on an asset (core.tag_item, #352). */
 export interface AssetTag {
   tag_id: string;
   label: string;
@@ -38,7 +38,7 @@ export interface Place {
 export interface Asset {
   asset_id: string;
   /**
-   * Which mounted scope this row is shown FROM (issue #599) — stamped by the
+   * Which mounted scope this row is shown FROM (#599) — stamped by the
    * merge (apps/_shared/scope-merge.ts), absent on a single-scope surface.
    * Two things depend on
    * it: every blob reference painted for this asset carries it as `data-scope`
@@ -70,7 +70,7 @@ export interface Asset {
    */
   tz_offset_min?: number | null;
   /**
-   * Edit lineage (issue #711): the asset this one was derived from, when it
+   * Edit lineage (#711): the asset this one was derived from, when it
    * was — the editor saves a crop as a new photograph and stamps the original
    * here. Null/absent on every camera original and every import, and that
    * absence is meaningful: it is the difference between "from a photograph
@@ -115,13 +115,13 @@ export interface MemoryCard {
   title: string;
   sub: string;
   coverUri: string | null;
-  /** The scope the cover's bytes live in (issue #599) — see `Asset.scope_id`. */
+  /** The scope the cover's bytes live in (#599) — see `Asset.scope_id`. */
   coverScopeId?: string | null;
   newestAt: string;
   onOpen: () => void;
   /**
    * A trip card's route, in capture order — the places the trip passed
-   * through, ready for `projectPlaces` (issue #816). Present only on a 'trip'
+   * through, ready for `projectPlaces` (#816). Present only on a 'trip'
    * card that had at least one located member; the sketch drawn from it is
    * arithmetic over coordinates the vault already holds, so a card carries a
    * map of the trip with no tile request and no remote URL anywhere in it.
@@ -177,7 +177,7 @@ export interface LibraryData {
   memories?: MemoryRow[];
   memoryMembers?: MemoryMemberRow[];
   truncated?: boolean;
-  /** The page's oldest `taken_at` — the next `before` cursor (issue #599). */
+  /** The page's oldest `taken_at` — the next `before` cursor (#599). */
   tail?: string | null;
   window?: number;
   vaultDenied?: { code?: string; message?: string } | null;

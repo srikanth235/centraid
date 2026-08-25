@@ -1,7 +1,7 @@
 // HTTP surface for gateway-owned harness detection.
 //
-// The desktop main process used to probe the on-machine state itself and
-// hand the renderer a snapshot over IPC. But the harness runs wherever the
+// Detection runs on the GATEWAY, not in the desktop main process: the
+// harness runs wherever the
 // GATEWAY runs, and Centraid is agnostic to how each harness authenticates —
 // every harness owns its own auth. So detection asks one question only: is
 // the CLI runnable on the gateway host? We run `<bin> --version` for each
@@ -19,10 +19,10 @@
 // warm). `modelsStatus` carries the load tri-state so the client shows a
 // loading placeholder and polls.
 //
-// The per-harness TOOLS listing that used to ride this route (`codexTools`,
-// `?refreshTools=1`, …) is gone — Connections is where the user reasons about
-// what a harness can reach. Host-tool enumeration itself is untouched: it still
-// feeds the builder's grounding block (`src/skills/`), read off the same
+// This route carries no per-harness TOOLS listing (no `codexTools`, no
+// `?refreshTools=1`) — Connections is where the user reasons about
+// what a harness can reach. Host-tool enumeration feeds the builder's
+// grounding block (`src/skills/`), read off the same
 // catalog by `makeUnifiedConversationRunner`.
 //
 // Mounted via `startRuntimeHttpServer`'s `extraHandlers` seam, after the
@@ -94,9 +94,9 @@ export type ResolveHarnessHealth = (kind: HarnessKind) => HarnessHealthEntry[];
  * codex + claude-code) because the boot warmer would otherwise spawn a process
  * per installed harness. But the capability probe launches those same harnesses
  * anyway and reads the very same `session/new` model config option — so for a
- * native ACP kind like opencode the answer (76 models) was already sitting in
- * `capabilities.configOptions`, while the picker showed "Built-in model"
- * because the catalog was empty.
+ * native ACP kind like opencode the answer (76 models) is already sitting in
+ * `capabilities.configOptions`, while a picker reading only the catalog shows
+ * "Built-in model".
  *
  * So an empty catalog falls back to that evidence rather than to nothing. No
  * extra spawn, and nothing is fabricated: this only echoes `{value, name}`
@@ -168,7 +168,7 @@ export interface HarnessStatusEntry {
   minVersion: string;
   /** Install/setup hint — present only when the CLI is NOT available. */
   hint?: string;
-  /** Models this harness can serve, from the catalog (issue #188). */
+  /** Models this harness can serve, from the catalog (#188). */
   models: HarnessModel[];
   /** Load state of `models` — lets the picker show loading vs empty. */
   modelsStatus: SurfaceStatus;

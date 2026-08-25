@@ -4,8 +4,8 @@
  *
  * The same `serve()` the Electron desktop embeds, wrapped with:
  *   - JSON config file (`--config <path>`)
- *   - a loopback bearer DERIVED FROM CUSTODY (issue #568 item J corrects the
- *     #505 phase 7 description): `HMAC(endpoint-key.bin,
+ *   - a loopback bearer DERIVED FROM CUSTODY (#505, #568):
+ *     `HMAC(endpoint-key.bin,
  *     "centraid/landlord-http/v1")`. It is never written to disk as a token
  *     and never printed, but it is STABLE for the life of the endpoint
  *     identity and is not rotated — any local process that can open the
@@ -29,11 +29,11 @@
  *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
  *   centraid-gateway key <status|export|restore|rotate> --data-dir <path> …  (custody, #298)
  *   centraid-gateway service <install|uninstall|status> …                    (OS service unit, #351)
- *   centraid-gateway status [--data-dir <path> | --config <path>] [--json]   (issue #382)
+ *   centraid-gateway status [--data-dir <path> | --config <path>] [--json]   (#382)
  *   centraid-gateway --help
  *   centraid-gateway --version
  *
- * `--json` on `pair`/`vault list`/`vault create`/`status` (issue #382) swaps
+ * `--json` on `pair`/`vault list`/`vault create`/`status` (#382) swaps
  * the human text for a single machine-readable line. Every other
  * subcommand's output is unchanged.
  */
@@ -205,7 +205,7 @@ async function commandServe(args: string[]): Promise<void> {
     lock: "exclusive",
   });
 
-  // Loopback bearer (issue #505 phase 7, corrected by #568 item J). This is
+  // Loopback bearer (#505, #568). This is
   // the bearer the in-process iroh endpoint host forwards with when it hands a
   // proved iroh request to the loopback HTTP listener; forwarded requests also
   // carry the per-boot device proof header, so the real per-device identity is
@@ -213,8 +213,8 @@ async function commandServe(args: string[]): Promise<void> {
   // door). It is NOT per-boot: `landlordBearerForEndpointSecret` derives it
   // from the KeyStore-custodied endpoint key, so it is stable for the life of
   // that identity and is never rotated — that stability is what lets the CLI
-  // and the desktop reach a daemon they did not spawn. The retired `token.bin`
-  // shared bearer plane is gone. A parent that DOES spawn this daemon (the
+  // and the desktop reach a daemon they did not spawn. A parent that DOES
+  // spawn this daemon (the
   // desktop's detached gateway) may pin a per-launch value via
   // `CENTRAID_GATEWAY_TOKEN`.
   const dataPlaneSecret = process.env.CENTRAID_DATA_PLANE_SECRET;
@@ -222,7 +222,7 @@ async function commandServe(args: string[]): Promise<void> {
   const desktopEndpointId =
     process.env.CENTRAID_DESKTOP_ENDPOINT_ID?.trim() || undefined;
 
-  // Device plane (issue #289): enrollment-scoped vault resolution for
+  // Device plane (#289): enrollment-scoped vault resolution for
   // requests arriving over the iroh endpoint. Constructed before serve()
   // so its `deviceAccess` participates in every request; the endpoint
   // itself binds after the HTTP listener is up.
@@ -238,7 +238,7 @@ async function commandServe(args: string[]): Promise<void> {
     process.env.CENTRAID_GATEWAY_TOKEN?.trim() ||
     landlordBearerForEndpointSecret(keyStore.loadOrCreate("endpoint-key.bin"));
   // The daemon always has a host identity: it is the device the auto-founded
-  // vaults are owned by (issue #603), and the identity `pair` mints against.
+  // vaults are owned by (#603), and the identity `pair` mints against.
   const hostEndpointId =
     desktopEndpointId ??
     kitlessHostIdentity(keyStore.loadOrCreate("endpoint-key.bin"));
@@ -295,7 +295,7 @@ async function commandServe(args: string[]): Promise<void> {
       endpointTicket: () => endpoint?.ticket(),
       onEndpointRevoked: (endpointId) => endpoint?.revokeEndpoint(endpointId),
     },
-    // Durable PWA control sessions (issue #376): persist control cookies so
+    // Durable PWA control sessions (#376): persist control cookies so
     // a web pairing survives a restart, and propagate `devices revoke` to
     // live cookies via the SAME enrollment store the endpoint admits from.
     webSessions: {
@@ -321,7 +321,7 @@ async function commandServe(args: string[]): Promise<void> {
   });
   vaultsRef = handle.vaults;
 
-  // The iroh endpoint (issue #289 phase 3): the gateway's permanent
+  // The iroh endpoint (#289): the gateway's permanent
   // identity + the only remote transport. Best-effort so the loopback
   // maintenance surface can still start when iroh is temporarily unavailable.
   const endpoint =
@@ -347,7 +347,7 @@ async function commandServe(args: string[]): Promise<void> {
     );
   }
 
-  // The loopback secret is deliberately NOT printed (issue #505 phase 7) — it
+  // The loopback secret is deliberately NOT printed (#505) — it
   // is ephemeral in-process plumbing, not a credential to paste anywhere.
   process.stdout.write(
     `[centraid-gateway] listening on ${handle.url}\n${handle.webUrl ? `[centraid-gateway] web app: ${handle.webUrl}\n` : ""}[centraid-gateway] dataDir: ${path.resolve(config.dataDir)}\n`
@@ -421,7 +421,7 @@ async function main(): Promise<void> {
 }
 
 // Only boot when this file is the process entrypoint (tsx/node/bin). Importing
-// pure helpers for unit tests (issue #545 B7) must not call process.exit.
+// pure helpers for unit tests (#545) must not call process.exit.
 // Node realpaths the ESM main for import.meta.url but leaves argv[1] as the
 // install symlink (node_modules/.bin/centraid-gateway); Bun realpaths both.
 // Compare realpaths so the documented Node bin is not a silent no-op (#545).

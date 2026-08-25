@@ -12,7 +12,7 @@ import type {
 import { AppCard, AutoCard } from "./LibraryCards.js";
 
 // The card family's own coverage (it moved out of HomeScreen when Home became
-// the springboard, issue #708). Starred and the automations overview both draw
+// the springboard, #708). Starred and the automations overview both draw
 // these, so the click/context/more-menu contract is tested once, here.
 
 const appItem: HomeAppItemDTO = {

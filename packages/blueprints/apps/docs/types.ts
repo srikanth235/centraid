@@ -1,6 +1,6 @@
 import type { SearchStatus } from "../_shared/search-scaffold.ts";
 import type { DriveFilters } from "./filters.ts";
-// Shared page-side shapes for the docs app (TS conversion). Type-only — no
+// Shared page-side shapes for the docs app. Type-only — no
 // runtime members — so every importer uses `import type`, which esbuild strips
 // at serve time (a value import of this module would 404). Grounded in the
 // query payloads: `DriveDoc` is the decorated document row the `drive`/`search`
@@ -22,7 +22,7 @@ export interface SharedMember {
 
 /**
  * One live share a document sits inside — a commons grant over the document
- * itself or over a folder above it (issue #821).
+ * itself or over a folder above it (#821).
  */
 export interface SharedWith {
   grant_id: string;
@@ -47,7 +47,7 @@ export interface DocTag {
 
 /**
  * A decorated document row — a `core.document` wrapper joined to its current
- * content item (issue #352). `document_id` is identity (selection, details,
+ * content item (#352). `document_id` is identity (selection, details,
  * quick-look, folders/star all key off it); `content_id` names the HEAD
  * revision whose bytes render.
  */
@@ -70,7 +70,7 @@ export interface DriveDoc {
   tags: DocTag[];
   custody_state: string | null;
   /**
-   * The live shares this document sits inside (issue #821). `[]` is "shared
+   * The live shares this document sits inside (#821). `[]` is "shared
    * with nobody"; `null` is "the share reads were denied", which the details
    * rail and the People filter axis both treat as UNKNOWN — the fact is absent
    * rather than negative, so nothing on screen says "not shared".
@@ -187,13 +187,12 @@ export interface AppData {
 export interface AppState {
   view: "grid" | "list";
   /**
-   * The current shelf (shelves.ts). This replaced the flat
+   * The current shelf (shelves.ts). Not a flat
    * `NavKind = all|recent|starred|folder|trash` bag: a shelf is a value the
    * strip, the band, the app bar, the breadcrumb and the row set all read, so
    * expressing it as one id — with `null` for All and `folder:<id>` for one
    * folder — is what keeps those five surfaces from disagreeing about where
-   * the member is. Nothing persists it, so the migration needed no upgrade
-   * path.
+   * the member is. Nothing persists it.
    */
   shelf: ShelfId;
   /**

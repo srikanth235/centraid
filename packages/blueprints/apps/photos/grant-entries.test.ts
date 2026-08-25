@@ -1,5 +1,5 @@
 /**
- * PHOTOS SHARES THROUGH THE ONE KIT (issue #825, wave 6).
+ * PHOTOS SHARES THROUGH THE ONE KIT (#825).
  *
  * Two halves, and the second is the one that keeps the first honest:
  *

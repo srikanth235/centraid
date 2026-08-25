@@ -97,14 +97,15 @@ export interface NotificationPlan {
 const LEDGER_LIMIT = 2_000;
 
 /**
- * Decide what a sync pass does, with no I/O (#647 review of PR #655).
+ * Decide what a sync pass does, with no I/O (#647).
  *
- * Two rules the old inline logic was missing:
+ * Two rules, both easy to lose:
  *
- *  1. **Seed silently.** The ledger starts absent, so the very first sync after
- *     a grant treated every already-open decision as new and fired one banner
- *     per row. A first pass now records the current payload as the baseline and
- *     notifies about nothing; only what appears *after* it is news.
+ *  1. **Seed silently.** The ledger starts absent, so a first sync after a
+ *     grant would otherwise treat every already-open decision as new and fire
+ *     one banner per row. A first pass records the current payload as the
+ *     baseline and notifies about nothing; only what appears *after* it is
+ *     news.
  *  2. **Never notify over the owner's shoulder.** With the app active the Notifications
  *     itself is on screen, so a banner is noise. A foreground pass leaves the
  *     ledger alone — deliberately, so anything that arrived while the owner was

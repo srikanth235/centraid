@@ -126,10 +126,10 @@ function searchWords(value: string): SearchWord[] {
  * runs, with the trailing `*` making only the last run a prefix. `"don't"*` is
  * the phrase (`don`, `t`*) — two adjacent words, not two independent terms.
  *
- * Since #846 P5 the token stream is the gateway's (whitespace-split), so the
- * punctuation split that used to happen in {@link replicaSearchTokens} happens
- * HERE instead, where it belongs: it is a property of the tokenizer reading the
- * phrase, not of the expression compiler writing it.
+ * The token stream is the gateway's (whitespace-split, #846 P5), so the
+ * punctuation split happens HERE rather than in {@link replicaSearchTokens},
+ * where it belongs: it is a property of the tokenizer reading the phrase, not
+ * of the expression compiler writing it.
  */
 function tokenPhrase(token: string): string[] {
   return [...token.matchAll(/[\p{L}\p{N}\p{M}]+/gu)].map((match) =>

@@ -1,13 +1,12 @@
 // The DECLARED command→container routing table for the Commons plane
-// (issue #750). This file is the single source of truth `commonsGrantForCommand`
-// consults; it replaces the string heuristics (`command.includes("folder")`)
-// and the hand-maintained `CONTAINER_ID_KEYS` list that used to decide routing
-// by shape rather than by declaration.
+// (#750). This file is the single source of truth `commonsGrantForCommand`
+// consults; routing is decided by DECLARATION here, never by the shape of a
+// command name (`command.includes("folder")`) or of its input keys.
 //
 // Why data and not code: a command that writes into a shared container but
 // does not reach the commons rail lands as a PRIVATE local mutation, and the
-// next compile reverts it — silent member data loss. Under heuristics that
-// happened whenever an input key was renamed. Here the routing is a table, and
+// next compile reverts it — silent member data loss. A heuristic breaks that
+// way whenever an input key is renamed. Here the routing is a table, and
 // `commons-routing.test.ts` walks the real registered command schemas and
 // fails when a declared key is not in the command's `inputSchema`, or when a
 // command in a declared owner schema grows a container key with no route.

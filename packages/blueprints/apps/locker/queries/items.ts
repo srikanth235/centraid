@@ -2,20 +2,14 @@
  * The locker as a bounded recent window: non-trashed locker_item rows,
  * newest-updated first (caller-sized, default 300), each decorated with its
  * favorite (the canonical flags-scheme star on target_type 'locker.item',
- * issue #274), its free-form tags, a safe subtitle, and its derived Watchtower
- * status. Secrets are SEALED columns (issue #293): a read returns
+ * #274), its free-form tags, a safe subtitle, and its derived Watchtower
+ * status. Secrets are SEALED columns (#293): a read returns
  * placeholders, so weak/reused and a card's last-four come from the
  * `locker.watchtower` command — derived INSIDE the vault's sealed boundary,
  * with the unseal receipted. Compromised is the one stored flag. Secrets
  * NEVER ride this payload; only the single-item query reveals them.
  * `truncated` tells the UI older items exist beyond the window. Everything
  * comes from the vault; this app holds no rows of its own.
- *
- * TS conversion note: the vault read/invoke surface returns
- * `Record<string, unknown>` rows (see HandlerCtx.vault), so each raw row set is
- * cast once to a typed shape (`as unknown as X[]`) at its read site — the only
- * place unknown vault columns become named fields. Handler logic is otherwise
- * byte-for-byte the pre-conversion JS.
  */
 
 export interface RawItem {
@@ -100,7 +94,7 @@ function subtitleOf(it: RawItem, watch: WatchEntry | undefined): string {
 
 /**
  * Watchtower derivatives per item id: {weak, reused, last4?}. Computed by
- * the vault (`locker.watchtower`, issue #293) — passwords never leave the
+ * the vault (`locker.watchtower`, #293) — passwords never leave the
  * sealed boundary. Fail-soft: no grant → an empty map, list still renders.
  */
 export async function readWatchtower(
@@ -155,9 +149,9 @@ export function decorate(
 
 /**
  * Read the two SKOS vocabulary tables once. `readTags` and `readStarred` both
- * need `core.concept` + `core.concept_scheme` (issue #310 S3) — read them
+ * need `core.concept` + `core.concept_scheme` (#310) — read them
  * together and hand the result to both so a single items read doesn't hit each
- * table twice (issue #404).
+ * table twice (#404).
  */
 export async function readConceptTables(
   ctx: HandlerCtx,
@@ -175,7 +169,7 @@ export async function readConceptTables(
 
 /**
  * Read tags for a set of item ids into item_id → string[]. Tags are SKOS
- * concepts in the locker-tags scheme carried by core_tag rows (issue #310
+ * concepts in the locker-tags scheme carried by core_tag rows (#310
  * S3) — the same canonical mechanism the star already rides. Pass `tables`
  * (from `readConceptTables`) to share the vocabulary read with `readStarred`.
  */
@@ -281,7 +275,7 @@ export default async function itemsHandler({
     // One vocabulary read shared by readTags + readStarred, and ONE watchtower
     // unseal — the sidebar badge + Watchtower panel are derived from this same
     // decorated set instead of a second full read + second receipted unseal
-    // (issue #404).
+    // (#404).
     const vocab = await readConceptTables(ctx, purpose);
     const [tagsByItem, starredIds, watchByItem] = await Promise.all([
       readTags(ctx, ids, purpose, vocab),

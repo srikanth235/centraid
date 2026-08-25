@@ -1,4 +1,4 @@
-// People's chrome as JSX — a ROUTE INSIDE THE FRAME (issue #505 inline path).
+// People's chrome as JSX — a ROUTE INSIDE THE FRAME (#505 inline path).
 //
 // The chrome owns GEOMETRY: the destination strip, the two trust banners, the
 // one scroll host and the content column the handoff caps at 760px. What

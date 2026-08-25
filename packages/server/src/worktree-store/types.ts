@@ -1,9 +1,7 @@
 // Public types + error class for the worktree-store module.
 //
-// Split out so `worktree-store.ts` stays focused on the class
-// implementation. Consumers should still import from the module
-// barrel (`./index.js`) — this file is an internal split, not an
-// alternate entry point.
+// Consumers import from the module barrel (`./index.js`) — this file is
+// not an alternate entry point.
 
 export interface WorktreeStoreOptions {
   /**
@@ -59,7 +57,7 @@ export interface RollbackInput {
   /** Existing tag to roll back to — e.g. `todo/v1`. */
   versionTag: string;
   // By design there is NO pre-merge hook here (the asymmetry with
-  // `PublishInput.beforeMerge` is deliberate — issue #160 / #144): rollback
+  // `PublishInput.beforeMerge` is deliberate — #160 / #144): rollback
   // is CODE-ONLY. It swaps the live `apps/<appId>/` tree back to an older
   // tag but does NOT touch the app's ext band in the vault. Ext DDL is
   // applied additively on publish; the band stays at its current (forward)

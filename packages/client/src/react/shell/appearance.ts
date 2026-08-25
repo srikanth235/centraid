@@ -1,7 +1,6 @@
-// Appearance prefs — the renderer-owned theme settings, ported out of the
-// vanilla app.ts. Pure helpers here (validation + wire mapping + the document
-// side-effect); the React hook that owns the live value and the gateway
-// round-trip lives in useAppearance.ts.
+// Appearance prefs — the renderer-owned theme settings. Pure helpers here
+// (validation + wire mapping + the document side-effect); the React hook that
+// owns the live value and the gateway round-trip lives in useAppearance.ts.
 //
 // The Binding Layer (#707) deleted the two colour overrides this module used
 // to write inline on `<html>`: the accent swatch (the shell now spends no hue
@@ -54,7 +53,7 @@ function isThemeMode(v: unknown): v is ThemeMode {
 
 /** Fold an arbitrary remote prefs object onto the typed AppearancePrefs shape,
  *  dropping unknown keys and values that don't match the unions. Mirrors the
- *  gateway's KNOWN_KEYS list (vanilla `pickAppearance`).
+ *  gateway's KNOWN_KEYS list.
  *
  *  A stored `theme` naming a preset this build no longer registers is simply
  *  dropped, so the client opens on DEFAULT_PREFS.theme — no migration step
@@ -82,10 +81,10 @@ export function pickAppearance(
   return out;
 }
 
-/** Convert typed prefs back into the gateway wire shape (vanilla
- *  `toRemoteShape`). Only the keys an owner can still set survive the Binding
- *  Layer flip — a stored `accent`/`bgL` on an older gateway is simply never
- *  read back (pickAppearance drops unknown keys), so no migration is owed. */
+/** Convert typed prefs back into the gateway wire shape. Only the keys an
+ *  owner can set are sent — a stored `accent`/`bgL` on an older gateway is
+ *  never read back (pickAppearance drops unknown keys), so no migration is
+ *  owed. */
 export function toRemoteShape(
   patch: Partial<AppearancePrefs>
 ): Record<string, unknown> {
@@ -97,8 +96,7 @@ export function toRemoteShape(
 }
 
 /** Write the prefs onto `<html>` as data attributes. Symmetric with what the
- *  gateway bakes on first paint (vanilla `applyPrefs`, minus the iframe
- *  broadcast which is an iframe-host concern handled in R3).
+ *  gateway bakes on first paint.
  *
  *  Attributes only, never inline custom properties: the token layer owns every
  *  colour, and an inline style here would outrank the `[data-theme='…']` block

@@ -14,7 +14,7 @@
  * route rejects anything outside the enum with a 400, so a drift here fails
  * loudly at the seam instead of silently widening what the owner may set.
  *
- * Renamed `off | local | model` → `off | device | gateway` by issue #712 C5:
+ * Renamed `off | local | model` → `off | device | gateway` by #712 C5:
  * one axis, three points, ordered by how far enrichment may run — `device`
  * is the member's own phone/laptop (plus deterministic gateway work),
  * `gateway` is the member's own gateway doing whatever it is already wired
@@ -33,7 +33,7 @@ export type EnrichDomain = (typeof ENRICH_DOMAINS)[number];
 export type EnrichPolicy = Record<EnrichDomain, EnrichTier>;
 
 /*
- * The policy CASCADE (issue #807), same restatement discipline as the tier
+ * The policy CASCADE (#807), same restatement discipline as the tier
  * above: mirrors of `packages/vault/src/enrich/policy-rules.ts`, kept here so
  * a settings screen can render a rule without importing the transport. The
  * route 400s anything outside these enums.
@@ -83,7 +83,7 @@ export const ENRICH_EGRESS_CLASSES = [
 export type EnrichEgressClass = (typeof ENRICH_EGRESS_CLASSES)[number];
 
 /**
- * ONE ANSWERED QUESTION in the egress-consent ledger (issue #807, Wave 3):
+ * ONE ANSWERED QUESTION in the egress-consent ledger (#807):
  * did the member ever agree that work for this capability may run on an engine
  * that reaches this far. A `declined` row is an ANSWER, kept on purpose — the
  * Privacy audit shows both, because "asked and told no" and "never asked" are

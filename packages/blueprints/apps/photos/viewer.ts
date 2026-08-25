@@ -15,7 +15,7 @@
 //
 // COPY IS FINAL. Every string below is the handoff's, at DESIGN.md `## Copy`
 // budgets — the custody paragraphs lost the reassuring second sentence the
-// handoff gave each of them (issue #805). It lives with the rule that selects
+// handoff gave each of them (#805). It lives with the rule that selects
 // it rather than in view-copy.ts, whose shape is a per-shelf table keyed by
 // `ShelfId` — the stage has no shelf.
 //
@@ -224,7 +224,7 @@ function takenDate(asset: Asset): string | null {
  * from. Four sentences, one per state of what is actually KNOWN — the line
  * never says more than the record does.
  *
- * Lineage is read, not assumed (issue #711). An edited copy carries
+ * Lineage is read, not assumed (#711). An edited copy carries
  * `source_asset_id` and is dated the day it was SAVED, so reading its
  * `captured_at` back as a capture date would state a falsehood about when the
  * shutter fired. When the copy's source is on hand its capture date is what
@@ -303,7 +303,7 @@ export const DEFAULT_GATEWAY_NAME = "the gateway";
 
 /**
  * One paragraph on where the original lives, for the info panel (§7.2) — the
- * per-copy provenance line (issue #712 P6a).
+ * per-copy provenance line (#712).
  *
  * WHAT IT MAY SAY, AND WHAT IT MAY NOT. The only per-photograph custody fact
  * an app can read is `blob.custody_state` (the five-value projection in
@@ -381,7 +381,7 @@ export type PhoneActionId = (typeof PHONE_ACTIONS)[number];
  * DESTINATION, never the verb `Share` with an invisible effect (§H). The
  * entry here is its RESTING caption — Lightbox.tsx overrides it per
  * destination with sharing.ts's `copyActionLabel` (`Copy to ⟨label⟩`)
- * whenever exactly one other writable scope is mounted (issue #726).
+ * whenever exactly one other writable scope is mounted (#726).
  */
 export const ACTION_LABELS: Readonly<
   Record<ViewerActionId | PhoneActionId, string>
@@ -400,7 +400,7 @@ export const SLIDESHOW_STATUS =
   "Esc leaves · the viewer keeps the photograph you stopped on";
 
 // The editor's commit and the explanation beside it are the same words native
-// renders, so they live in `shared-copy.ts` (issue #805) and are re-exported
+// renders, so they live in `shared-copy.ts` (#805) and are re-exported
 // under the names this module's callers already know.
 export {
   PHOTOS_SAVE_AS_NEW as SAVE_AS_NEW,

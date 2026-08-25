@@ -211,14 +211,14 @@ export interface BackupServiceOptions {
   /** Injectable target-independent CAS inventory seam (tests). */
   casReconcile?: typeof runCasOnlyReconciliation;
   /**
-   * Host power-context posture gate (#528 Phase D). When it returns true, the
+   * Host power-context posture gate (#528). When it returns true, the
    * hourly retention/reconciliation tick is skipped — the same safe-loop
    * courtesy as the owner pause. Defaults to "never defer". The WAL drain
    * (RPO durability) is intentionally NOT gated by this predicate.
    */
   shouldDeferPosture?: () => boolean;
   /**
-   * Resource-actuals hook (#528 Phase C): one WAL drain (per vault, per pass)
+   * Resource-actuals hook (#528): one WAL drain (per vault, per pass)
    * completed — `bytesUploaded` is the sealed bytes shipped, `durationMs` the
    * wall-clock of the drain. Accounting only, never a gate.
    */
@@ -227,7 +227,7 @@ export interface BackupServiceOptions {
     durationMs: number;
   }) => void;
   /**
-   * Per-vault owner (issue #726 P1) — paired with `authorizedOwnerId` to
+   * Per-vault owner (#726) — paired with `authorizedOwnerId` to
    * skip a vault owned by someone OTHER than the person this host's backup
    * configuration is authorized for. Hosting a vault confers no right to
    * ship its bytes to YOUR configured destination without its owner's own
@@ -235,12 +235,12 @@ export interface BackupServiceOptions {
    * case, are unaffected).
    */
   ownerOf?: (vaultId: string) => string | undefined;
-  /** The owner id this host's backup configuration is authorized for (#726 P1). */
+  /** The owner id this host's backup configuration is authorized for (#726). */
   authorizedOwnerId?: () => string | undefined;
 }
 
 /**
- * A `restore()` result, plus — for a lazy/partial restore (issue #405 §5) — the
+ * A `restore()` result, plus — for a lazy/partial restore (#405) — the
  * previews-first warm-pass outcome: `result.skippedBlobs` names the blobs left
  * remote-only, and `previewsWarm` reports how many tinies were pulled and the
  * time-to-usable-grid a new device waited. `previewsWarm` is absent on a full
@@ -251,7 +251,7 @@ export type LazyRestoreResult = RestoreResult & {
 };
 
 /**
- * The previews-first lazy restore option (issue #405 §5 / #439 R2): the remote
+ * The previews-first lazy restore option (#405 §5 / #439 R2): the remote
  * CAS tier that is both the per-blob skip oracle and the warm-pass source, plus
  * an optional bounded warm fan-out. Explicit callers (tests, the recovery UI)
  * pass it directly; `restore()` also AUTO-resolves one from the vault's own tier
@@ -260,19 +260,19 @@ export type LazyRestoreResult = RestoreResult & {
 export interface LazyRestoreOption {
   /** The vault's remote blob CAS — the skip oracle AND the warm-pass source. */
   remote: RemoteTier;
-  /** Bounded warm-pass read-through fan-out (issue #405 §5/§7). */
+  /** Bounded warm-pass read-through fan-out (#405 §5/§7). */
   warmConcurrency?: number;
 }
 
 /** The home bundle's provider-declared promises for the five-metric contract
- *  (#436 §6) — Recovery window and Exit read these two fields. */
+ *  (#436) — Recovery window and Exit read these two fields. */
 export interface HomeDiscovery {
   retention: Retention;
   restoreCostClass: "free-egress" | "metered-egress";
 }
 
 /**
- * The recovery window N in ms (issue #439 R4) — the retention DAILY rung, the
+ * The recovery window N in ms (#439) — the retention DAILY rung, the
  * span over which PITR makes every instant restorable. `undefined` for a
  * non-ladder retention (`kind: 'none'`, e.g. a local provider): no daily window
  * promise, so the orphan-grace gate stays disengaged and orphans delete on
@@ -288,8 +288,8 @@ export function recoveryWindowMs(
 }
 
 /**
- * The pre-start restore cost estimate (issue #439 R2) the metered-egress confirm
- * gate — and, later, the recovery UI's price card (#436 §5) — render WITHOUT
+ * The pre-start restore cost estimate (#439) the metered-egress confirm
+ * gate — and, later, the recovery UI's price card (#436) — render WITHOUT
  * downloading a manifest. `costClass` is the provider-declared egress class
  * (`homeDiscovery`, PROTOCOL.md's `restoreCostClass` MUST finally getting a call
  * site); `undefined` when backup isn't configured. `fullBytes` is the selected
@@ -313,7 +313,7 @@ export interface RestoreEgressEstimate {
 
 /**
  * The snapshot a restore (and its egress estimate) selects, from a newest-first
- * `listSnapshots` result (issue #439 R2): an explicit `seq`, else — for a `--at`
+ * `listSnapshots` result (#439): an explicit `seq`, else — for a `--at`
  * point-in-time restore — the newest snapshot AT OR BEFORE that instant (which
  * is exactly the base the WAL replay starts from), else the newest snapshot.
  * `createdAt` is epoch SECONDS on the wire; `pointInTimeMs` is epoch ms.
@@ -448,7 +448,7 @@ export class BackupService {
 
   /**
    * The home bundle's provider-declared promises the five-metric contract
-   * (#436 §6) reads for Recovery window (`retention`) and Exit
+   * (#436) reads for Recovery window (`retention`) and Exit
    * (`restoreCostClass`) — sourced from the discovery document
    * (`GET /v1/storage/provider`, PROTOCOL.md § Layer 2 — backup). Cached for
    * `HOME_DISCOVERY_TTL_MS` so the 10s status poll doesn't re-hit the provider
@@ -683,7 +683,7 @@ export class BackupService {
         manifestBlobCache: this.manifestBlobCache,
       });
     };
-    // Orphan-grace window N (issue #439 R4): the recovery window is the retention
+    // Orphan-grace window N (#439): the recovery window is the retention
     // daily rung. Threaded into the sweep so the client-owned CAS orphan delete
     // waits N past first-observed-orphaned for a blob referenced only between two
     // snapshots — the byte a recovery-to-N inside that interval would replay.
@@ -740,7 +740,7 @@ export class BackupService {
       return;
     }
     // Hosting a vault confers no right to ship its bytes to THIS host's
-    // configured destination without its own owner's say-so (#726 P1). Skip
+    // configured destination without its own owner's say-so (#726). Skip
     // + report, never silent — same shape as the fenced/destination-changed
     // skips just below.
     if (this.ownerOf && this.authorizedOwnerId) {
@@ -1435,7 +1435,7 @@ export class BackupService {
         problems.push(`vault: ${report.vault.integrity}`);
       if (report.journal.integrity !== "ok")
         problems.push(`journal: ${report.journal.integrity}`);
-      // Seal-key custody (issue #439 R5): a restore whose sealed columns cannot
+      // Seal-key custody (#439): a restore whose sealed columns cannot
       // be opened is "a placebo" (FORMAT.md) — prove the restored key is present
       // AND matches the vault's stamped fingerprint, or say so loudly.
       if (report.sealKey.verdict === "missing") {
@@ -1459,7 +1459,7 @@ export class BackupService {
           `journal: ${report.journal.foreignKeyViolations} fk violation(s)`
         );
       }
-      // Depth half of the drill (#842 W1.3). Everything above proves the two
+      // Depth half of the drill (#842). Everything above proves the two
       // files OPEN; these prove the restored vault is USABLE — no content
       // spine that restored empty out of a source that holds rows, and no
       // surviving row pointing at bytes this restore cannot produce. Both are
@@ -1558,7 +1558,7 @@ export class BackupService {
 
   /**
    * The live source pair's content-spine census, for the drill's empty-shell
-   * comparison (#842 W1.3). `undefined` when the vault's plane is not mounted
+   * comparison (#842). `undefined` when the vault's plane is not mounted
    * — the drill then WARNS that it could not compare rather than passing.
    */
   private liveSpineCensus(vaultId: string): SpineCensus | undefined {
@@ -1575,7 +1575,7 @@ export class BackupService {
   private lastAutoBackupAttemptMs = new Map<string, number>();
   /** `manifestHash → walGenerations` memo for the prune's keep-set. */
   private readonly manifestGenerationCache = new Map<string, string[]>();
-  /** `manifestHash → blob shas` memo for the retained-snapshot GC roots (#436 §6). */
+  /** `manifestHash → blob shas` memo for the retained-snapshot GC roots (#436). */
   private readonly manifestBlobCache = new Map<string, string[]>();
 
   /**
@@ -1750,7 +1750,7 @@ export class BackupService {
           },
           logger: this.logger,
         });
-        // Resource actuals (#528 Phase C): every drain pass, even a no-op one.
+        // Resource actuals (#528): every drain pass, even a no-op one.
         this.onDrainAccounted?.({
           bytesUploaded: result.bytes,
           durationMs: this.now() - drainStartedAt,
@@ -1832,9 +1832,9 @@ export class BackupService {
       this.timer.unref();
     }, jitterDelayMs(HOUR_MS));
     this.timer.unref();
-    // The 30 s global clock used to run even with no backend. Resolve live
-    // configuration first, then arm one tick for the earliest actual policy
-    // due time; unconfigured gateways arm no WAL-drain clock (#456 I4).
+    // Resolve live configuration first, then arm one tick for the earliest
+    // actual policy due time; unconfigured gateways arm no WAL-drain clock
+    // (#456).
     void this.refreshWalSchedule().catch((error) => {
       this.logger.warn(
         `backup: wal scheduler setup failed: ${error instanceof Error ? error.message : String(error)}`
@@ -1933,7 +1933,7 @@ export class BackupService {
       let target = state.targets[vaultId];
       if (target?.fenced) return;
       // Keep the plane's blob sweep pinned to the retained-snapshot GC roots
-      // (issue #436 §6) for every backup-configured vault — covers planes
+      // (#436) for every backup-configured vault — covers planes
       // mounted lazily after start, before their first scheduled backup.
       if (backupConfigured && target) this.attachSnapshotRoots(plane);
       if (backupConfigured) {
@@ -2025,9 +2025,9 @@ export class BackupService {
   }
 
   /**
-   * Recovery-kit confirmation gate (issue #351 wave 4 / #367): whether the
+   * Recovery-kit confirmation gate (#351 wave 4 / #367): whether the
    * operator has ever acknowledged exporting + safely storing the
-   * recovery kit. Generic on purpose — issue #367 reuses this same flag
+   * recovery kit. Generic on purpose — #367 reuses this same flag
    * to gate the S3-storage enable flow, so it isn't backup-card-specific.
    */
   async recoveryKitStatus(): Promise<RecoveryKitState> {
@@ -2174,11 +2174,11 @@ export class BackupService {
     vaultId: string;
     destDir: string;
     seq?: number;
-    /** Point-in-time restore (issue #408): replay WAL segments only up to this instant. */
+    /** Point-in-time restore (#408): replay WAL segments only up to this instant. */
     pointInTimeMs?: number;
     /**
      * Force a FULL restore even when the vault has a durable remote CAS tier
-     * (issue #439 R2) — materialize every blob byte the snapshot carries. This
+     * (#439) — materialize every blob byte the snapshot carries. This
      * is the `--full` flag / operator-forensics override; it is IGNORED when an
      * explicit `lazy` option is supplied (that caller already resolved its own
      * tier). Absent ⇒ lazy-by-default: a vault with a durable remote tier
@@ -2186,7 +2186,7 @@ export class BackupService {
      */
     full?: boolean;
     /**
-     * Previews-first, lazy/partial restore (issue #405 §5). Present ⇒ every
+     * Previews-first, lazy/partial restore (#405). Present ⇒ every
      * blob the given remote CAS already holds is DEFERRED (never materialized
      * locally — the vault's custody read-through serves it on demand), so a
      * library far larger than the local disk restores onto a small gateway;
@@ -2194,7 +2194,7 @@ export class BackupService {
      * their only copy). After the DB is up, a warm pass pulls ALL `thumb`
      * tinies into the local spool so the grid is usable in minutes. Absent ⇒
      * lazy is still resolved AUTOMATICALLY from the vault's own remote tier
-     * (issue #439 R2) unless `full` is set — see the resolution note below.
+     * (#439) unless `full` is set — see the resolution note below.
      */
     lazy?: LazyRestoreOption;
   }): Promise<LazyRestoreResult> {
@@ -2210,9 +2210,9 @@ export class BackupService {
     // an explicit `lazy` option (tests, the recovery UI once it holds its own
     // tier) wins; else a `--full` caller forces the bulk download; else
     // auto-resolve the vault's own durable remote CAS tier and prefer lazy
-    // whenever one exists — the metered-egress whole-library download the CLI
-    // used to always incur is exactly what the previews-first path was built to
-    // avoid. No remote tier ⇒ the snapshot is the only copy ⇒ full.
+    // whenever one exists — a metered-egress whole-library download is
+    // exactly what the previews-first path avoids. No remote tier ⇒ the
+    // snapshot is the only copy ⇒ full.
     const lazy =
       opts.lazy ?? (opts.full ? undefined : this.autoLazyTier(opts.vaultId));
     const result = await restoreSnapshot({
@@ -2266,7 +2266,7 @@ export class BackupService {
   }
 
   /**
-   * The lazy-by-default skip-oracle + warm-pass source (issue #439 R2): the
+   * The lazy-by-default skip-oracle + warm-pass source (#439): the
    * vault's OWN settings-declared remote CAS tier, resolved through the live
    * plane's cached closure so the gateway never rebuilds S3 config. `undefined`
    * (⇒ full restore) when the vault isn't mounted or has no durable remote tier
@@ -2278,10 +2278,10 @@ export class BackupService {
   }
 
   /**
-   * The metered-egress confirm gate's evidence (issue #439 R2), computed BEFORE
+   * The metered-egress confirm gate's evidence (#439), computed BEFORE
    * a restore starts and WITHOUT downloading a manifest. Small and reusable on
    * purpose: the CLI's gate calls it today, and the recovery UI's price card
-   * (#436 §5) calls the same method later. See `RestoreEgressEstimate` for what
+   * (#436) calls the same method later. See `RestoreEgressEstimate` for what
    * each field means and why the lazy figure is deliberately not fabricated.
    */
   async restoreEgressEstimate(opts: {

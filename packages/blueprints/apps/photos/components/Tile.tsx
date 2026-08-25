@@ -79,8 +79,8 @@ export interface TileProps {
   /**
    * NOT a fifth slot (§4.4 says four, and means it) — a narrow carve-out for
    * the one per-tile action the selection bar's fixed five (§6) has nowhere
-   * to put: album detail's own Remove. Trash's Restore used to live here too;
-   * it retired once `allowsSelection(TRASH)` went true and the bar grew the
+   * to put: album detail's own Remove. Trash's Restore does not live here:
+   * `allowsSelection(TRASH)` is true and the bar carries the
    * Trash → Restore swap (`buildSelectionActions`), which is where a batch
    * restore belongs. Removing a single photograph from the album you are
    * looking at has no equivalent swap — "Add to album" opens a destination

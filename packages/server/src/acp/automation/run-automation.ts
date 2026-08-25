@@ -1,6 +1,6 @@
 /**
- * Local-side automation fire (issue #98) — `runAutomation`, the harness-runtime
- * wrapper over the fire spine (issue #147, Concern 2).
+ * Local-side automation fire (#98) — `runAutomation`, the harness-runtime
+ * wrapper over the fire spine (#147, Concern 2).
  *
  * The per-fire orchestration (resolve the automation, open its ledger, run
  * `handler.js`, cascade `onFailure`) lives in `@centraid/server/automation`'s `runFire`
@@ -11,11 +11,10 @@
  * the onFailure cascade — to app-engine.
  *
  * The captured kind is any registered `HarnessKind`: `startLiveDispatch` routes
- * `ctx.delegate` through the `HarnessSpec` registry (issue #479). `'codex'`
- * remains the default only because a caller that names no harness gets the
- * historical one. Issue #484 removed the `ctx.tool` rail (and the eager
- * mock-LLM server it spawned per fire), so a fire whose handler never calls
- * `ctx.delegate` starts zero child processes and zero HTTP servers.
+ * `ctx.delegate` through the `HarnessSpec` registry (#479). `'codex'`
+ * is the default for a caller that names no harness. There is no `ctx.tool`
+ * rail (#484), so a fire whose handler never calls `ctx.delegate` starts zero
+ * child processes and zero HTTP servers.
  */
 
 import { randomUUID } from "node:crypto";
@@ -54,7 +53,7 @@ export interface RunAutomationOptions {
   appsDir: string;
   /**
    * The vault's `journal.db` file — the run ledger every fire writes
-   * (issue #280: one per-vault ledger; the per-app `runtime.sqlite` is gone).
+   * (#280: one per-vault ledger; the per-app `runtime.sqlite` is gone).
    */
   journalDbFile: string;
   /** Accounted host turn seam. Required so a fire cannot construct an unmetered door. */
@@ -79,7 +78,7 @@ export interface RunAutomationOptions {
    * Whether `harness` came from the user's own settings (`prefs`) or from the
    * automation's artifact-writable manifest (`manifest`). Only the former is
    * consent for unattended egress; a manifest pin must still be a live ladder
-   * member or carry an existing grant (#567 D13).
+   * member or carry an existing grant (#567).
    */
   harnessSelectionSource?: "prefs" | "manifest";
   /**
@@ -116,7 +115,7 @@ export interface RunAutomationOptions {
   timeoutMs?: number;
   /** Optional logger. */
   onLog?: (level: "info" | "warn" | "error", msg: string) => void;
-  /** Live run-stream sink (issue #158); forwarded to the fire spine. */
+  /** Live run-stream sink (#158); forwarded to the fire spine. */
   onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
   /** Host-owned detached queue for another bounded pass over remaining work. */
   rearm?: automation.RunFireOptions["rearm"];
@@ -142,7 +141,7 @@ export interface RunAutomationOptions {
    */
   failureDepth?: number;
   /**
-   * Gateway broker seam (issue #304) — forwarded to the fire spine so a
+   * Gateway broker seam (#304) — forwarded to the fire spine so a
    * connector's connection credential resolves and injects per fire.
    */
   resolveConnection?: automation.ResolveConnection;

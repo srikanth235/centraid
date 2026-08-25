@@ -30,8 +30,7 @@ import {
 
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,
 // the real kit, the workspace React runtime, and a mocked `window.centraid`
-// vault. The retired served adapter and its vendored React copy are not part
-// of this path.
+// vault. No served adapter and no vendored React copy is part of this path.
 //
 // Typechecking and root lint cover these modules, but neither executes their
 // browser startup. Without this behavioral harness, a rendering crash reaches
@@ -291,11 +290,11 @@ const settle = () =>
  * Boot calls `refresh()` without awaiting and the apps paint through React's
  * async scheduler, so the DOM that a fixed sleep observes is a guess. Measured:
  * a shelf rendered from the local replica lands 4 event-loop turns (~4ms) after
- * its module import resolves locally — 20× inside the old fixed 80ms settle —
- * yet the loaded CI runner still queried a null node and failed the `check`
- * job. Dropping settle
- * to 1ms reproduces that exact failure locally, confirming a race rather than a
- * budget. So poll for the precondition instead of guessing at it.
+ * its module import resolves locally — 20× inside an 80ms fixed settle — yet a
+ * loaded CI runner still queries a null node and fails the `check` job.
+ * Dropping a fixed settle to 1ms reproduces that failure locally, which is a
+ * race rather than a budget. So poll for the precondition instead of guessing
+ * at it.
  *
  * 4s ceiling: an order of magnitude above any observed individual wait and
  * comfortably inside the per-test budget, so a genuine regression still fails
@@ -330,9 +329,9 @@ const BOOT_TEST_TIMEOUT_MS = 60_000;
 
 // The inline chrome (Chrome.tsx) mounts its consent notice — a `.kit-banner`
 // carrying `id="consentBanner"` — when the vault denies a read, and unmounts it
-// when the vault grants again. (The retired served islands kept a persistent
-// element and toggled `hidden`; the inline tree mounts/unmounts instead, so
-// "shown" is "present and not hidden".)
+// when the vault grants again. (The inline tree mounts and unmounts rather
+// than keeping a persistent element and toggling `hidden`, so "shown" is
+// "present and not hidden".)
 function consentBannerShown(): boolean {
   const banner = document.querySelector<HTMLElement>("#consentBanner");
   return banner !== null && banner.hidden === false;
@@ -394,7 +393,7 @@ export function describeAppBoot(
       // below and refuses to load a module outside the project root.
       // Each app gets its own scratch ROOT, laid out like `apps/` itself:
       // `<root>/<app>` beside `<root>/_shared`. An app importing a cross-app
-      // module by its real specifier (`../_shared/…`, issue #599) then resolves
+      // module by its real specifier (`../_shared/…`, #599) then resolves
       // exactly as it does in a shell bundle — and because the shared copy lives
       // inside the app's own root, two app-boot files running in parallel never
       // write the same path.

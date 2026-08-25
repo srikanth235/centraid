@@ -1,5 +1,5 @@
 /*
- * Pure state machine for ConnectFlow (issue #382) — the wizard shared by
+ * Pure state machine for ConnectFlow (#382) — the wizard shared by
  * onboarding's ticket path and the switcher's "Add gateway" action. Two
  * top-level methods:
  *
@@ -7,10 +7,10 @@
  *     test (it's always reachable); the flow skips straight to picking or
  *     creating a vault on it.
  *   - `gateway` — an existing gateway elsewhere, reached ONLY by a pairing
- *     ticket over iroh. URL pairing and per-device bearers were retired in
- *     issue #555; the QUIC identity is the enrollment credential.
+ *     ticket over iroh. There is no URL pairing and no per-device bearer
+ *     (#555); the QUIC identity is the enrollment credential.
  *
- * The third method, `ssh`, was deleted in issue #603: driving a remote
+ * The third method, `ssh`, was deleted in #603: driving a remote
  * `centraid-gateway` CLI over SSH was an admin channel, not an onboarding
  * path, and a pair ticket now covers every remote connect.
  *
@@ -84,7 +84,7 @@ export interface ConnectFlowResult {
   displayLabel: string;
 }
 
-/** Outcome of reading the local gateway's vaults (issue #603 W4). A transport
+/** Outcome of reading the local gateway's vaults (#603). A transport
  *  failure is NOT an empty registry — the vault step renders them differently,
  *  so the two cases stay distinguishable all the way to the UI. */
 export type LocalVaultsResult =
@@ -130,7 +130,7 @@ export interface ConnectFlowState {
 
 /**
  * `method` pre-selects a method and lands on its first real step — used when
- * the host already made the choice (onboarding's ticket path, issue #603) and
+ * the host already made the choice (onboarding's ticket path, #603) and
  * a one-card method grid would just be a redundant click.
  */
 export function createInitialConnectFlowState(
@@ -352,7 +352,7 @@ export function canCommitConnectFlow(state: ConnectFlowState): boolean {
     // Once the ticket has been redeemed the report says which vault the
     // enrollment actually grants. An enrollment that names none leaves the
     // vault step with nothing to pick, so "Continue" must not proceed
-    // (issue #603 D10) — it would commit against no vault at all.
+    // (#603) — it would commit against no vault at all.
     if (state.step === "vault" && state.report) return hasUsableVault(state);
     return true;
   }

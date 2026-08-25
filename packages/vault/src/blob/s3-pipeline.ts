@@ -1,5 +1,5 @@
 import type { S3BlobStoreOptions } from "./s3.js";
-/* eslint-disable max-classes-per-file -- token bucket is an implementation detail of the shared S3 pipeline (#418) */
+/* oxlint-disable max-classes-per-file -- token bucket is an implementation detail of the shared S3 pipeline (#418) */
 import { signS3Request } from "./sigv4.js";
 
 export interface S3RequestInput {

@@ -110,7 +110,7 @@ export interface GatewayScreenProps {
   loadResourceMode?: () => Promise<ResourceMode>;
   saveResourceMode?: (mode: ResourceMode) => Promise<void>;
   /**
-   * Pause / resume background work (issue #528 Phase B). Optional so older
+   * Pause / resume background work (#528). Optional so older
    * hosts/tests keep rendering; the pause control also gates on the health
    * snapshot carrying `metrics.backgroundPause`.
    */
@@ -119,7 +119,7 @@ export interface GatewayScreenProps {
   ) => Promise<{ paused: boolean; until: string | null }>;
   onResumeBackgroundWork?: () => Promise<{ paused: boolean }>;
   /**
-   * L3 "Tune" rung knob overrides (issue #528 Phase F). Optional so older
+   * L3 "Tune" rung knob overrides (#528). Optional so older
    * hosts/tests keep rendering; the Advanced section also gates on the health
    * profile carrying `sources` + `bounds`.
    */
@@ -135,7 +135,7 @@ export interface GatewayScreenProps {
    * Absent, the screen keeps the page in local state and behaves exactly as it
    * did — which is what a test rendering it standalone, or a host with no
    * router, needs. The one thing it must never do is draw its own back
-   * control: that was a second, competing way back sitting inside the page.
+   * control: that would be a second, competing way back inside the page.
    */
   onOpenTab?: (tab: TabId) => void;
   loadLocalUsage?: StorageScreenProps["loadLocalUsage"];
@@ -224,9 +224,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
 
   // ── The hero, WHEN THERE IS SOMETHING TO EXPLAIN.
   //
-  // It used to open the page in every state, and once the strip and the status
-  // line's own stamp landed it was saying nothing the rest of the page had not
-  // already said better: "This browser last synced 4s ago" over a foot that
+  // A hero opening the page in every state says nothing the strip and the
+  // status line's own stamp have not already said better: "This browser last
+  // synced 4s ago" over a foot that
   // reads "Synced · 4s ago" and an app bar that reads "checked just now";
   // "availability 100.0%" over a strip whose entire subject is availability;
   // "uptime 3h 31m" over an Identity row stating when the gateway started. A
@@ -466,12 +466,11 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         </div>
       </div>
 
-      {/* NO BACK ROW. A drill-in used to open its own "‹ System · Back" row at
-          the top of the page — a second back control, three inches below the
-          frame's own back arrow and pointing at the same place. The drill-ins
-          are routes now (`onOpenTab`), so the arrow in the chrome already
-          returns to the overview and the page keeps its first screenful for
-          what it is actually about. */}
+      {/* NO BACK ROW. The drill-ins are routes (`onOpenTab`), so the arrow in
+          the chrome already returns to the overview. A page-level
+          "‹ System · Back" row would be a second back control three inches
+          below it pointing at the same place, and would spend the page's first
+          screenful on navigation instead of on what it is about. */}
 
       {tab === "overview" ? (
         <>
@@ -600,13 +599,11 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             <RowsBlock ariaLabel="Look closer" rows={lookCloser} />
           </div>
 
-          {/* NO CLOSING NOTE. It was two paragraphs of commentary ABOUT the
-              page — one explaining that this seat withholds verbs, one
-              explaining that System is never pinned in the band. Neither is a
-              fact about the gateway, and the first was doing real work in the
-              wrong place: a row whose verb is withheld should say so ON THE
-              ROW, where the reader is already looking, which is what the
-              Identity row and the read-only rows now do. */}
+          {/* NO CLOSING NOTE. Commentary ABOUT the page — that this seat
+              withholds verbs, that System is never pinned in the band — is not
+              a fact about the gateway and does not belong here. A row whose
+              verb is withheld says so ON THE ROW, where the reader is already
+              looking, as the Identity row and the read-only rows do. */}
         </>
       ) : null}
 

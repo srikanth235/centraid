@@ -16,16 +16,15 @@ import { RUNTIME_DIR } from "./config.js";
 // stack trace pointing at node_modules internals.
 //
 // WHY the entry resolution below is written out by hand rather than handed to
-// `createRequire`, which is what it used to use: `node:module` is refused by
-// every sandbox lane in packages/server/src/engine/sandbox/policy.ts, and for
-// a good reason — a `createRequire` handed to the graph resolves modules
-// through Node's own loader, skipping the lane's hooks entirely, so one
-// builtin re-opens everything the lane closed. While this file needed it, an
-// automation worker that loads a recognition bundle could not run under ANY
-// lane, which is why the automation plane's default was no lane at all
-// (#846 P9). Resolution is the only thing `createRequire` was doing here; the
-// LOADING is already a plain dynamic `import()` of an absolute file URL, which
-// the lane's hooks do see.
+// `createRequire`: `node:module` is refused by every sandbox lane in
+// packages/server/src/engine/sandbox/policy.ts, and for a good reason — a
+// `createRequire` handed to the graph resolves modules through Node's own
+// loader, skipping the lane's hooks entirely, so one builtin re-opens
+// everything the lane closed. A file that needs it cannot run under ANY lane,
+// and an automation worker that loads a recognition bundle must (#846).
+// Resolution is the only thing `createRequire` would do here; the LOADING is
+// already a plain dynamic `import()` of an absolute file URL, which the
+// lane's hooks do see.
 //
 // What is re-implemented is deliberately the narrow part of Node's algorithm
 // the four packages `runtime/` installs actually need — a directory under

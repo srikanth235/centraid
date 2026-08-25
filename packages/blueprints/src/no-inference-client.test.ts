@@ -1,5 +1,5 @@
 /*
- * docs/blueprint-seats.md "Enrichment doctrine" (issue #712 C5), checked
+ * docs/blueprint-seats.md "Enrichment doctrine" (#712), checked
  * mechanically: provider model calls use `ctx.delegate`, while recognition
  * automations bundle local model execution and use ctx.vault content/invoke.
  * A blueprint app, automation, or mobile seat may not import a provider SDK
@@ -34,7 +34,7 @@ const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 // tooling would be just as much a third road.
 const SOURCE_DIRS = ["apps", "automations", "scripts", "src", "types"] as const;
 
-// WIDENED TO THE NATIVE TREE (issue #712 E1, engine C). The doctrine says "no
+// WIDENED TO THE NATIVE TREE (#712 E1, engine C). The doctrine says "no
 // blueprint app OR AUTOMATION" invents a third road, and the native client is
 // where the device work-lease lane actually runs (iOS Vision / Android ML
 // Kit): it is the surface with both the motive and the opportunity to reach

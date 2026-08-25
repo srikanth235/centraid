@@ -40,7 +40,7 @@ export function useNotificationsCounts(): {
     void subscribeNotificationsChanges(load, controller.signal).catch(() => {
       // The slow poll below is the deliberate fallback.
     });
-    // The fallback poll suspends with the tab (issue #659): SSE is primary and
+    // The fallback poll suspends with the tab (#659): SSE is primary and
     // reconnects on return, and a hidden tab has no badge to keep current.
     const stop = startVisibilityTicker(load, POLL_MS);
     window.addEventListener("focus", load);

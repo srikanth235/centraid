@@ -18,8 +18,8 @@ describe(isValidAppId, () => {
     expect(isValidAppId("_internal")).toBe(false);
     expect(isValidAppId("a/b")).toBe(false);
     expect(isValidAppId("up..dir")).toBe(false);
-    // Dots are no longer part of the grammar — the legacy `auto.` prefix
-    // is gone; automation apps are marked by the manifest `kind` field.
+    // Dots are not part of the grammar; automation apps are marked by the
+    // manifest `kind` field.
     expect(isValidAppId("auto.standup-bot")).toBe(false);
     // The vault assistant's reserved scope is `_`-prefixed like any other
     // plugin-internal id — `isValidAppId` alone still rejects it; see

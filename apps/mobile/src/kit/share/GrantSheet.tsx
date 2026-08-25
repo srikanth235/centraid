@@ -1,5 +1,5 @@
 /**
- * THE GRANT SHEET, native seat (issue #825).
+ * THE GRANT SHEET, native seat (#825).
  *
  * The web sheet's twin, and deliberately not its copy: every sentence, every
  * state token and the whole write door come from

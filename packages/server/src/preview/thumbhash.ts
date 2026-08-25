@@ -1,4 +1,4 @@
-// ThumbHash encoder (issue #419 M0.3): a ~5-25 byte, DCT-based placeholder a
+// ThumbHash encoder (#419): a ~5-25 byte, DCT-based placeholder a
 // native client paints instantly while a real thumb streams in. Inline
 // derivative variant `thumbhash`, base64 (unpadded) as its canonical form.
 //

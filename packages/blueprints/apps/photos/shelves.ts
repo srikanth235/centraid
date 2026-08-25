@@ -1,6 +1,6 @@
 // The seven shelves, the compact band's destinations, and the three questions
 // every surface asks about a shelf (v4 handoff §5, §3.1, §16; the Sharing
-// place was retired by issue #726 — a share's place is the recipient's vault).
+// place does not exist here — a share's place is the recipient's vault, #726).
 //
 // The structure — id model, route round trip, band tab — is
 // `_shared/shelves.ts`. This file is Photos' TABLES.
@@ -11,9 +11,9 @@ import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
 
 export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 
-// The shelves that had no built-in id before v4. Same one-slot trick as the
-// existing built-ins: the prefix can never collide with a collection id,
-// which is an opaque token and never carries a colon.
+// Built-in shelf ids. Same one-slot trick as the other built-ins: the prefix
+// can never collide with a collection id, which is an opaque token and never
+// carries a colon.
 export const PLACES = "built-in:places";
 export const PEOPLE = "built-in:people";
 /** Search is a shelf (§9), reached from the band and the frame — not a field
@@ -146,8 +146,7 @@ export function showsTileSize(id: ShelfId): boolean {
  * May `Select` be entered here? Every timeline shelf, Trash included (§6):
  * the bar's fifth action becomes **Restore** there (components/SelectionBar.tsx
  * derives the swap from the shelf) rather than Trash losing selection
- * altogether. Trash used to be excluded here for exactly the reason the bar
- * now handles — widening this predicate is what turns it back on.
+ * altogether.
  */
 export function allowsSelection(id: ShelfId): boolean {
   return packsTiles(id);

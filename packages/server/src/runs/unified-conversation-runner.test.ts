@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * Unified chat runner (issue #141, Phase 3). One chat surface, both jobs:
+ * Unified chat runner (#141). One chat surface, both jobs:
  * a turn runs in the app's draft session worktree (native file edits stage
  * there) with the union of tools (the `centraid_*` dispatcher threaded via
  * `toolContext` alongside the harness's native file tools), the unified

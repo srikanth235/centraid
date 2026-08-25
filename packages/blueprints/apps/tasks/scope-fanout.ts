@@ -1,4 +1,4 @@
-// The Tasks board's cross-scope read (issue #726 D11 task 3): fans the
+// The Tasks board's cross-scope read (#726 D11 task 3): fans the
 // `board` query across every mounted scope and merges the `open` lists
 // through the shared kit (apps/_shared/scope-kit.ts, scope-merge.ts) — no
 // merge logic of Tasks' own, only the two parameters `mergeScopePages`
@@ -11,9 +11,9 @@
 // (search.ts) draws, for the same reason: a bounded per-scope window with
 // nothing paginated ACROSS scopes has no horizon to reconcile.
 //
-// PER-SCOPE REACH (issue #726 D10/D11 finding 3). A scope that failed to
-// answer used to fold into the merge as `rows: []` and vanish — a remote
-// list that could not be reached rendered identically to one that is
+// PER-SCOPE REACH (#726 D10/D11 finding 3). A scope that fails to
+// answer must not fold into the merge as `rows: []` and vanish — a remote
+// list that cannot be reached would render identically to one that is
 // genuinely empty, the exact failure D10 exists to beat. `reach` on the
 // returned payload names every scope's own state (`perScopeReach`) so a
 // caller can render an unreached list as a STATE beside whatever other
@@ -42,7 +42,7 @@ interface BoardPayload {
 /**
  * The board read for the current mount. A single-scope host (or one whose
  * bridge has no `readAll`) gets the plain `read` it always had. A host
- * mounted over N scopes (issue #599's `multiScope: true`) fans out and
+ * mounted over N scopes (#599's `multiScope: true`) fans out and
  * returns the OWN scope's answer with `open` replaced by the merge across
  * every scope that answered — logbook, projects, sections, tags and counts
  * stay the own scope's, matching what this app has always shown for them.

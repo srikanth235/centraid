@@ -7,7 +7,7 @@
  *  - timeout enforcement (parent terminates worker on overrun)
  *  - a controlled API surface (ctx.vault is just message passing)
  *
- * Issue #842 W7.1 narrows that: before the handler graph is imported, this
+ * That is narrowed (#842): before the handler graph is imported, this
  * worker installs the app-handler sandbox (`../sandbox/install.ts`), which
  * refuses every node builtin outside a computational allowlist (no `fs`, no
  * `net`, no `child_process`, no `module`), revokes ambient network globals,
@@ -19,12 +19,12 @@
  * The full, per-mechanism limits are in `../sandbox/install.ts` — read them
  * before describing this boundary in a threat model.
  *
- * The handler's only data door is `ctx.vault` (issue #286 phase 2: apps are
- * projections over the owner's vault — the per-app data.sqlite is gone).
+ * The handler's only data door is `ctx.vault` (#286 phase 2: apps are
+ * projections over the owner's vault; there is no per-app data.sqlite).
  * Every call is async message passing to the parent, which holds the
  * credential and enforces consent.
  *
- * Warm-spare pooling (issue #404): a worker runs EXACTLY ONE handler and is
+ * Warm-spare pooling (#404): a worker runs EXACTLY ONE handler and is
  * then discarded — the parent never reuses a worker across handler runs, so a
  * handler always executes in a thread whose module registry has imported no
  * other handler (isolation identical to the spawn-per-run model). Two boot
@@ -222,14 +222,14 @@ const vault = {
   },
   /**
    * This app's own invocations awaiting owner confirmation — the "my
-   * pending approvals" surface (issue #260), so a parked request-booking or
+   * pending approvals" surface (#260), so a parked request-booking or
    * send can render as durable state instead of a session-local guess.
    */
   parked(): Promise<unknown> {
     return vaultCall("parked", {});
   },
   /**
-   * The card resolver (issue #272): `{refs: [{type, id}], purpose}` →
+   * The card resolver (#272): `{refs: [{type, id}], purpose}` →
    * `{cards, receiptId}` — minimal renderable cards for cross-domain
    * references, resolvable when a live core.link connects them to something
    * this caller reads. Denials arrive as per-ref `status: 'denied'` cards.
@@ -237,7 +237,7 @@ const vault = {
   resolve(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("resolve", request);
   },
-  /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (issue #293). */
+  /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (#293). */
   reveal(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("reveal", request);
   },

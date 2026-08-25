@@ -1,7 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#567) one fire-spine suite shares the real worker, stable automation conversation, audit store, failover notice, and onFailure fixtures
 import { promises as fs } from "node:fs";
 /*
- * Automation fire spine (issue #147, Concern 2). The per-fire orchestration
+ * Automation fire spine (#147, Concern 2). The per-fire orchestration
  * lives here in app-engine; the `ctx.delegate` dispatch surface is injected by
  * the host via `openDispatch`. These tests run a real (trivial) `handler.js`
  * through `runFire` with a STUB dispatch surface, proving the spine resolves

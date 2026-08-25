@@ -1,4 +1,4 @@
-// The multi-scope write rule (issue #599, apps/_shared/write-target.ts): where
+// The multi-scope write rule (#599, apps/_shared/write-target.ts): where
 // a new item lands when an app is mounted over several scopes at once. Every
 // branch of the rule is pinned here, including the two degenerate inputs that
 // keep the function total.

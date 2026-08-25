@@ -1,4 +1,4 @@
-// Consent memory for the install-grant top-up (issue #308 A3/A4).
+// Consent memory for the install-grant top-up (#308 A3/A4).
 //
 // Two facts the #306 top-up forgot, made durable:
 //   - the owner's "no": `consent_scope_tombstone` rows survive revocation,
@@ -137,7 +137,7 @@ export function listScopeTombstones(
  * and only those. The direction matters: approving schema-wide `core` read
  * withdraws every narrower `core.*` read "no", but approving one anchored
  * `core.core_task` read must NOT erase a schema-wide `core` read refusal
- * (issue #541 review). Erasing it would put the owner back in front of an ask
+ * (#541 review). Erasing it would put the owner back in front of an ask
  * they already refused on the next mount — exactly the nagging A4 exists to
  * end.
  *

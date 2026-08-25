@@ -1,14 +1,14 @@
 /**
- * Answer one face proposal (issue #712) — the app-plane half of
+ * Answer one face proposal (#712) — the app-plane half of
  * `media.answer_face_proposal`, and the ONLY write behind the Face review
  * queue on every surface (the review screen, the lightbox's mini-loop, and
  * the native twin).
  *
- * It replaces the `confirm-face` / `reject-face` pair. Those two could not
- * finish a queue between them: confirm demanded a person, so "reviewed and
- * deliberately left unnamed" had nowhere to go, and reject DELETED the row,
- * so nothing remembered that the owner had said no. See the vault command's
- * own header for the full account.
+ * ONE WRITE, THREE ANSWERS, never a confirm/reject pair: a confirm that
+ * demanded a person leaves "reviewed and deliberately left unnamed" nowhere to
+ * go, and a reject that DELETED the row leaves nothing remembering that the
+ * owner said no — between them they cannot finish a queue. See the vault
+ * command's own header for the full account.
  *
  * The three answers are the discriminant, not three endpoints:
  *   - `confirm` — this is that person. Carries `party_id`.

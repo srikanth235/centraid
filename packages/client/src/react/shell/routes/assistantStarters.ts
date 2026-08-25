@@ -1,5 +1,5 @@
 /*
- * Prompt starters for the assistant empty state (issue #420, Wave 3).
+ * Prompt starters for the assistant empty state (#420).
  *
  * Configurable via the gateway prefs store under `assistant.starters` (a JSON
  * string array), falling back to these defaults when unset/empty. Chosen over

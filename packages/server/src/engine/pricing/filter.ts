@@ -1,5 +1,5 @@
 /*
- * LiteLLM catalog filter (issue #445).
+ * LiteLLM catalog filter (#445).
  *
  * The upstream catalog is ~3k entries across every provider and modality
  * (chat, image, audio, embeddings). This reduces it to the families centraid

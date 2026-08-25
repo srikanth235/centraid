@@ -40,19 +40,17 @@ export interface StatusLineOptions {
   progress?: { done: number; total: number };
 }
 
-// ---------- Status line ----------
+// ────────── Status line ──────────
 //
-// Retired the floating `toast` stack (#707 Phase 3 — the Binding Layer's
+// There is no floating `toast` stack (#707 — the Binding Layer's
 // fifth invariant): state is reported on ONE persistent line docked to the
 // bottom of the frame, updated IN PLACE. There is no stack, no per-call
 // element, and no entry/exit animation — a single `.kit-status-line` element
 // is mounted once and its children swap under it. A duration still clears the
 // message back to quiet, but the line itself never leaves the DOM.
 //
-// #799 retired the `<kit-status-line>` custom element that used to wrap this:
-// the host is now the live region itself. That is stronger than the element
-// was — the element re-created the `role="status"`/`aria-live` div on every
-// render, and a live region that is replaced rather than mutated is not
+// The host IS the live region itself (#799), mutated in place and never
+// re-created: a live region that is replaced rather than mutated is not
 // reliably announced.
 
 let statusLineHost: HTMLElement | null = null;
@@ -213,14 +211,13 @@ export function outcomeMessage(
   return null;
 }
 
-// ---------- Loading and read-error states ----------
+// ────────── Loading and read-error states ──────────
 
 /**
  * Fill a container with placeholder rows while the first read is in flight.
  * The React surfaces render the same `.kit-skeleton` rows through
  * `_shared/LoadingSkeleton.tsx`; this is the imperative twin for the DOM
- * surfaces that have no React tree (#799 retired the `<kit-skeleton>` element
- * both used to go through).
+ * surfaces that have no React tree (#799).
  */
 export function showSkeleton(container: Element, rows = 3): void {
   container.replaceChildren(
@@ -243,7 +240,7 @@ export function readFailed(bannerEl: HTMLElement | null | undefined): void {
   bannerEl.hidden = false;
 }
 
-// ---------- Confirm-to-act (arm on first click, run on second) ----------
+// ────────── Confirm-to-act (arm on first click, run on second) ──────────
 
 /**
  * Returns true when the click should proceed. First click arms the button
@@ -275,7 +272,7 @@ export function armConfirm(
   return false;
 }
 
-// ---------- Bulk runner (selection-bar actions) ----------
+// ────────── Bulk runner (selection-bar actions) ──────────
 
 /**
  * Run `run(id)` over `ids` sequentially, narrating progress and the final

@@ -17,7 +17,7 @@ export interface WireClientOptions {
   /** Injectable for tests. Defaults to global `fetch`. */
   fetchImpl?: typeof fetch;
   /**
-   * Transient-failure backpressure handling (PROTOCOL/issue #412). Two classes
+   * Transient-failure backpressure handling (PROTOCOL/#412). Two classes
    * of response are retryable, with deliberately different budgets:
    *   - **429** — explicit rate-limit backpressure. The client respects a
    *     `Retry-After` header when present, otherwise backs off exponentially,
@@ -148,7 +148,7 @@ export async function callProviderRoute<T>(
       }
     }
 
-    // Backpressure (issue #412): 429 = explicit rate-limit (patient budget);
+    // Backpressure (#412): 429 = explicit rate-limit (patient budget);
     // 5xx or an unparseable body = transient provider-internal failure (short,
     // jittered budget — don't pile load onto a struggling provider). 4xx with a
     // valid envelope are client faults and never retried.

@@ -5,15 +5,13 @@
 // refresh() re-reads.
 //
 // Every command here is ABOUT an existing asset, so it goes to the scope that
-// asset is shown from (issue #599) — never to the chip selection. Favoriting a
+// asset is shown from (#599) — never to the chip selection. Favoriting a
 // photo in a shared audience edits it there; the member's own library has no
 // copy of it to edit.
 //
-// A single-asset `restoreAsset` used to live here for the Trash tile's own
-// Restore button (Timeline.tsx's `TileExtras`). It retired with that button:
-// Trash now allows selection (§6) and restoring goes through the bar's
-// Trash → Restore swap, batched — `runBatchRestore` in selection-actions.ts —
-// even for a selection of one.
+// There is no single-asset `restoreAsset` here. Trash allows selection (§6),
+// so restoring goes through the bar's Trash → Restore swap, batched —
+// `runBatchRestore` in selection-actions.ts — even for a selection of one.
 import { act, narrate } from "./outcomes.ts";
 import type { Asset } from "./types.ts";
 

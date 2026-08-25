@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * Git-store backend integration (issue #137, per-vault since #280). The
+ * Git-store backend integration (#137, per-vault since #280). The
  * gateway constructs a `WorktreeStore` inside the ACTIVE vault's directory,
  * syncs every app on `main` into the registry, and serves handlers +
  * static from the live `main` worktree.

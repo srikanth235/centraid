@@ -1,12 +1,12 @@
 /**
- * Locker user-presence authentication (issue #630).
+ * Locker user-presence authentication (#630).
  *
  * Credentials are verified with scrypt over an HMAC keyed by the vault seal
  * key. The database therefore contains no verifier that can be attacked from
  * a vault.db copy alone. Unlock sessions and one-time item permits exist only
  * in this gateway instance's memory; restarting the gateway always relocks.
  *
- * The derivation is ASYNC (issue #659 G11). scrypt at N=2^15 is ~100 ms of
+ * The derivation is ASYNC (#659). scrypt at N=2^15 is ~100 ms of
  * deliberate CPU, and `scryptSync` spent it on the event loop: one unlock
  * froze every other request, SSE subscriber, and automation tick on the
  * gateway — the exact shape docs/coding-standards.md D1 names. `scrypt` does
@@ -35,7 +35,7 @@ const SCRYPT_OPTIONS = {
   p: 1,
   maxmem: 64 * 1024 * 1024,
 } as const;
-/** Same KDF, same parameters, off the event loop (issue #659 G11). */
+/** Same KDF, same parameters, off the event loop (#659). */
 const scryptAsync = promisify(scrypt) as (
   password: Buffer,
   salt: Uint8Array,

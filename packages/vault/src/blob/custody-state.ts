@@ -1,4 +1,4 @@
-// Custody-state projection helpers (issue #352 phase 3/4, #367 §C7). Split out
+// Custody-state projection helpers (#352 phase 3/4, #367 §C7). Split out
 // of custody.ts along the "rebuildable projection" seam so the facade stays
 // under the governance line-cap; custody.ts re-exports these, so every caller
 // that imports them from `./custody.js` (index.ts, gateway.ts) is untouched.
@@ -11,7 +11,7 @@ import type { CustodyState } from "./custody-types.js";
 import { shaOfBlobUri } from "./store.js";
 
 /**
- * Persist a custody-state snapshot into `blob_custody_state` (issue #352
+ * Persist a custody-state snapshot into `blob_custody_state` (#352
  * phase 3/4) — the rebuildable projection apps read as `blob.custody_state`
  * (schema/tables.ts). Only LIVE content items' ORIGINAL bytes are covered —
  * derivatives (thumb/preview) are an implementation detail of serving, not
@@ -76,7 +76,7 @@ export async function refreshCustodyState(
 }
 
 /**
- * Cheap per-vault custody breakdown (issue #351 wave 4, #367 prep): counts
+ * Cheap per-vault custody breakdown (#351, #367): counts
  * `blob_custody_state` GROUP BY state — read-only, no tier I/O — so the
  * `blob-sweep` health probe (and #367's later Storage UI card) get
  * replicated-vs-backlog counts without re-listing the remote tier on every
@@ -103,7 +103,7 @@ export function custodyStateCounts(
 }
 
 /**
- * Byte-summed twin of `custodyStateCounts` (issue #367 §C7): the Storage
+ * Byte-summed twin of `custodyStateCounts` (#367): the Storage
  * status route wants replicated/backlog progress in BYTES, not just object
  * counts — `core_content_item.byte_size` is already the authoritative size
  * per content id (schema/core.ts), so this is one more GROUP BY join, not a

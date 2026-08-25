@@ -1,4 +1,4 @@
-/** The two member-facing Commons cards (issue #750): steward absence and a
+/** The two member-facing Commons cards (#750): steward absence and a
  *  commons that outgrew the size its member consented to. */
 
 import { describe, expect, test } from "vitest";
@@ -129,7 +129,7 @@ describe("commons notices", () => {
     expect(absent.headline).toContain("9 days");
     expect(absent.detail?.["recoverable"]).toBe(true);
     // The card has to name a place a client can actually go: Household, whose
-    // People & circles panel offers the ceremony (issue #750).
+    // People & circles panel offers the ceremony (#750).
     expect(absent.detail?.["deepLink"]).toBe("/household");
     // A seat parked on a divergence fault must never be re-founded from state
     // it could not verify, so its card does not offer the ceremony.

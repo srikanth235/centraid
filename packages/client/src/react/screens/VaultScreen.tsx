@@ -243,11 +243,11 @@ type State =
   | { phase: "ready"; data: VaultData };
 
 /**
- * Vault — the per-app owner consent pane, ported to React (issue #325,
- * Phase 3). Unlike the read-only screens this one is stateful: it fetches the
- * consent surface through the vanilla-supplied `loadData`, and every owner act
- * (grant / revoke / confirm / demo) runs the matching gateway call, then
- * reloads. Emits the same `cd-vault-*` / `cd-app-settings-*` classes.
+ * Vault — the per-app owner consent pane. Unlike the read-only screens this
+ * one is stateful: it fetches the consent surface through the route-supplied
+ * `loadData`, and every owner act (grant / revoke / confirm / demo) runs the
+ * matching gateway call, then reloads. Emits the `cd-vault-*` /
+ * `cd-app-settings-*` classes global styles.css targets.
  */
 export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
   const { block, loadData, showToast, onAccessChanged, onParkedCount } = props;

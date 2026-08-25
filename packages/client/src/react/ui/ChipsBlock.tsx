@@ -1,4 +1,4 @@
-// Filter chips (v9 §8, issue #765).
+// Filter chips (v9 §8, #765).
 //
 // A pill row that toggles what you are LOOKING at. It is not
 // `styles/seg.module.css`: the segmented control is a sunken track with one

@@ -141,7 +141,7 @@ export default function PhotoLightbox({
   const [slideshow, setSlideshow] = useState(false);
   // "Send a copy" opens the place-precision sheet rather than the OS share
   // sheet: what a copy says about where it was taken is a decision, and it is
-  // made before any bytes leave (issue #816).
+  // made before any bytes leave (#816).
   const [shareOpen, setShareOpen] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
   // The `···` chip's own rectangle, measured on the press that opens the
@@ -460,7 +460,7 @@ export default function PhotoLightbox({
   };
 
   /**
-   * The overflow menu's "Make key photo" (issue #721 B5) — the same
+   * The overflow menu's "Make key photo" (#721) — the same
    * `set-album-cover` write `AlbumDetail.tsx`'s selection-bar "Make cover"
    * fires, reached here without leaving the viewer. `tags` (built above for
    * the info sheet's Albums chips) already IS this photograph's album
@@ -589,7 +589,7 @@ export default function PhotoLightbox({
     gatewayName
   );
   // What the stage's one line says, and in what order it decides — see
-  // `viewerStatus`. The bytes do not automatically win here any more: a
+  // `viewerStatus`. The bytes do not automatically win here: a
   // magnified photograph and a phone whose gestures nothing has taught both
   // outrank a fact with nothing to do about it.
   const status = viewerStatus({

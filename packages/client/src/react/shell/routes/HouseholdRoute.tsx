@@ -31,9 +31,9 @@ import VaultModal, {
 import { addVault } from "./vaultModals.js";
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
-// React-owned Household route (issue #599, Decision 14; ownership #726). The
-// roster half is the device/owner surface that used to hang off the Gateway
-// page; the vaults half reads the owner's scope registry, which is also what
+// React-owned Household route (#599, Decision 14; ownership #726). The
+// roster half is the device/owner surface; the vaults half reads the owner's
+// scope registry, which is also what
 // every "which vault?" picker resolves against — one source, so the page and
 // the pickers can never disagree about what this owner can reach.
 /** How often the humanized ages advance. Minute granularity, because that is
@@ -61,10 +61,9 @@ export default function HouseholdRoute({
   const { navigate, showToast } = useShellActions();
   const scopes = useOwnerScopes();
   const [now, setNow] = useState(() => Date.now());
-  // "New vault" moved here with the rest of the vault vocabulary — it used to
-  // hang off a gateway header row in the retired switcher. `addVault`
+  // "New vault" lives here with the rest of the vault vocabulary. `addVault`
   // operates on the gateway this client already addresses, which is the one
-  // Household is describing, so there is no gateway to pick first any more.
+  // Household is describing, so there is no gateway to pick first.
   const [newVaultOpen, setNewVaultOpen] = useState(false);
   const canCreateVault = typeof window.CentraidApi.createVault === "function";
   const ownVaultIds = scopes.scopes.map((scope) => scope.id);

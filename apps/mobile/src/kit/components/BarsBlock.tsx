@@ -3,7 +3,7 @@
 // The chart says one thing: how much ran, and how much of it failed. So it
 // spends exactly one colour — `net` on the failed cap — and draws the rest in
 // tertiary ink. There is no gradient, no axis grid, no hover tooltip and no
-// vector runtime; the previous sparkline had all four and said less.
+// vector runtime.
 //
 // A chart is unreadable to a screen reader whatever it draws, so the whole
 // block carries ONE image-role label the caller composes ("Runs per day over
@@ -24,9 +24,8 @@ export interface BarsBlockProps {
   /**
    * The marks along the axis, oldest → newest, spread across the plot.
    *
-   * TWO OR MORE, and the count is the caller's (#775). It was a fixed triple
-   * while the only marks it carried were the relative words "30 days ago /
-   * halfway / today" — words a fold into real dates has no use for.
+   * TWO OR MORE, and the count is the caller's (#775): a fold into real dates
+   * has no use for a fixed triple of relative words.
    */
   axis: readonly string[];
   /**

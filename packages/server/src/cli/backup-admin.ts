@@ -13,16 +13,16 @@
  *   centraid-gateway backup kit     [--config <path> | --data-dir <path>] --out <file>
  *
  * `restore` ALWAYS materializes a snapshot into a FRESH, empty `--dest`
- * side directory (issue #439 R3) — it NEVER swaps or restores in place over
+ * side directory (#439) — it NEVER swaps or restores in place over
  * a live vault (FORMAT.md restore rule 3, enforced by the engine's
  * empty-directory refusal); adopting the result as a live vault, and
  * clearing the resulting quarantine marker, are separate, deliberate
- * operator steps. It is LAZY by default (issue #439 R2): a vault with a
+ * operator steps. It is LAZY by default (#439): a vault with a
  * durable remote CAS tier restores previews-first, deferring every
  * remote-held blob to on-demand read-through; pass `--full` to materialize
  * every blob byte instead. On a `metered-egress` home the restore refuses to
  * start without `--yes`, printing the download it will incur (PROTOCOL.md's
- * `restoreCostClass`). `--at` is point-in-time restore (issue #408): the
+ * `restoreCostClass`). `--at` is point-in-time restore (#408): the
  * newest snapshot at or before that instant plus every shipped WAL segment up
  * to it. `restore-verify` performs a REAL restore from the remote into a
  * scratch dir and runs the full check battery (G9) — a backup that has never
@@ -55,9 +55,9 @@ interface BackupArgs {
   passwordFile?: string;
   /** Point-in-time restore target, epoch ms (parsed from `--at <iso>`). */
   atMs?: number;
-  /** Force a full (non-lazy) restore — the `--full` override (issue #439 R2). */
+  /** Force a full (non-lazy) restore — the `--full` override (#439). */
   full?: boolean;
-  /** Acknowledge a metered-egress restore's download cost — the `--yes` gate release (issue #439 R2). */
+  /** Acknowledge a metered-egress restore's download cost — the `--yes` gate release (#439). */
   yes?: boolean;
 }
 
@@ -133,7 +133,7 @@ function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
-/** Human-readable size for the metered-egress gate's cost line (issue #439 R2). */
+/** Human-readable size for the metered-egress gate's cost line (#439). */
 export function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
   let value = bytes;
@@ -149,7 +149,7 @@ export async function commandBackup(
   args: string[],
   fail: (msg: string, code?: number) => never,
   /**
-   * Test seam only (issue #439): inject a pre-built `BackupProvider` so a test
+   * Test seam only (#439): inject a pre-built `BackupProvider` so a test
    * can drive the CLI against a provider with a chosen `restoreCostClass` (e.g.
    * `metered-egress`) without standing up a real remote server. Production
    * callers (`cli.ts`) omit it and the provider is built from the config.
@@ -333,7 +333,7 @@ export async function commandBackup(
           ...(parsed.full ? { full: true } : {}),
         });
         printJson({ restored: parsed.dest, ...result });
-        // `previewsWarm` present ⇒ the lazy previews-first path ran (issue #439
+        // `previewsWarm` present ⇒ the lazy previews-first path ran (#439
         // R2); absent ⇒ a full materialization. Report which so the operator
         // knows whether originals are local or still remote-only.
         const mode = result.previewsWarm

@@ -32,12 +32,12 @@ import { sendJson } from "./http-utils.js";
 import { SseStream } from "./sse-stream.js";
 
 // 55s keeps the stream warm while staying under the ~60s idle cut common to
-// mobile carrier NATs and reverse proxies (issue #404) — one heartbeat still
+// mobile carrier NATs and reverse proxies (#404) — one heartbeat still
 // lands inside every idle window, at roughly half the wakeups of the old 30s.
 const HEARTBEAT_MS = 55_000;
 
 /**
- * Concurrent `_changes` subscribers a single app accepts (issue #351 Tier 4
+ * Concurrent `_changes` subscribers a single app accepts (#351 Tier 4
  * hygiene). Unlike the gateway's per-surface SSE caps (one `_logs` stream,
  * one `_automations` stream, a handful of devices), `_changes` is per-app
  * and a user can legitimately have several windows/tabs of the SAME app
@@ -128,7 +128,7 @@ export async function handleAppChanges(
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  // Bounded writer (issue #659 G6): a subscriber that stops reading is dropped
+  // Bounded writer (#659): a subscriber that stops reading is dropped
   // rather than buffered, and reconnects into a fresh `_changes` stream.
   const stream = new SseStream(res);
   // Send an initial comment so the client's `onopen` fires immediately
@@ -167,7 +167,7 @@ export async function handleAppChanges(
           /* swallow */
         }
       }
-      // eslint-disable-next-line promise/no-multiple-resolved -- `done` guard ensures single resolution (#247)
+      // oxlint-disable-next-line promise/no-multiple-resolved -- `done` guard ensures single resolution (#247)
       resolve();
     };
     req.on("close", cleanup);

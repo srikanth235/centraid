@@ -1,4 +1,4 @@
-// The demo register (issue #290 phase 1): scenario data enters through the
+// The demo register (#290): scenario data enters through the
 // normal command pipeline but stays separable forever — seed.demo provenance,
 // vault-side seed registry, invisible to the automation plane, purgeable in
 // one receipted act.

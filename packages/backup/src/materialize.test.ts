@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 /*
- * `materializeSnapshotBlobs` (issue #439 R5) — the targeted blob re-pin the
+ * `materializeSnapshotBlobs` (#439) — the targeted blob re-pin the
  * adopt-time reconcile leans on. It must pull ONLY the requested shas out of a
  * real snapshot, land them byte-exact under the `FsBlobStore` layout, verify
  * each against the manifest sha, and report a requested sha the snapshot does

@@ -1,6 +1,6 @@
 /*
  * Entropy-gated payload framing (FORMAT.md § Chunk payload framing — /2,
- * issue #405 §1). These are the format-level unit tests for the frame itself;
+ * #405 §1). These are the format-level unit tests for the frame itself;
  * the end-to-end "does a real snapshot compress and still restore" coverage
  * lives in engine.test.ts, where framing rides inside the seal.
  */

@@ -1,5 +1,5 @@
 /*
- * The doctor integrity-scrub check library (issue #839 W1.2) — barrel.
+ * The doctor integrity-scrub check library (#839) — barrel.
  *
  * Re-exports the reusable invariant checks and the scrub orchestrator so
  * in-package callers (the `doctor` CLI verb, the restore drill) import from one

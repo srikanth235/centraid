@@ -1,7 +1,7 @@
 /*
  * Pure intent-shape logic shared by every caller that admits an offline
  * intent against a consent-derived shape: the device-facing route
- * (`replica-intent-route.ts`) and the commons intent path. Extracted so a
+ * (`replica-intent-route.ts`) and the commons intent path. Shared so a
  * commons member's queued write is
  * checked for staleness with the EXACT SAME arithmetic a device's own
  * offline edit is — one answerer for "did this row change under you",

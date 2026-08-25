@@ -1,5 +1,5 @@
 /*
- * One platform default for every gateway owner (issue #555). Desktop,
+ * One platform default for every gateway owner (#555). Desktop,
  * service units, and the CLI use this resolver instead of inventing roots
  * under a client application's userData directory.
  */

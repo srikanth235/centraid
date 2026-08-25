@@ -1,5 +1,5 @@
 /*
- * The ⌘K palette's empty-state source (issue #708 §A, last item): before any
+ * The ⌘K palette's empty-state source (#708 §A, last item): before any
  * query, the palette shows RECENTS (recently opened/edited vault objects)
  * rather than a blank void. Reuses the same replica session as
  * `paletteEntitySearch.ts` — `session.read` instead of `session.search`,

@@ -1,11 +1,11 @@
 /**
- * Pure logic for finishing a `needs-auth` connection FROM THE PHONE (#647
- * review of PR #655). No React, no Expo imports — the screen owns the browser
+ * Pure logic for finishing a `needs-auth` connection FROM THE PHONE (#647).
+ * No React, no Expo imports — the screen owns the browser
  * session, this module owns the rules.
  *
  * Why the phone cannot reuse the PWA shape
  * ----------------------------------------
- * Mobile used to POST `{surface:"web"}` and then `Linking.openURL(authUrl)`
+ * Mobile must not POST `{surface:"web"}` and then `Linking.openURL(authUrl)`
  * into the SYSTEM browser. Both halves are wrong here:
  *
  *  - `surface:"web"` makes the Assist Worker 303 the callback to

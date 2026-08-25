@@ -1,4 +1,4 @@
-// The custody ROLLUP projection (issue #711 — Photos' Storage surface).
+// The custody ROLLUP projection (#711 — Photos' Storage surface).
 //
 // `blob_custody_state` (custody-state.ts) already answers "where are THIS
 // content item's bytes?", one row per live content item. What no surface could

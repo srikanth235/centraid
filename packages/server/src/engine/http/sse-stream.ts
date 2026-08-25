@@ -1,12 +1,12 @@
 /*
- * Bounded server-sent-event writer (issue #659 G6).
+ * Bounded server-sent-event writer (#659).
  *
- * Every SSE surface in the gateway used to call `res.write()` and ignore the
- * result. `res.write()` returning `false` means the socket is full and Node is
- * now buffering the frame in memory on our behalf — so a client that stops
+ * An SSE surface that calls `res.write()` and ignores the result is unbounded.
+ * `res.write()` returning `false` means the socket is full and Node is
+ * buffering the frame in memory on our behalf — so a client that stops
  * reading (a phone that slept, a tab throttled to a stop, a tunnel that
  * stalled) turns a busy vault's change feed into unbounded RSS growth on the
- * gateway. Nothing capped it and nothing measured it.
+ * gateway.
  *
  * The policy here is the one SSE was designed for: a stream that cannot keep up
  * is DROPPED, not buffered. `EventSource` reconnects on its own and every

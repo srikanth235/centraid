@@ -1,4 +1,4 @@
-// The editor's SEVEN write outcomes (Docs handoff Part 2 §9; issue #821) —
+// The editor's SEVEN write outcomes (Docs handoff Part 2 §9; #821) —
 // "a write has seven visible outcomes and the member must always know which
 // one is showing."
 //
@@ -50,9 +50,7 @@ export interface EditorOutcomeCopy {
   line: string;
   /** The note names the rule, not the vibe. */
   note: string;
-  /** The commit control's label. */
   commit: string;
-  /** Drawn in the `net` tone. */
   net: boolean;
   /** The one optional follow-up beside the line. */
   action?: EditorActionId;

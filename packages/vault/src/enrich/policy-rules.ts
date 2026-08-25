@@ -1,4 +1,4 @@
-// The policy cascade's rule STORE (issue #807) — reads and writes of
+// The policy cascade's rule STORE (#807) — reads and writes of
 // `enrich_policy_rule`, and nothing else.
 //
 // WHAT THIS MODULE DELIBERATELY DOES NOT DO: resolve. There is no

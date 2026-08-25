@@ -43,7 +43,7 @@ const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
     title: "Spend categories",
   },
   flags: { uri: "urn:duaility:flags", title: "Agent flags" },
-  // Machine-tag vocabularies (issue #299) — concepts arrive on demand from
+  // Machine-tag vocabularies (#299) — concepts arrive on demand from
   // the enrichment publishers; only the scheme rows seed. Pre-v10 vaults
   // get these from the guarded v10 backfill instead.
   vision: { uri: "urn:centraid:vision", title: "Vision tags (machine)" },
@@ -65,11 +65,11 @@ const SEED_CONCEPTS: SeedConcept[] = [
   { scheme: "relations", notation: "about", label: "About" },
   { scheme: "relations", notation: "works-for", label: "Works for" },
   { scheme: "relations", notation: "duplicate-of", label: "Duplicate of" },
-  // Cross-referencing relations (issue #272) — also seeded into existing
+  // Cross-referencing relations (#272) — also seeded into existing
   // vaults by the v3 migration, which must stay in step with these two.
   { scheme: "relations", notation: "references", label: "References" },
   { scheme: "relations", notation: "attachment-of", label: "Attachment of" },
-  // Version lineage (issue #352): a newer content item revises an older one —
+  // Version lineage (#352): a newer content item revises an older one —
   // core.edit_document, core.replace_document_content,
   // core.restore_document_version, and knowledge.edit_note all assert it.
   { scheme: "relations", notation: "revises", label: "Revises" },
@@ -150,9 +150,9 @@ export function bootstrapVault(
       options.baseCurrency ?? "USD",
       now
     );
-  // The enrichment-policy mirror (issue #352 phase 3/4, host.ts
+  // The enrichment-policy mirror (#352 phase 3/4, host.ts
   // readEnrichSettings/updateEnrichSettings): `gateway` is the default on
-  // both domains (issue #712 C5 rename), same as the settings-bag default
+  // both domains (#712 C5 rename), same as the settings-bag default
   // this table shadows — the member's own devices and gateway may do
   // deterministic and device-lease work and whatever the gateway is
   // already wired to; a THIRD-PARTY PROVIDER seeing bytes is still gated

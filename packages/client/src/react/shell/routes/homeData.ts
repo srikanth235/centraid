@@ -33,7 +33,7 @@ export interface HomeDeps {
   tileVariant: AppearancePrefs["tileVariant"];
 }
 
-/** Derive the Home app-card DTOs from the resolved app list (vanilla renderHomeAsync). */
+/** Derive the Home app-card DTOs from the resolved app list. */
 export function buildHomeAppItems(
   apps: readonly AppMetaResolvedType[],
   deps: HomeDeps

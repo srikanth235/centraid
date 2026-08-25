@@ -29,15 +29,13 @@ import type { Palette } from "../palette";
 // both the page and the raised paper, and in dark it is the raised paper
 // (`#171716`), which is LIGHTER than the page.
 //
-// The ramp now ships the Binding Layer v9 ladder exactly — `ink2 #5A5A58`,
+// The ramp ships the Binding Layer v9 ladder exactly — `ink2 #5A5A58`,
 // `ink3 #6C6C69`, `ghost #888885` in light, `#9A9A98 / #878785 / #656563` in
-// dark. It previously sat one rung DEEPER at every secondary level, on the
-// reasoning that a borderline `ink3` had no tone-by-tone trade-off left to
-// protect. Measured against `WALL`, the deepest paper in the system, the v9
+// dark. Measured against `WALL`, the deepest paper in the system, the v9
 // values clear their obligations with room to spare: soft 6.02:1, faint
 // 4.58:1 (floor 4.5), ghost 3.09:1 (floor 3, and ghost is forbidden from body
-// copy by its own role). Deepening past that was buying contrast the floors
-// did not ask for, at the cost of the four rungs reading as one flat grey —
+// copy by its own role). Deepening any rung buys contrast the floors
+// do not ask for, at the cost of the four rungs reading as one flat grey —
 // the failure `contrast.test.ts`'s ramp-ordering assertion exists to name.
 // That test re-measures both ramps off the emitted CSS, so this is the pin.
 export const BRAND = "#141414";
@@ -194,21 +192,20 @@ export const STAGE_SUNKEN = "#1A1A19";
 
 /**
  * ONE PAGE. The shell and every app share this single colour — there is no
- * per-app surface tone. The `data-tone` axis (`--bg-tone-*`, five tones
- * neutral/paper/mat/cool/warm) shipped and was retired for two measured
- * reasons:
+ * per-app surface tone. A `data-tone` page axis (`--bg-tone-*`) is dead by
+ * decision, for two measured reasons:
  *
  *   1. Retuning `--bg` alone while `--bg-elev` / `--bg-sunken` / `--skel`
- *      stayed pinned INVERTED the paper metaphor. The system's rule is that
- *      raised paper is darker-in-light and lighter-in-dark; Photos, on a
- *      retuned page, drew its cards LIGHTER than its page in light mode —
- *      exactly backwards, because only the page moved and the surfaces above
- *      it did not move with it.
+ *      stay pinned INVERTS the paper metaphor. The system's rule is that
+ *      raised paper is darker-in-light and lighter-in-dark; on a retuned
+ *      page an app draws its cards LIGHTER than its page in light mode —
+ *      exactly backwards, because only the page moves and the surfaces above
+ *      it do not move with it.
  *   2. Measured on device, four of the five tones sat within 0.7 L* of
  *      neutral, and dark mode's whole five-tone spread was 2.4 L* — an axis
  *      nobody could perceive.
  *
- * The rule going forward: if a page tone ever returns, it must carry its
+ * The rule: if a page tone ever returns, it must carry its
  * whole surface SET (page + elev + sunken + skel) together, never `--bg`
  * alone. See docs/traps/design-tokens.md, "There is ONE page, and an app does
  * not retune it."
@@ -225,7 +222,7 @@ export const PAGE = { dark: "#0E0E0E", light: "#FDFDFC" } as const;
  * not on the page the app is working on. That is the handoff's own rule —
  * the phone band's Home capsule keeps the frame's colour "never the app's
  * mat" — and it is the only way to give the stem a distinct surface without
- * reopening the retired per-app tone axis above: this rung sits BELOW the
+ * reopening the per-app tone axis (dead by decision, above): this rung sits BELOW the
  * page in light and above it in dark, so raised paper inside the stem still
  * lifts in the direction the rest of the ramp lifts.
  */

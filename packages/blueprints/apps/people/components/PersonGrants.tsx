@@ -1,10 +1,9 @@
-// `Shared with them`, drawn from the GRANT PLANE (issue #825, wave 7).
+// `Shared with them`, drawn from the GRANT PLANE (#825).
 //
 // This is the person screen's grant dashboard: every live grant reaching this
 // party, the channel that carries them, and the two acts the ruling gives
-// People — `Share` and `Revoke`. Both were registered withholdings while a
-// share could only be made of a container People does not own; the grant plane
-// removed that cause, so the controls are here and they are live.
+// People — `Share` and `Revoke`, both live, because a grant names an audience
+// × subject × capability and needs no container of this app's own.
 //
 // THE ONE COMPONENT IN THIS APP THAT READS FOR ITSELF, and deliberately: the
 // grant plane is not one of People's vault queries — it is the gateway's own

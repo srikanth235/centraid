@@ -1,4 +1,4 @@
-// Links (core §01/§08, issue #272): the typed, temporal relationship fabric,
+// Links (core §01/§08, #272): the typed, temporal relationship fabric,
 // activated as commands. All cross-entity meaning goes through core.link — a
 // SKOS-governed relation concept, valid_from/valid_to, who asserted it —
 // never an ad-hoc junction table. These two commands are the whole write
@@ -76,7 +76,7 @@ function requireEndpoint(
   }
 }
 
-// The standoff anchor selector (issue #282): a W3C-style text-quote selector
+// The standoff anchor selector (#282): a W3C-style text-quote selector
 // plus a position hint, pointing into the from-endpoint's decoded body text.
 // `start` is a char offset in UTF-16 code units (the JS-string convention the
 // projections decode to). The anchor is a locator for the link, never a
@@ -147,7 +147,7 @@ const LINK: CommandDefinition = {
       to_id: { type: "string", minLength: 1 },
       /** Notation into the relations scheme, e.g. `references`, `about`. */
       relation: { type: "string", minLength: 1 },
-      /** Optional inline anchor written atomically with the link (issue #282). */
+      /** Optional inline anchor written atomically with the link (#282). */
       selector: SELECTOR_SCHEMA,
     },
   },
@@ -307,7 +307,7 @@ function unlinkEntities(ctx: HandlerCtx): Record<string, unknown> {
   return { link_id: input.link_id };
 }
 
-// Re-anchor / re-baseline (issue #282): move (or clear) the standoff anchor
+// Re-anchor / re-baseline (#282): move (or clear) the standoff anchor
 // an existing live link carries. This is a locator write, not a new judgment
 // — the link's endpoints, relation and validity are untouched. With a
 // selector it upserts the anchor (the @-gesture re-anchoring an orphaned
@@ -379,7 +379,6 @@ function anchorLink(ctx: HandlerCtx): Record<string, unknown> {
   return { link_id: input.link_id };
 }
 
-/** Register the core link commands on a gateway. */
 export function registerLinkCommands(gateway: Gateway): void {
   gateway.registerCommand(LINK);
   gateway.registerCommand(UNLINK);

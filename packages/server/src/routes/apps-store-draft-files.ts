@@ -1,8 +1,7 @@
-// Draft file read/write inside a session worktree (issue #137) — the I/O
-// helpers behind `PUT`/`GET`/`DELETE /_apps/<id>/files`. Split out of
-// apps-store-routes.ts to keep the route table under the repo file-size
-// limit; the sandboxing (refuse writes outside the app dir, text-only
-// extensions) lives here with the reads/writes it guards.
+// Draft file read/write inside a session worktree (#137) — the I/O
+// helpers behind `PUT`/`GET`/`DELETE /_apps/<id>/files`. The sandboxing
+// (refuse writes outside the app dir, text-only extensions) lives here with
+// the reads/writes it guards.
 
 import { promises as fs } from "node:fs";
 import type * as TypeImport_g9tn66 from "node:fs";

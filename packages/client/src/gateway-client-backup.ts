@@ -2,8 +2,7 @@
  * Renderer-side client for the offsite backup engine's HTTP surface
  * (`GET /centraid/_gateway/backup`, `POST /centraid/_gateway/backup/run`,
  * `POST /centraid/_gateway/backup/kit-confirmed` —
- * `packages/server/src/routes/backup-routes.ts`, issue #351's last
- * workstream; wave 4 adds the recovery-kit confirmation gate). Backs the
+ * `packages/server/src/routes/backup-routes.ts`, #351). Backs the
  * Gateway page's Backup card.
  */
 
@@ -24,7 +23,7 @@ export interface GatewayBackupPolicyDTO {
 }
 
 /**
- * Owner-editable policy keys (issue #436 §4). `casAck` and `storageClass` are
+ * Owner-editable policy keys (#436). `casAck` and `storageClass` are
  * deliberately NOT editable: `casAck`'s field survives on the read DTO for the
  * wire declaration (always defaults to 'receipt'), and store-class vocabulary
  * is gateway-internal — neither round-trips as an owner-settable value. The
@@ -128,8 +127,8 @@ export interface GatewayBackupVaultDTO {
 }
 
 /**
- * Recovery-kit confirmation gate (issue #351 wave 4 / #367) — deliberately
- * generic, not backup-card-specific: issue #367 reuses this same
+ * Recovery-kit confirmation gate (#351 / #367) — deliberately
+ * generic, not backup-card-specific: #367 reuses this same
  * `{confirmedAt}` shape to gate the S3-storage enable flow.
  */
 export interface GatewayRecoveryKitStatusDTO {
@@ -138,7 +137,7 @@ export interface GatewayRecoveryKitStatusDTO {
 }
 
 /** The provider's retention promise (discovery `backup.retention`) — the
- *  Recovery-window metric's source (#436 §6). Structural subset of
+ *  Recovery-window metric's source (#436). Structural subset of
  *  `@centraid/backup`'s `Retention` (drops `neverPruneNewest`, always true). */
 export type GatewayRetentionDTO =
   | {
@@ -150,7 +149,7 @@ export type GatewayRetentionDTO =
   | { kind: "none" };
 
 /** The home bundle's provider-declared promises for the five-metric contract
- *  (#436 §6): Recovery window (`retention`) and Exit (`restoreCostClass`). */
+ *  (#436): Recovery window (`retention`) and Exit (`restoreCostClass`). */
 export interface GatewayHomeDiscoveryDTO {
   retention: GatewayRetentionDTO;
   restoreCostClass: "free-egress" | "metered-egress";

@@ -21,7 +21,7 @@ import { describe, expect, it } from "vitest";
 // ships an iOS build with no FTS5 (the podspec logs nothing about fts5 — the
 // only tell is a missing SQLITE_ENABLE_FTS5=1 in the generated xcconfig).
 //
-// `sqliteVec` (issue #721) rides the exact same pair of files and the exact
+// `sqliteVec` (#721) rides the exact same pair of files and the exact
 // same two-toolchain resolution story — it is a second flag op-sqlite reads
 // off the identical `"op-sqlite"` block, nothing more — so it is asserted
 // alongside `fts5` below rather than in a file of its own.
@@ -37,7 +37,7 @@ const fts5Of = (file: string): unknown =>
     "fts5"
   ];
 
-// `sqliteVec` (issue #721) is the SAME compile-time-define story as `fts5`
+// `sqliteVec` (#721) is the SAME compile-time-define story as `fts5`
 // above — op-sqlite reads it from the identical two package.json files, via
 // the identical two toolchains — so it has to clear the identical bar: both
 // files, or a build silently misses the extension a future vector-search

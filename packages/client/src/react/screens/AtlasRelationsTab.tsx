@@ -36,7 +36,7 @@ import type { SampleRowsFetcher } from "./atlasSampleRows.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
-// Relations tab — the orrery (issue #441 B2, "Map" redesign #519). A
+// Relations tab — the orrery (#441 B2, "Map" redesign #519). A
 // party-centred radial star chart of the vault's kinds (inline SVG). Kinds sit
 // on concentric rings by hop distance and on FIXED per-pack bearings; clicking a
 // kind re-centres, animating radius only so pack identity stays a stable compass

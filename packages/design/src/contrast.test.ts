@@ -89,9 +89,8 @@ describe("shell token contrast floors", () => {
 
   // Every opaque surface a foreground can be painted on. There is no per-app
   // surface tone axis — one page, for the shell and every app in it — so
-  // this is the shell's fixed surface set. The dark ramp used to be a
-  // `--bg-l` calc that only a browser could resolve; both ramps are literal
-  // now, so nothing needs substituting.
+  // this is the shell's fixed surface set. Both ramps are literal, so nothing
+  // needs substituting.
   const SURFACE_NAMES = ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"];
 
   describe.each([
@@ -167,9 +166,8 @@ describe("shell token contrast floors", () => {
         contrastRatio(resolve(tokens["--accent-text"] ?? "", scope), bg),
         `${name} --accent-text`
       ).toBeGreaterThanOrEqual(AA_BODY);
-      // The semantic states get their own grid below — this loop used to hold
-      // them to AA_LARGE on `--bg` alone, which is what let `--danger` ship at
-      // 3.74:1 on dark `--bg-elev`.
+      // The semantic states get their own grid below, against every surface —
+      // this loop only pins that each one is emitted.
       for (const token of SEMANTIC_STATES) {
         expect(tokens[token], `${name} ${token} is emitted`).toBeDefined();
       }
@@ -239,12 +237,11 @@ describe("shell token contrast floors", () => {
       }
     });
 
-    // The filled destructive button (`.kit-btn.primary.danger`, née the
-    // `destructiveFilled` variant) is retired with the Binding Layer flip —
+    // There is no filled destructive button (`.kit-btn.primary.danger`):
     // destructive is OUTLINED in `--net`/`--danger`, never a fill, so there
-    // is no danger-under-`--text-inv` fill pairing left to pin here. See
+    // is no danger-under-`--text-inv` fill pairing to pin here. See
     // "keeps the ink contract for filled states" below for the StatusLine
-    // fill/track pairing that replaces this coverage.
+    // fill/track pairing that covers filled ink.
 
     test(`${name}: the v9 state and hover rungs clear their floors`, () => {
       // `--seam`, `--net-hover` and `--accent-hover` are all BORDER-AND-LABEL
@@ -405,7 +402,7 @@ describe("blueprint token contrast floors", () => {
       }
     });
 
-    // The filled destructive button is retired (see the shell grid above) —
+    // There is no filled destructive button (see the shell grid above) —
     // kit.css is shared, so nothing app-surface-specific to pin here either.
 
     test(`${name}: the status line's determinate fill carries its ink on the app surface`, () => {
@@ -430,10 +427,8 @@ describe("blueprint token contrast floors", () => {
 
   // ── The one filled action, which is INK ────────────────────────────────
   //
-  // This grid used to walk eight accent hues, because an app could retune the
-  // product accent and one fixed ink could not serve all of them. The Binding
-  // Layer removed the choice at the root: the accent IS the ink, so what has
-  // to be proved is different and much sharper — the fill carries its ink, the
+  // There is no per-app accent choice: the accent IS the ink, so this grid
+  // walks one pairing rather than a hue wheel — the fill carries its ink, the
   // HOVER never walks back toward that ink, and the fill is still findable
   // against the card behind it.
   describe("the filled ink action carries its ink", () => {
@@ -468,11 +463,9 @@ describe("blueprint token contrast floors", () => {
   // ── The palette hues as TEXT ────────────────────────────────────────────
   //
   // `--c-*` are icon FILLS. Painted as `color:` on a near-white surface they
-  // measure 2.2:1 (`--c-amber`) to 4.8:1 (`--c-indigo`) — which is why `docs`
-  // hand-picked six deeper literals for its file-kind labels, and why #686
-  // silently broke five of six by replacing those literals with the raw fills.
-  // `--c-<name>-text` is the solved rung that closes the gap for every surface,
-  // and this grid is what stops it drifting back.
+  // measure 2.2:1 (`--c-amber`) to 4.8:1 (`--c-indigo`) — so a raw fill is
+  // never ink. `--c-<name>-text` is the solved rung that closes the gap for
+  // every surface, and this grid is what stops it drifting back (#686).
   describe("every palette hue has a legible TEXT rung", () => {
     // A kind label sits on a weak tint of its OWN hue, so the surface has
     // already moved toward the ink. `docs` paints 12%; measuring the rung on a
@@ -606,11 +599,9 @@ describe("blueprint token contrast floors", () => {
   });
 
   test("an app that declares no identity inherits no hue", () => {
-    // `--app-hue` used to tint every unbranded app's greys, ink and shadows
-    // toward whatever identity it had declared, which is how the neutrals
-    // stopped being shared. It parameterises nothing now: the blueprint
-    // surface paints the system's literal paper, and the hue is only the
-    // app's slot on the identity wheel.
+    // `--app-hue` parameterises nothing: the blueprint surface paints the
+    // system's literal paper, and the hue is only the app's slot on the
+    // identity wheel. It never tints an app's greys, ink or shadows.
     expect(light["--app-hue"]).toBe(HUE);
     expect(light["--app-identity"]).toBe("var(--text)");
     expect(light["--app-identity-text"]).toBe("var(--text)");
@@ -622,13 +613,10 @@ describe("blueprint token contrast floors", () => {
 // ── The kit rules the grids above assume ───────────────────────────────────
 //
 // The token grids prove the PAIRINGS are legible; they cannot see which
-// pairing a stylesheet actually writes. `.kit-btn.primary.danger` used to ink
-// a `--danger` fill with `--text` — the same-side ink — and measured 3.81:1 on
-// light / 4.09:1 on dark, so the value grid passed while the button did not.
-// The filled destructive button is retired outright with the Binding Layer
-// flip (destructive is OUTLINED in `--net`/`--danger`, never a fill), so this
-// describe now pins that retirement plus the StatusLine determinate fill that
-// replaces it as the model of "report state in the ink ramp, not a hue".
+// pairing a stylesheet actually writes. There is no filled destructive button
+// (destructive is OUTLINED in `--net`/`--danger`, never a fill), so this
+// describe pins that absence plus the StatusLine determinate fill — the model
+// of "report state in the ink ramp, not a hue".
 describe("kit.css honours the ink contract for filled states", () => {
   const css = readFileSync(
     path.resolve(import.meta.dirname, "elements/kit.css"),

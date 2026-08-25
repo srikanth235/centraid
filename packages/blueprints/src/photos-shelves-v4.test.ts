@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// The four v4 shelves that used to lead nowhere, plus the routing that reaches
-// them (v4 handoff §5, §9, §12, §13).
+// The four v4 shelves and the routing that reaches them (v4 handoff §5, §9,
+// §12, §13).
 //
 // Places, People, Storage and the permission screen are the last of the app's
 // advertised destinations to land, and each one is asserted on the thing that
@@ -95,7 +95,7 @@ const { storageFacts, StorageView } = (await import(
     onOpenTrash: () => void;
   }>;
 };
-// The whole-library custody rollup the screen reads (issue #711). Its own
+// The whole-library custody rollup the screen reads (#711). Its own
 // arithmetic is covered by apps/photos/storage-model.test.ts; here it is a
 // prop, and the UNCOUNTED case is the one this file cares about — a Storage
 // screen with no rollup must still render its window facts.
@@ -253,8 +253,8 @@ describe("Storage reports what the rows say and nothing else", () => {
   });
 
   it("says nothing about custody when the sweep has not answered", () => {
-    // Custody is no longer inferred from the loaded rows at all (issue #711):
-    // the whole-library rollup replaced that window-sized answer. With no
+    // Custody is never inferred from the loaded rows (#711): the
+    // whole-library rollup is the answer, not a window-sized one. With no
     // rollup the screen says so, and prints no custody section.
     const facts = storageFacts([{ asset_id: "a", byte_size: 1 }], [], false);
     const html = renderToStaticMarkup(
@@ -418,10 +418,10 @@ describe("permission is a screen, not an error", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Search's four states (§9), the status line's determinate meter (§14), and
-// the one member preference the duplicates shelf used to opt out of (§4.2).
-// ---------------------------------------------------------------------------
+// the one member preference the duplicates shelf honours too (§4.2).
+// ───────────────────────────────────────────────────────────────────────────
 
 interface SearchProps {
   query: string;
@@ -498,7 +498,7 @@ describe("search is four states, and each one is a different sentence", () => {
   it("echoes the query and what was searched on a miss", () => {
     const html = search({ query: "ferry", status: "ready", count: 0 });
     expect(html).toContain("Nothing matches “ferry”");
-    // Aligned with mobile's wording for the same fact (issue #711
+    // Aligned with mobile's wording for the same fact (#711
     // reconciliation) — see view-copy.ts's SEARCH_COPY.miss.body comment.
     expect(html).toContain(
       "Nothing in captions, people, places, things or album names."
@@ -511,7 +511,7 @@ describe("search is four states, and each one is a different sentence", () => {
     expect(html).toContain("Search needs the gateway");
     expect(html).toContain("Retry");
     expect(html).toContain("browsing, albums, favorites, captions");
-    // The vault noun is forbidden in Photos copy (issue #599) — this is the
+    // The vault noun is forbidden in Photos copy (#599) — this is the
     // handoff's "Cannot reach the vault" without the word.
     expect(html).not.toContain("vault");
     // The honest miss line is a claim nobody verified here, so it is absent.

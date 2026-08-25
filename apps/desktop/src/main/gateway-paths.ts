@@ -1,5 +1,5 @@
 /*
- * Desktop path ownership (issue #555).
+ * Desktop path ownership (#555).
  *
  * Device state lives under Electron userData:
  *

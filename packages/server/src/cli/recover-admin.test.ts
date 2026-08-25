@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 /*
- * `centraid-gateway recover` (issue #439 R6) — the CLI shell over `recover()`.
+ * `centraid-gateway recover` (#439) — the CLI shell over `recover()`.
  * Exercised against the real in-process fake provider server (real HTTP, real
  * grant + snapshot flow), which advertises `metered-egress`, so the `--yes`
  * gate is real. Machine A backs up a vault against it and exports a kit FILE;

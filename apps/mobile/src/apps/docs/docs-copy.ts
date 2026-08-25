@@ -1,5 +1,5 @@
 // The phone's own status sentences (Binding Layer v12 handoff Part 2;
-// issue #821) — every screen-level shelf status the handoff's `docsCfg` table
+// #821) — every screen-level shelf status the handoff's `docsCfg` table
 // prints, with the sample numbers replaced by the member's real counts (the
 // shared `view-copy.ts` header names that as the one licensed departure).
 //
@@ -104,10 +104,10 @@ export const STORAGE_ROWS: readonly { state: string; label: string }[] = [
   { state: "missing", label: "Missing — needs attention" },
 ];
 
-// ---------------------------------------------------------------------------
-// One document's screens (the document-level slice of issue #821) — appended
+// ───────────────────────────────────────────────────────────────────────────
+// One document's screens (the document-level slice of #821) — appended
 // by the sibling agent, additively, per INTEGRATION-NOTES.md.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** §7's status, verbatim: the facts panel's one standing sentence. */
 export const FACTS_STATUS =

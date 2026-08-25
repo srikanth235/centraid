@@ -1,5 +1,5 @@
 /**
- * The renderer/main privilege boundary (issue #656, Layer 1F).
+ * The renderer/main privilege boundary (#656, Layer 1F).
  *
  * These tests pin the things a bridge regression would silently change: the
  * exact key set exposed to the renderer, the channel every member reaches
@@ -123,13 +123,11 @@ const EXPECTED_API_KEYS = [
 ];
 
 /**
- * Members that reach no bridge channel at all — `getHostCapabilities` was
- * the last member on this surface with a channel-backed device probe
- * (`DEVICE_TRANSCRIPT_AVAILABLE`); with desktop's on-device file-ASR adapter
- * deleted (issue #724 W6) it is a pure synchronous snapshot instead, so it
- * moved out of `REQUEST_SURFACE` (which asserts every entry reaches exactly
- * its declared channel) into this list instead of being dropped from the
- * coverage check below.
+ * Members that reach no bridge channel at all. `getHostCapabilities` is a pure
+ * synchronous snapshot — the desktop carries no on-device file-ASR adapter
+ * (#724) — so it cannot sit in `REQUEST_SURFACE`, which asserts every entry
+ * reaches exactly its declared channel. It is listed here so the coverage
+ * check below still counts it.
  */
 const PURE_SURFACE = ["getHostCapabilities"];
 

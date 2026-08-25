@@ -11,7 +11,7 @@ import { useGatewayCheck } from "./useGatewayRuntime.js";
 
 import chrome from "./chrome.module.css";
 
-// The frame's one persistent status line (issue #707, invariant 5).
+// The frame's one persistent status line (#707, invariant 5).
 //
 // It is always mounted and it never covers anything, which is what lets it
 // replace every toast, spinner and badge in the shell. Three states, in
@@ -22,7 +22,7 @@ import chrome from "./chrome.module.css";
 //                 never as a fill, so the line takes a rule rather than
 //                 turning red. The reason is inline; there is no tooltip,
 //                 because a tooltip has no mobile.
-//   2. a note   — whatever `statusLine.ts` was last told, optionally with a
+//   2. a note   — whatever `postStatus` was last told, optionally with a
 //                 determinate bar and exact counts, or one bounded action.
 //   3. health   — the standing condition of the route you are on (#765), set
 //                 by the route's own loader through `setRouteHealth`. It sits
@@ -46,7 +46,7 @@ const count = (n: number): string => n.toLocaleString();
  * minutes after the machine went to sleep — the state that most needs to be
  * visible looked exactly like the state that is fine. The stamp lives in its
  * own leaf component with its own subscription and its own ticker, so the
- * shell root above it still does not re-render on the heartbeat (issue #659).
+ * shell root above it still does not re-render on the heartbeat (#659).
  *
  * It draws nothing unless the gateway is answering: an unreachable gateway is
  * already the offline banner's subject, and "synced 4 min ago" under it would

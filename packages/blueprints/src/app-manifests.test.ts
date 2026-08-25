@@ -20,7 +20,7 @@ const quotedSource = (value: string) =>
   `["']${value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}["']`;
 
 // A directory under `apps/` is a template UNLESS its name starts with `_`:
-// underscore-prefixed dirs are shared modules several apps import (issue #599's
+// underscore-prefixed dirs are shared modules several apps import (#599's
 // `apps/_shared`), the same convention `queries/_shared.ts` already uses. They
 // carry no app.json and never ship as a gallery entry.
 const isTemplateDir = (name: string) => !name.startsWith("_");
@@ -194,8 +194,8 @@ describe("bundled blueprint manifests", () => {
   it.each(apps.map((id) => [id] as const))(
     "apps/%s declares only handlers that exist on disk",
     (id) => {
-      // Handlers may be authored as `.ts` (post TS conversion) or `.js` — the
-      // dispatcher probes `.ts` first, then `.js`. Accept whichever is present.
+      // Handlers may be authored as `.ts` or `.js` — the dispatcher probes
+      // `.ts` first, then `.js`. Accept whichever is present.
       const handlerExists = (
         kind: "actions" | "queries",
         name: string

@@ -1,4 +1,4 @@
-// Device enrichment work leases (issue #414 D11).
+// Device enrichment work leases (#414).
 //
 // Routes authenticate/advertise devices; this module is the vault-local,
 // synchronous queue primitive they call. Claim is one atomic UPDATE with a
@@ -7,7 +7,7 @@
 // second device can claim the row. Completion is token + device bound and an
 // already-completed duplicate is a harmless `false`.
 //
-// THE LANE SPLIT (issue #724). This queue leases exactly the work a BROWSER
+// THE LANE SPLIT (#724). This queue leases exactly the work a BROWSER
 // can do with the platform it already has: rasterize a preview, grab a video
 // poster frame, pull text out of a PDF. Everything model-shaped — OCR,
 // transcription, embedding — left this lane and now runs on the gateway's one

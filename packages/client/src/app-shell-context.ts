@@ -1,7 +1,5 @@
 // Shared renderer types — appearance prefs, the route union, and the
-// template/app metadata the React shell (react/shell/*) renders against. Once
-// the seam between the vanilla app.ts shell and its route modules; after the
-// full-React flip (#325) app.ts is gone and this is just the types.
+// template/app metadata the React shell (react/shell/*) renders against.
 
 // ── Appearance prefs (renderer-local; mirrored to the gateway) ──────────────
 export type ThemeName = keyof typeof window.CentraidTokens.themes;
@@ -18,12 +16,12 @@ export type GatewayProfile = Awaited<
 /**
  * The renderer's appearance prefs.
  *
- * The Binding Layer retired both per-owner colour overrides (#707): the shell
- * spends no hue, so there is no accent to pick, and the dark ramp is a set of
- * literal surface tones rather than one `--bg-l` lightness anchor to slide.
- * `sidebarOpen` went with them: the stem never scrolls away and never changes
- * width, so there is no open state to remember. What is left is what an owner
- * can still meaningfully choose — light/dark, card treatment, tile finish.
+ * NO per-owner colour overrides (#707): the shell spends no hue, so there is
+ * no accent to pick, and the dark ramp is a set of literal surface tones rather
+ * than one `--bg-l` lightness anchor to slide. No `sidebarOpen` either: the
+ * stem never scrolls away and never changes width, so there is no open state to
+ * remember. What an owner can meaningfully choose is light/dark, card
+ * treatment, tile finish.
  */
 export interface AppearancePrefs {
   /** The owner's pick. `system` re-resolves on OS appearance changes. */
@@ -34,13 +32,12 @@ export interface AppearancePrefs {
   cardVariant: CardVariant;
 }
 
-// A shell route — the navigable surfaces of the home shell (apps and the
-// builder route the user into other views). Drives the nav stack + `applyRoute`
-// dispatcher in app.ts and the per-route refresh in the route modules.
+// A shell route — the navigable surfaces of the home shell. Drives the nav
+// stack and the per-route refresh in the route modules.
 export type ShellRoute =
   | { kind: "home" }
   // `page` deep-links into one Settings sub-page (e.g. `'storage'` from the
-  // Gateway page's Storage card — issue #367 §D3); omitted, SettingsRoute
+  // Gateway page's Storage card — #367 §D3); omitted, SettingsRoute
   // falls back to its own default (Appearance). Loosely typed as `string`
   // here (not SettingsRoute's own page union) to avoid a type-only import
   // cycle between this shared-types module and a screen route module —
@@ -54,15 +51,15 @@ export type ShellRoute =
   | { kind: "starred" }
   | { kind: "automations" }
   // Vault data-source connections (Gmail, GitHub, …) — a launcher
-  // destination; previously Settings → Account → Connections.
+  // destination.
   | { kind: "connectors" }
   | { kind: "approvals" }
   | {
       kind: "gateway";
       /**
        * Which of System's pages. The drill-ins are ROUTES rather than local
-       * state so the frame's own back arrow returns to the overview — the page
-       * used to carry a "‹ System" row of its own, which was a second back
+       * state so the frame's own back arrow returns to the overview. The page
+       * carries no "‹ System" row of its own: that would be a second back
        * control competing with the one in the chrome.
        */
       tab?:
@@ -75,18 +72,18 @@ export type ShellRoute =
       focus?: "backups" | "capacity";
       cause?: "backup-alert";
     }
-  // The people side of this installation (issue #599, Decision 14): the member
+  // The people side of this installation (#599, Decision 14): the member
   // roster, the devices acting for each person, and every vault this member can
   // reach. A launcher destination beside Gateway — which it took People &
   // devices from, leaving Gateway purely about runtime health.
   | { kind: "household" }
   // Local disk footprint by component, the owner's disk budget, and the
-  // offsite snapshot custody that used to be the whole page (issue #544 —
-  // this was `backups`). A launcher destination beside Gateway; Settings →
+  // offsite snapshot custody (#544). A launcher destination beside
+  // Gateway; Settings →
   // Storage provider owns the connection itself.
   | { kind: "storage" }
   // Ontology-at-a-glance — the Kinds/Relations/Browse census over the vault
-  // schema (issue #441 Part B). A launcher destination.
+  // schema (#441). A launcher destination.
   | { kind: "atlas" }
   | { kind: "templates" }
   // Instructions-first create/edit form (Automations UI revamp). `automationId`
@@ -94,7 +91,7 @@ export type ShellRoute =
   // template gallery entry (the automation gallery's "Use template" for an
   // automation). `watchEntity` (a logical entity KIND, `schema.table`) seeds a
   // create-mode data trigger watching that kind — the per-app "Automate this
-  // data" deep-link (issue #446 follow-up 1). Like `templateId`, it only shapes
+  // data" deep-link (#446 follow-up 1). Like `templateId`, it only shapes
   // the initial DTO and is excluded from `routeKey`, so it never persists past
   // the first paint. Reached inside normal chrome, NOT full-bleed — unlike the
   // builder chat it replaces as the primary edit surface.
@@ -137,13 +134,13 @@ export interface TemplateEntry {
   version: string;
   kind?: "app" | "automation";
   /** Whether this app-kind template is already installed in the addressed
-   *  vault (issue #434). Always true for a mounted vault since #708 installs
+   *  vault (#434). Always true for a mounted vault since #708 installs
    *  every bundled app at mount; kept because it is the gateway's own answer
    *  and an unmounted audience vault can still say `false`. */
   installed?: boolean;
-  /** Requested vault access as the gateway declares it (issue #434). Read by
-   *  the Privacy grants ledger; the install/consent sheet that used to render
-   *  it retired with Discover (#708), since nothing asks to install any more. */
+  /** Requested vault access as the gateway declares it (#434). Read by
+   *  the Privacy grants ledger; nothing asks to install, so no consent sheet
+   *  renders it (#708). */
   vault?: TemplateVaultBlock;
   // automation-only display fields:
   emoji?: string;
@@ -153,7 +150,7 @@ export interface TemplateEntry {
   integrations?: readonly string[];
 }
 
-/** A template's requested vault access (issue #434) — what the app declares it
+/** A template's requested vault access (#434) — what the app declares it
  *  will touch. Mirrors the gateway's `TemplateVaultDTO`. */
 export interface TemplateVaultBlock {
   purpose?: string;
@@ -179,6 +176,5 @@ export type AutomationRunState =
     };
 
 // ── Late-bound render registry ──────────────────────────────────────────────
-// Populated by app.ts (for routes still living there) and by each module
-// factory as it's extracted. Always fully populated before boot.
+// Populated by each route-module factory. Always fully populated before boot.
 // ── The context handed to every route module ────────────────────────────────

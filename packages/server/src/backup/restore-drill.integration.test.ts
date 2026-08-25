@@ -3,7 +3,7 @@
  *
  * A backup you never restore is not a backup. The gateway already restores one
  * for real on the vault's `verifyEveryDays` clock (`BackupService.tick` →
- * `runRestoreVerify`, issue #408 G9); this lane proves the drill that clock
+ * `runRestoreVerify`, #408 G9); this lane proves the drill that clock
  * runs is worth running — that it takes a REAL backup through the REAL product
  * path, restores it, and judges the restored vault USABLE rather than merely
  * present.

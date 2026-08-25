@@ -4,8 +4,8 @@
 //
 // Four facts the screen must keep apart — no gateway session, a roster that
 // named somebody, a roster that answered nobody, and a roster half of which
-// could not be read. The last one used to be spoken as the third, which told a
-// member with a full People directory that they knew nobody.
+// could not be read. Speaking the last one as the third tells a member with a
+// full People directory that they know nobody.
 //
 // The hook is driven inside a probe component: what reached the status line,
 // and whether the sheet opened, are the whole observable outcome of a refusal.

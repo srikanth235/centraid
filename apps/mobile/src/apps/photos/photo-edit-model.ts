@@ -13,7 +13,7 @@
 // must be given the same promise, word for word; two string literals in two
 // packages is exactly how that stops being true.
 //
-// FLIP joined crop/rotate/straighten in the same tool row (issue #724 B1) for
+// FLIP joined crop/rotate/straighten in the same tool row (#724) for
 // the same reason rotate did: `expo-image-manipulator`'s manipulator context
 // exposes it directly (`.flip('horizontal')`), so it costs nothing beyond a
 // toggle here and a chained call in `photo-edit-save.ts`.
@@ -34,11 +34,11 @@
 // require the native dependency this issue's brief forbids adding.
 
 // The commit and its explanation, imported from the one module that owns them.
-// They used to be re-declared here: `viewer.ts` reaches its neighbours through
-// `.ts`-suffixed specifiers, which the Expo tsconfig rejects, so importing THAT
-// module turns 0 type errors into 13. The fix this file's old note asked for
-// landed in #805 — the strings moved down into `shared-copy.ts`, the
-// import-free leaf both packages can read, and `viewer.ts` re-exports them.
+// Not re-declared here, and not read from `viewer.ts`: that module reaches its
+// neighbours through `.ts`-suffixed specifiers, which the Expo tsconfig
+// rejects, so importing it turns 0 type errors into 13. The strings live in
+// `shared-copy.ts`, the import-free leaf both packages can read, and
+// `viewer.ts` re-exports them (#805).
 export {
   PHOTOS_SAVE_AS_NEW as SAVE_AS_NEW,
   PHOTOS_SAVE_AS_NEW_EXPLANATION as SAVE_AS_NEW_EXPLANATION,
@@ -67,9 +67,9 @@ export function editorMeta(capturedAt?: string): string {
   })}`;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Rotation
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** How far one press of Straighten turns the frame, and how far it may go.
  *  Matched to the web editor's constants: this control is for levelling a
@@ -136,9 +136,9 @@ export function rotatedFrameRatio(assetRatio: number, degrees: number): number {
   return box.height > 0 ? box.width / box.height : assetRatio;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The crop rectangle
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** In FRACTIONS of the current (rotated) frame, so it survives a resize and
  *  means the same thing on the stage and in the saved pixels. */
@@ -175,7 +175,7 @@ export function moveCrop(rect: CropRect, dx: number, dy: number): CropRect {
  * Pinch: the box grows or shrinks about its own centre, KEEPING its aspect in
  * frame terms so a `3 : 2` crop is still `3 : 2` afterwards. Deliberately not a
  * free-form eight-handle resize — this is the Google Photos gesture, not a
- * gesture engine (issue #711).
+ * gesture engine (#711).
  */
 export function scaleCrop(rect: CropRect, factor: number): CropRect {
   const cx = rect.x + rect.w / 2;
@@ -233,9 +233,9 @@ export function cropPixels(
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // What the editor is about to do, in one sentence
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** Horizontal is the mirror a member actually wants (a selfie shot the way it
  *  faced the lens); vertical is offered for parity with the manipulator's own

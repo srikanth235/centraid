@@ -432,9 +432,9 @@ describe("SettingsHarnessesScreen suite", () => {
 
     it("states the model AND the level every inheriting lane lands on", async () => {
       // The default row is the one row that decides what every inheriting lane
-      // runs, under a head reading "harness · model · level". It used to name
-      // the agent and a bare model, so the level it thinks at was the one
-      // answer on the page nothing stated. Both come from the harness's own
+      // runs, under a head reading "harness · model · level". Naming the agent
+      // and a bare model would leave the level it thinks at as the one answer
+      // on the page nothing states. Both come from the harness's own
       // probe when nothing is pinned, because that is what the runtime uses.
       const el = await mount(
         makeProps({

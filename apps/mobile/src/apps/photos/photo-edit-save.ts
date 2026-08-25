@@ -16,9 +16,9 @@
 // offline behaviour and the same derivatives as one that came off the camera —
 // there is no second, weaker ingest for edits.
 //
-// EDIT LINEAGE (issue #711/#724 B1). `media.add_asset`'s `source_asset_id`
+// EDIT LINEAGE (#711/#724). `media.add_asset`'s `source_asset_id`
 // column, the action schema and its handler have all carried this field since
-// issue #711 — what this module (and `DeviceMediaInput`, one layer down) was
+// #711 — what this module (and `DeviceMediaInput`, one layer down) was
 // missing was the wire between them. `asset.assetId` is the vault
 // `media_asset.asset_id` the source photograph was read in on, and it is
 // exactly what `source_asset_exists` (`commands/media.ts`) checks a claimed
@@ -118,8 +118,7 @@ export interface SaveEditDeps {
  * The commit's sentence also promises "with this one recorded as its source",
  * and `source_asset_id` is what makes that true: forwarded through
  * `DeviceMediaInput` to the `photos / upload` action, which has carried the
- * field since issue #711 (see the header above for why this file did not send
- * it until #724).
+ * field since #711 (#724).
  */
 export async function saveEditAsNewPhotograph(
   deps: SaveEditDeps,
@@ -143,7 +142,7 @@ export async function saveEditAsNewPhotograph(
     // is not one.
     deleteSourceAfterSettle: true,
     ...(asset.sourceVaultId ? { targetVaultId: asset.sourceVaultId } : {}),
-    // Edit lineage (issue #711/#724 B1) — see the header above. Omitted, not
+    // Edit lineage (#711/#724) — see the header above. Omitted, not
     // sent empty, when the source has no vault identity yet.
     ...(asset.assetId ? { sourceAssetId: asset.assetId } : {}),
   });

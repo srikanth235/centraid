@@ -1,4 +1,4 @@
-// The vector-search extension loader (issue #721 E3) — the gateway half of the
+// The vector-search extension loader (#721) — the gateway half of the
 // `OpenVaultOptions.loadExtensions` seam.
 //
 // WHY THE GATEWAY OWNS THIS. `packages/vault` is deliberately dependency-light

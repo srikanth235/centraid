@@ -1,5 +1,5 @@
 /*
- * Renderer-side client for the gateway's LOCAL disk surface (issue #544 —
+ * Renderer-side client for the gateway's LOCAL disk surface (#544 —
  * `packages/server/src/routes/storage-routes.ts`). Sibling of
  * `gateway-client-storage.ts`, which speaks to the same route prefix but
  * about the PROVIDER: that file answers "what does my storage provider hold",

@@ -269,7 +269,7 @@ export function buildInlineCtx(
       };
     },
     // No client-side card resolver exists; inline apps render without far-end
-    // mention cards rather than blanking (see runInlineQuery / issue #505 P4).
+    // mention cards rather than blanking (see runInlineQuery / #505 P4).
     resolve(): Promise<{ cards: ReplicaValue[] }> {
       return Promise.resolve({ cards: [] });
     },

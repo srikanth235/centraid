@@ -1,6 +1,6 @@
 /*
  * `/centraid/_vault/enrich/rules` and `/centraid/_vault/enrich/effective` —
- * the owner's door onto the enrichment policy CASCADE (issue #807, Wave 2).
+ * the owner's door onto the enrichment policy CASCADE (#807).
  *
  * A sibling of `vault-routes.ts` rather than more of it: the legacy per-domain
  * tier handler there stays byte-for-byte what it was (its response body is a
@@ -12,7 +12,7 @@
  *   PUT    /centraid/_vault/enrich/rules                — write one scope's rule
  *   DELETE /centraid/_vault/enrich/rules?scope=&ref=&capability=
  *   GET    /centraid/_vault/enrich/consent              — the egress-consent ledger
- *   POST   /centraid/_vault/enrich/consent              — record one answer (issue #807 Wave 3)
+ *   POST   /centraid/_vault/enrich/consent              — record one answer (#807)
  *   GET    /centraid/_vault/enrich/effective?domain=&capability=&scope=
  *
  * WHAT THIS SURFACE MUST NOT BECOME. `effective` REPORTS what

@@ -1,5 +1,5 @@
 /*
- * Golden-frame conformance for the tunnel wire protocol (issue #263 / #419).
+ * Golden-frame conformance for the tunnel wire protocol (#263 / #419).
  *
  * The framing — u32 big-endian length prefix + UTF-8 JSON header frame — is
  * implemented five times (Node here, Swift + Kotlin in
@@ -153,7 +153,7 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
       vaultName: "personal",
       vaultIds: ["vlt_42", "vlt_family"],
       version: "0.1.0",
-      // Stated against the shared constant, not a literal (issue #726
+      // Stated against the shared constant, not a literal (#726
       // Finding 8): this vector is the golden fixture's SOURCE OF TRUTH, so a
       // stale literal here would keep signing off on a floor no build still
       // serves. `GATEWAY_PROTOCOL_VERSION` is 3 today (unchanged byte output

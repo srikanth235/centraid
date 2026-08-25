@@ -1,10 +1,8 @@
 /**
- * Parent-side handlers for the worker's `ctx.*` messages (issue #80).
+ * Parent-side handlers for the worker's `ctx.*` messages (#80).
  *
- * Split out of `runner.ts` so the handler orchestrator stays focused
- * on worker lifecycle + message routing. Each function here takes the
- * audit `AutomationRunsStore` (when present) and returns a reply that
- * matches the worker's expected wire shape.
+ * Each function here takes the audit `AutomationRunsStore` (when present)
+ * and returns a reply that matches the worker's expected wire shape.
  */
 
 import type {
@@ -32,7 +30,7 @@ export interface AuditState {
   runId: string;
   automationId: string;
   ordinal: number;
-  /** Live run-stream sink. No-op until the host wires its bus (issue #158). */
+  /** Live run-stream sink. No-op until the host wires its bus (#158). */
   emit: RunEventSink;
 }
 
@@ -46,7 +44,7 @@ export interface CtxReply {
   error?: string;
 }
 
-/** One `ctx.delegate` content reference, as the worker sent it (issue #299). */
+/** One `ctx.delegate` content reference, as the worker sent it (#299). */
 export interface DelegateContentRef {
   contentId: string;
   variant: string;
@@ -55,7 +53,7 @@ export interface DelegateContentRef {
 
 /**
  * Resolve `ctx.delegate` content refs into attachments through the vault
- * bridge (issue #299 §2): each fetch runs under the automation's grant and
+ * bridge (#299): each fetch runs under the automation's grant and
  * is receipted host-side as its own consent event. Resolution is
  * fail-closed — a denied or missing derivative fails the delegate call with
  * the reason (and receipt id) in the error, never a silent partial prompt.
@@ -121,8 +119,6 @@ export async function resolveContentAttachments(
  * Service one `ctx.delegate` call: open a `delegate` run node, dispatch, forward
  * streamed chat events as `item.delta`, and settle the item with the
  * token/model rollup. Returns the reply the host sends back to the worker.
- * Extracted from the orchestrator so each file stays under the repo-hygiene line
- * cap (issue #166).
  */
 export async function handleDelegateMessage(
   audit: AuditState,
@@ -155,7 +151,7 @@ export async function handleDelegateMessage(
     },
     started,
   });
-  // When the harness streams (issue #158, Phase 2), forward each chat event as a
+  // When the harness streams (#158), forward each chat event as a
   // native `item.delta`, and remember the last `usage` event so
   // `closeRunNode` can persist the token/model rollup. ACP tool calls become
   // their own durable items keyed by toolCallId: parallel calls can share a

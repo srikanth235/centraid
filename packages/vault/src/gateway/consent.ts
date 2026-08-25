@@ -249,15 +249,15 @@ export function evaluateConsent(
   declaredPurpose?: string,
   evaluatedAt = nowIso()
 ): ConsentDecision {
-  // Purposes are dormant, not deleted (issue #306 decision 4): an undeclared
+  // Purposes are dormant, not deleted (#306 decision 4): an undeclared
   // purpose evaluates as the default, so policy rules still bite either way.
   const purpose = declaredPurpose ?? DEFAULT_PURPOSE;
-  // Reveal is read-shaped but act-graded (issue #293): a readonly device may
+  // Reveal is read-shaped but act-graded (#293): a readonly device may
   // browse placeholders, never dump secrets.
   if ((verb === "act" || verb === "reveal") && !identity.mayAct) {
     return { decision: "deny", failing: "device is readonly", grantId: null };
   }
-  // The on-behalf-of cap (issue #599 decision 7; #726): an agent turn is
+  // The on-behalf-of cap (#599 decision 7; #726): an agent turn is
   // hard-capped at the authority of the owner it acts for, so Sid's
   // assistant fails exactly where Sid would. Checked BEFORE grants, because
   // no grant of the enrolled agent's own can exceed the human it is working
@@ -301,7 +301,7 @@ export function evaluateConsent(
   const explicitOnly = requiresExplicitScope(vault, schema, table, evaluatedAt);
   for (const grant of grants) {
     for (const scope of scopesFor(vault, grant.grant_id, schema, table)) {
-      // Reveal never rides read or act (issue #293): only an explicit
+      // Reveal never rides read or act (#293): only an explicit
       // 'reveal' scope covers it, and a 'reveal' scope covers nothing else.
       if (!verbAllowed(scope.verbs, verb)) continue;
       // High-sensitivity tables never ride a whole-schema scope.

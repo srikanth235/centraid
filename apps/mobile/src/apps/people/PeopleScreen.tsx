@@ -1,4 +1,4 @@
-// The frame every People surface sits in (v12 handoff, § Nav; issue #821).
+// The frame every People surface sits in (v12 handoff, § Nav; #821).
 //
 // The same predicate `PhotosScreen.tsx` states for Photos: every screen in the
 // stack renders the claimed band and the Home capsule, so a pushed screen can

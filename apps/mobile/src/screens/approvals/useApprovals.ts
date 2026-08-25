@@ -1,17 +1,15 @@
-// The Notifications place's data half (#765) — everything the old
-// `screens/Approvals.tsx` did above the render, unchanged in behaviour and
-// moved out of the way of the blocks.
+// The Notifications place's data half (#765) — everything above the render,
+// kept out of the way of the blocks.
 //
-// KEPT WHOLE, deliberately: the read (`getNotifications(true)`, archived
+// ALL OF IT IS LOAD-BEARING: the read (`getNotifications(true)`, archived
 // included), the SSE doorbell, the 60s poll, the push-permission request and
 // replica wake registration, and all five writes — outbox decide (with the
 // edited artifact and the always-allow flag), parked confirm, scope decide,
 // notice read/archive, and the in-app OAuth reconnection ceremony.
 //
-// ADDED: the standing-grant plane. `GET /centraid/_vault/outbox-grants` and
-// `DELETE …/<grantId>` are routes the gateway has served since #308 and that
-// no mobile lib wrapped, because no mobile screen showed grants. They are read
-// through the shared HTTP core here rather than by growing `lib/gateway.ts`,
+// The standing-grant plane rides here too. `GET /centraid/_vault/outbox-grants`
+// and `DELETE …/<grantId>` (#308) are read through the shared HTTP core here
+// rather than by growing `lib/gateway.ts`,
 // and a gateway that does not serve them leaves the section absent instead of
 // failing the page: the queue is what the page is FOR, and a missing reference
 // list must never take it down.

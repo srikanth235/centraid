@@ -1,4 +1,4 @@
-// Face grouping (issue #724 W5): the pass that turns a pile of detected face
+// Face grouping (#724): the pass that turns a pile of detected face
 // regions into two useful things — "this looks like Ana, is it?" and "here are
 // eleven photographs of somebody you have not named".
 //
@@ -28,7 +28,7 @@
 // same fact one level up: answered regions are read for NOTHING — not as
 // centroid material, not as clustering candidates, not as assignment targets.
 // A queue whose answers can be undone by the next sweep is a queue that can
-// never be finished, which is the exact defect issue #712 fixed in the schema.
+// never be finished (#712).
 //
 // EVERY COMPARISON HAPPENS WITHIN ONE MODEL. Cosine distance between vectors
 // from two different embedders is a number with no meaning. So the pass

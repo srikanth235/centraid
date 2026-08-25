@@ -114,7 +114,7 @@ function attachmentsBySubject(
   attachments: RawAttachment[],
   contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
-  // Blob-backed bytes serve as same-origin URLs (issue #296).
+  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -180,11 +180,12 @@ function attendeesByEvent(
 // multi-day events are not cut off at the window edge.
 const SPAN_BUFFER_MS = 31 * 24 * 60 * 60 * 1000;
 
-// The open-ended "upcoming" (schedule) view has no `to`, so recurring series
-// were expanded a full YEAR out on every load, nav and doorbell (issue #404).
-// A quarter is generous forward runway for a list; the month/week views pass
-// their own bounded `to` and are unaffected. expandRrule's per-series
-// maxInstances still backstops a runaway DAILY rule regardless.
+// The open-ended "upcoming" (schedule) view has no `to`, so this bound is what
+// stops a recurring series expanding a full YEAR out on every load, nav and
+// doorbell (#404). A quarter is generous forward runway for a list; the
+// month/week views pass their own bounded `to` and are unaffected.
+// expandRrule's per-series maxInstances still backstops a runaway DAILY rule
+// regardless.
 const DEFAULT_EXPAND_MS = 120 * 24 * 60 * 60 * 1000;
 
 // Hard ceiling on the recurring anchors pulled — a vault has no upper bound,
@@ -278,7 +279,7 @@ function expandRecurringEvents(
   // (and the memo key) compare via `.getTime()`, so normalize to Date once
   // here. (Passing the raw strings threw `String.getTime is not a function`,
   // which the outer catch silently turned into an empty agenda whenever a
-  // recurring series existed — issue #404.)
+  // recurring series existed — #404.)
   const fromDate = rangeFrom instanceof Date ? rangeFrom : new Date(rangeFrom);
   const toDate = rangeTo instanceof Date ? rangeTo : new Date(rangeTo);
   const out: EventRow[] = [];
@@ -440,12 +441,12 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
       return { events: [], calendars: calendars.rows ?? [] };
     }
     const eventIds = windowed.map((e) => e.event_id);
-    // Joins are `in`-bounded by the windowed events (issue #264) — the
+    // Joins are `in`-bounded by the windowed events (#264) — the
     // event→calendar edge in schedule.event_ext (the UI colors and filters
     // by calendar, so each event carries its calendar_id), the attachment
     // edges, and the guest list (schedule.attendee, joined to core.party for
     // names below). The owner's own party comes from core.vault so a guest
-    // that IS you gets the RSVP controls (issue #337).
+    // that IS you gets the RSVP controls (#337).
     const [exts, attachments, attendeesRes, vaultRes, exceptionsRes] =
       await Promise.all([
         ctx.vault.read({
@@ -548,7 +549,7 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
       };
     });
     // Open-ended "upcoming" (no `to`) still needs a real ceiling to expand
-    // against — a bounded forward window (issue #404) keeps a doorbell from
+    // against — a bounded forward window (#404) keeps a doorbell from
     // re-expanding a year of a DAILY series; the month/week views pass their
     // own tighter `to`. expandRrule's own maxInstances backstops it regardless.
     const expandTo = to ?? new Date(fromMs + DEFAULT_EXPAND_MS).toISOString();

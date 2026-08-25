@@ -3,17 +3,16 @@
  *
  * It sits next to the `ConversationRunner` interface and the harness-turn
  * contract it wires together, both of which live here in app-engine. The
- * actual model turn is injected as a `RunTurnFn` (`runTurn`) — the historical
- * `agent-runtime` package
- * passes its codex/claude `runTurn`; tests pass a stub. Every
+ * actual model turn is injected as a `RunTurnFn` (`runTurn`) —
+ * `@centraid/server/acp` passes its ACP `runTurn`; tests pass a stub. Every
  * `ConversationRunner` the gateway's `/_turn` route can inject does the same
  * thing around that turn: load prefs, resolve a cwd, build the system prompt,
  * thread the `centraid_*` dispatcher into a `ToolContext`, resume when the
  * prior turn used the same harness kind, drive the turn, and (optionally) run a
- * post-turn side effect. That spine used to be copied into both
+ * post-turn side effect. That spine is shared by
  * `makeConversationRunner` (agent-runtime, data-only chat) and the gateway's
- * `makeUnifiedConversationRunner` (code+data builder chat); they now differ
- * only by the four injected seams below (issue #147, Concern 1):
+ * `makeUnifiedConversationRunner` (code+data builder chat); they differ
+ * only by the four injected seams below (#147, Concern 1):
  *
  *   - `resolveCwd`            — data chat returns `input.dataDir`; builder
  *                              chat opens the app's draft worktree.

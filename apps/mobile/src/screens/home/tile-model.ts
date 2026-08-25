@@ -1,4 +1,4 @@
-// What each springboard tile SAYS, derived from replica rows (issue #708 A).
+// What each springboard tile SAYS, derived from replica rows (#708 A).
 //
 // The Binding Layer's Home is made of content, not of icons: every tile carries
 // an INVARIANT header — app icon, app name at the UI role, a count in the
@@ -134,7 +134,7 @@ function byDescending(
     text(left, idColumn).localeCompare(text(right, idColumn));
 }
 
-// ---------------------------------------------------------------- photos ---
+// ──────────────────────────────────────────────────────────────── photos ───
 
 /**
  * The newest assets, as a mosaic that bleeds to the tile edge.
@@ -209,11 +209,10 @@ export const MOSAIC_SLOTS = 4;
  * Lives here, beside the slot count, so the geometry the tile depends on is
  * asserted in the same place the selection rules are.
  *
- * The row now bleeds to the full card width rather than sitting inside three
+ * The row bleeds to the full card width rather than sitting inside three
  * columns of padded content, so a single row of four reads roughly square at
- * ordinary phone widths — taller than the old 56pt half-row, because it is
- * carrying the whole tile's vertical budget alone now instead of splitting it
- * across two rows.
+ * ordinary phone widths. It carries the whole tile's vertical budget alone
+ * rather than splitting it across two rows.
  */
 export const MOSAIC_CELL_HEIGHT = 88;
 
@@ -237,7 +236,7 @@ export function mosaicCells(
   return Array.from({ length: MOSAIC_SLOTS }, (_, index) => photos[index]);
 }
 
-// ------------------------------------------------------------ prose bodies ---
+// ──────────────────────────────────────────────────────────── prose bodies ───
 
 /**
  * Decode a `core.content_item` body. Notes and short documents store their text
@@ -295,7 +294,7 @@ export function selectNoteExcerpt(
   };
 }
 
-// ------------------------------------------------------------------ docs ---
+// ────────────────────────────────────────────────────────────────── docs ───
 
 const BYTE_UNITS = ["bytes", "KB", "MB", "GB", "TB"] as const;
 
@@ -348,7 +347,7 @@ export function selectDocRows(
     }));
 }
 
-// ---------------------------------------------------------------- agenda ---
+// ──────────────────────────────────────────────────────────────── agenda ───
 
 export interface AgendaOccurrence {
   instanceKey: string;
@@ -397,7 +396,7 @@ export function countUpcoming(
   ).length;
 }
 
-// ---------------------------------------------------------------- people ---
+// ──────────────────────────────────────────────────────────────── people ───
 
 /** Overlapping face circles: a sample of the directory, name-ordered. */
 export function selectFaces(
@@ -436,7 +435,7 @@ export function initialsOf(name: string): string {
   return (parts[0]![0] ?? "").toUpperCase();
 }
 
-// ----------------------------------------------------------------- tasks ---
+// ───────────────────────────────────────────────────────────────── tasks ───
 
 const OPEN_STATUSES = new Set(["needs-action", "in-process"]);
 
@@ -478,7 +477,7 @@ export function selectTaskRows(
   ];
 }
 
-// ----------------------------------------------------------------- tally ---
+// ───────────────────────────────────────────────────────────────── tally ───
 
 /** Minor units summed over the rows the read already scoped to this month. */
 export function sumMinor(rows: readonly ReplicaRow[]): number {

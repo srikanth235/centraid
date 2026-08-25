@@ -1,6 +1,4 @@
-// Pure, DOM-free identity + status logic for automations (Automations
-// redesign). Extracted so it is unit-testable; app.ts wraps these in DOM
-// builders (`autoGlyphTile` / `auStatusPill` / `triggerBadge`).
+// Pure, DOM-free identity + status logic for automations.
 //
 // Per-automation identity colour + glyph are derived deterministically from
 // the automation id — there is no manifest field for them, mirroring how the
@@ -54,7 +52,7 @@ export function glyphForId(id: string): AuGlyph {
 export type RowStatus = "active" | "paused" | "draft";
 
 // An automation's lifecycle status: enabled = active; disabled with no runs
-// yet = draft (never switched on); disabled but previously run = paused.
+// yet = draft (never switched on); disabled with runs behind it = paused.
 export function auStatusForRow(enabled: boolean, hasRun: boolean): RowStatus {
   if (enabled) return "active";
   return hasRun ? "paused" : "draft";

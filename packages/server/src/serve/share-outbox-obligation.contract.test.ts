@@ -1,8 +1,7 @@
 /*
- * The sharing plane's ONE effect outbox, as a law (issue #750 abstraction 2).
+ * The sharing plane's ONE effect outbox, as a law (#750 abstraction 2).
  *
- * `share_effects` succeeded three hand-rolled queues with three drainers and
- * three ways to forget a crash. What replaced them is only worth having if
+ * `share_effects` is the plane's single queue, and it is only worth having if
  * three things hold together: an obligation is keyed by WHAT IT IS ABOUT (so a
  * replay lands on the same row rather than doubling the work), one unreadable
  * row cannot stop the drainer from discharging its neighbours, and a failed

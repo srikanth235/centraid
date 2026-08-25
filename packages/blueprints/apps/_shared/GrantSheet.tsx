@@ -1,5 +1,5 @@
 /**
- * THE GRANT SHEET, web seat (issue #825).
+ * THE GRANT SHEET, web seat (#825).
  *
  * One sheet, two doors into it, one core:
  *

@@ -1,4 +1,4 @@
-// Derivation provenance (issue #724 W2): the two operations the
+// Derivation provenance (#724): the two operations the
 // `enrich_derivation` sidecar exists for — stamp what a model just produced,
 // and read which model currently owns a derived value.
 //
@@ -10,7 +10,7 @@
 // because `model` happens to sit in its uniqueness key. The stamp gives every
 // capability the same answer shape.
 //
-// PLURAL RESULTS, ONE READER (issue #807). A target's variant may now be
+// PLURAL RESULTS, ONE READER (#807). A target's variant may now be
 // derived by several ENGINE PROFILES at once — the built-in deterministic
 // engine and an LLM profile can both hold an OCR result for the same page —
 // so the stamp key carries `profile` and "which one is on disk" stops being a
@@ -83,7 +83,7 @@ export interface DerivationQuery {
  * target's `variant`. Re-running the SAME profile REPLACES its stamp rather
  * than adding one: within a profile the row must always name the model whose
  * output is on disk right now. A different profile is a different row — plural
- * results per target are normal (issue #807), and `preferredDerivation` is how
+ * results per target are normal (#807), and `preferredDerivation` is how
  * a consumer picks among them.
  *
  * The caller owns the transaction — see the header.

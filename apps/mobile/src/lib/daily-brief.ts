@@ -1,10 +1,9 @@
-// The daily-brief NOTIFICATION. What used to be here as well — `fetchDailyBrief`
-// and the `DailyBrief` payload — went with `DailyBriefCard`, which the Binding
-// Layer retires: a card summarising four apps sat above a springboard whose
-// tiles preview those same four apps from the local replica, said it a beat
-// later (it was a gateway round trip), and pushed the grid down while it
-// arrived. The 07:00 notification survives because it is the one part that
-// reaches the member when Home is NOT open.
+// The daily-brief NOTIFICATION, and nothing else. The Binding Layer allows no
+// `DailyBriefCard` on Home: a card summarising four apps sits above a
+// springboard whose tiles preview those same four apps from the local replica,
+// says it a beat later over a gateway round trip, and pushes the grid down
+// while it arrives. The 07:00 notification is the one part that reaches the
+// member when Home is NOT open.
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";

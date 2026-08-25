@@ -30,13 +30,12 @@ describe("product grammar moment matrix", () => {
   });
 
   test("declares one lowering profile for every contracted surface", () => {
-    // Four surfaces, not five. #799 retired the served blueprint plane, so
+    // Four surfaces, not five: there is no served blueprint plane (#799), so
     // the BS surface (`kit-served` into an `iframe-webview`) has no renderer
-    // and no capture lane; its reference states moved to BI, where a
-    // blueprint app now paints — inline, in the shell's own document. With
-    // only one blueprint lowering left, its renderer is named for what it
-    // is (React in the shell's document), not for the retired kit/served
-    // pair it used to be distinguished from.
+    // and no capture lane; its reference states live on BI, where a blueprint
+    // app paints — inline, in the shell's own document. With one blueprint
+    // lowering, its renderer is named for what it is: React in the shell's
+    // document.
     expect(matrix.surfaces).toStrictEqual({
       BI: { profile: "blueprint", renderer: "react-inline", host: "shell" },
       MO: { profile: "native", renderer: "react-native", host: "ios-android" },

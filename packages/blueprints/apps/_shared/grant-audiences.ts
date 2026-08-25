@@ -1,5 +1,5 @@
 /**
- * WHO AN APP MAY NAME IN A GRANT (issue #825) — the mapping, once.
+ * WHO AN APP MAY NAME IN A GRANT (#825) — the mapping, once.
  *
  * The grant kit draws the sheet; the HOST says who is in the room, because the
  * roster is People's and a sheet that fetched its own audience list would be a

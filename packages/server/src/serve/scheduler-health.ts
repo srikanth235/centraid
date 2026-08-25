@@ -1,6 +1,6 @@
 /*
  * Per-vault scheduler liveness + missed-run visibility — the `scheduler`
- * health component (issue #351 tier 2/3).
+ * health component (#351 tier 2/3).
  *
  * Two signals share one probe because they read the SAME persisted ledger
  * (`@centraid/server/automation`'s `SchedulerLedgerStore`, written every tick from

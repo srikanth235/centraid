@@ -1,13 +1,13 @@
 /*
- * Per-journal-file `ConversationStore` memo (issue #541 review).
+ * Per-journal-file `ConversationStore` memo (#541 review).
  *
  * `makeJournalDbProvider(file)` mints a FRESH lazy provider every call, so
  * `new ConversationStore(makeJournalDbProvider(file))` opens a brand-new
  * `DatabaseSync` (with a 64 MiB `mmap_size`) the first time it is used —
  * and `ConversationStore.close()` is a documented no-op, because the
  * connection belongs to the host's `DatabaseProvider`. Constructing one per
- * fire / per steering message / per compile therefore leaked one connection,
- * one fd, and 64 MiB of mapped address space per call until the process ran
+ * fire / per steering message / per compile therefore leaks one connection,
+ * one fd, and 64 MiB of mapped address space per call until the process runs
  * out of descriptors.
  *
  * Every gateway-side ledger reader/writer goes through this memo instead: one

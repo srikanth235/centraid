@@ -1,4 +1,4 @@
-// The derived-naming half of a place (issue #816).
+// The derived-naming half of a place (#816).
 //
 // `media.name_place` in `media.ts` is where a MEMBER says what a place is
 // called. This is the only other writer of a place's name-ish facts, and it is

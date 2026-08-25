@@ -83,9 +83,9 @@ type HomeState =
 /**
  * How long a resolved Home stays good enough to reuse.
  *
- * Home used to re-resolve the gateway on mount, on every focus, on every
- * vault-link event and on every doorbell — so tabbing away and back cost three
- * round trips for an answer that had not changed. Anything that genuinely
+ * Re-resolving the gateway on mount, on every focus, on every vault-link event
+ * and on every doorbell makes tabbing away and back cost three round trips for
+ * an answer that has not changed. Anything that genuinely
  * invalidates the screen (pull-to-refresh, a vault switch) forces past this
  * window; ordinary navigation does not.
  */
@@ -359,14 +359,14 @@ export default function HomeScreen({
    *
    * `notifs` is the Approvals inbox, which is what "waiting on a decision"
    * means here; `autos` is Automations; `conn` is Connectors, its own cover
-   * since issue #765 (it used to share `settings`, which was the same lie the
+   * since #765 (folding it into `settings` would be the same lie the
    * paragraph below warns about — "What is allowed to reach outside" is not
    * the account screen); `settings` is Settings; `stats` and `gateway` both
    * land on Insights, which the nav tree's own comment already scopes as
    * "gateway health + limited usage insights" — one screen legitimately
    * holding both facts, not two labels hiding behind one wrong page.
    * `storage` is the stable id for On this phone, the local-replica-usage screen.
-   * `data` and `devices` are the two net-new covers from the same issue.
+   * `data` and `devices` are covers of their own.
    *
    * `starred` has NO mobile screen — there is no cross-app favourites view —
    * so it stays a STATED no-op rather than a guess at the nearest existing

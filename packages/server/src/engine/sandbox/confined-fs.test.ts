@@ -1,5 +1,5 @@
 /*
- * The filesystem mirror the sandbox substitutes for `node:fs` (#842 W7.1).
+ * The filesystem mirror the sandbox substitutes for `node:fs` (#842).
  *
  * WHY THIS FILE EXISTS. `fs-guard.ts`, `confined-fs.ts` and
  * `confined-fs-promises.ts` are the whole of the filesystem confinement — the

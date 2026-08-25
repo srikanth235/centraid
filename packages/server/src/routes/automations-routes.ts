@@ -1,10 +1,10 @@
 // governance: allow-repo-hygiene file-size-limit (#387) single dispatch surface for the automation read/turn/item/SSE wire (one switch over one HTTP contract); splitting scatters the route table without a seam
-// HTTP surface for automation runtime ops (issue #141).
+// HTTP surface for automation runtime ops (#141).
 //
-// The desktop used to read automation manifests off the local
-// materialized `main` and read/write turn ledgers + analytics from local
-// SQLite directly — so these operations threw for a remote gateway.
-// These routes move them onto HTTP so the desktop is a thin client for
+// These routes carry automation manifest reads and turn-ledger + analytics
+// read/writes over HTTP, rather than the desktop reading the local
+// materialized `main` and local SQLite directly — which throws for a remote
+// gateway. So the desktop is a thin client for
 // local AND remote gateways alike. Mounted via `serve()`'s
 // `extraHandlers`, after the bearer check.
 //
@@ -70,7 +70,7 @@ import { SseSubscriberCap } from "./sse-cap.js";
  * The production subscriber cap for `/centraid/_automations/turn/events` —
  * one gateway process serves one of these (`buildGateway` calls
  * `makeAutomationsRouteHandler` with no override), so this instance's live
- * count IS the real count (issue #351).
+ * count IS the real count (#351).
  */
 const defaultSubscriberCap = new SseSubscriberCap();
 
@@ -230,7 +230,7 @@ export function makeAutomationsRouteHandler(
     return turnsStore;
   };
 
-  // SSE: stream one run end-to-end (issue #158, ledger-tail hybrid). Subscribe
+  // SSE: stream one run end-to-end (#158, ledger-tail hybrid). Subscribe
   // to the bus first (so events during replay aren't lost), replay the durable
   // ledger snapshot, then drain buffered + live events until `turn.end`.
   const streamTurnEvents = (
@@ -247,7 +247,7 @@ export function makeAutomationsRouteHandler(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    // Bounded writer (issue #659 G6) — a paused viewer is dropped, not buffered.
+    // Bounded writer (#659) — a paused viewer is dropped, not buffered.
     const stream = new SseStream(res);
     stream.comment(`turn ${turnId}`);
     const heartbeat = setInterval(() => {
@@ -443,14 +443,13 @@ export function makeAutomationsRouteHandler(
         const boundedLimit =
           Number.isFinite(limit) && limit > 0 ? Math.min(limit, 250) : 50;
         // `systemLane` splits the combined feed at the fetch, not after
-        // (issue #731 M2). Before this, the unscoped `turns` query filled
-        // its one `boundedLimit` window with whatever ran most recently —
-        // so a large photo import (which fires the recognition automations
-        // once per photo) could fill the entire window with recognition
-        // runs and leave a member's own "Recent activity" empty. "member"
-        // and "recognition" are each fetched as their own SQL-filtered,
-        // independently-bounded query; omitting the param keeps the old
-        // combined behavior for other callers.
+        // (#731). An unscoped `turns` query fills its one
+        // `boundedLimit` window with whatever ran most recently — so a large
+        // photo import (which fires the recognition automations once per
+        // photo) fills the entire window with recognition runs and leaves a
+        // member's own "Recent activity" empty. "member" and "recognition"
+        // are each fetched as their own SQL-filtered, independently-bounded
+        // query; omitting the param keeps the combined feed for other callers.
         const systemLaneParam = url.searchParams.get("systemLane");
         const laneFilter: "member" | "recognition" | undefined =
           systemLaneParam === "member" || systemLaneParam === "recognition"
@@ -612,7 +611,7 @@ export function makeAutomationsRouteHandler(
           "X-Accel-Buffering": "no",
           "X-Centraid-Turn-Id": turnId,
         });
-        // Bounded writer (issue #659 G6).
+        // Bounded writer (#659).
         const stream = new SseStream(res);
         stream.comment(`automation ${row.ref} turn ${turnId}`);
         const heartbeat = setInterval(() => {

@@ -23,7 +23,7 @@ describe("conformance suite", () => {
     providerConformanceCases(makeHarness).map((c) => [c.name, c] as const)
   )("%s", async (_name, c) => {
     await c.run();
-    // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496 E5).
+    // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496).
     expect(true).toBe(true);
   });
 });

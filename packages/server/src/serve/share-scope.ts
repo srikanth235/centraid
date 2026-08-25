@@ -1,19 +1,19 @@
 /*
- * An edge's SCOPE, parsed rather than asserted (issue #750 abstraction 5).
+ * An edge's SCOPE, parsed rather than asserted (#750 abstraction 5).
  *
- * `scope_json` used to reach the reconcilers and the receipt writer as
- * `JSON.parse(row.scope_json ?? "[]") as string[]` — a cast, in four places,
- * over a column that a receipt then records as durable audit. A row whose
- * scope was `null`, `{}`, `[1, 2]` or `[""]` produced an empty or nonsense
+ * `scope_json` reaches the reconcilers and the receipt writer through this
+ * module and never through a `JSON.parse(row.scope_json ?? "[]") as string[]`
+ * cast, because a receipt records that column as durable audit: a row whose
+ * scope is `null`, `{}`, `[1, 2]` or `[""]` would produce an empty or nonsense
  * receipt SILENTLY, which is precisely the failure a durable access audit
  * exists to prevent.
  *
- * This module is the total parser that replaces the cast. Malformed input is
+ * This module is the total parser. Malformed input is
  * refused loudly (a thrown `ShareScopeError`, which the edge plane turns into
  * a parked edge with a reason) rather than degraded into an empty set.
  *
  * The payload is a DISCRIMINATED union on `mode` even though `mode` admits
- * exactly one value today: live lending was removed in #731 and the
+ * exactly one value today: there is no live lending (#731) and the
  * `share_edges` CHECK constraint is what keeps it structurally absent, so the
  * absence is asserted at the boundary here too. Nothing in this file re-adds
  * a live scope — a snapshot scope is a fixed, non-empty set of item ids, and

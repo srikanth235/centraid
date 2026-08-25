@@ -477,7 +477,6 @@ function editTask(ctx: HandlerCtx): Record<string, unknown> {
   return { task_id: input.task_id };
 }
 
-/** Register the schedule domain's task commands on a gateway. */
 export function registerTaskCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_TASK);
   gateway.registerCommand(SET_TASK_STATUS);

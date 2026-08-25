@@ -1,5 +1,5 @@
 /*
- * Desktop side of the phone tunnel (issue #263).
+ * Desktop side of the phone tunnel (#263).
  *
  * Binds one iroh endpoint with two ALPNs:
  *  - `centraid/tunnel/1`: connections are admitted only when the remote
@@ -14,7 +14,7 @@
  * the QUIC layer and then speaks to the gateway as the HOST, under the host
  * bearer. It therefore strips any client-supplied identity header and marks
  * every hop with `TUNNEL_FORWARDED_HEADER`, so the gateway's host-only
- * capabilities do not mistake 127.0.0.1 for the owner (issue #568 item A).
+ * capabilities do not mistake 127.0.0.1 for the owner (#568).
  */
 
 import crypto from "node:crypto";
@@ -198,7 +198,7 @@ class DesktopTunnel {
     await this.handleTunnelConnection(connection);
   }
 
-  // ---- pairing ----
+  // ──── pairing ────
 
   private beginPairing(ttlMs: number): ActivePairing {
     const code = crypto.randomBytes(16).toString("base64url");
@@ -273,7 +273,7 @@ class DesktopTunnel {
     };
   }
 
-  // ---- HTTP forwarding ----
+  // ──── HTTP forwarding ────
 
   private revokeDevice(deviceId: string): PairedDevice | undefined {
     const removed = this.options.deviceStore.remove(deviceId);
@@ -340,7 +340,7 @@ class DesktopTunnel {
     }
     const base = new URL(upstream.baseUrl);
     const headers = sanitizeHeaders(header.headers ?? {});
-    // Loopback is not an identity (issue #568 item A). This forwarder carries
+    // Loopback is not an identity (#568). This forwarder carries
     // a paired PHONE to the desktop's loopback gateway under the host bearer,
     // so it cannot prove a device identity — but it must not let the phone
     // claim one either. Strip any client copy of the identity headers, then

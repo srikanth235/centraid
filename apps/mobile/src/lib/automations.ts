@@ -1,4 +1,4 @@
-// Mobile automations client (issue #263 family). The vault's automations are
+// Mobile automations client (#263 family). The vault's automations are
 // long-lived automation turns that fire on a trigger; this module lists
 // them, fires one now, and toggles a row's enabled flag — all over the same
 // gateway base (paired tunnel or manual dev URL) the rest of the app uses.
@@ -9,7 +9,7 @@
 // (list, turn-now) and lifecycle-automation-routes.ts (set-enabled).
 
 // Every call here goes out with `apiHeaders()` — auth *and* `x-centraid-vault`
-// (issue #289 addressing). Sending only the bearer let the gateway fall back to
+// (#289 addressing). Sending only the bearer let the gateway fall back to
 // its implied default vault, so a Notifications notice raised by an automation in a
 // non-active Vault opened the wrong vault's thread and "Run now" fired there.
 // Notifications itself is fetched with `apiHeaders()`, so the active Vault is the

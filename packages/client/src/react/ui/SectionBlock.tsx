@@ -1,4 +1,4 @@
-// The block vocabulary's section head (v9 §8, issue #765).
+// The block vocabulary's section head (v9 §8, #765).
 //
 // One label and one count, over a hairline. Every ops screen hand-rolled this
 // (`.groupHead`, `.sectionHead`, `.panelHead`…); the shapes had drifted by a

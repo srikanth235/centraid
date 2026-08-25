@@ -4,7 +4,7 @@ import { listAppScopes, listVaults } from "../../gateway-client.js";
 import type { OwnerScope } from "./ownerScope.js";
 import { useAsyncData } from "./useAsyncData.js";
 
-// The owner's scope registry (issue #726) feeds Household, explicit target
+// The owner's scope registry (#726) feeds Household, explicit target
 // pickers, and the combined sidebar switcher.
 //
 // An owner owns their own vault and every audience vault the household added

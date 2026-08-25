@@ -65,10 +65,10 @@ export function wantsTextarea(key: string, value: string): boolean {
 }
 
 /**
- * WHO staged or asked, as words rather than a coloured chip. The kind badge
- * was a classifier pill in a system whose one chromatic ink means "this leaves
- * the device"; the same fact reads better as English in the line that already
- * names the actor.
+ * WHO staged or asked, as words rather than a coloured chip. A kind badge
+ * would be a classifier pill in a system whose one chromatic ink means "this
+ * leaves the device"; the same fact reads better as English in the line that
+ * already names the actor.
  */
 export function callerPhrase(kind: string, caller: string): string {
   switch (kind) {
@@ -162,7 +162,7 @@ export function noticeSpanPhrase(
   return `×${row.count} over ${spanWords(span)}`;
 }
 
-/** Absolute local timestamp for the expanded activity detail (issue #552). */
+/** Absolute local timestamp for the expanded activity detail (#552). */
 export function formatAbsoluteTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -176,7 +176,7 @@ export function formatAbsoluteTime(iso: string): string {
   });
 }
 
-/** Decision → the row's one state word (issue #552). */
+/** Decision → the row's one state word (#552). */
 export function decisionWord(decision: string): string {
   switch (decision) {
     case "allow":

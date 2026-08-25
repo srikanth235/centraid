@@ -53,11 +53,11 @@ export function monthCount(assets: readonly Asset[]): string {
  * has no single place to claim, and guessing one would be a lie about where
  * the member was.
  *
- * A NAME, NOT A COORDINATE (issue #816). This line used to print
- * `asset.place.name` raw, and every place minted from GPS carries the digits
- * `findOrCreatePlaceTx` wrote as its name until somebody renames it — so a
- * scrolled timeline printed `12 · 39.09680, -120.03240` beside a day at the
- * lake. `readableName` is the one predicate every Photos surface asks, and a
+ * A NAME, NOT A COORDINATE (#816). This line must not print
+ * `asset.place.name` raw: every place minted from GPS carries the digits
+ * `findOrCreatePlaceTx` wrote as its name until somebody renames it, so a
+ * scrolled timeline would print `12 · 39.09680, -120.03240` beside a day at
+ * the lake. `readableName` is the one predicate every Photos surface asks, and a
  * day whose only label is a coordinate falls back to the count alone: nothing
  * is a better sub-label than a number pretending to be a place.
  */

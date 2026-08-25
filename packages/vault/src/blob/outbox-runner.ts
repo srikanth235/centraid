@@ -51,7 +51,7 @@ export class BlobOutboxRunner {
     }
     // No remote tier means there is nowhere to drain, but local upload spools
     // still expire and must be reaped. Run that cheap lifecycle pass on the
-    // one-minute configuration backstop (#456 I1).
+    // one-minute configuration backstop (#456).
     if (!this.options.remoteConfigured()) {
       this.flight = this.cleanupExpiredSessions()
         .catch(() => undefined)
@@ -95,8 +95,8 @@ export class BlobOutboxRunner {
       remote: this.options.remote,
       onReplicated: () => this.options.onStatus(),
       settlementAllowed: () => !this.closed,
-      // Route derivatives to the derived store class at drain time (issue #425
-      // Wave 2); the enqueue side stays sha+size only.
+      // Route derivatives to the derived store class at drain time (#425);
+      // the enqueue side stays sha+size only.
       desiredStore: (sha: string) =>
         desiredStoreForSha(this.options.vault, sha),
     };

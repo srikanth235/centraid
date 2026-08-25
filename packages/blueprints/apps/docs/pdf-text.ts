@@ -1,8 +1,8 @@
-// Browser-only PDF text extraction (issue #414). PDF.js is a normal client
+// Browser-only PDF text extraction (#414). PDF.js is a normal client
 // dependency: Vite emits its display chunk and worker asset with the inline
 // Docs app instead of relying on same-origin files in the shared kit.
 
-// eslint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
+// oxlint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
 const MAX_TEXT_CHARS = 1_000_000;

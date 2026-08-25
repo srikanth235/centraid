@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-// Warm-spare worker pool (issue #404). These cover the four properties the
+// Warm-spare worker pool (#404). These cover the four properties the
 // pool must hold beyond "dispatch still works": it keeps warm spares between
 // runs, it preserves per-run module isolation (a worker is never reused across
 // handlers), a hung handler is still terminable, and a worker crash doesn't
@@ -227,7 +227,7 @@ describe("handler-pool", () => {
     expect(
       workerPoolSizeFromEnv({ ...standard, CENTRAID_WORKER_POOL_SIZE: "" })
     ).toBe(DEFAULT_WORKER_POOL_SIZE);
-    // A constrained host keeps ONE warm spare (#659 G11): it is the target
+    // A constrained host keeps ONE warm spare (#659): it is the target
     // hardware, and it is where a cold worker boot hurts most.
     expect(
       workerPoolSizeFromEnv({

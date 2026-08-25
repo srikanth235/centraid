@@ -1,4 +1,4 @@
-// Gateway-side app-manifest validation (issue #137; was the harness runtime).
+// Gateway-side app-manifest validation (#137).
 // The publish gate (`publishAndReconcile`) and the apps-store publish route both
 // call `validateManifestAt` before a draft goes live, so a structurally-broken
 // or replay-unsafe app is rejected at publish time rather than at run/fire time.
@@ -67,7 +67,7 @@ export async function validateManifestAt(
   if (queryError) return queryError;
   // Automation apps carry handlers under `automations/<id>/handler.js` that run
   // under the #166 journal/replay runtime — they must be deterministic between
-  // ctx.* calls. Lint each for replay-unsafe patterns (issue #167) so a bad
+  // ctx.* calls. Lint each for replay-unsafe patterns (#167) so a bad
   // handler is rejected at publish time, not silently mis-resumed at fire time.
   if (manifest.kind === "automation") {
     // Every `automations/<id>/automation.json` must itself parse against
@@ -90,10 +90,9 @@ export async function validateManifestAt(
       : await lintAutomationHandlersAt(appDir);
     if (handlerError) return handlerError;
   }
-  // The design-token contract check that used to run last here retired with
-  // the served-app plane (issue #799): a code-store app ships no stylesheet
-  // for a gateway to serve, and the eight bundled apps' CSS is checked in this
-  // repo by the design gates instead.
+  // No design-token contract check runs here (#799): a code-store app
+  // ships no stylesheet for a gateway to serve, and the eight bundled apps'
+  // CSS is checked in this repo by the design gates instead.
   return undefined;
 }
 

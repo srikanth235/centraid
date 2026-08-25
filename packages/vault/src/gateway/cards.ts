@@ -1,4 +1,4 @@
-// The card resolver (issue #272): one narrow read that turns (type, id)
+// The card resolver (#272): one narrow read that turns (type, id)
 // references into minimal renderable cards, so an app can DISPLAY an entity
 // another domain owns without ever holding a read scope on that domain.
 // Card shapes are registered here, engine-side, next to the entity registry
@@ -107,7 +107,7 @@ export const CARDED_ENTITIES: readonly string[] = Object.keys(CARD_SQL);
 
 /**
  * PK column per carded entity. PKs are UUIDv7, so `ORDER BY pk DESC` IS
- * recent-first — what a picker's no-term browse wants (issue #262 rules).
+ * recent-first — what a picker's no-term browse wants (#262 rules).
  */
 export const CARD_PK: Readonly<Record<string, string>> = {
   "core.party": "party_id",

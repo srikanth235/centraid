@@ -1,4 +1,4 @@
-// Atlas' cross-surface copy (issue #805, slice C).
+// Atlas' cross-surface copy (#805).
 //
 // The vault census is drawn by `react/screens/AtlasScreen.tsx` +
 // `AtlasKindsSection.tsx` on desktop and by `screens/data/Data.tsx` on mobile,

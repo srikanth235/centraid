@@ -1,4 +1,4 @@
-// The ext band (issue #286 phase 2): app-declared tables INSIDE vault.db.
+// The ext band (#286): app-declared tables INSIDE vault.db.
 // What must hold: the gateway applies + diffs DDL from specs (never the
 // app); consent scopes on `ext.<appId>` gate app reads and the typed write
 // trio; links/tags/search/export/vault_sql treat ext rows like canonical

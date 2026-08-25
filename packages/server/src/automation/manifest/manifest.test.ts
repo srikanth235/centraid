@@ -444,8 +444,7 @@ describe("data triggers", () => {
     expect(() =>
       validateManifest({ ...base, triggers: [{ kind: "data", entities: [] }] })
     ).toThrow(/entities/u);
-    // Omitted entirely, not just empty — the shape the gateway's create route
-    // used to re-prove over HTTP (#656 1D).
+    // Omitted entirely, not just empty (#656 1D).
     expect(() =>
       validateManifest({ ...base, triggers: [{ kind: "data" }] })
     ).toThrow(/entities must be a non-empty array/u);

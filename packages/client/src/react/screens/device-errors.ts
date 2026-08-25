@@ -1,5 +1,5 @@
 /*
- * Reading the gateway's device-screen refusals in plain words (issue #726).
+ * Reading the gateway's device-screen refusals in plain words (#726).
  *
  * `readJson` folds the gateway's JSON error body into the thrown message, so
  * the machine-readable code arrives embedded rather than as a field. These
@@ -10,7 +10,7 @@
  *   pairErrorMessage — a ticket mint that ownership refused. Access is
  *     ownership (#726): the only ticket a device may mint is for its OWN
  *     owner, so every refusal here is some flavor of "not yourself" — plus
- *     `owner_only` (#726 P1), the host-custody refusal for acting on a
+ *     `owner_only` (#726), the host-custody refusal for acting on a
  *     vault the host doesn't own.
  *   lastDeviceVault  — revoking the owner's LAST live device for a vault.
  *     The gateway names the vault it would strand and asks for a typed

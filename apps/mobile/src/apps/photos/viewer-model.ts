@@ -43,8 +43,8 @@ export interface ViewerAction {
  * surface (§18).
  */
 export const VIEWER_BOTTOM_ACTIONS: readonly ViewerAction[] = [
-  // `Copy to another place`, since issue #726 retired the Photos "Sharing"
-  // place: the action puts this photograph into another vault the member
+  // `Copy to another place` (#726 — there is no Photos "Sharing"
+  // place): the action puts this photograph into another vault the member
   // names, so the label names a DESTINATION, never the verb `Share` with an
   // invisible effect — the same resting caption the web viewer's
   // `ACTION_LABELS.copy` carries (blueprints `viewer.ts`), so the two clients
@@ -103,9 +103,9 @@ export function viewerAction(id: ViewerActionId): ViewerAction {
  * The floating chrome's round chip — 44, the touch floor EXACTLY, and
  * deliberately not the bar's 56.
  *
- * A 56 circle sitting on a photograph is a plate, not a chip: the old bar
- * earned its 56 by being a full-width strip where the target and its label
- * shared one cell, and nothing floating over the stage has that excuse. The
+ * A 56 circle sitting on a photograph is a plate, not a chip: 56 is earned by
+ * a full-width strip where the target and its label share one cell, and
+ * nothing floating over the stage has that excuse. The
  * three-up capsule keeps 56 per target (`VIEWER_ACTION_TARGET`) because those
  * targets are neighbours and 44 side by side is where mis-taps start.
  */
@@ -118,8 +118,8 @@ export const VIEWER_CHROME_INSET = 8;
 /**
  * The three floating elements at the stage's head, in leading→trailing order.
  *
- * There is no top BAR any more. A full-width strip is a second ground laid over
- * the photograph, and it charged the stage its own height on every screen; three
+ * There is no top BAR. A full-width strip is a second ground laid over
+ * the photograph, and it would charge the stage its own height on every screen; three
  * elements standing on the stage cost only the plates they occupy. The stamp is
  * the middle one because it is the only one that is not a control — a member
  * scanning for something to press skips the centre.
@@ -140,12 +140,12 @@ export function viewerChromeHeight(insetTop: number): number {
 
 /**
  * Why a write control disables in a read-only vault — the ONE sentence for
- * this truth on the phone (v4 handoff §6, §18, issue #711 item M). Two
- * different stub strings used to say the same thing in two places
+ * this truth on the phone (v4 handoff §6, §18, #711 item M). Two
+ * stub strings saying the same thing in two places
  * (`PhotoLightboxToolbar`'s bottom-bar reasons and `PhotoLightbox`'s
- * write-refusal panel copy); a member reading both would have no way to know
- * they were the same fact. There is exactly one string now, so the two
- * surfaces can never drift again.
+ * write-refusal panel copy) leave a member reading both with no way to know
+ * they are the same fact. There is exactly ONE string, which is what stops the
+ * two surfaces drifting.
  */
 export const READ_ONLY_VAULT_REASON =
   "This vault is read-only for you, so meaning cannot be written into it.";
@@ -173,10 +173,11 @@ export function infoSheetHeight(screenHeight: number): number {
  * Slideshow is a different mode from the viewer, not the viewer with things
  * switched off in the UI: no filmstrip, no info, determinate position (§7.3).
  *
- * A MODEL MUST NOT DESCRIBE CONTROLS THAT DO NOT RENDER. This used to claim
- * `transports: 1, pause: true` while the phone rendered neither — and the one
- * control it DID render wore a pause glyph and exited the slideshow, so the
- * model, the mark and the behaviour were three different stories (issue #711).
+ * A MODEL MUST NOT DESCRIBE CONTROLS THAT DO NOT RENDER. Claiming
+ * `transports: 1, pause: true` while the phone renders neither — with the one
+ * control it DOES render wearing a pause glyph and exiting the slideshow —
+ * makes the model, the mark and the behaviour three different stories
+ * (#711).
  *
  * The phone's slideshow has exactly one top-bar action and it is `Leave`
  * (prototype line 4492). Building the transport is a RECORDED NON-GOAL: Google
@@ -196,9 +197,8 @@ export const SLIDESHOW = {
  * The slideshow's ONE top-bar action, as a single object.
  *
  * Label and effect are read from the SAME value by the control that renders it,
- * which is the structural reason they can no longer disagree — the bug this
- * replaces was a label (a pause glyph) and an effect (exit) that had drifted
- * apart because they were written in two places.
+ * which is the structural reason they cannot disagree: a label (a pause glyph)
+ * and an effect (exit) written in two places drift apart.
  */
 export const SLIDESHOW_ACTION = { effect: "leave", label: "Leave" } as const;
 
@@ -229,15 +229,15 @@ export function slideshowPosition(
   return { position: String(index + 1), total: String(total) };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // What the floating stamp says
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
- * The name the photograph answers to. It is no longer the stamp's first line —
- * WHEN outranks WHAT there (see `captureStamp`) — but it is still the accessible
- * name of the stamp, and it is still the visible first line for a photograph
- * that has no capture time to show instead.
+ * The name the photograph answers to. It is NOT the stamp's first line — WHEN
+ * outranks WHAT there (see `captureStamp`) — but it is the accessible name of
+ * the stamp, and the visible first line for a photograph that has no capture
+ * time to show instead.
  *
  * The timeline flattens a vault row's `title` column into `filename` (see
  * `timeline-engine.ts`), so the caption and the file name arrive in the same
@@ -259,8 +259,8 @@ export function viewerTitle(input: {
 /**
  * `30 July 2026` over `17:42 · Lyme Regis` — the floating stamp, in two lines.
  *
- * This used to be one run of text (`captureLine`) under the caption, and it read
- * as a footnote. WHEN a photograph was taken is the fact a member is actually
+ * One run of text under the caption reads as a footnote, which is what this is
+ * not. WHEN a photograph was taken is the fact a member is actually
  * looking for when they open one, so it takes the stamp's first line and the
  * emphasis; the clock and the place follow beneath it in the numeric register,
  * where a time and a place name belong.
@@ -304,9 +304,9 @@ export function captureStamp(input: {
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The vault a photograph is in
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * Sharing is a place a photograph is in, not a permission attached to it — and
@@ -340,15 +340,15 @@ export function marksAsElsewhere(personal: boolean): boolean {
   return !personal;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Zoom
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * THE rung. One number for every way into a zoom, because a double tap and a
  * `+` that land on different magnifications are two different controls wearing
- * one name: the double tap used to go to 2.5 (`lightbox-gestures.ts`) while the
- * chip went to 2.4, so the readout changed depending on which one you used.
+ * one name: a double tap at 2.5 (`lightbox-gestures.ts`) beside a chip at 2.4
+ * changes the readout depending on which one you used.
  */
 export const ZOOM_RUNG = 2.5;
 
@@ -428,9 +428,9 @@ export function assetAspectRatio(asset: {
   return width / height;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Transports — one slot, three variants
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export type TransportVariant = "video" | "audio" | "live";
 
@@ -529,9 +529,9 @@ export function videoKindLabel(asset: {
   return parts.join(" · ");
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Where the bytes are
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * An original that is offloaded by the OS, still on the gateway, or behind a
@@ -612,9 +612,9 @@ export function originalWhereabouts(status: OriginalStatus): string {
   return "The original is on the gateway — opening reads a smaller copy, and fetching the full-quality one is your choice.";
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The one status line inside the stage
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The phone's teaching line (proto 4637–4639). The desktop shows the bytes here
@@ -642,10 +642,9 @@ export interface ViewerStatus {
 /**
  * Which of the four things the stage's ONE line says — and in which order.
  *
- * The precedence is deliberate, and it is NOT "the bytes always win", which is
- * what the phone used to do (the byte status was printed unconditionally, so
- * the gesture line and the zoom readout the handoff specifies never appeared at
- * all):
+ * The precedence is deliberate, and it is NOT "the bytes always win" — a byte
+ * status printed unconditionally keeps the gesture line and the zoom readout
+ * the handoff specifies off the screen entirely:
  *
  * 1. **Zoomed** outranks everything. A member holding a magnified photograph
  *    has one question — how far in am I, and how do I get out — and the answer
@@ -674,9 +673,9 @@ export function viewerStatus(input: {
   return { text: VIEWER_GESTURE_STATUS };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Gestures
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * Nothing is reachable by gesture alone (§15). Every gesture the phone adds has

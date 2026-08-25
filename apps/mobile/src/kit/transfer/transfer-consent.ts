@@ -1,10 +1,10 @@
-// THE BACKUP CONSENT MOMENT — asked once per device, then automatic (#711, S4).
+// THE BACKUP CONSENT MOMENT — asked once per device, then automatic (#711).
 //
 // docs/decisions.md S4 and docs/blueprint-seats.md settle the model: backup is
 // "consent-once, then automatic under a Wi-Fi/charging/roaming policy owned by
-// the frame". What shipped before this module was the opposite — a member
-// selected photographs and held a button, per photograph, forever. That is not
-// a stricter product, it is a LOSSIER one: the photographs a member forgets to
+// the frame". The opposite — a member selecting photographs and holding a
+// button, per photograph, forever — is not a stricter product, it is a LOSSIER
+// one: the photographs a member forgets to
 // select are the ones the `local-only` custody state exists to warn about, and
 // no amount of tile marking rescues an original from a dropped phone.
 //

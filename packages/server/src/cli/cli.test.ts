@@ -247,9 +247,9 @@ describe("cli scenarios", () => {
 
   // End-to-end: spawn the CLI via tsx, parse "listening on …" out of stdout,
   // hit /centraid/_apps with the loopback secret, assert 200, send SIGTERM,
-  // confirm clean exit. Issue #505 phase 7 retired the persistent `token.bin`
-  // and stopped PRINTING any bearer — the daemon mints an ephemeral per-boot
-  // loopback secret instead. A parent (here the test, mirroring the desktop's
+  // confirm clean exit. There is no persistent `token.bin` and no printed
+  // bearer (#505) — the daemon mints an ephemeral per-boot
+  // loopback secret. A parent (here the test, mirroring the desktop's
   // detached-gateway spawn) pins a known value via `CENTRAID_GATEWAY_TOKEN` so
   // it can reach the loopback listener; the secret is never written to disk.
   test("serve subcommand boots, accepts the parent-supplied loopback secret, and exits cleanly on SIGTERM", async (t) => {

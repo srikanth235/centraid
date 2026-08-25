@@ -1,4 +1,4 @@
-// Wire-rail command-tail replay (issue #750 invariant 7): a member reached
+// Wire-rail command-tail replay (#750 invariant 7): a member reached
 // only over the peer plane receives the EXECUTABLE operation tail
 // (`exportCommonsIncrement`) and re-runs it (`applyCommonsIncrement`) inside
 // one transaction with its cursor advance. A tail this replica cannot replay
@@ -267,7 +267,7 @@ describe("Commons command-tail replay, wire rail (issue #750 invariant 7)", () =
 });
 
 /**
- * State proof is bounded, not continuous (issue #750 invariant 7): the one
+ * State proof is bounded, not continuous (#750 invariant 7): the one
  * attested state digest covers the STEWARD's closure bytes, which a member —
  * whose projection re-owns and may re-id what it stores — cannot recompute
  * from its own rows. So a seat may stand at most one checkpoint interval of

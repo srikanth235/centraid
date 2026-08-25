@@ -141,7 +141,7 @@ export interface BrowseRowsPage {
   dir: "asc" | "desc";
 }
 
-/** Per-kind rows + sizes, grouped by pack (issue #441 B1's census). */
+/** Per-kind rows + sizes, grouped by pack (#441's census). */
 export async function fetchAtlasCensus(): Promise<AtlasCensus> {
   const base = await requireGatewayBase();
   return fetchJson<AtlasCensus>(`${base}/centraid/_vault/atlas/stats`, {
@@ -150,7 +150,7 @@ export async function fetchAtlasCensus(): Promise<AtlasCensus> {
   });
 }
 
-/** FK edges (with fill) + authored links (issue #441 B2's relations). */
+/** FK edges (with fill) + authored links (#441's relations). */
 export async function fetchAtlasGraph(): Promise<AtlasGraph> {
   const base = await requireGatewayBase();
   return fetchJson<AtlasGraph>(`${base}/centraid/_vault/atlas/graph`, {

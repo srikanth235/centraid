@@ -7,7 +7,7 @@ import type {
   ShellCapabilities,
 } from "./capabilities.js";
 
-// The launcher's information architecture, as data (issue #707).
+// The launcher's information architecture, as data (#707).
 //
 // This replaces navModel.ts. The sidebar's three zones are gone: the stem
 // holds the product mark, Search, and a launcher of PINNED destinations, and
@@ -36,7 +36,7 @@ import type {
 // also why `LauncherDestination` has no `colorKey` field at all rather than an
 // optional one left unset — an optional hue is an invitation to fill it in.
 //
-// Discover is NOT in this list, and its absence is the point (issue #708). A
+// Discover is NOT in this list, and its absence is the point (#708). A
 // catalogue is a place you go to acquire what you do not have; every first-party
 // app now ships installed, so there was nothing left there to acquire. The
 // handoff's Home is two tiers — a springboard of content tiles and the All-apps

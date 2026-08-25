@@ -1,11 +1,11 @@
-// Device-side CBSF v2 edge sealing (#419 M0.4).
+// Device-side CBSF v2 edge sealing (#419.4).
 //
 // The wire format is defined by `packages/vault/src/blob/seal-frames.ts` and
 // enforced on arrival by `packages/vault/src/blob/remote-verify.ts`
 // (`verifyRemoteSealedObject`). This module is the SECOND writer of that same
 // format — after the vault (node:crypto) — and the only device-side one: the
-// browser shells retired their edge sealer with the served plane (#799) and
-// upload through the gateway's authoritative POST instead, while the vault's
+// browser shells have no edge sealer (#799) and upload through the gateway's
+// authoritative POST instead, while the vault's
 // own writer is not importable from Hermes. `cbsf.test.ts` unseals this
 // module's output with
 // the vault's own `unsealFrame`/`openDirectory` so the two can never drift.

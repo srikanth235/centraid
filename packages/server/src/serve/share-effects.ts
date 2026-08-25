@@ -1,5 +1,5 @@
 /*
- * The durable half of the sharing plane's ONE effect outbox (issue #750
+ * The durable half of the sharing plane's ONE effect outbox (#750
  * abstraction 2) — `share_effects` in `gateway.db`. Reads and writes only;
  * what an effect MEANS is `share-coordinator.ts`, and what running one DOES
  * is `share-effect-executor.ts`.

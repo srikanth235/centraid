@@ -1,8 +1,8 @@
 // The album picker's "Add" commit (v4 handoff §3, §14).
 //
-// WHAT RETIRED HERE: the `btn.textContent = "Adding 3 of 12…"` mutation. A
-// control is not a progress bar — progress is DETERMINATE, carries exact
-// counts, and rides the frame's ONE status line, which is also where the
+// PROGRESS NEVER LANDS ON THE CONTROL — no `btn.textContent = "Adding 3 of
+// 12…"`. A control is not a progress bar: progress is DETERMINATE, carries
+// exact counts, and rides the frame's ONE status line, which is also where the
 // outcome lands when the run finishes. The picker panel keeps its geometry
 // throughout and simply goes busy, so nothing under the pointer moves.
 //
@@ -87,7 +87,7 @@ export async function submitPicker(
   }: { refresh: () => Promise<void>; closePicker: () => void }
 ): Promise<void> {
   // Album membership lives in the album's own scope, and this app only authors
-  // albums in the member's own (issue #599) — so does adding to one. A target
+  // albums in the member's own (#599) — so does adding to one. A target
   // that cannot be written says why instead of firing a refused write.
   const target = writeTarget("own");
   if (target.disabled) {

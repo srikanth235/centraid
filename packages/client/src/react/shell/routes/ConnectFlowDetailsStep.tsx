@@ -8,11 +8,11 @@ import controlsCss from "../../styles/controls.module.css";
 import buttonCss from "../../ui/Button.module.css";
 import styles from "./ConnectFlow.module.css";
 
-// The 'details' step's panel — split out of ConnectFlow.tsx (issue #382)
+// The 'details' step's panel — split out of ConnectFlow.tsx (#382)
 // purely to keep that file under the repo's file-size cap; it is pure
 // presentation over `connectFlow-core.ts`'s state/reducer, no logic lives
 // here that isn't also in ConnectFlow.tsx's effects. Its SSH sibling was
-// deleted with the SSH method (issue #603).
+// deleted with the SSH method (#603).
 
 type Field = "ticket" | "label";
 

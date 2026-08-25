@@ -1,8 +1,8 @@
-// Semantic photo search (issue #721 E3): the query half of the embedding
+// Semantic photo search (#721): the query half of the embedding
 // index. A phrase becomes a vector through the SAME embed-text automation that
 // wrote the rows, and the vector is ranked against `enrich_embedding` by cosine.
 //
-// TWO CAPABILITIES, ONE SPACE (issue #724 W1). The rows are keyed by the
+// TWO CAPABILITIES, ONE SPACE (#724). The rows are keyed by the
 // `embed-image` model, because that is what produced them; the query rides
 // `embed-text`. The two bundled handlers must share a model/vector space — a
 // text query is compared to image vectors by cosine, so mismatched models

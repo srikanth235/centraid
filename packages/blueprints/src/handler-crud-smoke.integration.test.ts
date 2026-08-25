@@ -1,13 +1,13 @@
 /**
- * Behavioural contract for every manifested blueprint handler (#630 Wave 0).
+ * Behavioural contract for every manifested blueprint handler (#630).
  *
- * The old test merely imported actions and swallowed query errors. This suite
- * invokes every action and query with schema-derived input against a seeded,
- * scope-enforcing vault seam. A handler now fails the suite when it throws,
+ * Every action and query is invoked with schema-derived input against a
+ * seeded, scope-enforcing vault seam — importing a handler and swallowing its
+ * query errors proves nothing. A handler fails the suite when it throws,
  * returns the wrong shape, skips its vault operation, or reaches outside the
  * scopes declared in app.json.
  */
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- browser-JS fixtures intentionally lack TS declarations (#408)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- browser-JS fixtures intentionally lack TS declarations (#408)
 // @ts-nocheck
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -190,8 +190,8 @@ function permits(
       scope.verbs.split("+").includes(verb) ||
       (verb === "read" && scope.verbs === "read+act");
     if (!verbs) return false;
-    // Table-less act scopes used to match any command in the schema
-    // (schedule.foo_bar with only `{schema: schedule, verbs: act}`). Require
+    // A table-less act scope must not match any command in the schema
+    // (schedule.foo_bar with only `{schema: schedule, verbs: act}`): require
     // the command's second segment so a renamed engine command fails smoke.
     if (scope.table == null) {
       if (verb !== "act") return true;

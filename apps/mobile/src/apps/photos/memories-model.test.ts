@@ -57,15 +57,14 @@ function memberRow(
   return { memory_id: memoryId, asset_id: assetId, ordinal };
 }
 
-/** A place map of names only, the way this file used to pass one — a trip's
- *  title now needs the whole row (issue #816), so the shorthand keeps the
- *  older cases readable. */
+/** A place map of names only. A trip's title needs the whole row (#816),
+ *  so this shorthand keeps the cases that do not need one readable. */
 const namedPlaces = (
   entries: readonly (readonly [string, string])[]
 ): Map<string, MemoryPlace> =>
   new Map(entries.map(([key, name]) => [key, { key, name }]));
 
-/** The trip fields `TripMemory` grew with the phrase ladder (issue #816), so a
+/** The trip fields `TripMemory` grew with the phrase ladder (#816), so a
  *  fixture asserting the older ones does not have to restate them. */
 const tripFixture = (over: Partial<TripMemory> = {}): TripMemory => ({
   memoryId: "trip:x",
@@ -150,9 +149,9 @@ describe(buildOnThisDayMemory, () => {
 
 describe(buildTripMemories, () => {
   test("resolves a trip's assets and place name, newest trip first", () => {
-    // The members carry their place, because a trip's name is now read off
-    // the places its own photographs were taken at (issue #816) rather than
-    // off a name looked up from the row's place_id — a row can name a place
+    // The members carry their place, because a trip's name is read off the
+    // places its own photographs were taken at (#816) rather than off a name
+    // looked up from the row's place_id — a row can name a place
     // nothing in the trip was actually shot at.
     const paris1 = photo("paris1", {
       capturedAt: "2026-01-05T09:00:00.000Z",
@@ -354,7 +353,7 @@ describe(yearsAgo, () => {
   });
 });
 
-// ── A trip, named and sketched (issue #816) ────────────────────────────────
+// ── A trip, named and sketched (#816) ────────────────────────────────
 //
 // `trips.test.ts` in the blueprints package owns the title grammar and the
 // route arithmetic — both surfaces call the same function, so restating them

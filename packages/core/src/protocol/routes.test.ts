@@ -1,7 +1,3 @@
-/**
- * Direct tests for the shared route table (issue #545 B9) — beyond the barrel.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {

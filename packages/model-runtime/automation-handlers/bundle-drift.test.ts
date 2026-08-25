@@ -1,6 +1,5 @@
 /*
- * Rebuild-drift check for the published recognition bundles (#781, deferred
- * from #753).
+ * Rebuild-drift check for the published recognition bundles (#781).
  *
  * The handlers in this directory are the source; `bun run build:automations`
  * bundles them into `packages/blueprints/automations/<id>/automations/<id>/

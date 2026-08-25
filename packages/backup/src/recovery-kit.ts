@@ -1,8 +1,7 @@
 /*
- * The recovery-kit READER (issue #439 R1) — the counterpart to
- * `writeRecoveryKit` (engine.ts). `writeRecoveryKit` emits
- * `{version, kind, createdAt, keyring, targets}` (FORMAT.md § Recovery kit);
- * this parses + validates that document back into a typed shape so `recover()`
+ * The recovery-kit READER (#439) — the counterpart to `wrapRecoveryKit`, which
+ * seals `{version, kind, createdAt, keyring, targets}` (FORMAT.md § Recovery
+ * kit); this parses + validates that document back into a typed shape so `recover()`
  * can restore "from nothing but this document". It is deliberately strict:
  * the kit is the ONLY thing standing between a blank machine and a vault, so a
  * wrong `kind`, an unsupported `version`, a malformed keyring, or a target
@@ -30,7 +29,7 @@ import type { Keyring } from "./crypto.js";
 import type { RecoveryKitTarget } from "./engine.js";
 import { canonicalJson } from "./manifest.js";
 
-/** A parsed + validated recovery kit (the shape `writeRecoveryKit` emits). */
+/** A parsed + validated recovery kit (the shape `wrapRecoveryKit` seals). */
 export interface RecoveryKitDocument {
   version: 1;
   kind: "centraid-recovery-kit";
@@ -230,12 +229,11 @@ export function wrapRecoveryKit(
 /**
  * Unwrap the owner-held password document. Authentication failures stay loud.
  *
- * There is no unwrapped acceptance path (issue #568 item J). Accepting a plain
- * document also SILENTLY IGNORED the supplied password, so every caller that
- * treats "parse succeeded" as "the owner knows the password" —
- * `vaults:restore`, `vaults:initialize/verify`, and the kit-confirmed
- * transition — had a password-free branch. v0 carries no back-compat
- * obligation, so the branch is gone rather than gated.
+ * Never add an unwrapped acceptance path (#568): accepting a plain document
+ * silently ignores the supplied password, and every caller that treats "parse
+ * succeeded" as "the owner knows the password" — `vaults:restore`,
+ * `vaults:initialize/verify`, the kit-confirmed transition — then has a
+ * password-free branch reachable from the kit file alone.
  */
 export function parseRecoveryKit(
   value: unknown,

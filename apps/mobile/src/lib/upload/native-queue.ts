@@ -1,8 +1,8 @@
-// Device assembly of the upload queue (#419 M0.4).
+// Device assembly of the upload queue (#419.4).
 //
 // Native-module imports live here and in `expo-native.ts` only; the queue,
 // sealer and drainer take every one of these by injection so the vitest rig
-// can exercise them (the M0.2 lesson).
+// can exercise them.
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { OpSqliteDriver } from "../replica/op-sqlite-driver";

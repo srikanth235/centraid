@@ -1,4 +1,4 @@
-// Shared "never lose anything" store contract (P5, issue #630).
+// Shared "never lose anything" store contract (P5, #630).
 //
 // A domain records its exact pre-mutation snapshot in the same transaction as
 // the canonical write. Domain-owned undo commands validate and apply snapshots
@@ -12,7 +12,7 @@ import type { HandlerCtx } from "../gateway/types.js";
 const DEFAULT_UNDO_WINDOW_MS = 10_000;
 
 /**
- * Rows deleted by one `pruneExpiredEntityRevisions` pass (issue #659 L1).
+ * Rows deleted by one `pruneExpiredEntityRevisions` pass (#659).
  * Bounded like every other retention pass so a vault that has never pruned
  * does not turn its first sweep into a multi-second stall.
  */
@@ -150,7 +150,7 @@ export interface EntityRevisionPruneResult {
 }
 
 /**
- * Drop revisions whose undo window has closed (issue #659 L1).
+ * Drop revisions whose undo window has closed (#659).
  *
  * Every mutation in the P5 store contract writes a FULL-ROW JSON snapshot
  * here, and the only reader — `loadEntityRevision` — refuses anything with

@@ -11,11 +11,11 @@
 //  - The "Albums" row and the "Activity" log below are inventions beyond the
 //    prototype, and they stay: both are honest provenance with real member
 //    value (which albums this is in, what has actually happened to it).
-//  - There is NO destructive control on this panel. A "Move to trash" button
-//    used to sit below the Activity log; it was removed because the viewer
-//    bar already carries Trash, and a second destructive path inside a facts
-//    panel is a misfire waiting to happen — the prototype's own panel
-//    deliberately carries no destructive control either.
+//  - There is NO destructive control on this panel — no "Move to trash"
+//    button below the Activity log. The viewer bar already carries Trash, and
+//    a second destructive path inside a facts panel is a misfire waiting to
+//    happen — the prototype's own panel deliberately carries no destructive
+//    control either.
 //
 // EVERY ROW IS A WRITE THAT CAN FAIL, BE REFUSED, OR BE UNDONE. That is the
 // organising idea, not a caveat: the caption, the capture time, the place, the
@@ -51,7 +51,7 @@ import { buildActivity } from "../activity.ts";
 import { renderFaces } from "../faces.ts";
 import { assetBytes, custodyMeta, toLocalInputValue } from "../format.ts";
 // Every command on this panel edits the OPEN asset, so each is addressed at
-// the scope that asset is shown from (issue #599) rather than the chip
+// the scope that asset is shown from (#599) rather than the chip
 // selection — including the album/tag/place ones, whose collection ids are
 // only meaningful inside that same scope.
 import { act, narrate } from "../outcomes.ts";

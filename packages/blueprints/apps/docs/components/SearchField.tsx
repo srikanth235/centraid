@@ -1,10 +1,10 @@
 // The search field — drawn in the SHELF'S OWN BODY, not in a header this app
 // keeps above every screen.
 //
-// THIS IS THE PHOTOS MOVE. `photos/Chrome.tsx` retired "the in-pane search
-// field" for the same reason: a field pinned above every shelf asks "what are
+// THIS IS THE PHOTOS MOVE. `photos/Chrome.tsx` draws no in-pane search field
+// either, for the same reason: a field pinned above every shelf asks "what are
 // you looking for?" on screens that are not searches, and it asks it in the
-// widest, most permanent region the app owns. The way IN is now the app bar's
+// widest, most permanent region the app owns. The way IN is the app bar's
 // Search control (`frame.tsx`'s `SearchBarButton`, beside Select) and the
 // compact band's Search tab; both land on the Search shelf, and the field is
 // drawn once, here, on the one shelf that searches.

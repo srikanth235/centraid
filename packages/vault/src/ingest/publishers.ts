@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit the per-entity publishers are one closed vocabulary — probe/create/update share the provenance-stamping contract (#290)
-// Per-entity-type publishers for the staging spine (issue #290 phase 2).
+// Per-entity-type publishers for the staging spine (#290).
 // A publisher is the ONLY code that turns a staged payload into vault rows:
 // `probe` adopts rows the vault already holds (domain-native keys — ical_uid,
 // party identifiers, external_id columns), `create`/`update` write, and both
@@ -39,7 +39,7 @@ export interface EventPayload {
 const eventPublisher: Publisher = {
   entityType: "core.event",
   probe(vault, payload) {
-    // Read-only — the runtime schema gate covers WRITE paths only (#374 T3).
+    // Read-only — the runtime schema gate covers WRITE paths only (#374).
     const p = payload as unknown as EventPayload;
     const existing = vault
       .prepare("SELECT event_id FROM core_event WHERE ical_uid = ?")
@@ -262,7 +262,7 @@ export interface MessagePayload {
   body: string;
   /** Normalized subject — the thread grouping key. */
   threadKey: string;
-  /** Staged blob shas the parser hashed into the CAS (issue #296). */
+  /** Staged blob shas the parser hashed into the CAS (#296). */
   attachments?: {
     stagedSha: string;
     filename: string;
@@ -402,7 +402,7 @@ const messagePublisher: Publisher = {
         body.contentId,
         p.messageId
       );
-    // Email attachments (issue #296): the parser staged the bytes; publish
+    // Email attachments (#296): the parser staged the bytes; publish
     // is the claim — content items promote from the staging band and pin to
     // the message with the same edge core.attach writes.
     for (const att of p.attachments ?? []) {
@@ -590,7 +590,7 @@ const lockerItemPublisher: Publisher = {
   },
   update(vault, entityId, payload, now) {
     // Source fills gaps, never overwrites: an imported password lands only
-    // where the vault holds none (vault-wins, issue #290 decision 6).
+    // where the vault holds none (vault-wins, #290 decision 6).
     const p = assertPayload<LockerItemPayload>("LockerItemPayload", payload);
     vault
       .prepare(
@@ -647,7 +647,7 @@ function noteContent(
 /**
  * Find-or-create a nested collection path under one owner, returning the
  * deepest collection. Shared by every importer that files what it publishes
- * (issue #721): a Markdown directory becomes nested notebooks, a Takeout
+ * (#721): a Markdown directory becomes nested notebooks, a Takeout
  * album folder becomes one flat album — same mechanism, same find-or-create,
  * so an import never mints a second collection with a name the vault holds.
  */
@@ -808,12 +808,12 @@ const notePublisher: Publisher = {
 // `adoptAssetForContentTx` for the sha-dedupe/restore rule,
 // `insertMediaAssetTx` for the row, `findOrCreatePlaceTx` for the place,
 // `setStarredTx` for the favorite (the column is a mirror, the tag is the
-// truth — issue #441 A2.1). What is genuinely new here is only what the
+// truth — #441 A2.1). What is genuinely new here is only what the
 // ARCHIVE knows and an upload does not: the sidecar's testimony and the
 // album folder it sat in.
 
 export interface MediaAssetPayload {
-  /** Bytes already in the CAS (issue #296) — the sha is also their identity. */
+  /** Bytes already in the CAS (#296) — the sha is also their identity. */
   stagedSha: string;
   filename: string;
   mediaType: string;
@@ -991,7 +991,7 @@ const mediaAssetPublisher: Publisher = {
 /**
  * The favorite bit, mirrored onto the canonical starred tag exactly as the
  * media commands do. Only ever SETS: an import fills gaps, it never clears a
- * star the owner put on a photo here (issue #290 decision 6).
+ * star the owner put on a photo here (#290 decision 6).
  */
 function applyImportedAssetFlags(
   deps: {

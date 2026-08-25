@@ -62,9 +62,10 @@ function parseCommonsInvite(value: string): CommonsInviteClaim | null {
   }
 }
 
-/** Which of the caller's OWN vaults a placement landed in. Cross-owner gives
- *  retired (#825, ruling G-copy), so the other end of an edge is never another
- *  person — labelling it "Linked person" said something that cannot be true. */
+/** Which of the caller's OWN vaults a placement landed in. There are no
+ *  cross-owner gives (#825, ruling G-copy), so the other end of an edge is
+ *  never another person — labelling it "Linked person" would say something
+ *  that cannot be true. */
 function vaultLabel(vaultId: string, links: readonly GatewayLink[]): string {
   for (const link of links) {
     if (link.vaultA === vaultId) return link.labelA ?? shortId(vaultId);

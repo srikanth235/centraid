@@ -1,4 +1,4 @@
-// The drive, projected from the phone's replica rows (issue #821).
+// The drive, projected from the phone's replica rows (#821).
 //
 // The web app's `drive` query performs these joins gateway-side
 // (packages/blueprints/apps/docs/queries/drive.ts, _shared.ts); the phone
@@ -242,11 +242,11 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
   return { documents, folders, rootFolderId, unfiledCount };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Shares — the same bounded join `queries/_shared.ts` runs gateway-side,
 // re-expressed over replica rows. `null` never leaves this function: the
 // caller decides denial by whether the share READS landed at all.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 function folderChain(
   conceptId: string | null,
@@ -406,9 +406,9 @@ export function sharesByDocument(
   return byDocument;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The row's one state slot (§4.1) — the shared ladder, fed with phone facts.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 const DAY_MS = 86_400_000;
 
@@ -454,9 +454,9 @@ export function docRowState(
   });
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Sort (§4.1's remembered orders)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export function sortDocuments<T extends DriveDoc>(
   docs: readonly T[],

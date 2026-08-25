@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import type * as TypeImport_rdfcd1 from "node:http";
 // governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
 /*
- * Connector broker invariants (issue #290 phase 4): manifest contract
+ * Connector broker invariants (#290): manifest contract
  * (connector needs a vault block), ctx.delegate forbidden in connector handlers,
  * and the honest-liveness fire gate (paused/needs-auth connections never run
  * their connector).

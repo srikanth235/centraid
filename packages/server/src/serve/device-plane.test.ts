@@ -106,7 +106,7 @@ describe("device-plane scenarios", () => {
     expect(store.vaultsFor("ep-tablet")).toStrictEqual(["v1", "v2"]);
 
     // Removing the PERSON is refused while they still own vaults — the
-    // ownership analogue of the old last-admin guard.
+    // ownership analogue of a last-admin guard.
     expect(() => store.removeOwner(laptop.ownerId)).toThrow(OwnerRemovalError);
     store.removeVault("v1");
     store.removeVault("v2");

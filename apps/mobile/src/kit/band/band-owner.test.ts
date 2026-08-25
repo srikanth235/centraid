@@ -1,10 +1,8 @@
-// THE BAND CAN BE CLAIMED AND HANDED BACK (issue #712 E3).
+// THE BAND CAN BE CLAIMED AND HANDED BACK (#712).
 //
-// `setBandOwner` had no caller on either client: the frame honoured a
-// preference the member had no way to express. These assert the latch itself —
-// the key namespace it now shares with the web shell, that a write survives a
-// relaunch, and that it is keyed PER APP rather than being Photos behaviour
-// wearing a general name.
+// These assert the latch itself — the key namespace it shares with the web
+// shell, that a write survives a relaunch, and that it is keyed PER APP rather
+// than being Photos behaviour wearing a general name.
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -63,10 +61,10 @@ describe("the band-owner latch", () => {
   });
 
   it("shares the web shell's key namespace, not a Photos-owned one", () => {
-    // The reconciliation itself (see band-owner.ts's header): mobile used to
-    // spell this `photos.bandOwner.<appId>` from inside the Photos app, which
-    // meant the frame could not read its own preference without importing an
-    // app — a boundary `scripts/check-import-boundaries.ts` forbids.
+    // The reconciliation itself (see band-owner.ts's header). A Photos-owned
+    // spelling like `photos.bandOwner.<appId>` would leave the frame unable to
+    // read its own preference without importing an app — a boundary
+    // `scripts/check-import-boundaries.ts` forbids.
     expect(bandOwnerKey("photos")).toBe("shell.bandOwner.photos");
     expect(bandOwnerKey("docs")).toBe("shell.bandOwner.docs");
   });
@@ -114,10 +112,8 @@ describe("the band-owner latch", () => {
   it("names the claiming apps the settings list offers", () => {
     // A limitation stated rather than hidden: mobile has no channel a frame
     // could ask "who has claimed", so the roster is hand-maintained. This
-    // fails the moment it drifts without someone deciding to — Docs and
-    // People joined when their v12 phone builds landed their bands (#821),
-    // Agenda and Tasks when theirs did (#834). Notes rebuilt in the same wave
-    // and is absent on purpose: its cover claims no band.
+    // fails the moment it drifts without someone deciding to. Notes is absent
+    // on purpose: its cover claims no band.
     expect(BAND_CLAIMING_APPS.map((app) => app.id)).toStrictEqual([
       "photos",
       "docs",

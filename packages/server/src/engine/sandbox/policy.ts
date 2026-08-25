@@ -128,11 +128,10 @@ export function appHandlerPolicy(): SandboxPolicy {
  * but it is not the same kind of code: it ships sample assets beside itself and
  * reads them off disk (`photos/seed.js` loads `sample/*` with `readFileSync`)
  * to build a believable first-run library. The app-handler lane refuses `fs`
- * outright, which is right for handlers and wrong for seeds — W7.1 landed that
- * lane on a corpus survey that read the `.ts` handlers and missed the `.js`
- * seeds, so demo seeding broke with `lane "app-handler" has no filesystem
- * grant`. This lane is the correction, kept SEPARATE from `appHandlerPolicy`
- * so restoring what seeds need never quietly hands it to every handler.
+ * outright, which is right for handlers and wrong for seeds — a seed run under
+ * it fails with `lane "app-handler" has no filesystem grant`. This lane is
+ * kept SEPARATE from `appHandlerPolicy` so granting what seeds need never
+ * quietly hands it to every handler.
  *
  * The grant is the narrowest one that works: read-only, confined to the seed's
  * OWN app directory. That is not a meaningful widening even in principle — a
@@ -221,7 +220,7 @@ export function modelRuntimePolicy(
  * revocation in this file constrains — the child inherits nothing from the
  * sandbox because it is not in it. That is strictly worse containment than
  * `model-runtime`, and strictly better than the no-lane default it replaces
- * (#846 P9): the handler JavaScript around the spawn is still read-confined,
+ * (#846): the handler JavaScript around the spawn is still read-confined,
  * write-refused, socket-refused and environment-empty, so what it can hand the
  * child and what it can do with the result are both bounded. Retiring this lane
  * means moving media decoding out of the handler, not widening it further.

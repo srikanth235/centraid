@@ -1,4 +1,4 @@
-// The packaged local orphan reclaim (issue #599 decision 11). Real vaults on
+// The packaged local orphan reclaim (#599 decision 11). Real vaults on
 // real disk — the load-bearing claims are filesystem facts (which directory
 // entry goes, which inode survives), so nothing here is mocked.
 

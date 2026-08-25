@@ -4,7 +4,7 @@
  * first, caller-sized (default 200). Each row is decorated with its party's
  * display name, its list (one lists-scheme tag, the same mechanism Docs
  * folders use), its canonical favorite star (the flags-scheme tag on the
- * party, issue #274), and its active reminder dates so the sidebar can derive
+ * party, #274), and its active reminder dates so the sidebar can derive
  * Reconnect / Upcoming / Favorites client-side exactly like the prototype.
  * `truncated` means older people exist beyond the window — grow it or search.
  *
@@ -18,11 +18,6 @@
  * Everything comes from the vault; this app holds no rows of its own. A
  * consent denial is a first-class outcome (vaultDenied), rendered as the
  * "ask the owner for access" state.
- *
- * TS conversion note: the vault read surface returns `Record<string, unknown>`
- * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
- * shape (`as unknown as X[]`) at its read site. Handler logic is otherwise
- * byte-for-byte the pre-conversion JS.
  */
 
 import { readLiveBindings } from "./_shared.ts";

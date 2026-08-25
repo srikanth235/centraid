@@ -77,7 +77,7 @@ export function tallyDedupes(
  * Final copy. It lives here rather than in view-copy.ts because these are the
  * only strings the panels say and nothing else reads them; the prototype's own
  * words throughout, except that no line prints the storage noun for a place
- * (issue #599 — a member reads a scope's label, never what holds it).
+ * (#599 — a member reads a scope's label, never what holds it).
  */
 const IMPORT_COPY = {
   dedupedEyebrow: "Deduped",

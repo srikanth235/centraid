@@ -1,6 +1,6 @@
 // AWS Signature v4 request signing for the S3-compatible blob driver
-// (extracted from s3.ts when issue #405 §4/§6 pushed that file past the
-// 500-line governance cap — see s3.ts's header for the driver's trust
+// (kept out of s3.ts, which sits at the 500-line governance cap under issue
+// #405 §4/§6 — see s3.ts's header for the driver's trust
 // posture). Pure functions over crypto primitives, no I/O: given a request's
 // shape and credentials, produce the final signed URL + header set for
 // `fetch`. Kept sibling to s3.ts so the signer and the driver evolve
@@ -76,7 +76,7 @@ export interface SignS3RequestParams {
   body?: Buffer;
   /**
    * Caller headers (e.g. content-type, range, `x-amz-storage-class` for
-   * issue #405 §6) — EVERY entry here is folded into SignedHeaders, so a
+   * #405 §6) — EVERY entry here is folded into SignedHeaders, so a
    * storage-class header is signed exactly like host/date with no special
    * casing. Names are lowercased before signing.
    */

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-// THE PEOPLE SHELF'S CONSENT GATE (issue #712 C2).
+// THE PEOPLE SHELF'S CONSENT GATE (#712).
 //
-// The face-detection consent question used to open from a toolbar icon +
-// `<dialog>` (components/Enrichment.tsx, retired) — built, correct, and
-// nearly unreachable. It now re-homes into THIS shelf's empty state: while
+// The face-detection consent question lives in THIS shelf's empty state, not
+// behind a toolbar icon and a `<dialog>` a member would have to go looking
+// for: while
 // the roster (and its proposals) are empty and the question is still open,
 // `gate` renders in place of the grid/note. `app-root.tsx` (enrichment-gate.ts)
 // decides WHEN that is true; this file only proves `PeopleShelf` renders
@@ -119,12 +119,12 @@ describe("the People shelf's consent gate", () => {
   });
 });
 
-// A FACE GROUP MAY SPAN TWO PEOPLE'S CONFIRMATIONS (issue #712 P6b).
+// A FACE GROUP MAY SPAN TWO PEOPLE'S CONFIRMATIONS (#712).
 //
 // `media_face_region` records the subject (`party_id`) and the answerer
 // (`confirmed_by_party_id`) as two separate columns, so a group assembled from
 // two members' confirmations is a fact the schema already carries. What the
-// roster used to do was DROP the answerer, which made "who agreed" unaskable —
+// roster that DROPS the answerer makes "who agreed" unaskable —
 // and the only alternative anyone reaches for after that is merging the two
 // members, which is precisely the thing that must not happen.
 describe("a person's confirmers", () => {

@@ -1,19 +1,17 @@
 // governance: allow-repo-hygiene file-size-limit the fire spine is one per-fire orchestration — liveness, secret preflight (#293), broker preflight (#304) and the onFailure cascade share the run bracket
 /**
  * Automation fire spine — the per-fire orchestration, owned here in
- * app-engine (issue #147, Concern 2).
+ * app-engine (#147, Concern 2).
  *
  * Resolving an automation, opening its run ledger, running the generated
  * `handler.js`, and cascading `onFailure` only ever touch app-engine
  * primitives (`parseRef`, `AutomationRunsStore`,
- * `runHandler`). That spine used to live in
- * `agent-runtime/run-automation.ts`; the only thing it genuinely needed from
- * agent-runtime was the `ctx.delegate` dispatch surface (a bounded model turn
- * through the harness registry). So the spine moves down and the dispatch
- * surface is injected via `openDispatch` — the same dependency inversion the
- * `Host` / `ConversationRunner` seams already use.
+ * `runHandler`). The only thing the spine needs from agent-runtime is the
+ * `ctx.delegate` dispatch surface (a bounded model turn through the harness
+ * registry), and that is injected via `openDispatch` — the same dependency
+ * inversion the `Host` / `ConversationRunner` seams already use.
  *
- * agent-runtime's `runAutomation` is now a thin wrapper that builds the
+ * agent-runtime's `runAutomation` is a thin wrapper that builds the
  * `openDispatch` closure (capturing the harness kind) and calls `runFire`. A
  * future host can inject its own dispatch surface instead of reimplementing
  * the spine. A fire whose handler never calls `ctx.delegate` starts zero child
@@ -60,7 +58,7 @@ import type {
 } from "./enrich-gate.js";
 
 /**
- * The gateway broker's per-fire seam (issue #304). Resolves the connector's
+ * The gateway broker's per-fire seam (#304). Resolves the connector's
  * connection to an injectable credential: `undefined` = harness-ambient lane
  * (no broker credential configured), `ConnectionAuth` = inject away, and
  * `{ refused }` = the credential exists but cannot serve this fire (dead
@@ -75,9 +73,9 @@ export type ResolveConnection = (connector: {
 }) => Promise<ConnectionAuth | { refused: string } | undefined>;
 
 /**
- * The live dispatch surface a fire runs against. Provided by the host
- * (the historical agent-runtime package stands up a mock-LLM server + harness spawn). `close()` tears
- * down whatever the host allocated and is always called once, even on throw.
+ * The live dispatch surface a fire runs against. Provided by the host.
+ * `close()` tears down whatever the host allocated and is always called once,
+ * even on throw.
  */
 export interface DispatchSurface {
   delegateDispatcher: DelegateDispatcher;
@@ -105,7 +103,7 @@ export interface OpenDispatchArgs {
   harnessKind?: string;
   /**
    * Manifest `requires.model` — the capability tier `ctx.delegate` should route
-   * to (issue #166). The host's `delegateDispatcher` picks the matching provider
+   * to (#166). The host's `delegateDispatcher` picks the matching provider
    * tier; undefined means "the host's default automation model".
    */
   model?: string;
@@ -139,7 +137,7 @@ export interface RunFireOptions {
   appsDir: string;
   /**
    * The vault's `journal.db` file — the run ledger every fire writes
-   * (issue #280: one per-vault ledger; the per-app `runtime.sqlite` is gone).
+   * (#280: one per-vault ledger; the per-app `runtime.sqlite` is gone).
    */
   journalDbFile: string;
   /**
@@ -181,7 +179,7 @@ export interface RunFireOptions {
     automationRef: string
   ) => Promise<NestedAutomationRuntime>;
   /**
-   * Live run-stream sink (issue #158) for THIS fire's run. Not propagated
+   * Live run-stream sink (#158) for THIS fire's run. Not propagated
    * into `onFailure` cascades — those are separate runs with their own ids
    * and ledgers, so streaming them onto this run's channel would mislabel
    * their events. A late viewer can open the child run by its own id.
@@ -217,7 +215,7 @@ export interface RunFireOptions {
    */
   deferOnFailure?: boolean | ((outcome: HandlerOutcome) => boolean);
   /**
-   * Gateway broker seam (issue #304): resolve the connector's connection to
+   * Gateway broker seam (#304): resolve the connector's connection to
    * an injectable credential before the handler runs. Absent → every
    * connection is treated as harness-ambient (pre-#304 behavior).
    */
@@ -268,13 +266,7 @@ export interface RunRecord {
 }
 
 /**
- * Single automation fire. Resolves the automation, opens its ledger, runs the
- * handler against the host-supplied dispatch surface, cascades `onFailure`,
- * and returns the run record + handler outcome. A missing automation app
- * throws; a handler failure surfaces in `outcome.ok === false`.
- */
-/**
- * Manifest lane → the worker's sandbox request (#846 P9).
+ * Manifest lane → the worker's sandbox request (#846).
  *
  * An absent block is an absent request, which the worker reads as the strict
  * `automation-handler` floor — never as "no sandbox".
@@ -325,7 +317,7 @@ export async function runFire(
 
   // Code (manifest + handler) resolves from `codeAppsDir`; data
   // (runtime.sqlite) from `appsDir`. They diverge under the git-store backend
-  // (issue #137) and coincide in the flat/legacy layout.
+  // (#137) and coincide in the flat/legacy layout.
   const codeAppsDir = opts.codeAppsDir ?? opts.appsDir;
 
   const parsed = parseRef(opts.automationRef);
@@ -415,9 +407,9 @@ export async function runFire(
   //
   // Fail-closed in three ways: an absent seam refuses, a throwing seam
   // refuses, and an unreadable/unknown tier refuses. See `enrich-gate.ts`
-  // for what `local` means in this runtime and why.
+  // for what `device` means in this runtime and why.
   const enrich = row.manifest.enrich;
-  /** Set under the `local` tier: the domain whose promise seals `ctx.delegate`. */
+  /** Set under the `device` tier: the domain whose promise seals `ctx.delegate`. */
   let sealedDomain: EnrichDomain | undefined;
   /** The profile the cascade selected for this capability, once allowed. */
   let selectedProfileId: string | undefined;
@@ -451,7 +443,7 @@ export async function runFire(
         );
         if (policy) profileEgress = answer.egressForProfile?.(policy.profileId);
         // The egress-consent lookup rides the SAME host answer as the tier and
-        // the rules (issue #807, Wave 3), so one seam still answers the whole
+        // the rules (#807), so one seam still answers the whole
         // gate. A throwing lookup lands in the catch below with everything
         // else and refuses; an absent one fails closed inside the gate.
         egressConsent = answer.egressConsent;
@@ -493,7 +485,7 @@ export async function runFire(
     }
   }
 
-  // RECOGNITION SELECTION (issue #807, Wave 5) — WHICH ENGINE RUNS, resolved
+  // RECOGNITION SELECTION (#807) — WHICH ENGINE RUNS, resolved
   // from policy rather than pinned in the manifest.
   //
   // `manifest.enrich.delegateStep` is the capability's DECLARATION that a
@@ -603,7 +595,7 @@ export async function runFire(
     onLog,
   });
 
-  // The `local` tier's backstop: the fire may run its deterministic /
+  // The `device` tier's backstop: the fire may run its deterministic /
   // device-lease work, but a model turn is provider egress, so `ctx.delegate` is
   // sealed shut rather than left to a handler's good manners. A handler that
   // reaches for one fails loudly with the reason instead of egressing.
@@ -616,7 +608,7 @@ export async function runFire(
       }
     : dispatch.delegateDispatcher;
 
-  // Honest liveness (issue #290 phase 4): a paused or needs-auth connection
+  // Honest liveness (#290): a paused or needs-auth connection
   // never fires its connector — the skip is logged, and since connectors are
   // cursor-based, the next healthy run catches up over the accumulated gap
   // in one fire. Best-effort: an unreadable status (no grant yet) lets the
@@ -636,7 +628,7 @@ export async function runFire(
     }
   }
 
-  // Secrets preflight (issue #293 decision 8): every declared secret must
+  // Secrets preflight (#293 decision 8): every declared secret must
   // reveal BEFORE the handler runs — one reveal per ref, receipted by the
   // vault. A trashed/missing item flips the connection to needs-auth (the
   // same honest-liveness state a wrong login shows) and the run skips.
@@ -677,7 +669,7 @@ export async function runFire(
     }
   }
 
-  // Broker credential preflight (issue #304): a connection carrying an
+  // Broker credential preflight (#304): a connection carrying an
   // oauth2/api_key credential resolves it NOW — token refreshed under the
   // broker's per-connection mutex, values ready for transport injection. A
   // refusal skips the fire exactly like honest-liveness above (the broker
@@ -891,7 +883,7 @@ export async function runFire(
 
 /**
  * Reveal one declared secret ref through the automation's consented bridge —
- * rides the agent's `reveal` grant, receipted per item (issue #293). Two
+ * rides the agent's `reveal` grant, receipted per item (#293). Two
  * ref forms: `locker:<item_id>:<column>` (the raw UUID) and, for stable
  * bindings that survive delete+recreate, `locker:@<alias>:<column>` (issue
  * #298 item 4) — the vault resolves the alias to the live item under the
@@ -925,7 +917,7 @@ async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
   return value;
 }
 
-/** Flip the connector's connection to needs-auth (issue #293): a missing or
+/** Flip the connector's connection to needs-auth (#293): a missing or
  *  trashed secret item is the same honest-liveness state a wrong login is. */
 async function flipNeedsAuth(
   vault: VaultBridge,

@@ -41,8 +41,8 @@ export { darkTheme, lightTheme } from "./centraid";
 // Registry: every entry shows up in the desktop theme picker.
 //
 // INVARIANT — a registry key must equal its `kind`. Shell stylesheets key
-// literally on `[data-theme='dark']` (`react/styles/toast.module.css`,
-// `react/screens/SettingsConnectionsScreen.module.css`), so a dark preset
+// literally on `[data-theme='dark']` (`react/screens/SettingsConnectionsScreen
+// .module.css`, `react/screens/RecoverScreen.module.css`), so a dark preset
 // registered under any other key would take the dark tokens while leaving
 // those rules unfired — light chrome painted over a dark surface (#608 O).
 // `themes.test.ts` pins the invariant; adding a third preset means either

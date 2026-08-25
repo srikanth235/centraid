@@ -1,4 +1,4 @@
-// Document content lifecycle (issue #352): in-place text edits, whole-file
+// Document content lifecycle (#352): in-place text edits, whole-file
 // replacement, and version-history reads/restores. Split out of logic.ts
 // purely to keep both files under the file-size cap — same factory pattern,
 // closing over app.tsx's own `data`/`refresh` plus logic.ts's own
@@ -36,7 +36,7 @@ export function createVersions({
   notice,
 }: VersionsDeps) {
   // "Replace file…" — any media type, through the same staged-bytes door
-  // uploadFiles() uses (issue #296): no base64 through command JSON, so a
+  // uploadFiles() uses (#296): no base64 through command JSON, so a
   // 200 MB scan replaces just as well as a 20 KB one.
   async function replaceDocument(doc: DriveDoc, file: File) {
     if (file.size > MAX_UPLOAD_BYTES) {

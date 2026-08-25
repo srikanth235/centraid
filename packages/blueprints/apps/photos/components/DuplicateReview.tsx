@@ -23,7 +23,7 @@ import { armConfirm, fmtBytes } from "@centraid/design/elements";
 // `4032 × 3024 · 4.1 MB · from this phone`; the cluster query
 // (queries/duplicates.ts) carries the dimensions and the byte size but no
 // provenance column at all, so the third clause is omitted rather than
-// guessed — see the app-root wiring note in the review's own report.
+// guessed.
 import { parseAssetKey } from "../asset-key.ts";
 import { decideCluster } from "../duplicate-decision.ts";
 import { assetBytes } from "../format.ts";

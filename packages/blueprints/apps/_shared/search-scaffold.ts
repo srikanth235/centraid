@@ -1,12 +1,12 @@
-// The one search grouping scaffold (issue #712 S1): entity rows -> states ->
+// The one search grouping scaffold (#712): entity rows -> states ->
 // chip suggestions, shared across every blueprint app's search surface so
 // eight apps do not grow three grammars for "no results".
 //
 // Photos (`apps/photos/search.ts` + `search-groups.ts` + `components/
-// SearchShelf.tsx`) is the canonical pattern this was extracted from: a
-// debounced live query against the gateway, a short list of person/place/
-// album/things ROWS above the primary results (grid, ledger, whatever the
-// app's own list is), and four honest states — `resting` (nothing typed),
+// SearchShelf.tsx`) is the canonical pattern: a debounced live query against
+// the gateway, a short list of person/place/album/things ROWS above the
+// primary results (grid, ledger, whatever the app's own list is), and four
+// honest states — `resting` (nothing typed),
 // `searching` (a request is in flight, determinate copy, never a spinner),
 // `ready` (hits, or the honest "no matches" line with the query echoed
 // back), and `unreachable` (the index lives on the gateway and could not be
@@ -133,7 +133,7 @@ export function deriveSearchStatus(input: {
 
 /**
  * Per-scope reach for a multi-scope fan-out (`window.centraid.readAll`):
- * THREE honest states, never two collapsed into "no matches" (issue #726
+ * THREE honest states, never two collapsed into "no matches" (#726
  * D11/item 7):
  *
  *   - 'reached'   the scope answered; its rows are trustworthy.

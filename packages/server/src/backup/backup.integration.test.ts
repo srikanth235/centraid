@@ -748,8 +748,7 @@ describe("backup", () => {
   // before anything is fetched or materialized) are ENGINE laws, owned by
   // packages/backup/src/engine.test.ts — `describe(verifySnapshot)` and the two
   // roundtrip refusal tests. The gateway adds no logic on those paths: the
-  // non-empty check exists only in engine.ts, and the deleted "verify catches
-  // real damage" test called `verifySnapshot` directly. What the gateway DOES
+  // non-empty check exists only in engine.ts. What the gateway DOES
   // add — that a refused recovery leaves no residue on a blank machine — lives
   // in recover.integration.test.ts's blank-machine test. This file keeps only
   // fencing, policy echo, and the CLI-restore -> adopt -> quarantine flow.

@@ -1,4 +1,4 @@
-// Local profile + first-run state (issue #263 onboarding).
+// Local profile + first-run state (#263 onboarding).
 //
 // The phone is a client of a desktop gateway, so "who am I" is a light local
 // preference — a display name, an accent color, and whether onboarding has

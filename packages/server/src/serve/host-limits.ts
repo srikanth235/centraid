@@ -1,5 +1,5 @@
 /*
- * Host resource limits probe (#528 Phase E) — reads the cgroup CPU/memory
+ * Host resource limits probe (#528) — reads the cgroup CPU/memory
  * quota and one cumulative CPU-steal sample at gateway boot so the hardware
  * profile sizes the *granted share of the host*, not the raw machine. A
  * container capped at 2 vCPU on a 64-core box should be sized like a 2-core
@@ -11,7 +11,7 @@
  * treats as a plain unconstrained host. The fs reader and steal sampler are
  * injectable so the parsing is unit-testable without a real cgroup mount.
  *
- * The steal sampler is REUSED from power-context.ts (#528 Phase D) rather than
+ * The steal sampler is REUSED from power-context.ts (#528) rather than
  * writing a second `/proc/stat` parser — this module only converts its one
  * cumulative `{steal,total}` sample into a boot-time percent.
  */

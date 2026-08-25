@@ -1,19 +1,17 @@
 // PERMISSION IS A TAKEOVER OF THE TIMELINE, NOT A SCREEN BEHIND A MENU ROW
-// (Photos v4 handoff §13, proto:4335-4342; issue #712 P13).
+// (Photos v4 handoff §13, proto:4335-4342; #712).
 //
-// This content used to be `PhotoPermission.tsx`, a PUSHED screen reached from
-// a buried `Photo access` row at the bottom of the More sheet. That arrangement
-// answered the wrong question in the wrong place: a member who refused the
-// camera-roll prompt does not go looking through a sheet for the word "access",
-// they look at an empty grid and conclude the app is broken. The timeline never
-// read the permission state at all, so the empty grid said nothing and offered
-// nothing — the exact dead end §13 exists to forbid.
+// The refusal is answered where the question is ASKED, never behind a menu
+// row: a member who refused the camera-roll prompt does not go looking through
+// a sheet for the word "access", they look at an empty grid and conclude the
+// app is broken. A timeline that does not read the permission state says
+// nothing and offers nothing — the exact dead end §13 exists to forbid.
 //
-// So the content moved to where the question is ASKED: `PhotosHome` renders
-// this panel in the grid's own slot the moment `photoAccessTakesOverTimeline`
-// says the grant cannot produce a timeline. The band stays up (the way out of
-// the app is never taken away), the head stays up, and the grid area carries
-// the refusal grammar — what was tried, why it was refused, what to do.
+// So `PhotosHome` renders this panel in the grid's own slot the moment
+// `photoAccessTakesOverTimeline` says the grant cannot produce a timeline. The
+// band stays up (the way out of the app is never taken away), the head stays
+// up, and the grid area carries the refusal grammar — what was tried, why it
+// was refused, what to do.
 //
 // The copy and the offered controls are `photo-access.ts`, which is
 // react-native-free and directly asserted. This file holds the live permission

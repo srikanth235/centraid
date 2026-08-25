@@ -2,7 +2,7 @@
 // The one thing about emptying the trash that is a pure function, and the one
 // thing a member would feel if it were wrong: purge ORDER. The vault refuses
 // to destroy a photograph while an edited copy still names it as its source
-// (issue #711), so a trash holding both must send the copy first or the
+// (#711), so a trash holding both must send the copy first or the
 // control silently leaves the original behind.
 import { describe, expect, it } from "vitest";
 

@@ -37,7 +37,7 @@ export const I = {
 /**
  * THE KIND GLYPH A ROW WEARS BESIDE A NAME.
  *
- * This replaces a tinted square with `DOC` / `PDF` / `XLS` stamped inside it.
+ * NEVER A TINTED SQUARE WITH `DOC` / `PDF` / `XLS` STAMPED INSIDE IT.
  * Three capital letters is a filename extension wearing a badge: it repeats
  * what the Kind column already prints one field to the right, it cannot be
  * read at a glance the way a shape can, and it put a coloured chip at the
@@ -62,10 +62,10 @@ export const KIND_ICONS = {
  * THE SAME FOUR SHAPES, AT THE SIZE A THUMBNAIL NEEDS.
  *
  * A card's thumb and the details rail's hero are 104px and 120px boxes; the
- * row's 18px mark disappears in one. They used to hold `DOC` / `PDF` / `XLS`
- * set large on a tinted square — the last two places the three-capitals badge
- * survived after the rows dropped it, which left one drive saying "page" two
- * ways depending on which view it was in.
+ * row's 18px mark disappears in one. They must not hold `DOC` / `PDF` / `XLS`
+ * set large on a tinted square: a three-capitals badge here beside a line
+ * drawing in the rows is one drive saying "page" two ways depending on which
+ * view you are in.
  *
  * The stroke thins to 1.35 as the glyph grows: a 1.6 stroke scaled from 18 to
  * 30 reads as a marker pen, where the row's mark reads as a line drawing.
@@ -113,9 +113,9 @@ export const MENU_ICONS = {
  * popover of destinations hung off the thing it belongs to — and two popovers
  * in one app drawing their rows at two weights is two menus.
  *
- * This menu used to be seven bare words. A menu of words can only be read;
- * a menu of shapes can be aimed at, and after the second visit a member goes
- * to the lock or the camera without reading the row at all.
+ * A menu of words can only be read; a menu of shapes can be aimed at, and
+ * after the second visit a member goes to the lock or the camera without
+ * reading the row at all.
  */
 export const PLACE_ICONS = {
   newdoc: glyph("Upload", 15, 1.6),

@@ -1,8 +1,7 @@
 /**
- * K-way merge of per-scope pages into ONE cross-scope list (issue #599,
- * generalised for issue #726 D11 from `apps/photos/merge.ts`). Pure: no DOM,
- * no IO — it takes what each scope's own query page returned and decides
- * what the merged view may show.
+ * K-way merge of per-scope pages into ONE cross-scope list (#599,
+ * #726 D11). Pure: no DOM, no IO — it takes what each scope's own
+ * query page returned and decides what the merged view may show.
  *
  * WHAT IS AND IS NOT GENERICISED. Two things vary per app and are
  * PARAMETERS: `sortKey` + `direction` (Photos: `taken_at` descending; a
@@ -11,9 +10,8 @@
  * content_id; a record-only app: its own row id — there is no separate
  * "same bytes, different row" question for a record). Everything else —
  * ordering, cross-scope dedupe, the shared safe horizon, the undated tail
- * bucket — is the SAME algorithm for every caller, transferred verbatim from
- * the Photos original: it is subtle and already correct, and no app gets its
- * own copy of it.
+ * bucket — is the SAME algorithm for every caller: it is subtle and already
+ * correct, and no app gets its own copy of it.
  *
  * ORDERING. `direction` ("desc": highest `sortKey` first, "asc": lowest
  * first) determines display order, matching each page's own order. Two rows

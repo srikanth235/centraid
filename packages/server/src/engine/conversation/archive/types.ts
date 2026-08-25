@@ -1,4 +1,4 @@
-// Conversation-band archival types + internal constants (issue #438, decisions
+// Conversation-band archival types + internal constants (#438, decisions
 // 1-4). app-engine owns the conversation-ledger band of journal.db, so the
 // archival engine lives here; the vault/gateway inject the two things only they
 // hold — the blob CAS door (`blobSink`) and the custody-proven latch
@@ -31,7 +31,7 @@ export function windowCutoffMs(nowMs: number, windowDays: number): number {
 }
 
 /**
- * The vault blob CAS door the engine seals segments through (issue #438
+ * The vault blob CAS door the engine seals segments through (#438
  * decision 2 — the SAME CAS #367 segments use, so custody/replication/GC/
  * restore all come free). `db.blobs` satisfies this; `has` lets the engine
  * assert a segment actually landed locally before it writes the index row.
@@ -42,7 +42,7 @@ export interface BlobSink {
 }
 
 /**
- * The custody-gate latch (issue #438 decision 3), supplied by the gateway from
+ * The custody-gate latch (#438 decision 3), supplied by the gateway from
  * vault primitives: remote tier configured ⇒ the segment sha is replicated AND
  * carries no pending outbox obligation; no remote tier ⇒ local CAS presence
  * suffices (#367 parity). Raw rows prune ONLY when this returns true — the
@@ -94,10 +94,10 @@ export interface ConversationArchivalResult {
 export type Row = Record<string, unknown>;
 
 /**
- * The gzip(JSON) segment shape (issue #438 decision 1/4). Rows are stored
+ * The gzip(JSON) segment shape (#438 decision 1/4). Rows are stored
  * VERBATIM (`SELECT *`) — turns with their items and their attachment rows —
- * so a round-trip fetch decodes byte-identical source rows (wave 3 rehydration
- * reads this via `readArchivedConversationSegment`).
+ * so a round-trip fetch decodes byte-identical source rows (rehydration reads
+ * this via `readArchivedConversationSegment`).
  */
 export interface ArchivedConversationSegment {
   version: number;

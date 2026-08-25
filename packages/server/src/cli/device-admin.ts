@@ -1,6 +1,6 @@
 /*
  * `centraid-gateway pair` / `centraid-gateway devices` — device enrollment
- * administration (issue #289 phase 2).
+ * administration (#289).
  *
  * `pair` reaches the running loopback daemon through the host-custody bearer
  * and receives a one-line ticket (gateway identity pin + relay hint +
@@ -51,7 +51,7 @@ interface DeviceArgs {
   newOwner?: string;
   /** Exact vault name required when the revoke removes the owner's last device. */
   confirmLastDevice?: string;
-  /** Emit machine-readable JSON instead of human text (issue #382, `pair` only). */
+  /** Emit machine-readable JSON instead of human text (#382, `pair` only). */
   json?: boolean;
   /**
    * Human mode: also print a terminal QR of the one-line ticket so a phone
@@ -176,7 +176,7 @@ export async function commandPair(
       );
     }
     const baseUrl = `http://127.0.0.1:${port}`;
-    // `endpointTicket` is auth-gated on `/_gateway/info` (#568 item C). Load the
+    // `endpointTicket` is auth-gated on `/_gateway/info` (#568). Load the
     // host-custody key first so the readiness handshake can present the landlord
     // bearer; an anonymous GET would look like "iroh not ready" forever.
     const endpointSecret = daemonKeyStore(
@@ -205,9 +205,9 @@ export async function commandPair(
       localFail(`daemon at ${baseUrl} owns a different data directory`, 1);
     }
     // `endpointTicket` is auth-gated, so an unauthenticated handshake drops it
-    // silently. Reporting that as "the endpoint is not ready" was a lie the
-    // owner could not act on (issue #603 C2): the real cause is that the
-    // daemon was started with a pinned bearer this CLI cannot derive.
+    // silently. Reporting that as "the endpoint is not ready" is a lie the
+    // owner cannot act on (#603): the real cause is a daemon
+    // started with a pinned bearer this CLI cannot derive.
     if (handshake.info.authenticated === false) {
       localFail(
         `daemon at ${baseUrl} rejected this CLI's credential. It was started with a pinned ` +
@@ -462,7 +462,7 @@ export async function commandDevices(
       // Without the daemon's protector every `keys/<id>.sealkey` fails to
       // unwrap, the registry swallows the mount into `failedMountsByDir`, and
       // this loop would silently skip the vault-local data erasure that
-      // revocation exists to perform (issue #568 item D).
+      // revocation exists to perform (#568).
       keyStore: daemonKeyStore(layout.keysDir),
       logger: quietLogger,
       enableWalShipper: false,

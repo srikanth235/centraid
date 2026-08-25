@@ -1,15 +1,15 @@
 /**
- * THE CAPTURE-TIME OCR CONSENT MOMENT (issue #712 C3) — the second instance
+ * THE CAPTURE-TIME OCR CONSENT MOMENT (#712) — the second instance
  * of the §8 consent gate, after Photos' face detection
  * (`apps/photos/enrichment-consent.ts`).
  *
- * `apps/mobile/src/screens/Scan.tsx` used to run text extraction
+ * `apps/mobile/src/screens/Scan.tsx` must not run text extraction
  * UNCONDITIONALLY at capture: device `recognizeText` first, then — silently,
- * on failure — a gateway HTTP fallback (`POST …/capture/ocr`). No consent
- * moment existed at all; a member never chose whether their scan's bytes
- * would leave the phone, because until the device engine fails they never
- * do, and the panel that would have said so never rendered either way. This
- * module supplies the copy for the latch that closes that gap
+ * on failure — a gateway HTTP fallback (`POST …/capture/ocr`). Without a
+ * consent moment a member never chooses whether their scan's bytes may leave
+ * the phone, because until the device engine fails they never do, and the
+ * panel that would say so never renders either way. This module supplies the
+ * copy for the latch that closes that gap
  * (`apps/mobile/src/screens/scan-consent.ts`).
  *
  * Copy lives here (`apps/_shared/`) rather than under a `docs` blueprint app
@@ -90,6 +90,6 @@ export const OCR_CONSENT_NOTE =
   "Declining saves the scan without extracted text, stated on the scan itself — search and receipt-splitting need the text, but nothing else about saving changes.";
 
 /** What the scan screen says once extraction was declined, beside the scan —
- *  never a dead control (issue #712 C3). */
+ *  never a dead control (#712). */
 export const OCR_DECLINED_INLINE =
   "Text extraction declined — this scan saves without extracted text.";

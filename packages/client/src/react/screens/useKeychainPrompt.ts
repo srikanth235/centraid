@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 /**
- * Will this host's first key write pop an OS keychain dialog (issue #603)?
+ * Will this host's first key write pop an OS keychain dialog (#603)?
  *
  * Extracted from OnboardingScreen so the ticket panel shared by onboarding
  * and the switcher's "Add vault" modal announces the prompt the same way on

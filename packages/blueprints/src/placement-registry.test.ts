@@ -1,5 +1,5 @@
 /*
- * A4/A7 tripwires for `apps/_shared/placement-registry.ts` (issue #712).
+ * A4/A7 tripwires for `apps/_shared/placement-registry.ts` (#712).
  *
  *   - A4: `PlaceableItemType` must stay exactly `packages/vault`'s
  *     `ShareableItemType` minus `"locker.item"`. Blueprints cannot IMPORT

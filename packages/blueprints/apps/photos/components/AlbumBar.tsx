@@ -7,8 +7,8 @@ import { usePhotoShare } from "../grant-audiences.ts";
 // and count in the bar."
 //
 // So this component occupies the shelf strip's slot in album detail: the way
-// back, and the two writes that used to live in the retired drawer's album
-// list — rename and delete. The title and the count are NOT here; they are the
+// back, and the album's own two writes — rename and delete. The title and the
+// count are NOT here; they are the
 // frame's app bar, contributed by frame.tsx.
 //
 // Destructive is an outlined `--net` button, never a fill (§18), and it arms

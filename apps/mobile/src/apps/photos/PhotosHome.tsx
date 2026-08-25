@@ -1,9 +1,8 @@
 // Photos' home surface on the phone (v4 handoff §3.1, §4, §14, §15).
 // governance: allow-repo-hygiene file-size-limit The #712 screen intentionally retains its cohesive data/routing orchestration; #716 extracts only independently testable UI bodies.
 //
-// The screen is now the wiring: state, data and routing. Everything with a
-// shape of its own moved out to a file that can be read — and tested — on its
-// own terms:
+// The screen is the wiring: state, data and routing. Everything with a shape
+// of its own lives in a file that can be read — and tested — on its own terms:
 //
 //   photos-band.ts     the band's rules (five + More, the capsule, the ground)
 //   PhotosBand.tsx     the band, rendered on OPAQUE paper
@@ -106,7 +105,7 @@ function filterSections(
 }
 
 /** The selection bar's centre plate, worded exactly as iOS Photos words its
- *  own (observed on simulator, issue #712): "Select Items" before anything is
+ *  own (observed on simulator, #712): "Select Items" before anything is
  *  picked, then a bold count. `count === 0` is unreachable from this screen
  *  today — `selecting` only turns true once the first tile is preselected —
  *  but the label still handles it honestly rather than assuming a caller
@@ -187,12 +186,11 @@ export default function PhotosHome({
   // in beyond `bandOwner` and the rung, both of which already stretch that
   // reality about as far as it should go.
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
-  // THE TEMPORAL GRAIN (issue #712 iOS parity, `timeline-grains.ts`). Session
+  // THE TEMPORAL GRAIN (#712 iOS parity, `timeline-grains.ts`). Session
   // state, for the same reason the filter above is: this repo has no
   // member-preference plane to spend a third device-local key in, and iOS
-  // itself returns to All between visits. That argument survives the rebuild
-  // of the control unchanged — what changed is that the control is now
-  // permanently visible, not what its value is scoped to.
+  // itself returns to All between visits. The control being permanently
+  // visible does not change what its value is scoped to.
   const [grain, setGrain] = useState<TimelineGrain>("all");
   // THE MEMBER'S PLACE IN THE LIBRARY, in the one vocabulary all three grains
   // speak — a `PhotoSection.day`. Every grain writes it (a card tap, a scroll
@@ -203,7 +201,7 @@ export default function PhotosHome({
   // does.
   const [placeDay, setPlaceDay] = useState<string | undefined>(undefined);
   // Collections' own fold state, LIFTED here from `PhotosCollectionsView.tsx`
-  // (issue #712): the header's trailing chip is now the ONE place Show All /
+  // (#712): the header's trailing chip is the ONE place Show All /
   // Collapse All live, so it has to drive the same set the per-section
   // chevrons on that page toggle — two owners of one fold would let a member
   // watch the chip say "folded" while a chevron underneath still says open.
@@ -241,14 +239,13 @@ export default function PhotosHome({
   // View Options rows (photos-library-menu.ts) — the same store the pinch
   // gesture on the grid moves, so the two can never disagree.
   const [rung, setRung] = usePhotosRung();
-  // The FRAME's latch, not Photos' (issue #712 E3). The hydrate-into-state
-  // dance this replaced lived in two Photos screens under a Photos-owned key;
-  // it is one hook in `kit/band/band-owner.ts` now, on the same
-  // `shell.bandOwner.<appId>` key the web shell already used, and the member's
-  // answer is WRITTEN from frame Settings rather than only read.
+  // The FRAME's latch, not Photos' (#712). One hook in
+  // `kit/band/band-owner.ts`, on the `shell.bandOwner.<appId>` key, rather
+  // than a hydrate-into-state dance per Photos screen under a Photos-owned
+  // key; the member's answer is WRITTEN from frame Settings, not only read.
   const { bandOwner } = useBandOwner("photos");
 
-  // The automatic sweep (#711 S4) belongs HERE, not on the Backup screen: the
+  // The automatic sweep (#711) belongs HERE, not on the Backup screen: the
   // enqueue it performs is over newly-taken camera-roll photographs, and the
   // walk that finds them runs wherever Photos is on screen. Mounted only on the
   // Backup screen it swept only while a member was looking at backup settings,
@@ -275,7 +272,7 @@ export default function PhotosHome({
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
   // The one place the Library's filter actually acts (the header menu,
-  // issue #712): Collections, People and Search are each their own shelf
+  // #712): Collections, People and Search are each their own shelf
   // already, over their own queries, so a filter meant for "what the grid of
   // every photograph shows" has no honest meaning there.
   const visibleSections = useMemo(
@@ -318,7 +315,7 @@ export default function PhotosHome({
     // opened because there are no cards there to tap.
     setGrain((current) => (current === "years" ? "months" : "all"));
   }, []);
-  // THE ONE TRAILING CONTROL, DESTINATION-SCOPED (issue #712). iOS Photos
+  // THE ONE TRAILING CONTROL, DESTINATION-SCOPED (#712). iOS Photos
   // carries exactly one options chip on its title row, and its contents
   // change per page — never a control that stays put while the surface under
   // it changes out from under it. Library's Sliders menu acts on a grid that
@@ -330,7 +327,7 @@ export default function PhotosHome({
   // because it claims capability the screen does not have. Search has no
   // honest menu of its own (verified: the file wires no AnchoredMenu today),
   // so the chip is simply absent there rather than opening onto an empty card.
-  // Face detection (issue #724 W5). The tier comes from the same
+  // Face detection (#724). The tier comes from the same
   // `enrich.policy` mirror `PhotosPeopleView` reads; `detectFacesFor` asks it
   // the GATEWAY question (can the faces sweep run at all?), which is a
   // different question from `deviceAnswerFor`'s on-device promise.
@@ -357,7 +354,7 @@ export default function PhotosHome({
         detectFaces: {
           availability: detectFacesAvailability,
           // The row leads to the CONSENT GATE, which lives in the People
-          // roster's empty state (issue #712 C2) — never straight to the
+          // roster's empty state (#712) — never straight to the
           // enrichment write. See photos-library-menu.ts's header.
           onDetectFaces: () => navigation.navigate("PhotosPeople"),
         },
@@ -532,7 +529,7 @@ export default function PhotosHome({
     ]);
   };
 
-  // TRASH, ON THE RIGHT (issue #712 — iOS parity). `batchTrash` already
+  // TRASH, ON THE RIGHT (#712 — iOS parity). `batchTrash` already
   // exists as the shared selection write (`photos-selection-writes.ts`,
   // exercised today from AlbumDetail's and the Duplicates shelf's own
   // selection bars) — the Library grid gets the same write rather than a
@@ -563,7 +560,7 @@ export default function PhotosHome({
     );
   };
 
-  // SCOPED TO THE LIBRARY GRID (issue #712). `selection` is state PhotosHome
+  // SCOPED TO THE LIBRARY GRID (#712). `selection` is state PhotosHome
   // owns, but it is only ever MUTATED by the timeline's own
   // `onSelectionChange` — `PhotoTimeline`, rendered on the "library"
   // destination alone; Collections, People and Search never touch it. Gating
@@ -578,7 +575,7 @@ export default function PhotosHome({
       setMoreOpen(true);
       return;
     }
-    // The residual-selection case (issue #712): a member selects on Library,
+    // The residual-selection case (#712): a member selects on Library,
     // then taps another band destination WITHOUT pressing ✕ first. Nothing
     // else in this screen clears `selection` on a destination change — it
     // otherwise only empties when a target's own write or Done fires — so
@@ -590,7 +587,7 @@ export default function PhotosHome({
     // an effect that calls `setSelection` off its own dependency is exactly
     // the cascading-render shape `react-compiler` flags.
     if (key !== "library") setSelection(new Set());
-    // Same reasoning, one control over (issue #712): the trailing chip's own
+    // Same reasoning, one control over (#712): the trailing chip's own
     // menu is destination-scoped, so a card left open across a destination
     // change would either hang off a chip that just vanished (People,
     // Search) or silently swap its rows for the new destination's answer
@@ -621,13 +618,10 @@ export default function PhotosHome({
   };
 
   return (
-    // THE PAGE, the same one the frame and every other app draws. This used to
-    // name `colors.toneMat` — Photos' declared surface tone — which grounded
-    // the page and nothing else: every card below it kept drawing the SHELL's
-    // `bgElev`, so a `#F9F8F6` card sat on an `#F0EFED` page, lighter than the
-    // page it was laid on. The tone axis is gone (see `PAGE` in
-    // `packages/design/src/themes/shared.ts`); one page is what makes that
-    // unrepresentable rather than merely fixed.
+    // THE PAGE, the same one the frame and every other app draws. There is no
+    // per-app surface tone: a card drawing the SHELL's `bgElev` over a toned
+    // page would sit lighter than the page it is laid on. See `PAGE` in
+    // `packages/design/src/themes/shared.ts`.
     // Explicit inset, not SafeAreaView-with-edges: inside the fullScreenModal
     // cover this stack presents, the edges variant intermittently resolves a
     // zero top inset while `useSafeAreaInsets()` stays correct (the viewer
@@ -639,7 +633,7 @@ export default function PhotosHome({
       ]}
     >
       {selecting ? (
-        // iOS PARITY (issue #712, observed on simulator). Entering Select
+        // iOS PARITY (#712, observed on simulator). Entering Select
         // keeps the header's own page title — this is still Photos, not a new
         // surface — and moves everything else to the RIGHT: the leftover
         // action plus a round ✕ chip that exits. The count and the two verbs
@@ -750,7 +744,7 @@ export default function PhotosHome({
 
       <ReplicaStatusBar />
 
-      {/* THE FIRST-RUN OFFER (issue #724 A2) — the staged-import alternative
+      {/* THE FIRST-RUN OFFER (#724) — the staged-import alternative
           to the silent automatic sweep above. A self-contained banner: it
           reads nothing from this screen's own state and returns null once
           there is nothing local-only left to offer, so it costs this file
@@ -901,7 +895,7 @@ export default function PhotosHome({
             )}
           </>
         )}
-        {/* THE GRAIN CONTROL (issue #712 iOS parity). PERMANENT while the
+        {/* THE GRAIN CONTROL (#712 iOS parity). PERMANENT while the
             Library is the destination — see `TimelineGrainControl.tsx` on the
             discoverability defect its scroll-armed predecessor caused. Inside
             the grid's own slot rather than beside the band, because it belongs

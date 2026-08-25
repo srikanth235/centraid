@@ -40,10 +40,10 @@ export const WINDOW_OPTIONS = [7, 30, 90] as const;
 /**
  * Columns the chart draws: ONE PER DAY (#775).
  *
- * The fold used to sample a window into 7–14 columns, which is how a single
- * $40 afternoon became a smear across four ordinary days — the one shape a
- * spend chart exists to show, averaged away. The compact form factor is the
- * only place that still folds, and it says so in every column's own label.
+ * Folding a window into 7–14 columns is how a single $40 afternoon becomes a
+ * smear across four ordinary days — the one shape a spend chart exists to
+ * show, averaged away. The compact form factor is the only place that folds at
+ * all, and it says so in every column's own label.
  */
 export function columnCount(windowDays: number, compact: boolean): number {
   return compact ? Math.min(windowDays, 10) : windowDays;
@@ -326,8 +326,8 @@ export function gatewayFacts(usage: ResourceUsageDTO): PanelFact[] {
  * The measurement window the gateway's numbers were counted over.
  *
  * Without it every figure on that panel is a number with no denominator: "120s
- * of CPU" is unremarkable over a week and alarming over a minute, and the panel
- * used to make the reader guess which.
+ * of CPU" is unremarkable over a week and alarming over a minute, and without
+ * it the panel makes the reader guess which.
  */
 export function gatewaySince(usage: ResourceUsageDTO | undefined): string {
   if (!usage) return "your own machine";

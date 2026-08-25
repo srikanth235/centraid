@@ -1,4 +1,4 @@
-// Pairing state + tunnel lifecycle for the phone ↔ gateway link (issue #263).
+// Pairing state + tunnel lifecycle for the phone ↔ gateway link (#263).
 //
 // Two ticket shapes, one Settings entry point:
 //

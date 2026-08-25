@@ -1,5 +1,5 @@
 /*
- * Durable-ingress cursor reads (issue #541 review).
+ * Durable-ingress cursor reads (#541 review).
  *
  * `trigger_ingress` is the durable landing zone for webhook deliveries and
  * polled provider events. The one invariant this module exists to hold:
@@ -14,7 +14,7 @@
  * pruned ingress row — are reported as `skipped`/`gapReason`, because the
  * source can no longer produce them at all.
  *
- * Extracted from `build-gateway.ts` so the invariant is unit-testable without
+ * Kept out of `build-gateway.ts` so the invariant is unit-testable without
  * booting a gateway.
  */
 

@@ -2,7 +2,7 @@
    original in flight at a time bounds memory on a phone, keeps the determinate
    "N of M" count truthful, and makes a mid-run pause resume at a clean row.
    Collecting the promises would parallelise the transfers and break all three. */
-// THE SERIAL TRANSFER RUN — app-agnostic (#711, S4).
+// THE SERIAL TRANSFER RUN — app-agnostic (#711).
 //
 // This was `runBackup` inside `apps/photos/photos-backup.ts`. Nothing about the
 // loop was ever about photographs: it walks entries, resolves each one's bytes

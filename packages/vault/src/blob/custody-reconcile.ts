@@ -1,6 +1,6 @@
-// The deep reconciliation sweep (issue #296 §6), lifted out of custody.ts so
+// The deep reconciliation sweep (#296), held outside custody.ts so
 // the facade stays under the governance line-cap and so the two-store diff lives
-// in one place. Made store-aware in issue #425 Wave 2: the sweep now lists EVERY
+// in one place. The sweep is store-aware (#425): it lists EVERY
 // granted store class (cas, and derived when the tier has a derived store),
 // deletes orphans out of each store, heals the replica index per store, and
 // re-pushes a missing live sha to the store class it BELONGS in (so a derivative
@@ -20,14 +20,14 @@ export interface ReconcileContext {
   remote: RemoteTier | null;
   local: LocalBlobStore;
   cache?: BlobCache;
-  /** The store class a live sha's bytes belong in (issue #425 Wave 2). */
+  /** The store class a live sha's bytes belong in (#425). */
   desiredStore: (sha: string) => ReplicaStore;
   /** Re-cache a remote-only sha into the local tier (custody.open). */
   open: (sha: string) => Promise<unknown>;
   /** Re-push local shas the remote is missing (custody.replicate). */
   replicate: (shas: string[]) => Promise<string[]>;
   /**
-   * The orphan-grace tombstone store (issue #439 R4) — where the sweep records
+   * The orphan-grace tombstone store (#439) — where the sweep records
    * WHEN each sha was first observed orphaned so the delete can be deferred by
    * `options.graceWindowMs`. Absent (legacy / cache-less) ⇒ grace cannot be
    * evaluated: when a grace window IS requested but this is missing, the sweep
@@ -96,13 +96,13 @@ export async function reconcileCustody(
         const sha = listed[shaIndex];
         if (sha === undefined) return reconcileTier(tierIndex + 1);
         // A live sha is re-referenced: it can carry no orphan tombstone. Clear
-        // any stale one (issue #439 R4 — a sha that becomes live again before
+        // any stale one (#439 R4 — a sha that becomes live again before
         // its grace elapses must lose its tombstone) and skip.
         if (liveShas.has(sha)) {
           ctx.orphans?.clear(sha);
           return reconcileSha(shaIndex + 1);
         }
-        // GC-pins-snapshots invariant (issue #436 §6): a blob referenced by any
+        // GC-pins-snapshots invariant (#436): a blob referenced by any
         // retained snapshot manifest is a live GC root and MUST NOT be deleted,
         // even though the live vault model no longer claims it. CAS has no
         // history — the retained snapshot's reference is the attachment history,
@@ -115,7 +115,7 @@ export async function reconcileCustody(
           result.orphansSkipped.push(sha);
           return reconcileSha(shaIndex + 1);
         }
-        // Orphan-grace gate (issue #439 R4). With a grace window in force, a
+        // Orphan-grace gate (#439). With a grace window in force, a
         // freshly-found orphan is tombstoned and HELD, not deleted: PITR makes
         // every instant inside the recovery window restorable, and a blob
         // referenced only BETWEEN two snapshots — named by no retained manifest —
@@ -146,7 +146,7 @@ export async function reconcileCustody(
     await reconcileTier(0);
   }
 
-  // Heal each store's rows against ITS listing (issue #425 Wave 2) — the
+  // Heal each store's rows against ITS listing (#425) — the
   // listing is truth, the index a cache of evidence.
   if (cache && remote) {
     const sizeOf = (sha: string): number => local.statSync(sha)?.size ?? 0;

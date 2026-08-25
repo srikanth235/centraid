@@ -1,5 +1,5 @@
 /*
- * Conversation / turn / item row types (issue #90, reshaped by #190).
+ * Conversation / turn / item row types (#90, reshaped by #190).
  *
  * Pure types — the table DDL lives in `gateway-db.ts` (RUNTIME_MIGRATIONS:
  * `conversations`, `turns`, `items`, `attachments`, `automation_state`).
@@ -7,7 +7,7 @@
  * `ConversationStore` in `store.ts` and the desktop UI) can
  * import the row types without pulling in the store implementation.
  *
- * "Everything is chat" (issue #190): the **conversation** is the first-class
+ * "Everything is chat" (#190): the **conversation** is the first-class
  * spine. A chat window, an automation, and a builder session are each a
  * single-kind conversation; `RunKind` discriminates and lives on the
  * conversation, not re-stamped per turn. A **turn** is one execution under
@@ -35,7 +35,7 @@ export type AutomationTriggerKind =
   | "interactive";
 
 /**
- * What *source* fired a turn (issue #96). `cron` is a scheduler fire,
+ * What *source* fired a turn (#96). `cron` is a scheduler fire,
  * `webhook` an inbound HTTP POST, `manual` an explicit "Run now". Distinct
  * from `AutomationTriggerKind`, which records intent rather than transport.
  */
@@ -50,7 +50,7 @@ export type AutomationTriggerOrigin =
 /**
  * Item discriminator. `message_in` is the inbound message — a person typing,
  * a webhook firing, a cron tick — recorded as ordinal 0 of the turn
- * (issue #190). `step` is one primary model-inference call — per-call token +
+ * (#190). `step` is one primary model-inference call — per-call token +
  * cost accounting lives at this grain. `tool` / `delegate` are per-call audit
  * rows.
  */
@@ -86,11 +86,11 @@ export interface Conversation {
   readonly turnCount: number;
   /**
    * When true the conversation is kept: retention pruning skips its turns
-   * and a `replay` fire can serve its recorded items (issue #80 follow-up).
+   * and a `replay` fire can serve its recorded items (#80 follow-up).
    */
   readonly pinned: boolean;
   /**
-   * When true the conversation is archived (issue #420): hidden from the main
+   * When true the conversation is archived (#420): hidden from the main
    * sidebar list behind a collapsed group and excluded from search, without
    * being deleted. Chat/build only.
    */
@@ -136,7 +136,7 @@ export interface Turn {
   readonly turnId: string;
   /**
    * The conversation this turn belongs to — NOT NULL, FK-backed, CASCADE
-   * (issue #190). Automation conversation ids include their fixed harness.
+   * (#190). Automation conversation ids include their fixed harness.
    */
   readonly conversationId: string;
   /** Ordinal within the thread (0-based). */
@@ -150,7 +150,7 @@ export interface Turn {
   /** When this turn is a retry, the turn id it re-runs. */
   readonly retryOf?: string;
   /**
-   * Client-supplied idempotency key (issue #420). A duplicate turn POST with
+   * Client-supplied idempotency key (#420). A duplicate turn POST with
    * the same key on the same conversation replays this recorded turn rather
    * than re-running. Absent on automation turns and pre-#420 rows.
    */
@@ -165,7 +165,7 @@ export interface Turn {
   readonly endedAt?: number;
   readonly ok: boolean;
   readonly error?: string;
-  /** Message-level reader feedback on the turn's answer (issue #420). */
+  /** Message-level reader feedback on the turn's answer (#420). */
   readonly feedback?: "up" | "down";
   readonly summary?: string;
   /**
@@ -173,7 +173,7 @@ export interface Turn {
    * validated `output` envelope, read back by `ctx.runs.last().output` and
    * fed to an `onFailure` cascade. (The inbound message moved to a
    * `message_in` item; this terminal output stays on the turn since there is
-   * no `message_out` item kind — issue #190.)
+   * no `message_out` item kind — #190.)
    */
   readonly outputJson?: string;
   /**
@@ -242,7 +242,7 @@ export interface Item {
 
 /**
  * A file that arrived on an inbound message — a chat upload OR a webhook /
- * email / folder-watch file (issue #190). Universal across all kinds. FK'd
+ * email / folder-watch file (#190). Universal across all kinds. FK'd
  * to the `message_in` item it rode in on (CASCADE). The bytes live
  * content-addressed on disk at `<appsDir>/<appId>/blobs/<hash>`, never in
  * sqlite — `hash` is the CAS key.

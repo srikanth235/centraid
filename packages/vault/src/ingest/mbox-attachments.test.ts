@@ -1,4 +1,4 @@
-// The import spine's blob door (issue #296 §3): mbox MIME attachments stage
+// The import spine's blob door (#296): mbox MIME attachments stage
 // into the CAS with a batch hold, publish claims them onto the message, and
 // discard releases the hold so the TTL sweep reclaims the bytes.
 

@@ -1,5 +1,5 @@
 /**
- * Provider presets — the BYO-client wizard content (issue #304 decision 7).
+ * Provider presets — the BYO-client wizard content (#304 decision 7).
  * Each preset carries everything `sync.configure_credential` needs except
  * the owner's own client_id/secret (that is the point: each owner registers
  * their OWN OAuth client — no shared Centraid app, no verification burden),

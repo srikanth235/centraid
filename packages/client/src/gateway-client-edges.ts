@@ -9,9 +9,7 @@
  * SAME-OWNER ONLY since #825 (ruling G-copy): giving another person a copy is
  * no longer a verb, so a cross-owner pair is refused with
  * `cross_owner_give_retired` and sharing with somebody else is a standing
- * GRANT on `/centraid/_vault/grants` (`react/blueprints/grant-wire.ts`). The
- * D9 answer calls this module used to carry — `GET …/edges/pending`,
- * `POST …/edges/<edgeId>/answer` — retired with the routes that served them.
+ * GRANT on `/centraid/_vault/grants` (`react/blueprints/grant-wire.ts`).
  *
  * This is the People panel's data source, independent of any one blueprint
  * app mount — a placement is a fact about the household, not about Photos or

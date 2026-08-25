@@ -1,4 +1,4 @@
-// Settings → Appearance (issue #498) — a three-way segmented control over the
+// Settings → Appearance (#498) — a three-way segmented control over the
 // device-local theme override (System / Light / Dark). Writing the preference
 // (kit/theme/appearance) re-renders every themed surface immediately, so the
 // choice previews live under the finger. 'System' follows the OS scheme.

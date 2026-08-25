@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { SEALED_SENTINEL, isSealedValue } from "./atlasBrowseData.js";
 
 // Sample-row plumbing for the Relations orrery's "A few of yours" panel section
-// (issue #441 human-language layer). The chart speaks human — People, not
+// (#441 human-language layer). The chart speaks human — People, not
 // core_party — so the readout rail earns its keep by showing a few REAL rows of
 // whatever kind you stand on. This reuses the Browse endpoint verbatim
 // (`browseRows({ table, limit: 3 })`), adds zero new gateway plumbing, and never

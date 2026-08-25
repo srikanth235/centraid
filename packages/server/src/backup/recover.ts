@@ -1,9 +1,8 @@
 /*
- * `recover()` — the recovery VERB (issue #439 R1). One shell-agnostic
+ * `recover()` — the recovery VERB (#439). One shell-agnostic
  * service-layer orchestration that turns "a blank machine plus the recovery
- * kit and the provider api-key" into a live vault. The CLI (`cli/recover-admin.ts`)
- * and, later, the pre-vault HTTP `/recover` routes (wave 4) are thin shells
- * over THIS function — not UI wrapping CLI.
+ * kit and the provider api-key" into a live vault. Every shell over it stays
+ * thin — the CLI (`cli/recover-admin.ts`) is one — never UI wrapping CLI.
  *
  * It composes machinery that already exists, in this order:
  *   1. discovering — parse the kit, reach the provider, list snapshots, and
@@ -21,8 +20,8 @@
  *   4. adopting — the staging dir becomes `<root>/<vaultId>` (rename). The
  *      `RESTORE_QUARANTINE.json` marker rides along and fires on FIRST mount,
  *      exactly as designed (`vault-quarantine.ts`). The R5 adopt-time inventory
- *      reconcile (wave 3) and the live-gateway mount (wave 4) slot into the
- *      `onAdopted` hook right here.
+ *      reconcile and the live-gateway mount slot into the `onAdopted` hook
+ *      right here.
  *   5. warming — previews-first warm pass when a remote tier is constructible
  *      in-context; otherwise HONESTLY skipped and reported (never faked).
  *
@@ -70,7 +69,7 @@ import {
 import { reconcileAdoptedInventory } from "./recover-reconcile.js";
 import type { ReconcileLogger, ReconcileReport } from "./recover-reconcile.js";
 
-/** The user-facing phases wave 4's SSE narrates. Machine vocabulary (seq, WAL,
+/** The user-facing phases a recovery UI narrates. Machine vocabulary (seq, WAL,
  *  lazy) stays out of it — these map to "fetching your vault → replaying recent
  *  changes → warming previews" in the UI. */
 export type RecoverPhase =
@@ -82,8 +81,8 @@ export type RecoverPhase =
   | "warming"
   | "done";
 
-/** Everything the post-adopt extension point (issue #439 R5 wave 3 / wave 4's
- *  live mount) needs to act on the freshly adopted vault. */
+/** Everything the post-adopt extension point (#439) needs to act on
+ *  the freshly adopted vault. */
 export interface RecoverAdoptContext {
   vaultId: string;
   /** `<vaultRoot>/<vaultId>` — the adopted live vault directory. */
@@ -110,7 +109,7 @@ export interface RecoverInput {
   sourceInstanceId?: string;
   /** Gateway data root when it cannot be derived from `vaultRoot`. */
   dataDir?: string;
-  /** Point-in-time recovery (issue #408): newest snapshot at/before this instant + WAL replay to it. Epoch ms. */
+  /** Point-in-time recovery (#408): newest snapshot at/before this instant + WAL replay to it. Epoch ms. */
   at?: number;
   /** Force a FULL restore — materialize every blob (the `--full` override); no inventory skip-set. */
   full?: boolean;
@@ -123,19 +122,19 @@ export interface RecoverInput {
   /** Test / wave-4 seam: a pre-built provider (else one is built from the kit target + apiKey). */
   provider?: BackupProvider;
   /**
-   * Warm-pass tier resolver (issue #439): build a `RemoteTier` over the restored
+   * Warm-pass tier resolver (#439): build a `RemoteTier` over the restored
    * vault's remote CAS, or return undefined to SKIP the warm pass honestly. The
    * headless CLI passes nothing (no credential wiring pre-mount ⇒ skip, reported);
-   * wave 4's live gateway wires the gateway's `s3Credentials` resolver and opens
+   * a live gateway wires the gateway's `s3Credentials` resolver and opens
    * the restored vault to hand back its own `.remote()` tier.
    */
   resolveRemoteTier?: (
     ctx: RecoverAdoptContext
   ) => RemoteTier | undefined | Promise<RemoteTier | undefined>;
   /**
-   * Post-adopt extension point (issue #439). Runs immediately AFTER the staging
-   * dir becomes the live vault directory and BEFORE the warm pass. Wave 3's R5
-   * adopt-time inventory reconcile and wave 4's live `VaultRegistry.adopt` +
+   * Post-adopt extension point (#439). Runs immediately AFTER the staging
+   * dir becomes the live vault directory and BEFORE the warm pass. The R5
+   * adopt-time inventory reconcile and a live `VaultRegistry.adopt` +
    * mount are inserted here — a real, named seam, not a deferred marker.
    */
   onAdopted?: (ctx: RecoverAdoptContext) => void | Promise<void>;
@@ -152,7 +151,7 @@ export type PreviewsRecoverOutcome =
     }
   | { warmed: false; reason: string };
 
-/** The honest completion report (issue #439 R1). */
+/** The honest completion report (#439). */
 export interface RecoverReport {
   vaultId: string;
   targetId: string;
@@ -176,7 +175,7 @@ export interface RecoverReport {
   restoreCostClass: "free-egress" | "metered-egress" | undefined;
   /** Warm-pass result or the honest skip reason. */
   previews: PreviewsRecoverOutcome;
-  /** Adopt-time inventory reconcile (issue #439 R5): what the restored index believed vs. what the
+  /** Adopt-time inventory reconcile (#439): what the restored index believed vs. what the
    *  provider actually holds — `lost.length > 0` is CRITICAL (bytes are gone). */
   reconcile: ReconcileReport;
   /** What the `RESTORE_QUARANTINE.json` marker parks the first time the vault mounts. */
@@ -184,11 +183,11 @@ export interface RecoverReport {
 }
 
 /**
- * The pre-restore "found your vault" facts (issue #439 R1/R6) — the size/asOf/
+ * The pre-restore "found your vault" facts (#439 R1/R6) — the size/asOf/
  * provider/cost the CLI prints and the metered-egress gate consults BEFORE any
- * restore work, WITHOUT downloading a manifest. Mirrors Wave 1's
+ * restore work, WITHOUT downloading a manifest. Mirrors the
  * `RestoreEgressEstimate` shape (`costClass`, `seq`, `fullBytes`, `lazyAvailable`)
- * so the recovery UI (#436 §5) can render the same card later. `provider` rides
+ * so the recovery UI (#436) can render the same card later. `provider` rides
  * back so a shell can pass the already-built client into `recover()` rather than
  * dialing the provider twice.
  */
@@ -206,8 +205,8 @@ export interface RecoveryDiscovery {
   /**
    * Whether THIS build can read the selected snapshot — the registry-`appMeta`
    * compatibility gate (the same one `recover()` enforces before a byte is
-   * fetched) run non-throwingly so the "found your vault" card (issue #439 R1
-   * wave 4's `/recover/discover`) can show a typed "update the gateway first"
+   * fetched) run non-throwingly so the "found your vault" card (#439)
+   * can show a typed "update the gateway first"
    * refusal instead of an opaque failure three phases into a restore. `true`
    * when there is a snapshot and this build can read it; `false` with
    * `incompatibleReason` set when a newer-software snapshot is refused. When no
@@ -387,7 +386,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       // insertion order it was written with, while a kit's keyring comes back
       // from `canonicalJson` inside the password wrap with keys sorted. Raw
       // stringify compares FORMATTING and would refuse an identical keyring —
-      // which is every restore-after-erase (issue #568, surfaced by item J).
+      // which is every restore-after-erase (#568, surfaced by item J).
       if (canonicalJson(existing) !== canonicalJson(kit.keyring)) {
         throw new Error(
           "recover: gateway custody contains a different backup keyring; refusing to overwrite live key material"
@@ -411,7 +410,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       );
     }
     keyStore.import(`${target.vaultId}.sealkey`, sealKey);
-    // The identity keypair rides beside the DEK (issue #726 P1) — restore it
+    // The identity keypair rides beside the DEK (#726) — restore it
     // too, so the recovered vault signs as the SAME vault it was before the
     // move (proof: it verifies against the public key recorded pre-move).
     if (
@@ -434,7 +433,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
     emit("adopting");
     await fs.rename(restoreWorkDir, finalDir);
     // Turn the restored `apps.bundle` back into the live bare code store
-    // (issue #517) — without this the vault mounts with data but no app code.
+    // (#517) — without this the vault mounts with data but no app code.
     await rehydrateCodeStore(finalDir, log);
     const adoptCtx: RecoverAdoptContext = {
       vaultId: target.vaultId,
@@ -443,7 +442,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       provider,
       keyring: kit.keyring,
     };
-    // R5 (issue #439): reconcile the restored `blob_replica` beliefs against the
+    // R5 (#439): reconcile the restored `blob_replica` beliefs against the
     // provider's live inventory (reusing `remoteShas`) BEFORE the vault mounts —
     // a recover()-internal step that ALWAYS runs, not gated on `onAdopted`. It
     // must write to `vault.db` while nothing else holds it (single-writer).
@@ -465,7 +464,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       log,
     });
 
-    // Extension point: wave 4 live `VaultRegistry.adopt` + mount.
+    // Extension point: a live `VaultRegistry.adopt` + mount.
     await input.onAdopted?.(adoptCtx);
 
     // ── warming ────────────────────────────────────────────────────────

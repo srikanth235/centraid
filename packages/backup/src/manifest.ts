@@ -107,10 +107,10 @@ function manifestPublicBytes(publicEnvelope: ManifestPublic): Uint8Array {
   return new TextEncoder().encode(canonicalJson(publicEnvelope));
 }
 
-/** The base-plus-WAL format (issue #408). Its chunk objects seal RAW part bytes. */
+/** The base-plus-WAL format (#408). Its chunk objects seal RAW part bytes. */
 export const SNAPSHOT_FORMAT_V1 = "centraid-snapshot/1";
 /**
- * `/2` (issue #405 §1) adds entropy-gated compression INSIDE the chunk seal:
+ * `/2` (#405) adds entropy-gated compression INSIDE the chunk seal:
  * the sealed plaintext is a framed payload `[algo-id][body]` rather than the
  * bare part. That is a payload-framing change, so the string bumps and `/1`
  * becomes unreadable — a `/1` reader would treat the algo byte as content, and
@@ -208,7 +208,7 @@ export function sealManifest(opts: {
     appMeta: opts.appMeta,
   };
   const aad = manifestPublicBytes(publicEnvelope);
-  // Deterministic nonce (issue #408 G7): derived from the payload's own
+  // Deterministic nonce (#408): derived from the payload's own
   // content hash, so the same logical manifest seals to byte-identical
   // output — a retried registration re-uploads the identical object under
   // the identical manifestHash instead of minting a fresh ciphertext. A

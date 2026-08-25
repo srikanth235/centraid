@@ -18,7 +18,7 @@ function targets(
     vaultId,
     label: target.label,
     sealKey: requiredSealKey(keyStore, vaultId).toString("base64"),
-    // The identity seed rides beside the DEK (issue #726 P1) — same custody,
+    // The identity seed rides beside the DEK (#726) — same custody,
     // so `recover()` can restore both from one kit.
     identitySeed: requiredIdentitySeed(keyStore, vaultId).toString("base64"),
   }));

@@ -53,7 +53,7 @@ export interface VaultListEntry {
 
 /**
  * One SCOPE an app may be mounted over, from `GET /_vault/scopes?app=<id>`
- * (issue #599). A scope is a vault the CALLING OWNER owns (#726) — so this is
+ * (#599). A scope is a vault the CALLING OWNER owns (#726) — so this is
  * the ownership-aware successor to `listVaults`, which answers per DEVICE
  * enrollment and carries neither `canWrite` nor whether the app is installed
  * there.
@@ -66,7 +66,7 @@ export interface AppScopeEntry {
   label: string;
   /**
    * Whether this is the member's OWN vault — the durable founding marker
-   * (issue #711 item H). An app's "somewhere other than my own" marker is
+   * (#711). An app's "somewhere other than my own" marker is
    * exactly `personal === false`, never a match on `label`. Optional only
    * because a gateway older than the marker omits it, and "unknown" must read
    * as the member's own (unmarked) rather than falsely marking everything.
@@ -81,7 +81,7 @@ export interface AppScopeEntry {
 }
 
 /**
- * The whole scopes answer: the rows this app is mounted over (issue #599).
+ * The whole scopes answer: the rows this app is mounted over (#599).
  */
 export interface AppScopePlane {
   scopes: AppScopeEntry[];
@@ -248,8 +248,8 @@ export async function searchVaultAnchors(
  * An invocation parked for owner confirmation (risk above app ceiling).
  * `callerKind` refines `'agent'` into `'assistant'` when the requester is
  * the vault assistant's own identity, not an automation's — the Approvals
- * row badge reads this to say WHO is asking (issue: parked-invocation
- * trust legibility). `callerId` is the enrolled row id, stable even if the
+ * row badge reads this to say WHO is asking. `callerId` is the enrolled row
+ * id, stable even if the
  * display name changes; `caller` is the display name shown to the owner.
  */
 export interface VaultParkedEntry {
@@ -420,7 +420,7 @@ export async function confirmVaultParked(input: {
   return readJson<{ status: string }>(res, "confirm parked invocation");
 }
 
-/** One app's scenario-seed state (issue #290 phase 1). */
+/** One app's scenario-seed state (#290). */
 export interface VaultDemoApp {
   appId: string;
   rows: number;
@@ -451,7 +451,7 @@ export async function vaultDemoLoad(appId: string): Promise<{ rows: number }> {
   return readJson<{ rows: number }>(res, "load demo data");
 }
 
-/** One connection's health (issue #290 phase 4). */
+/** One connection's health (#290). */
 export interface VaultConnection {
   connectionId: string;
   kind: string;

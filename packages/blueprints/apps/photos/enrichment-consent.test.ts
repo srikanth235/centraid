@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 // THE ENRICHMENT CONSENT MOMENT (v4 handoff §8, prototype `s==='enrich'`).
 //
-// Two rules are load-bearing here, and both were BROKEN before this suite
-// existed — this is a privacy regression net, not a styling snapshot:
+// Two rules are load-bearing here — this is a privacy regression net, not a
+// styling snapshot:
 //
-//   1. NO ENRICHMENT WRITE MAY BE ISSUED WITHOUT AN EXPLICIT ANSWER. The
-//      previous surface was a popover with a `Detect faces now` button: one
-//      click, one write, no facts. Mounting, opening the question, reading the
+//   1. NO ENRICHMENT WRITE MAY BE ISSUED WITHOUT AN EXPLICIT ANSWER. A
+//      popover with a `Detect faces now` button is one click, one write, no
+//      facts. Mounting, opening the question, reading the
 //      policy, declining and closing must all write nothing. This build has
 //      no device-side faces producer, so its on-device answer is unavailable
 //      and cannot reach `window.centraid.write` either.
@@ -209,11 +209,10 @@ describe("the enrichment consent surface", () => {
 });
 
 describe("the enrichment gate (issue #712 C2, re-homed into People's empty state)", () => {
-  // `enrichment-gate.ts` is the retired toolbar dialog's state machine,
-  // lifted so it can drive `PeopleShelf`'s `gate` prop instead — a plain
-  // closure over `window.centraid`, so these tests drive it directly rather
-  // than through a mounted component. THE LOAD-BEARING RULE is unchanged:
-  // no enrichment write without an explicit answer.
+  // `enrichment-gate.ts` is the gate's state machine, driving `PeopleShelf`'s
+  // `gate` prop — a plain closure over `window.centraid`, so these tests drive
+  // it directly rather than through a mounted component. THE LOAD-BEARING
+  // RULE: no enrichment write without an explicit answer.
   const write = vi.fn<(intent: unknown) => Promise<{ status: string }>>(
     async () => ({ status: "executed" })
   );

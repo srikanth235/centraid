@@ -1,5 +1,5 @@
 /*
- * The public contract of the generic ACP backend (issue #479): what a caller
+ * The public contract of the generic ACP backend (#479): what a caller
  * hands `runAcpTurn` and what a harness kind declares about itself.
  *
  * Two flavours of harness land here:

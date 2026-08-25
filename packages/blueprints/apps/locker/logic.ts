@@ -80,7 +80,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     render();
   }
 
-  // ---------- Item writes ----------
+  // ────────── Item writes ──────────
 
   async function toggleFav(sel: LockerDetail) {
     const outcome = await act(sel.favorite ? "unstar-item" : "star-item", {
@@ -195,7 +195,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // ---------- Selection / navigation ----------
+  // ────────── Selection / navigation ──────────
 
   // Open an item: fetch its FULL fields (the only place secrets arrive) and
   // show the detail pane. Secrets stay in state.detail, never in the list
@@ -258,7 +258,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     render();
   }
 
-  // ---------- Generator ----------
+  // ────────── Generator ──────────
 
   function regen() {
     state.genValue = genPassword({
@@ -285,7 +285,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     render();
   }
 
-  // ---------- Search ----------
+  // ────────── Search ──────────
 
   let searchSeq = 0;
   const applySearchInput = debounce(async (raw: string) => {
@@ -347,10 +347,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   };
 }
 
-// ---------- Clipboard copy (standalone — no closure over app state) ----------
+// ────────── Clipboard copy (standalone — no closure over app state) ──────────
 
 // Seconds a copied secret is allowed to live on the clipboard before we wipe
-// it (issue #298 item 5): copy-password legitimately crosses into the OS
+// it (#298): copy-password legitimately crosses into the OS
 // clipboard, and from there into clipboard-history tools. We can't reach the
 // native `org.nspasteboard.ConcealedType` mark from a browser context
 // (navigator.clipboard only speaks text/html/png), so the portable
@@ -431,7 +431,7 @@ export function copy(text: string, label?: string, secret?: boolean) {
     .catch(() => statusLine("Copy is unavailable here."));
 }
 
-// ---------- Pure derivations (no closure — components may call directly) ----------
+// ────────── Pure derivations (no closure — components may call directly) ──────────
 
 // The rows for the current nav → search → filter → sort by title.
 export function currentPool(state: AppState, data: AppData): LockerRow[] {

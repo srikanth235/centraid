@@ -30,10 +30,9 @@ import type { CursorReadResult } from "./cursor-engine.js";
 
 /*
  * `__trigger:` stays a reserved `automation_state` key prefix: handlers share
- * that KV namespace via `ctx.state`, and the retired pre-cursor scheduler
- * persisted its watermarks there. Durable trigger positions now live in
+ * that KV namespace via `ctx.state`. Durable trigger positions live in
  * `automation_trigger_cursor` (see `cursor-engine.ts`), so nothing in this
- * module writes the prefix any more.
+ * module writes the prefix.
  */
 
 /** Cap on remembered hashes — beyond this the oldest matches re-fire. */

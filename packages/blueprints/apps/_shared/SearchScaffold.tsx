@@ -1,6 +1,6 @@
-// The ruled-row / four-state search body (issue #712 S1), extracted from
-// Photos' `components/SearchShelf.tsx` so a second app does not redraw the
-// same four sentences from scratch. This owns the STATES — resting,
+// The ruled-row / four-state search body (#712), so a second app
+// does not redraw the same four sentences from scratch. This owns the
+// STATES — resting,
 // searching, unreachable, no-results, and the grouped-hit rows above the
 // caller's own results — never the search field itself: the field's
 // placement is chrome each app already owns (Photos draws it inline in the
@@ -9,9 +9,8 @@
 //
 // Every string is copy the caller supplies (`SearchStateCopy`,
 // `search-scaffold.ts`) — this file contains no example queries, no eyebrow
-// text, no product nouns. That is what makes it safe for Photos to adopt
-// without a visible copy change: pass Photos' own strings in, get Photos'
-// own sentences out.
+// text, no product nouns: pass an app's own strings in, get that app's own
+// sentences out.
 import type { ReactNode } from "react";
 
 import type {
@@ -49,7 +48,7 @@ export interface SearchScaffoldProps {
   onRetry?: () => void;
   onOpenGroup?: (openTarget: string, row: SearchGroupRow) => void;
   /**
-   * Per-scope reach for a multi-scope search (issue #726 D10/D11,
+   * Per-scope reach for a multi-scope search (#726 D10/D11,
    * `scopeReachFacts`) — a scope that could not be asked, named BESIDE the
    * results the other scopes still have, never in place of them. Rendered
    * whenever `status` is `ready` (with or without hits) and this is
@@ -89,7 +88,7 @@ export function SearchScaffold({
   const hasGroups = groups.length > 0;
   const none = asked && status === "ready" && count === 0 && !hasGroups;
   const showResults = asked && status === "ready" && (count > 0 || hasGroups);
-  // A PARTIAL reach still counts as `ready` (issue #726 D10/D11) — some
+  // A PARTIAL reach still counts as `ready` (#726 D10/D11) — some
   // scope's results are on screen, they are just not every mounted scope's.
   // Drawn under EITHER the miss or the results panel, never instead of one:
   // the point of naming a short scope is that it sits BESIDE what still

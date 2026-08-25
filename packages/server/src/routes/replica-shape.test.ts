@@ -844,7 +844,7 @@ describe("replica-shape suite", () => {
 
     vault.start();
     // The first sweep is deferred one immediate off the mount critical path
-    // (issue #659 G10) — it must still RUN, just not inside start(). Queueing
+    // (#659) — it must still RUN, just not inside start(). Queueing
     // behind it is what "shortly after startup" means now.
     await new Promise<void>((resolve) => {
       setImmediate(resolve);
@@ -857,7 +857,7 @@ describe("replica-shape suite", () => {
 
   test("the photos grant yields a self-contained shape a native client can render from", async () => {
     const vault = await plane();
-    // The photos app's read surface (issue #419): a native client renders the
+    // The photos app's read surface (#419): a native client renders the
     // whole library — assets, their bytes' metadata, derivatives, albums, faces,
     // places, tags — entirely from the replica, no online round trip.
     vault.approveGrant("photos", {
@@ -897,7 +897,7 @@ describe("replica-shape suite", () => {
       expect(byEntity.has(entity), `shape is missing ${entity}`).toBe(true);
     }
 
-    // First-class asset state (issue #419) rides on media.asset itself.
+    // First-class asset state (#419) rides on media.asset itself.
     const asset = byEntity.get("media.asset")!;
     expect(asset.columns).toStrictEqual(
       expect.arrayContaining([

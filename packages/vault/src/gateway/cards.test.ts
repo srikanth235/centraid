@@ -163,7 +163,7 @@ describe("cards", () => {
       to_id: assetId,
       relation: "references",
     });
-    // Delete is trash now (issue #308 A6) — the row survives its grace
+    // Delete is trash now (#308) — the row survives its grace
     // window, so the card still resolves…
     expect(
       invoke(owner, "knowledge.delete_note", { note_id: noteId }).status

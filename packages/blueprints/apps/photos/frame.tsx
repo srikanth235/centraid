@@ -95,7 +95,7 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
       ) : null}
       {state.showImport ? (
         // `uploadBtn` is the id upload.ts drives and `applyUploadTarget`
-        // re-reads on every render; it moved here from the retired drawer.
+        // re-reads on every render.
         // A disabled commit takes the plain outline, never the fill (§18).
         <button
           type="button"

@@ -1,4 +1,4 @@
-// Minimal ZIP reader unit tests (issue #545 B6).
+// Minimal ZIP reader unit tests (#545).
 
 import { deflateRawSync } from "node:zlib";
 

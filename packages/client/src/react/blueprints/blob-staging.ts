@@ -1,4 +1,4 @@
-// Vault blob staging for inline apps (issue #505 Phase 4).
+// Vault blob staging for inline apps (#505).
 //
 // An app runs in the SHELL document, whose origin is not the gateway (the
 // installable web PWA rides the iroh tunnel; desktop runs from `file://`), so
@@ -25,7 +25,7 @@ import { blobAuthHeaders, BLOB_PREFIX } from "./blob-auth.js";
  * leave. The gateway still hashes and verifies every POST authoritatively, so
  * a declared sha is an optimization and never a gate.
  *
- * Bytes land in the scope the caller named, not the focused one (issue #599):
+ * Bytes land in the scope the caller named, not the focused one (#599):
  * an upload aimed at an audience must be staged into THAT vault's CAS.
  */
 export async function stageBlob(
@@ -91,7 +91,7 @@ export async function stageBlob(
 }
 
 /**
- * Submit a typed derivative contribution (issue #299 enrichers) through the
+ * Submit a typed derivative contribution (#299 enrichers) through the
  * authed blob door — a thumbnail, a poster frame, an extracted transcript —
  * addressed to the sha of the parent it was derived from.
  */

@@ -1,5 +1,4 @@
 /**
- * Direct unit tests for the SSE turn driver helpers (issue #545 B4).
  * Pure attachment parsing / lock serialization — no live HTTP or runner.
  */
 
@@ -247,7 +246,7 @@ describe("driveTurnOverSse recovery hydration", () => {
   it("plans a failover rung against its OWN binding and the full ledger", async () => {
     // Regression for the review blocker: the ladder rung the harness actually
     // reaches may be a provider the route never targeted. Planned once against
-    // the primary target, a fallback rung started with no session id AND no
+    // the primary target, a fallback rung starts with no session id AND no
     // hydration — the entire conversation silently lost.
     const dir = await tempDir("centraid-turn-perrung-");
     const appsDir = path.join(dir, "apps");

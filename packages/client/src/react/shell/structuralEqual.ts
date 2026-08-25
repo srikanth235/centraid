@@ -1,5 +1,5 @@
 // Value equality for the JSON-shaped DTOs the shell passes to screens
-// (issue #659). Used to decide "did this projection actually change?" so a
+// (#659). Used to decide "did this projection actually change?" so a
 // re-projection that produced an identical value can hand back the PREVIOUS
 // object, keeping React's identity checks (memo, dep arrays) meaningful.
 //

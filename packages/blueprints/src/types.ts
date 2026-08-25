@@ -109,7 +109,7 @@ export interface TemplateMeta {
    * for automation templates; omitted entries default to 'app'.
    */
   kind?: TemplateKind;
-  // ----- automation-only display fields (kind === 'automation') -----
+  // ─── automation-only display fields (kind === 'automation') ───
   /** Emoji shown on the automation gallery card (e.g. '🌤'). */
   emoji?: string;
   /** Gallery section header (e.g. 'Daily rhythm', 'Engineering'). */

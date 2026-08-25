@@ -1,4 +1,4 @@
-// Multi-scope replica sessions (issue #599).
+// Multi-scope replica sessions (#599).
 //
 // The regression these lock down is the one that made multi-scope unsafe:
 // `doFetch` stamps `x-centraid-vault` from the shell's AMBIENT focused vault

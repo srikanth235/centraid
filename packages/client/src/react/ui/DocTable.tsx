@@ -1,4 +1,4 @@
-// The records table (v9 §9, issue #765) — the Data route's document rows.
+// The records table (v9 §9, #765) — the Data route's document rows.
 //
 // Three columns: a flexible Record column and two fixed ones. The header is a
 // 32px sunken band whose Record label is inset past the row's leading glyph,

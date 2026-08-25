@@ -102,13 +102,13 @@ export default defineConfig({
     ],
   },
   define: {
-    // Real package version for the web shell (issue #468 K9).
+    // Real package version for the web shell (#468).
     __APP_VERSION__: JSON.stringify(appVersion),
     // The `@font-face` block, generated in Node at config time and inlined as
     // a string constant. `@centraid/design/fonts` reaches for `node:path`, so
     // it can never be imported by the browser bundle — but its OUTPUT is a
     // plain string, and `define` is the seam that already carries build-time
-    // facts into this app (issue #707).
+    // facts into this app (#707).
     __CENTRAID_FONT_FACE_CSS__: JSON.stringify(toFontFaceCss(FONT_BASE)),
   },
   build: {
@@ -138,7 +138,7 @@ export default defineConfig({
           // .spec.ts — it asserts the app RENDERS. Request count alone is
           // gameable: the blank-page builds above "improved" to 6 requests.
           //
-          // ROUTE-LEVEL CODE SPLITTING WAS TRIED AND WAIVED (issue #659 C7).
+          // ROUTE-LEVEL CODE SPLITTING WAS TRIED AND WAIVED (#659).
           // Recorded here so nobody repeats the experiment from scratch.
           //
           // Making the shell's 18 non-first-paint routes `React.lazy` MEASURED

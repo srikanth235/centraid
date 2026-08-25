@@ -121,7 +121,7 @@ describe("outbox-runner", () => {
     });
     try {
       // The backstop is jittered ±10%, so the latest possible fire is 66s —
-      // advance past it (65s used to lose the draw ~8% of the time).
+      // advance past it (65s loses the draw ~8% of the time).
       await clock.advance(70_000);
       expect(expired).toStrictEqual(["expired-local"]);
       expect(state.session("expired-local")).toBeNull();

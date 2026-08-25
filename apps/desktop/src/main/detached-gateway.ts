@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#468) one cohesive detached spawn/adopt/poll/stop owner — splitting would scatter lock/probe/CLI resolve that must stay in lockstep
 /*
- * Impure detached-gateway glue (issue #468, H2–H7).
+ * Impure detached-gateway glue (#468, H2–H7).
  *
  * Pure decisions live in `detached-gateway-core.ts`. This module owns:
  *   - resolving the bundled `centraid-gateway` CLI entry (H6)
@@ -8,9 +8,9 @@
  *   - kernel-backed gateway.db lock inspection (H3/H4)
  *   - minting the per-launch loopback token, handing it to the spawned daemon
  *     via `CENTRAID_GATEWAY_TOKEN`, and polling `/centraid/_gateway/info` until
- *     ready (issue #505 phase 7 retired the daemon's persistent `token.bin`;
- *     the desktop is the loopback token's landlord now, persisting it only in
- *     device safeStorage so no non-daemon writer touches the data dir)
+ *     ready (the daemon persists no token of its own; the desktop is the
+ *     loopback token's landlord (#505), persisting it only in device
+ *     safeStorage so no non-daemon writer touches the data dir)
  *   - stopping only processes we own
  *
  * Lifecycle verbs (start/stop/status/service) all invoke the same CLI
@@ -252,8 +252,7 @@ function signalGatewayGroup(pid: number, signal: NodeJS.Signals): void {
  * short final wait. Callers MUST await this before rebinding the port (else the
  * fresh child races the old listener → EADDRINUSE, swallowed by stdio:'ignore')
  * or before re-reading the ownership stamp (else `ensureDetachedGateway` adopts
- * the still-dying pid and never respawns). This is exactly the restart-crash
- * footgun: the old stop was a fire-and-forget SIGTERM with no wait.
+ * the still-dying pid and never respawns).
  */
 async function terminateDetachedGateway(
   pid: number,
@@ -358,10 +357,9 @@ function makeHandle(input: {
     async close() {
       if (!owned) return;
       // Wait for the process to actually exit (H2) — a fire-and-forget SIGTERM
-      // let `restartLocalGateway`'s stop→start race the dying daemon: the
-      // respawn either adopted the still-terminating pid or hit EADDRINUSE on
-      // the not-yet-released port, leaving the gateway down. Awaiting exit here
-      // makes stop→start correct for every caller.
+      // lets `restartLocalGateway`'s stop→start race the dying daemon: the
+      // respawn either adopts the still-terminating pid or hits EADDRINUSE on
+      // the not-yet-released port, leaving the gateway down.
       await terminateDetachedGateway(pid);
     },
   };
@@ -372,7 +370,7 @@ async function waitUntilReady(input: {
   port: number;
   timeoutMs: number;
   /**
-   * The loopback token the daemon was spawned with (issue #505 phase 7). The
+   * The loopback token the daemon was spawned with (#505). The
    * desktop minted it and handed it over via `CENTRAID_GATEWAY_TOKEN`, so we
    * already know the bearer — no polling a daemon-written token file.
    */
@@ -401,7 +399,7 @@ const LOCK_STATUS_TIMEOUT_MS = 5_000;
  *
  * `spawnSync` reports a timeout as `error.code === 'ETIMEDOUT'` after killing
  * the child — the ONLY way to tell "the CLI blocked on the holder's SQLite
- * lock" apart from "the CLI failed fast", and previously discarded.
+ * lock" apart from "the CLI failed fast".
  */
 function probeLockStatus(
   dataDir: string,
@@ -530,7 +528,7 @@ export async function ensureDetachedGateway(
   // landlord bearer from the endpoint key instead. The desktop holds the same
   // custody credential, so try the derived bearer as well — otherwise opting
   // into the service produces a permanent `'foreign'` refusal on every
-  // subsequent launch (issue #568 item F).
+  // subsequent launch (#568).
   const controlToken = await firstWorkingToken(candidateUrl, [
     existingToken,
     landlordBearerForDataDir(dataDir, { masterKey: gatewayWrappingKey }),

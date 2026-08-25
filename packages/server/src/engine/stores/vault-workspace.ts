@@ -1,11 +1,10 @@
 /*
  * `VaultWorkspace` — the per-vault world an app-engine runtime operates in
- * (issue #280: the vault is the unit).
+ * (#280: the vault is the unit).
  *
  * Everything personal lives inside one vault's directory: the conversation
  * ledger (the ledger band of `journal.db`, which also carries the
- * `run_summary` rollup — the old standalone `transcripts.db` folded in),
- * the per-app state dirs (`apps/<id>/` logs + blobs), and the chat
+ * `run_summary` rollup), the per-app state dirs (`apps/<id>/` logs + blobs), and the chat
  * harness's per-conversation scratch files. The gateway resolves the ACTIVE
  * vault and hands app-engine this view of it; a vault switch makes the
  * provider return a different workspace on the next call, and every store
@@ -25,7 +24,7 @@ export interface VaultWorkspace {
   /**
    * The vault owner's party id (`core_vault.owner_party_id`). Conversations
    * are stamped with this — the vault owner IS the user; there is no separate
-   * gateway-side identity (issue #280 kills `identity.sqlite`).
+   * gateway-side identity (#280 kills `identity.sqlite`).
    */
   ownerPartyId: string;
   /**

@@ -6,12 +6,12 @@
 // everything else stands in — and nothing more. It adds no token, no rung, no
 // colour and no control recipe.
 //
-// THE RETIRED SELECTORS ARE GONE FOR GOOD. The pre-rebuild chrome stamped a
-// global tk-prefixed shell/side/topbar trio so sibling stylesheets could
-// reach across a module boundary; that seam is permanently banned (trap #5,
-// packages/blueprints/src/shared-css.test.ts), which reads this whole tree as
-// text — so the dead selectors are not spelled out even in a comment. Every class in this tree is
-// module-scoped or part of the global `kit-*` vocabulary the host loads once.
+// NO GLOBAL tk-PREFIXED shell/side/topbar TRIO IS STAMPED HERE, so sibling
+// stylesheets cannot reach across a module boundary; that seam is permanently
+// banned (trap #5, packages/blueprints/src/shared-css.test.ts), which reads
+// this whole tree as text — so the banned selectors are not spelled out even
+// in a comment. Every class in this tree is module-scoped or part of the
+// global `kit-*` vocabulary the host loads once.
 //
 // EVERYTHING VARIABLE ARRIVES AS A SLOT, the same shape `docs/Chrome.tsx` and
 // `photos/Chrome.tsx` use. The chrome owns geometry; what stands in each region

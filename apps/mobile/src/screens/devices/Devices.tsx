@@ -1,8 +1,8 @@
-// DEVICES — the machines holding a copy (issue #765, spec §7).
+// DEVICES — the machines holding a copy (#765, spec §7).
 //
-// Net-new on the phone: this app could pair ITSELF into a gateway (Settings'
-// "Desktop link") but never showed the roster it joined, so a lost laptop had
-// no phone-side answer. The page reads `GET /_gateway/devices` and offers the
+// This app can pair ITSELF into a gateway (Settings' "Desktop link"); without
+// this page it shows no roster of what it joined, and a lost laptop has no
+// phone-side answer. The page reads `GET /_gateway/devices` and offers the
 // three gestures that wire serves — mint a ticket, rename, revoke.
 //
 // WHAT IS DELIBERATELY NOT HERE, and why the page is shorter than the

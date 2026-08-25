@@ -150,7 +150,7 @@ export const styles = StyleSheet.create({
   /** The transport: play, a determinate track, a clock, a kind label. */
   track: { borderRadius: radii.pill, flex: 1, height: 3 },
   trackFill: { borderRadius: radii.pill, height: 3 },
-  /** The scrub-preview strip (issue #724 B2b) — a row of real poster frames
+  /** The scrub-preview strip (#724) — a row of real poster frames
    *  above the Live Photo transport's track, letting a member see the motion
    *  before pressing play. Absent (not a placeholder box) wherever
    *  `expo-video-thumbnails` cannot honestly produce one — see
@@ -231,9 +231,9 @@ export const styles = StyleSheet.create({
     minHeight: VIEWER_CHROME_CHIP,
     paddingHorizontal: spacing[3],
   },
-  /** The video's kind label — `video · 4K · 0:24` — where the hand-rolled
-   *  transport used to be. Centred under the frame, micro-caps, and the only
-   *  thing we say about a recording the platform's own controls are playing. */
+  /** The video's kind label — `video · 4K · 0:24`. Centred under the frame,
+   *  micro-caps, and the only thing we say about a recording the platform's
+   *  own controls are playing. */
   kindLabel: {
     ...t("eyebrow"),
     paddingHorizontal: spacing[3],

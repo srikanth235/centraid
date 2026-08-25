@@ -1,5 +1,5 @@
 /*
- * Desktop connection registry (issue #555).
+ * Desktop connection registry (#555).
  *
  * Electron main owns one `<userData>/connections.json`; it never scans or
  * creates a directory per connection. Remote gateways are keyed by their

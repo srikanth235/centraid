@@ -1,11 +1,11 @@
 /*
- * Connection-broker credential health — the `broker` component (issue #351
+ * Connection-broker credential health — the `broker` component (#351
  * tier 2).
  *
  * The `connections` component (`build-gateway.ts`) already counts every
  * connection's `needs-auth` status across ALL connections, harness-ambient
  * included. This probe is narrower and specifically about the BROKER's own
- * custody of `sync_connection_credential` rows (issue #304's oauth2/api_key
+ * custody of `sync_connection_credential` rows (#304's oauth2/api_key
  * sidecar): it names WHICH broker-carried connections are dead
  * (`needs-auth`, with the broker's own `sync_connection_health.auth_note`
  * reason) and — the signal `connections` can't give you — which oauth2

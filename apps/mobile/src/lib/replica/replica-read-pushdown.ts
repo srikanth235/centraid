@@ -1,15 +1,15 @@
 // Turn the fixed replica read grammar into SQL the attached databases can run.
 //
-// The mounted reader used to `SELECT` every row of an entity from every scope,
-// `JSON.parse` each payload, and only then apply the caller's filters and limit
-// in JavaScript. On a ten-year library that is the whole projection crossing the
-// JSI bridge to answer "give me 500 rows".
+// Without pushdown the mounted reader `SELECT`s every row of an entity from
+// every scope, `JSON.parse`s each payload, and only then applies the caller's
+// filters and limit in JavaScript. On a ten-year library that is the whole
+// projection crossing the JSI bridge to answer "give me 500 rows".
 //
 // This planner emits a **superset prefilter**: SQL that keeps every row
 // `evaluateReplicaRead` would keep *and* every row that would make it throw. The
 // JavaScript evaluator still runs unchanged on the reduced set, so filter
 // semantics — BINARY text ordering, mixed-type `OnlineOnlyError`, oversized and
-// undisclosed-field escalation — are exactly what they were. Pushdown only
+// undisclosed-field escalation — are unaffected. Pushdown only
 // decides which rows are worth parsing.
 
 import { ReplicaProtocolError } from "@centraid/client/replica/native";

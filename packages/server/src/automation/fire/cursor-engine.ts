@@ -1,5 +1,5 @@
 /**
- * One durable cursor engine for every automation trigger (issue #541).
+ * One durable cursor engine for every automation trigger (#541).
  *
  * A source answers "which ordered elements exist after this position?".
  * The engine writes a pending receipt before firing, acknowledges each
@@ -217,7 +217,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         // account A's events to account B's automation. Match on that prefix
         // rather than the bare key, so a nudge always wakes the right
         // registration; a same-kind sibling that wakes too reads its own cursor
-        // and finds nothing (issue #541 review).
+        // and finds nothing (#541 review).
         (trigger.kind === "event" &&
           sourceKey.startsWith(`${eventSourceKey(trigger)}:`));
       if (selected) this.processSafely(registration, at);

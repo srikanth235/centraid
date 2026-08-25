@@ -1,6 +1,6 @@
 // WHAT A SHARED PHOTOGRAPH SAYS ABOUT WHERE IT WAS TAKEN, and at what
 // precision — the choice a member makes once, per share, before any bytes
-// leave (issue #816).
+// leave (#816).
 //
 // A photograph on the member's own screen and the same photograph in somebody
 // else's hands are two different disclosures. The screen may say "3.4 km NE of

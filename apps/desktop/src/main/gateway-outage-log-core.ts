@@ -1,15 +1,13 @@
 /*
- * Pure outage/alert event log formatting + capping + derivation logic
- * (issue #351 wave 4) — mirrors crash-log-core.ts's split: this file is
- * Electron-free so it unit-tests as plain logic; gateway-outage-log.ts
- * wires in `app.getPath('userData')` + real filesystem reads/writes.
+ * Pure outage/alert event log formatting + capping + derivation logic.
+ * Mirrors crash-log-core.ts's split: keep this file Electron-free so it
+ * unit-tests as plain logic; gateway-outage-log.ts wires in
+ * `app.getPath('userData')` + real filesystem reads/writes.
  *
- * Where crash-log.ts captures unexpected process crashes, this captures
- * the gateway-monitor's alert-worthy signals durably. Before this module
- * the outage history lived only in `GatewayRuntimeState.outages`
- * (gateway-monitor-core.ts) — in-memory, per-launch — so a restart lost
- * exactly the post-mortem trail you'd want after a bad night (issue #351:
- * "Logs and outage history don't survive restart").
+ * Where crash-log.ts captures unexpected process crashes, this captures the
+ * gateway-monitor's alert-worthy signals durably — `GatewayRuntimeState.outages`
+ * (gateway-monitor-core.ts) is in-memory and per-launch, so it is not a
+ * post-mortem trail.
  *
  * `deriveOutageEvents` folds one tick's before/after runtime state (plus
  * the alert actions gateway-monitor.ts already computed that tick) into
@@ -23,11 +21,11 @@
  *     `notifyVersionSkew`), so the persisted log always agrees with what
  *     actually got surfaced to the user for those two kinds.
  *
- * This log is the ONLY durable home for gateway health (issue #665). It was
- * briefly dual-written into the vault Notifications as well (#647); that projection is
- * gone, because health is STATUS, not a decision — marking a persistent
- * "degraded" card read never un-degrades anything, it just comes back. Health
- * reaches the owner through the Gateway page (Overview status card, Components
+ * This log is the ONLY durable home for gateway health (#665) — never
+ * dual-write it into the vault Notifications, because health is STATUS, not a
+ * decision: marking a persistent "degraded" card read never un-degrades
+ * anything, it just comes back. Health reaches the owner through the Gateway
+ * page (Overview status card, Components
  * tab, and the Alerts tab that reads THIS file) plus the threshold-gated OS
  * notification in gateway-monitor.ts.
  */
@@ -61,24 +59,17 @@ export interface OutageLogEvent {
 export const OUTAGE_LOG_CAP = 500;
 
 /**
- * Schema history:
- *   1 — events only, written by a build that never projected anything.
- *   2 — per-gateway Notifications projection marks (issue #647 review). **Legacy.**
- *   3 — marks carry the `vaultId` they were advanced against (issue #647
- *       follow-up). **Legacy.**
- *   4 — events only again (issue #665): gateway health is STATUS, not a
- *       decision, so it no longer projects into Notifications at all — it lives on
- *       the Gateway page (Overview card, Components tab, Alerts history) and
- *       in the threshold-gated OS notification. With no projection there is
- *       nothing to high-water-mark, so schema 2/3's `projection-mark` lines are
- *       dead weight: we stop WRITING them and never write a mark again.
+ * On-disk schemas, oldest first: 1 and 4 are events only; 2 and 3 additionally
+ * carried per-gateway Notifications `projection-mark` lines — **legacy**,
+ * never write one again (#665: health is STATUS, not a decision, so there is
+ * no projection to high-water-mark).
  *
- * Reading an existing schema-3 file still works and always will: a
- * `projection-mark` line simply is not an event line (`isOutageLogEvent`
- * rejects anything carrying a `type`), so `parseOutageLogFile` skips it the
- * same way it skips the header. The marks disappear from disk the first time
- * this build rewrites the file. Nothing reads `schema` any more — the header
- * line is kept purely so the on-disk format stays self-describing.
+ * A file written by any earlier schema must stay readable: a `projection-mark`
+ * line is not an event line (`isOutageLogEvent` rejects anything carrying a
+ * `type`), so `parseOutageLogFile` skips it the same way it skips the header,
+ * and the marks leave disk the first time this build rewrites the file.
+ * Nothing reads `schema` — the header line exists only to keep the on-disk
+ * format self-describing.
  */
 const OUTAGE_LOG_SCHEMA = 4;
 
@@ -176,13 +167,13 @@ export interface DeriveOutageEventsInput {
 
 /**
  * Why a gateway just turned `degraded`, in one line — or `undefined` when we
- * have nothing honest to say (issue #647 follow-up).
+ * have nothing honest to say (#647 follow-up).
  *
- * This used to stamp `${latencyMs}ms latency` on EVERY degraded event, which
- * produced the nonsense card "Local is degraded — 4ms latency": latency only
- * degrades a gateway past `DEGRADED_LATENCY_MS` (2000ms), so a 4ms
- * reading meant the degradation actually came from a component, and the detail
- * was reporting the one number that proved it hadn't. `latencyDegraded` is the
+ * The detail must NOT stamp `${latencyMs}ms latency` on EVERY degraded event,
+ * which yields the nonsense card "Local is degraded — 4ms latency": latency
+ * only degrades a gateway past `DEGRADED_LATENCY_MS` (2000ms), so a 4ms
+ * reading means the degradation came from a component, and the detail would be
+ * reporting the one number that disproves it. `latencyDegraded` is the
  * flag `applyProbe` sets for the latency path, so trust it rather than the
  * raw sample, and otherwise name the components that are actually unwell.
  */

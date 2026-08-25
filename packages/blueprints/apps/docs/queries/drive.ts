@@ -2,34 +2,29 @@
  * The drive as a bounded recent window: folders are SKOS concepts in the
  * owner's folders scheme (uri https://centraid.dev/schemes/folders, whose
  * 'root' concept is the drive's top level), and a document is a core.document
- * wrapper (issue #352) carrying exactly one folders-scheme tag — identity is
+ * wrapper (#352) carrying exactly one folders-scheme tag — identity is
  * the wrapper, never the content item it currently points at. Vault data has
- * no upper bound (issue #262), so documents arrive newest-filed-first via
+ * no upper bound (#262), so documents arrive newest-filed-first via
  * their tags (caller-sized, default 200) — never a whole-table content pull;
  * anything older is reachable through the FTS search query or by growing the
  * window (`truncated` tells the UI to offer that). Trashed documents
  * (deleted_at set) keep their tag so a restore lands them back where they
  * were; they ride the same window with trashed=true and their purge date.
- * Starred is a flags-scheme tag on the wrapper (issue #274), decorated from
+ * Starred is a flags-scheme tag on the wrapper (#274), decorated from
  * one bounded read over the windowed ids — the same star a favorited photo
  * carries. Each row's media_type/byte_size come from a join to whichever
  * content item is currently canonical (current_content_id) — older versions
  * are a separate read (the history query), never shipped here. Everything
  * comes from the vault; this app holds no rows of its own.
  *
- * Phase 4 (issue #352) adds two more bounded joins, factored into
- * ./_shared.ts since search.ts needs the identical pair: `tags` (free-form
+ * Two more bounded joins live in ./_shared.ts, since search.ts needs the
+ * identical pair (#352): `tags` (free-form
  * labels over the shared "Tags" scheme, core.tag_item/untag_item) and
  * `custody_state` (the blob custody projection, local-only/replicated/
  * remote-only/missing/absent) keyed off each row's current_content_id.
- * Issue #821 adds a third: `shared_with`, the live commons grants over each
+ * A third is `shared_with` (#821): the live commons grants over each
  * document and over the folders above it — decoration over the same window,
  * `null` where the share reads are denied rather than a failed drive.
- *
- * TS conversion note: the vault read surface returns `Record<string, unknown>`
- * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
- * shape (`as unknown as X[]`) at its read site. Handler logic is otherwise
- * byte-for-byte the pre-conversion JS.
  */
 
 import {
@@ -129,7 +124,7 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       };
     }
 
-    // Starred is a flags-scheme tag on the wrapper (issue #274) — one
+    // Starred is a flags-scheme tag on the wrapper (#274) — one
     // bounded read over the windowed ids. No scheme or concept yet just
     // means nothing has ever been starred.
     const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
@@ -142,8 +137,8 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
 
     // The wrapper join is `in`-bounded by the windowed tags — only the
     // documents in the window ever ride the RPC, never every wrapper in the
-    // vault. Free-form labels (issue #352 phase 4) ride the same window.
-    // Shares (issue #821) ride the same window: the grants over these
+    // vault. Free-form labels (#352) ride the same window.
+    // Shares (#821) ride the same window: the grants over these
     // documents and over the folders above them, decorating rows that were
     // already selected. A denial comes back as `null` rather than an error —
     // the scopes are new, so on an existing vault they park for approval and
@@ -192,7 +187,7 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     // The current content join is bounded by the windowed wrappers' own
     // current_content_id set — media_type/byte_size come from whichever
     // content item is canonical right now, never the whole content table.
-    // Custody (issue #352 phase 4) rides the same content id set.
+    // Custody (#352) rides the same content id set.
     const documentRows = (documentsRes.rows ?? []) as unknown as DocumentRow[];
     const contentIds = [
       ...new Set(documentRows.map((d) => d.current_content_id)),
@@ -214,7 +209,7 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       ])
     );
 
-    // Blob-backed bytes (issue #296) leave the row as `blob:` addresses —
+    // Blob-backed bytes (#296) leave the row as `blob:` addresses —
     // the client gets same-origin serve URLs (Range, immutable caching, and
     // iframe-able PDF previews); inline data: URIs pass through.
     const srcOf = (c: ContentRow | undefined) =>

@@ -1,6 +1,6 @@
 /*
  * `share_party_vault_binding` — the vault-resident answer to "is this person
- * linked to a vault of their own, and which one?" (issue #821).
+ * linked to a vault of their own, and which one?" (#821).
  *
  * The table has existed since #731, written by the commons plane
  * (`createCommonsGrant`, invitation claims, roster/control projection), so

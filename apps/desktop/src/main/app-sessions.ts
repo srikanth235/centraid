@@ -1,15 +1,15 @@
 /*
- * Per-app editing-session manager (issue #137).
+ * Per-app editing-session manager.
  *
- * The desktop no longer owns a local `workspaceDir`; app code lives in
- * the gateway's git store. Editing an app means holding an open git
- * session (a `sessions/<id>` worktree the gateway materialized) and
- * reading/writing draft files into it over HTTP.
+ * The desktop owns no local `workspaceDir`; app code lives in the gateway's
+ * git store. Editing an app means holding an open git session (a
+ * `sessions/<id>` worktree the gateway materialized) and reading/writing
+ * draft files into it over HTTP.
  *
- * The renderer's IPC surface is unchanged — it still calls
- * `readAppFiles({ id })` / `writeAppFile({ id, ... })` /
- * `publish({ id })`. This module is the main-process seam that turns
- * those per-app calls into session-scoped HTTP calls: it lazily opens
+ * The renderer's IPC surface is per-app — `readAppFiles({ id })` /
+ * `writeAppFile({ id, ... })` / `publish({ id })`. This module is the
+ * main-process seam that turns those calls into session-scoped HTTP calls:
+ * it lazily opens
  * one session per app id, caches it, and reuses it across reads,
  * writes, and the explicit Publish.
  *
@@ -95,7 +95,7 @@ export function resetAppSessions(): void {
 
 /**
  * Throw a clear error unless the active gateway is local. The desktop's
- * remaining filesystem-bound operations (issue #141) — APPS_OPEN
+ * remaining filesystem-bound operations (#141) — APPS_OPEN
  * (reveal-in-Finder) and AGENT_* (the in-process codex/claude builder
  * that writes to the worktree) — only work against the local embedded
  * gateway, which materializes session worktrees on disk. A remote gateway
@@ -113,9 +113,8 @@ export async function assertActiveGatewayLocal(action: string): Promise<void> {
 
 /**
  * Absolute path to the LOCAL session worktree's `apps/<appId>/` dir
- * (opens the session if needed). After issue #141 moved scaffold / clone /
- * automation editing onto the HTTP file-map path, this serves ONLY the two
- * deliberately local-only flows: APPS_OPEN (reveal-in-Finder) and
+ * (opens the session if needed). Serves ONLY the two deliberately local-only
+ * flows (#141): APPS_OPEN (reveal-in-Finder) and
  * AGENT_* (the in-process builder hands this dir to the codex/claude
  * binary). Requires the active gateway to be local — remote gateways don't
  * expose their worktrees over the filesystem.
@@ -145,11 +144,11 @@ export async function ensureAppSessionDir(appId: string): Promise<string> {
  * exist. Prefers the live published code at
  * `<code-store>/active-main/apps/<id>` (stable across launches, always
  * materialized once the app is published) and only falls back to opening an
- * editing-session worktree for a draft that isn't on `main` yet. The old
- * reveal handler jumped straight to the session-worktree path, which is
- * created lazily by the builder — so for any app the user hadn't edited it
- * pointed at a non-existent directory and `shell.openPath` silently no-op'd.
- * Requires a local gateway (remote gateways expose no worktree on disk).
+ * editing-session worktree for a draft that isn't on `main` yet. Don't reveal
+ * the session-worktree path directly: the builder creates it lazily, so for an
+ * app the user hasn't edited it names a non-existent directory and
+ * `shell.openPath` silently no-ops. Requires a local gateway (remote gateways
+ * expose no worktree on disk).
  */
 export async function resolveAppRevealDir(appId: string): Promise<string> {
   await assertActiveGatewayLocal(`revealing app "${appId}"`);

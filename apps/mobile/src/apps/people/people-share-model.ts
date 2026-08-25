@@ -5,9 +5,9 @@
 // failed; ANY failed read nulls the whole answer — the plane is one story,
 // and half of it would read as "nothing is shared".
 //
-// WHAT IS SHARED WITH THE PERSON IS NOT PROJECTED HERE (#825). The commons-era
-// circle_grant × circle_member × commons_member_state projection retired with
-// the twin it mirrored; standing grants are read live from the grant plane by
+// WHAT IS SHARED WITH THE PERSON IS NOT PROJECTED HERE (#825). There is no
+// circle_grant × circle_member × commons_member_state projection on either
+// seat; standing grants are read live from the grant plane by
 // `PersonGrants.tsx` through the share kit's own transport.
 
 import type {

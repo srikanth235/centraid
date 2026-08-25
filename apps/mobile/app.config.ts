@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 /**
- * Expo config — single-sources version + native build numbers (issue #468 J6).
+ * Expo config — single-sources version + native build numbers (#468).
  * Build numbers come from {@link nativeBuildNumber} so app.json hardcodes cannot drift.
  */
 import type { ExpoConfig, ConfigContext } from "expo/config";
@@ -16,7 +16,7 @@ import { nativeBuildNumber } from "./src/version-core.cjs";
 
 /**
  * Single-source version from `@centraid/mobile` package.json (synced from the
- * monorepo root by scripts/release/sync-versions.mjs / publish.mjs — #501 / J6).
+ * monorepo root by scripts/release/sync-versions.mjs / publish.mjs — #501).
  * Walk cwd candidates so gradle (cwd=android/) and monorepo-root invokers both
  * resolve the right package.json without import.meta.
  */
@@ -101,7 +101,7 @@ export default function createExpoConfig({
     // `appVersion` policy. VERSION is the same value that policy would
     // resolve to and keeps OTA compatibility tied to the store version.
     runtimeVersion: VERSION,
-    // J7 / #501 — routine updates are store-only. The emergency OTA lane is
+    // Routine updates are store-only (#501). The emergency OTA lane is
     // explicitly disabled until the real Expo project id is enrolled; no
     // placeholder endpoint or dormant native updater ships.
     updates: EAS_PROJECT_ID

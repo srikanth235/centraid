@@ -6,11 +6,10 @@ import {
   relativeTime,
   triggersSummary,
 } from "../../../app-format.js";
-// Automations overview data layer — ports the vanilla app-automations.ts
-// `collectAutomationRuns` + `buildOverviewData`. Every display value (hue,
-// glyph, trigger/status labels, formatted run meta) is computed here so the
-// React AutomationsOverviewScreen imports no vanilla formatters. All derivation
-// helpers come from the pure automation-identity + app-format modules.
+// Automations overview data layer. Every display value (hue, glyph,
+// trigger/status labels, formatted run meta) is computed here so
+// AutomationsOverviewScreen formats nothing itself. All derivation helpers
+// come from the pure automation-identity + app-format modules.
 import {
   auStatusForRow,
   glyphForId,
@@ -90,14 +89,13 @@ function formatWhereClause(where: unknown): string {
 }
 
 /**
- * Fetch the automation rows + their recent run feed (vanilla
- * collectAutomationRuns).
+ * Fetch the automation rows + their recent run feed.
  *
  * Returns the rows alongside the feed because the caller needs them too, and
- * they cost a request. `loadAutomationsOverviewData` used to call
- * `listAutomations()` itself *and* sit in the same `Promise.all` as this
- * function, which called it again — the overview paid for the same list twice
- * on every visit. Handing the rows back means one fetch, still fully parallel.
+ * they cost a request. `loadAutomationsOverviewData` sits in the same
+ * `Promise.all` as this function, so calling `listAutomations()` itself would
+ * make the overview pay for the same list twice on every visit. Handing the
+ * rows back means one fetch, still fully parallel.
  */
 export async function collectAutomationRuns(): Promise<{
   rows: CentraidAutomationRow[];
@@ -107,11 +105,10 @@ export async function collectAutomationRuns(): Promise<{
   //
   // The automation list is load-bearing: the overview cannot render without
   // it, and an empty list is indistinguishable from "you have no automations".
-  // So a list failure THROWS and the overview paints its error card. This
-  // function used to swallow both — which was harmless while the overview
-  // fetched the list itself, and became a silent regression the moment it
-  // started sourcing rows from here: a 500 rendered the empty state over a
-  // broken gateway, with no error and no Retry.
+  // So a list failure THROWS and the overview paints its error card. Swallowing
+  // both here would be a silent regression, because the overview sources its
+  // rows from this function: a 500 would render the empty state over a broken
+  // gateway, with no error and no Retry.
   //
   // The run feed is decoration. Losing it should cost you the recent-activity
   // rows, not the page, so it degrades to empty on its own.
@@ -120,8 +117,8 @@ export async function collectAutomationRuns(): Promise<{
   // catch the throw at their own call site and degrade the whole block.
   //
   // The run feed itself is TWO independently-windowed fetches, not one
-  // (issue #731 M2). A single `listAutomationTurns({ limit: 100 })` call —
-  // no lane filter — used to hand back whichever 100 turns ran most
+  // (#731). A single `listAutomationTurns({ limit: 100 })` call —
+  // no lane filter — would hand back whichever 100 turns ran most
   // recently; a large photo import fires the recognition automations once
   // per photo, so it could fill the entire 100-row window with recognition
   // runs and leave a member's own "Recent activity" empty. Fetching the
@@ -156,10 +153,9 @@ export async function collectAutomationRuns(): Promise<{
   };
 }
 
-/** Derive the React overview DTO from the loaded rows + run feed (vanilla buildOverviewData).
+/** Derive the overview DTO from the loaded rows + run feed.
  *  `attentionByRef` is an optional, caller-computed map of automation `ref` →
- *  pending-consent-item count (the fleet row's amber attention badge —
- *  Automations UI revamp, receipts/issue-387-automations-ui-revamp.md). It's computed by the
+ *  pending-consent-item count (the fleet row's amber attention badge). It's computed by the
  *  route wrapper via `filterConsentForAutomation` (automationThreadData.ts)
  *  rather than here, so this module doesn't take on a reverse dependency on
  *  the thread data layer that already depends on it. Omitted entirely (e.g.
@@ -305,16 +301,15 @@ export interface AutomationHeroDTO {
   when: string;
 }
 
-/** Derive the hero/trigger block for one automation row (vanilla portion of
- *  deriveAutomationHero is factored here so automationThreadData.ts's thread
- *  header can reuse it instead of re-deriving webhook/cron/data/condition
- *  detail a second time). */
+/** Derive the hero/trigger block for one automation row. Factored here so
+ *  automationThreadData.ts's thread header can reuse it instead of re-deriving
+ *  webhook/cron/data/condition detail a second time. */
 export function deriveAutomationHero(
   row: CentraidAutomationRow,
   /**
    * The active gateway's base URL (`auth().baseUrl` — see
    * `gateway-client-core.ts`). The webhook route only ever lives on the
-   * gateway that owns the automation (issue #96: core gateway mount), so a
+   * gateway that owns the automation (#96: core gateway mount), so a
    * bare `/_centraid-hook/<id>` path is ambiguous the moment more than one
    * gateway exists (remote daemon vs. this desktop's embedded one) — the
    * caller resolves it and passes it in here so this function stays pure

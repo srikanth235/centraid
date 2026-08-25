@@ -1,5 +1,5 @@
 /*
- * `awaiting_channel`, resolved (issue #825, ruling G-channel). A grant to a
+ * `awaiting_channel`, resolved (#825, ruling G-channel). A grant to a
  * person this vault has never reached is not an error and not a queue: it is a
  * standing grant whose FIRST fulfillment step is asking that person for a
  * channel. The asking machinery already exists — `share_commons_invitation`

@@ -1,16 +1,13 @@
-// The People shelf's model (issue #724 W5): who is in this library, who is
+// The People shelf's model (#724): who is in this library, who is
 // waiting to be named, and what the member may do about it. Pure — no React,
 // no navigation, no theme — so every claim below is testable as a claim.
 //
-// WHAT CHANGED, AND WHY THIS FILE EXISTS. Until W5 there was no
-// face-similarity signal in the schema at all, and the blueprint's own
-// `queries/people.ts` said so plainly: "every unconfirmed face honestly IS its
-// own proposal until an identity-matching enricher ships — at which point
-// regions sharing its `party_id` group for free". Both halves of that arrived
-// with W5: proposals near a confirmed person now carry that person's
-// `party_id` as a CANDIDATE, and the strangers left over are grouped in
-// `media_face_cluster`. So the shelf has, for the first time, two honest
-// sections instead of one: people, and groups-waiting-for-a-name.
+// THE SHELF HAS TWO HONEST SECTIONS, not one: people, and
+// groups-waiting-for-a-name. Both rest on the face-similarity signal —
+// proposals near a confirmed person carry that person's `party_id` as a
+// CANDIDATE, and the strangers left over are grouped in `media_face_cluster`.
+// Without that signal every unconfirmed face is its own proposal, which is
+// what the blueprint's `queries/people.ts` describes.
 //
 // THE THREE KINDS OF ROW, AND WHY THEY ARE NEVER MERGED INTO ONE LIST.
 //
@@ -55,14 +52,13 @@ export interface FaceRegionRow {
   bbox_json?: unknown;
 }
 
-/** One `core.party` row. */
 export interface PartyRow {
   party_id: string;
   kind?: string | null;
   display_name?: string | null;
 }
 
-/** One `media.face_cluster` row — the grouping projection (issue #724 W5). */
+/** One `media.face_cluster` row — the grouping projection (#724). */
 export interface FaceClusterRow {
   region_id: string;
   cluster_id: string;

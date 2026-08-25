@@ -1,10 +1,10 @@
-// Scrub-preview frame planning for a video (issue #724 B2b) — pure math over
+// Scrub-preview frame planning for a video (#724) — pure math over
 // a duration and a frame count, no native module, no react-native import. The
 // generator that actually calls a poster-frame API lives in
 // `video-scrub-strip-native.ts`; this module decides WHEN in the clip to ask
 // it to look, so both can be asserted without a device.
 //
-// WHERE THIS IS HONESTLY WIRED (issue #724 B2b). `MediaPage.tsx` deliberately
+// WHERE THIS IS HONESTLY WIRED (#724). `MediaPage.tsx` deliberately
 // does NOT hand-roll a scrub transport for an ordinary video — its own header
 // comment records that decision: `expo-video`'s `VideoView` with
 // `nativeControls` already draws the platform's own scrubber, on both iOS and

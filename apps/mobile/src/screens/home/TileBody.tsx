@@ -1,4 +1,4 @@
-// The structurally distinct tile bodies (issue #708 A, the Binding Layer brief).
+// The structurally distinct tile bodies (#708 A, the Binding Layer brief).
 // governance: allow-repo-hygiene file-size-limit The #712 shared tile-body catalog stays together so every blueprint's shape remains comparable in one binding layer.
 //
 // The header above these is INVARIANT — icon, name, count — and is drawn once by
@@ -382,12 +382,12 @@ function Prose({
  * read is in flight, while the bytes are being fetched, and once they land. The
  * only thing that changes is what each cell contains.
  *
- * This is the fix for a Photos tile that rendered as one large blank grey
- * rectangle on a seeded vault. Two paths produced it and both bypassed the
- * per-cell contract: the generic loading skeleton drew a single `bgSunken` box,
- * and an empty `photos` array left this container drawing only its own ground.
- * Both are gone — the container itself is now transparent, so if a cell ever
- * fails to lay out there is nothing left behind to masquerade as a tile.
+ * A Photos tile must never render as one large blank grey rectangle. Two paths
+ * produce that, and both bypass the per-cell contract: a generic loading
+ * skeleton drawing a single `bgSunken` box, and an empty `photos` array leaving
+ * this container drawing only its own ground. So the container itself is
+ * TRANSPARENT — if a cell fails to lay out there is nothing left behind to
+ * masquerade as a tile.
  *
  * Cells take an EXPLICIT height rather than `aspectRatio`, because a cell that
  * resolves to zero height is invisible against a container that has a minimum

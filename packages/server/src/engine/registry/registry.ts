@@ -8,11 +8,11 @@ import type { AppId, RegistryEntry } from "../types.js";
  * Persistent registry of registered apps stored at `<appsDir>/_registry.json`.
  *
  * Every app is created via `ensureUploaded(id)` from the upload route —
- * there is no longer a way to register an external folder live. Older
+ * there is no way to register an external folder live. Older
  * rows carrying a `mode` field are loaded transparently and the field
  * is dropped on next persist.
  */
-/* eslint-disable max-classes-per-file -- error class is colocated with its module (#247) */
+/* oxlint-disable max-classes-per-file -- error class is colocated with its module (#247) */
 export class Registry {
   private cache = new Map<AppId, RegistryEntry>();
   private loaded = false;

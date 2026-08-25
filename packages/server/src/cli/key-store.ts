@@ -27,13 +27,13 @@ const MACOS_KEYCHAIN_SERVICE = "dev.centraid.gateway.keystore";
 const warnedFallbacks = new Set<string>();
 
 /**
- * macOS Keychain account for one data directory's keys (issue #568 item E).
+ * macOS Keychain account for one data directory's keys (#568).
  *
- * Keyed by `keysDir` the same way `headlessCredentialFile` is: a single
- * account name shared by every install meant that `service install` for one
- * data dir overwrote (`security add-generic-password -U`) the credential
- * another data dir's keys were wrapped under, and every key in that tree
- * then failed to unwrap.
+ * Keyed by `keysDir` the same way `headlessCredentialFile` is: one account
+ * name shared by every install would let `service install` for one data dir
+ * overwrite (`security add-generic-password -U`) the credential another data
+ * dir's keys are wrapped under, leaving every key in that tree unable to
+ * unwrap.
  */
 export function keychainAccountFor(
   keysDir: string,
@@ -171,7 +171,7 @@ function loadOrCreateFileCredential(file: string): Buffer {
 
 /**
  * The external 0600 host credential `daemonKeyStore` falls back to, base64,
- * creating it when absent (issue #568 item E).
+ * creating it when absent (#568).
  *
  * `service install` uses this instead of minting `randomBytes(32)`: a
  * headless `serve` has already wrapped every key under this credential, so a

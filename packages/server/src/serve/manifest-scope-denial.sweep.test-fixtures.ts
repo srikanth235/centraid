@@ -1,15 +1,16 @@
 /*
- * Shared fixtures for the bundled-manifest scope-denial sweep (issue #839, G4).
+ * Shared fixtures for the bundled-manifest scope-denial sweep (#839).
  *
- * WHAT WAS UNGATED. `packages/vault/src/gateway/consent.ts` is the RLS
+ * WHAT THIS GATES. `packages/vault/src/gateway/consent.ts` is the RLS
  * replacement: every read, act and reveal a non-owner caller makes passes
  * `evaluateConsent`, and the execution clamp built from an app's / automation's
  * declared `vault.scopes` is the first thing that can refuse. Individual clamp
- * behaviours were pinned by hand (`gateway/execution-clamp.test.ts`), and the
- * bundled manifests were checked for *parseability*
- * (`packages/blueprints/src/app-manifests.test.ts`) — but nothing ever drove
- * the real consent engine over the real manifests. So "the 37 shipped manifests
- * deny everything they did not declare" was an assumption, not a proof.
+ * behaviours are pinned by hand (`gateway/execution-clamp.test.ts`), and the
+ * bundled manifests are checked for *parseability*
+ * (`packages/blueprints/src/app-manifests.test.ts`) — neither drives the real
+ * consent engine over the real manifests. Without this sweep, "the 37 shipped
+ * manifests deny everything they did not declare" is an assumption rather than
+ * a proof.
  *
  * WHAT THIS SWEEP DOES. It loads every bundled `app.json` (8 apps + 29
  * automations) through the runtime validators that actually govern them
@@ -148,7 +149,7 @@ function loadAppManifest(id: string): LoadedManifest {
 /**
  * An automation template's `app.json` is its gallery identity; the vault block
  * it actually runs under lives in the `automation.json` beside its handler
- * (issue #98's unified folder model). Both are parsed with their own runtime
+ * (#98's unified folder model). Both are parsed with their own runtime
  * validator, so a manifest that would not load at runtime cannot pass here.
  */
 function loadAutomationManifest(id: string): LoadedManifest {

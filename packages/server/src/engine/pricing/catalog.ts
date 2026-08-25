@@ -1,5 +1,5 @@
 /*
- * In-memory pricing catalog (issue #445).
+ * In-memory pricing catalog (#445).
  *
  * Seeded at import from the committed LiteLLM snapshot so lookups work with
  * zero I/O and fully offline. The gateway warmer overlays a fresher table via

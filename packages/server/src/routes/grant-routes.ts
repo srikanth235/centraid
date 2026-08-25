@@ -1,10 +1,9 @@
 /*
- * The GRANT PLANE's owner surface (issue #825) — `/centraid/_vault/grants`.
+ * The GRANT PLANE's owner surface (#825) — `/centraid/_vault/grants`.
  *
  * A share is a standing grant, so this route says a sentence and keeps it: who
- * may see or edit which subject, from when, until it is revoked. It replaces
- * the retired give verbs outright — nothing here hands over a copy, and there
- * is no second act after the sentence is said.
+ * may see or edit which subject, from when, until it is revoked. Nothing here
+ * hands over a copy, and there is no second act after the sentence is said.
  *
  * Three shapes of question, because three shapes are asked:
  *

@@ -1,6 +1,6 @@
 /*
- * What a link ROW is, and how to read it from either side (issue #726 P2 §3 +
- * P3 decisions 1–3; reshaped by issue #750). Separate from the store because
+ * What a link ROW is, and how to read it from either side (#726 P2 §3 +
+ * P3 decisions 1–3; reshaped by #750). Separate from the store because
  * a link's shape is what every reader needs — the crossing judgment, the peer
  * plane, the remote give — while the store is only how rows are found and
  * written.
@@ -93,7 +93,7 @@ export interface VaultLinkRow {
   created_at: string;
 }
 
-/** Why a link row changed — what a listener reconciles against (issue #821). */
+/** Why a link row changed — what a listener reconciles against (#821). */
 export type LinkChangeReason =
   | "proposed"
   | "approved"

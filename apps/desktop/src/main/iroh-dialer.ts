@@ -1,5 +1,5 @@
 /*
- * Desktop iroh dialer (issue #555).
+ * Desktop iroh dialer (#555).
  *
  * Gateway identity is the stable EndpointId. Relay URLs are refreshable cache
  * and are converted to a fresh EndpointTicket only at dial time. The device

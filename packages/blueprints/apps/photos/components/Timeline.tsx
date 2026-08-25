@@ -67,7 +67,7 @@ interface TileCommon {
   onToggleSelect: (key: string, shiftKey?: boolean) => void;
   onOpen: (key: string) => void;
   /**
-   * The mounted vault a tile is shown FROM (issue #599, §H). The tile's vault
+   * The mounted vault a tile is shown FROM (#599). The tile's vault
    * marker is derived from this scope's record — any vault but the personal
    * one — so a member with one vault sees an unmarked grid and nothing about
    * the timeline changes for them.
@@ -95,7 +95,7 @@ function Row({
       {tiles.map((t) => (
         <Tile
           // Scope-qualified: two scopes can legitimately hand the merged list
-          // the same asset id (ids are per-scope, issue #599), and a bare id
+          // the same asset id (ids are per-scope, #599), and a bare id
           // key would make React reuse one tile's DOM — and its already loaded
           // bytes — for the other scope's photograph.
           key={`${t.asset.scope_id ?? ""}:${t.asset.asset_id}`}
@@ -138,10 +138,11 @@ function purgeNote(asset: Asset): string | undefined {
 
 /**
  * Album detail's own Remove — deliberately outside the tile's four slots
- * (Tile.tsx's `extras`, §4.4). Trash's Restore used to live here beside it;
- * it retired once the selection bar grew the Trash → Restore swap (§6). This
- * one stays: removing a single photograph from the album you are looking at
- * has no equivalent among the bar's fixed five, since "Add to album" is a
+ * (Tile.tsx's `extras`, §4.4). Trash's Restore does not live here beside it:
+ * the selection bar carries the Trash → Restore swap (§6). This
+ * one belongs here: removing a single photograph from the album you are
+ * looking at has no equivalent among the bar's fixed five, since "Add to
+ * album" is a
  * destination picker on every other shelf and album detail is not a
  * destination to pick.
  */

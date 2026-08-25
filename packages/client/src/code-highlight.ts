@@ -1,4 +1,4 @@
-// Dependency-free fenced-code syntax highlighter (issue #420, Wave 2). A tiny
+// Dependency-free fenced-code syntax highlighter (#420). A tiny
 // hand-rolled scanner with no npm dependency. The rich-answer renderer
 // (assistant-rich.ts) calls it from its code-block path.
 //

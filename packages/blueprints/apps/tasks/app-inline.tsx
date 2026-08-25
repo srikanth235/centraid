@@ -1,4 +1,4 @@
-// Tasks, inline descriptor (issue #505). The `InlineAppModule` the shell's
+// Tasks, inline descriptor (#505). The `InlineAppModule` the shell's
 // client loader (packages/client inlineApps.ts) imports: it pairs the
 // query-free `Root` (app-root.tsx) with this app's `./queries/*` handler
 // modules for the shell's client-side query path, alongside changeTables +
@@ -15,10 +15,10 @@ const tasksInlineApp: InlineAppModule = {
   appId: "tasks",
   pendingProjection,
   changeTables: CHANGE_TABLES,
-  // Mount over every scope this member can see (issue #726 D11 task 3): a
+  // Mount over every scope this member can see (#726 D11 task 3): a
   // task board is the merge of the member's own open tasks and each audience
   // they belong to, never one vault's slice — the same door Photos' timeline
-  // walks (issue #599). Declared here, not in the UI, so the rebuilt `Root`
+  // walks (#599). Declared here, not in the UI, so the rebuilt `Root`
   // inherits the N-scope mount rather than rediscovering it.
   multiScope: true,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline

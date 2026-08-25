@@ -47,10 +47,10 @@ export interface AppKnobsManifest {
 
 /**
  * Fetch the app's own `app.json` (next to its index.html), or null. Read
- * straight off the gateway with the renderer's own credential (issue #799):
- * the per-app browser session that used to front this read retired with the
- * iframe host, and the manifest is the source for the appearance knobs and
- * the vault consent block the settings popover renders.
+ * straight off the gateway with the renderer's own credential (#799):
+ * no per-app browser session fronts this read, and the manifest is the source
+ * for the appearance knobs and the vault consent block the settings popover
+ * renders.
  */
 export async function fetchAppManifestRaw(
   appId: string
@@ -132,7 +132,7 @@ function appKnobKebab(key: string): string {
 }
 
 /**
- * Live-push a knob to an inline app's root element (issue #505). Keys ending
+ * Live-push a knob to an inline app's root element (#505). Keys ending
  * Color/Accent are continuous colour values → CSS vars; the rest are discrete
  * states → data attributes, which keeps a live edit and a reload identical.
  * Applied straight to the element the inline app reads: the app's own CSS +
@@ -222,7 +222,7 @@ export function buildVaultProps(
 }
 
 /*
- * The app popover's Enrichment surface (issue #807).
+ * The app popover's Enrichment surface (#807).
  *
  * An app is bound to a data-shape DOMAIN, not to a capability: Photos holds
  * photos, Docs holds documents, and the capability list of each domain is the

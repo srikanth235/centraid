@@ -17,15 +17,7 @@ import {
 import type { MockGateway, TestEnv } from "./fixtures";
 
 /**
- * REAL Electron launch-time probe (issue #659 R3b).
- *
- * What existed before this: `tests/perf/desktop-cold.perf.test.ts`, whose own
- * comment calls itself a "crude first-import proxy for desktop main modules
- * (not full Electron launch)". It dynamically imports one pure module —
- * `gateway-supervisor-core.ts` — with no Electron process, no renderer, no
- * gateway and no window, and fences it at 3,000 ms. Nothing in the repo has
- * ever measured how long the desktop app takes to become usable, which is the
- * only launch number a vault owner can perceive.
+ * REAL Electron launch-time probe (#659).
  *
  * This measures three intervals across ONE real launch:
  *

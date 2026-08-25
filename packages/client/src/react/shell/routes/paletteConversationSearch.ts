@@ -1,5 +1,5 @@
 /*
- * Async conversation search source for the ⌘K palette (issue #420, Wave 3).
+ * Async conversation search source for the ⌘K palette (#420).
  *
  * The palette's `buildPaletteGroups` is synchronous — it's re-run on every
  * keystroke and again whenever the palette's injected `refresh()` fires. FTS

@@ -16,11 +16,9 @@
 // separation rather than trusting it, and this subtree is the only part of
 // `src/**` compiled with the DOM lib (`tsconfig.elements.json`).
 //
-// There are NO custom elements here any more. #799 retired the last four
-// (`kit-avatar`, `kit-meter`, `kit-skeleton`, `kit-status-line`) and the
-// `KitElement` base they shared: the presentation primitives are React blocks
-// in `packages/blueprints/apps/_shared/`, and the status line is plain DOM
-// built by `feedback.ts`. Nothing in this subtree calls
+// There are NO custom elements here (#799): the presentation primitives are
+// React blocks in `packages/blueprints/apps/_shared/`, and the status line is
+// plain DOM built by `feedback.ts`. Nothing in this subtree calls
 // `customElements.define()`, so importing it registers nothing — it is an
 // ordinary module graph of functions.
 

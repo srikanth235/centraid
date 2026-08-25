@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#731) the grant compiler, signed command rail, and scrub transaction form one Commons integrity boundary; splitting their shared control projections would make authorization and cleanup drift independently
-// Circle-backed commons (issue #731): vault-resident consent compiled onto
+// Circle-backed commons (#731): vault-resident consent compiled onto
 // the existing projection primitive. This is not a scheduler or a second
 // replication engine. Callers append one ordered command, execute it through
 // the ordinary invoke path at the steward, then reconcile the declared
@@ -66,7 +66,7 @@ export interface CommonsMemberInput {
   capability: CommonsCapability;
   /** Invitation without this seat stays pending and compiles no data. */
   vault?: ShareVaultRef;
-  /** Host-only replica executor for command-tail replay (issue #750). Never
+  /** Host-only replica executor for command-tail replay (#750). Never
    * serialized, never reachable from member or app code. */
   applyCommand?: CommonsReplicaExecutor;
 }
@@ -402,7 +402,7 @@ export const COMMONS_DEFAULT_MAX_SIZE_BYTES = 4 * 1024 * 1024 * 1024;
  * bounds the tail so one laggard cannot stall compaction indefinitely. */
 export const COMMONS_OP_RETENTION_FLOOR = 256;
 
-/** Ops between stored checkpoints (issue #750 invariant 7). The full closure
+/** Ops between stored checkpoints (#750 invariant 7). The full closure
  * is serialized onto the grant row only when a checkpoint is CUT — every this
  * many ops, matching the compaction cadence — never on every compile, so a
  * single write stops rewriting `checkpoint_json` for the whole commons. */
@@ -410,14 +410,14 @@ export const COMMONS_CHECKPOINT_INTERVAL = 32;
 
 /** Cut a checkpoint at the head when one is due (or forced): store the full
  * closure + sequence on the grant row and attest it. The ONLY writer of
- * `checkpoint_json` outside a projected control frame (issue #750 defect c). */
+ * `checkpoint_json` outside a projected control frame (#750 defect c). */
 export function checkpointCommonsState(input: {
   steward: ShareVaultRef;
   stewardVaultId: string;
   grantId: string;
   /** Thunked on purpose: building the closure is the O(commons size) walk this
    * whole design exists to avoid, so it must not run when no checkpoint is
-   * due (issue #750 invariant 7). */
+   * due (#750 invariant 7). */
   closure: () => WireClosure;
   now: string;
   force?: boolean;
@@ -919,7 +919,7 @@ export function compileCommons(
   const grant = readCommonsGrant(input.steward.vault, input.grantId);
   if (grant.revokedAt)
     throw new Error(`commons grant ${input.grantId} is revoked`);
-  // Lazy on purpose (issue #750 invariant 7): reading and projecting the whole
+  // Lazy on purpose (#750 invariant 7): reading and projecting the whole
   // closure is the O(commons size) cost this compile exists to avoid. A
   // compile where every seat catches up by replaying the operation tail never
   // touches it, so the declared-ceiling check — which needs the closure's
@@ -1054,7 +1054,7 @@ export function compileCommons(
         "SELECT 1 AS n FROM share_commons_lineage WHERE grant_id = ? LIMIT 1"
       )
       .get(grant.grantId);
-    // Command-tail replay (issue #750 invariant 7): a seat that already holds
+    // Command-tail replay (#750 invariant 7): a seat that already holds
     // a projection and whose own cursor sits on the retained op chain
     // RE-EXECUTES the operations it missed instead of receiving a projection.
     // Its unchanged items and their seat-local derived rows (OCR/embeddings/
@@ -1223,7 +1223,7 @@ export function compileCommons(
       });
   // The full closure lands on the grant row only when a checkpoint is DUE —
   // every COMMONS_CHECKPOINT_INTERVAL ops, or the very first compile — never
-  // on every command (issue #750 defect c). Between checkpoints the stored
+  // on every command (#750 defect c). Between checkpoints the stored
   // snapshot stays put as the seat's proof anchor; bootstrap exports rebuild
   // and freshly sign a head snapshot without storing it.
   checkpointCommonsState({
@@ -1259,7 +1259,7 @@ export interface AppendCommonsOpInput {
   now: string;
 }
 
-/** Every append goes through the hash chain (issue #731): the op's fields and
+/** Every append goes through the hash chain (#731): the op's fields and
  * its predecessor's hash decide its own, so no writer can slip an unchained
  * row into the log. */
 function chainFields(
@@ -1461,21 +1461,21 @@ function docsFolderContains(input: {
   return Boolean(row);
 }
 
-/** Prefix on a refusal reason produced by `staleContextConflict` (issue #731
+/** Prefix on a refusal reason produced by `staleContextConflict` (#731
  * goal 1) — a distinct, honest classification a caller can pattern-match the
  * way `executeCommonsCommand`'s fork guard already does for "not the current
  * steward", instead of lumping every refusal into one bucket. */
 export const STALE_CONTEXT_REASON_PREFIX = "stale-context:";
 
 /** Keys whose string value names a specific row this command reasons about.
- * DERIVED from the declared routing vocabulary (issue #750) rather than kept
+ * DERIVED from the declared routing vocabulary (#750) rather than kept
  * as a second hand-maintained key list that could drift from it — the keys
  * that address a shareable row are exactly the keys stale-context has to
  * watch. Deliberately excludes nothing structurally — the container's own id
  * key (e.g. `group_id` for a `tally.group` grant) is filtered by VALUE below
  * instead, since every op in a grant's log already shares that same id and
  * matching on it would flag virtually every pair of commands in an active
- * commons (issue #731 goal 1: "do not refuse on any intervening op"). */
+ * commons (#731 goal 1: "do not refuse on any intervening op"). */
 const STALE_CONTEXT_ROW_KEYS = new Set(
   COMMONS_CONTAINER_KEYS.map((key) => key.inputKey)
 );
@@ -1537,7 +1537,7 @@ function staleContextTargets(
   return { rows, parties };
 }
 
-/** Stale-context conflict scoping (issue #731 goal 1). A member composes a
+/** Stale-context conflict scoping (#731 goal 1). A member composes a
  * command against the grant sequence they last observed locally
  * (`basedOnSequence`, recorded by `queueCommonsIntent` from the seat's own
  * projected `share_circle_grant.last_sequence`). By the time it reaches the
@@ -1616,7 +1616,7 @@ function staleContextConflict(input: {
 }
 
 /**
- * The NAMED fault a re-minted member identity produces (issue #750).
+ * The NAMED fault a re-minted member identity produces (#750).
  *
  * A member vault that lost its identity seed and was re-created presents a
  * different `vault_public_key` than the one this commons pinned in
@@ -1685,7 +1685,7 @@ function commandRefuses(input: {
   // Identity is checked BEFORE what the command says: if the seat is not the
   // vault this commons pinned, nothing it sends can be attributed to it, and
   // the person deserves the real story ("re-invite this member") rather than
-  // whatever the command itself would have been refused for (issue #750).
+  // whatever the command itself would have been refused for (#750).
   if (input.presentedVaultPublicKey && input.memberSignature) {
     const pinned = pinnedMemberVaultKey(
       input.steward,
@@ -1889,7 +1889,7 @@ export interface ExecuteCommonsCommandInput {
   /** See `commandRefuses` — the transport-proven member identity key. */
   presentedVaultPublicKey?: string;
   /** The grant sequence the actor had projected locally when this command
-   * was composed (issue #731 goal 1). Optional so a caller that predates this
+   * was composed (#731 goal 1). Optional so a caller that predates this
    * field keeps validating exactly as before — the stale-context check only
    * ever runs when a caller actually supplies it. */
   basedOnSequence?: number;
@@ -2005,7 +2005,7 @@ export function executeCommonsCommand(
   });
   if (prior) return { decision: prior };
   const grant = readCommonsGrant(input.steward.vault, input.grantId);
-  // Fork guard (issue #731). Only the vault that currently owns the grant may
+  // Fork guard (#731). Only the vault that currently owns the grant may
   // authorize and sequence a write. After a steward transfer an intent still
   // addressed to the old steward would otherwise be authorized and appended to
   // its now-orphaned log — an acknowledged-then-lost write. Refuse structurally
@@ -2059,7 +2059,7 @@ export function executeCommonsCommand(
   const executeAndSequence = () => {
     // The sequence this append is about to take. Seeding the steward's own
     // execution with the replica key is what lets every member re-execute the
-    // same operation and mint byte-identical row ids (issue #750 invariant 7)
+    // same operation and mint byte-identical row ids (#750 invariant 7)
     // — the whole reason catch-up can ship commands instead of rows.
     const outcome = input.gateway.invokeCommonsCanonical(
       input.credential,
@@ -2170,7 +2170,7 @@ export function executeCommonsCommand(
 }
 
 /** Every state `share_commons_intent.status` can hold. `expired`/`cancelled`
- * are settled states like `denied` (issue #731 goal 2): once reached, an
+ * are settled states like `denied` (#731 goal 2): once reached, an
  * intent is done re-appearing as pending/parked. */
 export type CommonsIntentStatus =
   | "queued"
@@ -2181,7 +2181,7 @@ export type CommonsIntentStatus =
   | "cancelled";
 
 /** How long a parked intent waits on an unreachable steward before it
- * settles as `expired` instead of staying "pending" forever (issue #731
+ * settles as `expired` instead of staying "pending" forever (#731
  * goal 2). Two weeks is generous for a genuinely offline steward — a trip
  * plus slack — while still bounding how far a member's mental model of the
  * group can drift before the protocol stops silently trusting it; a member
@@ -2201,7 +2201,7 @@ export function queueCommonsIntent(input: {
 }): string {
   // Opportunistic maintenance: every new submission is a natural moment to
   // settle this seat's own long-parked intents first, so they stop crowding
-  // the overlay even without a dedicated background sweep (issue #731
+  // the overlay even without a dedicated background sweep (#731
   // goal 2 — see `expireParkedCommonsIntents` for the full horizon and the
   // gateway-side sweep this still needs to make expiry prompt on read too).
   expireParkedCommonsIntents({ seat: input.seat, now: input.now });
@@ -2210,7 +2210,7 @@ export function queueCommonsIntent(input: {
   // authoritative for the steward's own seat, or exactly what the last
   // successful pull/compile (`projectRoster`) left behind for a member seat.
   // Either way this IS "the sequence the member had applied when the intent
-  // was formed" (issue #731 goal 1): no caller has to supply it, and it can
+  // was formed" (#731 goal 1): no caller has to supply it, and it can
   // never be missing or stale-by-construction the way a caller-supplied
   // value could be. A seat with no local grant row yet has no baseline to
   // compare against; 0 is the conservative, honest answer for an unobserved
@@ -2271,7 +2271,7 @@ export function settleCommonsIntent(input: {
     .run(input.status, input.reason ?? null, input.now, input.intentId);
 }
 
-/** Bounded life for a parked intent (issue #731 goal 2). Settles every
+/** Bounded life for a parked intent (#731 goal 2). Settles every
  * `parked` intent on this seat whose `created_at` is older than the horizon
  * to `expired`, so it stops re-appearing as an in-flight write and the peer
  * sweep's `WHERE status IN ('queued','parked')` retry query naturally

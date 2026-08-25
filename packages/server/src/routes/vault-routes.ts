@@ -3,7 +3,7 @@
  * Owner-facing vault routes (duaility §12) — the consent surface over the
  * mounted vault registry. Everything here is an OWNER act: the routes run
  * behind the gateway's host-level auth, resolve the vault the REQUEST is
- * addressed to (issue #289 — the composed handler already established the
+ * addressed to (#289 — the composed handler already established the
  * ambient vault scope from the `x-centraid-vault` header / device
  * enrollment), and the planes execute them with the owner-device
  * credential. Apps never call these — their door is `ctx.vault` inside
@@ -14,22 +14,22 @@
  *   PATCH  /centraid/_vault/vaults/<vaultId>           — update {name?, color?, icon?, blurb?}
  *   GET    /centraid/_vault/enrich                     — per-domain tiers + the cascade's scoped rules
  *   PUT    /centraid/_vault/enrich                     — write one or both domains' tier
- *   PUT    /centraid/_vault/enrich/rules               — write one scope's rule (issue #807)
+ *   PUT    /centraid/_vault/enrich/rules               — write one scope's rule (#807)
  *   DELETE /centraid/_vault/enrich/rules?scope=&ref=&capability= — that scope stops deciding
  *   GET    /centraid/_vault/enrich/effective?domain=&capability=&scope= — what the ONE resolver folds
  *   GET    /centraid/_vault/apps                       — enrolled apps + active grants
  *   POST   /centraid/_vault/apps/<appId>/grants        — approve {purpose, scopes[], expiresAt?}
- *   POST   /centraid/_vault/apps/<appId>/purge-ext     — drop a retained ext band (issue #286)
+ *   POST   /centraid/_vault/apps/<appId>/purge-ext     — drop a retained ext band (#286)
  *   GET    /centraid/_vault/agents                     — enrolled automation agents + grants
  *   POST   /centraid/_vault/agents/<appId>/grants      — approve an automation's agent grant
  *   DELETE /centraid/_vault/grants/<grantId>           — revoke (cascade runs)
  *   GET    /centraid/_vault/parked                     — invocations awaiting confirmation
  *   POST   /centraid/_vault/parked/<invocationId>      — {approve: boolean} → outcome
- *   GET    /centraid/_vault/outbox?status=             — external-write artifacts (issue #306), each carrying
+ *   GET    /centraid/_vault/outbox?status=             — external-write artifacts (#306), each carrying
  *                                                        `canEdit` (verb has a request rebuilder, outbox-edit.ts)
  *   POST   /centraid/_vault/outbox/<itemId>            — {decision, artifact?, always_allow?, note?} — an
  *                                                        edited `artifact` on an `approve` rebuilds the wire
- *                                                        request server-side (issue #308 A5 UI slice); a raw
+ *                                                        request server-side (#308 A5 UI slice); a raw
  *                                                        `request` from the client is refused, not accepted
  *   GET    /centraid/_vault/outbox-grants              — standing (actor, verb, target) rules
  *   DELETE /centraid/_vault/outbox-grants/<grantId>    — revoke a standing rule
@@ -37,13 +37,13 @@
  *   GET    /centraid/_vault/notifications              — unified decisions + durable notices projection
  *   GET    /centraid/_vault/notifications/events       — `notifications-changed` SSE doorbell
  *   POST   /centraid/_vault/notifications/notices/<id> — mark a notice read or archived
- *   GET    /centraid/_vault/scope-requests             — open manifest scope-widening asks (issue #308)
+ *   GET    /centraid/_vault/scope-requests             — open manifest scope-widening asks (#308)
  *   POST   /centraid/_vault/scope-requests/<requestId> — {approve: boolean} → decided request
  *   GET    /centraid/_vault/review?limit=              — salience-ranked receipt feed
- *   GET    /centraid/_vault/picker?term=&kinds=&limit= — shell entity picker (issue #272)
+ *   GET    /centraid/_vault/picker?term=&kinds=&limit= — shell entity picker (#272)
  *   GET    /centraid/_vault/anchors?term=&limit=        — live anchor picker for automation @ references
  *   POST   /centraid/_vault/links                      — assert a link as the owner (pick-is-consent),
- *                                                        optionally carrying an inline anchor selector (issue #282)
+ *                                                        optionally carrying an inline anchor selector (#282)
  *   DELETE /centraid/_vault/links/<linkId>             — end a link (temporal, never deletes)
  *   PATCH  /centraid/_vault/links/<linkId>             — move/clear the link's standoff anchor {selector: {...}|null}
  *
@@ -118,13 +118,13 @@ const defaultNotificationsSubscriberCap = new SseSubscriberCap();
 
 export interface VaultRouteOptions {
   /**
-   * Device-plane ACL (issue #289 phase 2). Production always supplies it;
+   * Device-plane ACL (#289). Production always supplies it;
    * direct route-unit harnesses may omit it while providing their own vault
    * context.
    */
   deviceAccess?: DeviceAccess;
   /**
-   * Kick the outbox executor after an owner approval (issue #306) so the
+   * Kick the outbox executor after an owner approval (#306) so the
    * drain happens now, not on the next periodic pass. Fire-and-forget.
    */
   onOutboxDecided?: (plane: VaultPlane) => void;
@@ -140,7 +140,7 @@ export interface VaultRouteOptions {
     appId: string
   ) => Promise<string | undefined> | string | undefined;
   /**
-   * The gateway-level storage-connections entity (issue #367 §C1). When
+   * The gateway-level storage-connections entity (#367). When
    * set, `PUT /centraid/_vault/blob-store` resolves a `connectionId` in the
    * body against it — denormalizing endpoint/region/bucket/prefix and
    * `connectionKind` into the vault's `blob_store` settings, and forcing
@@ -150,7 +150,7 @@ export interface VaultRouteOptions {
    */
   storageConnections?: StorageConnectionStore;
   /**
-   * Recovery-kit confirmation gate (issue #367 §C10): attaching a
+   * Recovery-kit confirmation gate (#367): attaching a
    * `connectionId` to `blob_store` (enabling a CAS remote tier) is refused
    * with `409 recovery_kit_not_confirmed` until the operator has exported,
    * re-selected, and verified the current recovery kit.
@@ -163,7 +163,7 @@ export interface VaultRouteOptions {
    * It can SEE this vault (it can read the disk), so it gets a typed
    * `owner_only` refusal naming the actual owner — never `not_found`
    * topology hiding, which is for callers who cannot otherwise tell
-   * (#726 P1).
+   * (#726).
    */
   isHostCustody?: (req: IncomingMessage) => boolean;
   /** Gateway state transaction owner for erase. */
@@ -180,7 +180,7 @@ export interface VaultRouteOptions {
   notificationsSubscriberCap?: SseSubscriberCap;
   /**
    * Which capability ids the enrichment policy cascade may be written for
-   * (issue #807). Defaults to the bundled capability registry.
+   * (#807). Defaults to the bundled capability registry.
    */
   enrichCapabilityKnown?: EnrichCapabilityCheck;
 }
@@ -190,7 +190,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Overlay `canEdit` on outbox rows for the owner surface (issue #308 A5 UI
+ * Overlay `canEdit` on outbox rows for the owner surface (#308 A5 UI
  * slice) — whether the item's verb has a request rebuilder
  * (`outbox-edit.ts`). An overlay here, not a `vault-plane.ts` field, keeps
  * the plane free of an import on the gateway's verb registry.
@@ -255,7 +255,7 @@ export function makeVaultRouteHandler(
           // Host custody can SEE this vault (it can read the disk), so it
           // gets an honest `owner_only` naming who owns it instead of a
           // generic refusal — hosting a vault confers none of the acts on
-          // this list for a vault the host does not own (#726 P1).
+          // this list for a vault the host does not own (#726).
           if (options.isHostCustody?.(req) === true) {
             const ownerId = options.enrollments?.owners.ownerOf(
               plane.boot.vaultId
@@ -347,7 +347,7 @@ export function makeVaultRouteHandler(
         vaults.delete(vaultId);
         options.keys.destroy(`${vaultId}.sealkey`);
         // The identity keypair shares the DEK's custody and lifecycle
-        // (#726 P1) — an erase crypto-erases both, never leaving the
+        // (#726) — an erase crypto-erases both, never leaving the
         // signing seed behind after the DEK is gone. The public-key PIN
         // (#750 invariant 1) goes with them: a pin outliving its seed is
         // exactly the state `VaultIdentityMismatchError` refuses to open, so
@@ -393,7 +393,7 @@ export function makeVaultRouteHandler(
         );
       }
 
-      // Byte-custody settings (issue #296, extended #367 §C1/§C4/§C10):
+      // Byte-custody settings (#296, extended #367 §C1/§C4/§C10):
       // where the vault's blobs replicate (`blob_store`: fs | s3
       // endpoint/bucket/region/prefix/encrypt/connectionId — static creds
       // are never stored here; `connectionId` resolves through the
@@ -440,7 +440,7 @@ export function makeVaultRouteHandler(
                 message: 'blob_store.kind must be "fs" or "s3"',
               });
             }
-            // Storage class (issue #405 §6): an optional non-empty string,
+            // Storage class (#405): an optional non-empty string,
             // trimmed and stored as `blob_store.storageClass` (camelCase,
             // matching throttleBytesPerSec). NO enum — S3-compatibles define
             // their own class names (STANDARD_IA, GLACIER, R2's single
@@ -501,7 +501,7 @@ export function makeVaultRouteHandler(
             });
           }
 
-          // Attaching a storage connection (issue #367 §C1) — resolve
+          // Attaching a storage connection (#367) — resolve
           // endpoint/region/bucket/prefix/connectionKind off the connection
           // row so the caller only ever names a `connectionId`, and gate on
           // the recovery-kit nudge before this vault starts replicating
@@ -563,13 +563,13 @@ export function makeVaultRouteHandler(
               ...(target.region ? { region: target.region } : {}),
               ...(target.bucket ? { bucket: target.bucket } : {}),
               ...(target.prefix ? { prefix: target.prefix } : {}),
-              // The `derived` store prefix (issue #425 Wave 2), present only when
+              // The `derived` store prefix (#425), present only when
               // the provider advertised + granted the store; absent ⇒ derivatives
               // stay on cas (graceful degradation).
               ...("derivedPrefix" in target && target.derivedPrefix
                 ? { derivedPrefix: target.derivedPrefix }
                 : {}),
-              // Declared storage classes (issue #425 Wave 3): the vault's direct-to-cold heuristic engages only when STANDARD_IA is here.
+              // Declared storage classes (#425): the vault's direct-to-cold heuristic engages only when STANDARD_IA is here.
               ...("supportedStorageClasses" in target &&
               target.supportedStorageClasses
                 ? { supportedStorageClasses: target.supportedStorageClasses }
@@ -643,15 +643,15 @@ export function makeVaultRouteHandler(
         }
       }
 
-      // The owner's enrichment policy (issue #299 §2, renamed by #712 C5):
+      // The owner's enrichment policy (#299 §2, renamed by #712 C5):
       // `device` — the owner's own phone/laptop plus deterministic gateway
-      // work — is the prior default; `gateway` — the owner's own gateway
+      // work — is the narrower tier; `gateway` — the owner's own gateway
       // may additionally do whatever it is already wired to, including a
       // model turn to a third-party provider — is a deliberate per-domain
-      // opt-in, now the seeded default for fresh vaults; `off` silences a
+      // opt-in and the seeded default for fresh vaults; `off` silences a
       // domain entirely.
       //
-      // The cascade that grew around it (issue #807) is a SIBLING resource
+      // The cascade that grew around it (#807) is a SIBLING resource
       // under the same prefix, handled in `vault-enrich-rules-routes.ts`: the
       // tier's own request/response bodies are unchanged, so the four seam
       // laws the client pins keep holding byte for byte.
@@ -759,7 +759,7 @@ export function makeVaultRouteHandler(
         }
       }
 
-      // The explicit second half of uninstall (issue #286 phase 2):
+      // The explicit second half of uninstall (#286):
       // uninstall RETAINS the app's ext band (the data is the owner's);
       // this drops its tables + registry rows for good.
       if (
@@ -814,7 +814,7 @@ export function makeVaultRouteHandler(
         }
       }
 
-      // The install/consent surface (issue #306 phase 4): declared-and-
+      // The install/consent surface (#306): declared-and-
       // granted scopes with salience highlights — what the install screen
       // and the app's consent card render.
       if (
@@ -854,7 +854,7 @@ export function makeVaultRouteHandler(
         });
       }
 
-      // The outbox (issue #306): external writes as artifacts. GET lists the
+      // The outbox (#306): external writes as artifacts. GET lists the
       // items (pending first is the client's sort; the payload carries the
       // artifact itself); POST /<itemId> is the owner's decision — approve /
       // edit-then-approve / discard / always-allow — and an approval kicks
@@ -905,7 +905,7 @@ export function makeVaultRouteHandler(
         const itemId = segments[1] ?? "";
         let rebuiltRequest: Record<string, unknown> | undefined;
         if (isRecord(body.artifact)) {
-          // Edit-then-send is an approve-time act (issue #308 A5 UI
+          // Edit-then-send is an approve-time act (#308 A5 UI
           // slice): discarding sends nothing, so there is nothing an
           // artifact edit could change about the outcome.
           if (body.decision !== "approve") {
@@ -983,7 +983,7 @@ export function makeVaultRouteHandler(
         );
       }
 
-      // The honest split of the old parked surface (issue #306 decision 5):
+      // The honest split of the old parked surface (#306 decision 5):
       // BLOCKING = things waiting on the owner; REVIEW = what happened,
       // salience-ranked, with receipts.
       if (
@@ -1108,20 +1108,15 @@ export function makeVaultRouteHandler(
             });
       }
 
-      // NOTE (issue #665): `POST /centraid/_vault/inbox/gateway-health` (the
-      // path spelling of the day, before the surface was renamed
-      // Notifications) used to live here so the desktop monitor could
-      // dual-write gateway health into the stream (#647). It is gone, along
-      // with its only caller. Health is STATUS, not a decision the owner can
+      // NOTE (#665): no route here writes gateway health into the
+      // Notifications stream. Health is STATUS, not a decision the owner can
       // resolve from Notifications — it lives on the Gateway page (Overview
       // card, Components tab, durable Alerts history) and in the desktop's OS
-      // notification. The route was never part of the published protocol
-      // surface (`packages/core/src/protocol/routes.ts` exposes only
-      // `vaultNotifications` / `vaultNotificationsEvents`) and carried no
-      // COMPAT tag, so deleting it outright is the documented path rather
-      // than a deprecation window.
+      // notification. The published protocol surface
+      // (`packages/core/src/protocol/routes.ts`) exposes only
+      // `vaultNotifications` / `vaultNotificationsEvents`.
 
-      // Manifest scope-widening requests (issue #308 A3): a published
+      // Manifest scope-widening requests (#308): a published
       // manifest asking beyond its last consent parks here; the owner's
       // decision mints the grant (approve) or tombstones the ask (deny).
       if (
@@ -1173,7 +1168,7 @@ export function makeVaultRouteHandler(
         });
       }
 
-      // The cross-referencing shell surface (issue #272): the picker is an
+      // The cross-referencing shell surface (#272): the picker is an
       // owner-device search/browse, and link writes ride the owner-device
       // credential — the pick itself is the consent, scoped to one row.
       // Canonical domain entity types (`schema.table`) — the ontology model,
@@ -1187,7 +1182,7 @@ export function makeVaultRouteHandler(
         return sendJson(res, 200, { entities: listVaultEntities() });
       }
 
-      // The Vault Atlas (issue #441 Part B): three read-only owner census
+      // The Vault Atlas (#441): three read-only owner census
       // surfaces over the registered ontology. All computed on request — an
       // owner ops screen, not a hot path. Numbers are derived from the live
       // schema (the FK walk, dbstat, the journal), never hardcoded.
@@ -1214,7 +1209,7 @@ export function makeVaultRouteHandler(
         }
       }
 
-      // The Vault Atlas Browse tab (issue #441 Part B, B3): a vault-aware
+      // The Vault Atlas Browse tab (#441): a vault-aware
       // table editor. Reads are owner-device census over the ontology; writes
       // ride the journalled command pipeline (atlas.* commands) with the
       // owner-device credential so every edit is a receipted operator act and
@@ -1444,7 +1439,7 @@ export function makeVaultRouteHandler(
         return sendJson(res, 200, await plane.unlinkAsOwner(segments[1] ?? ""));
       }
 
-      // Re-anchor / re-baseline (issue #282): move the standoff anchor of a
+      // Re-anchor / re-baseline (#282): move the standoff anchor of a
       // live link ({selector: {...}}) or clear it ({selector: null}) —
       // demoting the reference to strip-only. A locator write; the link
       // judgment is untouched.
@@ -1657,7 +1652,7 @@ async function handleVaultsRoute(
 }
 
 /**
- * Run a Browse write (issue #441 B3) through the journalled command pipeline
+ * Run a Browse write (#441) through the journalled command pipeline
  * with the owner-device credential, and shape the outcome: `executed` → 200
  * with the command output; `denied`/`failed` → 4xx with the reason (STRICT
  * NOT NULL / CHECK violations, sealed-column or machinery refusals all land
@@ -1705,7 +1700,7 @@ function sendRegistryError(res: ServerResponse, err: unknown): boolean {
 }
 
 /**
- * Validate a standoff-anchor selector from the wire (issue #282). Returns
+ * Validate a standoff-anchor selector from the wire (#282). Returns
  * undefined on anything malformed — the routes turn that into a 400.
  */
 function parseSelector(raw: unknown): AnchorSelector | undefined {

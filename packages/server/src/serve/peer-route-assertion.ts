@@ -1,5 +1,5 @@
 /*
- * Signed route assertions (issue #726 P3 decision 4).
+ * Signed route assertions (#726 P3 decision 4).
  *
  * When a gateway's endpoint keypair rotates or a vault moves hosts, every
  * peer's cached route goes stale. Rather than a directory or a re-run of the

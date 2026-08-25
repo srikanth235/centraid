@@ -1,5 +1,5 @@
 /*
- * PROTOCOL JOIN LANE (issue #839, gaps G11 + G12).
+ * PROTOCOL JOIN LANE (#839, gaps G11 + G12).
  *
  * Runs on the PR path at its 3-seat floor and again nightly at width — the
  * `protocol-join` job in `.github/workflows/e2e.yml` raises

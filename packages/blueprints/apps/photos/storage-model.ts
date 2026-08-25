@@ -1,4 +1,4 @@
-// The Storage screen's custody arithmetic (issue #711, §12) — pure functions
+// The Storage screen's custody arithmetic (#711) — pure functions
 // over the gateway's rollup, so every number on that screen is unit-testable
 // without a DOM, exactly as `storageFacts` (components/Storage.tsx) already is
 // for the loaded window.

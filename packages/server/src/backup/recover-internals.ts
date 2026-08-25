@@ -1,5 +1,5 @@
 /*
- * The step helpers behind `recover()` (issue #439 R1) — kept beside the
+ * The step helpers behind `recover()` (#439) — kept beside the
  * orchestration (`recover.ts`) rather than inside it so the verb reads as its
  * six phases while the how-of-each-phase lives here: kit-target → provider
  * resolution, the attested-inventory skip-set, the seal-key custody relocation,
@@ -101,7 +101,7 @@ function casShaOf(key: string): string | undefined {
 }
 
 /** Paginate the provider's ATTESTED cas inventory into the set of shas it holds
- *  durably (issue #439). A blob in this set is deferred at restore (remote-only,
+ *  durably (#439). A blob in this set is deferred at restore (remote-only,
  *  read-through on demand); a blob NOT in it is materialized — the snapshot is
  *  its only copy. `state: 'live'` only: a soft-deleted object is being removed,
  *  not durable. */
@@ -128,7 +128,7 @@ export async function collectRemoteCasShas(
 }
 
 /**
- * Rehydrate the app code store from the restored git bundle (issue #517). The
+ * Rehydrate the app code store from the restored git bundle (#517). The
  * snapshot carries the vault's bare code repo as a `git bundle --all` that
  * `restoreSnapshot` materializes at `<vaultDir>/apps.bundle`, but the runtime
  * reads app code from the bare repo `WorktreeStore` owns at
@@ -171,7 +171,7 @@ export async function rehydrateCodeStore(
 
 /** A materialized restore is a NEW replica history, never a continuation — the
  *  restored `blob_replica` rows attest capture-time durability, not now (issue
- *  #439 gap 4). Bump the epoch so nothing trusts them; the R5 reconcile (wave 3)
+ *  #439 gap 4). Bump the epoch so nothing trusts them; the R5 reconcile
  *  re-establishes truth against the live inventory. */
 export function invalidateRestoredReplica(destDir: string): void {
   const vault = new DatabaseSync(path.join(destDir, "vault.db"));
@@ -217,7 +217,7 @@ export function currentVersions(): RestoreCurrentVersions {
   };
 }
 
-/** Previews-first warm pass, or the honest reason it was skipped (issue #439).
+/** Previews-first warm pass, or the honest reason it was skipped (#439).
  *  Warms ONLY when a tier resolver yields a `RemoteTier`; a full restore or a
  *  resolver-less headless context reports `warmed:false` with a reason. */
 export async function warmOrSkip(
@@ -276,8 +276,8 @@ export async function warmOrSkip(
  * `providerRef` is deliberately OMITTED: at recovery time the recovered
  * gateway's eventual backend resolution isn't known, and `assertTargetBackend`
  * treats an absent `providerRef` as "trust a static config backend" (the
- * headless daemon this serves) — a dynamic storage-connection backend (wave 4's
- * desktop) sets it through its own adopt wiring.
+ * headless daemon this serves) — a dynamic storage-connection backend sets it
+ * through its own adopt wiring.
  */
 export async function seedFencedBackupState(opts: {
   gatewayDatabase: GatewayDatabase;

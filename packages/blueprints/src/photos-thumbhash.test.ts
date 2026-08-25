@@ -1,4 +1,4 @@
-// The Photos client ThumbHash encoder (issue #419). A faithful port of the
+// The Photos client ThumbHash encoder (#419). A faithful port of the
 // same reference the gateway codec uses, so the two agree byte-for-byte on the
 // same RGBA — asserted here against the exact fixtures the gateway codec test
 // pins. Exercised as a plain module (no kit imports, no canvas) so the pure

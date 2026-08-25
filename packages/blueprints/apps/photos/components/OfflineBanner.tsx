@@ -1,9 +1,8 @@
 // OFFLINE, EXPLAINED (v4 handoff §14, README §14, proto 4867-4873).
 //
 // README §14 states the bug this component closes in one line: "A grey mosaic
-// with no explanation is a bug." Photos had no offline concept at all on the
-// web — a failed read became one invented sentence on the status line, and the
-// grid it produced was exactly that unexplained mosaic.
+// with no explanation is a bug." A failed read narrated as one invented
+// sentence on the status line produces exactly that mosaic.
 //
 // What this is, precisely, and what it is NOT:
 //

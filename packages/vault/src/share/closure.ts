@@ -1,4 +1,4 @@
-// The share closure CONTRACT (issue #599 decision 11, split in #726).
+// The share closure CONTRACT (#599 decision 11, split in #726).
 //
 // A share is two halves that never share a database handle:
 //

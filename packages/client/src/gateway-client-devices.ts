@@ -1,5 +1,5 @@
 /*
- * Renderer-side client for the gateway's paired-device surface (issue #376 —
+ * Renderer-side client for the gateway's paired-device surface (#376 —
  * `packages/server/src/routes/devices-routes.ts`). Backs the Gateway page's
  * Devices card (list + revoke).
  *
@@ -172,7 +172,7 @@ export interface GatewayDeviceTicketInput {
   /** Mint a vault for a NEW person instead of self-pairing. */
   forPerson?: { label: string; vaultName?: string };
   /**
-   * Idempotency key the gateway REQUIRES with `forPerson` (issue #750):
+   * Idempotency key the gateway REQUIRES with `forPerson` (#750):
    * generated once per intended mint (a UUID) and reused on retry, so a
    * retried request can never mint a second owner/vault.
    */

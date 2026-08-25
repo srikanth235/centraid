@@ -1,4 +1,4 @@
-// MAPLIBRE OVER OPENFREEMAP — the Android half of the real map (issue #816).
+// MAPLIBRE OVER OPENFREEMAP — the Android half of the real map (#816).
 //
 // Android only, and for a reason worth stating: `expo-maps` — which draws the
 // iOS half through MapKit — pulls Google Maps on Android, and with it an API

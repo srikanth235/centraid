@@ -5,14 +5,12 @@
 // are, so the shape is drawn and the affordance to go get the rest sits on
 // top of it.
 //
-// Extracted from photos' `MediaPage.tsx` (`MeteredPlaceholder`), generalised
-// so a byte-bearing app that isn't Photos — Docs' "available offline" pin
-// fetch is the first one named — gets the same grammar for free instead of
-// re-deriving it. The geometry matches `PhotoLightbox.styles.ts`'s
-// `mediaCenter`/`zoomPill`/`chipText` exactly (radii.pill, 1px border, 44
-// minimum target), resolved straight from theme tokens here so this module
-// does not depend on a photos-owned stylesheet — a structural move, not a
-// visual one.
+// It is deliberately app-agnostic: a byte-bearing app that isn't Photos —
+// Docs' "available offline" pin fetch is the first one named — gets the same
+// grammar rather than re-deriving it. The geometry matches
+// `PhotoLightbox.styles.ts`'s `mediaCenter`/`zoomPill`/`chipText` exactly
+// (radii.pill, 1px border, 44 minimum target), resolved straight from theme
+// tokens here so this module does not depend on a photos-owned stylesheet.
 
 import React from "react";
 import type { StyleProp, ViewStyle } from "react-native";

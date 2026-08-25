@@ -39,8 +39,8 @@ test("1.1 — first launch reaches Home without a profile gate", async () => {
   await seedRemoteGateway(env, gateway, { onboarding: true });
   const { app, page } = await launchApp(env);
   try {
-    // Desktop first run is chooser-first (#603). The fresh path should now
-    // connect and hand off to Home without asking for identity details.
+    // Desktop first run is chooser-first (#603). The fresh path connects and
+    // hands off to Home without asking for identity details.
     const onboarding = page.getByTestId("onboarding-view");
     const chooser = page.getByTestId("first-run-choice");
     await chooser.waitFor({ state: "visible" });
@@ -62,8 +62,8 @@ test("1.1 — first launch reaches Home without a profile gate", async () => {
 });
 
 test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home', async () => {
-  // Issue #603 replaced the founding ceremony (create-vault + recovery-kit
-  // download + verify) with a two-option chooser. On a virgin install the
+  // First run is a two-option chooser, not a founding ceremony (create-vault +
+  // recovery-kit download + verify) — #603. On a virgin install the
   // desktop deliberately does NOT start its local gateway until the user picks
   // "Start fresh on this Mac" — that start is what would otherwise pop an OS
   // keychain prompt before any UI. The gateway then founds Personal itself;
@@ -89,9 +89,8 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
     const onboarding = page.getByTestId("onboarding-view");
     await onboarding.waitFor({ state: "visible" });
 
-    // The fresh/local path connects on mount and enters Home directly. The
-    // optional profile step is gone; the H5 service tip is also not blocking.
-    // Onboarding view gone, home shell present.
+    // The fresh/local path connects on mount and enters Home directly. There
+    // is no optional profile step, and the H5 service tip does not block.
     await onboarding.waitFor({ state: "detached" });
     await waitForHome(page);
     const evidenceDir = path.resolve(
@@ -167,8 +166,8 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
       fullPage: true,
     });
 
-    // Persisted flag means a relaunch would skip onboarding, and the local
-    // gateway is now really running.
+    // Persisted flag means a relaunch skips onboarding, and the local gateway
+    // is really running.
     const persisted = (await page.evaluate(() =>
       window.CentraidApi.getSettings()
     )) as {
@@ -220,7 +219,7 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
     const firstRun = page.getByTestId("home-first-run");
     // One of the two graded treatments must be visible.
     await expect(springboard.or(firstRun)).toBeVisible();
-    // No library shelf / composer on Home any more.
+    // No library shelf / composer on Home.
     await expect(page.getByTestId("home-composer")).toHaveCount(0);
     await expect(page.getByTestId("shelf-empty")).toHaveCount(0);
     await expect(
@@ -231,13 +230,13 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
     // so the companion must appear within 100ms of the member gesture. Measure
     // in the renderer to exclude Playwright transport latency.
     //
-    // MutationObserver, NOT a requestAnimationFrame poll (#842). The rAF loop
-    // this replaced stopped when the RUNNER next scheduled a frame, so on a
-    // shared CI machine the number was dominated by frame cadence rather than
-    // by anything the product does: 180.6 ms and 209.8 ms on macOS against a
-    // ceiling of 100, while the same build passed on Linux. A budget that
-    // reports the runner's contention is not a budget, and one that is red on
-    // every macOS and Windows run stops being read at all.
+    // MutationObserver, NOT a requestAnimationFrame poll (#842). An rAF loop
+    // ends when the RUNNER next schedules a frame, so on a shared CI machine
+    // the number is dominated by frame cadence rather than by anything the
+    // product does: 180.6 ms and 209.8 ms on macOS against a ceiling of 100,
+    // while the same build passes on Linux. A budget that reports the runner's
+    // contention is not a budget, and one that is red on every macOS and
+    // Windows run stops being read at all.
     //
     // The CEILING IS UNCHANGED at 100 ms — this is not a widening. What changed
     // is that the interval now ends when the dialog enters the DOM, which is
@@ -522,7 +521,7 @@ test("2.7 — the stem nav is present and All apps is reachable", async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // The fixed stem (#707) replaced the collapsible sidebar — it does not
+    // The stem is fixed, not a collapsible sidebar (#707) — it does not
     // toggle open/closed, and All apps lives in the foot.
     await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
     await page.getByRole("button", { name: /All apps/iu }).click();

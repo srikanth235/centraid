@@ -1,8 +1,7 @@
 /*
- * Centraid gateway prefs store (issue #280).
+ * Centraid gateway prefs store (#280).
  *
- * Replaces the old `identity.sqlite` `users` + `user_prefs` pair. The
- * parallel gateway-side user identity is GONE — the vault owner IS the
+ * There is no parallel gateway-side user identity — the vault owner IS the
  * user (`core_vault.owner_party_id`), so the only thing left at the
  * gateway is device-level configuration: which coding harness to run, its
  * binary path, UI theme/density for this host, etc. Those are a handful

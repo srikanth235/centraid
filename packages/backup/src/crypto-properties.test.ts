@@ -163,12 +163,12 @@ describe("backup crypto property", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Mutation-kill campaign (#656 Layer 1C).
 //
 // Laws the seal/derive surface owes FORMAT.md, stated over the whole input
 // domain rather than over one hand-picked vector.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 describe("backup crypto domain law", () => {
   test("a nonce that is not the format's 12 bytes is refused, not silently used", () => {

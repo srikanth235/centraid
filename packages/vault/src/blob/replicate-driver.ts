@@ -1,5 +1,5 @@
-// Bounded-parallel replication with QoS preemption (issue #405 §4/§7) — the
-// orchestration lifted out of custody.ts (which is at the governance line-cap)
+// Bounded-parallel replication with QoS preemption (#405 §4/§7) — the
+// orchestration held outside custody.ts (which is at the governance line-cap)
 // so the facade keeps just the per-blob push. Two coarse-but-real v0 levers:
 //
 //   BOUNDED PARALLELISM (§4): push N blobs at a time (default 3-4), not the
@@ -23,9 +23,9 @@ export interface ReplicateDriverOptions {
   alreadyThere: Set<string>;
   /** Push exactly one sha; resolves true when it moved, false when it raced a delete. */
   pushOne: (sha: string) => Promise<boolean>;
-  /** Max concurrent pushes (issue #405 §4). */
+  /** Max concurrent pushes (#405). */
   concurrency: number;
-  /** Awaited between blobs to yield to interactive reads (issue #405 §7). */
+  /** Awaited between blobs to yield to interactive reads (#405). */
   qosWait: QosWait;
 }
 

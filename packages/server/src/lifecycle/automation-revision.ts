@@ -1,20 +1,21 @@
 /*
- * Revise orchestration (issue #541 review).
+ * Revise orchestration (#541 review).
  *
- * Two properties this module exists to hold, both of which the inline
- * fire-and-forget version got wrong:
+ * Two properties this module exists to hold, both of which an inline
+ * fire-and-forget revise gets wrong:
  *
  * 1. SERIALIZED. A revise snapshots the automation's manifest, rewrites the
- *    prompt, and publishes. Two revises seconds apart both snapshotted the
- *    PRE-revision manifest and the second publish silently dropped the first,
- *    while their turns interleaved in one automation conversation. Everything
- *    runs under the same per-`(app, conversation)` lock the interactive turn
- *    already takes, so a steering message queues behind a revise too.
+ *    prompt, and publishes. Unserialized, two revises seconds apart both
+ *    snapshot the PRE-revision manifest, the second publish silently drops the
+ *    first, and their turns interleave in one automation conversation.
+ *    Everything runs under the same per-`(app, conversation)` lock the
+ *    interactive turn already takes, so a steering message queues behind a
+ *    revise too.
  *
  * 2. TRANSACTIONAL. The published prompt and the compiled `handler.js` are one
- *    unit. Publishing the prompt first and compiling separately left an
+ *    unit. Publishing the prompt first and compiling separately leaves an
  *    enabled automation firing the OLD handler on schedule while the manifest
- *    and UI showed the NEW instructions, with nothing to reconcile it. If the
+ *    and UI show the NEW instructions, with nothing to reconcile it. If the
  *    compile fails — or the rewrite throws after its publish — the previous
  *    instructions are restored and the roll-back is reported into the thread.
  */

@@ -1,16 +1,13 @@
 /*
- * Renderer-side app *session* + *lifecycle* over direct HTTP (issue #141,
- * Phase 2). Split out of `gateway-client.ts` (repo file-size limit); the
- * barrel re-exports these so call sites still `import … from
+ * Renderer-side app *session* + *lifecycle* over direct HTTP (#141).
+ * `gateway-client.ts` re-exports these, so call sites `import … from
  * './gateway-client.js'`.
  *
- * What is left here after the served-app plane retired (issue #799): the
- * `desktop-<id>` editing session (opened/closed lazily and shared with the
- * automation-authoring harness), and the deterministic lifecycle the gateway
- * owns — clone / install / meta / delete. Automation CRUD lives next door in
- * `gateway-client-automation-editing.ts` and is the remaining writer of the
- * code store. The app-file editing surface (draft files, publish, preview
- * URLs, scaffolding a blank app) went with the builder that drove it.
+ * What lives here (#799): the `desktop-<id>` editing session (opened/closed
+ * lazily and shared with the automation-authoring harness), and the
+ * deterministic lifecycle the gateway owns — clone / install / meta / delete.
+ * Automation CRUD lives next door in `gateway-client-automation-editing.ts`
+ * and is the only remaining writer of the code store.
  *
  * Two lifecycles meet here, and the difference is *where the code comes
  * from* (#434). A bundled app `install`s: the gateway records consent and
@@ -152,7 +149,7 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
 }
 
 /**
- * Install a bundled blueprint app in place (issue #434): registration +
+ * Install a bundled blueprint app in place (#434): registration +
  * consent grants, no code copy, no git. Keeps the blueprint's own id.
  * Idempotent — installing an already-installed app returns its existing
  * registration (`alreadyInstalled: true`). Unlike {@link cloneTemplate}
@@ -161,10 +158,10 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
  */
 export async function installTemplate(input: {
   templateId: string;
-  /** The vault the app is installed into (issue #599). Omitted falls back to
-   *  the internal default — which is the only spelling left now that the
-   *  catalogue's target picker retired with it (#708); the remaining caller is
-   *  the gateway's own "app follows the member into an audience vault" seam. */
+  /** The vault the app is installed into (#599). Omitted falls back to
+   *  the internal default — the only spelling there is (#708); the remaining
+   *  caller is the gateway's own "app follows the member into an audience
+   *  vault" seam. */
   scopeId?: string;
 }): Promise<{
   app: {
@@ -196,7 +193,7 @@ export async function installTemplate(input: {
 }
 
 /**
- * Rename an installed bundled app (issue #434) — sets its per-vault label
+ * Rename an installed bundled app (#434) — sets its per-vault label
  * override in the registry, with NO editing session. The gateway's meta route
  * short-circuits bundled ids to the label override (their code is read-only,
  * so nothing is staged/published); routing this through {@link updateAppMeta}

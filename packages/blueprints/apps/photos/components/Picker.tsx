@@ -2,14 +2,14 @@
 // "the picker is drawn as a panel in the content area, labelled as the dialog
 // it is").
 //
-// IT OFFERS THE SAME TILE THE TIMELINE DOES. Before v4 this file hand-rolled a
-// second square tile with its own check circle and its own accent outline; a
-// photograph therefore looked like one thing in the grid and another thing in
-// the picker, and the picker's tiles reflowed the moment their bytes landed
-// because their shape came from the CSS, not from the record. Now the rows come
-// from the shared `justify()` packer and every box is a `<Tile>`: `--skel`
-// ground at the packed geometry from the first frame, four overlay slots, 2px
-// gutters, and selection drawn as 2px of INK — never Photos' hue on a control.
+// IT OFFERS THE SAME TILE THE TIMELINE DOES, and never a second square tile of
+// its own: a hand-rolled one with its own check circle and its own accent
+// outline makes a photograph look like one thing in the grid and another thing
+// here, and reflows the moment its bytes land, because its shape comes from the
+// CSS rather than from the record. The rows come from the shared `justify()`
+// packer and every box is a `<Tile>`: `--skel` ground at the packed geometry
+// from the first frame, four overlay slots, 2px gutters, and selection drawn as
+// 2px of INK — never Photos' hue on a control.
 //
 // The picker is permanently IN SELECTION (`selectMode`), because picking is the
 // only thing it does: a tile's media click toggles, exactly as the check does,
@@ -164,7 +164,7 @@ export function PickerView({
                   selected={picked.has(t.asset.asset_id)}
                   // Always picking: a media click toggles, same as the check.
                   selectMode
-                  // Album membership is own-scope only (issue #599), so every
+                  // Album membership is own-scope only (#599), so every
                   // candidate is the member's own and none is marked (§H).
                   vaultMark={null}
                   onOpen={() => onToggle(t.asset.asset_id)}

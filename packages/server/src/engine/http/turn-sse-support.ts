@@ -129,7 +129,7 @@ export function validateTurnAttachmentRefs(
  * The lock map is per-runtime — held on the `Runtime` instance and threaded
  * through the route context. A module-level map would collide across
  * gateways that share an `appId` (two profiles can install the same
- * template). See issue #113.
+ * template). See #113.
  */
 export async function withConversationLock<T>(
   conversationLocks: Map<string, Promise<void>>,

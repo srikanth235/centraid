@@ -1,5 +1,5 @@
 /**
- * Centraid Assist OAuth courier (issue #526, Model B).
+ * Centraid Assist OAuth courier (#526, Model B).
  *
  * Stateless by construction: no KV, D1, Durable Object, or cache. The only
  * cookie is a signed, short-lived browser-binding envelope with no OAuth

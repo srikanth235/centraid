@@ -18,11 +18,11 @@ import {
 
 describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
   test("Photos claims exactly Library · Collections · Search · More", () => {
-    // Library leads (issue #712): the timeline is what a member reaches for
+    // Library leads (#712): the timeline is what a member reaches for
     // most, so it takes the first slot rather than the second. Collections
-    // still replaced Albums — it is the landing destination, and "Albums"
-    // named one of the eight sections the page actually holds while the other
-    // seven sat behind More — but it no longer opens the band. People is off
+    // is not "Albums" — it is the landing destination, and "Albums" names one
+    // of the eight sections the page holds — and it does not lead the band
+    // either. People is off
     // the band entirely: it is reached from Collections' own People section
     // and the Library shelf list instead of a fifth tab.
     expect(PHOTOS_BAND_DESTINATIONS.map((d) => d.label)).toStrictEqual([
@@ -41,18 +41,18 @@ describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
   });
 
   test("the More sheet carries only what Collections does not", () => {
-    // ONE row. Every shelf this table used to list — Favorites, Places,
-    // Duplicates, Trash — is a named section of Collections now, with its own
-    // live count, on screen (and Sharing stopped existing with issue #726). A
-    // row here as well would be a second, hidden door to each, and a second
-    // place to keep its label honest.
+    // ONE row. Favorites, Places, Duplicates and Trash are each a named
+    // section of Collections, with its own live count, on screen, and there is
+    // no Photos "Sharing" place at all (#726). A row here as well would
+    // be a second, hidden door to each, and a second place to keep its label
+    // honest.
     //
     // Backup survives because it is NOT a shelf: it is a cross-stack link to a
     // frame screen about whether this device's bytes have left it, and that
     // policy governs Docs' scans and Notes' attachments too. "Backup", not
-    // "Storage" (#712 B1) — the screen it opens is titled "Backup health".
+    // "Storage" (#712) — the screen it opens is titled "Backup health".
     //
-    // "Photo access" is gone (#712 P13) — permission is a takeover of the
+    // "Photo access" is gone (#712) — permission is a takeover of the
     // timeline's own slot now, not a buried row to a pushed screen.
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).toStrictEqual(["Backup"]);
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).not.toContain("Storage");
@@ -131,8 +131,8 @@ describe("the band's PLATE (CHANGELOG §G)", () => {
     expect(style.borderRadius).toBe(BAND_RADIUS);
     // The FOURTH side. The handoff's frame band is `margin:8px 12px 12px`
     // (:5961) and a claimed band's row is `padding:8px 12px 12px` (:4955) —
-    // the top gap is 8 on both. It used to be 0, so the plate sat flush against
-    // whatever content ended above it.
+    // the top gap is 8 on both. At 0 the plate sits flush against whatever
+    // content ends above it.
     expect(style.marginTop).toBe(BAND_TOP_GAP);
     expect(BAND_TOP_GAP).toBe(8);
     // The width is the caller's, so the band and any other plate can be drawn
@@ -145,10 +145,10 @@ describe("the band's PLATE (CHANGELOG §G)", () => {
   test("the frame's band and a claimed band draw the SAME plate", () => {
     // Invariant 1: one band. Home's band and Photos' claimed band are the same
     // object wearing different destinations, so they may differ in what they
-    // carry and never in the shape they carry it on. Home's used to be a flush
-    // edge-to-edge bar with a top rule while this one floated — two visibly
-    // different objects. Both now read this one function, and the only input
-    // that legitimately differs is the page colour each sits on.
+    // carry and never in the shape they carry it on. A flush edge-to-edge bar
+    // with a top rule beside a floating one is two visibly different objects.
+    // Both read this one function, and the only input that legitimately
+    // differs is the page colour each sits on.
     //
     // What DOES differ is how many plates each band composes: the frame's band
     // is one (`mobileBandStyle` :5961), a claimed band is two inside a

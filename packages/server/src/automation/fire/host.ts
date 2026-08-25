@@ -3,7 +3,7 @@
  * implements. Centraid's backend today:
  *
  *   - local gateway (desktop embed + standalone daemon): the in-process
- *     `InProcessScheduler` (issue #149) keeps an in-memory registry and a
+ *     `InProcessScheduler` (#149) keeps an in-memory registry and a
  *     single minute-boundary timer — no OS scheduler, no launchd/systemd.
  *     It fires enabled cron automations only while the gateway runs (n8n
  *     semantics, no backfill). See `./in-process-scheduler.ts`.

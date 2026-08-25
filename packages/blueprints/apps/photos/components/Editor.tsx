@@ -56,7 +56,7 @@ const STRAIGHTEN_STEP = 1;
 const STRAIGHTEN_LIMIT = 15;
 
 /** The rectangle `Crop` starts from: centred, inset a tenth on every side, so
- *  there is something to drag before a drag has happened. Cropping used to be
+ *  there is something to drag before a drag has happened. Cropping is not
  *  reachable ONLY by dragging across the canvas, which is no control at all on
  *  a keyboard — the handoff lists `Crop` among the tool row's buttons
  *  (proto 4621), and this is what pressing it does. */
@@ -228,7 +228,7 @@ export function EditorView({
         type: "image/jpeg",
       });
       // A new photograph lands beside the original, so it lands in the
-      // ORIGINAL's scope (issue #599) — never in the chip selection, which
+      // ORIGINAL's scope (#599) — never in the chip selection, which
       // could be a different audience entirely.
       const scope = asset.scope_id ?? undefined;
       const staged = await stageFileBytes(file, "", scope ? { scope } : {});
@@ -237,7 +237,7 @@ export function EditorView({
         {
           staged_sha: staged.sha256,
           kind: "photo",
-          // Both halves of what the commit's sentence promises (issue #711):
+          // Both halves of what the commit's sentence promises (#711):
           // dated TODAY, and "with this one recorded as its source" — which is
           // now a real column (`media_asset.source_asset_id`) rather
           // than a claim with nowhere to land. The lineage is what lets the

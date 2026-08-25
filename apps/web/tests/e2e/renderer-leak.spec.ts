@@ -1,9 +1,9 @@
 /**
- * RENDERER LEAK SOAK (issue #842, W3.5).
+ * RENDERER LEAK SOAK (#842).
  *
- * The shell is a single long-lived document. #799 retired the served-app
- * iframe, so opening a bundled app is a route swap inside the SAME window and
- * nothing is torn down by a navigation any more — which means every allocation
+ * The shell is a single long-lived document with no served-app iframe (#799),
+ * so opening a bundled app is a route swap inside the SAME window and
+ * nothing is torn down by a navigation — which means every allocation
  * an app open makes has to be released by the app close, or it is released
  * never. The desktop app and an installed PWA are opened once and left running
  * for days, so "never" is a real duration.

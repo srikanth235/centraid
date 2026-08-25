@@ -27,7 +27,7 @@ import {
 
 import styles from "./SettingsEnrichmentScreen.module.css";
 
-// Settings → Enrichment, THE CAPABILITY LIST (issue #807; reshaped again for
+// Settings → Enrichment, THE CAPABILITY LIST (#807; reshaped again for
 // the v11 binding layer).
 //
 // WHY THE CAPABILITY IS THE ROW. The member's questions here are "what is
@@ -52,9 +52,9 @@ import styles from "./SettingsEnrichmentScreen.module.css";
 // has no "what reads it" to answer yet.
 //
 // THE ROW READS LEFT TO RIGHT AS ITS OWN SENTENCE: what this is, where its work
-// goes, what reads it, and last whether it runs. The switch used to lead, which
-// put the commit ahead of its subject and pushed the description into the
-// middle of the row.
+// goes, what reads it, and last whether it runs. A leading switch would put the
+// commit ahead of its subject and push the description into the middle of the
+// row.
 
 /**
  * The profile id a row's agent choice is stored under — derived, never typed.

@@ -1,4 +1,4 @@
-// Automations' cross-surface copy (issue #805, slice C).
+// Automations' cross-surface copy (#805).
 //
 // `react/screens/AutomationsOverviewScreen.tsx` and mobile's
 // `apps/automations/*` carried the same four sentences twice over, including
@@ -21,7 +21,7 @@ export const AUTOMATIONS_ERROR_RETRY = "Reconnect";
 /**
  * The error body: what happens to the work while the scheduler is away.
  *
- * It used to open with "Automations are stored on the gateway and are safe.
+ * It does NOT open with "Automations are stored on the gateway and are safe.
  * Nothing has been lost" — two promises about absence in front of the one
  * clause a member can act on. Queueing IS the promise, and it is a fact.
  *

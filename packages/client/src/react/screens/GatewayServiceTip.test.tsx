@@ -129,7 +129,7 @@ describe("GatewayServiceTip — the H5 service offer", () => {
 
   // The strand this component nearly caused: it is the ONLY caller of
   // `installGatewayService` in the client, so a dismissal that hid it
-  // completely retired the whole feature on one click, with no way back.
+  // completely would retire the whole feature on one click, with no way back.
   it("keeps the service installable after a dismissal — this session and the next", async () => {
     const installGatewayService = vi.fn<() => Promise<{ ok: true }>>(() =>
       Promise.resolve({ ok: true as const })

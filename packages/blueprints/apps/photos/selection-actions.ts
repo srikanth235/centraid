@@ -14,7 +14,7 @@ import { assetKey, parseAssetKey, scopeOfKey } from "./asset-key.ts";
 import { act, narrate, notice } from "./outcomes.ts";
 import type { Album, Asset } from "./types.ts";
 
-// A selection spans scopes (issue #599): the merged timeline lets a member
+// A selection spans scopes (#599): the merged timeline lets a member
 // tick their own photo and a Family one in the same batch. Every id below is
 // therefore a COMPOSITE key (asset-key.ts) — `(scope_id, asset_id)` — and each
 // command is addressed at the scope carried IN the key it acts on. That is the
@@ -262,9 +262,8 @@ export async function runBatchDownload(
   notice(parts.join(" · ") || "Nothing to download");
 }
 
-// `runBatchCopyToVault` (the old `copy-into-scope` command path) is gone
-// (#726 P6) — it was never backed on the gateway (no such action was ever
-// registered; every call silently narrated "not recognised"). There is no
-// batch share command here at all now (#825): the bar's Share control opens
-// the shared grant kit over ONE subject, and a grant is a standing answer to
-// "who may see this", not a copy this module could run in a loop.
+// THERE IS NO BATCH SHARE OR COPY-INTO-SCOPE COMMAND HERE, and none may be
+// added (#726 P6, #825): the gateway registers no such action, and the bar's
+// Share control opens the shared grant kit over ONE subject — a grant is a
+// standing answer to "who may see this", not a copy this module could run in a
+// loop.

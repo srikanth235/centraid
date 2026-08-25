@@ -1,4 +1,4 @@
-// The durable replica protocol band (issue #406). It lives in vault.db so a
+// The durable replica protocol band (#406). It lives in vault.db so a
 // base-table mutation and its change entry share one SQLite transaction. The
 // per-entity triggers are installed after fresh schema bootstrap by replica/change-log.ts:
 // generating them from the logical registry keeps this DDL independent of the

@@ -74,7 +74,7 @@ describe("Commons full-copy size", () => {
     // Two enforcement points, one message. A compile that materializes the
     // closure — here, projecting a seat that holds nothing yet — refuses at
     // the exact byte. Since catch-up replays commands instead of projecting
-    // rows (issue #750 invariant 7), a compile where every seat replays never
+    // rows (#750 invariant 7), a compile where every seat replays never
     // builds the closure and so never re-measures it; the WRITE path below is
     // what keeps the ceiling live, and it is the only path that can grow a
     // commons past it in the first place.

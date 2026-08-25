@@ -1,7 +1,6 @@
 // `<section class="v-detail">` — back button + (watchtower | item | empty)
-// content. The React port of app.js's `LockerDetail` Lit component. The
-// item-view internals (field descriptors/rows, including the real-TOTP tick)
-// live in ItemFields.tsx to keep this file under the size cap.
+// content. The item-view internals (field descriptors/rows, including the
+// real-TOTP tick) live in ItemFields.tsx to keep this file under the size cap.
 import { catOf, monoOf, subOf } from "../format.ts";
 import type {
   LockerDetail as DetailItem,

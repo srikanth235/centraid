@@ -25,7 +25,6 @@ import type { NativeWriteInput } from "../../lib/replica/native-session";
 
 type Scope = "occurrence" | "future" | "series";
 
-/** The three answers, in the words the product uses. */
 const SCOPES: readonly { value: Scope; label: string }[] = [
   { value: "occurrence", label: "This occurrence" },
   { value: "future", label: "This and following" },

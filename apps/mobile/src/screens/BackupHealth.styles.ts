@@ -4,7 +4,7 @@ import { borders, spacing, t, radii } from "../kit/theme";
 
 export const styles = StyleSheet.create({
   // The consent moment's geometry mirrors EnrichmentConsent.styles.ts on
-  // purpose: one consent grammar, whichever surface is asking (#711, S4).
+  // purpose: one consent grammar, whichever surface is asking (#711).
   action: {
     alignItems: "center",
     borderRadius: radii.lg,
@@ -82,10 +82,10 @@ export const styles = StyleSheet.create({
   ruleFlagged: { borderLeftWidth: 2, paddingLeft: spacing[3] },
   ruleLabel: { ...t("body") },
   // The label and its inert reason stack; the switch stays on the trailing
-  // edge of the row. `flex: 1` moved here from `ruleLabel` so the reason
-  // wraps against the switch rather than under it.
+  // edge of the row. `flex: 1` belongs here rather than on `ruleLabel` so the
+  // reason wraps against the switch rather than under it.
   ruleText: { flex: 1, paddingRight: spacing[3], paddingVertical: spacing[2] },
-  // The one sentence that says why a switch is grey (issue #712 E1).
+  // The one sentence that says why a switch is grey (#712).
   ruleReason: { ...t("small"), marginTop: 2 },
   safe: { flex: 1 },
   section: {

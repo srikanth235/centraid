@@ -1,4 +1,4 @@
-// Unit tests for the persisted-conversation route builders (issue #420) — the
+// Unit tests for the persisted-conversation route builders (#420) — the
 // ONE place the `_centraid-conversations` paths are minted.
 import { describe, expect, it } from "vitest";
 

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * Template catalog over HTTP (issue #141). The gateway owns the bundled
+ * Template catalog over HTTP (#141). The gateway owns the bundled
  * @centraid/blueprints catalog and serves its display metadata at
  * `GET /centraid/_templates`, so the renderer reads it directly instead of
  * through a desktop IPC. We boot serve() and assert the route returns the

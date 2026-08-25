@@ -157,7 +157,7 @@ export function templateSourceDir(
 }
 
 /**
- * Read a template's files into an in-memory file map (issue #141). The
+ * Read a template's files into an in-memory file map (#141). The
  * desktop owns the bundled/cached catalog locally, so it reads a
  * template's files here and pushes them to the gateway over HTTP
  * (`cloneTemplateFiles` → session PUT → publish) — the remote gateway
@@ -185,7 +185,7 @@ export async function readTemplateFiles(
   );
 }
 
-// ---------------- internal helpers ----------------
+// ──────────────── internal helpers ────────────────
 
 async function readManifest(dir: string): Promise<TemplateManifest> {
   const raw = await fs.readFile(path.join(dir, MANIFEST_FILE), "utf8");
@@ -218,11 +218,11 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Template clone + app metadata edits (moved out of @centraid/server/engine in
 // #151). The gateway lifecycle routes use the file-map (`*Files`) variants;
 // the disk wrappers back the local paths.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 export { updateAppMetaFiles, validateAppId } from "./app-meta.js";
 export {
   cloneTemplate,

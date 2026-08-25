@@ -16,12 +16,11 @@ import {
 // row — is real. The mobile-native (Maestro airplane-mode) variant of the
 // same contract remains open under #781.
 //
-// It drove Tasks until that interface was removed pending a ground-up
-// redesign, and now drives Docs — the remaining app whose production rows
-// render the shared pending overlay (`apps/docs/components/List.tsx` →
-// `_shared/PendingWriteActions.tsx`). Since #781 it also carries what the
-// retired `pending-overlay.spec.ts` proved for this seat: the pending state a
-// member can SEE, across a reload, not merely a durable outbox row.
+// It drives Docs — the app whose production rows render the shared pending
+// overlay (`apps/docs/components/List.tsx` →
+// `_shared/PendingWriteActions.tsx`). It also pins, for this seat, the pending
+// state a member can SEE, across a reload, not merely a durable outbox row
+// (#781).
 //
 // The offline write is issued through `window.centraid.write` rather than a
 // toolbar control ON PURPOSE. Docs' rename affordances live in the sidebar the

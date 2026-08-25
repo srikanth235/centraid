@@ -1,4 +1,4 @@
-// The grant plane (issue #825). A share is a STANDING GRANT — an audience, a
+// The grant plane (#825). A share is a STANDING GRANT — an audience, a
 // subject, a capability — and that meaning lives in `share_grant`. Delivery is
 // a separate question: `share_fulfillment` holds one row per audience vault,
 // so "who may see this" never again depends on whether a transport succeeded.
@@ -26,7 +26,7 @@
  * question — "did this peer ever receive the subject?" — and reading the
  * answer off `state` made a delivered-then-degraded grant settle `removed`
  * ("nothing had been delivered") while the audience vault still held the whole
- * projection: the owner was told a share was gone when it was not (#846 P1).
+ * projection: the owner was told a share was gone when it was not (#846).
  * Set once, on the first delivery, and cleared only by a removal that
  * verifiably took the projection with it.
  */
@@ -223,7 +223,7 @@ DROP TABLE share_grant_seed;
 DROP TABLE share_grant_mint;
 `;
 
-// Rung (issue #846 P1): carry `share_fulfillment.delivered_at` to vaults
+// Rung (#846): carry `share_fulfillment.delivered_at` to vaults
 // stamped before it. Editing the baseline above only reaches files created
 // after the edit — `migrate()` applies rungs past `PRAGMA user_version`, so a
 // file already at the grant-plane rung keeps the shape it was born with, and

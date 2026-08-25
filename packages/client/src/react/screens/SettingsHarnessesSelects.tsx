@@ -85,10 +85,10 @@ function modelOptions(card: HarnessCardDTO): JSX.Element[] {
 /**
  * Human label for a model id, for use inside an inherited-option label.
  *
- * WITH NO PIN IT NAMES THE MODEL THAT WILL ACTUALLY RUN. It used to answer
- * "agent default", which is the name of the *rule* rather than the answer: a
- * lane caption reading "inherits Codex · agent default · xhigh" tells a member
- * nothing they did not already know. The harness's own probe marks one model
+ * WITH NO PIN IT NAMES THE MODEL THAT WILL ACTUALLY RUN. Answering "agent
+ * default" would name the *rule* rather than the answer: a lane caption
+ * reading "inherits Codex · agent default · xhigh" tells a member nothing they
+ * did not already know. The harness's own probe marks one model
  * `default`, so that is the model named; a harness whose probe has reported
  * nothing yet has no name to give and keeps the words.
  */

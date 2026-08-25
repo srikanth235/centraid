@@ -1,7 +1,7 @@
 /*
  * Assemble one vault's `SourceEntry[]` for `createSnapshot` (FORMAT.md
  * "What a Centraid vault snapshot contains"): the WAL shipper's pinned base
- * clones first (each anchors that database's segment stream — issue #408;
+ * clones first (each anchors that database's segment stream — #408;
  * the old `stageVaultDbs` VACUUM INTO staging is gone with the /1 format),
  * then the local blob CAS read in place and the code store's git bundle.
  * Long-lived keys never enter a snapshot: the passphrase-wrapped recovery kit
@@ -89,12 +89,12 @@ async function codeRefsDigest(bareDir: string): Promise<string> {
  * The upload path treats the bundle like any other snapshot entry: fixed-part
  * chunk, dedup, encrypt, upload-if-new (`engine.ts`). That path already has a
  * `(size, mtime)`-keyed fast path that reuses a prior entry's chunk refs without
- * re-reading — but only if the FILE is byte-stable across ticks. The old code
- * rebuilt in a disposable per-tick directory, so the
- * bundle looked new every time: a full-history `git pack-objects` repack (git's
- * default `pack.threads` is not even byte-deterministic on a grown repo) plus a
- * full re-read/re-chunk and, when the bytes drifted, a wholesale re-upload — all
- * for a code store that changes far less often than the backup cadence.
+ * re-reading — but only if the FILE is byte-stable across ticks. Rebuilding in
+ * a disposable per-tick directory makes the bundle look new every time: a
+ * full-history `git pack-objects` repack (git's default `pack.threads` is not
+ * even byte-deterministic on a grown repo) plus a full re-read/re-chunk and,
+ * when the bytes drift, a wholesale re-upload — all for a code store that
+ * changes far less often than the backup cadence.
  *
  * So we gate on a ref digest (`codeRefsDigest`): if the store's refs are
  * unchanged since we last bundled (sidecar `apps.bundle.refs`), the existing
@@ -196,7 +196,7 @@ export async function assembleSourceEntries(
   const { plane, bundleDir, log } = opts;
   const entries: SourceEntry[] = [];
 
-  // (a) DB base clones FIRST (issue #408): the shipper pinned each database
+  // (a) DB base clones FIRST (#408): the shipper pinned each database
   // right after a TRUNCATE checkpoint (WAL-quiet, immutable until the next
   // checkpoint), so the clone IS a point-in-time copy — no VACUUM INTO
   // rewrite, no staging. `sha256` + `walGeneration` ride into the sealed
@@ -272,7 +272,7 @@ export async function assembleSourceEntries(
   if (remotePrimary) {
     pending = new Set(plane.db.blobTransfers.pendingSnapshotShas());
     const replicated = new ReplicaIndex(plane.db.vault).all();
-    // Shared, read-only base set (#659 L5); the archive roots are checked
+    // Shared, read-only base set (#659); the archive roots are checked
     // alongside it instead of being merged into it.
     for (const sha of liveBlobShasCached(plane.db.vault))
       if (!replicated.has(sha)) pending.add(sha);

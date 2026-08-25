@@ -1,14 +1,13 @@
-// SPRINGBOARD POLICY (issue #712 P18, extracted from ./tile-model).
+// SPRINGBOARD POLICY (#712).
 //
 // THE SEAM. `tile-model.ts` answers "what does THIS app's tile say", one
 // selector per app body, over `ReplicaRow`s. This module answers a different
 // question that never touches a row: given the tiles, WHERE do they sit, WHICH
 // of them have earned the grid, and what is the springboard as a whole doing.
 // The first is per-app and grows with the app roster; the second is one page's
-// layout law and does not. They were one file only because they shipped
-// together.
+// layout law and does not.
 //
-// Still pure — no React, no react-native, no replica imports at all now. Every
+// Pure — no React, no react-native, no replica imports at all. Every
 // function here takes `TileData`/`TileBody` (or a `Pick` of them) and returns
 // a decision, which is what makes them unit-testable without a renderer.
 //
@@ -20,7 +19,7 @@
 
 import type { TileBody, TileData } from "./tile-model";
 
-// ------------------------------------------------------------ size ------
+// ──────────────────────────────────────────────────────────── size ──────
 
 /**
  * Tile size class: `small` 1×1, `medium` 2×1, `large` 2×2 — 4 columns on
@@ -87,7 +86,7 @@ export function isWideTile(appId: string): boolean {
   return tileSize(appId) !== "small";
 }
 
-// ------------------------------------------------------------- copy ------
+// ───────────────────────────────────────────────────────────── copy ──────
 
 /**
  * What to do when an app holds nothing yet — one imperative line per app.
@@ -109,7 +108,7 @@ export const TILE_EMPTY_COPY: Record<string, string> = {
   tasks: "Capture the next thing to do",
 };
 
-// -------------------------------------------------------------- grading ---
+// ────────────────────────────────────────────────────────────── grading ───
 
 /**
  * Whether this tile has EARNED a place on the grid.
@@ -166,7 +165,7 @@ export function countThings(tiles: Iterable<TileData>): {
   return { capped, settled, total };
 }
 
-// ------------------------------------------------------------ first run ---
+// ──────────────────────────────────────────────────────────── first run ───
 
 export type SpringboardState = "loading" | "first-run" | "content";
 

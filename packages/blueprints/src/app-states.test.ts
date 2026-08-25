@@ -1,5 +1,5 @@
 /*
- * The designed-state partition, per bundled blueprint (issue #839, gap G7).
+ * The designed-state partition, per bundled blueprint (#839, gap G7).
  *
  * WHY THIS BLOCK EXISTS. Until now "which honest states does this app owe a
  * member" was only readable by eye, out of copy tables and component names —

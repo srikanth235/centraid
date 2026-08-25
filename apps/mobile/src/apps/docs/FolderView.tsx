@@ -1,4 +1,4 @@
-// Inside one label (handoff Part 2 §3; issue #821). Same rows, same actions,
+// Inside one label (handoff Part 2 §3; #821). Same rows, same actions,
 // its own empty state and its own caption: "<name> is a label; taking it off
 // does not delete anything."
 //

@@ -1,5 +1,5 @@
 /**
- * The one pending-write overlay engine (issue #738).
+ * The one pending-write overlay engine (#738).
  *
  * A seat's honest local read is replica ⊕ outbox. Apps declare only how an
  * action projects into replica rows; the shell owns intent identity, status,
@@ -405,11 +405,8 @@ function isPendingProjectionValue(
 }
 
 /**
- * The accessible label a pending badge carries (issue #805).
- *
- * Both surfaces built it inline from the same prefix — web in
- * `PendingWriteActions.tsx`, and natively in the row status the phone's
- * covers drew — so the prefix lives beside the copy it prefixes.
+ * The accessible label a pending badge carries (#805). Both seats read
+ * it from here, so the prefix lives beside the copy it prefixes.
  */
 export function pendingChangeLabel(
   pending: PendingOverlayPresentation

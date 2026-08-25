@@ -22,8 +22,8 @@ export interface PairDeviceModalProps {
  * Devices offers, deliberately: two ways to reach one surface, not a second
  * implementation that can drift.
  *
- * Not the Electron phone-tunnel screen that used to be Settings → Phone. That
- * one publishes desktop apps over a tunnel and is inert on web (the browser
+ * Not the Electron phone-tunnel screen. That one publishes desktop apps over
+ * a tunnel and is inert on web (the browser
  * host answers "pairing is managed by the gateway or desktop client"); this is
  * the ticket flow that actually enrolls a phone against this gateway.
  *

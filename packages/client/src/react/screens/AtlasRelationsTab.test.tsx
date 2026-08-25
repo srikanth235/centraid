@@ -18,7 +18,7 @@ import {
   viewportTransform,
 } from "./atlasRelationsTestKit.js";
 
-// Component behaviour for the Relations "Map" tab (issue #519). Pure geometry
+// Component behaviour for the Relations "Map" tab (#519). Pure geometry
 // and the detail-dial predicates live in atlasOrreryGeometry.test; the shared
 // fixture, mount harness, and DOM helpers live in atlasRelationsTestKit.
 

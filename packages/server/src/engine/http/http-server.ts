@@ -34,7 +34,7 @@ export interface RuntimeHttpServerOptions {
    * Extra hostnames accepted in the Host header beyond the built-in
    * loopback set (localhost / 127.0.0.1 / ::1). The bind `host` is added
    * automatically. Used when a deployment configures non-loopback names
-   * (issue #504); defaults leave only loopback forms allowed.
+   * (#504); defaults leave only loopback forms allowed.
    */
   allowedHosts?: readonly string[];
   /**
@@ -66,7 +66,7 @@ export interface RuntimeHttpServerOptions {
   exposeConversationRoute?: boolean;
   /**
    * Host-supplied route handlers run after auth but before
-   * `runtime.handle` (issue #137). Each returns `true` when it handled
+   * `runtime.handle` (#137). Each returns `true` when it handled
    * the request (response already sent), `false` to fall through.
    * Tried in order. The gateway uses this to mount the apps-store
    * publish/session surface without baking a git backend into
@@ -76,7 +76,7 @@ export interface RuntimeHttpServerOptions {
     (req: IncomingMessage, res: ServerResponse) => Promise<boolean>
   >;
   /**
-   * Exact pathnames served WITHOUT the bearer check (issue #304). The one
+   * Exact pathnames served WITHOUT the bearer check (#304). The one
    * intended tenant is the OAuth consent callback — a provider redirects
    * the owner's BROWSER here, which cannot carry the bearer; the request
    * instead authenticates by its single-use unguessable `state` capability,
@@ -86,7 +86,7 @@ export interface RuntimeHttpServerOptions {
    */
   publicPaths?: readonly string[];
   /**
-   * Path PREFIXES served WITHOUT the bearer check (issue #96). The
+   * Path PREFIXES served WITHOUT the bearer check (#96). The
    * intended tenant is the webhook-trigger route (`/_centraid-hook/<id>`,
    * variable per automation) — the shared secret carried in the request
    * itself IS the auth, checked by the route handler; requiring the
@@ -98,7 +98,7 @@ export interface RuntimeHttpServerOptions {
    */
   publicPathPrefixes?: readonly string[];
   /**
-   * Pluggable bearer authorization (issue #376). When set, it REPLACES the
+   * Pluggable bearer authorization (#376). When set, it REPLACES the
    * single-shared-token equality check: called with the raw bearer string
    * (Authorization header, `Bearer ` prefix stripped), it returns
    * `{plane:'admin'}` for the landlord token, `{plane:'device',
@@ -127,7 +127,7 @@ const CONVERSATIONS_PREFIX = "/_centraid-conversations";
 const USER_STORE_PREFIX = "/_centraid-user";
 
 /**
- * Internal, server-stamped device-identity header (issue #376). Set ONLY
+ * Internal, server-stamped device-identity header (#376). Set ONLY
  * by `route()` below, ONLY after `authorizeBearer` resolves a presented
  * bearer to a device-plane token — never trust a client-supplied value:
  * every request has it deleted first, so a bearer-holder can never forge
@@ -137,7 +137,7 @@ const USER_STORE_PREFIX = "/_centraid-user";
 export const AUTHED_DEVICE_HEADER = "x-centraid-authed-device";
 /**
  * Internal, server-stamped marker naming the plane a presented credential
- * resolved to (issue #568 item C). Same trust rules as
+ * resolved to (#568). Same trust rules as
  * `AUTHED_DEVICE_HEADER`: deleted from every inbound request before auth
  * runs, set only by `route()` on success. Public paths do not REQUIRE a
  * credential, but when one is presented and valid this still records it —
@@ -153,7 +153,7 @@ export type BearerAuthorization =
   | { plane: "device"; deviceKey: string };
 
 /**
- * CORS for the loopback control plane (issue #504 batch 0).
+ * CORS for the loopback control plane (#504 batch 0).
  *
  * Bearer-only clients (desktop thin client, device tokens) have no ambient
  * credentials: reflecting their Origin with credentials is fine when the
@@ -234,11 +234,11 @@ function resolveAllowedHosts(
  * catch at the transport boundary).
  *
  * They exist precisely because no handler ran, so they cannot reach
- * `http-utils.ts`'s `sendJson` — which is where `X-Content-Type-Options:
- * nosniff` was being set for every other JSON response on this server. Three
- * hand-rolled `res.end(JSON.stringify(...))` calls therefore shipped without
- * it (#846 P10, filed as #844). One writer instead of three, so the next
- * transport-boundary response cannot forget the header either.
+ * `http-utils.ts`'s `sendJson`, which is where `X-Content-Type-Options:
+ * nosniff` is set for every other JSON response on this server. One writer
+ * instead of three hand-rolled `res.end(JSON.stringify(...))` calls, so the
+ * next transport-boundary response cannot forget the header either (#846 P10,
+ * #844).
  *
  * `close` sets `Connection: close`: right for a refused Host and for a route
  * that already threw, wrong for a 401, which is an ordinary answer on a
@@ -264,7 +264,7 @@ function endTransportJson(
  * Auth model:
  *   - Loopback bind by default (`127.0.0.1`).
  *   - Host header allowlisted (loopback forms + configured names) — DNS
- *     rebinding is refused before auth/handlers (issue #504).
+ *     rebinding is refused before auth/handlers (#504).
  *   - All requests require `Authorization: Bearer <token>` (or a host-supplied
  *     cookie authorizer via `authorizeRequest`).
  *   - The token is randomly minted on `start()` unless one is provided.

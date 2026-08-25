@@ -1,4 +1,4 @@
-// Circle-backed commons sharing (issue #731). Consent and the roster live in
+// Circle-backed commons sharing (#731). Consent and the roster live in
 // vault.db so backup/restore retains the relationship; the gateway compiles
 // these rows into transport and projection mechanics after every mount.
 

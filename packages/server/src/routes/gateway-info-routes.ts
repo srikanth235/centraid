@@ -1,6 +1,6 @@
 /*
  * `GET /centraid/_gateway/info` — gateway identity + version handshake
- * (issue #289 / #504).
+ * (#289 / #504).
  *
  * The one route a client reads BEFORE trusting anything else about a
  * gateway: software version + schema epoch (exact-match or refuse in v0),
@@ -33,7 +33,7 @@ export interface GatewayInfoRouteOptions {
   /**
    * Current relay/address data — a dial ticket for this gateway's iroh
    * endpoint. Served ONLY to a caller that presented a valid credential
-   * (issue #568 item C).
+   * (#568).
    *
    * The route itself is public because a client must read the version /
    * schema handshake before it can pair, and `isLoopbackRequest` is not a
@@ -73,7 +73,7 @@ export function makeGatewayInfoRouteHandler(
       });
     }
     const endpointId = options.endpointId?.();
-    // Reported on the payload (issue #603): an anonymous caller silently loses
+    // Reported on the payload (#603): an anonymous caller silently loses
     // `endpointTicket`, and without this flag a bearer mismatch is
     // indistinguishable from an endpoint that has not come up yet.
     const authenticated = isAuthenticated(req);

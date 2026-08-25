@@ -39,11 +39,10 @@ export const PEER_COMMONS_CLAIM_PATH = "/centraid/_peer/commons/claim";
 export const PEER_COMMONS_REFUSE_PATH = "/centraid/_peer/commons/refuse";
 
 /**
- * Per-transfer authorization state (#750 defect b). Authorizing a blob pull
- * used to run a FULL closure export + Ed25519 signing for EVERY 1 MiB chunk
- * (~1024 exports per member per GiB). Now the closure walk happens ONCE, when
- * a transfer session is opened; each chunk only validates against the
- * session's sha set. Sessions are in-memory and expiring — losing one on a
+ * Per-transfer authorization state (#750 defect b). The closure walk happens
+ * ONCE, when a transfer session is opened — not a FULL closure export +
+ * Ed25519 signing for EVERY 1 MiB chunk (~1024 exports per member per GiB).
+ * Each chunk only validates against the session's sha set. Sessions are in-memory and expiring — losing one on a
  * gateway restart merely costs the member one re-authorize round trip.
  * The same store carries a paginated bootstrap frame (#750 defect d), sliced
  * so no single response serializes the entire commons.
@@ -442,7 +441,7 @@ export async function handlePeerCommonsCommand(
   const credential = deps.credentialFor(stewardVaultId);
   const link = peer.linkForPair(stewardVaultId, memberVaultId);
   // The grant sequence the member had projected locally when it composed this
-  // command (issue #731 goal 1). It is member-supplied, untrusted input like
+  // command (#731 goal 1). It is member-supplied, untrusted input like
   // every other field on this wire body — it never rode inside the signed
   // intent bytes `memberSignature` covers — so it is an honesty/classification
   // signal for the stale-context check only, and must never widen what
@@ -490,7 +489,7 @@ export async function handlePeerCommonsCommand(
       // A member whose vault identity was RE-MINTED still links and still
       // signs — it simply is not the key this commons pinned. That is a named
       // condition with a cure (re-invitation), not an unknown caller, so it
-      // answers with the fault instead of a silent 404 (issue #750).
+      // answers with the fault instead of a silent 404 (#750).
       const pinned = steward.vault
         .prepare(
           `SELECT b.party_id FROM share_party_vault_binding b

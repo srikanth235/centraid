@@ -1,4 +1,4 @@
-// HTTP surface for the gateway-owned git store (issue #137).
+// HTTP surface for the gateway-owned git store (#137).
 //
 // These routes live in gateway-runtime, not app-engine, because
 // they're specific to the WorktreeStore backend — app-engine stays
@@ -29,9 +29,8 @@
 //   DELETE /centraid/_apps/<appId>                   remove app from main
 //
 // Publish validates the manifest against the *session worktree* before
-// the merge — the validation that used to run client-side in
-// the harness publish path now runs gateway-side, since the
-// gateway owns the data.
+// the merge — gateway-side, not in the harness publish path
+// client-side, since the gateway owns the data.
 
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -52,8 +51,8 @@ import {
   sendJsonConditional,
 } from "./route-helpers.js";
 
-// Re-exported so existing importers (lifecycle-shared) keep their path; the
-// implementation moved to validate-manifest.ts (issue #167, file-size hygiene).
+// Re-exported so importers (lifecycle-shared) keep their path; the
+// implementation lives in validate-manifest.ts (#167).
 export { validateManifestAt } from "../validate-manifest.js";
 
 export interface AppsStoreRouteOptions {
@@ -73,13 +72,13 @@ export interface AppsStoreRouteOptions {
    */
   onAppDeleted?: (appId: string) => Promise<void>;
   /**
-   * Installed bundled apps for the request's vault (issue #434) — the second
+   * Installed bundled apps for the request's vault (#434) — the second
    * half of the `GET /_apps` union, read from the shipped blueprint dir +
    * per-vault rename (not the git store). Omitted with no vault plane.
    */
   bundledApps?: () => Promise<AppMetaRow[]>;
   /**
-   * The vault plane's ext-band operations (issue #286 phase 2). Injected
+   * The vault plane's ext-band operations (#286). Injected
    * so publish applies the session's declared extension tables to the
    * vault before the ff-merge, and reset-data re-snapshots the draft band —
    * the store itself stays data-agnostic. Omitted on hosts without a
@@ -119,14 +118,14 @@ export function makeAppsStoreRouteHandler(
     const method = (req.method ?? "GET").toUpperCase();
 
     try {
-      // ---- collection-level: GET /_apps (list with metadata) ----
+      // ──── collection-level: GET /_apps (list with metadata) ────
       // Shadows app-engine's legacy registry-list route and returns
       // the same flat-array shape, extended with `name`, `description`,
-      // and the app.json tile identity (`iconKey`/`colorKey`, issue #263)
+      // and the app.json tile identity (`iconKey`/`colorKey`, #263)
       // so the home shelves render tiles without a workspaceDir scan or a
       // per-device metadata shim.
       if (segments.length === 1 && method === "GET") {
-        // Listing union (issue #434): installed bundled apps (served in place)
+        // Listing union (#434): installed bundled apps (served in place)
         // + git code-store apps, deduped with bundled (reserved ids) winning.
         const storeApps = await store.listAppsWithMeta();
         const bundled = opts.bundledApps ? await opts.bundledApps() : [];
@@ -140,7 +139,7 @@ export function makeAppsStoreRouteHandler(
         return sendJsonConditional(req, res, 200, apps);
       }
 
-      // ---- session lifecycle: /_apps/_sessions[/<id>] ----
+      // ──── session lifecycle: /_apps/_sessions[/<id>] ────
       if (segments[1] === "_sessions") {
         return await handleSessions(
           store,
@@ -164,7 +163,7 @@ export function makeAppsStoreRouteHandler(
         return true;
       }
 
-      // ---- per-app collection-level: DELETE /_apps/<appId> ----
+      // ──── per-app collection-level: DELETE /_apps/<appId> ────
       if (segments.length === 2 && method === "DELETE") {
         // Delete is idempotent. `store.deleteApp` throws `no_changes` when
         // there's no code subtree on `main` to drop — which is the normal
@@ -288,9 +287,8 @@ async function handlePublish(
     return true;
   }
 
-  // Manifest validation moved gateway-side (was the harness runtime's
-  // assertManifestValid). Validate the session worktree's app.json +
-  // handler files BEFORE the merge so an invalid manifest fails the
+  // Manifest validation is gateway-side: validate the session worktree's
+  // app.json + handler files BEFORE the merge so an invalid manifest fails the
   // publish instead of producing a dead live version.
   const appDir = await store.snapshotSessionAppDir(sessionId, appId);
   const validationError = await validateManifestAt(appDir);
@@ -361,7 +359,7 @@ async function handleRollback(
 }
 
 /**
- * Re-snapshot a draft session's ext band from live (issue #286 phase 2) —
+ * Re-snapshot a draft session's ext band from live (#286) —
  * the preview "Reset data" control. Reads the DRAFT manifest's declared
  * tables and rebuilds the scratch band with a fresh copy of live rows.
  * Doubles as a dress rehearsal of the publish DDL: a spec the vault
@@ -458,7 +456,7 @@ async function handleFiles(
   }
   if (method === "DELETE") {
     // /_apps/<appId>/files/<rel...> — remove a draft file from the
-    // session worktree (issue #141: app-owned-automation delete over HTTP).
+    // session worktree (#141: app-owned-automation delete over HTTP).
     const rel = segments
       .slice(3)
       .map((s) => decodeURIComponent(s))
@@ -486,7 +484,7 @@ async function handleFiles(
   return false;
 }
 
-// ---- apps-store-specific error mapping (delegates to shared sendJson) ----
+// ──── apps-store-specific error mapping (delegates to shared sendJson) ────
 
 function sendStoreError(res: ServerResponse, err: unknown): true {
   if (err instanceof WorktreeStoreError) {

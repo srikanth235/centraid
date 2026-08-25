@@ -1,5 +1,5 @@
 /*
- * Three version numbers for Centraid (issue #512).
+ * Three version numbers for Centraid (#512).
  *
  * 1. GATEWAY_VERSION (product) — humans, changelog, installers. Never use for
  *    runtime control flow.
@@ -29,14 +29,14 @@ export const GATEWAY_PROTOCOL_VERSION = 3;
  *   peer.protocolVersion >= local.minSupported
  *   local.protocolVersion >= peer.minSupported
  *
- * v3 (#726 P0): ownership replaces roles — member/role wire fields became
+ * v3 (#726): ownership replaces roles — member/role wire fields became
  * owner fields, `canWrite` is gateway-supplied, and the `/share` plane is
  * gone. Hard floor, no COMPAT shims (pre-1.0 no-fallback policy).
  */
 export const GATEWAY_MIN_PROTOCOL_VERSION = 3;
 
 /*
- * Gateway↔GATEWAY protocol (issue #726 P3 decision 5).
+ * Gateway↔GATEWAY protocol (#726 P3 decision 5).
  *
  * A fourth number, deliberately independent of the three above: two linked
  * gateways are two products on their owners' own upgrade schedules, and the

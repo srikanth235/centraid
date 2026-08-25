@@ -2,8 +2,6 @@ import type { JSX } from "react";
 
 // Chrome-local line glyphs — the app-bar marks that are NOT in
 // @centraid/design (design-token icons render via <Icon name=…>).
-// Faithful ports of the inline `Glyph` SVGs in the vanilla chrome.ts: same
-// viewBox, stroke treatment, and path data.
 //
 // The set shrank with the stem (#707): Plus/Sparkle went with the sidebar rows
 // that drew them, and everything the launcher draws comes from the one path

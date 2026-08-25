@@ -1,5 +1,5 @@
 /**
- * Add a free-form label to a photo through core.tag_item (issue #352
+ * Add a free-form label to a photo through core.tag_item (#352
  * phase 3/4) — additive and idempotent over the shared "Tags" concept
  * scheme (packages/vault/src/commands/tags.ts, the same scheme notes/tasks
  * tag through); tagging the same label twice just dedupes onto the one

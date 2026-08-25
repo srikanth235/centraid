@@ -28,7 +28,7 @@ export interface AppVisualIdentity {
 
 /**
  * Pure string variant: backfill `iconKey` / `colorKey` in an `app.json`
- * string from the template's catalog entry (issue #263 — tile identity
+ * string from the template's catalog entry (#263 — tile identity
  * lives at the source, not in a desktop localStorage shim). Keys the
  * manifest already declares win — a template's own app.json is copied
  * verbatim on clone, so this only fills gaps (older cached template
@@ -86,7 +86,7 @@ export interface AutomationManifestRewriteOptions {
  * Pure string variant: rewrite `name` (and optionally re-stamp
  * `generated`) in an `automation.json` string. Returns `null` when the
  * input is unparseable so the caller can skip it. Shared by the
- * filesystem walker and the git-store file-map path (issue #141).
+ * filesystem walker and the git-store file-map path (#141).
  */
 export function applyManifestName(
   raw: string,

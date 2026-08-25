@@ -16,26 +16,17 @@ import { createHash } from "node:crypto";
  * Clawgnition checkout or its dev credentials aren't where expected. Run it
  * explicitly with `bun run test:interop` (see package.json).
  *
- * History: this suite previously carried two `test.fails(...)` exemptions
- * in "a. full conformance" for confirmed Clawgnition-side bugs —
- * `POST /v1/storage/vaults/:id/snapshots` omitting `prunedAt`, and that same
- * route's response shape disagreeing with `GET .../snapshots/:seq` for the
- * identical row (extra `id`/`vaultId` fields, missing `prunedAt`). Both are
- * now fixed upstream (registration response matches the GET row shape
- * exactly) and the exemptions are removed — the full, unmodified
- * conformance kit runs and passes outright.
+ * There are no `test.fails(...)` exemptions here: the full, unmodified
+ * conformance kit runs and passes outright against a live Clawgnition
+ * gateway.
  *
- * One bug WAS found and fixed on the Centraid side while building this
- * suite (see `engine.ts`'s `createSnapshot` and `conformance.ts`'s
- * `manifestKeyFor`): PROTOCOL.md's own example showed a bare
- * `"manifestKey": "manifests/…"`, and both `LocalBackupProvider` and this
- * package's in-process fake gateway happily accepted that — but a live
- * Clawgnition gateway 400s it with `invalid_manifest_key`, because it
- * enforces manifestKey to literally start with the target's per-store
- * prefix (`u/{id}/backup/` since centraid-storage-provider/1)
- * prefix. Fixed by having `createSnapshot` (and the conformance kit's own
- * registration test data) build prefixed keys; PROTOCOL.md's example was
- * corrected to match.
+ * MANIFEST KEYS ARE PREFIXED (see `engine.ts`'s `createSnapshot` and
+ * `conformance.ts`'s `manifestKeyFor`): a live Clawgnition gateway 400s a
+ * bare `"manifestKey": "manifests/…"` with `invalid_manifest_key`, because it
+ * enforces manifestKey to literally start with the target's per-store prefix
+ * (`u/{id}/backup/` since centraid-storage-provider/1). Both
+ * `LocalBackupProvider` and this package's in-process fake gateway accept an
+ * unprefixed key, so only this suite catches a regression to one.
  */
 import { existsSync, readFileSync, promises as fs } from "node:fs";
 import net from "node:net";
@@ -92,11 +83,11 @@ async function fileSha256(filePath: string): Promise<string> {
     .digest("hex");
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Gating — decided at collection time, synchronously, so `describe.skipIf`
 // can act on it and the whole suite (including its `beforeAll`) is skipped
 // cleanly with zero side effects when the env/checkout isn't set up.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 const CLAWGNITION_REPO =
   process.env.CLAWGNITION_REPO ?? "/Users/srikanth/gitspace/clawgnition";
@@ -125,19 +116,19 @@ const SUITE_TITLE = SKIP_REASON
   ? `interop: Centraid backup client vs real Clawgnition gateway (SKIPPED — ${SKIP_REASON})`
   : "interop: Centraid backup client vs real Clawgnition gateway";
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Fixed dev-loop constants (match Clawgnition's docs/LOCAL_DEV_BACKUP.md and
 // its predev-computed PORT_OFFSET for this branch, which happens to land the
 // gateway on 9587 — see AGENT_ISSUE handoff notes; if that ever drifts,
 // GATEWAY_PORT below is the one thing to change).
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 const GATEWAY_PORT = 9587;
 const S3_PORT = 9099;
 const GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`;
 const BUCKET = "clawgnition-vault-backups-dev";
-// Clawgnition auth is routed-key based (`sk-claw_v1_<cell>_<keyId>_<secret>`):
-// flat seeded keys no longer authenticate. The suite signs in as the
+// Clawgnition auth is routed-key based (`sk-claw_v1_<cell>_<keyId>_<secret>`);
+// a flat seeded key does not authenticate. The suite signs in as the
 // predev-seeded operator and mints a routed key over the real HTTP surface
 // (`POST /v1/keys`) in beforeAll — the same path the dashboard takes.
 const OPERATOR_EMAIL = "operator@clawgnition.local";
@@ -154,9 +145,9 @@ const APP_META = {
   sourceInstanceId: "interop-test",
 };
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Process/port plumbing
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 async function assertPortFree(port: number, label: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
@@ -360,9 +351,9 @@ async function mintRoutedApiKey(): Promise<string> {
   return mintAfterVerifierWarmup(0);
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Suite
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
   let s3: S3TestServer;
@@ -436,9 +427,9 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     return targetId;
   }
 
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   // a. Full conformance
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   describe("a. full conformance", () => {
     async function makeHarness(): Promise<ConformanceHarness> {
       return { provider, cleanup: async () => undefined };
@@ -455,17 +446,17 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       "%s",
       async (_name, c) => {
         await c.run();
-        // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496 E5).
+        // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496).
         expect(c.name.length).toBeGreaterThan(0);
       },
       90_000
     );
   });
 
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   // b + c. Real snapshot -> restore over the wire, then verify catches real
   // loss. Sequential/stateful on purpose — c corrupts the snapshot b built.
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   describe("b+c. real snapshot lifecycle over the wire", () => {
     const VAULT_ID = "interop-vault-1";
     let targetId: string;
@@ -510,9 +501,8 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       // at 1.5 MiB, one part). Incompressible on purpose: it stores RAW under
       // the keep-if-smaller gate (each part costs the 1 frame byte, no
       // inflation) while still exercising many-object seal/upload/restore
-      // reassembly against the real S3 server. (Fixed 16 MiB parts — centraid
-      // no longer content-defined-chunks, so size, not entropy, sets the part
-      // count.)
+      // reassembly against the real S3 server. (Fixed 16 MiB parts — size, not
+      // entropy, sets the part count.)
       await fs.writeFile(
         path.join(sourceDir, "blobs", "big.bin"),
         pseudoRandomBuffer(33 * 1024 * 1024, 4)
@@ -650,9 +640,9 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     }, 90_000);
   });
 
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   // d. Fencing against the real Durable Object
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   test("d. generation fencing + idempotency replay-before-fencing, against the real DO", async () => {
     const targetId = await freshTarget("interop-fencing");
     const base = {
@@ -711,9 +701,9 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     expect(replay.manifestKey).toBe(gen2.manifestKey);
   }, 90_000);
 
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   // e. Read-mode grant
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   test("e. a 'read' credential grant carries mode:'read'; our S3ObjectStore refuses put locally", async () => {
     const targetId = await freshTarget("interop-read-grant");
 
@@ -743,9 +733,9 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     ).rejects.toThrow(/read.*mode/iu);
   }, 90_000);
 
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   // f. accountStatus / usage / currentGeneration shape against real rows
-  // -------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────
   test("f. getTarget/usage report real accountStatus/usage/currentGeneration from D1", async () => {
     const targetId = await freshTarget("interop-shape-check");
     await provider.registerSnapshot(targetId, {

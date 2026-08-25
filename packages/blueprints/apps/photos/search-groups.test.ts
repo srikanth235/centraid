@@ -182,7 +182,7 @@ describe(searchGroups, () => {
   });
 });
 
-// THE NO-LOCATION BUCKET (issue #816): the one set Places could not show.
+// THE NO-LOCATION BUCKET (#816): the one set Places could not show.
 const NO_LOCATION_SECTION: PlaceSection = {
   key: NO_LOCATION_KEY,
   name: "No location yet",
@@ -191,10 +191,11 @@ const NO_LOCATION_SECTION: PlaceSection = {
   lng: null,
 };
 
-// A PLACE IS A SEARCH TERM (issue #816). Before this, a place answered to
-// exactly one string — the `name` column — so the Tahoe trip was unfindable by
-// the word "Tahoe" (the member had called the sections something else, or the
-// vault had called them a coordinate), and "near home" matched nothing at all.
+// A PLACE IS A SEARCH TERM (#816). A place that answered to exactly one
+// string — the `name` column — left the Tahoe trip unfindable by the word
+// "Tahoe" whenever the member had called the sections something else or the
+// vault had called them a coordinate, and matched nothing at all for
+// "near home".
 describe("the vocabulary a place answers to", () => {
   function placesFor(query: string, sections: readonly PlaceSection[]) {
     return searchGroups({

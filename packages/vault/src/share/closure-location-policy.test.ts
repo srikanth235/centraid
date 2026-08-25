@@ -1,4 +1,4 @@
-// The `media.location` policy at closure READ (issue #726 P3 decision 8,
+// The `media.location` policy at closure READ (#726 P3 decision 8,
 // threat 8): a `strip` origin must not let GPS cross a CROSS-OWNER boundary
 // through `exif_json`, even though `projection-ingest.ts` already stops the
 // AUDIENCE from re-deriving a `place_id` from it — the coordinates themselves

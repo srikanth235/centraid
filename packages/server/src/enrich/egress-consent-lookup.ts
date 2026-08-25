@@ -1,5 +1,5 @@
 /*
- * THE GATEWAY'S READ of the vault's egress-consent ledger (issue #807, Wave 3).
+ * THE GATEWAY'S READ of the vault's egress-consent ledger (#807).
  *
  * Consent is DATA-OWNER PROPERTY: it is written in the vault, by the one
  * journalled command (`enrich.record_consent`, packages/vault/src/commands/

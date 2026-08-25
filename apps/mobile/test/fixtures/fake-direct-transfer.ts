@@ -12,7 +12,7 @@
 //
 // Never imported by app code.
 
-/* eslint-disable max-classes-per-file -- (#419) the kill switch, the provider
+/* oxlint-disable max-classes-per-file -- (#419) the kill switch, the provider
    and the gateway are one test model of a single contract: the killer's step
    labels are named by the provider/gateway seams they instrument, and splitting
    them would scatter one fixture across four files. */

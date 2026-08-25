@@ -1,9 +1,9 @@
 // Client half of HTTP conditional requests for the phone's gateway calls.
 //
 // Home re-fetches the same three endpoints on mount, on focus and on every SSE
-// doorbell, and none of those responses usually changed. Unconditional GETs made
-// the phone pay the full body every time — over a metered link, over a relay,
-// for bytes it already had. `If-None-Match` turns the unchanged case into a 304
+// doorbell, and none of those responses usually changed. An unconditional GET
+// makes the phone pay the full body every time — over a metered link, over a
+// relay, for bytes it already had. `If-None-Match` turns the unchanged case into a 304
 // with no body while leaving the freshness guarantee exactly where it was: the
 // gateway still decides, and a changed resource still returns in full.
 //

@@ -3,10 +3,8 @@
 //
 // `resolveIconName` THROWS on an unknown name, and an icon is rendered deep
 // inside real screens, so a missing alias is not a wrong glyph: it is a render
-// error that takes the whole screen down. Three separate spellings shipped that
-// way (`list`, `file`, then `map-pin`), each found only by a member walking
-// onto the screen that used it, because nothing connected "the spellings the
-// call sites use" to "the spellings the resolver knows".
+// error that takes the whole screen down — and nothing else connects "the
+// spellings the call sites use" to "the spellings the resolver knows".
 //
 // This test is that connection. It greps the mobile source for icon literals
 // and resolves every one. It cannot prove a glyph is the RIGHT glyph — that is

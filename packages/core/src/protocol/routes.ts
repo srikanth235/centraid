@@ -1,5 +1,5 @@
 /*
- * Shared `/centraid/_*` route-path constants (issue #504 batch 2).
+ * Shared `/centraid/_*` route-path constants (#504 batch 2).
  *
  * Planes:
  *   - `/centraid/_gateway/*`  shell/control plane
@@ -10,8 +10,8 @@
  * App RPC is NOT a plane: a handler invocation is addressed under the app's
  * own prefix — `POST /centraid/<appId>/actions/<action>` (an action) and
  * `POST /centraid/<appId>/queries/<query>` (a query), with the declared
- * handlers discoverable at `GET /centraid/<appId>/_describe` (issue #505,
- * which retired the `/centraid/_tool/centraid_*` shim). Those paths are
+ * handlers discoverable at `GET /centraid/<appId>/_describe` (#505).
+ * Those paths are
  * per-app and parametric, so they are minted by the helpers below rather
  * than living in the flat `ROUTES` table.
  *
@@ -99,7 +99,7 @@ export const ROUTE_PATHS: readonly string[] = Object.freeze(
 );
 
 /**
- * Build the app-scoped action-invocation path (issue #505). `POST` here with
+ * Build the app-scoped action-invocation path (#505). `POST` here with
  * a JSON body of `{ input?, intentId? }` runs the declared action; the app id
  * and action name ride in the path, not the body.
  */
@@ -108,7 +108,7 @@ export function appActionPath(appId: string, action: string): string {
 }
 
 /**
- * Build the app-scoped query-invocation path (issue #505). `POST` here with a
+ * Build the app-scoped query-invocation path (#505). `POST` here with a
  * JSON body of `{ input? }` runs the declared query.
  */
 export function appQueryPath(appId: string, query: string): string {
@@ -116,7 +116,7 @@ export function appQueryPath(appId: string, query: string): string {
 }
 
 /**
- * Build the app-scoped describe path (issue #505). `GET` returns the app's
+ * Build the app-scoped describe path (#505). `GET` returns the app's
  * manifest; an optional `?action=<name>` or `?query=<name>` narrows to one
  * declared handler. Replaces the `centraid_describe` tool.
  */
@@ -125,7 +125,7 @@ export function appDescribePath(appId: string): string {
 }
 
 /**
- * Build the app-scoped conversation-turn path (issue #420). `POST` opens an
+ * Build the app-scoped conversation-turn path (#420). `POST` opens an
  * SSE stream driven by the app's declared-handler agent.
  */
 export function appTurnPath(appId: string): string {

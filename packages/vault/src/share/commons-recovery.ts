@@ -1,4 +1,4 @@
-// Replica-export recovery for the Commons plane (issue #731).
+// Replica-export recovery for the Commons plane (#731).
 //
 // A commons grant has exactly ONE steward vault, and today its loss is
 // terminal: members keep a complete replica forever and can do nothing with

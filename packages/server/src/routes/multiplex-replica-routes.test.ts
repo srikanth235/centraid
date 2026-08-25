@@ -155,7 +155,7 @@ describe("multiplex replica route", () => {
       schemaEpoch: familyState.schemaEpoch,
     });
     // Ownership of the family vault ends while the phone is offline — the
-    // ownership analogue of the old grant removal.
+    // ownership analogue of a grant removal.
     f.enrollments.owners.removeVault(f.family.boot.vaultId);
     const req = request(streamPath([f.personal, f.family]), f.deviceId);
     const res = new MockResponse();
@@ -206,7 +206,7 @@ describe("multiplex replica route", () => {
       schemaEpoch: familyState.schemaEpoch,
     });
     // Ownership of the family vault ends while the phone is offline — the
-    // ownership analogue of the old grant removal.
+    // ownership analogue of a grant removal.
     f.enrollments.owners.removeVault(f.family.boot.vaultId);
     const req = request(streamPath([f.personal, f.family]), f.deviceId);
     const res = new MockResponse();

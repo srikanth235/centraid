@@ -1,5 +1,5 @@
 /*
- * Owners — the principal layer (issue #726).
+ * Owners — the principal layer (#726).
  *
  * An owner is a human on this gateway. Authorization is two questions,
  * neither a role: whose device is this (`enrollment-store.ts` binds proved
@@ -153,7 +153,7 @@ export class OwnerStore {
   /**
    * Remove a person: one transaction that drops their device bindings and
    * the owner row. Refused while they still own vaults — the ownership
-   * analogue of the old last-admin guard, structural instead of counted.
+   * analogue of a last-admin guard, structural instead of counted.
    */
   remove(ownerId: string): { removedEndpointIds: string[] } {
     return this.gatewayDatabase.transaction(() => {

@@ -22,10 +22,10 @@
 // @centraid/client/home-copy).
 //
 // What is NOT here, deliberately: dashed placeholder cards. A dashed rectangle
-// per empty app was the old day-one treatment, and it had two faults the brief
-// names — it scaled to eight identical apologies as the vault filled, and each
-// one opened the empty app it was named after, which is a dead end wearing an
-// invitation. Every move below lands somewhere that can TAKE content.
+// per empty app has two faults the brief names — it scales to eight identical
+// apologies as the vault fills, and each one opens the empty app it is named
+// after, which is a dead end wearing an invitation. Every move below lands
+// somewhere that can TAKE content.
 
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";

@@ -1,4 +1,4 @@
-// The Home springboard's tile model (issue #708, section A).
+// The Home springboard's tile model (#708, section A).
 //
 // The Binding Layer's Home is not an icon launcher. Every tile carries the
 // INVARIANT header — app mark, app name at the UI role, count in the numeric
@@ -22,10 +22,10 @@ import { HOME_FIRST_MOVE_COPY } from "../../../home-copy.js";
  * freshness rule. It leads with the two bodies that carry IMAGERY and PROSE —
  * the mosaic and the reading register — and only then runs the small chips.
  *
- * The order this replaces sorted by how often an app's content changes (agenda
- * and tasks first, the standing library last), which is a sound rule and the
- * wrong one here. It put two 1×1 chips in the top-left and pushed the mosaic to
- * the right, so the first thing the eye met on Home was a checkbox list. The
+ * Sorting by how often an app's content changes (agenda and tasks first, the
+ * standing library last) is a sound rule and the wrong one here: it puts two
+ * 1×1 chips in the top-left and pushes the mosaic to the right, so the first
+ * thing the eye meets on Home is a checkbox list. The
  * mosaic is the only body that needs area to be itself; giving it the corner is
  * what makes the grid read as a page with a subject instead of a launcher with
  * a picture in it. Freshness still decides what is IN a tile — it just no
@@ -143,9 +143,9 @@ export type HomeTileBody =
   | { kind: "notes"; line: string; at: string }
   /** Nothing to show. A MARKER, not a rendering: `partitionHomeTiles` reads it
    *  to keep this app out of the grid entirely, and the invitation to fill it
-   *  lives once, in `homeFirstMoves`. It used to carry what-to-do copy for a
-   *  dashed in-grid tile — two spellings of one state, which is the drift
-   *  `home-copy.ts` exists to prevent. */
+   *  lives once, in `homeFirstMoves`. Carrying what-to-do copy here as well
+   *  would be two spellings of one state, the drift `home-copy.ts` exists to
+   *  prevent. */
   | { kind: "empty" };
 
 export interface HomeTileModel {
@@ -376,11 +376,11 @@ export function buildHomeTiles(input: {
  * Split the springboard into the tiles that have earned the grid and the apps
  * that have not.
  *
- * This replaces `isFirstRun`, which was a BINARY over the same information and
- * got both ends wrong. With nothing anywhere it produced one sentence over four
- * dashed rectangles; with one note anywhere it flipped and produced all eight
- * tiles, seven of them apologising — the "eight apologies" the day-one treatment
- * exists to prevent, arriving one note later. A vault fills up gradually, so the
+ * A BINARY over the same information gets both ends wrong: with nothing
+ * anywhere it produces one sentence over four dashed rectangles; with one note
+ * anywhere it flips and produces all eight tiles, seven of them apologising —
+ * the "eight apologies" the day-one treatment exists to prevent, arriving one
+ * note later. A vault fills up gradually, so the
  * surface has to be graded too: a tile is in the grid when it has something to
  * show, and everything else becomes an INVITATION rather than an absence.
  *

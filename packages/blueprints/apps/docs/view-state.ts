@@ -7,9 +7,9 @@
 //     `loaded` the view paints skeleton rows at the row geometry rather than
 //     saying "This drive is empty".
 //
-//  2. Docs used to reset `nav` to All whenever the open folder vanished from a
-//     read — for the ordinary case of a folder deleted in another window. The
-//     fall-back is FOLDERS, not All, because the folder was reached from there;
+//  2. When the open folder vanishes from a read — the ordinary case of a
+//     folder deleted in another window — `nav` does not fall back to All. The
+//     fall-back is FOLDERS, because the folder was reached from there;
 //     and the move is ANNOUNCED (`goneFolder`) so the shelf can say what
 //     happened. That is the spec's own "A document whose folder has gone"
 //     framing (§4.3 `folders`), applied to navigation.

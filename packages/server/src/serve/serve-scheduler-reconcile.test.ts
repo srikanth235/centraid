@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 /*
- * Scheduler-on-publish reconcile (issue #149). A publish over HTTP must
+ * Scheduler-on-publish reconcile (#149). A publish over HTTP must
  * resync the in-process cron scheduler — `serve()` reconciles in onAppLive
  * against the gateway's persistent scheduler instance. Boots a real
  * git-store gateway with an injected spy scheduler and asserts a publish

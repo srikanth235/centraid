@@ -1,5 +1,5 @@
 /**
- * PHOTOS' OWN WAY INTO THE GRANT SHEET (issue #825, wave 6).
+ * PHOTOS' OWN WAY INTO THE GRANT SHEET (#825).
  *
  * The grant kit draws the sheet; the HOST says who is in the room. The roster
  * MAPPING is not Photos' either — `_shared/grant-audiences.ts` owns it for

@@ -1,15 +1,13 @@
-// The two controls that belong to ONE staged write (#765), folded out of the
-// old `components/OutboxDecisionCard`.
+// The two controls that belong to ONE staged write (#765).
 //
-// That card carried the whole decision — title, artifact dump, edit form,
-// always-allow switch and three buttons — inside one bordered plate, once per
-// queued item. The v9 shape promotes ONE write to a panel and leaves the rest
-// as rows, so the card's plate, its title line and its artifact preview are
-// gone: `PanelBlock` states them better (the body is quoted because the words
-// are somebody else's, and every address is a fact in a keyed column). What
-// survives is what the panel cannot express — an editable form and a standing
-// consent toggle — and it survives as the CHILDREN of two rows under the
-// panel, because a deny is not a smaller approve and neither is a grant.
+// A whole decision inside one bordered plate per queued item — title, artifact
+// dump, edit form, always-allow switch and three buttons — is exactly what
+// this shape refuses. ONE write is promoted to a panel and the rest stay rows:
+// `PanelBlock` carries the plate, the title line and the body (quoted, because
+// the words are somebody else's, with every address a fact in a keyed column).
+// What lives here is only what the panel cannot express — an editable form and
+// a standing consent toggle — and it lives as the CHILDREN of two rows under
+// the panel, because a deny is not a smaller approve and neither is a grant.
 
 import React, { useMemo, useState } from "react";
 import { Switch, View } from "react-native";

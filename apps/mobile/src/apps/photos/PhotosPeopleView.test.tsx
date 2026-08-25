@@ -1,5 +1,5 @@
-// Pins the people roster's defects from issue #711, plus the re-homed
-// consent gate from issue #712 C2. People moved off the band and behind
+// Pins the people roster's defects from #711, plus the re-homed
+// consent gate from #712. People moved off the band and behind
 // Collections/the Library shelf list later in #712 — see `PhotosScreen`'s
 // stub below — but the claims this file pins about the grid itself did not
 // change:
@@ -7,11 +7,9 @@
 //  - a party with no display_name still shows, as "Unnamed" — never dropped
 //    from the grid (README:217, proto:3760)
 //  - tapping a person card opens THAT PERSON'S PHOTOGRAPHS
-//    (`PhotoStateView`, mode "person"), never `FaceReview` — the previous
-//    `PhotosCollectionsView` behaviour this screen replaced always opened
-//    Face review regardless of which person card was tapped, which is
-//    exactly the "labelled destination opens something else" bug this issue
-//    is about
+//    (`PhotoStateView`, mode "person"), never `FaceReview` — opening Face
+//    review regardless of which person card was tapped is exactly the
+//    "labelled destination opens something else" bug this issue is about
 //  - the face-detection consent gate now lives in THIS view's empty state
 //    (moved off PhotosLibrary's footer row + modal), and only while the
 //    question is still open — an empty-and-answered roster falls back to the
@@ -93,7 +91,7 @@ const mocks = vi.hoisted(() => ({
       confirmed_by_party_id: undefined,
       review_state: "proposed",
     },
-    // Answered without being confirmed (issue #712): the member reviewed this
+    // Answered without being confirmed (#712): the member reviewed this
     // face and deliberately left it unnamed. It is nobody's card AND nobody's
     // backlog — before `review_state` the note counted it as still waiting.
     {
@@ -244,7 +242,7 @@ vi.mock(
     }) as unknown as Partial<StatusLineModule>
 );
 
-// The shell (issue #712): PhotosPeopleView now draws the band via
+// The shell (#712): PhotosPeopleView now draws the band via
 // `PhotosScreen`, which pulls in react-navigation, the band-owner hook and
 // the whole band/selection-bar tree — none of which this file's claims are
 // about. Stubbed to a passthrough of its children, same reasoning as the

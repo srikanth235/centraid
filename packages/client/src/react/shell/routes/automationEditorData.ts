@@ -1,11 +1,6 @@
-// Automation editor data layer — LOAD half only (Automations UI revamp, see
-// receipts/issue-387-automations-ui-revamp.md). Seeded by Foundation-renderer so the editor
-// route/screen have something real to compile against; Lane B (editor) owns
-// this file per the brief's file-ownership table and is expected to extend
-// it with the save flow (`updateAutomation`/`createAutomation` wiring,
-// webhook mint/rotate, consent-tab derivation) rather than start from
-// scratch. Kept intentionally thin: just enough to resolve `{ row, name,
-// instructions, triggers }` for edit mode, and defaults for create mode.
+// Automation editor data layer — the LOAD half only (#387): enough to resolve
+// `{ row, name, instructions, triggers }` for edit mode, and defaults for
+// create mode. The save flow lives in AutomationEditorRoute.tsx.
 import { readAutomation } from "../../../gateway-client.js";
 import type { AuEditorConnectorsDTO } from "../../screen-contracts.js";
 

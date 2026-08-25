@@ -4,9 +4,9 @@
  * `centraid-gateway pair` runs with shell access on the gateway host and no
  * device identity — the devices route authorizes it through its own
  * host-custody check (`canMintPairingTicket` → `isDirectHostRequest`). The
- * composed handler's global "proved enrolled device" gate used to run first,
- * so that hatch was unreachable and a headless daemon could not enroll any
- * device from the CLI at all.
+ * composed handler's global "proved enrolled device" gate must not run first:
+ * that would make the hatch unreachable, and a headless daemon could not
+ * enroll any device from the CLI at all.
  *
  * The bypass must stay narrow — a loopback, non-forwarded caller only. An
  * iroh-forwarded request carries device headers and must still be gated.

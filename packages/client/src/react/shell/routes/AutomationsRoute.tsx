@@ -11,8 +11,7 @@ import {
 } from "./automationsOverviewLoad.js";
 import { loadOverviewSuggestions } from "./templatesData.js";
 
-// React-owned Automations overview — the fleet (Automations UI revamp, see
-// receipts/issue-387-automations-ui-revamp.md). loadData fetches the rows, the
+// The Automations overview — the fleet (#387). loadData fetches the rows, the
 // run feed, and the global consent lists (parked + outbox), soft-matches the
 // latter down to each automation's actor via `filterConsentForAutomation` (the
 // same rule the thread view uses), and hands `buildOverviewData` a ref →
@@ -20,7 +19,7 @@ import { loadOverviewSuggestions } from "./templatesData.js";
 // ShellActions surface. Empty-state suggestions adopt via the same clone path
 // as Templates.
 //
-// The page's two verbs live in the app bar (issue #765): the filled commit
+// The page's two verbs live in the app bar (#765): the filled commit
 // "New automation" opens the instructions-first editor in create mode, and the
 // quiet "Templates" opens the catalogue. `App.tsx` carries the same two
 // navigations as its shell-level fallback, but the route publishes its own so

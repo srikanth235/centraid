@@ -32,7 +32,7 @@ export interface StorageQuotaConnectionEntry {
 export interface StorageQuotaHealthOptions {
   /** Every configured storage connection (all `kind: 'provider'`). */
   readonly connections: () => Promise<readonly StorageQuotaConnectionEntry[]>;
-  /** The cached provider-reported usage for one connection (issue #367 §D1's poller). */
+  /** The cached provider-reported usage for one connection (#367 §D1's poller). */
   readonly usageFor: (
     connectionId: string
   ) => Promise<{ providerReported: UsageByStore | null }>;

@@ -3,11 +3,9 @@
 // "Every app a 44px row with mark, recency, count and a pin switch. Pinning
 // writes the home grid order." That is what this module persists: a list of app
 // ids, in the order the member put them, which the springboard sorts by before
-// it grades tiles. It replaces ./band-pins, which persisted the same shape for
-// a band that no longer carries apps at all.
+// it grades tiles.
 //
-// Two differences from the band list it replaces, and both follow from the move
-// off the band:
+// Two rules, both following from the fact that the band carries no apps:
 //
 //  · NO CAP. Five was invariant 1's tab ceiling, not a statement about how many
 //    apps a member may care about; a grid scrolls, so there is nothing to cap.
@@ -15,8 +13,8 @@
 //    other app keeps its catalog position behind the pinned ones. A launcher
 //    that can hide an installed app is a launcher you can lose an app in.
 //
-// Storage lives here rather than in ./band so the pure list logic stays testable
-// without mocking AsyncStorage — the same split the band/band-pins pair had.
+// Storage lives here rather than in ./band so the pure list logic stays
+// testable without mocking AsyncStorage.
 //
 // This file also owns the place pins (below), for the same reason: ./places
 // and ./band stay pure plain-data modules, and the one AsyncStorage-backed

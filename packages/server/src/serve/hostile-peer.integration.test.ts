@@ -6,7 +6,7 @@
  * garbage. This suite attacks a peer that speaks the wire CORRECTLY BUT
  * MALICIOUSLY: every frame below parses and is individually well-formed — the
  * abuse is in the STATE MACHINE (order, repetition, an unfinished ceremony, an
- * abandoned ticket, a stream flood). The peer plane (#726 P3) is the newest
+ * abandoned ticket, a stream flood). The peer plane (#726) is the newest
  * attack surface; the steward-signature suites cover only the commons rail, so
  * the ceremony and route-assertion state machine had no adversarial-peer rig.
  *

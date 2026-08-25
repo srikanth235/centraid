@@ -845,7 +845,7 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain("The pairing relay");
     });
 
-    // The enrichment egress ledger (issue #807, Wave 3). Reference material,
+    // The enrichment egress ledger (#807). Reference material,
     // read back: every answer is shown, the refusals included, and none of
     // them is a control.
     it("lists the enrichment egress answers, declines and all, with no verb", () => {

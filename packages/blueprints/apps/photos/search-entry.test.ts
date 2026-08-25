@@ -1,6 +1,6 @@
-// Desktop/PWA's own way to Search (§9): only the compact band reached the
-// Search shelf before this — a bounded control in the bar is the fix. This
-// colocates with frame.tsx (which now owns the control) rather than
+// Desktop/PWA's own way to Search (§9): a bounded control in the bar, since
+// the compact band is the only other way to the Search shelf. This colocates
+// with frame.tsx (which owns the control) rather than
 // stretching src/photos-frame.test.ts's dynamic-import harness, which
 // declares its own local `AppBarState` and would need to grow the same
 // `compact`/`onSearch` fields to exercise this at all.

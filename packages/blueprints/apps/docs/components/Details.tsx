@@ -6,11 +6,10 @@
 // it." (§8, verbatim.) The tab bodies are in `DetailsTabs.tsx`; this file is
 // the rail: head, tabs, the document's own verbs, and the footer.
 //
-// TWO THINGS LEFT THIS FILE. Version history is a ROUTE now (§6.2) rather
-// than a disclosure inside a drawer, and Activity went with it — "what
-// happened to a document and which version it produced are one spine" — so
-// the rail's footer sends the member to that screen instead of unfolding a
-// second copy of it here.
+// VERSION HISTORY AND ACTIVITY ARE A ROUTE (§6.2), not a disclosure inside
+// this drawer — "what happened to a document and which version it produced are
+// one spine" — so the rail's footer sends the member to that screen instead of
+// unfolding a second copy of it here.
 import { useEffect, useRef, useState } from "react";
 
 import { armConfirm } from "@centraid/design/elements";
@@ -181,7 +180,7 @@ export function Details({
       );
     }
   };
-  // The blob custody projection (issue #352 phase 4) — null for an inline
+  // The blob custody projection (#352) — null for an inline
   // document or one the standing sweep hasn't reached yet, rendered as
   // nothing rather than a guess.
   const custody = custodyMeta(doc.custody_state);
@@ -251,12 +250,12 @@ export function Details({
             href={doc.content_uri ?? undefined}
             extra={{ download: doc.title ?? "file" }}
           />
-          {/* THE STAR LOSES ITS ★ AND KEEPS ITS GLYPH. It used to draw a
-                filled/hollow star character beside the word while every other
-                verb in this rail drew nothing — one region, two vocabularies.
-                The line glyph is the same shape the row menu, the selection bar
-                and the stage give this verb; whether it is ON is `aria-pressed`
-                and the word, which is where a state belongs. */}
+          {/* THE STAR KEEPS ITS GLYPH AND TAKES NO ★. A filled/hollow star
+                character beside the word, while every other verb in this rail
+                draws none, is one region with two vocabularies. The line glyph
+                is the same shape the row menu, the selection bar and the stage
+                give this verb; whether it is ON is `aria-pressed` and the word,
+                which is where a state belongs. */}
           {trashed ? null : (
             <ActionBtn
               icon="star"

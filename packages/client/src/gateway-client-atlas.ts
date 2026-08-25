@@ -1,5 +1,5 @@
 /*
- * Renderer-side client for the Vault Atlas (issue #441 Part B): the Kinds
+ * Renderer-side client for the Vault Atlas (#441): the Kinds
  * census, the Relations graph, the write pulse, and the Browse editor's
  * read/write surface. Split from `gateway-client-vault.ts` — same owner-act
  * character, its own file so each stays within the repo's file-size cap.
@@ -15,7 +15,7 @@ import {
 } from "./gateway-client-core.js";
 
 /*
- * The Vault Atlas (issue #441 Part B): three read-only owner census surfaces
+ * The Vault Atlas (#441): three read-only owner census surfaces
  * over the registered ontology. Payload shapes mirror the vault package's
  * `atlas-census.ts` builders — the gateway wraps them verbatim.
  */
@@ -145,7 +145,7 @@ export interface AtlasPulsePayload {
   series: AtlasPulseSeries[];
 }
 
-/** Kinds census — per-pack rows/bytes grouping (issue #441 B1). */
+/** Kinds census — per-pack rows/bytes grouping (#441). */
 export async function vaultAtlasStats(): Promise<AtlasCensusPayload> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/atlas/stats", {
@@ -155,7 +155,7 @@ export async function vaultAtlasStats(): Promise<AtlasCensusPayload> {
   return readJson<AtlasCensusPayload>(res, "read atlas stats");
 }
 
-/** Relations graph — FK edges (with fill) + authored links (issue #441 B2). */
+/** Relations graph — FK edges (with fill) + authored links (#441). */
 export async function vaultAtlasGraph(): Promise<AtlasGraphPayload> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/atlas/graph", {
@@ -165,7 +165,7 @@ export async function vaultAtlasGraph(): Promise<AtlasGraphPayload> {
   return readJson<AtlasGraphPayload>(res, "read atlas graph");
 }
 
-/** 30-day per-table write pulse from the journal (issue #441 B1 sparklines). */
+/** 30-day per-table write pulse from the journal (#441 B1 sparklines). */
 export async function vaultAtlasPulse(): Promise<AtlasPulsePayload> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/atlas/pulse", {
@@ -175,14 +175,14 @@ export async function vaultAtlasPulse(): Promise<AtlasPulsePayload> {
   return readJson<AtlasPulsePayload>(res, "read atlas pulse");
 }
 
-// ---------------------------------------------------------------------------
-// The Vault Atlas Browse tab (issue #441 Part B, B3): a vault-aware table
+// ─────────────────────────────────────────────────────────────────────────
+// The Vault Atlas Browse tab (#441): a vault-aware table
 // editor. Reads are owner-trust census over the ontology; writes ride the
 // journalled command pipeline gateway-side (atlas.* commands) and record
 // operator provenance, so a hand-edit ships in the replica log like any app
 // write. Sealed columns read as a placeholder and refuse writes; machinery
 // bands are read-only unless `unlockMachinery` is set.
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 
 /** One table row of the Browse picker. */
 export interface BrowseTableEntry {

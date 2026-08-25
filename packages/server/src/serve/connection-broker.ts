@@ -5,8 +5,8 @@
 // connection-limiter.ts, and splitting the lifecycle itself would scatter
 // the token-correctness invariants across files.
 /**
- * The connection broker (issue #304) — the gateway-side owner of
- * broker-carried credentials. Where issue #290 decision 4 made the gateway
+ * The connection broker (#304) — the gateway-side owner of
+ * broker-carried credentials. Where #290 decision 4 made the gateway
  * a broker over HARNESS-ambient credentials (resolve/pin/allowlist/
  * liveness), this module extends the same brokerage to credentials the
  * connection row itself carries: `oauth2` (the owner's BYO client) and
@@ -19,7 +19,7 @@
  * `allowed_hosts`. Nothing here ever returns a token to handler code.
  *
  * Token lifecycle correctness — the three known rot points, each with a
- * named defense (issue #304 decision 4):
+ * named defense (#304 decision 4):
  *   1. rotating refresh tokens: the rotated pair persists (receipted,
  *      through `sync.store_tokens`) BEFORE the new access token is used;
  *   2. concurrent refresh races: one single-flight refresh per connection —
@@ -70,7 +70,7 @@ const EXPIRY_SLACK_MS = 60 * 1000;
 const TRANSIENT_RETRY_DELAY_MS = 500;
 
 /**
- * Bound on one token-endpoint POST (issue #351 Tier 4 hygiene) — a hung IdP
+ * Bound on one token-endpoint POST (#351 Tier 4 hygiene) — a hung IdP
  * would otherwise wedge whatever awaits the refresh (a fire, the outbox
  * drain) indefinitely. A timeout rejects the `fetch` exactly like a dropped
  * connection would, so it rides the existing transient-failure path below
@@ -187,7 +187,7 @@ export class ConnectionBroker {
   }
 
   /**
-   * Start the consent ceremony (issue #304 decision 3): mint the PKCE
+   * Start the consent ceremony (#304 decision 3): mint the PKCE
    * verifier + single-use `state` and build the provider consent URL. The
    * `state` is the capability the (bearer-free) callback authenticates by.
    * `access_type=offline&prompt=consent` are Google's knobs for issuing a
@@ -463,7 +463,7 @@ export class ConnectionBroker {
   }
 
   /**
-   * The per-fire seam `runFire` calls (issue #304): resolve the connector's
+   * The per-fire seam `runFire` calls (#304): resolve the connector's
    * connection to injectable values. `undefined` = the connection carries
    * no broker credential (harness-ambient lane, pre-#304 behavior).
    */
@@ -637,7 +637,7 @@ export class ConnectionBroker {
   }
 
   /**
-   * The outbox executor's seam (issue #306): resolve one connection to
+   * The outbox executor's seam (#306): resolve one connection to
    * injectable values on the WRITE lane. Same custody as `resolveForFire` —
    * injection only, host pin, single-flight refresh — plus `allowWrites`,
    * which connector fires never get: the only mutating injected requests in
@@ -1137,7 +1137,7 @@ export class ConnectionBroker {
       // a credential belonging to another connector kind.
       return row?.kind === connector.kind ? row : undefined;
     }
-    // No credential sidecar row = the harness-ambient lane (issue #290).
+    // No credential sidecar row = the harness-ambient lane (#290).
     return plane.db.vault
       .prepare(
         `SELECT cc.connection_id, c.kind, c.label, cc.provider,

@@ -226,7 +226,7 @@ export function EffortPicker({
 }
 
 /**
- * Assistant copilot screen (issue #325 Phase 3, extended by #420 Wave 1).
+ * Assistant copilot screen (#325, extended by #420 Wave 1).
  * AssistantRoute owns the stream + message model; this screen renders the
  * transcript (with per-message copy / feedback / regenerate / retry / retry
  * pager / timestamps), a scroll-aware autoscroll with a jump-to-bottom pill,
@@ -282,7 +282,7 @@ export default function AssistantScreen({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  // Only the newest slice of a long transcript is mounted (issue #659); the
+  // Only the newest slice of a long transcript is mounted (#659); the
   // rest is one click above, never dropped. The window resets per conversation
   // because "how far back have I asked to see" belongs to the thread you are
   // reading, not to the screen.
@@ -383,7 +383,7 @@ export default function AssistantScreen({
     queueDraftSave(conversationId, v);
   };
 
-  // @-mentions + slash-commands (issue #420). Inert when the route wires no
+  // @-mentions + slash-commands (#420). Inert when the route wires no
   // entity search / commands (older callers, tests).
   const autocomplete = useComposerAutocomplete({
     textareaRef: taRef,
@@ -419,8 +419,8 @@ export default function AssistantScreen({
     // switch; its completion must not re-enable the old harness's controls.
     pickerLoadSeqRef.current += 1;
     setModelPickerLoaded(false);
-    // `finally` is load-bearing: a rejected switch used to leave every picker
-    // disabled forever (plus an unhandled rejection). Mirrors BuilderChatPane.
+    // `finally` is load-bearing: without it a rejected switch leaves every
+    // picker disabled forever, plus an unhandled rejection.
     void onSetHarness(harnessKind)
       .then((picker) => {
         if (harnessSwitchSeqRef.current === switchSeq) setModelPicker(picker);
@@ -437,7 +437,7 @@ export default function AssistantScreen({
 
   // Memoized because `Message` is memoized: a fresh callbacks object every
   // render would defeat the row-level comparison and re-render the whole
-  // transcript on every keystroke and every streamed token (issue #659).
+  // transcript on every keystroke and every streamed token (#659).
   const messageCallbacks = useMemo<MessageCallbacks>(
     () => ({
       hydrateRefs,

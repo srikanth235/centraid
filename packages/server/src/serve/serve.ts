@@ -5,7 +5,7 @@
  * host-agnostic graph without a socket — see `build-gateway.ts`). `serve()`
  * adds the loopback bind + bearer auth via `startRuntimeHttpServer` and
  * mounts the gateway's `composedHandler` — which resolves the vault every
- * request is addressed to (issue #289) before the chain runs — then drives
+ * request is addressed to (#289) before the chain runs — then drives
  * the post-listener lifecycle. Two callers ship today:
  *
  *   - `apps/desktop` embeds it in the Electron main process (paths under
@@ -29,7 +29,7 @@ export interface ServeOptions extends BuildGatewayOptions {
   /** HTTP port. `0` (default) asks the OS for an ephemeral port. */
   port?: number;
   /**
-   * Extra Host header names accepted beyond loopback forms (issue #504).
+   * Extra Host header names accepted beyond loopback forms (#504).
    * Required for non-loopback operator hostnames when clients send a
    * non-loopback `Host` (Docker / reverse-proxy). Loopback is always allowed.
    */
@@ -81,10 +81,10 @@ export async function serve(
     extraHandlers: [gateway.webhookHandler, gateway.composedHandler],
     exposeUserStoreRoute: false,
     exposeConversationRoute: false,
-    // The OAuth consent callback (issue #304) is the one bearer-free path:
+    // The OAuth consent callback (#304) is the one bearer-free path:
     // a provider redirects the owner's browser here; the route authenticates
     // by its single-use `state` capability instead. The webhook route
-    // (issue #96) is bearer-free too — the shared secret in the request IS
+    // (#96) is bearer-free too — the shared secret in the request IS
     // the auth, checked by `webhookHandler` itself; requiring the gateway
     // owner's bearer as well would defeat the point of a webhook (the
     // caller is a third-party service, not the owner).

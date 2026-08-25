@@ -7,7 +7,7 @@ import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
 
-// Settings → Enrichment, EXCEPTIONS (issue #807).
+// Settings → Enrichment, EXCEPTIONS (#807).
 //
 // A rule says what ONE scope decides about ONE capability; everything it leaves
 // unset is inherited, and the gateway's single resolver folds the chain. This
@@ -19,10 +19,9 @@ import SectionBlock from "../ui/SectionBlock.js";
 // the switches on the capability rows above, and showing them again as rows
 // would be the same decision rendered twice in two vocabularies.
 //
-// AUTHORING MOVED OUT, deliberately. This group used to carry a form whose
-// scope reference was a free-text `type:ref` field — the module's own comment
-// admitted no picker enumerated collections, so the control could only be
-// filled by someone reading the vault schema. An exception is an in-situ
+// NO AUTHORING HERE, deliberately. A form whose scope reference is a free-text
+// `type:ref` field can only be filled by someone reading the vault schema,
+// because no picker enumerates collections. An exception is an in-situ
 // decision ("don't read faces in this album") and belongs on the album; this
 // group is where the ones that exist are reviewed and revoked.
 // TODO(#814): offer the exception at the collection itself, then link to it here.

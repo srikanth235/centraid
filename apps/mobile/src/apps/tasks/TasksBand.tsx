@@ -1,4 +1,4 @@
-// The band Tasks has claimed, rendered (Tasks spec §2; issue #834).
+// The band Tasks has claimed, rendered (Tasks spec §2; #834).
 //
 // Two plates in a transparent row — the frame's Home capsule on the frame's
 // neutral page colour, then the app's five destinations as one group on

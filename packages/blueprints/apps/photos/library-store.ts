@@ -1,4 +1,4 @@
-// The N-scope library data layer (issue #599). Owns one page per mounted scope
+// The N-scope library data layer (#599). Owns one page per mounted scope
 // and the merged timeline over them, so app-root.tsx keeps only rendering and
 // the store keeps every rule about WHICH scope gets re-read WHEN.
 //
@@ -17,7 +17,7 @@
 //     as units (src/photos-library-store.test.ts) rather than as a mounted app.
 //
 // The merge itself — ordering, cross-scope dedupe, the shared safe horizon —
-// lives in apps/_shared/scope-merge.ts (issue #726 D11) and is deliberately
+// lives in apps/_shared/scope-merge.ts (#726) and is deliberately
 // not re-derived here.
 import { mergeScopePages } from "../_shared/scope-merge.ts";
 import type { MergeResult, ScopePage } from "../_shared/scope-merge.ts";

@@ -1,5 +1,3 @@
-// ThumbHash pure encoder unit tests (issue #545 B7).
-
 import { describe, expect, test } from "vitest";
 
 import { rgbaToThumbHash } from "./thumbhash.js";

@@ -1,4 +1,4 @@
-// Home's cross-surface copy (issue #708, section A).
+// Home's cross-surface copy (#708, section A).
 //
 // Desktop (packages/client/src/react/screens/HomeSpringboard.tsx) and mobile
 // (apps/mobile/src/screens/home/FirstRunGrid.tsx) draw the SAME Home in two
@@ -14,8 +14,7 @@
 // seam that both can reach without inventing a new package.
 
 /** First run — the vault has no content ANYWHERE. Verbatim from the v4 Binding
- *  Layer handoff (design_handoff_photos/…v4.dc.html:5700, `frTitle`). The v3
- *  brief's "Nothing here yet" retired with the flip. */
+ *  Layer handoff (design_handoff_photos/…v4.dc.html:5700, `frTitle`). */
 export const HOME_FIRST_RUN_TITLE = "Nothing in here yet";
 
 /** The body under it. One sentence about what Home becomes; custody is stated
@@ -134,15 +133,12 @@ export const HOME_SAMPLE_CLEAR = "Clear the sample";
 /**
  * While the generators run, before the first one has been named.
  *
- * This used to be the WHOLE of the filling state: one static sentence on a
- * disabled button for the ten seconds the seven generators take, of which the
- * photo uploads are most. A sentence that never changes is indistinguishable
- * from a surface that has stopped, which is the one reading a local-first
- * product can least afford — it knows exactly how much work is left.
- *
- * So it is now the fallback rather than the state: the run reports its position
- * and the surface says which app it is waiting on. This wording survives for
- * the frame before the first report, and for an app id with no line below.
+ * The FALLBACK, not the state: a sentence that never changes over the ten
+ * seconds the seven generators take is indistinguishable from a surface that
+ * has stopped, which is the one reading a local-first product can least
+ * afford — it knows exactly how much work is left. So the run reports its
+ * position and the surface says which app it is waiting on; this wording
+ * covers the frame before the first report, and an app id with no line below.
  */
 export const HOME_SAMPLE_FILLING = "Filling your vault with a sample week…";
 

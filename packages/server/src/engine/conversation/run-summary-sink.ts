@@ -2,13 +2,11 @@
  * `RunSummary` — one row per finished harness run (conversation turn, automation fire,
  * or builder iteration), the shape the Insights/Executions surfaces read.
  *
- * Historically this file also declared a `RunSummarySink` write-through seam:
- * the ledger pushed a denormalized summary row into a separate analytics DB
- * at `finishTurn`. That seam is gone — `run_summary` is now a SQL VIEW over
- * the ledger tables in the same `journal.db` (see `CONVERSATION_LEDGER_DDL`),
- * so the ledger IS the source and `AnalyticsStore` in `insights/` is a
- * read-only lens over the view. The DTO stays here at the package root so
- * the `insights/` boundary remains one-way (#151).
+ * There is no write-through sink: `run_summary` is a SQL VIEW over the ledger
+ * tables in the same `journal.db` (see `CONVERSATION_LEDGER_DDL`), so the
+ * ledger IS the source and `AnalyticsStore` in `insights/` is a read-only lens
+ * over the view. The DTO stays here at the package root so the `insights/`
+ * boundary remains one-way (#151).
  */
 
 import type { RunKind } from "./schema.js";

@@ -5,9 +5,9 @@
 // Album membership is computed against OWN-SCOPE assets only: an album id
 // minted in one scope means nothing in another, and matching it over the
 // merged list would let a colliding id pull a stranger's photograph into the
-// member's album (issue #599).
+// member's album (#599).
 //
-// A TRIP CARD IS TITLED, not measured (issue #816). The vault's own hint is
+// A TRIP CARD IS TITLED, not measured (#816). The vault's own hint is
 // `"3-day trip"`, which is a fact about a calendar rather than a memory; the
 // ladder in `trips.ts` turns it into "Weekend in South Lake Tahoe, CA" when the
 // members carry a name worth printing, and leaves the hint alone when they do

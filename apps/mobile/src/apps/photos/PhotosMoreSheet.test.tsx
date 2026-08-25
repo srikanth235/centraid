@@ -1,22 +1,20 @@
-// Pins the More sheet's anatomy (issue #711, cut back in #712):
+// Pins the More sheet's anatomy (#711, #712):
 //
 //  - it carries exactly what `PHOTOS_MORE_ROWS` names, which is now ONE row.
-//    The five shelves it used to list — Sharing, Favorites, Places,
-//    Duplicates, Trash — are sections of Collections, on screen with their
-//    own counts, so a row here would be a second hidden door to each. A stray
+//    Sharing, Favorites, Places, Duplicates and Trash are sections of
+//    Collections, on screen with their own counts, so a row here would be a
+//    second hidden door to each. A stray
 //    reintroduction is caught here and in `photos-more-router.test.ts`
 //  - Backup carries no meta: the figure would come from a network round trip
-//    this sheet has no business making, and a placeholder is the lie the old
-//    meta map existed to avoid
+//    this sheet has no business making, and a placeholder would be a lie
 //  - tapping a row calls `onSelect` with that row's OWN key, never a
 //    different one — the same "labelled destination opens something else"
 //    defect class this issue is about, one level up from the router itself
-//  - the foot line is the exact spec copy, and the old invented "More"
-//    eyebrow is gone
+//  - the foot line is the exact spec copy, with no "More" eyebrow above it
 //
-// Tile size is NOT covered here any more — it moved on from this sheet to
-// the Library's own header menu (`photos-library-menu.test.ts` carries the
-// rung rows now); see `PhotosMoreSheet.tsx`'s header for why.
+// Tile size is NOT covered here: it belongs to the Library's own header menu
+// (`photos-library-menu.test.ts` carries the rung rows); see
+// `PhotosMoreSheet.tsx`'s header for why.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -181,7 +179,7 @@ describe("the More sheet's rows, meta and foot", () => {
   });
 
   it("omits Backup's meta rather than inventing a number", () => {
-    // The row is labelled "Backup" now (#712 B1) and its meta is still absent:
+    // The row is labelled "Backup" now (#712) and its meta is still absent:
     // the figure it would carry comes from a network round trip this sheet has
     // no business making, and a placeholder number is the lie the whole meta
     // map exists to avoid.
@@ -217,9 +215,9 @@ describe("the More sheet's rows, meta and foot", () => {
   it("renders the exact spec foot copy, and no invented eyebrow", () => {
     renderSheet();
     expect(container!.textContent).toContain("Everything Photos can show.");
-    // The old header was a bare "More" eyebrow with nothing else on its line;
-    // the foot sentence itself does not contain that word, so this also
-    // guards against it creeping back in as a separate heading.
+    // The head carries no bare "More" eyebrow; the foot sentence itself does
+    // not contain that word, so this also guards against one creeping back in
+    // as a separate heading.
     expect(
       Array.from(container!.querySelectorAll("span")).some(
         (span) => span.textContent === "More"

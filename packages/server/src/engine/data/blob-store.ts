@@ -1,5 +1,5 @@
 /*
- * Per-app blob content-addressed store (CAS) — issue #190.
+ * Per-app blob content-addressed store (CAS) — #190.
  *
  * Attachment bytes live on the filesystem under the vault workspace's app dir
  * (`<workspace appsDir>/<appId>/blobs/<hash>`), keyed by the sha256 of their
@@ -55,7 +55,7 @@ export class BlobStore {
 
   private blobDir(appId: string): string {
     // Real app ids AND the vault assistant's reserved `_assistant` scope
-    // (its attachments ride the same per-app blob CAS shape — issue #190
+    // (its attachments ride the same per-app blob CAS shape — #190
     // extended to the shell-level assistant surface).
     if (!isValidAppOrAssistantId(appId)) {
       throw new Error(`blob-store: invalid app id "${appId}"`);

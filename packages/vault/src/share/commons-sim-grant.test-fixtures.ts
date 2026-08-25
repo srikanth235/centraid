@@ -1,4 +1,4 @@
-// The share-grant SCHEDULE and ORACLE for the Commons simulator (issue #839,
+// The share-grant SCHEDULE and ORACLE for the Commons simulator (#839,
 // gaps G1/G2/G3). `commons-sim-grant-world.test-fixtures.ts` owns the physical
 // world; this half owns the verbs and what must be true after each of them.
 //
@@ -27,10 +27,8 @@
 //      following origin edits, erasing audience edits, and keeping one
 //      provenance row, because a pass re-projects rather than merges.
 //
-// Nothing here is pinned. `checkSeverance` carried the simulator's one
-// tolerated break — defect D1, a revocation settling `removed` while the
-// audience kept the projection — until #846 P1 fixed the engine; the pin went
-// with the fix, so every invariant below now simply fails.
+// Nothing here is pinned: every invariant below simply fails on violation
+// (#839, #846 P1).
 
 import {
   fulfillShareGrant,
@@ -200,16 +198,13 @@ function checkProjection(world: World, slot: ShareSlot, label: string): void {
  * G1. A revocation that has SETTLED (`removed`) must leave the audience
  * holding nothing.
  *
- * This carried the simulator's one pinned break, defect D1 (#839), until #846
- * P1 closed it: `fulfillShareGrant` overwrote a `delivered` row with `syncing`
- * when the host merely could not reach the peer that pass, erasing the record
- * that the peer HOLDS the subject, and `propagateShareGrantRevocation` then
- * read `syncing` as never-delivered and finished `removed` — "nothing had been
- * delivered; there was nothing to remove" — without deleting the projection
- * and without even a `remove_sent`. The owner read `removed`; the peer kept the
- * copy. The engine now remembers delivery durably
- * (`share_fulfillment.delivered_at`), so there is no reach-lost carve-out left
- * here: every settled revocation is held to G1 alike.
+ * There is no reach-lost carve-out (#839, #846 P1): the engine remembers
+ * delivery durably (`share_fulfillment.delivered_at`), so `fulfillShareGrant`
+ * never overwrites a `delivered` row with `syncing` because the host could not
+ * reach the peer on one pass, and `propagateShareGrantRevocation` cannot read
+ * that as never-delivered and settle `removed` without deleting the projection
+ * — the owner reading `removed` while the peer keeps the copy. Every settled
+ * revocation is held to G1 alike.
  */
 function checkSeverance(world: World, slot: ShareSlot, label: string): void {
   if (slot.fulfillment !== "removed") return;

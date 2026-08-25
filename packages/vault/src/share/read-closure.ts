@@ -1,4 +1,4 @@
-// The ORIGIN half of a share (issue #726): read a closure, write nothing.
+// The ORIGIN half of a share (#726): read a closure, write nothing.
 //
 // Every query here runs against the origin vault and none of them mutates it,
 // so a share needs no transaction on the owner's side and no two-database

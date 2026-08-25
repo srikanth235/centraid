@@ -1,4 +1,4 @@
-// Whether a commit control may commit right now (issue #708, C7).
+// Whether a commit control may commit right now (#708).
 //
 // The status line already knows the shell is offline and says why (#707). What
 // it could not do was stop the buttons: every screen would have had to learn

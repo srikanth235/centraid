@@ -1,4 +1,4 @@
-// Undo-window garbage collection for the P5 revision ledger (issue #659 L1).
+// Undo-window garbage collection for the P5 revision ledger (#659).
 // The law: a pass deletes exactly the snapshots the store's own reader
 // already refuses (`undo_until < now`), bounded per run.
 

@@ -9,13 +9,11 @@ import styles from "./ConnectFlow.module.css";
 /*
  * The pairing-ticket step, as ONE component.
  *
- * Adding a vault used to be a different experience depending on where you
- * started: onboarding opened straight on the ticket field with a sentence
- * explaining what a ticket is and a keychain heads-up, while the switcher's
- * modal opened on a one-card chooser with neither. Same act, two wizards.
- * Both hosts render this panel now, so the steps, the copy, and the keychain
- * warning cannot drift; what stays host-owned is only the chrome around it
- * (onboarding's dark card headline, the modal's dialog head).
+ * Adding a vault must not be a different experience depending on where you
+ * started — one act, one wizard. Both hosts render this panel, so the steps,
+ * the copy, and the keychain warning cannot drift; what stays host-owned is
+ * only the chrome around it (onboarding's dark card headline, the modal's
+ * dialog head).
  */
 
 /** The one sentence that explains a pairing ticket. Exported rather than

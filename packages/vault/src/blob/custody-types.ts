@@ -1,4 +1,4 @@
-// Shared custody value types (issue #352 phase 3/4, #405 §3). Kept in their own
+// Shared custody value types (#352 phase 3/4, #405 §3). Kept in their own
 // leaf module so custody.ts and the custody-state.ts projection can both name
 // them without a runtime import cycle, and so custody.ts (the facade) stays
 // under the governance line-cap.
@@ -24,7 +24,7 @@ export interface RemoteTier {
   store: BlobStore;
   /**
    * Optional second CAS-shaped store under the target's `derived` grant prefix
-   * (issue #425 Wave 2). Present only when the vault's `blob_store` settings
+   * (#425). Present only when the vault's `blob_store` settings
    * carry a `derivedPrefix` (the target advertised + granted the `derived`
    * store); binary display derivatives (thumb/preview/poster) route here.
    * Absent ⇒ graceful degradation: derivatives replicate into `store` (cas),
@@ -37,7 +37,7 @@ export interface RemoteTier {
   transfer?: RemoteBlobTransfer;
   /**
    * Resolve the S3 storage class an eligible ORIGINAL's object-creating write
-   * should carry (issue #425 Wave 3 Part B), or undefined to leave it class-less
+   * should carry (#425), or undefined to leave it class-less
    * (Standard / the instance-level class). db.ts wires this to the direct-to-cold
    * heuristic (large video/audio originals → STANDARD_IA, but only when the
    * target declares support). `storeClass` is where the bytes actually land —
@@ -63,7 +63,7 @@ export interface RemoteTier {
   /** Per-blob edge-seal key; takes precedence over the legacy shared key. */
   keyFor?: (sha256: string) => Buffer;
   /**
-   * Plaintext frame size for the framed seal (issue #405 §1). Optional so
+   * Plaintext frame size for the framed seal (#405). Optional so
    * db.ts can construct a `RemoteTier` without it (falls back to the format
    * default); tests inject a small value to exercise multi-frame blobs
    * without allocating multi-MiB buffers. Only the WRITER (replication) reads
@@ -71,7 +71,7 @@ export interface RemoteTier {
    */
   frameSize?: number;
   /**
-   * Blobs at or above this byte size stream (issue #367 §C8) instead of
+   * Blobs at or above this byte size stream (#367) instead of
    * buffering. Optional; absent = the module default. Tests set it to 0 to
    * force the streaming seal path over a tiny blob.
    */
@@ -87,8 +87,8 @@ export function remoteEncryptionKey(
 }
 
 /**
- * The `BlobStore` that holds (or should hold) `store`-classed bytes (issue #425
- * Wave 2). `derived` resolves to `remote.derivedStore` when it exists; anything
+ * The `BlobStore` that holds (or should hold) `store`-classed bytes (#425).
+ * `derived` resolves to `remote.derivedStore` when it exists; anything
  * else — or a tier with no derived store — falls back to the cas `store`, which
  * is the graceful-degradation contract (a provider without `derived` keeps
  * everything under cas). The edge-seal key is per-sha and store-independent, so
@@ -112,13 +112,13 @@ export interface ReconcileResult {
   missing: string[];
   /**
    * Remote objects that WOULD have been deleted as orphans, had the caller
-   * not passed `skipOrphanDelete` (issue #367 §C6 — the gateway instance
+   * not passed `skipOrphanDelete` (#367 §C6 — the gateway instance
    * lease is conflicted, so a second live gateway process might legitimately
    * still be writing here). Empty whenever orphan-delete ran normally.
    */
   orphansSkipped: string[];
   /**
-   * Orphaned remote objects HELD by the orphan-grace window (issue #439 R4):
+   * Orphaned remote objects HELD by the orphan-grace window (#439):
    * found orphaned but tombstoned (or newly tombstoned) less than `graceWindowMs`
    * ago, so a recovery-to-N that lands between two snapshots can still reach the
    * byte. Distinct from `orphansSkipped` (a lease-conflict pause of the whole
@@ -130,7 +130,7 @@ export interface ReconcileResult {
 
 export interface ReconcileOptions {
   /**
-   * Skip the orphan-DELETE phase (issue #367 §C6): while the gateway
+   * Skip the orphan-DELETE phase (#367): while the gateway
    * instance lease is conflicted (two processes may be live against the
    * same vault), an object this process doesn't recognize might be one the
    * OTHER instance just wrote — deleting it would be a real data-loss risk,
@@ -139,7 +139,7 @@ export interface ReconcileOptions {
    */
   skipOrphanDelete?: boolean;
   /**
-   * Retained-snapshot GC roots (issue #436 §6 — the GC-pins-snapshots
+   * Retained-snapshot GC roots (#436 §6 — the GC-pins-snapshots
    * invariant). Blob shas referenced by any RETAINED backup snapshot manifest
    * that the caller has authenticated. A remote object one of these names is
    * NEVER an orphan, even when the live vault model no longer references it:
@@ -153,7 +153,7 @@ export interface ReconcileOptions {
    */
   extraLiveRoots?: ReadonlySet<string>;
   /**
-   * The orphan-grace window in ms (issue #439 R4 — the recovery window N, the
+   * The orphan-grace window in ms (#439 R4 — the recovery window N, the
    * retention daily rung). When set, a genuine orphan (not live, not pinned by
    * `extraLiveRoots`) is not deleted on the pass that first finds it: the sweep
    * tombstones it (`ctx.orphans`) and DEFERS the delete until
@@ -167,14 +167,14 @@ export interface ReconcileOptions {
    */
   graceWindowMs?: number;
   /**
-   * Monotonic clock for the grace-window arithmetic (issue #439 R4), injectable
+   * Monotonic clock for the grace-window arithmetic (#439), injectable
    * so tests need no real waits. Absent ⇒ `Date.now`.
    */
   now?: () => number;
 }
 
 /**
- * The standing sweep's own liveness (issue #351 wave 4, #367 prep): before
+ * The standing sweep's own liveness (#351, #367): before
  * this, a `reconcile()` failure only ever surfaced as a one-line log warn
  * from `VaultPlane.runSweep` — nothing a health probe could read back. Kept
  * in-memory only (process-lifetime, per `BlobCustody` instance = per mounted
@@ -186,7 +186,7 @@ export interface BlobSweepStatus {
   lastCompletedAt: string | null;
   /**
    * ISO timestamp of the last `reconcile()` ATTEMPT, success or failure
-   * (issue #367 §C5) — `lastCompletedAt` only moves on success, so a caller
+   * (#367) — `lastCompletedAt` only moves on success, so a caller
    * computing a failure backoff window needs this to know when the clock
    * for "try again" actually started.
    */

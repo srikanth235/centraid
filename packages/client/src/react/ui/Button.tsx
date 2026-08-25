@@ -46,7 +46,7 @@ export interface ButtonProps extends ButtonData {
    */
   ariaExpanded?: boolean;
   /**
-   * Is this the control that COMMITS — the one that writes data (issue #708,
+   * Is this the control that COMMITS — the one that writes data (#708,
    * C7)? Defaults to `variant === "primary"`, because the filled ink IS the
    * commit control in this grammar. Set it explicitly on a commit that is not
    * the view's one filled element, or `false` on a primary that only navigates
@@ -96,10 +96,10 @@ export default function Button({
     <>
       <button
         type="button"
-        // `.btn` is the base on EVERY size, including chrome. It used to be
-        // swapped out for `.chrome`, which meant a titlebar button silently
-        // lost the shared hover, press and focus-ring rules keyed on `.btn` —
-        // a control with no visible focus ring is a keyboard dead end.
+        // `.btn` is the base on EVERY size, including chrome — `.chrome` is
+        // added beside it, never swapped in for it. The shared hover, press
+        // and focus-ring rules are keyed on `.btn`, and a control with no
+        // visible focus ring is a keyboard dead end.
         className={cx(
           styles.btn,
           size === "chrome" && styles.chrome,
