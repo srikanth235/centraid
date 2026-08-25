@@ -94,7 +94,7 @@
   // ---- Palette -----------------------------------------------------------
   const C = {
     sky:'#5c94fc', skyNight:'#101830', skyCave:'#000000',
-    ground:'#c8611c', groundDark:'#7a3a0f', groundTop:'#3aa93a',
+    ground:'#e07028', groundDark:'#000000', groundDark2:'#8a3f10', groundTop:'#3aa93a',
     brick:'#c8611c', brickDark:'#8a3f10', brickMortar:'#000000',
     qblock:'#e39b1a', qblockDark:'#9a6210', qblockShine:'#ffe08a',
     used:'#9a7d55', usedDark:'#5c4b32',
@@ -170,21 +170,21 @@
     {
       name: '1-1', bg: 'day', time: 400,
       map: [
-        "                                                                                                    ",
-        "                                                                                                    ",
-        "          C                        C                          C                                     ",
-        "                                                                                                    ",
-        "      C            ?   b?b                    C                                                      ",
-        "                                                                                                    ",
-        "                                          bMb                                bb?bb                  ",
-        "                                                                                                    ",
-        "   C          H              e                                e      e                    C          ",
-        "                                                     [ ]                                            ",
-        "         u          ?                e         [ ]   { }        b b            F                    ",
-        "               [ ]        e    e     { }       { }   { }    e                  F                    ",
-        "  @        e   { }    e               { }      { }   { }   e e                  F                   x",
-        "GGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGG  GGGG{ }GGGGGG{ }GGG{ }GGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGGGGGGGx",
-        "GGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGG  GGGG{ }GGGGGG{ }GGG{ }GGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGGGGGGGx",
+        "                                                                                                                        ",
+        "                                                                                                                        ",
+        "        C            C                     C   C                     C            C                C                     ",
+        "                                                                                                                        ",
+        "     C                            C                          C                          C                               ",
+        "                                                                                                                        ",
+        "                ?           b?bMb                      b?b        bbSb            b?b                                   ",
+        "                                                                                                                        ",
+        "   C        H                            H                    H                          H                 C             ",
+        "                                                     [ ]                                                                ",
+        "       u             u    e        [ ]   u     [ ]   { }   u     e e     bMb  u      o o o        x       F             ",
+        "                [ ]      e e       { }         { }   { }      e                 e   e            xx       F             ",
+        "  @      e      { }   e            { }    e    { }   { }     e e     e     e       e e          xxx       F            x",
+        "GGGGGGGGGGGGGGGG{ }GGGGGGGGGGGG  GG{ }GGGGGGGGG{ }GGG{ }GGGGGGGGGGGGGGGGGG   GGGGGGGGGGGGGGGGGGxxxxGGGGGGFGGGGGGGGGGGGGx",
+        "GGGGGGGGGGGGGGGG{ }GGGGGGGGGGGG  GG{ }GGGGGGGGG{ }GGG{ }GGGGGGGGGGGGGGGGGG   GGGGGGGGGGGGGGGGGGxxxxGGGGGGFGGGGGGGGGGGGGx",
       ],
     },
     // ---- 1-2  Underground coins -----------------------------------------
@@ -749,6 +749,7 @@
     if (!p.alive) return;
     p.alive = false; p.vy = -8; p.vx = 0;
     game.state = 'dying'; game.dyingT = 0;
+    stopMusic();
     sfx('die');
   }
 
@@ -761,6 +762,7 @@
     game.score += 2000 + game.time*10;
     game.state = 'levelclear';
     game.clearT = 0;
+    stopMusic();
     sfx('clear');
   }
 
@@ -817,9 +819,10 @@
     for (const d of w.deco) {
       const dx = d.x - cam*0.5;
       if (dx < -64 || dx > VW*TILE+64) continue;
+      const groundTop = (w.height-2)*TILE;   // hills and bushes sit on the ground line
       if (d.t==='cloud') drawCloud(dx, d.y);
-      else if (d.t==='hill') drawHill(dx, d.y);
-      else if (d.t==='bush') drawBush(dx, d.y);
+      else if (d.t==='hill') drawHill(dx, groundTop-17);
+      else if (d.t==='bush') drawBush(dx, groundTop-15);
     }
 
     // tiles
@@ -892,11 +895,22 @@
   function drawTile(ch, x, y, wld, tx, ty) {
     switch (ch) {
       case 'G': {
-        const top = !isSolid(tileAt(wld,tx,ty-1));
-        px(x,y,TILE,TILE, C.ground);
-        px(x,y,TILE,4, C.groundDark);
-        if (top) px(x,y,TILE,4, C.groundTop);
-        px(x+2,y+7,3,3, C.groundDark); px(x+9,y+11,3,3, C.groundDark);
+        // NES-style ground: rounded orange bricks with dark outlines
+        px(x,y,TILE,TILE, C.groundDark);
+        // two brick rows per tile, offset half-brick on the lower row
+        const off = (ty%2===0)?0:8;
+        for (const row of [0,8]) {
+          const shift = ((row===8)?8:0) ^ off;
+          for (let bx=-8; bx<TILE; bx+=16) {
+            const rx = x+bx+(shift%16);
+            // brick body with 1px dark gap all around, lighter top-left bevel
+            px(rx+1, y+row+1, 14, 6, C.ground);
+            px(rx+1, y+row+1, 14, 1, '#f8b878');
+            px(rx+1, y+row+1, 1, 6, '#f8b878');
+            px(rx+13, y+row+2, 2, 5, C.groundDark2);
+            px(rx+2, y+row+6, 13, 1, C.groundDark2);
+          }
+        }
         break;
       }
       case 'b': {
@@ -983,19 +997,37 @@
   }
 
   // ---- Deco --------------------------------------------------------------
+  function drawPuffRow(x, y, bumps, fill, outline, shadeC) {
+    // scalloped puff shape with 1px outline, NES-cartoon style
+    ctx.fillStyle = outline;
+    for (const [ox,oy,r] of bumps) { ctx.beginPath(); ctx.arc(x+ox,y+oy,r+1.5,0,7); ctx.fill(); }
+    ctx.fillStyle = fill;
+    for (const [ox,oy,r] of bumps) { ctx.beginPath(); ctx.arc(x+ox,y+oy,r,0,7); ctx.fill(); }
+    if (shadeC) {
+      ctx.fillStyle = shadeC;
+      for (const [ox,oy,r] of bumps) { ctx.beginPath(); ctx.arc(x+ox,y+oy+r*0.55,r*0.5,0,7); ctx.fill(); }
+    }
+  }
   function drawCloud(x,y){
-    ctx.fillStyle=C.cloud;
-    for (const [ox,oy,r] of [[0,6,6],[8,2,8],[18,4,7],[26,7,6]]) { ctx.beginPath(); ctx.arc(x+ox,y+oy,r,0,7); ctx.fill(); }
-    px(x-4,y+8,40,6,C.cloud);
+    drawPuffRow(x, y, [[2,8,7],[12,3,9],[24,5,8],[33,9,6]], C.cloud, '#000');
+    // scalloped white base with flat bottom
+    ctx.fillStyle='#000'; ctx.fillRect(x-6,y+9,47,8);
+    ctx.fillStyle=C.cloud; ctx.fillRect(x-5,y+9,45,6);
+    // pale blue shading dashes underneath
+    ctx.fillStyle='#a0c8f8';
+    for (let i=0;i<5;i++) ctx.fillRect(x-2+i*9, y+13, 5, 2);
   }
   function drawHill(x,y){
-    ctx.fillStyle=C.hillDark; ctx.beginPath(); ctx.moveTo(x-24,y+16); ctx.quadraticCurveTo(x,y-18,x+24,y+16); ctx.fill();
-    ctx.fillStyle=C.hill; ctx.beginPath(); ctx.moveTo(x-20,y+16); ctx.quadraticCurveTo(x,y-12,x+20,y+16); ctx.fill();
+    ctx.fillStyle='#000'; ctx.beginPath(); ctx.moveTo(x-30,y+17); ctx.quadraticCurveTo(x,y-22,x+30,y+17); ctx.fill();
+    ctx.fillStyle=C.hill; ctx.beginPath(); ctx.moveTo(x-28,y+17); ctx.quadraticCurveTo(x,y-19,x+28,y+17); ctx.fill();
+    // dark speckles like classic hill markings
+    ctx.fillStyle='#0a5a0a';
+    px(x-4,y-6,3,3); px(x+4,y-1,3,3); px(x-9,y+4,3,3); px(x+9,y+7,3,3); px(x-1,y+8,3,3);
   }
   function drawBush(x,y){
-    ctx.fillStyle=C.bush;
-    for (const [ox,r] of [[0,7],[9,9],[19,7]]) { ctx.beginPath(); ctx.arc(x+ox,y+12,r,Math.PI,2*Math.PI); ctx.fill(); }
-    px(x-6,y+11,34,5,C.bush);
+    drawPuffRow(x, y+4, [[0,8,7],[10,4,9],[21,8,7]], C.bush, '#000', '#0a5a0a');
+    ctx.fillStyle='#000'; ctx.fillRect(x-8,y+13,38,3);
+    ctx.fillStyle=C.bush; ctx.fillRect(x-7,y+12,36,3);
   }
 
   // ---- Coin pop / floaters ----------------------------------------------
@@ -1066,19 +1098,28 @@
       }
       return;
     }
-    // walker (brown mushroom-ish creature)
+    // walker: squat brown creature with a big domed head and stubby feet
     const step = Math.floor(e.t/6)%2;
-    px(x+1, y+1, 12, 9, C.enemy);
-    px(x+1, y+1, 12, 3, C.enemyDark);
-    px(x, y+5, 14, 5, C.enemy);
-    // eyes
-    px(x+2, y+5, 3, 3, C.enemyEye); px(x+9, y+5, 3, 3, C.enemyEye);
-    px(x+3, y+6, 1, 2, '#000'); px(x+10, y+6, 1, 2, '#000');
-    // brow
-    px(x+2,y+4,4,1,'#000'); px(x+8,y+4,4,1,'#000');
-    // feet
-    if (step) { px(x, y+11, 6, 3, C.enemyFoot); px(x+9, y+11, 5, 3, C.enemyFoot); }
-    else { px(x+1, y+11, 5, 3, C.enemyFoot); px(x+8, y+11, 6, 3, C.enemyFoot); }
+    // dome head with outline
+    px(x+2, y, 10, 2, '#000');
+    px(x+1, y+2, 12, 1, '#000'); px(x, y+3, 14, 8, '#000');
+    px(x+3, y+1, 8, 2, C.enemy);
+    px(x+2, y+3, 10, 2, C.enemy);
+    px(x+1, y+4, 12, 6, C.enemy);
+    // pale underside/face
+    px(x+3, y+8, 8, 3, '#f8c890');
+    // angry brows + eyes
+    px(x+3, y+4, 3, 2, '#000'); px(x+8, y+4, 3, 2, '#000');
+    px(x+3, y+5, 2, 4, C.enemyEye); px(x+9, y+5, 2, 4, C.enemyEye);
+    px(x+4, y+7, 1, 2, '#000'); px(x+9, y+7, 1, 2, '#000');
+    // feet, alternating shuffle
+    if (step) {
+      px(x-1, y+11, 6, 3, '#000'); px(x+9, y+11, 6, 3, '#000');
+      px(x, y+11, 5, 2, C.enemyFoot); px(x+10, y+11, 4, 2, C.enemyFoot);
+    } else {
+      px(x, y+11, 6, 3, '#000'); px(x+8, y+11, 6, 3, '#000');
+      px(x+1, y+11, 4, 2, C.enemyFoot); px(x+9, y+11, 5, 2, C.enemyFoot);
+    }
   }
   function drawDeadEnemy(d, cam) {
     const x=Math.floor(d.x-cam), y=Math.floor(d.y);
@@ -1146,29 +1187,32 @@
   }
 
   // ---- HUD ---------------------------------------------------------------
+  function hudText(str, x, y, align, scale) {
+    // white text with hard black drop shadow, like classic HUDs
+    drawText(str, x+1, y+1, align, '#000', scale);
+    drawText(str, x, y, align, '#fff', scale);
+  }
   function drawHUD() {
-    // top black strip
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.fillRect(0,0,VW*TILE,26);
-    drawText('SCORE', 16, 4, 'left', '#fff', 1);
-    drawText(String(game.score).padStart(6,'0'), 16, 13, 'left', '#fff', 1);
-    // coins
-    drawCoinTile(150, 5);
-    drawText('x'+String(game.coins).padStart(2,'0'), 164, 9, 'left', '#fff', 1);
-    // level name
-    drawText('WORLD', 250, 4, 'left', '#fff', 1);
-    drawText(game.world?.def.name || '1-1', 258, 13, 'left', '#fff', 1);
-    // time
-    drawText('TIME', 340, 4, 'left', '#fff', 1);
-    drawText(String(game.time).padStart(3,'0'), 348, 13, 'left', '#fff', 1);
-    // lives
-    drawText('LIVES', 420, 4, 'left', '#fff', 1);
-    drawText('x'+game.lives, 430, 13, 'left', '#fff', 1);
-    // power indicator
+    // five columns: SCORE · COINS · WORLD · TIME · LIVES (label above value)
+    const cols = [
+      ['SCORE', String(game.score).padStart(6,'0'), 56],
+      ['COINS', String(game.coins), 160],
+      ['WORLD', game.world?.def.name || '1-1', 256],
+      ['TIME',  String(game.time).padStart(3,'0'), 352],
+      ['LIVES', String(game.lives), 456],
+    ];
+    for (const [label, val, cx] of cols) {
+      hudText(label, cx, 6, 'center', 1);
+      hudText(val, cx, 16, 'center', 1);
+    }
+    // power indicator, small, under SCORE column
     const pw = game.world?.player?.power;
-    const label = pw===2?'FIRE': pw===1?'BIG':'SMALL';
-    const col = pw===2?C.flower: pw===1?C.mushroom:'#bcd';
-    drawText(label, 480, 9, 'left', col, 1);
+    if (pw>0) {
+      const label = pw===2?'FIRE':'BIG';
+      const col = pw===2?C.flower:C.mushroom;
+      drawText(label, 57, 27, 'center', '#000', 1);
+      drawText(label, 56, 26, 'center', col, 1);
+    }
   }
 
   // ---- Text (pixel font) -------------------------------------------------
@@ -1231,6 +1275,7 @@
     game.state = 'play';
     game.paused = false;
     game.message = w.def.name; game.messageT = 60;
+    startMusic(w.def.bg);
   }
   function nextLevel() {
     if (game.levelIndex+1 >= LEVELS.length) { game.state='win'; return; }
@@ -1238,7 +1283,7 @@
   }
   function respawn() {
     game.lives--;
-    if (game.lives < 0) { game.state='gameover'; return; }
+    if (game.lives < 0) { game.state='gameover'; stopMusic(); return; }
     const keepPower = 0;
     loadLevel(game.levelIndex);
   }
@@ -1309,6 +1354,73 @@
   // resume audio on first interaction
   addEventListener('keydown', ()=>{ const a=ac(); if(a && a.state==='suspended') a.resume(); }, {once:true});
   addEventListener('pointerdown', ()=>{ const a=ac(); if(a && a.state==='suspended') a.resume(); }, {once:true});
+
+  // ---- Music: original looping chiptune (square lead + triangle bass) ----
+  // Note frequencies
+  const NF = {C3:130.81,D3:146.83,E3:164.81,F3:174.61,G3:196.00,A3:220.00,B3:246.94,
+              C4:261.63,D4:293.66,E4:329.63,F4:349.23,G4:392.00,A4:440.00,B4:493.88,
+              C5:523.25,D5:587.33,E5:659.26,F5:698.46,G5:783.99,A5:880.00,B5:987.77,C6:1046.5};
+  // Overworld loop: bouncy I–vi–IV–V arpeggios with a walking answer phrase (original tune)
+  const TUNE_DAY = {
+    step: 0.135,
+    lead: ['C5','E5','G5','E5','C5','E5','G5','C6',
+           'A4','C5','E5','C5','A4','C5','E5','A5',
+           'F4','A4','C5','A4','F4','A4','C5','F5',
+           'G4','B4','D5','B4','G5','F5','D5','B4',
+           'C5','G4','E4','G4','C5','E5','G5','E5',
+           'A4','E4','C4','E4','A4','C5','E5','C5',
+           'F4','C4','A3','C4','F4','A4','C5','A4',
+           'G4','D4','B3','D4','G4','B4','D5','G5'],
+    bass: ['C3',0,'G3',0,'C3',0,'G3',0,
+           'A3',0,'E3',0,'A3',0,'E3',0,
+           'F3',0,'C3',0,'F3',0,'C3',0,
+           'G3',0,'D3',0,'G3',0,'B3',0,
+           'C3',0,'G3',0,'C3',0,'G3',0,
+           'A3',0,'E3',0,'A3',0,'E3',0,
+           'F3',0,'C3',0,'F3',0,'C3',0,
+           'G3',0,'D3',0,'G3',0,'G3',0],
+  };
+  // Cave/night loop: slower minor pulse (original tune)
+  const TUNE_CAVE = {
+    step: 0.19,
+    lead: ['A4',0,'C5',0,'E5',0,'C5',0,
+           'G4',0,'B4',0,'D5',0,'B4',0,
+           'F4',0,'A4',0,'C5',0,'A4',0,
+           'E4',0,'G4','A4','B4',0,'E5',0],
+    bass: ['A3',0,0,0,'E3',0,0,0,
+           'G3',0,0,0,'D3',0,0,0,
+           'F3',0,0,0,'C3',0,0,0,
+           'E3',0,0,0,'E3',0,0,0],
+  };
+  const music = { timer:null, step:0, tune:null };
+  function musicNote(freq, when, dur, type, vol) {
+    const a = ac(); if (!a) return;
+    const o=a.createOscillator(), g=a.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq, when);
+    g.gain.setValueAtTime(vol, when);
+    g.gain.exponentialRampToValueAtTime(0.0001, when+dur);
+    o.connect(g); g.connect(a.destination); o.start(when); o.stop(when+dur);
+  }
+  function startMusic(kind) {
+    stopMusic();
+    const a = ac(); if (!a) return;
+    music.tune = (kind==='cave'||kind==='night') ? TUNE_CAVE : TUNE_DAY;
+    music.step = 0;
+    music.timer = setInterval(() => {
+      if (game.paused || game.state!=='play') return;
+      const t = music.tune, a2 = ac();
+      const i = music.step % t.lead.length;
+      const when = a2.currentTime + 0.02;
+      const L = t.lead[i], B = t.bass[i % t.bass.length];
+      const hurry = game.time<=100 ? 1.0 : 0;   // slight urgency: louder lead when low on time
+      if (L) musicNote(NF[L], when, t.step*0.9, 'square', 0.028 + hurry*0.012);
+      if (B) musicNote(NF[B], when, t.step*1.7, 'triangle', 0.05);
+      music.step++;
+    }, (music.tune.step*1000)|0);
+  }
+  function stopMusic() {
+    if (music.timer) { clearInterval(music.timer); music.timer = null; }
+  }
 
   // 5x7 pixel font (bit rows, MSB=leftmost of 5 columns)
   function buildFont(){
