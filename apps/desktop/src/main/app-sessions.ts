@@ -25,6 +25,7 @@ import path from "node:path";
 
 import { openSession } from "./apps-store-client.js";
 import { vaultCodeStoreDir } from "./gateway-paths.js";
+import { assertRevealableAppId } from "./ipc-core.js";
 import { loadSettings } from "./settings.js";
 
 async function dirExists(p: string): Promise<boolean> {
@@ -124,6 +125,10 @@ export async function assertActiveGatewayLocal(action: string): Promise<void> {
  * of writing into it).
  */
 export async function ensureAppSessionDir(appId: string): Promise<string> {
+  // Issue #865: the id is joined into an on-disk path below (and handed to
+  // external binaries by the AGENT_* builders), so grammar-check it before
+  // any join — a traversal id must never build a filesystem path.
+  assertRevealableAppId(appId);
   await assertActiveGatewayLocal(`editing app "${appId}"`);
   const settings = await loadSettings();
   const sessionId = await ensureAppSession(appId);
@@ -152,6 +157,9 @@ export async function ensureAppSessionDir(appId: string): Promise<string> {
  * Requires a local gateway (remote gateways expose no worktree on disk).
  */
 export async function resolveAppRevealDir(appId: string): Promise<string> {
+  // Backstop for the grammar gate the APPS_OPEN handler already applies
+  // (issue #865) — this path reaches shell.openPath verbatim.
+  assertRevealableAppId(appId);
   await assertActiveGatewayLocal(`revealing app "${appId}"`);
   const settings = await loadSettings();
   if (!settings.activeVaultId)

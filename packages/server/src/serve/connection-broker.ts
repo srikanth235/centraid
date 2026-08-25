@@ -92,6 +92,7 @@ interface ConnectionCredRow {
   client_secret: string | null;
   access_token: string | null;
   refresh_token: string | null;
+  refresh_capability: string | null;
   api_key: string | null;
   token_expires_at: string | null;
   allowed_hosts: string | null;
@@ -158,7 +159,18 @@ const MAX_TOKEN_RESPONSE_BYTES = 64 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 1024 * 1024;
 
 type TokenResponse =
-  | { ok: true; accessToken: string; refreshToken?: string; expiresAt?: string }
+  | {
+      ok: true;
+      accessToken: string;
+      refreshToken?: string;
+      /**
+       * Issue #865: the Worker-minted HMAC capability that authenticates the
+       * refresh token at /refresh. Persisted sealed beside the token it
+       * authenticates and re-persisted whenever Google rotates it.
+       */
+      refreshCapability?: string;
+      expiresAt?: string;
+    }
   | { ok: false; authDead: boolean; detail: string };
 
 export class ConnectionBroker {
@@ -776,6 +788,20 @@ export class ConnectionBroker {
         ? await this.postAssist("/refresh", {
             provider: "google",
             refresh_token: refreshToken,
+            // Issue #865: the Worker refuses any refresh whose capability does
+            // not verify against the presented token. A row without one (a
+            // pre-#865 pair) is auth-dead until the owner reconnects, which
+            // re-mints the pair with its capability.
+            ...(row.refresh_capability
+              ? {
+                  refresh_capability: this.unseal(
+                    plane,
+                    connectionId,
+                    "refresh_capability",
+                    row.refresh_capability
+                  ),
+                }
+              : {}),
           })
         : await this.postByoRefresh(row, connectionId, plane, refreshToken);
     if (!response.ok && response.authDead) {
@@ -807,6 +833,9 @@ export class ConnectionBroker {
         ok: true,
         accessToken,
         ...(rotatedRefreshToken ? { refreshToken: rotatedRefreshToken } : {}),
+        ...(response.refreshCapability
+          ? { refreshCapability: response.refreshCapability }
+          : {}),
         ...(expiresAt ? { expiresAt } : {}),
       },
       "refreshed tokens did not persist",
@@ -981,11 +1010,15 @@ export class ConnectionBroker {
             : `assist_worker_${status}`;
         return {
           ok: false,
+          // A 401 capability refusal (issue #865) is auth-dead like
+          // invalid_grant: the stored pair cannot be used until a reconnect
+          // ceremony mints a fresh pair with its capability.
           authDead:
-            status === 400 &&
-            ["invalid_grant", "invalid_receipt", "expired_receipt"].includes(
-              code
-            ),
+            status === 401 ||
+            (status === 400 &&
+              ["invalid_grant", "invalid_receipt", "expired_receipt"].includes(
+                code
+              )),
           detail: code,
         };
       }
@@ -1004,6 +1037,10 @@ export class ConnectionBroker {
         accessToken,
         ...(typeof parsed.refresh_token === "string" && parsed.refresh_token
           ? { refreshToken: parsed.refresh_token }
+          : {}),
+        ...(typeof parsed.refresh_capability === "string" &&
+        parsed.refresh_capability
+          ? { refreshCapability: parsed.refresh_capability }
           : {}),
         ...(expiresIn && Number.isFinite(expiresIn) && expiresIn > 0
           ? { expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString() }
@@ -1027,6 +1064,11 @@ export class ConnectionBroker {
         access_token: response.accessToken,
         ...(response.refreshToken
           ? { refresh_token: response.refreshToken }
+          : {}),
+        // Issue #865: land the capability in the SAME act as the token it
+        // authenticates — a pair without its capability cannot refresh.
+        ...(response.refreshCapability
+          ? { refresh_capability: response.refreshCapability }
           : {}),
         ...(response.expiresAt ? { expires_at: response.expiresAt } : {}),
       },

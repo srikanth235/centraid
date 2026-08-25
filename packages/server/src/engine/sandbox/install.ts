@@ -21,7 +21,10 @@
  *     reach: `fetch`, `WebSocket`, `EventSource`, `XMLHttpRequest`,
  *     `navigator.sendBeacon`, `process.binding`, `process.dlopen`,
  *     `process.getBuiltinModule` (re-filtered through the same allowlist,
- *     since it is a documented loader bypass), and `process.env`.
+ *     since it is a documented loader bypass), `process.env`, and — because
+ *     worker threads share the gateway's PID (#865) — `process.kill`,
+ *     `process.abort`, and `process.report`, plus redacted `process.argv` /
+ *     `process.execArgv` inside worker threads.
  *
  * ========================= WHAT IT DOES NOT ENFORCE =========================
  *
@@ -57,6 +60,7 @@
 import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { isMainThread } from "node:worker_threads";
 
 import { denied } from "./denied.js";
 import { setConfinedReadRoots } from "./fs-guard.js";
@@ -269,5 +273,53 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
       configurable: false,
       enumerable: true,
     });
+  }
+
+  // Worker threads share the gateway's PID (#865). `process.kill` and
+  // `process.abort` are process-wide — a SIGKILL from a handler would take
+  // down every lane, the vault, and the tunnels with it, and no pool can
+  // terminate its way out of that. No lane grants them; handlers are
+  // untrusted, and subprocess lanes shell out through `child_process`, which
+  // the allowlist already gates — never through these.
+  proc.kill = () => {
+    throw denied(
+      "process.kill is revoked; worker threads share the gateway's PID, so a signal from an untrusted handler kills the whole gateway"
+    );
+  };
+  proc.abort = () => {
+    throw denied(
+      "process.abort is revoked; it crashes the shared gateway process, not just this handler's thread"
+    );
+  };
+
+  // `process.report.getReport()` reads the REAL OS environ at call time (#865),
+  // straight past the frozen-empty `process.env` above, and would hand a
+  // handler whatever the gateway process carries — S3 credentials, tunnel
+  // tokens, provider keys. Undefined rather than stubbed so there is nothing
+  // left on the object to reach.
+  Object.defineProperty(process, "report", {
+    value: undefined,
+    writable: false,
+    configurable: false,
+    enumerable: true,
+  });
+
+  // argv and execArgv echo how the gateway was launched (#865). Each thread
+  // owns its own copy of these properties, so replacing them here cannot touch
+  // the host process — but they are only replaced inside real worker threads:
+  // this file also installs in-process under the test harness (a fork, where
+  // `isMainThread` holds), and there `process.argv` is the harness's own
+  // command line. Both production installers (`engine/worker/runner.ts`,
+  // `automation/worker/runner.ts`) run as worker entries, so every production
+  // install takes this branch.
+  if (!isMainThread) {
+    for (const name of ["argv", "execArgv"]) {
+      Object.defineProperty(process, name, {
+        value: Object.freeze([] as string[]),
+        writable: false,
+        configurable: false,
+        enumerable: true,
+      });
+    }
   }
 }

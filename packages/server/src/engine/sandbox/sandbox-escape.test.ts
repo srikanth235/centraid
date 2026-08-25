@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#865) every escape case runs a real hostile handler in a real worker; splitting the lanes would scatter the one enforcement story.
 /**
  * ESCAPE TESTS for the handler sandbox (issue #842 W7.1).
  *
@@ -334,6 +335,67 @@ describe("app-handler lane: process", () => {
     const value = result.value as { canary: string | null; keys: number };
     expect(value.canary).toBeNull();
     expect(value.keys).toBe(0);
+  });
+
+  test("process.kill and process.abort cannot take down the gateway (#865)", async () => {
+    // Worker threads share the gateway's PID: a successful SIGKILL here would
+    // end every lane at once, so the strongest assertion available is that this
+    // result was posted AT ALL — the process survived both attempts.
+    const file = await handler(
+      "self-destruct.mjs",
+      `export default async () => {
+         const out = [];
+         try { process.kill(process.pid, "SIGKILL"); out.push("kill:ALLOWED"); }
+         catch (error) { out.push("kill:" + (error.code === "CENTRAID_SANDBOX_DENIED" ? "refused" : "other")); }
+         try { process.abort(); out.push("abort:ALLOWED"); }
+         catch (error) { out.push("abort:" + (error.code === "CENTRAID_SANDBOX_DENIED" ? "refused" : "other")); }
+         return { denied: out.join(",") };
+       };`
+    );
+    const result = await runAppHandler(file);
+    expect(refusal(result)).toBe("kill:refused,abort:refused");
+  });
+
+  test("process.report.getReport() cannot read the real OS environ (#865)", async () => {
+    // getReport reads environ at call time, past any frozen process.env. The
+    // worker here genuinely carries CANARY_ENV in its OS environment — a
+    // working report would leak it.
+    const file = await handler(
+      "diagnostic-report.mjs",
+      `export default async () => {
+         try {
+           const vars = process.report.getReport().environmentVariables;
+           return {
+             leakedCanary: vars.${CANARY_ENV} ?? null,
+             leakedKeys: Object.keys(vars).length,
+           };
+         } catch (error) { return { denied: String(error.message) }; }
+       };`
+    );
+    const result = await runAppHandler(file);
+    const value = result.value as {
+      leakedCanary?: string | null;
+      leakedKeys?: number;
+      denied?: string;
+    };
+    expect(value.leakedCanary).toBeUndefined();
+    expect(value.leakedKeys).toBeUndefined();
+    expect(value.denied).toContain("getReport");
+  });
+
+  test("process.argv and process.execArgv are redacted in the handler thread (#865)", async () => {
+    // They echo how the gateway was launched; each worker owns its own copy,
+    // so the parent's command line must not be visible from in here.
+    const file = await handler(
+      "argv.mjs",
+      `export default async () => ({
+         argv: process.argv,
+         execArgv: process.execArgv,
+       });`
+    );
+    const result = await runAppHandler(file);
+    expect(result.ok).toBe(true);
+    expect(result.value).toStrictEqual({ argv: [], execArgv: [] });
   });
 });
 

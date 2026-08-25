@@ -12,6 +12,24 @@ import type { DataPlaneHttpOptions } from "../serve/data-plane-handoff.js";
 import { parseRange, pipeBlobResponse } from "./blob-response.js";
 import { sendJson } from "./route-helpers.js";
 
+/**
+ * Media types a browser executes in the origin of whatever page embeds them
+ * (issue #865). Blob bytes can be attacker-authored — an imported email
+ * attachment, a shared file — so a stored `text/html` blob served inline is
+ * a stored XSS against the PWA shell origin. These are never rendered
+ * inline from the gateway: they download instead. `nosniff` plus the
+ * `sandbox` CSP below keep even a mislabeled type inert.
+ */
+const INLINE_EXECUTABLE_MEDIA_TYPES = new Set([
+  "text/html",
+  "application/xhtml+xml",
+  "image/svg+xml",
+]);
+
+function baseMediaType(mediaType: string): string {
+  return mediaType.split(";")[0]?.trim().toLowerCase() ?? "";
+}
+
 export async function serveBlobRead(input: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -23,7 +41,11 @@ export async function serveBlobRead(input: {
 }): Promise<true> {
   const { req, res, method, blob, custody, dataPlane } = input;
   const etag = `"${blob.sha256}"`;
-  const disposition = input.download ? "attachment" : "inline";
+  const disposition =
+    input.download ||
+    INLINE_EXECUTABLE_MEDIA_TYPES.has(baseMediaType(blob.mediaType))
+      ? "attachment"
+      : "inline";
   const name = (blob.title ?? blob.sha256.slice(0, 12)).replace(
     /["\\\r\n]/gu,
     ""
@@ -34,6 +56,12 @@ export async function serveBlobRead(input: {
     // Content-addressed bytes never change under their id+variant — cache
     // forever, privately (this is the owner's data).
     res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    // Blob bytes are not always owner-authored; a browser must never guess a
+    // scriptable type from them, and any document it does open gets an
+    // opaque sandboxed origin — no same-origin access to the shell (issue
+    // #865).
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "sandbox");
     res.setHeader("Content-Type", blob.mediaType);
     res.setHeader("Content-Disposition", `${disposition}; filename="${name}"`);
   };

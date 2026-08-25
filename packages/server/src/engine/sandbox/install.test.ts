@@ -120,6 +120,30 @@ describe("ambient-authority revocation", () => {
     expect(() => proc.dlopen()).toThrow(/may not load native addons/u);
   });
 
+  test("kill, abort, and report are revoked in every lane (#865)", () => {
+    // Worker threads share the gateway's PID, so kill/abort/report cannot be a
+    // lane grant at all — the same way getBuiltinModule is re-filtered rather
+    // than trusted. These observe the one install this thread already carries.
+    const proc = process as unknown as {
+      kill: (...args: unknown[]) => unknown;
+      abort: () => unknown;
+      report: unknown;
+    };
+    expect(() => proc.kill(process.pid, "SIGKILL")).toThrow(SandboxDeniedError);
+    expect(() => proc.kill(process.pid, "SIGKILL")).toThrow(
+      /share the gateway's PID/u
+    );
+    expect(() => proc.abort()).toThrow(SandboxDeniedError);
+    expect(() => proc.abort()).toThrow(/crashes the shared gateway process/u);
+    // Undefined, not stubbed: there is nothing left to call getReport on, so
+    // the real OS environ stays unreachable even if the frozen-empty env above
+    // were bypassed some other way.
+    expect(proc.report).toBeUndefined();
+    expect(
+      Object.getOwnPropertyDescriptor(process, "report")?.configurable
+    ).toBe(false);
+  });
+
   test("the environment is replaced with a frozen empty object", () => {
     // Not merely emptied: a writable `{}` would let a handler stash state
     // across the one run it gets, and a configurable property would let it

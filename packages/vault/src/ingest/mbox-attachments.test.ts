@@ -70,8 +70,43 @@ describe("mbox-attachments", () => {
     expect(msg.body).toBe("Here is the receipt you asked for.");
     expect(msg.attachments).toHaveLength(1);
     expect(msg.attachments[0]!.filename).toBe("receipt.png");
-    expect(msg.attachments[0]!.mediaType).toBe("image/png");
+    // The email's declared type is not echoed verbatim (issue #865) —
+    // parsing declares nothing; staging settles the type from the bytes.
+    expect(msg.attachments[0]!.mediaType).toBe("application/octet-stream");
     expect(msg.attachments[0]!.data.equals(PNG_BYTES)).toBe(true);
+  });
+
+  test("a lying email Content-Type cannot stage attacker-chosen media types (issue #865)", () => {
+    const b64 = PNG_BYTES.toString("base64");
+    const mbox = [
+      "From mallory@example.com Mon Jun  3 10:00:00 2024",
+      'From: "Mallory" <mallory@example.com>',
+      "Subject: invoice",
+      "Date: Mon, 3 Jun 2024 10:00:00 +0000",
+      "Message-ID: <lie-1@example.com>",
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/mixed; boundary="XYZ"',
+      "",
+      "--XYZ",
+      "Content-Type: text/html; charset=utf-8",
+      "Content-Transfer-Encoding: base64",
+      'Content-Disposition: attachment; filename="invoice.png"',
+      "",
+      b64,
+      "--XYZ--",
+      "",
+    ].join("\n");
+    const staged = stageFile(db, owner, {
+      filename: "mail.mbox",
+      data: mbox,
+    });
+    void staged;
+    const sha = sha256OfBytes(PNG_BYTES);
+    const row = db.vault
+      .prepare("SELECT media_type FROM blob_staging WHERE sha256 = ?")
+      .get(sha) as { media_type: string };
+    // The message said text/html; the bytes say image/png — bytes win.
+    expect(row.media_type).toBe("image/png");
   });
 
   test("stage → publish: attachment bytes claim onto the message with an edge", () => {

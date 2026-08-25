@@ -961,6 +961,10 @@ const STORE_TOKENS: CommandDefinition = {
       // Absent on refresh responses that do not rotate — the stored one
       // stays. Rotating providers MUST land the new one in the same act.
       refresh_token: { type: "string", minLength: 1 },
+      // Issue #865: the Worker-minted HMAC capability authenticating the
+      // refresh token at /refresh. Absent when no (new) refresh token is
+      // present; MUST land in the same act as a new refresh token.
+      refresh_capability: { type: "string", minLength: 1 },
       expires_at: { type: "string", minLength: 1 },
     },
   },
@@ -982,7 +986,7 @@ const STORE_TOKENS: CommandDefinition = {
     },
   ],
   postconditions: [],
-  sealedInput: ["access_token", "refresh_token"],
+  sealedInput: ["access_token", "refresh_token", "refresh_capability"],
   idempotency: "idempotent",
   // Low salience but confirm-gated (issue #308 A2): swapping the stored
   // token pair re-principals every future drain, and only the broker's
@@ -997,18 +1001,21 @@ function storeTokens(ctx: HandlerCtx): Record<string, unknown> {
     connection_id: string;
     access_token: string;
     refresh_token?: string;
+    refresh_capability?: string;
     expires_at?: string;
   };
   ctx.db
     .prepare(
       `UPDATE sync_connection_credential SET access_token = ?,
          refresh_token = COALESCE(?, refresh_token),
+         refresh_capability = COALESCE(?, refresh_capability),
          token_expires_at = ?, updated_at = ?
        WHERE connection_id = ?`
     )
     .run(
       input.access_token,
       input.refresh_token ?? null,
+      input.refresh_capability ?? null,
       input.expires_at ?? null,
       ctx.now,
       input.connection_id

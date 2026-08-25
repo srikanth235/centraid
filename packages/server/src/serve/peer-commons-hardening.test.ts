@@ -1,9 +1,12 @@
+// governance: allow-repo-hygiene file-size-limit (#865) each hardening case crosses the same two-vault peer transport; per-case files would re-boot that world per suite.
 /* PR #735 peer-plane commons hardening: the signed-command route must bind the
  * acted-as party to the PROVEN peer (never trust body.actorPartyId), and a
  * fully caught-up member's pull must be a no-op that neither scrubs nor counts
  * as sweep progress. Both cross the real peer routes on two in-process vaults. */
 
-import { describe, expect, test } from "vitest";
+import type { ServerResponse } from "node:http";
+
+import { describe, expect, test, vi } from "vitest";
 
 import {
   appendCommonsOperation,
@@ -18,7 +21,14 @@ import {
   STALE_CONTEXT_REASON_PREFIX,
 } from "@centraid/vault";
 
-import { PEER_COMMONS_COMMAND_PATH } from "../routes/peer-commons-route.js";
+import {
+  handlePeerCommonsBlob,
+  handlePeerCommonsBlobAuthorize,
+  PEER_COMMONS_COMMAND_PATH,
+  PEER_COMMONS_SESSION_CAP,
+} from "../routes/peer-commons-route.js";
+import type { PeerCommonsRouteDeps } from "../routes/peer-commons-route.js";
+import type { PeerIdentity } from "../routes/peer-plane.js";
 import { addKnownParty } from "./commons-b6.test-fixtures.js";
 import {
   pullPeerCommons,
@@ -31,6 +41,8 @@ import {
   routeFrom,
   seedPhoto,
 } from "./peer-give.test-fixtures.js";
+
+vi.setConfig({ testTimeout: 60_000 });
 
 describe("commons peer-plane hardening", () => {
   test("a read-only member cannot forge a steward-attributed command by supplying actorPartyId", async () => {
@@ -559,5 +571,212 @@ describe("commons peer-plane hardening", () => {
         )
         .get(grant.grantId)
     ).toMatchObject({ n: 0 });
+  });
+
+  /* (#865 F9) A nonce is bound straight into SQLite as `signature_nonce`; a
+   * non-string value used to reach that binding and surface as a 500 instead
+   * of the route's normal refusal. */
+  test("a malformed signature nonce is refused on the wire, not surfaced as a 500", async () => {
+    const origin = makeSide("nonce-steward");
+    const member = makeSide("nonce-member");
+    await link(origin, member);
+    const now = new Date().toISOString();
+    const photo = seedPhoto(origin, "nonce-grammar");
+    const grant = createCommonsGrant({
+      origin: origin.vault.vault,
+      ownerPartyId: origin.ownerPartyId,
+      ownerVaultId: origin.vaultId,
+      ownerVault: origin.vault,
+      containerType: "media.asset",
+      containerId: photo.assetId,
+      members: [
+        {
+          partyId: member.ownerPartyId,
+          capability: "read+write",
+          vaultId: member.vaultId,
+          vaultPublicKey: member.publicKey,
+        },
+      ],
+      now,
+    });
+    compileCommons({
+      steward: origin.vault,
+      stewardVaultId: origin.vaultId,
+      grantId: grant.grantId,
+      seats: commonsSeats({
+        steward: origin.vault.vault,
+        grantId: grant.grantId,
+        stewardVaultId: origin.vaultId,
+        vaultFor: () => undefined,
+      }),
+      now,
+    });
+    const dial = dialFrom(member, origin);
+    const route = routeFrom(member, origin);
+    const response = await dial.request({
+      endpointTicket: dial.endpointTicketFor(
+        route.endpointId,
+        route.relayHints
+      ),
+      method: "POST",
+      target: PEER_COMMONS_COMMAND_PATH,
+      body: {
+        stewardVaultId: origin.vaultId,
+        memberVaultId: member.vaultId,
+        grantId: grant.grantId,
+        actorPartyId: member.ownerPartyId,
+        command: "media.update_asset",
+        input: { asset_id: photo.assetId, title: "bad nonce" },
+        memberSignature: {
+          memberVaultId: member.vaultId,
+          // A write-capable member, a matching vault id — everything the old
+          // shape check looked at was honest except this one field.
+          nonce: { forged: "not-a-string" },
+          signature: "AAAA",
+        },
+        basedOnSequence: 0,
+        intentId: "malformed-nonce",
+      },
+    });
+    expect(response.status).toBe(404);
+    expect(response.json).toMatchObject({ state: "not_found" });
+    expect(
+      origin.vault.vault
+        .prepare(
+          "SELECT COUNT(*) AS n FROM share_commons_op WHERE grant_id = ?"
+        )
+        .get(grant.grantId)
+    ).toMatchObject({ n: 0 });
+  });
+
+  /* (#865 F9) The transfer-session store swept only EXPIRED sessions; opens
+   * that outpace the TTL used to grow it without limit. Past the cap, the
+   * oldest session must die while fresh ones keep working. */
+  test("transfer sessions evict oldest-first past the retention cap", async () => {
+    const origin = makeSide("retention-steward");
+    const member = makeSide("retention-member");
+    await link(origin, member);
+    const now = new Date().toISOString();
+    const photo = seedPhoto(origin, "retention");
+    const grant = createCommonsGrant({
+      origin: origin.vault.vault,
+      ownerPartyId: origin.ownerPartyId,
+      ownerVaultId: origin.vaultId,
+      ownerVault: origin.vault,
+      containerType: "media.asset",
+      containerId: photo.assetId,
+      members: [
+        {
+          partyId: member.ownerPartyId,
+          capability: "read+write",
+          vaultId: member.vaultId,
+          vaultPublicKey: member.publicKey,
+        },
+      ],
+      now,
+    });
+    compileCommons({
+      steward: origin.vault,
+      stewardVaultId: origin.vaultId,
+      grantId: grant.grantId,
+      seats: commonsSeats({
+        steward: origin.vault.vault,
+        grantId: grant.grantId,
+        stewardVaultId: origin.vaultId,
+        vaultFor: () => undefined,
+      }),
+      now,
+    });
+    const identity: PeerIdentity = {
+      endpointId: "ep-retention",
+      linked: true,
+      linkFor: () => undefined,
+      linkForPair: (localVaultId, peerVaultId) =>
+        localVaultId === origin.vaultId && peerVaultId === member.vaultId
+          ? {
+              linkId: "link-retention",
+              localVaultId: origin.vaultId,
+              peerVaultId: member.vaultId,
+              peerPublicKey: member.publicKey,
+              peerLabel: "retention-member",
+              myLabel: "retention-steward",
+              route: {
+                endpointId: "ep-retention",
+                relayHints: [],
+                assertedAt: 1,
+              },
+              permissions: {},
+            }
+          : undefined,
+    };
+    const deps: PeerCommonsRouteDeps = {
+      vaultFor: (vaultId) =>
+        vaultId === origin.vaultId ? origin.vault : undefined,
+      gatewayFor: () => undefined,
+      credentialFor: () => undefined,
+    };
+    const callRoute = (
+      handler: (
+        res: ServerResponse,
+        peer: PeerIdentity,
+        query: URLSearchParams,
+        deps: PeerCommonsRouteDeps
+      ) => true,
+      query: URLSearchParams
+    ): { status: number; json: Record<string, unknown> } => {
+      let statusCode = 0;
+      let body = "";
+      const res = {
+        setHeader: () => undefined,
+        end(value?: string | Buffer) {
+          if (value) body += value.toString();
+        },
+        get statusCode() {
+          return statusCode;
+        },
+        set statusCode(value: number) {
+          statusCode = value;
+        },
+      } as unknown as ServerResponse;
+      handler(res, identity, query, deps);
+      return { status: statusCode, json: JSON.parse(body) };
+    };
+    const authorize = () =>
+      callRoute(
+        handlePeerCommonsBlobAuthorize,
+        new URLSearchParams({
+          stewardVaultId: origin.vaultId,
+          memberVaultId: member.vaultId,
+          grantId: grant.grantId,
+        })
+      );
+    const chunkWith = (token: string) =>
+      callRoute(
+        handlePeerCommonsBlob,
+        new URLSearchParams({
+          stewardVaultId: origin.vaultId,
+          memberVaultId: member.vaultId,
+          grantId: grant.grantId,
+          sha256: photo.sha256,
+          token,
+          offset: "0",
+          length: String(photo.bytes.length),
+        })
+      );
+
+    const first = authorize();
+    expect(first.json).toMatchObject({ state: "authorized" });
+    const oldestToken = first.json.token as string;
+
+    // The oldest session is alive and serves its proven sha set…
+    expect(chunkWith(oldestToken).status).toBe(200);
+
+    // …and opening sessions past the cap evicts it while the newest survive.
+    for (let opened = 1; opened <= PEER_COMMONS_SESSION_CAP; opened += 1)
+      expect(authorize().status).toBe(200);
+    expect(chunkWith(oldestToken).status).toBe(404);
+    const newest = authorize();
+    expect(newest.json).toMatchObject({ state: "authorized" });
+    expect(chunkWith(newest.json.token as string).status).toBe(200);
   });
 });

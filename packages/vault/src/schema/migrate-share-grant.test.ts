@@ -56,6 +56,25 @@ CREATE TABLE share_commons_member_state (
 ) STRICT;
 CREATE INDEX share_commons_member_state_party
   ON share_commons_member_state(party_id);
+-- Issue #304's credential sidecar predates this rung, so any real v2 vault
+-- carries it — and issue #865's later rung ALTERs it, so the fixture must too.
+CREATE TABLE sync_connection_credential (
+  connection_id    TEXT PRIMARY KEY,
+  cred_kind        TEXT NOT NULL CHECK (cred_kind IN ('oauth2','api_key')),
+  oauth_mode       TEXT NOT NULL DEFAULT 'byo' CHECK (oauth_mode IN ('byo','assist')),
+  provider         TEXT,
+  auth_url         TEXT,
+  token_url        TEXT,
+  scopes           TEXT,
+  client_id        TEXT,
+  client_secret    TEXT,
+  access_token     TEXT,
+  refresh_token    TEXT,
+  api_key          TEXT,
+  token_expires_at TEXT,
+  allowed_hosts    TEXT NOT NULL CHECK (json_valid(allowed_hosts)),
+  updated_at       TEXT NOT NULL
+) STRICT;
 `;
 
 /*
@@ -222,7 +241,7 @@ describe("schema/migrate rung three (issue #825 grant plane)", () => {
     expect(
       (db.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version
-    ).toBe(4);
+    ).toBe(5);
 
     expect(grantShapes(db)).toStrictEqual([
       // The uniform named circle stays ONE circle-audience grant.

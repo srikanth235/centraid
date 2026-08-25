@@ -1,9 +1,11 @@
+// governance: allow-repo-hygiene file-size-limit (#865) registration, wake replay, and the SSRF guard share one fixture gateway; splitting them would triple the boot cost.
+import { promises as dnsPromises } from "node:dns";
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -36,7 +38,16 @@ const dirs: string[] = [];
 const relays: PushWakeRelay[] = [];
 
 describe("push-wake-routes", () => {
+  // Registration resolves the endpoint host (issue #865); tests run offline,
+  // so named hosts default to a public resolution. Individual tests override
+  // this spy for reserved-range cases.
+  beforeEach(() => {
+    vi.spyOn(dnsPromises, "lookup").mockResolvedValue([
+      { address: "93.184.216.34", family: 4 },
+    ] as never);
+  });
   afterEach(async () => {
+    vi.restoreAllMocks();
     for (const relay of relays.splice(0)) relay.stop();
     for (const server of servers.splice(0)) server.close();
     for (const plane of planes.splice(0)) plane.stop();
@@ -203,6 +214,59 @@ describe("push-wake-routes", () => {
       headers,
     });
     expect(removed.status).toBe(200);
+    expect(webRegistrationRows(database)).toStrictEqual([]);
+  });
+
+  test("refuses web-push endpoints that resolve into reserved ranges (issue #865)", async () => {
+    const { base, database } = await registrationServer();
+    const headers = {
+      [AUTHED_DEVICE_HEADER]: "phone-1",
+      "content-type": "application/json",
+    };
+    const register = (endpoint: string) =>
+      fetch(`${base}${PUSH_REGISTRATIONS_PATH}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          platform: "web",
+          subscription: {
+            endpoint,
+            keys: { p256dh: "p".repeat(65), auth: "a".repeat(16) },
+          },
+        }),
+      });
+
+    // Reserved-range IP literals are refused without touching DNS at all.
+    await Promise.all(
+      [
+        "https://127.0.0.1:8080/fcm",
+        "https://[::1]/fcm",
+        "https://10.9.8.7/fcm",
+        "https://192.168.1.10/fcm",
+        "https://169.254.169.254/latest/meta-data",
+        "https://[fd00::5]/fcm",
+      ].map(async (endpoint) => {
+        const refused = await register(endpoint);
+        expect(refused.status).toBe(400);
+        await expect(refused.json()).resolves.toMatchObject({
+          error: "invalid_push_registration",
+          reason: expect.stringMatching(/reserved-range|must use https/u),
+        });
+      })
+    );
+
+    // A DNS name resolving to a private address is refused too.
+    vi.spyOn(dnsPromises, "lookup").mockResolvedValue([
+      { address: "192.168.0.20", family: 4 },
+    ] as never);
+    const rebinded = await register("https://rebind.example/wake");
+    expect(rebinded.status).toBe(400);
+    await expect(rebinded.json()).resolves.toMatchObject({
+      error: "invalid_push_registration",
+      reason: expect.stringContaining("reserved-range"),
+    });
+
+    // Nothing from the refusals ever reached storage.
     expect(webRegistrationRows(database)).toStrictEqual([]);
   });
 
