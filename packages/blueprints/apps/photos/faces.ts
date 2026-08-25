@@ -1,37 +1,9 @@
-// Faces (#299, fixed for #711): the propose-and-confirm loop over
-// media.face_region, scoped to the ONE open photograph — the lightbox's own
-// compact mini-list. The full, dedicated "Face review" surface (v4 handoff
-// 4305-4318, vault-wide, one proposal at a time) lives in
-// components/FaceReview.tsx + queries/face-queue.ts, not here; this file's
-// job is only to not repeat, at photograph scale, the two mistakes that
-// surface exists to fix — see #711's review:
-//
-//  1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285). This file never
-//     prints `Math.round(region.confidence * 100)}%`, the enricher's raw
-//     similarity score. It counts MATCHES instead: how many OTHER
-//     `media_face_region` rows (on any asset, confirmed or not) propose the
-//     SAME `party_id`, deduped by photograph — the same derivation
-//     queries/face-queue.ts uses for the full surface's `confidence` fact.
-//  2. ONE FACE AT A TIME (v4 3967). This file does not render every
-//     unconfirmed region on the open photograph as a list. It shows
-//     exactly one — the current index is kept on the host element itself
-//     (`data-face-index`) so it survives the answer re-render this function
-//     calls itself, without adding React state to a function that stays
-//     intentionally DOM-imperative (see below).
-//
-// It does NOT use ../triage-session.ts, and that is deliberate: this loop's
-// cursor lives in a DOM dataset precisely because the function is re-invoked
-// wholesale rather than re-rendered, and there is no frozen denominator or
-// outcome tally here to share — its progress line counts the photograph's own
-// regions. Borrowing the session type would mean serialising it through
-// `data-*` attributes to hold a state machine this surface does not have.
-//
-// Fully-imperative DOM builder, same as the Lit port: it targets an empty
-// `<div ref={facesHostRef}>` that LightboxInfo always renders with no JSX
-// children, so React never has anything of its own to reconcile there — the
-// same "React-owned but foreign-filled" contract the boot skeleton relies on.
-// No domain (asset/album) state here, so it lives beside outcomes.ts rather
-// than in app.tsx — LightboxInfo imports and calls it directly.
+// Faces (#299, #711): the propose-and-confirm loop over media.face_region for
+// the ONE open photograph; the vault-wide surface is components/FaceReview.tsx.
+// TWO RULES: confidence is a MATCH COUNT, never a percentage; and ONE face at
+// a time, its index on the host (`data-face-index`) so it survives the
+// re-render this function calls on itself. Not ../triage-session.ts: no
+// frozen denominator here. Imperative builder — React reconciles nothing.
 import { act, narrate } from "./outcomes.ts";
 
 interface FaceRegion {
@@ -65,14 +37,6 @@ function kitBtn(
   return btn;
 }
 
-/**
- * How many OTHER regions on this asset propose the same person (rule 1: a
- * MATCH COUNT, never `region.confidence`'s raw similarity score). This mini
- * list only ever sees the current asset's own regions, so — unlike
- * queries/face-queue.ts's vault-wide version — it counts within `regions`
- * alone; it is a smaller, honestly-scoped number, not an approximation of
- * the same one.
- */
 function matchCountWithin(
   region: FaceRegion,
   regions: readonly FaceRegion[]
@@ -98,10 +62,7 @@ export async function renderFaces(
     return; // face queries never break the lightbox
   }
   const regions = data?.regions ?? [];
-  // Clear before the empty bail-out too: a re-render call (confirm/reject
-  // just resolved the LAST region) must erase the stale "People" section it
-  // left behind, not just skip repopulating it. Only a genuinely failed read
-  // (caught above) leaves whatever was already there alone.
+  // Cleared before the empty bail-out, so the LAST region leaves nothing.
   host.replaceChildren();
   if (regions.length === 0 || data?.denied) return;
   const confirmedCount = regions.filter((r) => r.confirmed).length;
@@ -109,9 +70,6 @@ export async function renderFaces(
   const heading = document.createElement("p");
   heading.className = "lightbox-faces-title";
   heading.append("People — ");
-  // Progress is DETERMINATE with exact counts, never a spinner or a bare
-  // fraction lost in the sentence (v4 §14) — the numerals get their own span
-  // so they stay mono/tabular even though the heading around them is prose.
   const progress = document.createElement("span");
   progress.style.fontVariantNumeric = "tabular-nums";
   progress.textContent = `${confirmedCount} of ${regions.length} reviewed`;
@@ -126,14 +84,7 @@ export async function renderFaces(
     host.appendChild(row);
   }
   if (unconfirmed.length === 0) return;
-  // Rule 2 — ONE FACE AT A TIME (v4 3967): a proposal at a time, not a list
-  // of every unconfirmed region on this photograph. The index is kept ON
-  // THE HOST rather than in a closure variable, because this function is
-  // re-invoked wholesale (by LightboxInfo's effect, and by itself after a
-  // write) rather than re-rendered by a framework that would preserve local
-  // state for it. A NEW photograph (LightboxInfo's effect re-firing for a
-  // different assetId) always starts its own queue at the head, rather than
-  // inheriting whatever index Skip left behind on the previous photograph.
+  // A NEW photograph starts at the head, never inheriting Skip's index.
   if (host.dataset.faceAsset !== assetId) {
     host.dataset.faceIndex = "0";
     host.dataset.faceAsset = assetId;
@@ -167,10 +118,8 @@ export async function renderFaces(
     if (region.party_id === person.party_id) option.selected = true;
     picker.appendChild(option);
   }
-  // ONE VERB, THREE ANSWERS (#712) — the same `answer-face` action the
-  // full Face review surface fires, so a face answered in the lightbox is
-  // answered everywhere, and a face the member declines to name here does not
-  // reappear in the dedicated queue tomorrow.
+  // ONE VERB, THREE ANSWERS (#712): a face answered here is answered
+  // everywhere.
   const answerHere = async (
     answer: "confirm" | "reject" | "dismiss",
     partyId?: string
@@ -196,16 +145,11 @@ export async function renderFaces(
   const reject = kitBtn("Not this person", async () => {
     await answerHere("reject");
   });
-  // The lightbox's own "keep the face, do not name it". The full surface has
-  // carried this row since #711 with nothing behind it; here it is offered
-  // only now that there is a command that means it.
   const keepUnnamed = kitBtn("Keep unnamed", async () => {
     await answerHere("dismiss");
   });
   keepUnnamed.setAttribute("aria-label", "Keep this face, do not name it");
   const skip = kitBtn("Skip", () => {
-    // Local-only: nothing is written, so the skipped face genuinely "stays
-    // in the queue" rather than the app merely promising that.
     host.dataset.faceIndex = String(index + 1);
     void renderFaces(host, assetId, note);
   });

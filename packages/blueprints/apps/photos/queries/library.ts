@@ -1,45 +1,10 @@
 /**
- * The library projection as bounded recent windows: the newest live assets
- * by captured_at (caller-sized, default 500 — a photo grid wants a deep
- * first page) and the newest 200 trashed ones — never the whole
- * media.asset table, and crucially never the whole core.content_item
- * table, because every photo's bytes ride inline as a data: URI and a full
- * content read ships the entire library on every refresh (#264).
- * Content items and album entries are joined only for the windowed rows;
- * albums stay a full read (a collection list is small). Media has no text
- * index, so anything older is reachable only by growing the window
- * (`truncated` tells the UI to offer that).
- *
- * Trash is a first-class shelf, not a filter the UI must remember: the
- * `assets` array is live rows only, and trashed assets ride separately in
- * `trash` with days-until-purge from the asset's own purge_at (#274:
- * the standard soft-delete pair — the shelf empties even when the bytes
- * stay rented elsewhere).
- *
- * Issue #352 phase 3/4 additions, each a bounded join over the SAME
- * windowed rows (see queries/_shared.js): every asset row now also carries
- * `place` (the linked core.place, or null), `tags` (free-form labels, an
- * array of strings) and `custody_state` (the blob custody projection).
- * `places` rides as a top-level array too (like `albums`) — the full known
- * place list, which the lightbox's place picker offers (there is no
- * app-plane command to mint a brand-new place, only to point an asset at
- * an existing one or clear it).
- *
- * A consent denial is a first-class outcome, not an error: the UI renders
- * it as the "ask the owner for access" state, receipt id included.
- *
- * KEYSET CURSOR (#599). Growing `limit` re-reads the whole window every
- * time, which is fine for one scope and quadratic for N merged ones, so the
- * window also takes a cursor: `input.before` is an ISO timestamp and admits
- * only assets with `captured_at` strictly older than it. The page reports
- * `tail` — the `taken_at` of its LAST (oldest) live asset, null when the page
- * is empty — which is what the caller passes back as the next `before`, and
- * what the multi-scope merge (../merge.ts) needs to compute a shared safe
- * horizon across scopes. Absent `before`, every existing caller keeps the
- * exact `limit`/`truncated` window behaviour it had. Note the cursor filters
- * on `captured_at`, so undated assets (NULL `captured_at`, which SQL
- * comparisons exclude) live only in the uncursored first window — the same
- * tail bucket the merge treats separately.
+ * The library projection as bounded windows: newest live assets by captured_at
+ * plus the newest 200 trashed. Never read core.content_item whole — bytes ride
+ * inline as data: URIs (#264). Keyset cursor (#599): `input.before` admits only
+ * strictly older captured_at, `tail` is the next `before`, and NULL
+ * captured_at fails that comparison, so undated assets ride the first window
+ * only. A consent denial is an outcome, not an error.
  *
  * @type {import('@centraid/server/engine').QueryHandler}
  */
@@ -84,9 +49,6 @@ interface RawMemory {
 export default async function libraryHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
-  // The keyset cursor: a non-empty ISO timestamp, or nothing at all. An
-  // absent/blank cursor must add no clause, so the uncursored window is
-  // byte-identical to what it was before the cursor landed.
   const before =
     typeof input?.before === "string" && input.before !== ""
       ? input.before
@@ -99,23 +61,15 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
   try {
     const [liveAssets, trashedAssets, albums, places, memories] =
       await Promise.all([
-        // The live window, newest capture first. SQLite ORDER BY … DESC puts
-        // NULLs last, so camera-dated photos lead and undated imports trail
-        // the window — acceptable semantics for a recency slice.
         ctx.vault.read({
           entity: "media.asset",
-          // Live timeline excludes archived assets (#419): archive hides
-          // from the timeline without trashing, so an archived photo is neither
-          // here nor in the trash shelf. `liveWhere` also carries the optional
-          // keyset cursor (`input.before`).
+          // Archived assets are in neither shelf (#419).
           where: liveWhere,
           orderBy: { column: "captured_at", dir: "desc" },
           limit: window,
           purpose,
         }),
-        // The trash window, newest-trashed first. Trash is a ~30-day shelf
-        // the lifecycle sweep keeps short, so a fixed cap of 200 covers any
-        // plausible shelf without a knob.
+        // A ~30-day shelf the sweep keeps short: 200 needs no knob.
         ctx.vault.read({
           entity: "media.asset",
           where: [{ column: "deleted_at", op: "not-null" }],
@@ -123,7 +77,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           limit: 200,
           purpose,
         }),
-        // Albums are collections (#274) — the one curation mechanism.
         ctx.vault.read({ entity: "core.collection", purpose }),
         readPlaces({ ctx, purpose }),
         before
@@ -131,9 +84,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           : ctx.vault.read({ entity: "media.memory", limit: 200, purpose }),
       ]);
 
-    // Joins are `in`-bounded by the windows — THIS is the point of the
-    // exercise: only the windowed photos' bytes travel, and album entries
-    // are pulled for windowed assets only.
+    // Joins stay `in`-bounded: only the windowed photos' bytes travel.
     const liveRows = (liveAssets.rows ?? []) as unknown as RawAsset[];
     const trashRows = (trashedAssets.rows ?? []) as unknown as RawAsset[];
     const windowed = [...liveRows, ...trashRows];
@@ -180,8 +131,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     );
     const { tagsByAsset, custodyByContent } = joins;
 
-    // Keep the app's album row shape over collection rows: a collection may
-    // also hold notes and documents; this surface renders its photo side.
     const albumRows = ((albums.rows ?? []) as unknown as RawCollection[]).map(
       (c) => ({
         album_id: c.collection_id,
@@ -207,8 +156,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             name: place.name,
             lat: place.lat,
             lng: place.lng,
-            // What the phrase ladder (place-phrase.ts) needs to say where this
-            // was taken in words rather than in digits.
             kind: place.kind,
             gazetteer: place.gazetteer,
           }
@@ -229,8 +176,6 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         byte_size: content?.byte_size ?? null,
         media_type: content?.media_type ?? null,
         title: content?.title ?? null,
-        // The real timestamp: capture time when the camera recorded one,
-        // otherwise the content item's creation time in the vault.
         taken_at: asset.captured_at ?? content?.created_at ?? null,
         album_ids: albumIds,
         album_titles: albumIds
@@ -243,10 +188,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     };
 
     const live = liveRows
-      // Live means the asset row is live AND its bytes are: a content item
-      // carrying deleted_at is released bytes, never rendered as library.
-      // A windowed asset whose content turns out deleted is filtered here
-      // in memory — rare, and it costs a slot in the window, not correctness.
+      // Live means the bytes are live too: released content is never library.
       .filter((asset) => contentById.get(asset.content_id)?.deleted_at == null)
       .map(join);
     live.sort((a, b) =>
@@ -254,16 +196,13 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     );
 
     const trash = trashRows.map((asset) => {
-      // The asset carries its own grace window (#274); the content
-      // fallback covers vaults trashed before the pair landed.
+      // The asset owns the grace window (#274); content is the fallback.
       const purgeAt =
         asset.purge_at ?? contentById.get(asset.content_id)?.purge_at ?? null;
       const ms = purgeAt == null ? NaN : Date.parse(purgeAt) - Date.now();
       return {
         ...join(asset),
         purge_at: purgeAt,
-        // Days until the lifecycle sweep purges — null when the bytes are
-        // still rented elsewhere (no purge date) or the date is unreadable.
         purge_in_days: Number.isNaN(ms)
           ? null
           : Math.max(0, Math.ceil(ms / 86400000)),
@@ -273,11 +212,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       String(b.deleted_at ?? "").localeCompare(String(a.deleted_at ?? ""))
     );
 
-    // A full live window means there may be older photos beyond it — the
-    // UI offers "Show more" (a re-read with a larger window).
     const truncated = liveRows.length >= window;
-    // The cursor for the NEXT page: the oldest live asset's timestamp after the
-    // newest-first sort. Null on an empty page (nothing left to page from).
     const tail =
       live.length > 0 ? (live[live.length - 1]!.taken_at ?? null) : null;
     return {
@@ -301,10 +236,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       memoryMembers: [],
       tail: null,
     };
-    // Only a consent deny is "ask the owner for access". Every other failure
-    // (VAULT_ERROR, VAULT_UNAVAILABLE, a protocol error from the replica
-    // bridge) is ours, and saying "no vault access yet" about it sends the
-    // reader off to fix a grant that was never the problem.
+    // Only a consent deny is "ask the owner"; every other failure is ours.
     const e = error as { code?: string; message?: string };
     if (e.code === "VAULT_CONSENT") {
       return { ...empty, vaultDenied: { code: e.code, message: e.message } };

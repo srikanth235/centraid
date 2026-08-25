@@ -6,29 +6,20 @@ import type { ResourceKnobOverrides, ResourceMode } from "./resource-mode.js";
 export { type ResourceMode } from "./resource-mode.js";
 export type HardwareClass = "constrained" | "standard";
 
-/**
- * The prioritized throughput knobs the resolver attributes a source to
- * (#528). Each accepts a durable UI override. No static compression
- * qualities sit here (#799): every body the gateway compresses is dynamic
- * JSON, which is fixed at `DYNAMIC_QUALITY`.
- */
+/** Each takes a durable UI override (#528). No static compression quality here (#799). */
 export type ResourceKnobName =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
   | "replicationConcurrency";
 
-/**
- * Per-knob provenance the client renders as Linked ('preset'), Custom
- * ('prefs'), or env-locked ('env'). `envVar` is the exact operator variable
- * name and is present ONLY when `source === 'env'` (#528).
- */
+/** `envVar` is the operator variable name, present ONLY when `source === 'env'` (#528). */
 export interface ResourceKnobSource {
   source: "env" | "prefs" | "preset";
   envVar?: string;
 }
 
-/** Hard reject bounds per knob — the client mirrors these for input validation. */
+/** Hard reject bounds; the client mirrors these. */
 export const RESOURCE_KNOB_BOUNDS: Record<
   ResourceKnobName,
   { min: number; max: number }
@@ -39,7 +30,6 @@ export const RESOURCE_KNOB_BOUNDS: Record<
   replicationConcurrency: { min: 1, max: 8 },
 };
 
-/** The operator env var that pins each knob (source-attribution + publish). */
 const RESOURCE_KNOB_ENV_VARS: Record<ResourceKnobName, string> = {
   workerMaxConcurrent: "CENTRAID_WORKER_MAX_CONCURRENT",
   workerMaxOldGenerationMb: "CENTRAID_WORKER_MAX_OLD_GENERATION_MB",
@@ -49,47 +39,34 @@ const RESOURCE_KNOB_ENV_VARS: Record<ResourceKnobName, string> = {
 
 export interface GatewayHardwareProfile {
   class: HardwareClass;
-  /** Owner/operator Resource mode that selected this profile. */
   resourceMode: ResourceMode;
-  /** RAW host CPU count (machine facts), not the cgroup-granted share. */
+  /** RAW host facts, not the cgroup-granted share. */
   cores: number;
-  /** RAW host memory (machine facts), not the cgroup-granted share. */
   totalMemoryBytes: number;
   storageFsyncMs: number | null;
-  /** A cgroup CPU quota actually clamped the granted share below the raw cores (#528). */
   cgroupLimitedCpu: boolean;
-  /** A cgroup memory limit actually clamped the granted share below raw memory (#528). */
   cgroupLimitedMemory: boolean;
-  /** Cumulative CPU steal% since host boot (co-tenant contention), null off-Linux/unknown. */
+  /** Cumulative steal% since host boot; null off-Linux/unknown. */
   stealPercent: number | null;
   sqliteSynchronous: "FULL" | "NORMAL";
   workerMaxConcurrent: number;
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
   replicationConcurrency: number;
-  /** Lazy mount remains gated by A5's scheduler index; correctness selects eager. */
+  /** Lazy mount stays gated on the scheduler index; correctness selects eager. */
   vaultMountStrategy: "eager";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
-  /** Budget preset framed as the share of the granted host it claims (#528). */
   budget: { cpuShare: number; memoryCapMb: number };
-  /** Per-knob provenance (env/prefs/preset) for the prioritized knobs (#528). */
   sources: Record<ResourceKnobName, ResourceKnobSource>;
 }
 
 /**
- * Budget presets (#528). Resource modes are no longer bespoke ternary
- * branches — they select one named budget over the *granted share of the host*
- * (cgroup- and steal-aware effective CPU/memory), not the raw machine. The
- * three presets are byte-identical to the pre-Phase-E class/mode ternaries on
- * plain hosts (guarded by hardware-profile.budget.test.ts); `cpuShare` is the
- * additive share-of-granted-host framing the client renders. Selection:
- * constrained class → conserve; standard + Performance → performance; else
- * balanced.
+ * A budget is spent over the *granted share* of the host, never the raw
+ * machine (#528); values are pinned by hardware-profile.budget.test.ts.
  */
 type BudgetPresetName = "conserve" | "balanced" | "performance";
 interface BudgetPreset {
-  /** Share of the granted host this budget claims (CPU and memory). */
   cpuShare: number;
   workerMaxConcurrent: number;
   workerMaxOldGenerationMb: number;
@@ -129,24 +106,15 @@ const BUDGET_PRESETS: Record<BudgetPresetName, BudgetPreset> = {
   },
 };
 
-/**
- * Cumulative CPU steal at or above this percent biases the host to
- * `constrained`: a tenth of the granted CPU is already being taken by
- * co-tenants, so we size for the share we actually keep, not the vCPUs the
- * hypervisor advertises (#528).
- */
+/** At or above this steal%, size for the share we keep, not the advertised vCPUs (#528). */
 const STEAL_CONSTRAINED_THRESHOLD_PERCENT = 10;
 const CONSTRAINED_CORE_CEILING = 4;
 const CONSTRAINED_MEMORY_CEILING_BYTES = 4 * 1024 ** 3;
 const SLOW_STORAGE_FSYNC_MS = 8;
 
 /**
- * Resolve one knob through the ONE precedence chain: env > prefs > preset.
- * Env and prefs both clamp through the same [min, max] — env wins when it
- * parses to a valid in-range integer, prefs is next, else the preset baseline
- * carries. A garbage env value (out of range/non-numeric) falls THROUGH to
- * prefs, never silently to preset (#528). `envVar` on the returned
- * source is set only when env actually won.
+ * The ONE chain: env > prefs > preset, all clamped through [min, max]. A bad
+ * env value falls THROUGH to prefs, never straight to preset (#528).
  */
 function resolveKnob(params: {
   envRaw: string | undefined;
@@ -178,12 +146,7 @@ function resolveKnob(params: {
   return { value: params.fallback, source: { source: "preset" } };
 }
 
-/**
- * Map Resource mode onto a hardware class when the operator has not pinned
- * `CENTRAID_HARDWARE_PROFILE`. Auto keeps detection; Conserve pins
- * constrained; Balanced/Performance pin standard (Performance raises
- * throughput knobs further below).
- */
+/** Applies only when `CENTRAID_HARDWARE_PROFILE` is unpinned; Auto keeps detection. */
 export function hardwareClassForResourceMode(
   mode: ResourceMode,
   detected: HardwareClass
@@ -199,14 +162,7 @@ export function hardwareClassForResourceMode(
   }
 }
 
-/**
- * Machine-readable projection of the resolved profile for the health
- * metrics surface (#528). Deliberately separate from
- * `formatHardwareProfileDetail`'s human string: a self-hoster's own
- * monitoring reads these numbers without parsing prose, and the client
- * renders the same values in Diagnostics. Pure + unit-testable — the
- * only source of the shape `GET /_gateway/health` publishes.
- */
+/** The only source of the shape `GET /_gateway/health` publishes (#528). */
 export interface StructuredResourceProfile {
   class: HardwareClass;
   mode: ResourceMode;
@@ -214,14 +170,10 @@ export interface StructuredResourceProfile {
     cores: number;
     totalMemoryBytes: number;
     storageFsyncMs: number | null;
-    /** cgroup CPU quota clamped the granted share below raw cores (#528 Phase E, additive). */
     cgroupLimitedCpu: boolean;
-    /** cgroup memory limit clamped the granted share below raw memory (#528 Phase E, additive). */
     cgroupLimitedMemory: boolean;
-    /** Cumulative CPU steal% since host boot, null off-Linux/unknown (#528 Phase E, additive). */
     stealPercent: number | null;
   };
-  /** Budget preset framed as the share of the granted host (#528 Phase E, additive). */
   budget: { cpuShare: number; memoryCapMb: number };
   resolved: {
     workerMaxConcurrent: number;
@@ -232,9 +184,7 @@ export interface StructuredResourceProfile {
     vaultSweepIntervalMs: number;
     outboxIdleIntervalMs: number;
   };
-  /** Per-knob provenance so the client shows Linked/Custom/env-locked (#528 Phase F, additive). */
   sources: Record<ResourceKnobName, ResourceKnobSource>;
-  /** Hard reject bounds per knob so the client validates without magic numbers (#528 Phase F, additive). */
   bounds: Record<ResourceKnobName, { min: number; max: number }>;
 }
 
@@ -270,8 +220,7 @@ export function toStructuredResourceProfile(
 export function formatHardwareProfileDetail(
   profile: GatewayHardwareProfile
 ): string {
-  // Name the share framing when a cgroup quota or steal actually shrank the
-  // granted host below the raw machine (#528) — otherwise stay terse.
+  // Name the share framing only when a quota or steal actually shrank the host (#528).
   const shareNote =
     profile.cgroupLimitedCpu ||
     profile.cgroupLimitedMemory ||
@@ -292,22 +241,12 @@ export function resolveGatewayHardwareProfile(
     cores?: number;
     totalMemoryBytes?: number;
     storageFsyncMs?: number;
-    /**
-     * cgroup CPU quota as fractional cores (quota/period), or null/absent when
-     * unlimited/unknown. Sizes the granted share of the host (#528).
-     */
+    /** cgroup CPU quota as fractional cores (quota/period); null/absent = unlimited. */
     cgroupCpuLimit?: number | null;
-    /** cgroup memory limit in bytes, or null/absent when unlimited/unknown (#528). */
     cgroupMemoryLimitBytes?: number | null;
-    /** Cumulative CPU steal% since host boot, or null/absent when unknown (#528). */
     stealPercent?: number | null;
-    /** Durable/owner Resource mode (prefs or daemon config). */
     resourceMode?: ResourceMode;
-    /**
-     * Durable per-knob UI overrides (#528). Each present knob wins over
-     * its preset baseline but still loses to the matching env var, and clamps
-     * through the same bounds. Absent knobs stay Linked to the preset.
-     */
+    /** Per-knob overrides: beat the preset, lose to env, clamp through the same bounds (#528). */
     prefsOverrides?: ResourceKnobOverrides;
   } = {},
   env: NodeJS.ProcessEnv = process.env
@@ -317,10 +256,8 @@ export function resolveGatewayHardwareProfile(
   const storageFsyncMs = input.storageFsyncMs ?? null;
   const stealPercent = input.stealPercent ?? null;
 
-  // Effective host = the *granted share*, not the machine. A cgroup CPU quota
-  // rounds up to whole cores (a 1.5-core quota still fields two workers), a
-  // memory limit clamps the ceiling; both floor at the raw host so an absent
-  // or looser limit is a no-op. Class + every knob derive from EFFECTIVE.
+  // Class and every knob derive from the EFFECTIVE (granted) host, not the
+  // machine; CPU quota rounds up to whole cores, both floor at the raw host.
   const cpuLimit = input.cgroupCpuLimit ?? null;
   const effectiveCores =
     cpuLimit !== null && cpuLimit > 0
@@ -348,16 +285,13 @@ export function resolveGatewayHardwareProfile(
     "auto";
 
   const requested = env.CENTRAID_HARDWARE_PROFILE;
-  // Explicit env class still wins (operator override). Otherwise Resource
-  // mode selects; Auto falls through to detection.
   const hardwareClass: HardwareClass =
     requested === "constrained" || requested === "standard"
       ? requested
       : hardwareClassForResourceMode(resourceMode, detected);
 
-  // NORMAL durability only on an explicit constrained choice — either the
-  // classic env pin or owner Conserve mode — never on mere auto-detection
-  // of a small host (matches #456: only intentional low-end opts in).
+  // NORMAL durability only on an explicit constrained choice (env pin or
+  // Conserve), never on auto-detection of a small host (#456).
   const syncOverride = env.CENTRAID_SQLITE_SYNCHRONOUS?.toUpperCase();
   const explicitConstrained =
     requested === "constrained" ||
@@ -371,10 +305,6 @@ export function resolveGatewayHardwareProfile(
 
   const constrained = hardwareClass === "constrained";
   const performance = !constrained && resourceMode === "performance";
-  // Select the budget over the granted share. Byte-identical to the former
-  // class/mode ternaries (hardware-profile.budget.test.ts): constrained class
-  // spends the conserve budget, standard Performance the performance budget,
-  // everything else balanced.
   const presetName: BudgetPresetName = constrained
     ? "conserve"
     : performance
@@ -382,8 +312,6 @@ export function resolveGatewayHardwareProfile(
       : "balanced";
   const preset = BUDGET_PRESETS[presetName];
 
-  // Resolve each prioritized knob through the ONE precedence chain
-  // (env > prefs > preset) and capture its provenance for the client.
   const prefsOverrides = input.prefsOverrides ?? {};
   const knob = (
     name: ResourceKnobName,
@@ -442,8 +370,7 @@ export function resolveGatewayHardwareProfile(
     vaultMountStrategy: "eager",
     vaultSweepIntervalMs: preset.vaultSweepIntervalMs,
     outboxIdleIntervalMs: preset.outboxIdleIntervalMs,
-    // Budget claims `cpuShare` of the effective (granted) host; memoryCapMb is
-    // that same share of the effective memory in MiB (#528 Phase E, additive).
+    // memoryCapMb is `cpuShare` of the EFFECTIVE memory, in MiB (#528).
     budget: {
       cpuShare: preset.cpuShare,
       memoryCapMb: Math.round(

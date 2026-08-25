@@ -1,49 +1,9 @@
-// The Photos chrome as JSX — a ROUTE INSIDE THE FRAME, not a standalone app
-// (v4 handoff §3).
-//
-// WHAT THIS CHROME DOES NOT DRAW, and why each one stays out:
-//
-//  * the hamburger and the sidebar/drawer — the frame owns navigation (the
-//    240px stem on desktop, the claimed band on the phone). A drawer inside
-//    the content pane is a second navigation for the same destinations.
-//  * the in-pane search field — search is a SHELF (§9), reached from the
-//    band and the frame, not a field this app draws in a header of its own.
-//  * the zoom in/out pair — tile size is a four-rung member preference in the
-//    toolbar row (§4.2), not two unlabelled buttons walking a pixel value.
-//  * the slideshow button — the slideshow is a mode on the stage, entered from
-//    the viewer.
-//  * the app's own title, count, Select and Import — those are the frame's app
-//    bar, contributed through `frame.setAppBar` (frame.tsx).
-//  * `#noticeBanner` — the ONE status line is the frame's, and every write
-//    outcome goes there through `frame.setStatus` with Undo where undo is
-//    possible (outcomes.ts). No toast, no spinner, no badge, no red dot.
-//
-//  * the `kit-banner` consent strip — permission is a designed SCREEN (§13,
-//    components/Permission.tsx), which arrives here as a slot and replaces the
-//    live region rather than sitting in a strip above it. A strip reads as
-//    "something went wrong up there"; a refused grant is a state the product
-//    is designed for.
-//
-// WHAT STAYS: the permission screen's slot (§13), the
-// live region, the scroll pane and the fixed-overlay regions — lightbox,
-// slideshow, picker, drop overlay — whose contents other modules own. Inline
-// they live INSIDE the app pane and are re-scoped to `position:absolute`
-// against `.shell` so they never overlay the shell chrome (#505 trap 7).
-//
-// SELECTION HAS NO OVERLAY OF ITS OWN (v4 §6): no second React root on a
-// floating `#selectionBar` pill, which would be two roots fighting over what
-// "the selection bar" means. There is ONE decision, made where the toolbar row
-// already lives (`#toolbarMount`, selection.tsx): `selectMode ? <SelectionBar>
-// : <ToolbarView>`. `#selectionBottomBar` is a different thing — the PHONE's
-// five-target action bar (§6, §15), which is never the toolbar row (the row
-// carries nothing there while selecting; the count/Select all/Done move to
-// the frame's head) and never a second band (it claims no destinations and
-// never calls `frame.claimBand`).
-//
-// The imperatively-toggled nodes (`#empty`, `#consentBanner`, `#live`,
-// `#lightbox`, `#slideshow`, `#picker`, `#dropOverlay`) keep their ids and a
-// literal `hidden` so the orchestrator's `$(…).hidden = …` writes survive —
-// React never re-writes an unchanged prop.
+// The Photos chrome as JSX — a ROUTE INSIDE THE FRAME (v4 §3). NONE of these
+// may come back: hamburger or drawer, in-pane search, zoom pair, slideshow
+// button, the app's own title/count/Select/Import, `#noticeBanner`, a consent
+// strip — the frame owns each, and permission is a SCREEN (§13). Overlays
+// re-scope absolute against `.shell` (#505 trap 7); selection has NO overlay
+// of its own (§6). The imperative nodes keep their ids and a literal `hidden`.
 import type { ReactNode } from "react";
 
 import { EMPTY_ACTIONS, EMPTY_TITLE } from "./view-copy.ts";
@@ -51,47 +11,17 @@ import { EMPTY_ACTIONS, EMPTY_TITLE } from "./view-copy.ts";
 import styles from "./Chrome.module.css";
 
 export interface ChromeSlots {
-  /** The shelf strip (§5). Absent in album detail and on the phone whose band
-   *  claim was honoured — the band carries the shelves there. On a pointer
-   *  seat wide enough for a column beside the set, `navRail` carries the same
-   *  destinations instead (v16). */
   shelfStrip: ReactNode;
-  /**
-   * The app navigation rail (v16) — Photos' own destinations as a 232px
-   * column on the leading edge of the content, on a pointer seat. Null where
-   * the strip or the band carries them instead, and on the routes §4 excludes.
-   *
-   * It is a SIBLING OF THE SCROLL PANE, not a block above it, which is the
-   * whole difference between a rail and a strip: the two columns scroll
-   * independently, so a spine does not scroll away with the set it indexes.
-   */
   navRail: ReactNode;
-  /** The Photos toolbar row (§3) — or the selection bar, while a selection is
-   *  active (§6). Null when it carries nothing. */
   toolbar: ReactNode;
   main: ReactNode;
-  /** The phone's floating selection action bar (§6, §15). Null everywhere
-   *  else — desktop/PWA carry the same actions inside `toolbar`. */
   selectionBottomBar: ReactNode;
   lightbox: ReactNode;
   slideshow: ReactNode;
   picker: ReactNode;
-  /**
-   * The permission screen (§13), or null while access is granted. It is a
-   * SCREEN and not a strip, so it replaces the live region rather than sitting
-   * above it — there is nothing behind it to look at, and a banner over an
-   * empty pane would say otherwise.
-   */
   permission: ReactNode;
-  /** The compact band's overflow sheet (§3.1), or null while it is closed. */
   moreSheet: ReactNode;
-  /**
-   * The offline banner (§14), or null while the library is reachable. It sits
-   * at the head of the scroll pane and pushes nothing aside: everything below
-   * it — months, days, counts, captions, albums, people, the rail, Select —
-   * still renders, because "the meaning is still here" is the banner's whole
-   * claim (components/OfflineBanner.tsx).
-   */
+  /** Pushes nothing aside: everything below it still renders (§14). */
   banner: ReactNode;
 }
 
@@ -106,22 +36,14 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
       <main className={styles.main}>
         {slots.permission}
 
-        {/* `hidden` rather than unmounted: the orchestrator kept the live
-            region's geometry across a denial before, and re-mounting it would
-            throw away every tile's already loaded bytes the moment access
-            came back. */}
+        {/* `hidden`, never unmounted: re-mounting throws away every tile's
+            already loaded bytes. */}
         <div id="live" className={styles.live} hidden={denied}>
           <div id="shelfStripMount">{slots.shelfStrip}</div>
           <div id="toolbarMount">{slots.toolbar}</div>
 
-          {/* THE CONTENT ROW (v16): the navigation rail and the scroll pane,
-              side by side. The pane used to be the only child of `#live` and
-              is now one of two, so the rail can be a flex SIBLING of it rather
-              than a block above it. That is what makes "the rail and the
-              content column scroll independently" true — a strip is inside the
-              column's own flow and a rail is beside it — and it costs the pane
-              nothing where `navRail` is null, because the row then has one
-              child taking all of it. */}
+          {/* The rail is a flex SIBLING of the pane, which is what makes the
+              two columns scroll independently. */}
           <div className={styles.contentRow}>
             {slots.navRail}
             <div id="scrollPane" className={styles.scroll}>
@@ -133,39 +55,21 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
               >
                 {slots.main}
               </section>
-              {/* THE EMPTY BLOCK IS PHOTOS' OWN (§14, proto 4406), not the
-                shared `.kit-empty`. Three things the kit's version could not
-                say, each of them load-bearing:
-
-                  * it CENTRES a 38ch column, and this state is a paragraph a
-                    member reads — reading copy is left-aligned and in flow,
-                    at 44ch, like every other paragraph in the product;
-                  * its title is 0.95rem/600, which is a row label. §14 asks
-                    for the display serif, because an empty library is the
-                    first real screen this app ever shows somebody;
-                  * IT HAS NO NODE FOR A BODY PARAGRAPH AT ALL. So the one
-                    sentence §14 requires — where the bytes actually go — had
-                    nowhere to live and was simply never said.
-
-                The nodes stay imperative (`#emptyText`, `#emptyBody`,
-                `#emptyUpload`, `#emptyCamera`) and keep their ids: app-root's
-                `applyEmptyState` writes them from `emptyStateView`
-                (view-state.ts), upload.ts binds `#emptyUpload` once at boot,
-                and `applyUploadTarget` re-reads it on every render. React
-                never re-writes an unchanged prop, so those writes survive. */}
+              {/* PHOTOS' OWN EMPTY BLOCK (§14), not `.kit-empty`: the kit
+                centres its column, sets its title at a row label's weight and
+                has no body-paragraph node at all — so §14's one required
+                sentence had nowhere to live. The nodes stay imperative and
+                keep their ids for `applyEmptyState` and upload.ts. */}
               <div id="empty" className={styles.empty} hidden>
-                {/* Seeded with the title it takes in every view but a search
-                  miss, so the heading is never an empty one to a screen
-                  reader; `applyEmptyState` overwrites its text content, and
-                  the block is `hidden` until it has. */}
+                {/* Seeded so the heading is never empty to a screen reader;
+                  `applyEmptyState` overwrites it. */}
                 <h2 id="emptyText" className={styles.emptyTitle}>
                   {EMPTY_TITLE}
                 </h2>
                 <p id="emptyBody" className={styles.emptyBody} />
                 <div className={styles.emptyActions}>
-                  {/* The ONE filled control in this view (§18). The frame's app
-                    bar drops its own Import while this is offered — two filled
-                    Imports on one screen is two answers to one question. */}
+                  {/* The ONE filled control here (§18); the app bar drops its
+                    own Import while this is offered. */}
                   <button
                     id="emptyUpload"
                     type="button"
@@ -174,8 +78,7 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
                   >
                     {EMPTY_ACTIONS.import}
                   </button>
-                  {/* Phone only (§15's Import row: the camera is the compact
-                    surface's second way in). Outlined, always. */}
+                  {/* Phone only (§15). Outlined, always. */}
                   <button
                     id="emptyCamera"
                     type="button"
@@ -191,21 +94,15 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
         </div>
       </main>
 
-      {/* Empty (no children) whenever selection is not active on the phone —
-          `.selectionBottomBar:empty` (Chrome.module.css) collapses it to
-          nothing rather than this needing a `hidden` toggle of its own. */}
+      {/* `.selectionBottomBar:empty` collapses it; no `hidden` toggle. */}
       <div id="selectionBottomBar" className={styles.selectionBottomBar}>
         {slots.selectionBottomBar}
       </div>
 
-      {/* The band's own overflow sheet (§3.1) — the app's, because the band's
-          sixth slot is the app's. It renders only while open, so there is no
-          empty region to collapse and nothing to hide. */}
+      {/* Renders only while open; no empty region to collapse. */}
       {slots.moreSheet}
 
-      {/* Never focusable and never shown — `hidden` already keeps it out of the
-          accessibility tree, so it carries no `aria-hidden`; upload.ts drives it
-          with `.click()`. */}
+      {/* `hidden` keeps it out of the a11y tree; no `aria-hidden`. */}
       <input
         id="fileInput"
         type="file"
@@ -213,12 +110,8 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
         multiple
         hidden
       />
-      {/* `Take a photograph` (§14, §15) is a real camera, not a second file
-          picker: `capture` hands the compact surface its camera directly. It
-          is a SEPARATE input because `capture` on the shared one would take
-          the file picker away from the desktop, where the camera is not one
-          of the three ways in. app-root binds its `change`; it is never shown
-          on a surface where the button is not offered. */}
+      {/* SEPARATE from the file input: `capture` on the shared one would take
+          the picker away from the desktop, where the camera is not a way in. */}
       <input
         id="cameraInput"
         type="file"
@@ -238,9 +131,8 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
       >
         {slots.lightbox}
       </dialog>
-      {/* Native <dialog>, never `showModal()` — `open` is mandatory (a <dialog>
-          without it is `display:none`) and the orchestrator keeps driving
-          visibility through the `hidden` attribute exactly as before. */}
+      {/* Never `showModal()`: `open` is mandatory, and visibility is driven
+          through `hidden`. */}
       <dialog
         id="slideshow"
         open

@@ -1,31 +1,7 @@
-// The selection bar (v4 handoff §6): the toolbar row's OWN content while a
-// selection is active — count, five actions in a fixed order, Select
-// all/none, Done. Two arrangements of the SAME data, exactly like the
-// viewer's ViewerBarActions/ViewerBottomBar split (ViewerActions.tsx):
-//
-//   * `SelectionBarView` — desktop/PWA. A row whose actions carry a visible
-//     label once the bar itself is at least `LABEL_BREAKPOINT` wide
-//     (measured by the caller — selection.tsx owns the ResizeObserver — and
-//     handed in as `labelled`, never re-derived from a surface flag here).
-//   * `SelectionBottomBar` — the phone's bottom bar of five 56px targets.
-//     Always icon + small caption; the count, Select all and Done stay in the
-//     frame's head on that surface (out of this file's reach — see the
-//     integration note below).
-//
-// `buildSelectionActions` is the one place the fixed order and the Trash
-// shelf's swap (Trash → Restore) live, as a pure function of shelf +
-// read-only state — both view components and the tests read the same table,
-// so the order can't drift between them. The third target is *Share* (#825):
-// it opens the ONE grant kit over the selected photograph, so the bar carries
-// no destination list, no scope reading and no share call of its own.
-//
-// WHERE THE BAR ACTUALLY RENDERS: `SelectionBarView` goes into the app's
-// `#selectionBar` overlay region (Chrome.tsx), not literally inside the
-// toolbar row's own DOM node. `shelfKind` and `readOnlyReason` need the
-// current shelf and the selected assets' write grants, which only
-// app-root.tsx's closure holds; selection.tsx exposes optional getters for
-// both, so wiring them is additive. `SelectionBottomBar` is mounted nowhere
-// yet — the phone band is Chrome.tsx's to claim.
+// The selection bar (v4 §6): TWO ARRANGEMENTS OF ONE TABLE.
+// `buildSelectionActions` is the ONE place the fixed order and the Trash
+// shelf's swap live, so the views and the tests cannot drift. *Share* (#825)
+// opens the shared grant kit: no destination list or share call of its own.
 import { useRef } from "react";
 import type { FC } from "react";
 
@@ -56,13 +32,9 @@ import type { Album, Asset } from "../types.ts";
 
 import styles from "./SelectionBar.module.css";
 
-/** Below this many pixels OF BAR the actions go icon-only (§6, §15). A
- *  function of the bar's own measured width, never of which surface this is —
- *  the PWA's narrower bar crosses it well above a phone's; a bare viewport
- *  breakpoint would get both wrong. */
+/** Pixels OF BAR, never a viewport breakpoint (§6, §15). */
 export const LABEL_BREAKPOINT = 840;
 
-/** Are the bar's actions labelled at this measured width? */
 export function labelsVisible(barWidth: number): boolean {
   return barWidth >= LABEL_BREAKPOINT;
 }
@@ -75,35 +47,21 @@ export interface SelectionActionSpec {
   icon: FC<{ size?: number }>;
   onRun: () => void;
   disabled: boolean;
-  /** Why it is disabled — a read-only vault states this on the control
-   *  itself, never only in a tooltip (§6, §18). */
+  /** Stated ON the control, never only a tooltip (§6, §18). */
   reason?: string;
-  /** An outlined `--net` button, never filled (§18) — Trash only; Restore
-   *  undoes a destructive action rather than being one. */
+  /** Outlined `--net`, never filled (§18). Trash only. */
   destructive?: boolean;
-  /** Asks for a second tap on the same control before it fires (armConfirm),
-   *  the wording naming exactly what will happen. Trash only. */
   confirmLabel?: string;
 }
 
 export interface BuildSelectionActionsInput {
   count: number;
   shelfKind: SelectionShelfKind;
-  /** The third target's caption. Always *Share* since #825 — the sheet asks
-   *  who, so the control never names a destination. */
+  /** The sheet asks who, so the control never names a destination (#825). */
   copyLabel: string;
-  /** Non-null in a read-only vault (§6): Favorite, Add to album and
-   *  Trash/Restore disable with this reason; *Share* and Download do not —
-   *  naming who may see a photograph, and downloading it, are never writes on
-   *  someone else's library. */
+  /** Read-only (§6). *Share* and Download stay live: neither writes. */
   readOnlyReason: string | null;
-  /**
-   * Why *Share* cannot fire — since #825, that a grant stands over ONE
-   * subject and this selection is not one (`ONE_AT_A_TIME`). Null when
-   * exactly one photograph is selected. The control DISABLES with this
-   * sentence on it rather than being tappable and doing nothing. Who there is
-   * to share WITH is never guessed here: that is the sheet's own read.
-   */
+  /** ONE subject per grant (#825): DISABLE, never tappable-and-inert. */
   copyBlockedReason: string | null;
   onFavorite: () => void;
   onAddToAlbum: () => void;
@@ -112,11 +70,7 @@ export interface BuildSelectionActionsInput {
   onTrash: () => void;
 }
 
-/**
- * The five actions, in the handoff's fixed order, with the Trash shelf's swap
- * applied (§6). Pure — no DOM, no React — so the order, the swap and the
- * disabled/reason state are all directly testable without rendering anything.
- */
+/** Pure, so order, swap and disabled state are testable unrendered (§6). */
 export function buildSelectionActions({
   count,
   shelfKind,
@@ -179,9 +133,7 @@ function ActionButton({
       className={`${styles.action} ${spec.destructive ? styles.destructive : ""}`}
       disabled={spec.disabled}
       aria-label={spec.label}
-      // Labelled, the visible text IS the name, so `title` only ever carries
-      // the disabled reason; icon-only, it doubles as the name for a pointer
-      // that hovers and wonders (§6, §18 — every icon-only control is named).
+      // Icon-only, `title` is the name; labelled, only the reason (§18).
       title={spec.reason ?? (labelled ? undefined : spec.label)}
       onClick={(e) => {
         if (
@@ -203,16 +155,12 @@ function ActionButton({
 
 export interface SelectionBarViewProps {
   selectedIds: Set<string>;
-  /** The currently loaded rows — Download resolves each key's `content_uri`
-   *  from here, and Select all/none walks the same list. */
   visible: readonly Asset[];
   albums: Album[];
   shelfKind: SelectionShelfKind;
   readOnlyReason: string | null;
   menuOpen: boolean;
   busy: boolean;
-  /** Is the bar itself at least `LABEL_BREAKPOINT` wide? Measured by the
-   *  caller (selection.tsx), never re-derived from a surface flag here. */
   labelled: boolean;
   refresh: () => Promise<void>;
   setBarBusy: (on: boolean) => void;
@@ -243,17 +191,12 @@ export function SelectionBarView({
   const share = usePhotoShare(notice);
   const [only] = [...selectedIds];
 
-  // countRef is passed as a REF, and the batch helpers dereference it only
-  // inside their own event-time bodies; nothing reads `.current` during this
-  // render — the compiler just cannot see through the call.
+  // countRef is dereferenced only at event time, never during render.
   // oxlint-disable-next-line react/react-compiler
   const actions = buildSelectionActions({
     count,
     shelfKind,
-    // Who there is to share with is still the sheet's asynchronous question
-    // (#726) — the control never disables on a guess about the roster.
-    // HOW MANY is not a guess, though: a grant stands over one subject, so a
-    // multi-selection refuses here with the sentence that names the album.
+    // WHO is the sheet's question (#726); HOW MANY refuses here.
     copyLabel: "Share",
     readOnlyReason,
     copyBlockedReason: count === 1 ? null : ONE_AT_A_TIME,
@@ -288,9 +231,7 @@ export function SelectionBarView({
           open={share.open}
           onClose={() => share.close()}
           audiences={share.audiences}
-          // The selection holds COMPOSITE keys (scope + asset); the grant
-          // stands over the asset itself, so the key is parsed rather than
-          // posted — a `\0`-joined key is not an id any vault would know.
+          // Composite keys are PARSED, never posted: not a vault id.
           subject={{
             subjectType: "media.asset",
             subjectId: parseAssetKey(only).assetId,
@@ -303,8 +244,7 @@ export function SelectionBarView({
       </span>
       <span className={styles.countLabel}>selected</span>
       <span className={styles.spacer} />
-      {/* A real <fieldset>, not role="group": same semantics, native tag.
-          The module strips the browser's fieldset chrome. */}
+      {/* A real <fieldset>, not role="group". */}
       <fieldset
         className={styles.actions}
         aria-label="Selection actions"
@@ -315,9 +255,7 @@ export function SelectionBarView({
             <div key={spec.id} className={`bar-menu-wrap ${styles.menuWrap}`}>
               <ActionButton spec={spec} labelled={labelled} />
               {menuOpen ? (
-                // kit-popover/kit-popover-item are the shared CSS classes; see
-                // the original note this replaces — the away-click listener
-                // lives in selection.tsx and queries `.bar-menu-wrap`.
+                // The away-click listener is selection.tsx's.
                 <div className={`kit-popover ${styles.albumMenu}`} role="menu">
                   {albumList.length === 0 ? (
                     <p className={`${styles.albumMenuEmpty} kit-muted`}>
@@ -332,10 +270,8 @@ export function SelectionBarView({
                         role="menuitem"
                         onClick={() => {
                           onCloseMenu();
-                          // Albums are own-scope regardless of the chip
-                          // selection (albums-actions.ts) — resolved here,
-                          // at the call site, so selection-actions.ts stays
-                          // free of the outcomes.ts write-target import.
+                          // Own-scope whatever the chip says; resolved here
+                          // to keep selection-actions.ts import-free.
                           const target = writeTarget("own");
                           void runBatchAddToAlbum(
                             [...selectedIds],
@@ -379,17 +315,11 @@ export interface SelectionBottomBarProps {
   refresh: () => Promise<void>;
   setBarBusy: (on: boolean) => void;
   onExit: () => void;
-  /** The phone has no room for an inline popover; the caller supplies
-   *  whatever picks an album there (a sheet, most likely) — not this file's
-   *  layout to invent. */
+  /** No room for an inline popover: the caller supplies the picker. */
   onAddToAlbum: () => void;
 }
 
-/**
- * The phone's bottom bar (§6, §D): five 56px targets, icon + small caption,
- * where a thumb is. Never measured for labels — at 390px there is no width
- * for six words either way, so every target names itself on the element.
- */
+/** Never measured for labels: at 390px every target names itself. */
 export function SelectionBottomBar({
   selectedIds,
   visible,
@@ -408,7 +338,6 @@ export function SelectionBottomBar({
     shelfKind,
     copyLabel: "Share",
     readOnlyReason,
-    // One subject per grant, on this surface too — see `SelectionBarView`.
     copyBlockedReason: count === 1 ? null : ONE_AT_A_TIME,
     onFavorite: () =>
       void runBatchFavorite(
@@ -449,9 +378,6 @@ export function SelectionBottomBar({
           open={share.open}
           onClose={() => share.close()}
           audiences={share.audiences}
-          // The selection holds COMPOSITE keys (scope + asset); the grant
-          // stands over the asset itself, so the key is parsed rather than
-          // posted — a `\0`-joined key is not an id any vault would know.
           subject={{
             subjectType: "media.asset",
             subjectId: parseAssetKey(only).assetId,
@@ -473,10 +399,7 @@ export function SelectionBottomBar({
               className={`${styles.bottomAction} ${spec.destructive ? styles.destructive : ""}`}
               disabled={spec.disabled}
               aria-label={spec.label}
-              // `title` names an icon-only control for a pointer that hovers
-              // and wonders — it never carries the read-only STORY on its
-              // own; that is the visible `.reason` line below (§6, §18: a
-              // refusal is stated inline, never only in a tooltip).
+              // The read-only story is the `.reason` line, not a tooltip.
               title={spec.reason ?? spec.label}
               onClick={(e) => {
                 if (
@@ -509,15 +432,7 @@ export interface PhoneAlbumSheetProps {
   onCancel: () => void;
 }
 
-/**
- * The phone's "Add to album" surface (§6): "the phone has no room for an
- * inline popover" (see the file header), so `SelectionBottomBar`'s Add to
- * album target opens this instead — a sheet-like list above the bottom bar,
- * dismissed by an explicit Cancel rather than a bare away-click (there is no
- * pointer to miss the target with on a touch surface). Picking an album and
- * the vault-write plumbing behind it are selection.tsx's job, same as the
- * desktop popover's — this component only says what the member tapped.
- */
+/** Dismissed by an explicit Cancel: there is no pointer to miss with. */
 export function PhoneAlbumSheet({
   albums,
   onPick,

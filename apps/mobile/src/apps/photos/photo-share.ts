@@ -1,35 +1,7 @@
 // SENDING A COPY — the one path a photograph takes off this device (#816).
-//
-// Handing the share sheet `resolveLocalOriginal(asset)` and being done sends
-// the original file, whose EXIF still carries the metre-accurate fix the camera
-// wrote — and nothing in the UI would say so: a member choosing to send a
-// picture of their kitchen would be sending their address with no way to know
-// it.
-//
-// So a share is two decisions and one guarantee:
-//
-//   1. WHAT THE MEMBER CHOSE. `share-place.ts` (a blueprint, so the web gets
-//      the same three precisions when it grows a share) owns the choice and
-//      its default, which is `none`.
-//   2. WHAT THE WORDS ARE. Only the `name` precision sends any, and they come
-//      from `sharePlaceMessage`, which is `placePhrase` with `context:
-//      "shared"` — the rung that would say "3.4 km NE of Home" is skipped
-//      there, so a Home-relative phrase cannot leave from here.
-//   3. WHAT THE BYTES ARE. Anything below `exact` leaves through
-//      `stripJpegLocation`, so the removal is a fact about the file the
-//      receiver opens, not about the screen the sender looked at.
-//
-// WHY THIS IS ITS OWN MODULE. So that "a photograph leaves the device" is one
-// function with one test, rather than a `Share.share` call sitting in a 900
-// line viewer where the next feature can quietly add a second one.
-// `share-place-call-sites.test.ts` holds that line: no other file under Photos
-// may call the OS share APIs.
-//
-// WHAT IS NOT A SHARE. Saving to the camera roll (`MediaLibrary.Asset.create`,
-// still in the viewer) writes to the member's OWN device library, where the
-// original with its own metadata already is. Scrubbing there would remove a
-// fix from a photograph the member is keeping, which is a different product
-// decision — and a lossy one — so this module does not reach it.
+// Below `exact` the bytes leave through `stripJpegLocation`. No other file under
+// Photos may call the OS share APIs (`share-place-call-sites.test.ts`); saving to
+// the camera roll is not a share.
 
 import { File, Paths } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
@@ -48,13 +20,6 @@ import type {
 
 import { isJpeg, stripJpegLocation } from "./exif-location-strip";
 
-/**
- * The location is in the bytes and this device cannot get it out.
- *
- * Its own class so the viewer can tell it apart from a failed download and say
- * the sentence the member needs — which names the way through, rather than
- * reading as a bug.
- */
 export class LocationNotRemovableError extends Error {
   constructor() {
     super(SHARE_PLACE_NOT_REMOVABLE);
@@ -62,39 +27,27 @@ export class LocationNotRemovableError extends Error {
   }
 }
 
-/** What the OS is handed. `message` exists only at the `name` precision. */
 export interface SharePayload {
   uri: string;
   message?: string;
 }
 
-/** The media kinds a timeline row can be — `PhotoAsset["kind"]`, restated so
- *  this module does not depend on the timeline to know what it is sending. */
 export type ShareKind = "photo" | "video" | "audio" | "scan";
 
-/** Kinds a still-image re-encode is a sane fallback for. A video would have to
- *  be transcoded, and audio has no frame to render. */
 const RE_ENCODABLE: readonly ShareKind[] = ["photo", "scan"];
 
 export interface ShareRequest {
-  /** The full-quality bytes, already resolved to a file this device can read. */
   uri: string;
   kind: ShareKind;
-  /** What the receiver should see the file called. */
   filename?: string | null;
   precision: SharePlacePrecision;
   place: SharePlaceInput;
 }
 
-/** Where scrubbed copies are staged — a folder of its own, so a copy can keep
- *  the original's filename without overwriting a download sitting in the cache
- *  under the same name. */
 const SHARE_FOLDER = "shared-copies";
 
-/** The same 0.92 the editor commits at, for the re-encode path below. */
 const RE_ENCODE_QUALITY = 0.92;
 
-/** The name the receiver sees, forced to `.jpg` when the copy was re-encoded. */
 function outgoingName(
   filename: string | null | undefined,
   jpeg: boolean
@@ -107,17 +60,8 @@ function outgoingName(
     : `${trimmed.replace(/\.[^.]+$/u, "")}.jpg`;
 }
 
-/**
- * The photograph as JPEG bytes, re-encoding once if it arrived in a container
- * this device cannot walk.
- *
- * HEIC is the iPhone default and PNG comes off screenshots and edits; neither
- * is a JPEG, and neither has a segment walker here. Re-encoding through
- * `expo-image-manipulator` produces a frame with no metadata at all — but the
- * claim does not rest on that, because the result goes through the walker
- * anyway. A video is never re-encoded: transcoding a member's video to strip a
- * tag would be a worse thing to do to it than refusing.
- */
+/** HEIC and PNG have no walker here, so re-encode. A video is never re-encoded —
+ *  refuse instead of transcoding it. */
 async function jpegBytes(request: ShareRequest): Promise<Uint8Array> {
   const original = await new File(request.uri).bytes();
   if (isJpeg(original)) return original;
@@ -133,12 +77,7 @@ async function jpegBytes(request: ShareRequest): Promise<Uint8Array> {
   return bytes;
 }
 
-/**
- * A copy of the photograph with its location gone, staged in the cache.
- *
- * Throws rather than degrading: the one outcome this module may not produce is
- * a share the member believes carries no place and does.
- */
+/** Throws rather than degrading: never a share that hides a place it carries. */
 async function scrubbedCopy(request: ShareRequest): Promise<string> {
   const stripped = stripJpegLocation(await jpegBytes(request));
   if (stripped === null) throw new LocationNotRemovableError();
@@ -147,21 +86,11 @@ async function scrubbedCopy(request: ShareRequest): Promise<string> {
     SHARE_FOLDER,
     outgoingName(request.filename, true)
   );
-  // The staged copy outlives the share by design — the OS reads the file after
-  // this promise resolves — so a second share of the same photograph overwrites
-  // rather than failing, exactly as the Insights CSV export does.
   file.create({ intermediates: true, overwrite: true });
   file.write(stripped.bytes);
   return file.uri;
 }
 
-/**
- * Hand the payload to whichever sheet can carry it.
- *
- * `expo-sharing` takes a file and nothing else, so a phrase can only travel
- * through React Native's own `Share`. Both are here rather than in the viewer
- * so there is one place where bytes leave.
- */
 async function hand(payload: SharePayload): Promise<void> {
   if (payload.message === undefined && (await Sharing.isAvailableAsync())) {
     await Sharing.shareAsync(payload.uri);
@@ -174,13 +103,6 @@ async function hand(payload: SharePayload): Promise<void> {
   );
 }
 
-/**
- * Send a copy at the precision the member chose, and answer what left.
- *
- * The return value is the payload the OS received, so a caller (and a test)
- * can state what was disclosed rather than trusting that it was the right
- * thing.
- */
 export async function shareOriginal(
   request: ShareRequest
 ): Promise<SharePayload> {

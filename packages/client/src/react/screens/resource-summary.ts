@@ -1,25 +1,18 @@
-// Pure formatting helpers for the Resource card's progressive-disclosure
-// ladder (#528 Phase A+B). Kept free of React so the L1 budget summary
-// and L2 "how we sized this" math stay unit-testable, and so ResourceModeCard
-// + ResourceCardDetails stay under the 500-line governance cap.
+// Pure formatting for the Resource card's disclosure ladder (#528). Keep it
+// React-free: the math is unit-tested here, and the components stay under the
+// governance line cap only because it lives out of them.
 
 import { formatBytes } from "../../format.js";
 
-/**
- * The owner resource mode (#521). Home for the union so the card, the
- * Compare dialog, and the prefs parser all import one definition — no cycle.
- */
 export type ResourceMode = "auto" | "conserve" | "balanced" | "performance";
 
-/** Host facts the gateway measured, from `health.metrics.resourceProfile.host`. */
 export interface ResourceProfileHost {
   cores: number;
   totalMemoryBytes: number;
-  /** `null` when the gateway never measured storage fsync latency. */
+  /** `null` when never measured. */
   storageFsyncMs: number | null;
 }
 
-/** The knobs the resolver derived, from `health.metrics.resourceProfile.resolved`. */
 export interface ResourceProfileResolved {
   workerMaxConcurrent: number;
   workerMaxOldGenerationMb: number;
@@ -30,59 +23,45 @@ export interface ResourceProfileResolved {
   outboxIdleIntervalMs: number;
 }
 
-/** Knob keys the resolver derives; all are owner-tunable (#528). */
 export type ResourceKnobKey =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
   | "replicationConcurrency";
 
-/** Provenance of one resolved knob, from `resourceProfile.sources` (#528). */
 export interface ResourceKnobSource {
   source: "env" | "prefs" | "preset";
-  /** The environment variable name when `source === 'env'`. */
+  /** Set only when `source === 'env'`. */
   envVar?: string;
 }
 
-/** Accepted inclusive range for one knob, from `resourceProfile.bounds` (#528). */
 export interface ResourceKnobBounds {
   min: number;
   max: number;
 }
 
-/** Structured resource profile on `health.metrics.resourceProfile` (#528). */
 export interface ResourceProfileDTO {
   class: "constrained" | "standard";
   mode: "auto" | "conserve" | "balanced" | "performance";
   host: ResourceProfileHost;
   resolved: ResourceProfileResolved;
-  /**
-   * Per-knob provenance (#528). Additive — absent on older
-   * gateways, in which case the L3 "Tune" rung does not render at all.
-   */
+  /** Absent on older gateways; the L3 "Tune" rung then does not render. */
   sources?: Record<ResourceKnobKey, ResourceKnobSource>;
-  /** Per-knob accepted range (#528). Additive — see `sources`. */
   bounds?: Record<ResourceKnobKey, ResourceKnobBounds>;
 }
 
-/** Background-work pause state on `health.metrics.backgroundPause` (#528). */
 export interface BackgroundPauseDTO {
   paused: boolean;
-  /** ISO timestamp the pause lifts, or `null` for indefinite / not paused. */
+  /** ISO; `null` means indefinite or not paused. */
   until: string | null;
 }
 
-/** One label/value pair rendered in the L2 detail lists. */
 export interface ResourceFactRow {
   label: string;
   value: string;
 }
 
-/**
- * Measured resource actuals on `health.metrics.resourceUsage` (#528
- * Phase C). Mirrors `CentraidResourceUsage` (centraid-api.d.ts) field for
- * field — proxies only (CPU time, bytes, activity), never wattage.
- */
+/** Proxies only (CPU time, bytes, activity), never wattage. */
 export interface ResourceUsageDTO {
   sinceMs: number;
   process: {
@@ -95,17 +74,12 @@ export interface ResourceUsageDTO {
     replication: { passes: number; bytesReplicated: number; busyMs: number };
     backup: { drains: number; bytesUploaded: number; busyMs: number };
     sweeps: { passes: number; busyMs: number };
-    /** `cpuSeconds` is `null` in v1 — harness runs aren't separately CPU-accounted. */
+    /** `cpuSeconds` is `null`: harness runs are not CPU-accounted. */
     harnessRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
   };
   backgroundTimerFiresLastHour: number | null;
 }
 
-/**
- * One measured subsystem row for the resource receipt. `note` carries a
- * clarifying caveat (e.g. the harness-runs "measured, not limited by Conserve"
- * label the issue mandates).
- */
 export interface ResourceUsageRow {
   label: string;
   value: string;
@@ -114,19 +88,16 @@ export interface ResourceUsageRow {
 
 const MS_PER_HOUR = 3_600_000;
 
-/** Format a byte count as GB with one decimal, e.g. `8.0 GB`. */
 export function formatGb(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-/** Format a MB count as GB with one decimal, e.g. `2.5 GB`. */
 export function formatMbAsGb(megabytes: number): string {
   if (!Number.isFinite(megabytes) || megabytes < 0) return "—";
   return `${(megabytes / 1024).toFixed(1)} GB`;
 }
 
-/** Friendly duration for the L2 interval knobs: `800 ms`, `30s`, `5 min`. */
 export function formatFriendlyMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "—";
   if (ms < 1000) return `${Math.round(ms)} ms`;
@@ -137,12 +108,7 @@ export function formatFriendlyMs(ms: number): string {
   return `${Number.isInteger(minutes) ? minutes : minutes.toFixed(1)} min`;
 }
 
-/**
- * L1 budget line in user units first — memory is `workerMaxConcurrent ×
- * workerMaxOldGenerationMb` (MB→GB, one decimal); worker/core counts come
- * from the resolved knobs and host. Attributed to the gateway host by the
- * caller, never the browser device.
- */
+/** The caller attributes this to the GATEWAY host, never the browser. */
 export function formatBudgetSummary(profile: ResourceProfileDTO): string {
   const { workerMaxConcurrent, workerMaxOldGenerationMb } = profile.resolved;
   const memGb = formatMbAsGb(workerMaxConcurrent * workerMaxOldGenerationMb);
@@ -153,11 +119,6 @@ export function formatBudgetSummary(profile: ResourceProfileDTO): string {
   return `Up to ~${memGb} memory · ${workers} background ${workerWord} on ${cores} ${coreWord}`;
 }
 
-/**
- * Milliseconds from `now` (epoch ms) until the next local 20:00. When `now`
- * is already at or past 20:00, targets 20:00 tomorrow. Powers the "Until
- * tonight" pause choice.
- */
 export function msUntilTonight(now: number): number {
   const target = new Date(now);
   target.setHours(20, 0, 0, 0);
@@ -165,7 +126,6 @@ export function msUntilTonight(now: number): number {
   return target.getTime() - now;
 }
 
-/** Paused-state label: a local clock time, or the indefinite phrasing. */
 export function formatPauseUntil(until: string | null): string {
   if (!until) return "Paused until you resume";
   const at = new Date(until);
@@ -175,7 +135,6 @@ export function formatPauseUntil(until: string | null): string {
   return `Paused until ${hh}:${mm}`;
 }
 
-/** L2 host facts — cores, total memory, storage fsync (or "not measured"). */
 export function hostFactRows(profile: ResourceProfileDTO): ResourceFactRow[] {
   const { host } = profile;
   return [
@@ -191,7 +150,6 @@ export function hostFactRows(profile: ResourceProfileDTO): ResourceFactRow[] {
   ];
 }
 
-/** L2 resolved knobs, in friendly units — read-only "how we sized this". */
 export function resolvedKnobRows(
   profile: ResourceProfileDTO
 ): ResourceFactRow[] {
@@ -215,24 +173,17 @@ export function resolvedKnobRows(
   ];
 }
 
-/** The three L0 pause durations, in the order the card renders them. */
 export const PAUSE_ONE_HOUR_MS = MS_PER_HOUR;
 
-// ── Power-context posture (issue #528 Phase D) ──────────────────────────────
-// Battery/thermal chrome appears ONLY when the gateway host actually has a
-// battery; a mains/server host shows a server-relevant fact (CPU steal) or
-// nothing. Kept React-free so the copy derivation stays unit-testable.
+// Battery/thermal chrome appears ONLY when the gateway host has a battery; a
+// mains/server host shows CPU steal, or nothing.
 
 export type PowerContextKind = "battery" | "mains" | "server";
 
-/**
- * React-local mirror of `CentraidPowerContext` (centraid-api.d.ts), field for
- * field. Describes the gateway HOST's power situation — never the browser or
- * phone viewing the screen.
- */
+/** The gateway HOST, never the browser or phone viewing the screen. */
 export interface PowerContextState {
   kind: PowerContextKind;
-  /** `null` ⇒ host has no battery — no battery chrome, ever. */
+  /** `null` ⇒ no battery on the host — no battery chrome, ever. */
   battery: { percent: number | null; charging: boolean | null } | null;
   deferringBackgroundWork: boolean;
   reason: "on-battery" | "low-battery" | "thermal" | null;
@@ -241,17 +192,11 @@ export interface PowerContextState {
   updatedAt: number | null;
 }
 
-/** Only surface the shared-host steal fact when the share lost is meaningful. */
+/** Below this, the steal fact is noise. */
 const STEAL_NOTE_THRESHOLD_PCT = 5;
 
-/**
- * The posture line for the Resource card, or `null` when nothing should
- * render. Battery/thermal chrome appears ONLY when the host has a battery
- * (`battery !== null`) AND posture is active — an idle battery host and every
- * mains host render nothing. A shared server host shows the CPU-steal fact
- * instead, but only when steal is meaningful (≥ 5%). The copy is host-neutral;
- * the caller attributes it to the gateway's host, never the viewing device.
- */
+/** Battery/thermal chrome needs BOTH a battery and active posture; a server
+ *  host gets the steal fact instead. Host-neutral copy. */
 export function powerPostureLine(power: PowerContextState): string | null {
   if (power.battery !== null) {
     if (!power.deferringBackgroundWork) return null;
@@ -268,7 +213,7 @@ export function powerPostureLine(power: PowerContextState): string | null {
         return null;
     }
   }
-  // No battery: never battery/thermal chrome. Only the server steal fact.
+  // No battery: never battery/thermal chrome.
   if (
     power.kind === "server" &&
     power.stealPercent !== null &&
@@ -279,11 +224,6 @@ export function powerPostureLine(power: PowerContextState): string | null {
   return null;
 }
 
-// ── Resource receipt (issue #528 Phase C) ───────────────────────────────────
-// Pure formatting + row-building for ResourceReceiptPanel — measured actuals,
-// kept React-free so the byte/duration math stays unit-testable.
-
-/** CPU/active time given in seconds — `4.2s`, `37s`, `12 min`, `1.4 h`. */
 export function formatSeconds(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "—";
   if (seconds < 60)
@@ -294,14 +234,12 @@ export function formatSeconds(seconds: number): string {
   return `${(minutes / 60).toFixed(1)} h`;
 }
 
-/** Active (busy) time given in milliseconds — reuses the seconds scale. */
 export function formatBusyMs(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "—";
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return formatSeconds(ms / 1000);
 }
 
-/** Process-level actuals — CPU time, current + peak memory. */
 export function processUsageRows(usage: ResourceUsageDTO): ResourceUsageRow[] {
   const { cpuSecondsTotal, currentRssBytes, peakRssBytes } = usage.process;
   return [
@@ -311,11 +249,8 @@ export function processUsageRows(usage: ResourceUsageDTO): ResourceUsageRow[] {
   ];
 }
 
-/**
- * Per-subsystem actuals in the order the receipt renders them. Harness runs
- * carry the explicit "measured, not limited by Conserve" caveat plus the
- * v1 null-CPU note, so Conserve never appears to promise what it can't govern.
- */
+/** Keep the harness-runs caveat: Conserve must never appear to promise what it
+ *  cannot govern. */
 export function subsystemUsageRows(
   usage: ResourceUsageDTO
 ): ResourceUsageRow[] {
@@ -345,30 +280,21 @@ export function subsystemUsageRows(
   ];
 }
 
-// ── L3 "Tune" rung: advanced knobs (issue #528 Phase F) ─────────────────────
-// The four owner-tunable knobs, their prefs plumbing, and the pure validation
-// used by ResourceAdvancedKnobs. Kept React-free so the bounds/warning math
-// stays unit-testable and the component stays under the 500-line cap.
-
-/** The four owner-tunable knob keys, in the order the L3 rung renders them. */
 export type TunableKnobKey =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
   | "replicationConcurrency";
 
-/** Saved knob overrides (desired), keyed by knob. `null` ⇒ Linked (no override). */
+/** `null` ⇒ Linked (no override). */
 export type ResourceKnobPrefs = Record<TunableKnobKey, number | null>;
 
-/** Pref-key prefix for knob overrides — `gateway.resource.<knob>`. */
 export const RESOURCE_KNOB_PREF_PREFIX = "gateway.resource.";
 
-/** The durable prefs key a knob override writes to. */
 export function knobPrefKey(key: TunableKnobKey): string {
   return `${RESOURCE_KNOB_PREF_PREFIX}${key}`;
 }
 
-/** Static per-knob presentation — label + disclosure tier. */
 interface KnobMeta {
   key: TunableKnobKey;
   label: string;
@@ -386,23 +312,17 @@ const KNOB_META: readonly KnobMeta[] = [
   },
 ];
 
-/** One row's profile-derived facts (before the saved-pref/desired merge). */
 export interface KnobRowFacts {
   key: TunableKnobKey;
   label: string;
   tier: "P0" | "P1";
-  /** Current running value from `resolved` — what the gateway applied at boot. */
   running: number;
   bounds: ResourceKnobBounds;
   source: "env" | "prefs" | "preset";
-  /** Environment variable name when `source === 'env'`. */
   envVar?: string;
 }
 
-/**
- * Build the four knob rows from the profile, or `null` when the gateway did
- * not send `sources` + `bounds` (older gateway) — the whole L3 rung then hides.
- */
+/** `null` when the gateway sent no `sources`/`bounds`: the L3 rung then hides. */
 export function knobRowsFromProfile(
   profile: ResourceProfileDTO
 ): KnobRowFacts[] | null {
@@ -423,7 +343,7 @@ export function knobRowsFromProfile(
   });
 }
 
-/** Read saved knob overrides from the prefs record; non-positive-integers ⇒ Linked. */
+/** Non-positive-integers read back as Linked. */
 export function parseResourceKnobPrefs(
   prefs: Record<string, unknown>
 ): ResourceKnobPrefs {
@@ -441,7 +361,7 @@ export function parseResourceKnobPrefs(
   };
 }
 
-/** Hard-validate a draft entry against its bounds. Positive integers only. */
+/** Positive integers within bounds only. */
 export function validateKnobDraft(
   raw: string,
   bounds: ResourceKnobBounds
@@ -457,11 +377,7 @@ export function validateKnobDraft(
   return { ok: true, value: n };
 }
 
-/**
- * A knob is restart-pending when the desired override differs from the running
- * value, or when a boot-time override was just cleared back to Linked. Env
- * knobs never go pending — the operator variable wins and can't be tuned here.
- */
+/** Env knobs never go pending: the operator variable wins. */
 export function knobPending(
   running: number,
   desired: number | null,
@@ -472,12 +388,7 @@ export function knobPending(
   return bootSource === "prefs";
 }
 
-/**
- * Soft (save-allowed) warnings for the worker-sizing knobs. `effectiveMemMb` is
- * the per-worker heap; the product against the worker count is compared to half
- * the host's memory. Amber, never blocking — the owner may know better than the
- * heuristic.
- */
+/** Amber, never blocking. `effectiveMemMb` is the PER-WORKER heap. */
 export function knobSoftWarnings(params: {
   effectiveConcurrent: number;
   effectiveMemMb: number;

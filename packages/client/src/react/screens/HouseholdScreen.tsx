@@ -35,61 +35,30 @@ import { custodyCounts, custodyLine } from "./vault-custody.js";
 
 import styles from "./HouseholdScreen.module.css";
 
-// Devices (issues #599, #726; v9 shape #765) — the page that answers "which
-// machines hold a copy of this vault, and whose are they".
-//
-// The v9 body is a sequence of section-headed row blocks, and the page's
-// identity — title, count line, the two verbs, the health sentence — is the
-// frame's app bar and status line, published from here as the roster resolves
-// (`routeVitals.ts`). Nothing on this page draws its own header.
-//
-// Sections the product actually wires, in the order the questions get asked:
-//
-//   Yours / Other people — the roster, split by whose hardware it is.
-//   Vaults you own       — the owner's scope registry, which is also what
-//                          every "which vault?" picker resolves against, so
-//                          the page and the pickers can never disagree.
-//   Sharing              — the links/edges/shared-space surface, still in its
-//                          pre-v9 card while it awaits its own pass. The v9
-//                          brief's "Other gateways" and its "two of three
-//                          people you nominate" recovery are NOT drawn: this
-//                          product has vault-to-vault links (locality is
-//                          routing, not semantics — #726 D3) and shared-space
-//                          steward recovery, neither of which is the thing
-//                          those sections describe.
+// Devices (#599, #726) — which machines hold a copy of this vault, and whose.
+// Identity (title, count, verbs, health) is published to the frame via
+// `routeVitals`; nothing here draws its own header. "Other gateways" and
+// nominee recovery are non-goals: this product has vault-to-vault links and
+// shared-space steward recovery (#726 D3).
 
-/** A host with no device plane still renders the page — it simply has no
- *  roster to show. Module-level so the hook's inputs stay referentially
- *  stable across renders. */
 const NO_DEVICES = async (): Promise<CentraidGatewayDevice[]> => [];
 const NO_REVOKE = async (): Promise<{ removed: boolean }> => ({
   removed: false,
 });
 const NO_LINKS = async (): Promise<GatewayLink[]> => [];
 
-/** How often the page re-reads what is waiting on somebody's decision. */
 const PENDING_POLL_MS = 30_000;
 
 export interface HouseholdScreenProps {
-  /** Live clock (route ticks it) — drives the roster's humanized ages. */
   now: number;
-  /** Vaults the calling owner owns, own vault first. */
   vaults: OwnerScope[];
-  /** The shell's default/active scope pointer — marks one row "Default". */
   defaultScopeId: string;
-  /** True until the scope registry's first fetch settles. */
   vaultsLoading?: boolean;
-  /** Local disk footprint + limits (Gateway → Storage). */
   onOpenStorage: () => void;
-  /** Open the "new vault" sheet. Omitted (a gateway this client can't create
-   *  vaults on) hides the affordance rather than offering a failing button. */
   onNewVault?: () => void;
-  /** Settings → Vault. Only offered for the default vault: that settings page
-   *  edits whichever vault the client currently resolves to, so pointing it at
-   *  another row's vault would quietly edit the wrong one. */
+  /** Default vault only: that page edits whichever vault the client resolves
+   *  to, so another row's would be the wrong one. */
   onOpenVaultSettings?: () => void;
-  /** Roster wiring. Optional so a host that can't list devices (or a test)
-   *  renders the page without the roster rather than crashing. */
   loadDevices?: DeviceRosterWiring["loadDevices"];
   onRevokeDevice?: DeviceRosterWiring["onRevokeDevice"];
   onRenameDevice?: DeviceRosterWiring["onRenameDevice"];
@@ -100,53 +69,32 @@ export interface HouseholdScreenProps {
   ) => Promise<GatewayDeviceTicket>;
   onUpdateDeviceCompute?: DeviceRosterWiring["onUpdateCompute"];
   loadDeviceWorkStatus?: DeviceRosterWiring["loadWorkStatus"];
-  /** Sharing wiring (#726). Optional so a gateway with no edge/link plane
-   *  (or a test) renders the page without it. */
   sharing?: SharingCardProps;
-  /**
-   * Drawn as ONE SECTION of the merged Vault surface rather than as a page of
-   * its own (v11). Embedded, it draws no page frame, publishes nothing to the
-   * frame's two slots, and reports what it knows to the surface above it
-   * instead — one route, one bar, one status line.
-   */
+  /** One section of the merged Vault surface: no frame, no publishing. */
   embedded?: boolean;
-  /**
-   * How many records the census counted, for the custody line's first clause.
-   * `null` when the census has not answered (an old gateway, or a read that
-   * failed beside a roster that succeeded): the clause is then OMITTED rather
-   * than guessed, and the two numbers this half does know still get said.
-   */
+  /** `null` until the census answers — omit the clause, never guess. */
   records?: number | null;
-  /** Embedded only: hand the surface what this half knows, once per change. */
   onReport?: (report: HouseholdReport) => void;
-  /** Embedded only: the section's disclosure, owned by the surface. */
   collapsed?: boolean;
   onToggle?: () => void;
 }
 
-/** What the "Where it lives" half tells the merged surface about itself. */
 export interface HouseholdReport {
   state: OpsState;
-  /** The custody line — the section head's meta and half the bar's count. */
   custody: string;
   deviceCount: number;
   personCount: number;
   pendingCount: number;
   health: RouteHealth;
-  /** The surface's one commit. */
   openPairing: () => void;
-  /** The surface's quiet verb: the recovery ceremony lives in the sharing
-   *  card, so "Recovery" scrolls to it. */
   reviewPending: () => void;
 }
 
-/** One thing waiting on this owner's decision, said as a sentence. */
 interface PendingRequest {
   id: string;
   sentence: string;
 }
 
-/** Whose vault the other end of a link is, by that side's own label. */
 function otherSide(
   link: GatewayLink,
   ownVaultIds: readonly string[]
@@ -155,19 +103,13 @@ function otherSide(
   return {
     label:
       (mineIsA ? link.labelB : link.labelA) ??
-      // A link proposed before labels were recorded still has to name
-      // somebody; it names the relationship instead of a wire id.
+      // An unlabelled link names the relationship, never a wire id.
       "Someone you are linked with",
     mineApproved: mineIsA ? link.approvedByA : link.approvedByB,
   };
 }
 
-/**
- * What is waiting on a decision: a link the other side proposed and this owner
- * has not answered. A parked incoming SHARE does not count here: there is no
- * copy-as-share (#825, ruling G-copy), and a grant's audience answers its
- * channel invitation in People rather than on this page.
- */
+/** A parked incoming SHARE never counts: no copy-as-share (#825, G-copy). */
 function pendingRequests(
   links: readonly GatewayLink[],
   ownVaultIds: readonly string[]
@@ -182,7 +124,6 @@ function pendingRequests(
     }));
 }
 
-/** The pending half of the page's health, polled beside the roster. */
 function usePendingRequests(
   sharing: SharingCardProps | undefined,
   ownVaultIds: readonly string[]
@@ -197,8 +138,6 @@ function usePendingRequests(
         .then((rows) => {
           if (live) setLinks(rows);
         })
-        // A gateway that won't answer about links has already said so through
-        // the roster's own error; the health line just stays quiet.
         .catch(() => undefined);
     };
     read();
@@ -214,9 +153,8 @@ function usePendingRequests(
   );
 }
 
-/** The vaults block — one row per vault, its settings door in the row's own
- *  detail so the block keeps one action per row. Capacity is NOT here: it is
- *  one fact about the gateway, so it is one row under the group. */
+/** One action per row. Capacity is NOT here: it is one gateway-wide fact, so
+ *  it is one row under the group. */
 function VaultRows({
   vaults,
   defaultScopeId,
@@ -244,11 +182,7 @@ function VaultRows({
         ? {
             children: (
               <div className={styles.detailActions}>
-                {/* Settings → Vault edits whichever vault the client resolves
-                    to, so it is offered only where it cannot mis-target.
-                    Capacity is NOT here any more: it is one door for every
-                    vault on this gateway, so it is one row under the group
-                    rather than the same button repeated inside each vault. */}
+                {/* Only where it cannot mis-target. */}
                 {isDefault && onOpenVaultSettings ? (
                   <Button
                     commit={false}
@@ -271,15 +205,8 @@ function VaultRows({
   return <RowsBlock rows={rows} />;
 }
 
-/**
- * The household roster — who, not what (v11 "Where it lives").
- *
- * A vault has exactly one owner and a device caller sees only its own owner's
- * roster row, so this block is almost always one row long. It is drawn anyway:
- * "which people can reach these bytes" is half the question the section asks,
- * and a section that answered it only when the answer was interesting would
- * leave a member unable to check that it is still one.
- */
+/** One row long, and drawn anyway: a member must be able to check that "who
+ *  can reach these bytes" is still one person. */
 function PeopleRows({
   people,
 }: {
@@ -321,15 +248,11 @@ export default function HouseholdScreen(
   const ownVaultIds = useMemo(() => vaults.map((vault) => vault.id), [vaults]);
   const requests = usePendingRequests(sharing, ownVaultIds);
 
-  // Only this device is enrolled — the healthy first state of a consent
-  // surface, not a failure. A gateway with no device plane at all is a
-  // different sentence, said below.
+  // A consent surface's healthy first state, not a failure; no device plane at
+  // all is a different sentence, said below.
   const onlyThisDevice =
     roster.deviceCount === 0 ||
     (roster.deviceCount === 1 && roster.self?.devices[0]?.current === true);
-  // The page's five states are the ROSTER's: devices are what this page is
-  // about. The vault block says its own "still reading" line rather than
-  // holding the whole page in a skeleton for a second loader.
   const state =
     roster.status === "loading"
       ? "loading"
@@ -345,9 +268,8 @@ export default function HouseholdScreen(
   }, []);
   const openPairing = useCallback(() => setPairing(true), []);
 
-  // The count line and the status line come from one publish, so the bar can
-  // never read "4 devices" over a status line still reading "Reading from the
-  // gateway". Both are cleared on unmount.
+  // Count and status ship in ONE publish: the bar must not read "4 devices"
+  // over a status line still reading "Reading…".
   const devices = `${roster.deviceCount} device${roster.deviceCount === 1 ? "" : "s"}`;
   const people = `${roster.personCount} ${roster.personCount === 1 ? "person" : "people"}`;
   const health = useMemo(
@@ -369,9 +291,8 @@ export default function HouseholdScreen(
       ? "This device only"
       : `${devices} · ${people} · ${requests.length} pending`;
 
-  // COPIES AND ENROLMENT ARE TWO NUMBERS (v11). The custody line states both,
-  // over the census's record count when there is one — and drops that clause
-  // rather than guessing when there is not.
+  // COPIES AND ENROLMENT ARE TWO NUMBERS: state both; drop the record clause
+  // rather than guess.
   const everyDevice = useMemo(
     () => [
       ...(roster.self?.devices ?? []),
@@ -386,9 +307,7 @@ export default function HouseholdScreen(
 
   const { embedded = false, onReport } = props;
   useEffect(() => {
-    // Embedded, the surface above publishes ONE count line and ONE status line
-    // for the whole of Vault; a second publisher on a second channel would put
-    // two answers behind one bar.
+    // Embedded, the surface above owns both slots; never publish here.
     if (embedded) return;
     publishRouteSignals("household", {
       count,
@@ -396,8 +315,7 @@ export default function HouseholdScreen(
       state,
       ...(requests.length > 0 ? { tone: "seam" as const } : {}),
     });
-    // `health` is rebuilt every render; its CONTENT is what matters, and the
-    // channel itself drops a republish that says the same thing.
+    // `health` is rebuilt each render; the channel drops identical republishes.
   }, [count, embedded, health, requests.length, state]);
   useEffect(() => {
     if (embedded) return undefined;
@@ -405,18 +323,13 @@ export default function HouseholdScreen(
   }, [embedded]);
   useEffect(() => {
     if (embedded) return;
-    // The commit opens this page's own pairing panel rather than the shell's
-    // modal: pairing here refreshes the roster it just changed.
+    // This page's panel, not the shell's modal: it refreshes the roster.
     publishRouteVerbs("household", {
       onCommit: openPairing,
-      // "Recovery" is honest only where there is a recovery surface to open:
-      // this product's is the shared-space steward ceremony inside the sharing
-      // card, so the verb scrolls to it and is withheld when it is absent.
+      // "Recovery" is the sharing card's ceremony; withhold it when absent.
       ...(hasSharing ? { onSecondary: reviewPending } : {}),
     });
-    // `hasSharing`, not the props object: the route rebuilds that every clock
-    // tick, and republishing the verbs once a second would wake the frame for
-    // nothing.
+    // `hasSharing`, not the props object: the route rebuilds that each tick.
   }, [embedded, hasSharing, openPairing, reviewPending]);
 
   const report = useMemo<HouseholdReport>(
@@ -441,9 +354,8 @@ export default function HouseholdScreen(
       state,
     ]
   );
-  // A BLOCK BODY, deliberately: an arrow that returned the callback's value
-  // would hand React whatever the caller's reporter happened to return as an
-  // effect destructor, and React would try to call it on unmount.
+  // Keep the block body: an expression arrow hands the reporter's return value
+  // to React as an effect destructor.
   useEffect(() => {
     onReport?.(report);
   }, [onReport, report]);
@@ -462,9 +374,6 @@ export default function HouseholdScreen(
         ]
       : []),
     {
-      // ONE door for every vault on this gateway. A button inside each
-      // vault's own detail would draw the same door once per vault and imply
-      // capacity is a per-vault fact.
       action: { label: "Open", onClick: props.onOpenStorage },
       id: "storage",
       meta: "System",
@@ -509,9 +418,7 @@ export default function HouseholdScreen(
         />
       )}
 
-      {/* The groups, in the order the question narrows: the containers, then
-          the machines holding them, then the people those machines belong to,
-          then everything reached across a wire. */}
+      {/* The question narrows: containers, machines, people, wires. */}
       {state === "loading" ? null : (
         <>
           <SectionBlock label="Vaults you own" meta={String(vaults.length)} />
@@ -555,19 +462,15 @@ export default function HouseholdScreen(
 
       {state === "loading" || !sharing ? null : (
         <div className={styles.sharing} ref={sharingRef}>
-          {/* Gateways, edges and commons still render in their pre-v9 card:
-              they are the sharing surface's own vocabulary, and rebuilding
-              them as "other gateways" would state a local/remote distinction
-              this product refuses (#726 D3). Their pass is its own slice. */}
+          {/* "Other gateways" would state a local/remote distinction this
+              product refuses. */}
           <SharingCard {...sharing} />
         </div>
       )}
     </>
   );
 
-  // Embedded, this half IS the third section of the Vault surface: it draws
-  // the head, the custody line and the disclosure, and no page frame of its
-  // own — the surface above owns the one column everything stacks in.
+  // Embedded: head, custody line, disclosure — never a page frame.
   if (embedded)
     return (
       <>

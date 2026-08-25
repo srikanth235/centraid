@@ -40,70 +40,34 @@ import type { KindRow } from "./atlasScreenModel.js";
 
 import styles from "./AtlasScreen.module.css";
 
-// The Data route (v9 §6, #765) — one vertical block list, no tab strip.
-//
-// KINDS → the note → HOW THEY RELATE → the browsed kind's records. The three
-// tabs it replaces (Kinds / Map / Browse) were three ways of asking the same
-// question about the same vault, and the tab strip meant two of the three
-// answers were always hidden. The identity (title, count line, "Export a kind")
-// lives in the app bar via `routeVitals`; the page's condition lives on the
-// status line; neither is drawn in the body any more.
-//
-// Above a threshold the kinds list grows a chip row — the `full` state — so a
-// vault with forty kinds is filtered rather than scrolled.
+// The Data route (#765): kinds → note → relations → the browsed kind's rows.
+// Identity and condition belong to the app bar via `routeVitals`, not the body.
 
 export interface AtlasScreenProps {
-  /** GET /_vault/atlas/stats — the Kinds census (rows/bytes per pack). */
   loadStats: () => Promise<AtlasCensusPayload>;
-  /** GET /_vault/atlas/pulse — the write pulse behind "written today". */
   loadPulse: () => Promise<AtlasPulsePayload>;
-  /** GET /_vault/atlas/graph — the relations payload. */
   loadGraph: () => Promise<AtlasGraphPayload>;
-  /**
-   * The gateway's backup status, for the status line's "Last backup" clause.
-   * Optional, and its failure is silent: a page about what the vault holds does
-   * not fail because a second, unrelated read did — the clause is simply left
-   * off rather than guessed at.
-   */
+  /** Failure is silent: drop the "Last backup" clause, never fail the page. */
   loadLastBackupAt?: () => Promise<string | null>;
-  /**
-   * Drawn as ONE SECTION of the merged Vault surface rather than as a page of
-   * its own (v11). Embedded, it draws no page frame, publishes nothing to the
-   * frame's two slots, and reports what it knows to the surface above it.
-   */
   embedded?: boolean;
-  /** Embedded only: hand the surface what this half knows, once per change. */
   onReport?: (report: AtlasReport) => void;
-  /** Embedded only: the section's disclosure, owned by the surface. */
   collapsed?: boolean;
   onToggle?: () => void;
 }
 
-/** What the "What it holds" half tells the merged surface about itself. */
 export interface AtlasReport {
   state: OpsState;
-  /** The census count line — "9 kinds · 12,408 records · 2.1 GB". */
   count: string;
-  /**
-   * Records the census counted, for the custody line's first clause. `null`
-   * while the census has not answered: the clause is then omitted rather than
-   * guessed, and one unrelated read failing does not fail the page.
-   */
+  /** `null` until the census answers — omit the clause, never guess it. */
   records: number | null;
   health: RouteHealth | null;
 }
 
-/** Kinds beyond this and the page is `full`: the chip row appears. */
 const FULL_AT = 8;
 
-/** Pages of records one export walks before it stops. A cap, stated in the
- *  file rather than discovered at 200k rows. */
 const EXPORT_PAGE_CAP = 40;
 
-// `all` genuinely means all (#775): the kinds list carries the never-written
-// ones too, so the chip that says "All kinds" is not quietly showing a subset.
-// `never` is the chip that isolates them — the answer to "what are the other
-// thirty-one?" that the count line asks and nothing else answers.
+// `all` means all (#775): never-written kinds included; `never` isolates them.
 const CHIPS = [
   { id: "all", label: "All kinds" },
   { id: "largest", label: "Largest" },
@@ -112,8 +76,6 @@ const CHIPS = [
 ] as const;
 type ChipId = (typeof CHIPS)[number]["id"];
 
-/** Save a blob through the browser's own download path — the same shape the
- *  import screen uses; the desktop host resolves it to a file dialog. */
 function download(text: string, filename: string): void {
   const url = URL.createObjectURL(
     new Blob([text], { type: "application/json" })
@@ -155,15 +117,12 @@ export default function AtlasScreen({
   const [chip, setChip] = useState<ChipId>("all");
   const [picked, setPicked] = useState<string | null>(null);
   const [relationsOpen, setRelationsOpen] = useState(false);
-  // When THIS PAGE last read the census. Not the payload's own `generatedAt`:
-  // the gateway may serve a cached census, and the stamp is a promise about
-  // when the page asked, which is the thing a Refresh verb changes.
+  // When THIS PAGE read the census, not the payload's `generatedAt`: the
+  // gateway may serve a cached one, and Refresh must move the stamp.
   const [censusReadAt, setCensusReadAt] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
-  // Census + pulse travel together (both feed the Kinds rows). The pulse is
-  // enhancement-only — without it a row simply carries no "written today" and
-  // no last-write meta — so only a census failure is the page's error state.
+  // The pulse is enhancement-only; only a census failure is the page's error.
   const loadCensus = useCallback(() => {
     void Promise.allSettled([loadStats(), loadPulse()]).then(([s, p]) => {
       if (!mountedRef.current) return;
@@ -172,9 +131,8 @@ export default function AtlasScreen({
         setStatsError(null);
         setCensusReadAt(new Date().toISOString());
       } else if (s.status === "fulfilled") {
-        // A 200 that is not a census (no packs / no totals) is a load
-        // error. Treating it as success would throw in kindRowsFrom and
-        // take the merged Vault surface down with it.
+        // A 200 that is not a census is an error: passing it on throws in
+        // kindRowsFrom, taking the merged Vault surface down.
         setStats(null);
         setStatsError("The host did not return a vault census.");
       } else
@@ -214,9 +172,7 @@ export default function AtlasScreen({
     [stats, pulse]
   );
   const shown = useMemo(() => filterKinds(kinds, chip), [kinds, chip]);
-  // The kinds that hold something. A vault whose schema declares forty kinds
-  // and has written none is still an EMPTY vault, so the empty state and the
-  // records section below both count these rather than the whole list.
+  // Declared-but-unwritten kinds still mean an EMPTY vault: count these.
   const written = useMemo(() => kinds.filter(kindWritten), [kinds]);
 
   const state =
@@ -230,16 +186,10 @@ export default function AtlasScreen({
             ? "full"
             : "ready";
 
-  // The kind whose records the last section shows: the one a Browse row asked
-  // for, else the fullest kind — the page always has a table under it. A ghost
-  // row's verb is inert, so `picked` is always a kind with records in it.
   const selected =
     written.find((k) => k.logical === picked) ?? written[0] ?? null;
 
-  // ── The frame's two slots ────────────────────────────────────────────────
-  // Embedded, the surface above publishes ONE count line and ONE status line
-  // for the whole of Vault; a second publisher on a second channel would put
-  // two answers behind one bar.
+  // Embedded, the surface above owns both slots; never publish from here.
   const health = useMemo<RouteHealth | null>(
     () =>
       state === "ready" || state === "full"
@@ -273,16 +223,13 @@ export default function AtlasScreen({
     }),
     [health, state, stats]
   );
-  // A BLOCK BODY, deliberately: an arrow that returned the callback's value
-  // would hand React whatever the caller's reporter happened to return as an
-  // effect destructor, and React would try to call it on unmount.
+  // Keep the block body: an expression arrow hands the reporter's return
+  // value to React as an effect destructor.
   useEffect(() => {
     onReport?.(report);
   }, [onReport, report]);
 
-  // "Export a kind" — the bar's one verb. It copies out what the page is
-  // showing: every record of the browsed kind, as the vault stores it. Not a
-  // commit, which is why Data declares no filled control at all.
+  // A copy-out, not a commit — Data declares no filled control.
   const exportKind = useCallback(() => {
     if (!selected) return;
     const { logical, label } = selected;
@@ -315,18 +262,13 @@ export default function AtlasScreen({
   }, [selected]);
 
   useEffect(() => {
-    // Standalone, "Export a kind" is still the bar's quiet verb. Merged, the
-    // bar's two verbs are the surface's ("Pair a device" / "Recovery") and
-    // export is a ROW beside the census, where it keeps its subject.
+    // Merged, the bar's verbs belong to the surface; export is a row instead.
     if (embedded) return;
     publishRouteVerbs("atlas", { onSecondary: exportKind });
   }, [embedded, exportKind]);
 
-  // ── The five states ──────────────────────────────────────────────────────
-  // A state that is the WHOLE page standalone is the section's BODY when
-  // merged: the head, its census sentence and its disclosure stay drawn, so a
-  // member reading "Where it lives" beneath is never told the surface failed
-  // because one of its three questions did.
+  // Merged, a whole-page state is only the section's body: head, census
+  // sentence and disclosure stay drawn.
   const frame = (body: JSX.Element): JSX.Element =>
     embedded ? (
       <>
@@ -401,9 +343,7 @@ export default function AtlasScreen({
         totalKinds={kinds.length}
       />
 
-      {/* The table browser is part of "What it holds", so it closes with it:
-          a section that hid its list and left a 500-row table under the closed
-          head would not have closed anything. */}
+      {/* Part of "What it holds", so it closes with it. */}
       {(embedded && collapsed) || !selected ? null : (
         <AtlasRecordsSection
           key={selected.logical}
@@ -415,8 +355,5 @@ export default function AtlasScreen({
     </>
   );
 
-  // The section head is `AtlasKindsSection`'s own in the ready states — it
-  // carries the Refresh verb beside the toggle, and two heads over one list is
-  // two headings for one thing.
   return embedded ? holds : <div className={styles.page}>{holds}</div>;
 }

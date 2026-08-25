@@ -3269,6 +3269,208 @@ Files swept in Wave 1 (plus `scripts/comment-only-diff.mjs`,
 - `packages/vault/src/wal-shipper-detectors.test.ts`
 - `packages/vault/src/wal-shipper.ts`
 
+### Wave 2 — compression sweep, worklist ranks 161-320 (2026-08-25)
+
+Eight worker sub-agents under the amended contract (JSX containers kept,
+no block left empty, severity calibrated to the Wave 1 server batches).
+Tree movement:
+
+| Figure | after Wave 1 | after Wave 2 |
+| --- | --- | --- |
+| Global character share | 21.17% | **19.26%** |
+| Global line density | 12.66% | **11.35%** |
+| Files over the 15% cap | 1,906 | 1,791 |
+
+Most files landed 11.9-13.0%. Residues above the cap are declaration/policy
+leaves reported with their honest floors; nine graduated to the allowlist
+(root ruling, reasons in the baseline): `consent-gate.ts`, `scope-kit.ts`,
+`docs/document-copy.ts`, `opsBar.ts`, `homeSample.ts`, `design/palette.ts`,
+`design/blocks/grid.ts`, `backup/backup-state.ts`, and `server/paths.ts`
+(90.9% after honest compression — a path-slot registry whose omit-semantics
+prose is the file's entire information content). Remaining non-allowlisted
+residues stay on the re-pass worklist.
+
+Proof-tool hardening continued: oxfmt's collapse of a one-line array dropped
+a trailing comma, a third cosmetic false-positive class — the token
+comparison now drops a `,` that immediately precedes a closing bracket, and
+its join separator is an escaped NUL (a literal NUL byte had made the script
+read as binary to grep). One stale-doc repair: `design/src/elements/attachments.ts`
+is cited by docs/coding-standards.md as a model of the capitalized invariant
+heading but carried none; its compressed header now leads with one.
+
+Verification (Wave 2):
+
+```sh
+node scripts/comment-only-diff.mjs HEAD   # 160 changed files — all comment-only
+bun run test:comment-density              # ok — no pin rose
+node --test scripts/check-comment-density-ratchet.test.mjs   # 10/10
+bun run lint && bun run format:check      # clean
+```
+
+Files swept in Wave 2 (plus `scripts/comment-only-diff.mjs`,
+`tests/comment-density-ratchet.json`, and this receipt):
+
+- `apps/desktop/src/main/app-sessions.ts`
+- `apps/desktop/src/main/detached-gateway-core.ts`
+- `apps/desktop/src/main/gateway-outage-log-core.ts`
+- `apps/desktop/src/main/gateway-supervisor-core.ts`
+- `apps/desktop/tests/e2e/onboarding-home.spec.ts`
+- `apps/mobile/src/apps/automations/automations-model.ts`
+- `apps/mobile/src/apps/docs/docs-copy.ts`
+- `apps/mobile/src/apps/photos/MediaPage.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightbox.styles.ts`
+- `apps/mobile/src/apps/photos/PhotoTimeline.tsx`
+- `apps/mobile/src/apps/photos/PhotosBand.tsx`
+- `apps/mobile/src/apps/photos/PhotosCollectionsView.tsx`
+- `apps/mobile/src/apps/photos/PhotosScreen.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.test.tsx`
+- `apps/mobile/src/apps/photos/exif-location-strip.ts`
+- `apps/mobile/src/apps/photos/photo-edit-save.ts`
+- `apps/mobile/src/apps/photos/photo-share.ts`
+- `apps/mobile/src/apps/photos/search-place-vocabulary.ts`
+- `apps/mobile/src/kit/band-surface.ts`
+- `apps/mobile/src/kit/replica/mount-plan.ts`
+- `apps/mobile/src/kit/storage/free-up-space.ts`
+- `apps/mobile/src/kit/transfer/transfer-policy.ts`
+- `apps/mobile/src/kit/transfer/transfer-run.ts`
+- `apps/mobile/src/lib/connection-reauth.ts`
+- `apps/mobile/src/lib/devices.ts`
+- `apps/mobile/src/screens/approvals/approvals-model.ts`
+- `apps/mobile/src/screens/data/data-model.ts`
+- `apps/mobile/src/screens/devices/devices-model.ts`
+- `apps/mobile/src/screens/home/VaultHeader.tsx`
+- `apps/mobile/src/screens/home/places.ts`
+- `apps/web/src/iroh-transport.ts`
+- `apps/web/tests/e2e/offline-search.spec.ts`
+- `apps/web/vite.config.ts`
+- `packages/backup/src/manifest.ts`
+- `packages/backup/src/wal-restore.test.ts`
+- `packages/blueprints/apps/_shared/consent-gate.ts`
+- `packages/blueprints/apps/_shared/download-on-demand.ts`
+- `packages/blueprints/apps/_shared/grant-plane.ts`
+- `packages/blueprints/apps/_shared/scope-kit.ts`
+- `packages/blueprints/apps/_shared/selection-engine.ts`
+- `packages/blueprints/apps/_shared/share-kit.ts`
+- `packages/blueprints/apps/_shared/triage-session.ts`
+- `packages/blueprints/apps/agenda/queries/day-context.ts`
+- `packages/blueprints/apps/agenda/views.ts`
+- `packages/blueprints/apps/docs/Chrome.tsx`
+- `packages/blueprints/apps/docs/components/FoldersRoute.tsx`
+- `packages/blueprints/apps/docs/components/QuickLook.tsx`
+- `packages/blueprints/apps/docs/document-copy.ts`
+- `packages/blueprints/apps/docs/icons.ts`
+- `packages/blueprints/apps/docs/logic.ts`
+- `packages/blueprints/apps/docs/shelves.ts`
+- `packages/blueprints/apps/people/people-copy.ts`
+- `packages/blueprints/apps/people/types.ts`
+- `packages/blueprints/apps/photos/Chrome.tsx`
+- `packages/blueprints/apps/photos/components/FaceReview.tsx`
+- `packages/blueprints/apps/photos/components/People.tsx`
+- `packages/blueprints/apps/photos/components/Places.tsx`
+- `packages/blueprints/apps/photos/components/SelectionBar.tsx`
+- `packages/blueprints/apps/photos/duplicates.tsx`
+- `packages/blueprints/apps/photos/faces.ts`
+- `packages/blueprints/apps/photos/layout.ts`
+- `packages/blueprints/apps/photos/library-store.ts`
+- `packages/blueprints/apps/photos/nav-rail.ts`
+- `packages/blueprints/apps/photos/queries/library.ts`
+- `packages/blueprints/apps/photos/queries/people.ts`
+- `packages/blueprints/apps/photos/search-groups.ts`
+- `packages/blueprints/apps/photos/search.ts`
+- `packages/blueprints/apps/photos/selection.tsx`
+- `packages/blueprints/apps/photos/shared-copy.ts`
+- `packages/blueprints/apps/photos/storage-model.ts`
+- `packages/blueprints/apps/photos/types.ts`
+- `packages/blueprints/src/app-states.test.ts`
+- `packages/blueprints/src/handler-reachability.test.ts`
+- `packages/blueprints/src/index.ts`
+- `packages/blueprints/src/placement-registry.test.ts`
+- `packages/blueprints/src/state-honesty.test.ts`
+- `packages/blueprints/src/types.ts`
+- `packages/client/src/app-shell-context.ts`
+- `packages/client/src/gateway-client-conversation-history.ts`
+- `packages/client/src/gateway-client-devices.ts`
+- `packages/client/src/react/screens/AtlasScreen.tsx`
+- `packages/client/src/react/screens/GatewayScreen.tsx`
+- `packages/client/src/react/screens/HomeSpringboard.tsx`
+- `packages/client/src/react/screens/HouseholdScreen.tsx`
+- `packages/client/src/react/screens/resource-summary.ts`
+- `packages/client/src/react/shell/ShellFrame.tsx`
+- `packages/client/src/react/shell/gatewayRegistry.ts`
+- `packages/client/src/react/shell/opsBar.ts`
+- `packages/client/src/react/shell/routeVitals.ts`
+- `packages/client/src/react/shell/routes/ApprovalsRoute.tsx`
+- `packages/client/src/react/shell/routes/AssistantRoute.tsx`
+- `packages/client/src/react/shell/routes/InlineAppRoute.tsx`
+- `packages/client/src/react/shell/routes/SettingsRoute.tsx`
+- `packages/client/src/react/shell/routes/automationsData.ts`
+- `packages/client/src/react/shell/routes/homeSample.ts`
+- `packages/client/src/react/shell/routes/paletteData.ts`
+- `packages/client/src/react/shell/statusChannel.ts`
+- `packages/client/src/storage-metrics.ts`
+- `packages/client/src/turn-stream.ts`
+- `packages/design/src/blocks/bars.ts`
+- `packages/design/src/blocks/fixtures.ts`
+- `packages/design/src/blocks/grid.ts`
+- `packages/design/src/color.ts`
+- `packages/design/src/elements/attachments.ts`
+- `packages/design/src/icons-contract.test.ts`
+- `packages/design/src/icons.ts`
+- `packages/design/src/palette.ts`
+- `packages/model-runtime/src/gazetteer.ts`
+- `packages/model-runtime/src/onnx.ts`
+- `packages/server/src/acp/automation/run-automation.ts`
+- `packages/server/src/acp/backends/acp/session-config.ts`
+- `packages/server/src/automation/fire/calendar-boundary-cron.test.ts`
+- `packages/server/src/automation/fire/scheduler-ledger.ts`
+- `packages/server/src/automation/fire/time-zoo-cron.test.ts`
+- `packages/server/src/automation/handler/lint.ts`
+- `packages/server/src/automation/index.ts`
+- `packages/server/src/automation/scaffold/webhook.ts`
+- `packages/server/src/backup/backup-state.ts`
+- `packages/server/src/backup/recover-internals.ts`
+- `packages/server/src/backup/wal-uploader.ts`
+- `packages/server/src/doctor/integrity-checks.ts`
+- `packages/server/src/engine/conversation/runner-core-types.ts`
+- `packages/server/src/engine/handlers/dispatcher.ts`
+- `packages/server/src/engine/handlers/worker-pool.ts`
+- `packages/server/src/engine/http/changes-sse.ts`
+- `packages/server/src/engine/http/turn-sse.ts`
+- `packages/server/src/engine/sandbox/install.ts`
+- `packages/server/src/enrich/capability-registry.ts`
+- `packages/server/src/enrich/semantic-search.ts`
+- `packages/server/src/paths.ts`
+- `packages/server/src/provider-egress-dispatch.test.ts`
+- `packages/server/src/routes/apps-store-routes.ts`
+- `packages/server/src/routes/automations-routes.ts`
+- `packages/server/src/routes/device-ticket-mint.ts`
+- `packages/server/src/routes/devices-routes.ts`
+- `packages/server/src/routes/lifecycle-routes.ts`
+- `packages/server/src/routes/peer-plane.ts`
+- `packages/server/src/routes/scopes-routes.ts`
+- `packages/server/src/routes/storage-routes.ts`
+- `packages/server/src/serve/grant-fulfillment.ts`
+- `packages/server/src/serve/hardware-profile.ts`
+- `packages/server/src/serve/local-usage.ts`
+- `packages/server/src/serve/manifest-scope-denial.sweep.test-fixtures.ts`
+- `packages/server/src/serve/protocol-join-lane.test.ts`
+- `packages/test-kit/src/vitest.ts`
+- `packages/tunnel/src/gateway-endpoint.ts`
+- `packages/vault/src/blob/exif-fixtures.ts`
+- `packages/vault/src/blob/preview.ts`
+- `packages/vault/src/blob/s3.ts`
+- `packages/vault/src/commands/media-gazetteer.ts`
+- `packages/vault/src/enrich/derivation.ts`
+- `packages/vault/src/enrich/model-id.ts`
+- `packages/vault/src/enrich/policy.ts`
+- `packages/vault/src/errors.ts`
+- `packages/vault/src/gateway/execution.ts`
+- `packages/vault/src/grant/grant-store.ts`
+- `packages/vault/src/share/commons-replay.ts`
+- `packages/vault/src/share/commons-sim-grant.test-fixtures.ts`
+- `packages/vault/src/share/commons-sim.test.ts`
+- `packages/vault/src/vault-footprint.ts`
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->

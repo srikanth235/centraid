@@ -1,24 +1,7 @@
-// Cross-seat selection, as a pure model (Photos v4 handoff §6, proto:4946).
-//
-// While a selection is live the band is REPLACED by this bar — proto:4953's
-// `appBandOn: …&&!sel` is exactly that rule — and the bar carries five 56px
-// targets in one fixed order. The order and the Trash shelf's swap (Trash →
-// Restore) live here, in a module free of `react-native`, for the same reason
-// `photos-band.ts` does: they are rules, they must be assertable without a
-// renderer, and the web's own selection bar
-// (`packages/blueprints/apps/photos/components/SelectionBar.tsx`,
-// `buildSelectionActions`) states them in one place too. Two surfaces, one
-// table, so the fifth target cannot mean `Trash` on the phone and `Download`
-// on the desktop. The set transitions and failure-isolated serial runner are
-// here too: a batch is one member act, but one bad item must not strand every
-// later item in that act.
-//
-// THE THIRD TARGET IS *COPY TO ⟨VAULT⟩* (#726). The caller supplies the
-// caption because only the caller knows the destination — another mounted
-// writable scope, named by its own label; there is no Sharing place and no
-// default share-target pointer to derive one from.
+// Cross-seat selection as a pure model (§6). A live selection REPLACES the band
+// with five targets in one fixed order, kept here so two surfaces cannot
+// disagree. A batch is one member act; one bad item must not strand the rest.
 
-/** The five, by id, in the handoff's fixed order. */
 export type SelectionActionId =
   | "favorite"
   | "add-to-album"
@@ -26,38 +9,26 @@ export type SelectionActionId =
   | "download"
   | "trash";
 
-/** Which swap applies to the fixed five (§6). */
 export type SelectionShelfKind = "trash" | "normal";
 
-/** The phone's selection targets. Above the 44 floor: this is the primary bar
- *  while a selection is live, exactly as the viewer's bar is (§7.1, §6). */
+/** Above the 44 floor: the primary bar while a selection is live. */
 export const SELECTION_ACTION_TARGET = 56;
 
 export interface SelectionAction {
   id: SelectionActionId;
-  /** Copy is final (§6) — icon-only would be an unnamed control (§18), so the
-   *  caption under the mark is this same string. */
+  /** Also the caption: icon-only is an unnamed control (§18). */
   label: string;
-  /** Semantic icon key, resolved by `kit/components/icon-resolver`. */
   icon: string;
-  /** Fires the write. INERT when `disabled` — see `buildSelectionActions`. */
   run: () => void;
   disabled: boolean;
-  /** Why it cannot fire, as one sentence. Stated inline under the bar in
-   *  `--net` mono by the renderer — never only in an accessibility hint,
-   *  which is the touch surface's tooltip (§6, §18). */
+  /** Rendered under the bar, never only in an accessibility hint. */
   reason?: string;
-  /** Takes `--net` as ink, never as a fill (§18). Trash only; Restore undoes
-   *  a destructive action rather than being one. */
+  /** `--net` as ink, never a fill (§18). Trash only — Restore undoes one. */
   destructive?: boolean;
 }
 
-/**
- * What one screen can actually do with a selection. A handler that is absent
- * is NOT hidden: the target still renders, disabled, with the caller's own
- * sentence saying why — which is why the "cannot" arm carries a reason and
- * cannot be constructed without one.
- */
+/** An absent handler is NOT hidden: the target renders disabled, with a reason
+ * the "cannot" arm cannot omit. */
 export type SelectionHandler =
   | { run: () => void }
   | { unavailableReason: string };
@@ -65,14 +36,8 @@ export type SelectionHandler =
 export interface BuildSelectionActionsInput {
   count: number;
   shelf: SelectionShelfKind;
-  /** The third target's caption — `Copy to ⟨destination label⟩`, or the
-   *  caller's resting caption when no single destination exists. Supplied,
-   *  never derived here: the destination is the caller's to resolve. */
   copyLabel: string;
-  /** Non-null when the scope the selection sits in refuses writes (§6):
-   *  Favorite, Add to album and Trash/Restore disable with this sentence.
-   *  *Copy to ⟨vault⟩* and Download do not — copying into a vault the member
-   *  owns, and downloading, are never writes on someone else's library. */
+  /** Disables Favorite, Add to album and Trash/Restore only. */
   readOnlyReason: string | null;
   favorite: SelectionHandler;
   addToAlbum: SelectionHandler;
@@ -91,16 +56,8 @@ function handlerOf(handler: SelectionHandler): {
     : { run: () => {}, reason: handler.unavailableReason, disabled: true };
 }
 
-/**
- * The five, in the fixed order, with the Trash shelf's swap applied and every
- * disabled target's handler replaced by a no-op.
- *
- * THE INERT HANDLER IS THE POINT (§6, proto `act:off?()=>{}:…`). A `disabled`
- * prop is what stops a tap or an assistive-tech activation; the no-op is what
- * stops anything calling `action.run()` directly — a test, a future caller, a
- * synthetic activation — from reaching a vault write the member's grant, or
- * the phone's missing surface, refuses.
- */
+/** THE INERT HANDLER IS THE POINT (§6): `disabled` stops a tap, the no-op stops
+ * a direct `action.run()` reaching a refused vault write. */
 export function buildSelectionActions({
   count,
   shelf,
@@ -147,8 +104,6 @@ export function buildSelectionActions({
       ...handlerOf(trash),
     },
   ];
-  // The read-only sentence applies to the three targets that WRITE into the
-  // scope being read. Download and *Copy to ⟨vault⟩* are deliberately exempt.
   const netOff = readOnlyReason !== null;
   const writesHere = new Set<SelectionActionId>([
     "favorite",
@@ -170,11 +125,7 @@ export function buildSelectionActions({
   });
 }
 
-/**
- * The one sentence under the bar. A member reads ONE line, not five: the
- * distinct reasons, in the bar's own order, joined by the system's `·`
- * separator (§18 — never an unspaced em dash).
- */
+/** ONE line, not five: distinct reasons in bar order (§18). */
 export function selectionBarReason(
   actions: readonly SelectionAction[]
 ): string | undefined {
@@ -186,7 +137,6 @@ export function selectionBarReason(
   return seen.length ? seen.join(" · ") : undefined;
 }
 
-/** Return the next selection without mutating the caller's set. */
 export function toggleSelectionKey(
   selected: ReadonlySet<string>,
   key: string
@@ -197,7 +147,6 @@ export function toggleSelectionKey(
   return next;
 }
 
-/** Apply one contiguous shift-range using the target key's next state. */
 export function toggleSelectionRange(
   selected: ReadonlySet<string>,
   orderedKeys: readonly string[],
@@ -240,10 +189,7 @@ export type SelectionBatchResult<Target, Value> =
   | { target: Target; status: "fulfilled"; value: Value }
   | { target: Target; status: "rejected"; reason: unknown };
 
-/**
- * Run in member order and isolate each failure. Serial ordering is required
- * by the replica ledger; catching per target is required by the batch law.
- */
+/** Serial order is the ledger's requirement; catching is the batch law's. */
 export async function runSelectionBatch<Target, Value>(
   targets: readonly Target[],
   run: (target: Target, index: number) => Promise<Value>

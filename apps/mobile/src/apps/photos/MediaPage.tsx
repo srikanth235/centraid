@@ -1,17 +1,5 @@
-// One page of the lightbox pager: the asset itself, its transport when it has
-// one, and the metered-connection gate in front of full-quality bytes.
-//
-// Separate from `PhotoLightbox`: that screen owns
-// the pager, the bars and the vault writes; this file owns what a single asset
-// looks like as its quality rung climbs from thumbnail to original, and the
-// decision — per photo, per session — about whether the phone should spend
-// cellular data getting there.
-//
-// The media is laid out from the asset record's own aspect ratio, so "fit"
-// means fit on a 390px portrait screen and the frame does not move when the
-// bytes land (§7.1, §14). Un-zoomed the stage offers `fit`; zoomed it reads out
-// exactly — `240% · drag to pan` — because a zoom with no number is a state the
-// member cannot describe.
+// One page of the lightbox pager. Layout comes from the record's aspect ratio,
+// so the frame does not move when the bytes land (§7.1, §14).
 
 import { Image } from "expo-image";
 import { VideoView, useVideoPlayer } from "expo-video";
@@ -46,7 +34,6 @@ import {
   zoomReadout,
 } from "./viewer-model";
 
-/** Copy for the tap that spends the data. Plain words, no units, no jargon. */
 const LOAD_FULL_QUALITY_LABEL = "Load full quality";
 
 function VideoAsset({
@@ -71,16 +58,7 @@ function VideoAsset({
   );
 }
 
-/**
- * Stands in for an original that would come down over mobile data: the preview
- * the app already holds, plus the one tap that spends the bytes. Never a
- * spinner and never a broken frame — the shape is known, so the shape is drawn.
- *
- * The gate itself (`fetchAccess`) and this stated-choice contract
- * (`FetchChoicePlaceholder`) live in `kit/fetch-gate/` — shared machinery, not
- * a photos concern — this wrapper only supplies the photo-specific preview
- * source and copy.
- */
+/** Preview plus the one tap that spends the bytes — never a spinner or a broken frame. */
 function MeteredPlaceholder({
   asset,
   width,
@@ -115,20 +93,8 @@ function MeteredPlaceholder({
   );
 }
 
-/**
- * Play, a determinate track, a clock, and a micro-caps kind label — for a LIVE
- * PHOTO OR AN AUDIO SCAN.
- *
- * VIDEO DOES NOT GET ONE. `VideoView` already draws the platform's own
- * scrubber: it is accessible, already wired to the element it controls, and
- * free, so a hand-rolled transport earns its place only by doing something
- * the platform's cannot. The web makes the same call in `ViewerStage.tsx`
- * (see its `Transport` doc comment).
- *
- * This is the live photo's play affordance, whose track sits at zero because
- * playback genuinely has not started — pressing it hands the companion video
- * to the platform player, which is where the real transport is.
- */
+/** Live photo or audio scan only. VIDEO DOES NOT GET ONE: `VideoView` draws the
+ *  platform's own scrubber. */
 function Transport({
   variantLabel,
   durationS,
@@ -138,15 +104,10 @@ function Transport({
   variantLabel: string;
   durationS: number;
   onPlay: () => void;
-  /** Real poster frames down this clip (#724), or empty wherever
-   *  `expo-video-thumbnails` cannot honestly produce one — see
-   *  `video-scrub-strip-native.ts`. An empty strip renders NOTHING here
-   *  rather than a placeholder box; the track below is unchanged either way. */
+  /** An empty strip renders NOTHING, not a placeholder box (#724). */
   scrubFrames?: readonly ScrubFrame[];
 }): React.JSX.Element {
   const { colors } = useTheme();
-  // Determinate from the first frame: the record carries the duration, so the
-  // track never has to admit it does not know how long this is.
   const elapsed = 0;
   const fraction = durationS > 0 ? elapsed / durationS : 0;
   return (
@@ -212,21 +173,9 @@ export function MediaPage({
   asset: PhotoAsset;
   companionUri?: string;
   networkType: string | undefined;
-  /**
-   * The member asked for the original — from the stage's status line, which is
-   * the ONE place that offer lives (proto 4645). This page carries no second
-   * `Load the original` chip of its own: the same fetch offered twice on one
-   * screen is two labels and two states for one thing. The screen owns the
-   * ask; this page owns what to do about it.
-   */
+  /** The stage's status line is the ONE place that offer lives (proto 4645). */
   originalRequested?: boolean;
-  /**
-   * The settled magnification, reported up. The stage's status line belongs to
-   * the screen but the gesture belongs to this page, and the line has to print
-   * the LIVE percentage (`240% · drag to pan · double tap returns to fit`) — a
-   * status that says one number while the transform holds another is the same
-   * class of lie as the frozen transport this file just lost.
-   */
+  /** The status line has to print the LIVE percentage. */
   onZoom?: (scale: number) => void;
   width: number;
   height: number;
@@ -236,13 +185,10 @@ export function MediaPage({
   const [quality, setQuality] = useState<"thumb" | "preview" | "original">(
     "thumb"
   );
-  // The user's consent to spend mobile data on THIS photo's original.
   const [fullQualityUnlocked, setFullQualityUnlocked] = useState(false);
   const [zoom, setZoom] = useState(1);
-  // Re-point at a different asset ⇒ start again at the thumbnail. Adjusting the
-  // state during render (React's documented "derive state from props" escape
-  // hatch) rather than in an effect means the reset lands before paint, so a new
-  // asset can never flash the previous one's full-resolution source.
+  // Derived during render, not in an effect: the reset lands before paint, so a
+  // new asset never flashes the previous one's source.
   const [qualityAssetId, setQualityAssetId] = useState(asset.id);
   if (qualityAssetId !== asset.id) {
     setQualityAssetId(asset.id);
@@ -250,31 +196,19 @@ export function MediaPage({
     setFullQualityUnlocked(false);
     setZoom(1);
   }
-  // On a metered connection nothing reaches for the original until the user
-  // asks. Off cellular this is always "granted", so behaviour is unchanged.
-  //
-  // The status line's action counts as that ask: it is rendered beside copy
-  // that states the cost first (`loading it spends mobile data`), which is the
-  // whole of the gate's stated-choice contract — the member reads what it
-  // costs, then decides. That is the same contract the removed chip honoured.
+  // Metered: nothing reaches for the original until the member asks, and the
+  // status-line action states the cost before it counts as that ask.
   const access = fetchAccess(
     networkType,
     fullQualityUnlocked || originalRequested
   );
   const unlockFullQuality = (): void => setFullQualityUnlocked(true);
-  // The scrub-preview strip (#724) — generated once per Live Photo
-  // companion, before playback starts, and never for an ordinary video (see
-  // `video-scrub-strip.ts`'s header for why the platform's own `VideoView`
-  // scrubber is left alone). The async generator resolves into a `.then`
-  // callback rather than a synchronous effect-body `setState`, the same
-  // pattern `PhotosHome.tsx`'s `backupConsent` hydration already uses.
+  // Once per Live Photo companion, never for an ordinary video (#724).
   const [scrubFrames, setScrubFrames] = useState<ScrubFrame[]>([]);
   useEffect(() => {
     let cancelled = false;
-    // The reset and the (re)generation both happen in scheduled callbacks —
-    // the compiler's EffectSetState rule forbids a synchronous effect-body
-    // setState, and the empty-strip reset genuinely belongs to the same
-    // "companion changed" transition as the fetch it precedes.
+    // Scheduled: the compiler's EffectSetState rule forbids a synchronous
+    // effect-body setState.
     const reset = setTimeout(() => {
       if (!cancelled) setScrubFrames([]);
       if (!companionUri || cancelled) return;
@@ -294,18 +228,13 @@ export function MediaPage({
   const startScale = useSharedValue(1);
   const panX = useSharedValue(0);
   const panY = useSharedValue(0);
-  // Re-pointing at a different asset must return the TRANSFORM to fit too, not
-  // just the `zoom` state beside it. A shared value cannot be written from a
-  // render body (that is the mutation the React compiler rejects), so this is
-  // the one effect on the page — without it a recycled row could open the next
-  // photograph already magnified and shoved off-centre.
+  // A shared value cannot be written from a render body, so the transform reset
+  // is the one effect here; without it a recycled row opens magnified.
   useEffect(() => {
     applyZoom(scale, ZOOM_FIT, { x: panX, y: panY });
   }, [asset.id, panX, panY, scale]);
   const zoomStyle = useAnimatedStyle(() => ({
-    // Translate BEFORE scale: the offset is accumulated in the frame's own
-    // pixels (that is what the clamp is computed against), and a translation
-    // applied after a scale would be multiplied by it.
+    // Translate BEFORE scale: the offset is in the frame's own pixels.
     transform: [
       { translateX: panX.value },
       { translateY: panY.value },
@@ -313,10 +242,7 @@ export function MediaPage({
     ],
   }));
   const transport = transportSpec(asset.kind, companionUri !== undefined);
-  // The frame the photograph will occupy, from the record — not from the bytes.
   const box = fitMedia(assetAspectRatio(asset), { height, width });
-  /** Every way to a rung ends here, so the readout, the status line and the
-   *  transform can never be three different opinions about one magnification. */
   const settleZoom = (next: number): void => {
     setZoom(next);
     onZoom?.(next);
@@ -330,18 +256,14 @@ export function MediaPage({
     startScale,
   });
   const readout = zoomReadout(zoom);
-  /** One rung, one place: `+`, `−`, `Fit` and the double tap all land here. */
   const goToZoom = (next: number): void => {
     applyZoom(scale, next, { x: panX, y: panY });
     settleZoom(next);
   };
-  // The quality rung actually on screen. The status line's ask (`originalRequested`)
-  // climbs the ladder to the top from OUTSIDE this component, so the one offer
-  // in the stage drives the same escalation the removed in-stage chip did.
+  // The status line's ask escalates the rung from OUTSIDE this component.
   const rung = originalRequested ? "original" : quality;
 
-  // A video page streams the original the moment it mounts — the most expensive
-  // ungated fetch in the app. On cellular it waits behind the same tap.
+  // A video streams the original on mount — on cellular it waits behind the tap.
   if (asset.kind === "video" || (playingLive && companionUri))
     return access === "granted" ? (
       <View style={{ width }}>
@@ -350,11 +272,8 @@ export function MediaPage({
           width={box.width}
           height={box.height}
         />
-        {/* ONE transport in this tree, and it belongs to the platform (see the
-            `Transport` doc comment). What is left for us to say is what this
-            recording IS — `video · 4K · 0:24`, composed by the same rules as
-            the web's `videoKindLabel`, so a member who opens one video on both
-            clients reads one label. */}
+        {/* ONE transport here, and it is the platform's. This line says what the
+            recording IS, by the web's `videoKindLabel` rules. */}
         <Text style={[styles.kindLabel, { color: colors.onStageSoft }]}>
           {videoKindLabel(asset)}
         </Text>
@@ -404,11 +323,8 @@ export function MediaPage({
           />
         </Animated.View>
       </GestureDetector>
-      {/* The ladder (proto 4536–4540), CENTRED over the media rather than
-          tucked into a corner: it is about the photograph, so it sits on it.
-          At fit it is one `+`; zoomed it is `−` `+` `Fit` and the exact
-          readout, because a member at 240% needs a way down as well as up —
-          the single toggle this replaces could only slam between two rungs. */}
+      {/* Centred over the media: it is about the photograph. Zoomed it gains `−`
+          and `Fit`, because a member at 240% needs a way down. */}
       <View
         style={[
           styles.zoomPill,
@@ -422,9 +338,7 @@ export function MediaPage({
             onPress={() => goToZoom(zoomOut(zoom))}
             style={styles.zoomStep}
           >
-            {/* A typographic minus, not a hyphen: it is the same width as the
-                `+` it stands beside, which is what keeps the pill from
-                shuffling as the ladder changes shape. */}
+            {/* A typographic minus, not a hyphen: same width as `+`. */}
             <Text style={[styles.zoomStepLabel, { color: colors.onStage }]}>
               −
             </Text>
@@ -453,8 +367,7 @@ export function MediaPage({
                 Fit
               </Text>
             </Pressable>
-            {/* `--on-stage-soft`, not `--text-soft`: this line sits ON the
-                stage, where `--text-soft` reads 2.85:1 in light mode. */}
+            {/* `--on-stage-soft`: `--text-soft` reads 2.85:1 on the stage. */}
             <Text style={[styles.zoomReadout, { color: colors.onStageSoft }]}>
               {readout.label}
             </Text>

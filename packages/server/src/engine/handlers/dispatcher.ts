@@ -1,13 +1,9 @@
-// governance: allow-repo-hygiene file-size-limit dispatcher gained the ctx.vault bridge threading (duaility §12); the follow-up split of validation + envelope helpers into a sibling module is tracked separately
+// governance: allow-repo-hygiene file-size-limit ctx.vault bridge threading (duaility §12); validation/envelope split tracked separately
 /**
- * Declared-handler dispatcher (#107, narrowed by #286 phase 2).
- * Every non-chat caller (UI buttons, webhooks, automations) flows through
- * here: reads `app.json`, validates `input` against the declared JSON
- * Schema with Ajv, then hands off to the `handler-runner` worker. That is
- * ALL it routes — there are no `_sql` built-ins (apps are projections;
- * handlers reach data via ctx.vault only).
- * Errors are MCP-shaped: `{ isError, content, structuredContent }`; the
- * HTTP shim maps `structuredContent.code` to a 4xx/5xx status.
+ * Declared-handler dispatcher (#107, #286): validate `input` against `app.json`
+ * with Ajv, hand off to `handler-runner`. That is ALL it routes — no `_sql`
+ * built-ins; handlers reach data via `ctx.vault`. Errors stay MCP-shaped so the
+ * HTTP shim can map `structuredContent.code` to a status.
  */
 
 import { createHash } from "node:crypto";
@@ -35,7 +31,6 @@ import type { RegistryEntry } from "../types.js";
 import { runHandler } from "./handler-runner.js";
 import type { VaultBridge } from "./vault-bridge.js";
 
-// Result envelopes — MCP-shaped (see header comment).
 export type ToolErrorCode =
   | "UNKNOWN_APP"
   | "UNKNOWN_ACTION"
@@ -45,11 +40,7 @@ export type ToolErrorCode =
   | "INVALID_MANIFEST"
   | "NO_ACTIVE_VERSION"
   | "HANDLER_ERROR"
-  /**
-   * The worker-admission gate refused a slot (#351): too many
-   * app-handler workers already running/queued. Distinct from
-   * HANDLER_ERROR — nothing ran, the caller should just retry shortly.
-   */
+  /** Admission gate refused a slot (#351): nothing ran, so retry is safe. */
   | "GATEWAY_BUSY";
 
 export interface ToolErrorContent {
@@ -96,15 +87,11 @@ function successResult(value: unknown): ToolSuccessResult {
   };
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Public input shapes
-// ────────────────────────────────────────────────────────────────────────────
-
 export interface CentraidWriteInput {
   readonly app: string;
   readonly action: string;
   readonly input?: unknown;
-  /** Durable browser intent; binds every vault invocation to replay-safe ids. */
+  /** Binds every vault invocation to replay-safe ids. */
   readonly intentId?: string;
 }
 
@@ -120,39 +107,20 @@ export interface CentraidDescribeInput {
   readonly query?: string;
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Dispatcher
-// ────────────────────────────────────────────────────────────────────────────
-
 export interface DispatcherOptions {
-  /**
-   * The app registry, or a resolver for it. The gateway wires "the ACTIVE
-   * vault's registry" (#280) so the dispatch surface follows a vault switch.
-   */
+  /** A resolver keeps dispatch on the ACTIVE vault's registry (#280). */
   readonly registry: Registry | (() => Registry);
-  /** Write-notification callback per app — feeds the `_changes` SSE stream. */
+  /** Feeds the `_changes` SSE stream. */
   readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
-  /**
-   * Code-dir resolver (#137). The git store owns all code; this
-   * resolves an app id to its live code dir (the materialized `main`
-   * worktree). An app it can't resolve is not live. When absent, no app
-   * has servable code.
-   */
+  /** The git store owns all code (#137); unresolved means not live. */
   readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
-  /**
-   * Per-app `ctx.vault` bridge factory (duaility §12). Resolves the app id
-   * to a host-held executor bound to that app's vault credential. When
-   * absent, handler `ctx.vault.*` calls fail closed with VAULT_UNAVAILABLE.
-   */
+  /** Absent must fail `ctx.vault.*` closed with VAULT_UNAVAILABLE. */
   readonly vaultFor?: (appId: string) => VaultBridge;
-  /** Host-resolved implementation mounted as handler `ctx.time`. */
+  /** Mounted as handler `ctx.time`. */
   readonly timeModuleUrl?: string;
 }
 
-/**
- * Manifest + compiled per-handler validators, keyed by absolute code
- * dir + mtime so a version swap or dev-watch rewrite invalidates.
- */
+/** Keyed by code dir + mtime so a version swap or dev-watch rewrite drops it. */
 interface ManifestCacheEntry {
   readonly codeDir: string;
   readonly mtimeMs: number;
@@ -184,12 +152,9 @@ export class Dispatcher {
     return this.registryProvider();
   }
 
-  // ───────── resolution helpers ─────────
   private async resolveCodeDir(
     entry: RegistryEntry
   ): Promise<string | undefined> {
-    // Git-store backend (#137): the override resolves an app's live code
-    // dir. No override → no servable code.
     return this.codeDirOverride ? this.codeDirOverride(entry.id) : undefined;
   }
 
@@ -228,23 +193,19 @@ export class Dispatcher {
     return v;
   }
 
-  /** Throw away the cache for one app — call when a version is activated. */
+  /** Call when a version is activated. */
   invalidate(codeDir?: string): void {
     if (codeDir === undefined) this.manifestCache.clear();
     else this.manifestCache.delete(codeDir);
   }
 
-  // ───────── describe ─────────
-
-  // `overrideCodeDir` (read/write/describe): the draft-preview path (#141)
-  // runs a session worktree's handlers against the app's live data.
+  // `overrideCodeDir` is the draft-preview path (#141), on all three verbs.
   async describe(
     input: CentraidDescribeInput,
     overrideCodeDir?: string
   ): Promise<ToolResult> {
     const { app, action, query } = input;
     if (app === undefined) {
-      // No filter — return all apps.
       const out = await Promise.all(
         this.registry.list().map(async (entry) => {
           try {
@@ -284,9 +245,7 @@ export class Dispatcher {
     }
 
     if (action === undefined && query === undefined) {
-      // Whole-app describe: the manifest IS the app's shape — its declared
-      // handlers and its vault/ext declarations. There is no per-app
-      // SQLite schema to report any more.
+      // The manifest IS the app's shape; there is no per-app SQLite schema.
       return successResult({ manifest });
     }
     if (action !== undefined) {
@@ -327,8 +286,6 @@ export class Dispatcher {
     return successResult(manifest);
   }
 
-  // ───────── write (action) ─────────
-
   async write(
     input: CentraidWriteInput,
     overrideCodeDir?: string
@@ -349,7 +306,7 @@ export class Dispatcher {
     if (!entry) {
       return errorResult("UNKNOWN_APP", `app "${appId}" is not registered`);
     }
-    // Draft mode: logs land in the override worktree beside the draft code.
+    // Draft mode: logs land beside the draft code.
     const dataDir = overrideCodeDir ?? appDataDir(entry);
     const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
@@ -364,9 +321,7 @@ export class Dispatcher {
     } catch (error) {
       return manifestErrorToResult(appId, error);
     }
-    // If the caller mistakenly addressed a query through write, surface
-    // WRONG_KIND explicitly — better than UNKNOWN_ACTION which would
-    // misleadingly suggest the handler doesn't exist.
+    // WRONG_KIND, not UNKNOWN_ACTION: the handler exists, the route is wrong.
     if (findQuery(manifest, actionName) && !findAction(manifest, actionName)) {
       return errorResult(
         "WRONG_KIND",
@@ -413,10 +368,8 @@ export class Dispatcher {
         outcome.error ?? "action handler failed"
       );
     }
-    // Action handlers historically return `{ status, body }`. Unwrap so
-    // the caller gets the substantive payload — non-2xx becomes a
-    // HANDLER_ERROR so the chat / HTTP shim treats it as a failure
-    // rather than silently passing the error JSON through.
+    // Unwrap `{ status, body }`; a >=400 status must become HANDLER_ERROR
+    // rather than pass the error JSON through as success.
     const result = (outcome.value ?? null) as {
       status?: number;
       body?: unknown;
@@ -436,8 +389,6 @@ export class Dispatcher {
     return successResult(result?.body ?? null);
   }
 
-  // ───────── read (query) ─────────
-
   async read(
     input: CentraidReadInput,
     overrideCodeDir?: string
@@ -453,7 +404,7 @@ export class Dispatcher {
     if (!entry) {
       return errorResult("UNKNOWN_APP", `app "${appId}" is not registered`);
     }
-    const dataDir = overrideCodeDir ?? appDataDir(entry); // draft: logs beside draft code; see write
+    const dataDir = overrideCodeDir ?? appDataDir(entry); // draft: see write
     const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
       return errorResult(
@@ -494,10 +445,7 @@ export class Dispatcher {
       handlerKind: "query",
       args: {
         params: {},
-        // Pass the typed input both as `query` (back-compat with the
-        // legacy URL-query handler arg) and as `input` (preferred new
-        // name). Most existing handlers either ignore both or destructure
-        // `query` — neither breaks.
+        // Both names: dropping either breaks one generation of handlers.
         query: (handlerInput ?? {}) as Record<string, unknown>,
         input: handlerInput,
       },
@@ -517,8 +465,6 @@ export class Dispatcher {
     return successResult(outcome.value ?? null);
   }
 
-  // ───────── shared validation ─────────
-
   private validateInput(
     codeDir: string,
     kind: "action" | "query",
@@ -534,9 +480,7 @@ export class Dispatcher {
         `manifest ${kind} "${entry.name}" has an invalid input schema: ${error instanceof Error ? error.message : String(error)}`
       );
     }
-    // Treat undefined as "no input" — Ajv expects an explicit value, but
-    // a caller that omits `input` for a no-arg handler is ergonomic and
-    // the schema typically allows an empty object.
+    // Ajv needs an explicit value; omitting `input` on a no-arg handler is legal.
     const data = input === undefined ? {} : input;
     if (validate(data)) return undefined;
     const errs = validate.errors ?? [];
@@ -552,11 +496,8 @@ export class Dispatcher {
 }
 
 /**
- * An app action normally makes one typed vault invocation. Offline retries
- * derive a domain-separated id from the authenticated intent and call
- * ordinal; uncommon multi-command actions therefore get stable, disjoint
- * ids. This keeps a crash after canonical commit but before the HTTP outcome
- * from executing the command twice.
+ * Ids derive from intent + call ordinal so they stay stable across offline
+ * retries: a crash after canonical commit must not re-execute the command.
  */
 function bindIntentToVaultBridge(
   bridge: VaultBridge,
@@ -565,9 +506,7 @@ function bindIntentToVaultBridge(
   let invocationIndex = 0;
   return (call) => {
     if (call.op !== "invoke") return bridge(call);
-    // JSON framing makes [intent, ordinal] injective before hashing. The
-    // domain prefix prevents these ids colliding with any other future hash
-    // lane; hashing keeps arbitrary client ids out of the journal key.
+    // JSON framing keeps [intent, ordinal] injective; the prefix keeps the lane disjoint.
     const generatedInvocationId = `replica:v1:${createHash("sha256")
       .update(
         JSON.stringify([
@@ -583,25 +522,14 @@ function bindIntentToVaultBridge(
       payload: {
         ...call.payload,
         intentId,
-        // The authenticated outer intent owns this idempotency namespace.
-        // Never trust a handler-selected id: a random value would execute a
-        // second canonical write on every offline retry.
+        // Never a handler-selected id: a random one re-executes on every retry.
         invocationId: generatedInvocationId,
       },
     });
   };
 }
 
-/**
- * Resolve a declared handler's source file, preferring a `.ts` over a `.js`
- * (a TS-authored app ships `.ts` handlers; a builder-generated one ships
- * `.js`). The worker loads whatever it's handed: `.ts` graphs go through the
- * esbuild loader hook the worker registers (worker/runner.ts), `.js` graphs
- * import natively as before. A single extra `stat` per dispatch is negligible
- * beside the worker spawn it precedes; if the `.ts` probe misses we fall
- * straight through to the historical `.js` path — a missing `.js` then surfaces
- * as the same worker "no default export"/load error it always did.
- */
+/** `.ts` wins over `.js`; the worker's esbuild hook loads either. */
 async function resolveHandlerFile(
   codeDir: string,
   dir: "actions" | "queries",
@@ -630,11 +558,8 @@ function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {
   );
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// HTTP-status mapping for the app RPC routes (#505).
-// ────────────────────────────────────────────────────────────────────────────
+// ─── HTTP-status mapping for the app RPC routes (#505) ───
 
-/** Map a `ToolErrorCode` to an HTTP status code for the app RPC routes. */
 export function statusForToolError(code: ToolErrorCode): number {
   switch (code) {
     case "UNKNOWN_APP":

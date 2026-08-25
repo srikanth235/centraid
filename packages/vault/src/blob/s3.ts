@@ -1,13 +1,7 @@
-// The S3-compatible remote driver (#296). Talks AWS Signature
-// v4 over plain fetch — no SDK dependency — so any S3-compatible endpoint
-// (AWS, MinIO, R2, B2, Garage) works with `{endpoint, bucket, region,
-// prefix}`. Credentials never live in settings: they arrive through an async
-// provider the host wires to the broker/sealed-secret path (#290/#293).
-//
-// Trust posture: the gateway computes every content hash from its local
-// spool — this driver's ETags are never believed, and a hostile endpoint can
-// at worst lose bytes (which the reconciliation sweep reports), never
-// corrupt identity.
+// The S3-compatible remote driver (#296): SigV4 over plain fetch, no SDK.
+// Credentials never live in settings — an async provider wired to the
+// sealed-secret path supplies them (#290). Hashes come from the local spool,
+// so ETags here are never believed.
 
 import { S3RequestPipeline } from "./s3-pipeline.js";
 import { assertSha } from "./store.js";
@@ -16,55 +10,28 @@ import type { BlobRange, BlobStat, BlobStore } from "./store.js";
 export interface S3Credentials {
   accessKeyId: string;
   secretAccessKey: string;
-  /** STS-style temporary credentials carry one. */
   sessionToken?: string;
 }
 
 export interface S3BlobStoreOptions {
-  /** e.g. `https://s3.us-east-1.amazonaws.com` or `http://127.0.0.1:9000`. */
   endpoint: string;
   bucket: string;
-  /** SigV4 region; S3-compatibles usually accept anything. */
   region?: string;
-  /** Key prefix inside the bucket, e.g. `vaults/v1`. */
   prefix?: string;
-  /** Path-style (`/bucket/key`) is the default — it works everywhere. */
   credentials: () => Promise<S3Credentials>;
-  /** Test seam. Defaults to global fetch. */
   fetchImpl?: typeof fetch;
-  /**
-   * Upload rate cap, bytes/sec (#367) — a simple token bucket
-   * applied before every PUT / multipart UploadPart. Omitted/0 = unthrottled.
-   * Downloads (`get`) are never throttled — only the replication path this
-   * store's writes serve needs pacing against the owner's uplink.
-   */
+  /** Writes only: downloads are NEVER throttled (#367). */
   throttleBytesPerSec?: number;
-  /**
-   * S3 storage class (#405): sent as the `x-amz-storage-class`
-   * header — SigV4-signed like every other header — on the two requests that
-   * CREATE an object: the single `put()` PUT and multipart's
-   * `CreateMultipartUpload`. Never sent on uploadPart/complete/get/head/
-   * delete/list (S3 fixes an object's class at creation). Unset ⇒ header
-   * absent ⇒ byte-identical to today's behavior. Deliberately un-validated
-   * and free-form: S3-compatibles define their own class names (STANDARD_IA,
-   * GLACIER, R2's single implicit class, and clawgnition may grow `derived`/
-   * IA-style tiers per clawgnition#118), so this driver passes the string
-   * through and lets the endpoint accept or reject it.
-   */
+  /** Object-CREATING requests only: S3 fixes a class at creation, and the value
+   *  is un-validated because every S3-compatible names its own (#405). */
   storageClass?: string;
-  /**
-   * Bounded-retry knobs (#405) — a test seam. `retryAttempts` is
-   * the TOTAL number of tries (default 3); `sleepImpl` backs the backoff
-   * wait so tests can run instantly / assert the schedule. Both default to
-   * production values; callers never set them outside tests.
-   */
   retryAttempts?: number;
   sleepImpl?: (ms: number) => Promise<void>;
 }
 
-/** Bodies over this size use multipart upload (#367) instead of one PUT. */
+/** Over this, uploads go multipart (#367). */
 export const MULTIPART_THRESHOLD_BYTES = 32 * 1024 * 1024;
-/** Multipart part size — S3's own minimum is 5 MiB; this bounds streaming memory to roughly one part. */
+/** S3's minimum is 5 MiB; this bounds streaming memory to one part. */
 const MULTIPART_PART_SIZE_BYTES = 16 * 1024 * 1024;
 
 async function streamToBuffer(source: NodeJS.ReadableStream): Promise<Buffer> {
@@ -75,12 +42,6 @@ async function streamToBuffer(source: NodeJS.ReadableStream): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-/**
- * Re-chunk a Readable into fixed-size Buffers, bounding resident memory to
- * roughly one part size regardless of the source's total length (#367
- * §C8: "never materializing the whole blob in memory").
- * @yields {Buffer} Fixed-size upload parts, with one final short part when needed.
- */
 async function* chunkReadable(
   source: NodeJS.ReadableStream,
   partSize: number
@@ -121,10 +82,6 @@ export class S3BlobStore implements BlobStore {
     return `${prefix}blobs/sha256/${sha}`;
   }
 
-  /**
-   * One signed S3 request. Bodies are buffered — blob puts arrive as whole
-   * buffers from the local spool, and gets are bounded by Range.
-   */
   private async request(
     method: string,
     key: string,
@@ -138,40 +95,11 @@ export class S3BlobStore implements BlobStore {
   }
 
   /**
-   * `request()` with bounded retry (#405). Today a single transient
-   * fault — one 503 from the endpoint, one dropped socket — fails a whole
-   * reconciliation sweep or restore. This retries the RETRYABLE faults:
-   *
-   *   - a thrown fetch/network error (connection refused, socket destroyed);
-   *   - HTTP 429 (throttled) and any 5xx (server-side transient).
-   *
-   * Every other status — 2xx, 3xx, and 4xx OTHER than 429 (incl. 404, which
-   * callers read as "absent") — is a definitive answer and returns
-   * immediately: retrying a 400/403 only burns budget on a request the
-   * endpoint will keep rejecting. Backoff is exponential with full jitter
-   * (base→cap), so a fleet of stores doesn't resynchronize its retries.
-   *
-   * Idempotency, per op that routes through here:
-   *   - get / stat(HEAD) / list — pure reads, trivially safe to repeat.
-   *   - put — content-addressed: a retried PUT overwrites the same key with
-   *     byte-identical bytes (same sha), so at-most/at-least-once collapse.
-   *   - delete — idempotent by design (404 counts as success upstream).
-   *   - uploadPart — keyed by (uploadId, partNumber); a retry overwrites the
-   *     same part, and we keep the ETag from the try that actually returned.
-   *   - createMultipartUpload — the one NON-idempotent op: if a create
-   *     SUCCEEDED server-side but its response was lost, the retry mints a
-   *     SECOND uploadId and the first is orphaned. That orphan is bounded and
-   *     swept — putStream aborts on any later failure, and a bucket lifecycle
-   *     rule reaps incomplete multipart uploads — which is strictly better
-   *     than failing the entire sweep on a single transient 503.
-   *   - completeMultipartUpload — the parts list is fixed for the call, so a
-   *     retry re-submits the same manifest; completing an already-completed
-   *     upload is the endpoint's call to accept or 4xx (not retried).
-   *
-   * Throttle budget is consumed by callers BEFORE this wrapper (see `put` /
-   * `uploadPart`), so retried bytes are NOT re-charged against the token
-   * bucket — a retry re-sends the body but the pacing already accounted for
-   * it once, which is the conservative (never over-throttles) choice.
+   * Bounded retry (#405): only network faults, 429 and 5xx retry; every other
+   * status, 404 included, is definitive. Every op here is idempotent EXCEPT
+   * `createMultipartUpload`, whose lost response orphans an uploadId (bounded:
+   * putStream aborts, a lifecycle rule reaps). Callers pace BEFORE this
+   * wrapper, so retried bytes are never re-charged.
    */
   private async send(
     method: string,
@@ -185,11 +113,7 @@ export class S3BlobStore implements BlobStore {
     return this.pipeline.send(method, key, opts);
   }
 
-  /**
-   * The class this write carries: the per-call override wins (#425
-   * direct-to-cold heuristic), else the instance default (#405), else
-   * none. Empty ⇒ no `x-amz-storage-class` header, byte-identical to today.
-   */
+  /** Per-call override beats the instance default (#425). */
   private classOf(override?: string): string | undefined {
     return override ?? this.options.storageClass;
   }
@@ -201,8 +125,6 @@ export class S3BlobStore implements BlobStore {
       body: bytes,
       headers: {
         "content-type": "application/octet-stream",
-        // Storage class rides the object-creating PUT; the signer folds it into
-        // SignedHeaders like any other header.
         ...(cls ? { "x-amz-storage-class": cls } : {}),
       },
     });
@@ -210,14 +132,7 @@ export class S3BlobStore implements BlobStore {
       throw new Error(`s3 put ${sha}: ${res.status} ${await res.text()}`);
   }
 
-  /**
-   * Streaming upload (#367): bodies at or under
-   * `MULTIPART_THRESHOLD_BYTES` buffer whole (bounded, same as `put`);
-   * larger ones go through S3 multipart upload, streamed from `source` in
-   * `MULTIPART_PART_SIZE_BYTES` chunks — at most one part resident in memory
-   * at a time, never the whole blob. Aborts the multipart upload on any
-   * failure so a partial upload doesn't bill/linger.
-   */
+  /** Any failure aborts the multipart upload: a partial never bills (#367). */
   async putStream(
     sha: string,
     source: NodeJS.ReadableStream,
@@ -241,9 +156,7 @@ export class S3BlobStore implements BlobStore {
         partNumber += 1;
       }
       if (parts.length === 0) {
-        // An empty stream — S3 refuses a zero-part complete. Abort and fall
-        // back to a trivial single PUT (a 0-byte blob is a degenerate case,
-        // not a multipart one).
+        // S3 refuses a zero-part complete; a 0-byte blob is degenerate.
         await this.abortMultipartUpload(key, uploadId);
         await this.put(sha, Buffer.alloc(0));
         return;

@@ -1,11 +1,3 @@
-/*
- * The step helpers behind `recover()` (#439) — kept beside the
- * orchestration (`recover.ts`) rather than inside it so the verb reads as its
- * six phases while the how-of-each-phase lives here: kit-target → provider
- * resolution, the attested-inventory skip-set, the seal-key custody relocation,
- * the fenced backup-state seed, and the warm-or-honestly-skip decision.
- */
-
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -41,9 +33,6 @@ import { warmPreviewTinies } from "./restore-warm.js";
 
 const LOCAL_PROVIDER_PREFIX = "local:";
 
-/** Build a provider from the kit target's addressing + the out-of-band api-key.
- *  A remote home carries its base URL in `provider`; an operator/test local
- *  provider carries `local:<dir>` (the api-key is irrelevant to it). */
 export function buildProviderFromTarget(
   target: RecoveryKitTarget,
   apiKey: string
@@ -56,9 +45,6 @@ export function buildProviderFromTarget(
   return openRemoteBackupProvider({ baseUrl: target.provider, apiKey });
 }
 
-/** Choose which target the kit names to recover. One vault ⇒ that one; several
- *  ⇒ the caller must name it (`--vault`) — recovery restores one vault, and
- *  silently picking one of several would be a footgun. */
 export function selectTarget(
   targets: RecoveryKitTarget[],
   vaultId: string | undefined
@@ -81,9 +67,6 @@ export function selectTarget(
   );
 }
 
-/** The snapshot a restore selects, from a newest-first `listSnapshots` result:
- *  the newest at/before `--at`, else the newest. This is the row the compat gate
- *  runs against; `restoreSnapshot` re-selects (by base tick) and re-gates. */
 export function pickSnapshotRow(
   rows: SnapshotRow[],
   at: number | undefined
@@ -92,19 +75,12 @@ export function pickSnapshotRow(
   return rows[0];
 }
 
-/** Map a cas-store inventory key to its content sha — the SAME mapping the
- *  reconcile audit uses (`backup-cas-diff.ts`): objects land at
- *  `blobs/sha256/<sha>` under the cas prefix. */
 function casShaOf(key: string): string | undefined {
   return /(?:^|\/)blobs\/(?:sha256\/)?(?<sha>[0-9a-f]{64})$/u.exec(key)?.groups
     ?.sha;
 }
 
-/** Paginate the provider's ATTESTED cas inventory into the set of shas it holds
- *  durably (#439). A blob in this set is deferred at restore (remote-only,
- *  read-through on demand); a blob NOT in it is materialized — the snapshot is
- *  its only copy. `state: 'live'` only: a soft-deleted object is being removed,
- *  not durable. */
+/** A blob outside this set is materialized: the snapshot is its only copy. */
 export async function collectRemoteCasShas(
   provider: BackupProvider,
   targetId: string
@@ -127,39 +103,17 @@ export async function collectRemoteCasShas(
   return shas;
 }
 
-/**
- * Rehydrate the app code store from the restored git bundle (#517). The
- * snapshot carries the vault's bare code repo as a `git bundle --all` that
- * `restoreSnapshot` materializes at `<vaultDir>/apps.bundle`, but the runtime
- * reads app code from the bare repo `WorktreeStore` owns at
- * `<vaultDir>/code/apps.git` (`VaultPlane.codeStoreRoot` + the store's
- * `apps.git` layout). Nothing else bridges the two: `WorktreeStore.init()`
- * only ever `git init --bare`s a FRESH empty repo when `apps.git/HEAD` is
- * absent. So without this a recovered vault mounts with all its data and an
- * EMPTY code store — every published app's code silently gone, the "data with
- * no apps" placebo restore FORMAT.md warns about.
- *
- * `git clone --bare <bundle>` brings back every ref the `--all` bundle carries
- * — `main`, each `<app>/v*` version tag (what rollback restores), and any live
- * session branch — and sets `HEAD -> main`, exactly `WorktreeStore.init()`'s
- * precondition (it then skips its own init/empty-commit and just materializes
- * main). The consumed bundle is removed: the bare repo is the code store now,
- * and a stray `apps.bundle` at the vault root is only clutter a future scan
- * could trip on.
- *
- * A vault whose source code store was empty ships no bundle (`bundleCodeStore`
- * skips an empty bare repo), so this is a no-op for it (`existsSync` guard) and
- * `WorktreeStore.init()` plants the fresh empty repo as before.
- */
+// Rehydrate the app code store from the restored git bundle (#517). Nothing
+// else bridges `apps.bundle` to the `code/apps.git` the runtime reads, so
+// without this a recovered vault mounts with all its data and an EMPTY code
+// store — the placebo restore FORMAT.md warns about. Guarded no-op when the
+// source code store was empty and shipped no bundle.
 export async function rehydrateCodeStore(
   vaultDir: string,
   log: EngineLogger
 ): Promise<void> {
   const bundle = path.join(vaultDir, "apps.bundle");
   if (!existsSync(bundle)) return;
-  // `<vaultDir>/code` is `VaultPlane.codeStoreRoot`; `apps.git` under it is the
-  // bare repo `WorktreeStore` opens (both layout constants are private to their
-  // owners, so they are spelled out here beside the KeyStore import path).
   const bareDir = path.join(vaultDir, "code", "apps.git");
   await fs.mkdir(path.dirname(bareDir), { recursive: true });
   await run(["clone", "--bare", bundle, bareDir], { cwd: vaultDir });
@@ -169,10 +123,8 @@ export async function rehydrateCodeStore(
   );
 }
 
-/** A materialized restore is a NEW replica history, never a continuation — the
- *  restored `blob_replica` rows attest capture-time durability, not now (issue
- *  #439 gap 4). Bump the epoch so nothing trusts them; the R5 reconcile
- *  re-establishes truth against the live inventory. */
+/** A NEW replica history: restored `blob_replica` rows attest capture-time
+ *  durability, so the epoch bump stops anything trusting them (#439). */
 export function invalidateRestoredReplica(destDir: string): void {
   const vault = new DatabaseSync(path.join(destDir, "vault.db"));
   try {
@@ -182,9 +134,6 @@ export function invalidateRestoredReplica(destDir: string): void {
   }
 }
 
-/** Recovered-as-of: the single instant both databases were coordinated-cut to
- *  (the honest "everything safe as of T"); the snapshot's registration time when
- *  the restore was base-pair-only (no WAL). */
 export function recoveredAsOfMs(
   walReplay: WalReplayOutcome,
   row: SnapshotRow
@@ -194,9 +143,7 @@ export function recoveredAsOfMs(
     : row.createdAt * 1000;
 }
 
-/** Truncated = a db could not be replayed to the newest tick the provider
- *  ACKNOWLEDGED (objects are gone) — the same honest signal restore-verify
- *  reports, plus the per-db chain signal. */
+/** Truncated = not replayable to the newest ACKNOWLEDGED tick. */
 export function walReplayTruncated(walReplay: WalReplayOutcome): boolean {
   const shortOfTip =
     walReplay.expectedCutMs >= 0 &&
@@ -206,9 +153,6 @@ export function walReplayTruncated(walReplay: WalReplayOutcome): boolean {
   );
 }
 
-/** The current gateway's version ceiling — the compat gate's "what can this
- *  build read". A pre-vault restore has no live plane to read a PRAGMA off, so
- *  `vaultUserVersion` is what THIS build understands (mirrors backup-service). */
 export function currentVersions(): RestoreCurrentVersions {
   return {
     gatewayVersion: GATEWAY_VERSION,
@@ -217,9 +161,6 @@ export function currentVersions(): RestoreCurrentVersions {
   };
 }
 
-/** Previews-first warm pass, or the honest reason it was skipped (#439).
- *  Warms ONLY when a tier resolver yields a `RemoteTier`; a full restore or a
- *  resolver-less headless context reports `warmed:false` with a reason. */
 export async function warmOrSkip(
   input: RecoverInput,
   ctx: RecoverAdoptContext,
@@ -266,18 +207,12 @@ export async function warmOrSkip(
 }
 
 /**
- * Seed the recovered gateway's backup state for this target at
- * `generation = currentGeneration + 1` (+ `lastSeq` from the restored snapshot),
- * following backup-state.ts's exact atomic read/write. This is the fencing
- * TOKEN, not the fence itself: the first post-recovery backup registers at this
- * generation, which bumps the provider's `currentGeneration`, and only THEN does
- * the superseded machine's next registration (still at the old generation) 409.
+ * Seed backup state at `generation = currentGeneration + 1`: the fencing TOKEN,
+ * not the fence. The first post-recovery backup registers here and bumps the
+ * provider's generation, and only THEN does the superseded machine 409.
  *
- * `providerRef` is deliberately OMITTED: at recovery time the recovered
- * gateway's eventual backend resolution isn't known, and `assertTargetBackend`
- * treats an absent `providerRef` as "trust a static config backend" (the
- * headless daemon this serves) — a dynamic storage-connection backend sets it
- * through its own adopt wiring.
+ * `providerRef` is deliberately OMITTED — `assertTargetBackend` reads its
+ * absence as "trust a static config backend".
  */
 export async function seedFencedBackupState(opts: {
   gatewayDatabase: GatewayDatabase;
@@ -298,8 +233,6 @@ export async function seedFencedBackupState(opts: {
     label: opts.target.label,
     generation: opts.fencedGeneration,
     lastSeq: opts.lastSeq,
-    // A grace baseline so the recovered gateway's health doesn't read "never
-    // backed up" — it holds a real restored snapshot at `lastSeq`.
     firstBackupAt: stamp,
     lastBackupAt: stamp,
   };

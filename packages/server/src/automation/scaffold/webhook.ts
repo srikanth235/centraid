@@ -1,22 +1,8 @@
-/**
- * Webhook trigger dispatch (#96).
- *
- * A `webhook` trigger fires an automation on an inbound HTTP POST. The core
- * gateway (`packages/server/src/serve/build-gateway.ts`) mounts a listener
- * at `/_centraid-hook` ahead of its own bearer check — the desktop/daemon
- * gateway IS the always-on gateway for desktop-only users (there is no
- * separate remote host in that topology). It hands every request to
- * `makeWebhookRouteHandler` built here.
- *
- * Auth is a shared secret carried as `Authorization: Bearer <secret>` or
- * the `x-openclaw-webhook-secret` header. The secret is generated
- * server-side and shown once at creation — `automation.json` stores
- * only a SHA-256 hash, since the manifest file is user-visible.
- *
- * The handler also enforces a body-size cap and fixed-window rate limit.
- * After auth it writes a durable ingress element; the shared cursor engine
- * fires it later. A concurrent/restarted fire can never drop the delivery.
- */
+// Webhook trigger dispatch (#96): the gateway mounts `makeWebhookRouteHandler`
+// at `/_centraid-hook`, ahead of its own bearer check. The shared secret is
+// minted server-side and shown once — `automation.json` is user-visible, so
+// only its SHA-256 hash is stored. After auth the handler writes a durable
+// ingress element, so a restarted fire can never drop a delivery.
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -39,32 +25,27 @@ import {
   writeManifestAt,
 } from "./app.js";
 
-/** URL prefix the gateway mounts the webhook route under. */
 export const WEBHOOK_ROUTE_PREFIX = "/_centraid-hook";
 
-/** Largest request body the webhook route accepts (64 KiB). */
+/** 64 KiB. */
 const MAX_BODY_BYTES = 64 * 1024;
 
-/** Fixed-window rate limit: at most this many fires per window, per webhook. */
 const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
-/** Generate a fresh webhook route slug (the path segment under the prefix). */
 export function generateWebhookId(): string {
   return crypto.randomBytes(12).toString("hex");
 }
 
-/** Generate a fresh shared secret — shown to the user once, never stored raw. */
 export function generateWebhookSecret(): string {
   return crypto.randomBytes(24).toString("hex");
 }
 
-/** SHA-256 hex of a secret — this is what the manifest persists. */
+/** What the manifest persists. */
 export function hashWebhookSecret(secret: string): string {
   return crypto.createHash("sha256").update(secret, "utf8").digest("hex");
 }
 
-/** Timing-safe check of a presented secret against a stored hash. */
 export function verifyWebhookSecret(
   provided: string,
   expectedHash: string
@@ -83,33 +64,17 @@ function isEnoent(err: unknown): boolean {
   );
 }
 
-/**
- * A webhook freshly minted by the provisioning pass. `secret` is the
- * plaintext shared secret — surfaced to the user exactly once and never
- * persisted; the manifest keeps only its SHA-256 hash.
- */
 export interface ProvisionedWebhook {
-  /** Automation app directory. */
   readonly dir: string;
-  /** Automation id (the directory basename). */
   readonly automationId: string;
-  /** Owning app id — every automation is app-owned (#98). */
   readonly ownerApp: string;
-  /** Minted webhook route slug — the path segment under the prefix. */
   readonly webhookId: string;
-  /** Plaintext shared secret — shown once, never written to disk. */
+  /** Never written to disk. */
   readonly secret: string;
 }
 
-/**
- * Provision a pending webhook trigger in the automation app at
- * `dir`. A pending trigger — `{ kind: 'webhook', pending: true }` — is
- * what the builder harness writes when the user asks for a webhook: the
- * harness cannot mint crypto-random credentials. This pass mints a route
- * id + secret, rewrites the trigger to its provisioned form, and
- * persists the manifest. Returns the minted secret (to be shown once)
- * or `undefined` when the app has no pending webhook.
- */
+/** A pending trigger is what the builder harness writes: it cannot mint
+ *  crypto-random credentials. */
 export async function provisionPendingWebhookAt(
   dir: string,
   ownerApp: string
@@ -132,11 +97,6 @@ export async function provisionPendingWebhookAt(
   return { dir, automationId: row.id, ownerApp, webhookId, secret };
 }
 
-/**
- * Provision every pending webhook across an app's owned automations at
- * `<appDir>/automations/<id>/` (#98). A missing `automations/`
- * subdir contributes nothing. Each entry's `ownerApp` is the app id.
- */
 export async function provisionAppPendingWebhooks(
   appDir: string
 ): Promise<ProvisionedWebhook[]> {
@@ -166,39 +126,24 @@ export async function provisionAppPendingWebhooks(
   );
 }
 
-/** A single draft file in a git-store file map (#141). */
 export interface WebhookFileMapEntry {
   path: string;
   content: string;
 }
 
-/** A webhook minted while provisioning a file map. No `dir` — the app is edited over HTTP. */
 export interface ProvisionedWebhookInFiles {
-  /** The `automation.json` path within the file map. */
   readonly path: string;
-  /** Automation id (the `automations/<id>/` segment). */
   readonly automationId: string;
-  /** Owning app id. */
   readonly ownerApp: string;
-  /** Minted webhook route slug. */
   readonly webhookId: string;
-  /** Plaintext shared secret — shown once, never written to disk. */
+  /** Never written to disk. */
   readonly secret: string;
 }
 
 const AUTOMATION_MANIFEST_RE =
   /^automations\/(?<automationId>[^/]+)\/automation\.json$/u;
 
-/**
- * Filesystem-free variant of {@link provisionAppPendingWebhooks} for the
- * git-store/HTTP path (#141). Scans a draft file map for pending
- * webhook triggers, mints id + secret for each, rewrites the trigger to
- * its provisioned form, and returns the updated map plus the minted
- * secrets (to be shown once). Secrets are minted here (crypto) and only
- * their hash is written into the manifest, so the plaintext never reaches
- * the gateway. Unparseable / invalid manifests are passed through
- * untouched.
- */
+/** Only the hash is written, so plaintext never reaches the gateway (#141). */
 export function provisionPendingWebhooksInFiles(
   files: ReadonlyArray<WebhookFileMapEntry>,
   ownerApp: string
@@ -242,35 +187,18 @@ export function provisionPendingWebhooksInFiles(
   return { files: out, minted };
 }
 
-/**
- * Freshly minted secret for a webhook trigger that was ALREADY provisioned
- * (rotation, not first mint — see {@link rotateWebhookInFiles}).
- */
 export interface RotatedWebhookInFiles {
-  /** The `automation.json` path within the file map. */
   readonly path: string;
-  /** Existing (unchanged) webhook route slug — any configured caller URL survives a rotation. */
+  /** Unchanged, so any configured caller URL survives a rotation. */
   readonly webhookId: string;
-  /** Freshly minted plaintext secret — shown once, never written to disk. */
+  /** Never written to disk. */
   readonly secret: string;
 }
 
-/**
- * Rotate a specific automation's PROVISIONED webhook secret within a draft
- * file map (#141 wire path, webhook-secret-rotation follow-up). The
- * plaintext secret is shown to the owner exactly once at mint time
- * (create/clone) — if they miss that one-time reveal the automation is
- * otherwise permanently uncallable, since only the SHA-256 hash persists.
- * This mints a fresh secret over the SAME route id (a caller already
- * configured with the webhook URL keeps working, only its credential
- * changes) and persists only the new hash — the mirror image of
- * {@link provisionPendingWebhooksInFiles}'s first-mint pass.
- *
- * Returns the single changed file (empty when the automation is absent,
- * its manifest is unparseable, or it has no *provisioned* webhook trigger —
- * a still-`pending` one has nothing to rotate, it needs its first mint) plus
- * the minted secret, or `undefined` in those same no-op cases.
- */
+/** Rotate a PROVISIONED webhook's secret in a draft file map (#141). Only the
+ *  hash persists, so an owner who missed the one-time reveal is left with an
+ *  uncallable automation. The route id is kept, so a configured caller keeps
+ *  working. `undefined` for a still-`pending` trigger: it needs a first mint. */
 export function rotateWebhookInFiles(
   current: ReadonlyArray<WebhookFileMapEntry>,
   automationId: string
@@ -307,19 +235,13 @@ export function rotateWebhookInFiles(
   };
 }
 
-/** Result of the caller-supplied durable ingress write. */
 export interface WebhookIngressResult {
   accepted: boolean;
   duplicate?: boolean;
   error?: string;
 }
 
-/**
- * Persists the authenticated delivery. Supplied by the gateway host so this
- * module carries no database dependency.
- */
 export type WebhookIngressFn = (input: {
-  /** `<appId>/<automationId>` handle of the resolved automation. */
   automationRef: string;
   webhookId: string;
   deliveryId: string;
@@ -328,9 +250,7 @@ export type WebhookIngressFn = (input: {
 }) => Promise<WebhookIngressResult>;
 
 export interface WebhookRouteOptions {
-  /** Directory holding the app folders that own the automations. */
   appsDir: string;
-  /** Durably ingresses the delivery once auth + resolution succeed. */
   ingress: WebhookIngressFn;
 }
 
@@ -344,12 +264,8 @@ function extractSecret(req: IncomingMessage): string | undefined {
   return undefined;
 }
 
-/**
- * The sender's per-delivery id, used to deduplicate durable ingress. Only
- * headers that are per-delivery BY CONTRACT qualify — `x-request-id` is a
- * transport correlation id some proxies reuse across requests, and reusing it
- * here would make two distinct deliveries collapse into one.
- */
+/** Only headers that are per-delivery BY CONTRACT: `x-request-id` is reused by
+ *  some proxies, which would collapse two deliveries into one. */
 function deliveryId(req: IncomingMessage): string {
   for (const name of ["x-centraid-delivery-id", "x-github-delivery"]) {
     const value = req.headers[name];
@@ -375,8 +291,6 @@ async function readBodyCapped(
   try {
     return { ok: true, body: JSON.parse(text) as unknown };
   } catch {
-    // A non-JSON body is passed through verbatim — the automation
-    // handler decides what to do with it.
     return { ok: true, body: text };
   }
 }
@@ -390,14 +304,9 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(text);
 }
 
-/**
- * Build the `/_centraid-hook` route handler. Returns `true` when it
- * owns the request (so the gateway stops its route chain), `false`
- * when the URL is not a webhook path.
- */
+/** `true` when it owns the request, so the gateway stops its chain. */
 export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
-  // Per-webhook fixed-window rate-limit. Module-scoped to the closure so each
-  // mounted route keeps its own.
+  // Scoped to the closure, so each mounted route keeps its own limiter.
   const windows = new Map<string, { start: number; count: number }>();
 
   const overRateLimit = (webhookId: string): boolean => {
@@ -433,8 +342,7 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
       return true;
     }
     try {
-      // Resolve the webhook id to its automation. Webhook slugs are
-      // globally unique, so the first active-version match wins.
+      // Webhook slugs are globally unique, so the first active-version match wins.
       const { rows } = await list(opts.appsDir);
       const target = rows.find(
         (r) => webhookTriggerOf(r.triggers)?.id === slug

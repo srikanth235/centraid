@@ -1,23 +1,9 @@
-// The view layer's pure derivations: which views a surface offers, the range
-// each one reads, where a grid lands when it opens, how an event is bucketed
-// into the day it is drawn on, and how one day's overlaps are laid out.
-//
-// Everything here is a plain function of its arguments so `views.test.ts` can
-// assert the product rules directly rather than through a rendered tree. The
-// three rules this module carries:
-//
-//   1. OPENING A GRID LANDS AT NOW, not at midnight, and the anchor recomputes
-//      when the view or the day changes (`nowAnchor`).
-//   2. THE GRID IS FOR THINGS WITH A TIME COST. Nothing costless is turned
-//      into a segment here; day context arrives as a decoration around the
-//      grid, never as a row inside it.
-//   3. A MULTI-DAY OR ZONE-CROSSING EVENT IS ONE DAY'S ROW in v1, clamped and
-//      marked, rather than a bar spanning columns (`bucketByDay`).
+// Pure derivations, so `views.test.ts` asserts product rules directly. The
+// grid is only for things with a time cost: day context decorates, never rows.
 
 import { localDayKey, startOfDay, startOfWeek, DAY_MS } from "./format.ts";
 import type { AgEvent, DaySegment, LaidSegment, ViewKind } from "./types.ts";
 
-/** Every view, in the order the switcher draws them. */
 export const VIEWS: readonly ViewKind[] = [
   "month",
   "week",
@@ -26,17 +12,9 @@ export const VIEWS: readonly ViewKind[] = [
   "waiting",
 ];
 
-/** The views a POINTER surface offers. All five. */
 export const POINTER_VIEWS: readonly ViewKind[] = VIEWS;
 
-/**
- * The views a TOUCH surface offers, and the four the band claims.
- *
- * Month and Week fall back to Day: a 7-column grid at 390px is a grid nobody
- * can read, and the fallback is a real answer rather than a squeezed one.
- * Waiting on is a band destination here, which is exactly the inverse of the
- * pointer surface, where it falls back to Schedule.
- */
+/** Month and Week fall back to Day: 7 columns at 390px are unreadable. */
 export const TOUCH_VIEWS: readonly ViewKind[] = [
   "day",
   "schedule",
@@ -44,37 +22,26 @@ export const TOUCH_VIEWS: readonly ViewKind[] = [
   "month",
 ];
 
-/** The view actually shown, given what the surface can draw. */
 export function resolveView(view: ViewKind, touch: boolean): ViewKind {
   if (touch) return view === "month" || view === "week" ? "day" : view;
   return view;
 }
 
-/** The default view for a surface before the member has chosen one. */
 export function defaultView(touch: boolean, knob?: string): ViewKind {
   if (touch) return "day";
   return VIEWS.includes(knob as ViewKind) ? (knob as ViewKind) : "month";
 }
 
-/**
- * Where a grid scrolls to when it opens: NOW when the anchor day is today,
- * and the working morning otherwise — never midnight, which is the one hour
- * of the day nobody is looking for.
- *
- * Returned in minutes from the day's start so the caller can turn it into a
- * pixel offset at whatever row height it is drawing.
- */
+/** Minutes from day start: NOW today, working morning otherwise, never 0. */
 export const GRID_OPEN_HOUR = 8;
 export function nowAnchor(anchorDay: Date, now: Date = new Date()): number {
   const sameDay = localDayKey(anchorDay) === localDayKey(now);
   if (!sameDay) return GRID_OPEN_HOUR * 60;
-  // A whole hour of context above the line, clamped so the first hour of the
-  // day still shows the rail above it.
+  // An hour of context above the line; hour zero keeps its rail.
   return Math.max(0, now.getHours() * 60 + now.getMinutes() - 60);
 }
 
-/** Minutes from midnight to `now`, or null when `now` is not on this day —
- *  the now line is drawn on exactly one column, never on all of them. */
+/** Null off this day: the now line draws on one column only. */
 export function nowLineMinutes(
   dayKey: string,
   now: Date = new Date()
@@ -83,7 +50,6 @@ export function nowLineMinutes(
   return now.getHours() * 60 + now.getMinutes();
 }
 
-/** The 6×7 Monday-first grid range around `d`'s month. */
 export function monthGridRange(d: Date): { from: string; to: string } {
   const gridStart = startOfWeek(new Date(d.getFullYear(), d.getMonth(), 1));
   const gridEnd = new Date(
@@ -94,7 +60,6 @@ export function monthGridRange(d: Date): { from: string; to: string } {
   return { from: gridStart.toISOString(), to: gridEnd.toISOString() };
 }
 
-/** The Monday-first 7-day range around `d`. */
 export function weekRange(d: Date): { from: string; to: string } {
   const start = startOfWeek(d);
   const end = new Date(
@@ -105,19 +70,13 @@ export function weekRange(d: Date): { from: string; to: string } {
   return { from: start.toISOString(), to: end.toISOString() };
 }
 
-/** One local day. */
 export function dayRange(d: Date): { from: string; to: string } {
   const start = startOfDay(d);
   const end = new Date(start.getTime() + DAY_MS);
   return { from: start.toISOString(), to: end.toISOString() };
 }
 
-/**
- * The bounded window each view reads. Schedule and Waiting on are forward
- * lists, so they name a `from` and let the query apply its own forward cap —
- * an unbounded read here would be the growth assumption the constitution
- * forbids, and the query is where that ceiling is already decided.
- */
+/** Bounded windows only; forward lists name `from`, query owns the cap. */
 export function rangeForView(
   view: ViewKind,
   anchor: Date
@@ -128,7 +87,6 @@ export function rangeForView(
   return { from: startOfDay(anchor).toISOString() };
 }
 
-/** The 42 days a month grid draws, as local day keys. */
 export function monthGridDays(anchor: Date): string[] {
   const start = startOfWeek(
     new Date(anchor.getFullYear(), anchor.getMonth(), 1)
@@ -140,7 +98,6 @@ export function monthGridDays(anchor: Date): string[] {
   );
 }
 
-/** The 7 days a week grid draws, as local day keys. */
 export function weekDays(anchor: Date): string[] {
   const start = startOfWeek(anchor);
   return Array.from({ length: 7 }, (_, index) =>
@@ -150,24 +107,13 @@ export function weekDays(anchor: Date): string[] {
   );
 }
 
-/** Is this event an all-day one? The vault says so through its recurrence
- *  semantics; a timed event that happens to fill a day is still timed. */
+/** The vault decides; an all-day-long timed event is still timed. */
 export function isAllDay(ev: AgEvent): boolean {
   return ev.recurrence_semantics === "all-day";
 }
 
-/**
- * Bucket each event into the ONE local day it is drawn on, with its span
- * clamped to that day.
- *
- * V1 BOUND, DELIBERATE (spec §"What is left"): a multi-day event, and an
- * event whose start and end sit in different zones, is drawn as a single-day
- * row on the day it starts rather than as a bar reaching across columns. The
- * `clamped` flag is how the row says so in words. Growing this into a real
- * spanning layout changes the week grid's geometry, the month cell's overflow
- * rule and the schedule's grouping all at once, which is a design decision
- * and not an implementation detail.
- */
+/** One local day per event: multi-day and zone-crossing events get a single
+ *  `clamped` start-day row, never a bar spanning columns. */
 export function bucketByDay(
   list: readonly AgEvent[]
 ): Map<string, DaySegment[]> {
@@ -200,8 +146,7 @@ export function bucketByDay(
   return map;
 }
 
-/** A day's segments split into the all-day rail and the timed grid. The rail
- *  is above the grid because a whole-day fact has no position inside it. */
+/** The rail is above the grid: a whole-day fact has no position. */
 export function splitDay(segments: readonly DaySegment[]): {
   allDay: DaySegment[];
   timed: DaySegment[];
@@ -212,11 +157,6 @@ export function splitDay(segments: readonly DaySegment[]): {
   };
 }
 
-/**
- * Assign overlapping segments of one day to side-by-side columns: greedy
- * first-fit inside each overlap cluster, every member of the cluster split
- * evenly.
- */
 export function layoutDay(items: readonly DaySegment[]): LaidSegment[] {
   const colEnds: number[] = [];
   let cluster: LaidSegment[] = [];
@@ -243,7 +183,6 @@ export function layoutDay(items: readonly DaySegment[]): LaidSegment[] {
   return placed;
 }
 
-/** A segment's position inside a day column, as two percentages of the day. */
 export function segmentBox(segment: DaySegment): {
   top: number;
   height: number;
@@ -251,12 +190,10 @@ export function segmentBox(segment: DaySegment): {
   const dayStart = startOfDay(new Date(segment.segStart)).getTime();
   const top = ((segment.segStart - dayStart) / DAY_MS) * 100;
   const raw = ((segment.segEnd - segment.segStart) / DAY_MS) * 100;
-  // A zero-length event still has to be readable, so the box has a floor of
-  // roughly twenty minutes rather than collapsing to a hairline.
+  // A zero-length event needs a ~20-minute floor.
   return { top, height: Math.max(raw, (20 / (24 * 60)) * 100) };
 }
 
-/** Events the member has not hidden by unticking their calendar. */
 export function visibleEvents(
   list: readonly AgEvent[] | null | undefined,
   hidden: ReadonlySet<string>
@@ -266,15 +203,7 @@ export function visibleEvents(
   );
 }
 
-/**
- * WAITING ON: the invitations and unanswered RSVPs — every event where the
- * owner is a guest whose PARTSTAT is still `needs-action`.
- *
- * It reads the same rows the grid does; there is no second store and no second
- * read. What makes it a view rather than a filter chip is that "who is waiting
- * on me" is a different question from "what is my week", and the answer is a
- * list of decisions rather than a shape of time.
- */
+/** Owner's PARTSTAT still `needs-action`; same rows the grid reads. */
 export function waitingOn(list: readonly AgEvent[]): AgEvent[] {
   return list.filter((ev) =>
     (ev.attendees ?? []).some(
@@ -289,7 +218,6 @@ export function isUnanswered(partstat: string | undefined): boolean {
   );
 }
 
-/** The owner's own guest row on an event, if they are on the guest list. */
 export function myAttendance(
   ev: AgEvent
 ): { party_id: string; partstat: string } | null {
@@ -297,13 +225,11 @@ export function myAttendance(
   return mine ? { party_id: mine.party_id, partstat: mine.partstat } : null;
 }
 
-/** The identity a row is keyed and selected by — an occurrence is addressable
- *  even though every occurrence shares the series' `event_id`. */
+/** Occurrences are addressable despite one `event_id`. */
 export function rowKey(ev: AgEvent): string {
   return ev.instance_key ?? ev.event_id;
 }
 
-/** Find a row by the identity `rowKey` produced, falling back to the series. */
 export function findEvent(
   list: readonly AgEvent[],
   identity: string

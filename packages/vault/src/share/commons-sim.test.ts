@@ -1,16 +1,8 @@
-// Seeded deterministic simulation of the Commons sharing plane (#731).
-// Each case runs one randomized program of ~160 steward writes, signed member
-// intents, pulls, roster churn, steward-transfer windows, compaction,
-// crash-restarts, and stale-restores, then forces quiescence and asserts the
-// golden invariants. On failure the seed plus the whole action trace prints, so
-// the schedule replays byte-for-byte from the seed alone.
-//
-// Budget note: opening the real encrypted vaults costs a few seconds per case,
-// and that fixed cost dwarfs the per-action cost (roughly 45 ms per action on
-// an idle machine). Prefer LENGTHENING an existing seed's program over adding
-// another seed — one long schedule finds more interleavings per second than two
-// short ones, and it does not pay the world-build toll twice. Broad seed sweeps
-// belong in a throwaway local file, not here.
+// Seeded deterministic simulation of the Commons sharing plane (#731): one
+// randomized program per case, quiesced, then held to the golden invariants.
+// A failure prints the seed, which replays the schedule byte-for-byte. Opening
+// the real vaults dwarfs the per-action cost, so LENGTHEN an existing seed's
+// program rather than adding a seed; sweeps belong in a local file.
 
 import { describe, expect, test } from "vitest";
 
@@ -22,29 +14,15 @@ import {
 } from "./commons-sim.test-fixtures.js";
 
 /**
- * Shrink-lite: a seed the simulator has caught a real Commons bug on gets
- * pinned here forever, with the suspected defect named in a comment beside it.
- * While the defect is still open, move that seed out of this list into its own
- * `test.fails` case so the failure is recorded rather than tolerated.
- *
- * - 839_001 is the grant-plane seed below. It found DEFECT D1 (a revocation
- *   that settles `removed` while the audience keeps the projection, see
- *   `commons-sim-grant.test-fixtures.ts` `checkSeverance`), fixed by #846 P1.
- *   The seed stays there as the schedule that found it, and now holds the
- *   invariant outright rather than recording a break.
- *
- * Nothing else: these seeds plus a wider offline sweep (44 seeds, 3–5 seats,
- * 1–3 grants, up to 260 actions each) found no non-converging schedule.
+ * A seed that caught a real bug is pinned forever. While its defect is open,
+ * move it into a `test.fails` case so the failure is recorded, not tolerated.
  */
 const REGRESSION_SEEDS: readonly number[] = [];
 
-/** Exploration seeds. Each opens four real on-disk vaults, so keep the list
- * short enough that the file stays a PR-suite citizen (TESTING.md). */
 const SEEDS: readonly number[] = [731_001, 731_002];
 
 const SIM_TIMEOUT_MS = 120_000;
 
-/** The failure message IS the bug report: seed, weights, stats, full trace. */
 function explain(result: SimReport): string {
   return [
     `commons simulation failed for seed ${result.seed}`,
@@ -98,11 +76,8 @@ describe("commons deterministic simulation", () => {
       expect(second.stats).toStrictEqual(first.stats);
       expect(second.failures).toStrictEqual(first.failures);
       expect(second.pinned).toHaveLength(first.pinned.length);
-      // A program this short cannot exercise the whole grant lifecycle and is
-      // not asked to — the 839001 case above is what proves the invariants,
-      // and this one proves the SCHEDULE replays. The oracle's own vacuity
-      // notice is therefore the only break it may carry; anything else here
-      // would be a regression hiding behind "both runs agreed".
+      // This case proves the SCHEDULE replays; 839001 proves the invariants,
+      // so the vacuity notice is the only break it may carry.
       expect(
         first.failures.every((entry) =>
           entry.startsWith("the grant plane proved nothing")
@@ -126,7 +101,7 @@ describe("commons deterministic simulation", () => {
         grants: 2,
       });
       expect(result.failures, explain(result)).toStrictEqual([]);
-      // A program that never exercised the disruptive legs proves nothing.
+      // A program that never ran the disruptive legs proves nothing.
       expect(result.stats["member_pull"] ?? 0).toBeGreaterThan(0);
       expect(result.stats["crash_restart"] ?? 0).toBeGreaterThan(0);
       expect(result.stats["compaction"] ?? 0).toBeGreaterThan(0);
@@ -149,12 +124,9 @@ describe("commons deterministic simulation", () => {
   );
 
   /**
-   * The grant plane (#839). ONE long program, deliberately not a second
-   * seed: the world build is the fixed cost, so lengthening a schedule finds
-   * more interleavings per second than starting another one. Both planes run
-   * over the same four vaults, so a share grant is delivered, edited,
-   * tampered with, cut off, revoked and propagated WHILE the commons rail is
-   * compacting, transferring stewardship and crash-restarting underneath it.
+   * The grant plane (#839): ONE long program, deliberately not a second seed.
+   * Both planes share four vaults, so a grant is delivered, tampered with,
+   * revoked and propagated WHILE the commons rail compacts and restarts.
    */
   test(
     "seed 839001 interleaves the grant lifecycle with the commons rail",
@@ -167,13 +139,11 @@ describe("commons deterministic simulation", () => {
         grantPlane: true,
       });
       expect(result.failures, explain(result)).toStrictEqual([]);
-      // The commons legs still fire — the grant verbs must not crowd them out.
+      // The grant verbs must not crowd the commons legs out.
       expect(result.stats["member_pull"] ?? 0).toBeGreaterThan(0);
       expect(result.stats["crash_restart"] ?? 0).toBeGreaterThan(0);
       expect(result.stats["compaction"] ?? 0).toBeGreaterThan(0);
-      // And every grant-plane leg the invariants depend on actually ran. The
-      // schedule is a pure function of the seed, so these are exact facts
-      // about this program, not hopes about a random one.
+      // The schedule is a pure function of the seed: exact facts, not hopes.
       for (const leg of [
         "grant_create",
         "grant_fulfill",
@@ -185,39 +155,23 @@ describe("commons deterministic simulation", () => {
         "park_confirmable",
         "settle_parked",
         "revoke_consent_grant",
-        // The audience diverged and a later pass overwrote it: "the origin is
-        // the sole author" is an empty claim unless something contested it.
+        // "The origin is the sole author" is empty unless something contested it.
         "grant_tamper_healed",
-        // A delivered row degraded back to `syncing` because the host lost
-        // reach. This is the precondition of the revocation-severance defect
-        // (#846), so a program that never hit it would hold G1 vacuously.
+        // The precondition of the severance defect (#846).
         "reach_lost_after_delivery",
       ])
         expect(result.stats[leg] ?? 0, `${leg} never fired`).toBeGreaterThan(0);
-      // Nothing is pinned any more. The simulator's one tolerated break was
-      // defect D1, fixed by #846 P1 and locked below.
       expect(result.pinned, explain(result)).toStrictEqual([]);
     },
     SIM_TIMEOUT_MS
   );
 
   /**
-   * REGRESSION LOCK for #846 P1 — defect D1 (#839) against ruling
-   * G-revoke.
-   *
-   * `fulfillShareGrant` drops a `delivered` fulfillment row back to `syncing`
-   * when the host merely cannot reach the peer for one pass — honest, because
-   * the audience copy may now be stale. `propagateShareGrantRevocation` then
-   * read that `syncing` as never-delivered and settled `removed` ("nothing had
-   * been delivered; there was nothing to remove") while the audience vault
-   * still held the whole projection. The owner was told the share was gone and
-   * it was not.
-   *
-   * G-revoke's sentence was right and is unchanged: revoke is honestly
-   * best-effort against a peer's disk. What was wrong was the engine, on a
-   * REACHABLE path, in the one direction the copy does not warn about. It now
-   * remembers what it delivered (`share_fulfillment.delivered_at`) instead of
-   * inferring it from a live freshness reading, so this probe severs.
+   * REGRESSION LOCK for defect D1 (#846). `fulfillShareGrant` drops a
+   * `delivered` row to `syncing` when one pass cannot reach the peer, and
+   * propagation once read that as never-delivered, settling `removed` while
+   * the audience still held the projection. Delivery is now remembered in
+   * `delivered_at`, so this probe severs.
    */
   test(
     "a revocation severs a grant the host lost reach for mid-life",

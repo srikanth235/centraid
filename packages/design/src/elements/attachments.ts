@@ -1,13 +1,9 @@
-// Attachments — the "shared pattern across apps", actually shared.
+// Small files ride inline as data: URIs, larger ones by sha (#296).
 //
-// Small files travel inline as data: URIs through the command JSON; larger
-// ones stream to the vault's blob CAS and attach by sha (#296). The
-// BYTES leave through the host (`stageBlob`/`stageDerivative`): the app
-// document is not the gateway origin — the installable web PWA rides the iroh
-// tunnel and desktop runs from `file://` — so a relative `fetch` would resolve
-// nowhere and carry no credential. This layer therefore owns the shape of the
-// flow (thresholds, hashing, tiles, the attach batch) and none of its
-// transport; `packages/client`'s `blob-staging.ts` owns the transport.
+// WHY THE BYTES LEAVE THROUGH THE HOST.
+// The app document is not the gateway origin, so a relative `fetch` resolves
+// nowhere and carries no credential. This layer owns the flow's shape, never
+// its transport.
 
 import { applyInOrder } from "./dom.js";
 import { armConfirm } from "./feedback.js";
@@ -18,7 +14,6 @@ import { host } from "./host.js";
 
 export type { StagedBlob } from "./host.js";
 
-/** One attachment row as the vault's queries return it. */
 export interface Attachment {
   attachment_id: string;
   content_id?: string;
@@ -29,10 +24,8 @@ export interface Attachment {
   [key: string]: unknown;
 }
 
-/** Files at or under this size ride inline as a data: URI, with no upload. */
 export const INLINE_ATTACH_BYTES = 256 * 1024;
 
-/** Read a File into a data: URI (the inline path for small attachments). */
 export function fileToDataUri(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -59,17 +52,8 @@ export function isPendingOffsite(
   );
 }
 
-/**
- * Stream a File into the vault's blob CAS; resolves the staging receipt
- * (`{sha256, …}`). `extra` appends pre-encoded query params (e.g. `&kind=…`).
- * With `{hash: true}` (the default) the sha is declared up front so the host
- * can preflight it and ship zero bytes when another device already
- * established custody; the gateway still hashes and verifies authoritatively.
- *
- * `scope` (#599) names WHICH mounted scope the bytes land in — a
- * multi-scope app adding to a shared audience must not stage into the
- * member's own CAS.
- */
+/** `hash` (default) declares the sha up front so the host ships zero bytes when
+ *  custody exists. `scope` (#599): never stage into the member's own CAS. */
 export async function stageFileBytes(
   file: File,
   extra = "",
@@ -80,7 +64,6 @@ export async function stageFileBytes(
   return stage(file, extra, options);
 }
 
-/** Submit a typed derivative contribution (#299 enrichers). */
 export async function stageDerivative(
   parentSha: string,
   variant: string,
@@ -92,16 +75,9 @@ export async function stageDerivative(
   return stage(parentSha, variant, body, mediaType);
 }
 
-// The strip's own blob authorization. `inline-blob-images.ts` in the shell
-// covers `<img>`/`background-image` generically, but an attachment tile for a
-// non-image also renders a download `<a href>`, which that observer does not
-// watch — so the strip authorizes its own references after each rebuild.
+// The shell's generic observer misses a tile's download `<a href>`.
 const stripObjectUrls = new WeakMap<HTMLElement, string[]>();
-// The generation is what makes the bookkeeping correct under re-render: a
-// strip re-rendered while an authorization is still in flight would otherwise
-// let the STALE render's `.then` push into (and re-publish) its own array,
-// clobbering the live render's list so those URLs were never revoked. A late
-// URL from a superseded render is revoked on arrival instead of recorded.
+// Without it a stale render's `.then` clobbers the live list, leaking URLs.
 const stripGeneration = new WeakMap<HTMLElement, number>();
 
 function revokeObjectUrl(url: string): void {
@@ -124,16 +100,11 @@ function authorizeStrip(stripEl: HTMLElement, generation: number): void {
   for (const target of targets) {
     const attr = target instanceof HTMLImageElement ? "src" : "href";
     const raw = target.getAttribute(attr);
-    // Any ROOT-RELATIVE ref, rather than a match on the vault's blob prefix:
-    // this layer holds no route vocabulary, and it does not need to — the host
-    // answers `null` for a path it does not own, which leaves the tile exactly
-    // as rendered. A ref that is already `blob:`, `data:` or absolute is
-    // resolvable as-is and is skipped by the same test.
+    // Root-relative, never the blob prefix: the host answers `null` for a path
+    // it does not own.
     if (!raw?.startsWith("/")) continue;
     void blobUrl(raw).then((objectUrl) => {
       if (!objectUrl) return;
-      // A URL that arrives for a superseded render, or for a tile that has
-      // left the document, has no owner to revoke it later — revoke it now.
       if (stripGeneration.get(stripEl) !== generation || !target.isConnected) {
         revokeObjectUrl(objectUrl);
         return;
@@ -144,15 +115,6 @@ function authorizeStrip(stripEl: HTMLElement, generation: number): void {
   }
 }
 
-/**
- * Fill `stripEl` with attachment tiles (image thumb or file link + size
- * badge), then authorise any `/_vault/blobs/…` bytes they point at. The
- * remove control arms on first click (`armConfirm`) and calls
- * `onRemove(attachment_id)`; when that resolves to an executed outcome the
- * tile drops immediately. Pass `onRemove: null` for a read-only strip (no
- * remove control at all). `onZoom(attachment)`, when given, makes image
- * thumbs zoomable.
- */
 export function renderAttachments(
   stripEl: HTMLElement,
   list: Attachment[] | null | undefined,
@@ -161,20 +123,12 @@ export function renderAttachments(
     | null,
   { onZoom }: { onZoom?: (attachment: Attachment) => void } = {}
 ): void {
-  // The rebuild below discards the previous render's tiles — and the object
-  // URLs they point at — so revoking them here is safe precisely because
-  // nothing survives it; this path re-reads every blob ref from `list`, so a
-  // re-render always re-authorizes.
   for (const url of stripObjectUrls.get(stripEl) ?? []) revokeObjectUrl(url);
   stripObjectUrls.delete(stripEl);
   const generation = (stripGeneration.get(stripEl) ?? 0) + 1;
   stripGeneration.set(stripEl, generation);
 
-  // An imperative rebuild (any refresh — e.g. the window-focus one) would
-  // otherwise wipe an armed remove button mid-confirm: the owner's second
-  // click lands on a fresh, disarmed button and merely re-arms it. Carry
-  // the armed state across the rebuild (the old node's disarm timer fires
-  // on the detached button — a no-op).
+  // Carry armed state, or a refresh mid-confirm eats the owner's second click.
   const armed = new Set(
     [
       ...stripEl.querySelectorAll<HTMLElement>(
@@ -215,9 +169,7 @@ export function renderAttachments(
       rm.title = "Remove";
       rm.setAttribute("aria-label", "Remove attachment");
       rm.dataset.kitAttachmentId = String(a.attachment_id);
-      // Click listeners must be void: an `async` listener returns a Promise
-      // where DOM expects void (`typescript(no-misused-promises)`). Same
-      // fire-and-forget shape as `wireAttachInput`.
+      // Void, not async: DOM expects void (`typescript(no-misused-promises)`).
       rm.addEventListener("click", () => {
         void (async () => {
           if (!armConfirm(rm, { armedLabel: "Sure?" })) return;
@@ -234,13 +186,7 @@ export function renderAttachments(
   authorizeStrip(stripEl, generation);
 }
 
-/**
- * Wire a hidden `<input type=file>` to the attach flow: stage-or-inline each
- * picked file, run the app's `attach` action, narrate each outcome. The app
- * supplies its own consent voice: `act(action, input) → outcome`,
- * `narrate(outcome) → bool` (false stops the batch), `notice(text)` for read
- * errors, `refresh()` after the batch.
- */
+/** `narrate` returning false stops the batch. */
 export function wireAttachInput(
   inputEl: HTMLInputElement,
   getSubjectId: () => string | null | undefined,
@@ -264,8 +210,6 @@ export function wireAttachInput(
       const subjectId = getSubjectId();
       if (!subjectId) return;
       let narrating = true;
-      // Keep attachment requests and consent narration in the chosen-file
-      // order; a declined/failed outcome must stop the same batch as before.
       await applyInOrder([...(inputEl.files ?? [])], async (file) => {
         if (!narrating) return;
         let input: Record<string, unknown>;

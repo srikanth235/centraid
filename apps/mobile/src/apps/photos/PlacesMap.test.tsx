@@ -1,38 +1,12 @@
 // @vitest-environment jsdom
-// The Places map on the phone (issues #781, #816).
-//
-// `place-map.test.ts` owns the projection — the pixels, the graticule, the
-// scale bar, the tier-floored merge — and none of that is restated here. What
-// this file owns is the seat around it, which no cheaper layer can falsify:
-//
-//   1. THE HEAD STATES THE MAP'S OWN SIZE: how many geotagged photographs are
-//      drawn, out of how many the library holds. Two different numerators, so
-//      a screen that printed the library count twice would look right and say
-//      nothing.
-//   2. A PIN IS A CONTROL IN THE ACCESSIBILITY TREE. The pins are real
-//      `Pressable`s rather than `onPress` on an SVG shape or a native marker,
-//      precisely so a screen reader has something to land on; a regression
-//      back to SVG press handling would leave a map nobody who cannot see it
-//      can read.
-//   3. A PIN IS THE PHOTOGRAPH taken there. The first cut drew dots on a
-//      graticule labelled in degrees, which is a chart, not a map.
-//   4. READING A PIN CHANGES THE READOUT, and reading a second one replaces
-//      the first — one place is being read at a time, not a growing list.
-//   5. WHAT LEAVES THE DEVICE, PER MODE — mode-shaped, never absolute
-//      (#816). On the private
-//      sketch no map SDK is constructed at all: the screen asks nobody
-//      anything, which is the same claim this file has always carried. With
-//      real maps on, exactly one thing is fetched — the base layer's own style
-//      — and nothing the vault holds is ever handed to the SDK. Both halves
-//      are asserted; deleting the first half because a basemap arrived would
-//      be the regression, not the feature.
-//
-// Same react-native-as-DOM technique as `FaceReview.test.tsx`; the production
-// component, its pure model, the shared projection, the two-mode store and the
-// mode-switching frame all stay real. The two map SDKs are mocked because they
-// are native host seams with no DOM implementation — and mocking them is what
-// makes claim 5 observable: a recording SDK proves whether a map view was ever
-// constructed, which a rendered tree alone cannot.
+// The Places map seat (#781, #816); the projection is `place-map.test.ts`'s.
+// The claims here: the head states drawn-of-held, a pin is a real control in the
+// accessibility tree AND the photograph taken there, reading a pin REPLACES the
+// readout, and egress is mode-shaped — no map SDK is constructed on the private
+// sketch, and with real maps on only the base layer's style is fetched. Both
+// halves are asserted; dropping the first because a basemap arrived is the
+// regression. The SDKs are mocked as RECORDERS, which is what makes "no map view
+// was constructed" falsifiable.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -69,13 +43,10 @@ const mocks = vi.hoisted(() => ({
     textFaint: "#mock-text-faint",
     textSoft: "#mock-text-soft",
   },
-  /** Every prop object either map SDK's view was constructed with. Empty is
-   *  the whole claim on the private sketch. */
+  /** Empty is the whole claim on the private sketch. */
   mapViews: [] as Record<string, unknown>[],
-  /** The groups the mode menu was opened with, newest last. */
   menus: [] as unknown[],
   places: [] as unknown[],
-  /** Survives `set` so an in-flight `hydrate` cannot snap back to the default. */
   stored: new Map<string, unknown>(),
 }));
 
@@ -123,9 +94,7 @@ vi.mock(import("react-native"), async () => {
   } as unknown as Partial<ReactNative>;
 });
 
-// The one native drawing seam of the sketch. `react-native-svg` has no DOM
-// implementation; the geometry it would be handed is the projection's, and
-// owned there.
+// `react-native-svg` has no DOM implementation; its geometry is the projection's.
 vi.mock(import("react-native-svg"), async () => {
   const ReactModule = await import("react");
   const passthrough = (tag: string) => {
@@ -142,9 +111,7 @@ vi.mock(import("react-native-svg"), async () => {
   } as never;
 });
 
-// THE MAP SDK, AS A RECORDER. Nothing here draws anything; the point is that
-// constructing a map view is observable, so "no map view was constructed" is a
-// falsifiable statement about the private sketch rather than a comment.
+// THE MAP SDK, AS A RECORDER: constructing a map view has to be observable.
 vi.mock(import("@maplibre/maplibre-react-native"), async () => {
   const ReactModule = await import("react");
   return {
@@ -187,8 +154,6 @@ vi.mock(
     }) as never
 );
 
-// The menu's own anatomy is `AnchoredMenu`'s to prove; what belongs here is
-// WHICH ROWS this screen hands it, and what pressing one does.
 vi.mock(
   import("../../kit/components/AnchoredMenu"),
   () =>
@@ -255,8 +220,6 @@ vi.mock(
     }) as unknown as Partial<TimelineSourceModule>
 );
 
-// Lake Tahoe and a house near Palo Alto — far enough apart that the projection
-// keeps them as two pins in any box this screen draws.
 const [TAHOE_PHOTO, HOME_PHOTO] = makePhotosFixture("place-tagged").assets;
 const [UNPLACED_PHOTO] = makePhotosFixture("one-day").assets;
 const PLACE_ROWS = [
@@ -283,15 +246,10 @@ function renderMap(): void {
   });
 }
 
-/** Render and let the real map's lazily-imported provider resolve. Real maps
- *  are the default, so this is the ordinary path. Two microticks are enough
- *  only on an idle worker; a coverage run compiling the provider for the
- *  first time is not idle, so wait for the recorder the SDK mock is. */
+/** Awaits the lazily-imported provider: two microticks suffice only on an idle
+ *  worker, and a coverage run compiling that graph is not idle. */
 async function renderRealMap(): Promise<void> {
   renderMap();
-  // Same module `PlacesRealMap` lazy-loads. Awaiting it inside `act` is what
-  // two microticks only stand in for — coverage compiling that graph is
-  // not two ticks.
   await act(async () => {
     await import("./places-map-libre");
   });
@@ -309,8 +267,7 @@ function press(button: Element | undefined): void {
   act(() => button!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
-/** This file's own directory, so a source read does not depend on which config
- *  invoked the project — under jsdom `import.meta.url` is an http URL. */
+/** Under jsdom `import.meta.url` is an http URL, so read the test path instead. */
 const here = path.dirname(expect.getState().testPath ?? "");
 const source = (file: string): string =>
   readFileSync(path.join(here, file), "utf8");
@@ -323,8 +280,7 @@ describe("the Places map (native)", () => {
     mocks.menus = [];
     mocks.stored.clear();
     mocks.places = PLACE_ROWS;
-    // Three geotagged photographs across two places, plus one the library
-    // holds that carries no place at all.
+    // Three geotagged across two places, plus one the library holds unplaced.
     mocks.assets = [
       TAHOE_PHOTO,
       { ...TAHOE_PHOTO, id: "place-tahoe-2" },
@@ -388,8 +344,6 @@ describe("the Places map (native)", () => {
   });
 
   it("says a place is something a photograph carries when nothing is plottable", () => {
-    // A library whose photographs are all unplaced: no pins, no plate, and the
-    // shelf's own sentence rather than an empty box.
     mocks.assets = [UNPLACED_PHOTO];
     renderMap();
     expect(container!.textContent).toContain(
@@ -421,8 +375,7 @@ describe("the Places map (native)", () => {
         rows: Array<{ checked: boolean; label: string; onSelect: () => void }>;
       }>
     )[0]!.rows;
-    // Two rows, one of them checked — the menu's whole grammar is "this is the
-    // current answer, here is the other one".
+    // Two rows, one checked: "this is the answer, here is the other one".
     expect(rows.map((row) => [row.label, row.checked])).toStrictEqual([
       ["Real maps", true],
       ["Private sketch", false],
@@ -435,9 +388,8 @@ describe("the Places map (native)", () => {
   });
 
   it("draws the real map by default and the sketch only when asked", async () => {
-    // The ruling is real-maps-on (docs/decisions.md, P-cartography), so a
-    // member who has never touched the switch gets land under the pins. A test
-    // that only ever exercised the sketch would let the default rot.
+    // Real-maps-on is the ruling (P-cartography); exercising only the sketch
+    // would let the default rot.
     setMapMode("real");
     await renderRealMap();
     expect(mocks.mapViews).toHaveLength(1);
@@ -470,11 +422,8 @@ describe("what the Places map asks of anybody, per mode", () => {
   });
 
   it("constructs no map view at all on the private sketch", () => {
-    // The claim this file has carried since the map stopped drawing
-    // `react-native-maps`, kept exactly: with the switch off, opening Places
-    // asks no map vendor anything. It is asserted on the SDK rather than on
-    // the markup because a map view that renders nothing visible would still
-    // be a map view fetching tiles on a real device.
+    // Asserted on the SDK, not the markup: a map view rendering nothing visible
+    // still fetches tiles on a real device.
     setMapMode("sketch");
     renderMap();
     expect(mocks.mapViews).toStrictEqual([]);
@@ -494,15 +443,12 @@ describe("what the Places map asks of anybody, per mode", () => {
   it("hands the map SDK nothing the library holds", async () => {
     setMapMode("real");
     await renderRealMap();
-    // Every string the SDK was constructed with, flattened. A photograph's
-    // URI, a place's name or a search phrase reaching the map view is the
-    // defect: the pins are drawn OVER the base layer by this app, so the SDK
-    // is entitled to a viewport and nothing else.
+    // The SDK is entitled to a viewport and nothing else: this app draws the
+    // pins over the base layer itself.
     const handed = mocks.mapViews.flatMap((props) =>
       Object.entries(props)
         .filter(([key]) => key !== "children")
-        // Handlers stringify to `undefined`; what is being read here is the
-        // data, and a callback carries none.
+        // Handlers stringify to `undefined`; only data is being read.
         .map(([, value]) => JSON.stringify(value) ?? "")
     );
     for (const value of handed) {
@@ -521,12 +467,8 @@ describe("what the Places map asks of anybody, per mode", () => {
   });
 
   it("keeps the private sketch free of every map SDK, in the source", () => {
-    // Asserted against the SOURCE because that is where the regression would
-    // land: a rendered tree proves only that the seam this file mocked was not
-    // called, while an SDK imported into the sketch is the whole defect — the
-    // screen would look correct and emit on a real device. The sketch and the
-    // screen that hosts it must both stay clean; the two providers are the
-    // only files allowed to name an SDK at all.
+    // Asserted against the SOURCE: a mocked seam proves nothing about an SDK
+    // imported into the sketch. Only the two providers may name one.
     for (const file of ["PlacesSketchMap.tsx", "PlacesMap.tsx"]) {
       expect(source(file)).not.toMatch(
         /from\s+["'](?:expo-maps|@maplibre\/[^"']+|react-native-maps)["']/u
@@ -535,9 +477,8 @@ describe("what the Places map asks of anybody, per mode", () => {
   });
 
   it("names exactly one remote host across the whole map surface", () => {
-    // The base layer's style, once, in the provider that draws it. Any second
-    // URL in any of these files is a second thing being fetched, which is the
-    // egress claim breaking.
+    // Any second URL in these files is a second thing fetched — the egress claim
+    // breaking.
     const urls = [
       "PlacesMap.tsx",
       "PlacesSketchMap.tsx",

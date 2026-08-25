@@ -16,23 +16,14 @@ import { loadConnection, webGatewayId } from "./web-state.js";
 const KEY_STORAGE = "centraid.web.v1.iroh-device-key";
 const BRIDGE_STORAGE = "centraid.web.v1.iroh-bridge";
 const VIRTUAL_PREFIX = "/__centraid_iroh__/";
-// A versioned script URL prevents an older shell worker from being treated as
-// ready merely because it controls the page. The virtual Iroh route only
-// exists in this worker generation. VERSION is shared with public/sw.js and
-// its derived Iroh worker binding via sw-version.ts (#468).
+// Versioned: an older shell worker must not read as ready.
 const SERVICE_WORKER_URL = `/sw.js?v=${SERVICE_WORKER_VERSION}`;
 
-// Transient tunnel failures (a redialed-then-still-dead connection, a stream
-// reset) are retried a bounded number of times with jittered backoff. The
-// pooled connection in the WASM layer already redials once on a stale cache,
-// so a failure that reaches here is worth a short pause before retrying.
+// The WASM layer already redials once, so failures here pause first.
 const MAX_RETRIES = 2;
 const RETRY_BACKOFF_MS = [250, 750];
-// A dead radio must fail fast instead of hanging forever. request() resolves
-// as soon as the response HEADER is read, so this bounds connect + send +
-// first-header, not the (possibly long-lived) body stream.
+// Bounds connect + send + first-header, never the body stream.
 const CONNECT_TIMEOUT_MS = 15_000;
-// Replaying these methods cannot duplicate a side effect.
 const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "OPTIONS", "PUT", "DELETE"]);
 
 let endpointPromise: Promise<BrowserEndpoint> | undefined;
@@ -67,43 +58,22 @@ async function endpoint(): Promise<BrowserEndpoint> {
     });
   }
   const node = await endpointPromise;
-  // A spawn that was still pending may have written its key to the session
-  // bucket under the pre-#603 code path; fold it back in.
+  // A pending spawn may write its key to session storage; fold it in.
   adoptDurableIrohDeviceKey();
   return node;
 }
 
-/**
- * Bring the WASM endpoint up during idle time, ahead of the first request that
- * needs it (#659).
- *
- * This is a 2 MB download, so the gate is deliberately narrow and is set by
- * measurement, not intuition. Gating only on "already paired" costs a
- * returning visit the full 2 MB on EVERY visit (perf-waterfall warm shell
- * 0 B -> 1,995,918 B). Two things prevent that:
- *
- *  1. `public/sw.js` serves JS-initiated `/assets/` fetches through the shell
- *     cache, so the binary is downloaded once per build rather than once per
- *     visit. Without that, warming can only ever move the cost around.
- *  2. The gate below also requires that this page will actually ROUTE through
- *     this transport. A page can be paired to an iroh endpoint and still send
- *     its traffic somewhere else — `window.CentraidIroh` is a replaceable seam,
- *     and the e2e harness replaces it with a direct-HTTP control transport.
- *     Warming a transport nothing will dial is pure waste, and it is the same
- *     waste whether the replacement came from a harness or a host.
- *
- * Still lazy in every other respect: `endpoint()` owns the single-flight
- * promise, and a failed warm just leaves the next real caller to surface it.
- */
+/** Warm the WASM endpoint at idle (#659). The gate stays narrow: a 2 MB
+ * download cached by `public/sw.js`, and a paired page can still route
+ * elsewhere (`window.CentraidIroh` is a replaceable seam). */
 export function warmIrohTransport(): void {
   if (endpointPromise) return;
   if (!webGatewayId(loadConnection())) return;
-  // Identity check, not a feature check: only warm the transport we installed.
+  // Identity check: warm only the transport we installed.
   if (window.CentraidIroh?.fetch !== irohFetch) return;
   const warm = (): void => {
     void endpoint().catch(() => {
-      // The first real request re-attempts and reports; a failed warm is not
-      // an event the reader should hear about.
+      // A warm failure is silent; the first real request reports.
     });
   };
   if (typeof requestIdleCallback === "function")
@@ -111,15 +81,8 @@ export function warmIrohTransport(): void {
   else setTimeout(warm, 1500);
 }
 
-/**
- * Move (never copy) the stable browser device key into durable storage.
- *
- * This key IS the enrolled device identity — losing it means the gateway no
- * longer recognises this browser and the only way back is a fresh pairing
- * ticket. It must never live in sessionStorage — "Remember this device" being
- * unchecked would then silently unpair on every browser restart. Durability is
- * not a consent axis; the offline copy is.
- */
+/** MOVE, never copy: this key IS the enrolled identity, and in sessionStorage
+ * it silently unpairs on restart. Durability is not a consent axis. */
 export function adoptDurableIrohDeviceKey(): string | null {
   const stored =
     localStorage.getItem(KEY_STORAGE) ?? sessionStorage.getItem(KEY_STORAGE);
@@ -171,8 +134,7 @@ export async function pairGatewayOverIroh(
   return { response, endpointId: node.endpoint_id() };
 }
 
-// The WASM connect path stamps this context onto a dial failure, which is the
-// only failure we can prove happened BEFORE the request body went on the wire.
+// The only failure provably raised BEFORE the body went out.
 function isConnectFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes(connect_failure_marker());
@@ -205,12 +167,8 @@ async function withConnectTimeout(
   }
 }
 
-// Wraps node.request() with a connect timeout and bounded, jittered retries.
-// A rejection here means the BrowserResponse header never resolved, so NO
-// response bytes have reached the caller yet — retrying cannot duplicate
-// delivered output. We still refuse to replay a non-idempotent request whose
-// body may already be on the wire: only a clear pre-send connect failure is
-// retried for those.
+// A rejection means no bytes reached the caller, so a retry duplicates nothing;
+// a non-idempotent request replays only on a proven connect failure.
 async function requestWithRetry(
   node: BrowserEndpoint,
   endpointTicket: string,
@@ -221,8 +179,6 @@ async function requestWithRetry(
 ): Promise<BrowserResponse> {
   const idempotent = IDEMPOTENT_METHODS.has(method);
   const attemptRequest = async (attempt: number): Promise<BrowserResponse> => {
-    // Each node.request() opens one QUIC stream on the pooled endpoint; count
-    // it (retries included) so a probe can prove streams ≫ connects.
     irohStats().streams += 1;
     const requestStart = nowMs();
     try {
@@ -267,12 +223,10 @@ async function requestParts(init: RequestInit): Promise<{
     ...(method === "GET" || method === "HEAD" ? { body: undefined } : {}),
   });
   const headers = Object.fromEntries(request.headers.entries());
-  // The transport bypasses browser HTTP, so stamp the trusted shell origin
-  // explicitly for gateway-minted browser app sessions.
+  // The transport bypasses browser HTTP; stamp the shell origin explicitly.
   headers["origin"] = window.location.origin;
-  // Browsers never expose Accept-Encoding to JS, so advertise gzip explicitly
-  // — otherwise the gateway ships raw bytes. irohFetch decodes the reply. Skip
-  // SSE (the server exempts text/event-stream anyway; keep the request honest).
+  // Browsers never expose Accept-Encoding to JS; without this the gateway ships
+  // raw bytes. `irohFetch` decodes.
   if (!(headers["accept"] || "").toLowerCase().includes("text/event-stream")) {
     headers["accept-encoding"] = "gzip";
   }
@@ -303,11 +257,8 @@ export async function irohFetch(
   );
   const headers = responseHeaders(response.headers_json);
   let body: ReadableStream = response.take_body();
-  // The browser does not auto-decode Content-Encoding on a Response we build in
-  // JS from tunnel bytes, so decode gzip here. Strip content-encoding +
-  // content-length (they describe the compressed form); ETag is kept — the
-  // gateway keys it to the RAW bytes, so revalidation stays correct. gzip only:
-  // DecompressionStream has no brotli, and requestParts only offers gzip.
+  // A JS-built Response is not auto-decoded; strip the compressed-form headers
+  // but KEEP the ETag, keyed to raw bytes.
   if ((headers.get("content-encoding") || "").toLowerCase() === "gzip") {
     headers.delete("content-encoding");
     headers.delete("content-length");
@@ -325,14 +276,9 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
     ...message.headers,
     "x-centraid-tunnel-auth-mode": "web-session",
   };
-  // Every request on this path originates from a generated app in the SW
-  // bridge, so the auth mode is fixed by PROVENANCE, not by whether a cookie
-  // happens to be in memory. The marker must be set unconditionally: the
-  // desktop tunnel keys off it to STRIP the device bearer. Gating it on the
-  // cookie (which the browser wipes when it kills an idle service worker)
-  // would let an idle app's requests fall through to the full device bearer —
-  // a privilege escalation. No cookie means the gateway rejects with 401,
-  // never an escalation. Do not "optimize" this back behind the cookie check.
+  // Set unconditionally: the desktop tunnel keys off it to STRIP the device
+  // bearer, so behind the cookie check an idle app falls through to the full
+  // bearer.
   if (message.sessionCookie) {
     headers["cookie"] = message.sessionCookie;
   }
@@ -351,8 +297,7 @@ function bridgeId(): string {
   const durable = connection.rememberDevice === true;
   const storage = durable ? localStorage : sessionStorage;
   const stale = durable ? sessionStorage : localStorage;
-  // Relay-bearing endpoint tickets can be refreshed without changing the
-  // sovereign gateway. Keep the cache namespace warm across those re-dials.
+  // Tickets refresh without changing the gateway; keep the cache namespace.
   const scope = `${webGatewayId(connection) ?? connection.endpointTicket ?? ""}\u0000${connection.vaultId ?? ""}`;
   let saved: { scope?: string; id?: string } = {};
   try {
@@ -373,7 +318,7 @@ function bridgeId(): string {
   return id;
 }
 
-/** The service worker treats only `d-` bridge scopes as cache-readable/writable. */
+/** Only `d-` bridge scopes are cache-readable to the worker. */
 export function irohBridgeIdForConsent(
   rememberDevice: boolean,
   randomId = crypto.randomUUID()
@@ -381,7 +326,6 @@ export function irohBridgeIdForConsent(
   return `${rememberDevice ? "d" : "e"}-${randomId}`;
 }
 
-/** Wipe all device-key/bridge state after unpair or remote revocation. */
 export function purgeIrohDeviceState(): void {
   const current = endpointPromise;
   endpointPromise = undefined;
@@ -396,7 +340,7 @@ export function purgeIrohDeviceState(): void {
   void current
     ?.then(async (node) => {
       await node.close().catch(() => undefined);
-      // A pending spawn can write its key after the eager clear.
+      // A pending spawn can write its key after the clear.
       clear();
     })
     .catch(() => undefined);
@@ -420,17 +364,11 @@ function currentIrohWakeConfiguration(): IrohWakeConfiguration | undefined {
   };
 }
 
-/**
- * Mirror the minimum paired transport state into private service-worker
- * storage. A closed PWA has no WindowClient to own the normal Iroh bridge, so
- * the worker must be able to authenticate its canonical Notifications pull itself.
- */
+/** A closed PWA has no WindowClient, so the worker authenticates its own pull. */
 export async function syncIrohWakeConfiguration(): Promise<void> {
   if (!("serviceWorker" in navigator)) return;
   const registration = await navigator.serviceWorker.ready;
   const worker = registration.active ?? navigator.serviceWorker.controller;
-  // ServiceWorker.postMessage's second argument is a transfer list, not a
-  // target origin; the generic browser rule does not model this overload.
   const message = {
     type: "centraid:configure-iroh-wake",
     configuration: currentIrohWakeConfiguration(),
@@ -500,9 +438,7 @@ function postError(port: MessagePort, error: unknown): void {
 }
 
 export function installIrohServiceWorkerBridge(): void {
-  // Eagerly surface the perf counters (#404) the moment the shell boots,
-  // so a probe can tell an instrumented bundle apart from a stale one before
-  // any request has run. Creating the object changes no transport behavior.
+  // Surface the perf counters at boot (#404): a probe can spot a stale bundle.
   irohStats();
   if (!("serviceWorker" in navigator)) return;
   navigator.serviceWorker.addEventListener(
@@ -527,8 +463,7 @@ export function installIrohServiceWorkerBridge(): void {
           >,
         });
         const reader = response.take_body().getReader();
-        // A MessagePort is an ordered byte stream: do not read the next chunk
-        // until the current one has been posted to the service worker.
+        // Ordered stream: post this chunk before reading the next.
         const pump = async (): Promise<void> => {
           const { done, value } = await reader.read();
           if (done) return;

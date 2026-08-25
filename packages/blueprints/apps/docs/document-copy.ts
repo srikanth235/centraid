@@ -1,32 +1,11 @@
-// What ONE DOCUMENT's own screens say (Docs spec §6.2, §7, §8): the version
-// screen's fold, the details rail's tabs and notes, and the stage's actions
-// and properties panel.
-//
-// The third copy module, split from `view-copy.ts` on the same axis the app is
-// split on: a shelf is a set of rows, and these screens are about one row.
-// Nothing here knows what a shelf is.
-//
-// THERE IS NO COPY HERE FOR AN IN-PLACE EDITOR OR A READING ROUTE, and none is
-// owed: Docs edits no document of any kind — a new version arrives as a whole
-// file through Replace — and text is read on the stage's paper sheet.
+// What ONE DOCUMENT's screens say (§6.2, §7, §8). Nothing here knows what a
+// shelf is, and no editor copy is owed: Docs edits no document.
 
-// ───────────────────────────────────────────────────────────────────────────
-// Versions (§6.2) and the details rail (§8)
-// ───────────────────────────────────────────────────────────────────────────
-
-/** §6.2 folds Activity INTO the version history, and says so. */
 export const VERSIONS_ACTIVITY_HEAD = "Activity";
 export const VERSIONS_ACTIVITY_META = "folded in here, deliberately";
-/** Activity was CUT as its own screen: what happened to a document and which
- *  version it produced are one spine, so the history carries both. That
- *  rationale is a design fact, not a sentence a member standing on the screen
- *  needs; what they need is what the third column means. */
 export const VERSIONS_CUT_NOTE =
   "The third column records whether a member, an app or a machine did it.";
 
-/** §8's three tabs. One rail answers all three former screens: "All three
- *  answer 'what is this row', so they belong beside the row and not three
- *  screens away from it." (§8, verbatim.) */
 export const RAIL_TABS = [
   { id: "props", label: "Properties" },
   { id: "facts", label: "Facts" },
@@ -35,8 +14,7 @@ export const RAIL_TABS = [
 
 export type RailTabId = (typeof RAIL_TABS)[number]["id"];
 
-/** The notes §8 hangs off individual rows — each one a RULE, so each one is
- *  the spec's own sentence rather than a paraphrase. */
+/** Each note is the spec's own sentence, never a paraphrase. */
 export const RAIL_NOTES = {
   folder: "a label on the document, not a place it sits",
   owner: "this document is in your own space",
@@ -48,27 +26,15 @@ export const RAIL_NOTES = {
   footer: "Select another row and the rail follows it.",
 } as const;
 
-/**
- * §8's sharing row (#821) — the key, and the note that qualifies one
- * share's value.
- *
- * THE ROW IS ABSENT, NEVER NEGATIVE. A document nobody has shared says nothing
- * here, and so does one whose share reads were denied: "Not shared" would be
- * this rail asserting a fact in the one place a wrong answer costs the most.
- *
- * `through <folder>` is the whole point of carrying `via`. A member who shared
- * a folder did not share this document, and a rail that said they did would
- * send them looking for a share they never made when they came to undo one.
- */
+/** ABSENT, NEVER NEGATIVE (#821): "Not shared" would assert a fact where a
+ *  wrong answer costs most. A folder share is not this document's share. */
 export const SHARED_WITH_KEY = "Shared with";
 
 export function sharedWithNote({
   viaFolder,
   pending,
 }: {
-  /** The folder the grant actually names, when the share came from above. */
   viaFolder?: string | null;
-  /** How many members have not accepted yet. */
   pending?: number;
 }): string | undefined {
   const parts: string[] = [];
@@ -77,27 +43,11 @@ export function sharedWithNote({
   return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
-/** §8's trailing row for a kind Docs cannot show (§10.1's `render` column). */
 export function cannotRenderFact(kindName: string): string {
   return `Docs cannot render ${kindName}`;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// The stage (§7's `docsStage`)
-// ───────────────────────────────────────────────────────────────────────────
-
-/**
- * The stage's action names, in the handoff's own order: Star, Download,
- * Print, Place…, Properties, More. They are named here rather than inline so
- * the bar and the phone's bottom row cannot drift on what a verb is called —
- * the same rule Photos' `ACTION_LABELS` keeps for the same two arrangements.
- *
- * `Place…` carries its ellipsis because it opens a sheet and asks; every other
- * name is a verb that fires. `More` is NOT in the table: the handoff's mobile
- * bar draws it over a dead handler, and this stage gives the phone the five
- * actions in a bottom bar instead of hiding them behind a menu that would then
- * have to be built.
- */
+/** Named here, not inline, so the bar and the phone row cannot drift. */
 export const STAGE_ACTIONS = {
   star: "Star",
   starred: "Starred",
@@ -109,16 +59,7 @@ export const STAGE_ACTIONS = {
   close: "Close",
 } as const;
 
-/**
- * Why Print cannot fire, per kind — on the control, never in a toast (§6).
- *
- * PRINTING IS A LAYOUT, AND THE QUESTION IS WHO DOES IT. A picture and text are
- * laid onto a sheet by Docs, so Docs prints both. A PDF is laid out by the
- * browser's own viewer inside the stage's frame, and that viewer carries its
- * own print control — so the outer button says whose job it is instead of
- * drawing a second one that could not drive the inner document. Sound and
- * moving pictures have no sheet at all.
- */
+/** On the control, never a toast (§6). A PDF's viewer owns its printing. */
 export const PRINT_REFUSALS = {
   embeddedViewer:
     "A PDF opens in its own viewer here, and that viewer owns its printing.",
@@ -127,22 +68,8 @@ export const PRINT_REFUSALS = {
     "Docs cannot render this kind on this device, so it cannot lay it onto a sheet.",
 } as const;
 
-/**
- * The stage's properties panel (§7's `vMeaning`). Each note is the handoff's
- * own sentence — a note explains what the value MEANS, which is the whole
- * reason the panel is not just the facts list twice.
- *
- * THREE OF THE HANDOFF'S ROWS ARE NOT DRAWN, and each is withheld because the
- * read behind it does not exist on this surface:
- *   * `Who this document names` — no read on this seat returns the people a
- *     document mentions; the details rail's Names tab already says Docs has
- *     not looked, and a second copy of that sentence on the stage would be a
- *     panel apologising twice.
- *   * `Where it is` — the drive projection carries no scope, so the panel
- *     cannot name the space a document is in or who can reach it.
- *   * `A refused write` — the stage has no write that can be refused. The
- *     row appears in the editor, which is where the seven outcomes land.
- */
+/** A note says what the value MEANS, or this is the facts list twice. Three
+ *  handoff rows stay undrawn: their reads do not exist on this surface. */
 export const STAGE_PROPS = {
   head: "Properties",
   title: "Title",

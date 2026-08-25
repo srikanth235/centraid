@@ -1,8 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit one instrument-panel screen
-// (runtime + backup + storage + components + logs + alerts) threading bridge
-// props to each drill-in's own screen component — binding layer v11 traded the
-// tab strip for one scrolling overview, which moved the drill-in links into the
-// body without shortening the prop wiring.
+// (runtime, backup, storage, components, logs, alerts) threading bridge props
+// to each drill-in's own screen component.
 import { useRef, useState } from "react";
 import type { JSX } from "react";
 
@@ -52,90 +50,48 @@ import type { StorageScreenProps } from "./StorageScreen.js";
 import styles from "./GatewayScreen.module.css";
 
 /*
- * System — gateway runtime, backup custody, capacity, resource mode, and the
- * three drill-ins (#341/#344/#347/#608; binding layer v11).
+ * System — gateway runtime, backup custody, capacity, resource mode, and three
+ * drill-ins (#341/#344/#347/#608).
  *
- * ONE SCROLLING OVERVIEW, NO TAB STRIP. The tabs were page-level navigation
- * dressed as a filter: they put Components, Logs and Alert history in front of
- * a member who arrived because a backup was overdue, and they hid Capacity
- * behind a word. In v11 the page reads top to bottom in the order the
- * questions are asked — is it answering, what is wrong now, are there copies,
- * is there room, how hard is it working, what is it — and the three diagnostic
- * pages are LINKS at the foot, under "Look closer". A drill-in is a page, so it
- * carries its own way back: System is never pinned in the band, and without
- * that row there is no route home at all.
- *
- * Green sections are absent, not empty: "What's wrong now" does not exist when
- * nothing is.
- *
- * People & devices remain on Household (#599), where their ownership context is
- * visible; the alert history stays here rather than on Notifications, because
- * durable machine health is System's subject.
+ * ONE SCROLLING OVERVIEW, NO TAB STRIP: the page reads in question order (is
+ * it answering, what is wrong, are there copies, is there room, how hard is it
+ * working, what is it); diagnostics are links under "Look closer". Green
+ * sections are absent, not empty. People & devices live on Household (#599).
  */
 
 export interface GatewayScreenProps {
   snapshot: GatewayRuntimeSnapshot;
-  /** Live clock (route ticks it each second) — drives the running counters. */
   now: number;
-  /** True while a settings write is in flight — the alert card locks. */
   savingAlert?: boolean;
   onAlertSecondsChange?: (seconds: number) => void;
   onAlertsEnabledChange?: (enabled: boolean) => void;
-  /** Optional launch-at-login toggle; defaults false for older hosts/tests. */
   launchAtLogin?: boolean;
   onLaunchAtLoginChange?: (enabled: boolean) => void;
-  /** True while the launch-at-login write is in flight — locks just that switch. */
   savingLaunchAtLogin?: boolean;
-  /** Polled component-health summary — reconciles the Overview status and
-   *  names the rows under "What's wrong now". `null` before the first poll. */
+  /** `null` before the first poll. */
   health: GatewayHealthDTO | null;
   loadHealth: SettingsDiagnosticsBridgeProps["loadHealth"];
-  /** Host plumbing for the Components drill-in's Connections section (#665).
-   *  Optional so hosts with no gateway registry (and route tests) still render. */
   connections?: DiagnosticsConnectionsProps;
   streamLogs: LogsBridgeProps["streamLogs"];
-  /**
-   * Restart the local embedded gateway (Identity section). Refused for a
-   * remote gateway — main answers `{ok: false}` with an explanation, rendered
-   * inline rather than thrown.
-   */
+  /** Remote gateway: `{ok: false}` renders inline, never throws. */
   onRestartGateway?: () => Promise<{ ok: boolean; error?: string }>;
-  /** Save `/centraid/_gateway/diagnostics` through a native dialog (Logs
-   *  drill-in toolbar). `canceled` when the user dismissed the dialog. */
   onExportDiagnostics: LogsBridgeProps["onExportDiagnostics"];
-  /**
-   * Resource mode (#521) — durable owner preference for how hard the gateway
-   * may use this machine. Optional so older hosts/tests keep rendering.
-   */
   loadResourceMode?: () => Promise<ResourceMode>;
   saveResourceMode?: (mode: ResourceMode) => Promise<void>;
-  /**
-   * Pause / resume background work (#528). Optional so older
-   * hosts/tests keep rendering; the pause control also gates on the health
-   * snapshot carrying `metrics.backgroundPause`.
-   */
+  /** Also gates on `metrics.backgroundPause` in the health snapshot (#528). */
   onPauseBackgroundWork?: (
     durationMs?: number
   ) => Promise<{ paused: boolean; until: string | null }>;
   onResumeBackgroundWork?: () => Promise<{ paused: boolean }>;
-  /**
-   * L3 "Tune" rung knob overrides (#528). Optional so older
-   * hosts/tests keep rendering; the Advanced section also gates on the health
-   * profile carrying `sources` + `bounds`.
-   */
+  /** Advanced also gates on the health profile's `sources` + `bounds` (#528). */
   loadKnobPrefs?: ResourceModeCardProps["loadKnobPrefs"];
   saveKnobPrefs?: ResourceModeCardProps["saveKnobPrefs"];
-  /** Backup custody sits above capacity — the copies question comes first. */
   backup?: Omit<BackupCardProps, "now">;
   initialTab?: TabId;
   /**
-   * Open one of System's pages AS A ROUTE, so the frame's back arrow returns
-   * to the overview and a drill-in can be deep-linked.
-   *
-   * Absent, the screen keeps the page in local state and behaves exactly as it
-   * did — which is what a test rendering it standalone, or a host with no
-   * router, needs. The one thing it must never do is draw its own back
-   * control: that would be a second, competing way back inside the page.
+   * Opens a drill-in AS A ROUTE, so the frame's back arrow returns to the
+   * overview; absent, the page falls back to local state. Either way the page
+   * must never draw its own back control.
    */
   onOpenTab?: (tab: TabId) => void;
   loadLocalUsage?: StorageScreenProps["loadLocalUsage"];
@@ -163,8 +119,7 @@ const STATUS_WORD: Record<ReconciledStatus, string> = {
   unknown: "Checking…",
 };
 
-/** The drill-in's own title — what the app bar says while you are on it. The
- *  way BACK is the frame's, not the page's. */
+/** App-bar title; the way back is the frame's, not the page's. */
 const DRILL: Record<DrillId, string> = {
   alerts: "Alert history",
   components: "Components",
@@ -184,8 +139,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
   const [localTab, setLocalTab] = useState<TabId>(
     props.initialTab ?? "overview"
   );
-  // Routed when the host gave us a way to navigate — the route is then the one
-  // source of truth for which page is showing, and the frame owns the way back.
+  // Routed: the route is the sole source of truth for the shown page.
   const routed = props.onOpenTab !== undefined;
   const tab = routed ? (props.initialTab ?? "overview") : localTab;
   const setTab = (next: TabId): void => {
@@ -203,10 +157,8 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
   };
   const drill: DrillId | null = tab === "overview" ? null : tab;
 
-  // The gateway's own uptime clock, advanced from the last heartbeat so it
-  // ticks between polls. Server-reported, so a desktop/gateway clock skew
-  // can't distort it. Keyed off the raw heartbeat, not the reconciled
-  // status — a degraded component doesn't blank the uptime figure.
+  // Server-reported and advanced from the last heartbeat, so clock skew cannot
+  // distort it. Keyed off the RAW heartbeat: degraded must not blank uptime.
   const uptimeMs =
     heartbeat === "up" &&
     snapshot.gatewayUptimeMs !== undefined &&
@@ -214,39 +166,19 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       ? snapshot.gatewayUptimeMs + Math.max(0, now - snapshot.lastCheckAt)
       : undefined;
   const availability = availabilityPct(snapshot);
-  // The heartbeat strip — the handoff's picture of availability, drawn from
-  // the window we actually measured. SEAM: `samples` is a per-launch ring, so
-  // the strip names THIS SESSION in its axis, its note and its aria sentence
-  // rather than the handoff's thirty days; a durable daily series has to reach
-  // the gateway contract before the month can be drawn honestly. See
-  // `gatewayHeartbeat.ts` for why the columns are probes and not minutes.
+  // SEAM: `samples` is a per-launch ring, so the strip says THIS SESSION in
+  // axis, note and aria; a month needs a durable daily series first.
   const strip = buildHeartbeatStrip(snapshot.samples, now);
 
-  // ── The hero, WHEN THERE IS SOMETHING TO EXPLAIN.
-  //
-  // A hero opening the page in every state says nothing the strip and the
-  // status line's own stamp have not already said better: "This browser last
-  // synced 4s ago" over a foot that
-  // reads "Synced · 4s ago" and an app bar that reads "checked just now";
-  // "availability 100.0%" over a strip whose entire subject is availability;
-  // "uptime 3h 31m" over an Identity row stating when the gateway started. A
-  // panel restating its own page is furniture, and a bordered one at the top of
-  // the first screenful is expensive furniture.
-  //
-  // A gateway that is NOT ANSWERING is the exception, and the reason to keep
-  // the block at all: that state needs a paragraph, not a row — what stopped,
-  // what did not, and what it means for the other devices — and the page's
-  // subject really is the outage. Degraded stays absent: "What's wrong now"
-  // already names the component and offers the page that can act on it, which
-  // is more than a paragraph could.
+  // THE HERO DRAWS ONLY WHEN NOT ANSWERING; elsewhere it restates the strip,
+  // stamp and Identity rows. Degraded stays absent: "What's wrong now" already
+  // names the component and the page that can act.
   const heroTitle =
     snapshot.statusSince === undefined
       ? STATUS_WORD.down
       : `Not answering since ${formatClock(snapshot.statusSince)}`;
-  // The consequence, said out loud at the moment it bites. A local gateway is
-  // a child of this app, so "down" also means every other device just lost the
-  // vault — most people meet that fact as "my phone can't see my stuff", with
-  // nothing connecting it back to here.
+  // A local gateway is a child of this app: "down" means every other device
+  // just lost the vault, so say that consequence out loud.
   const heroBody = props.readOnly
     ? `Runs on ${snapshot.gatewayLabel}, and this browser cannot reach it. What the rest of this page shows is the last replica that machine sent.`
     : snapshot.gatewayKind === "local"
@@ -290,8 +222,6 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
     });
   }
 
-  // ── What's wrong now. One row per thing, each carrying the way to the page
-  // that can do something about it. Absent entirely when nothing is wrong.
   const openComponents = (): void => setTab("components");
   const trouble: RowDef[] = [];
   if (overall === "down") {
@@ -325,13 +255,10 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
     });
   }
 
-  // ── Identity. Architecture nouns are allowed here and nowhere else.
+  // Architecture nouns are allowed here and nowhere else.
   const identity: RowDef[] = [
     {
       id: "machine",
-      // UPTIME LIVES HERE NOW, ticking, rather than in a hero fact list: this
-      // is the row about the machine, and how long it has been up is a fact
-      // about the machine.
       meta: uptimeMs === undefined ? "gateway" : `up ${formatUptime(uptimeMs)}`,
       sub:
         uptimeMs === undefined
@@ -350,9 +277,6 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
     },
     {
       id: "checks",
-      // AVAILABILITY AND LATENCY LAND HERE, for the same reason: they are facts
-      // about the probing, and this is the probing's row. The strip above draws
-      // the shape; this states the two numbers the shape cannot.
       meta:
         availability === undefined
           ? "this session"
@@ -377,9 +301,8 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       title: `Runs on ${snapshot.gatewayLabel}`,
     });
   } else if (props.onRestartGateway) {
-    // A PAGE, not a button. Twenty seconds with the vault out of reach of
-    // every device is a consequence that belongs in front of the member before
-    // the act, not in a tooltip after it.
+    // A PAGE, not a button: twenty seconds of vault outage must be read before
+    // the act, not explained in a tooltip after it.
     identity.push({
       action: {
         hint: "Read what a restart does, then decide",
@@ -392,9 +315,8 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
     });
   }
 
-  // ── Look closer. Pages, linked — not tabs. Storage is absent on purpose:
-  // capacity is already on this page, and its route id survives only so old
-  // deep links land somewhere.
+  // Pages, not tabs. Storage is absent on purpose: capacity is on this page;
+  // its route id survives only for old deep links.
   const lookCloser: RowDef[] = [
     {
       action: {
@@ -466,17 +388,11 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         </div>
       </div>
 
-      {/* NO BACK ROW. The drill-ins are routes (`onOpenTab`), so the arrow in
-          the chrome already returns to the overview. A page-level
-          "‹ System · Back" row would be a second back control three inches
-          below it pointing at the same place, and would spend the page's first
-          screenful on navigation instead of on what it is about. */}
+      {/* NO BACK ROW: the chrome's arrow already returns to the overview. */}
 
       {tab === "overview" ? (
         <>
-          {/* ONLY WHEN IT IS NOT ANSWERING (see `heroTitle` above). No eyebrow
-              either: the badge over the title was a third statement of what the
-              `<h1>` and the body already say. */}
+          {/* Only when not answering (see `heroTitle`); no eyebrow either. */}
           {overall === "down" ? (
             <PanelBlock
               body={heroBody}
@@ -487,10 +403,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             />
           ) : null}
 
-          {/* Availability as a shape rather than a percentage: a percentage
-              cannot say WHEN it stopped, and that is the question people
-              arrive with. Absent until three probes have landed — below that
-              the strip is two rectangles rather than a shape. */}
+          {/* A shape, not a percentage: only a shape says WHEN it stopped. */}
           {strip ? (
             <div data-testid="heartbeat-strip">
               <BarsBlock
@@ -504,9 +417,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             </div>
           ) : null}
 
-          {/* Pre-focused arrival: the cause is named, and the section it
-              belongs to is the next thing on the page rather than something to
-              go looking for. */}
+          {/* Pre-focused arrival. */}
           {props.cause === "backup-alert" ? (
             <div data-testid="system-arrival">
               <RowsBlock
@@ -533,14 +444,10 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             </div>
           ) : null}
 
-          {/* The H5 service offer, relocated here from a blocking onboarding
-              step. Demotes itself to a one-line standing control once the user
-              declines — dismissing the pitch must not retire the only way to
-              install the service — and disappears once installed. */}
+          {/* Declining demotes the pitch; never retire the install path. */}
           {props.readOnly ? null : <GatewayServiceTip />}
 
-          {/* Custody before capacity, unless the member arrived asking about
-              room. Each card owns its own section head. */}
+          {/* Custody before capacity unless they arrived asking about room. */}
           {props.focus === "capacity" ? (
             <>
               {capacity}
@@ -599,11 +506,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             <RowsBlock ariaLabel="Look closer" rows={lookCloser} />
           </div>
 
-          {/* NO CLOSING NOTE. Commentary ABOUT the page — that this seat
-              withholds verbs, that System is never pinned in the band — is not
-              a fact about the gateway and does not belong here. A row whose
-              verb is withheld says so ON THE ROW, where the reader is already
-              looking, as the Identity row and the read-only rows do. */}
+          {/* NO CLOSING NOTE: a withheld verb says so on its own row. */}
         </>
       ) : null}
 

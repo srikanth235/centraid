@@ -14,40 +14,21 @@ const fromHere = (path: string): string =>
 const appVersion = JSON.parse(readFileSync(fromHere("./package.json"), "utf8"))
   .version as string;
 
-/**
- * Same-origin path the four Binding Layer faces are served from (#707).
- *
- * Absolute, not relative: the PWA is a single document served at every route
- * (`/`, `/apps/…`, `/settings`), and the token <style> is injected once at
- * boot — a relative `fonts/…` would resolve against whatever path the user
- * happened to deep-link into, and 404 on all but the root.
- */
+/** Absolute, never relative (#707): the PWA is one document at every route, so
+ * a relative `fonts/…` resolves against the deep-linked path and 404s. */
 const FONT_BASE = "/fonts";
 
-/**
- * Serve `@centraid/design`'s vendored `.woff2` files from this app's OWN
- * origin, in dev and in the build.
- *
- * The faces are emitted as build assets rather than copied into `public/`:
- * `public/` is a tracked source directory, and 160 KB of binaries that a
- * build step regenerates does not belong in one (the iroh worker gets away
- * with it only because it is gitignored). Emitting keeps the source tree
- * clean and makes the manifest in `FONT_FILES` the single decider of what
- * ships.
- *
- * A CDN is not an option here even though a CDN is the usual answer: the
- * shell installs as a PWA and is expected to paint offline, its app surfaces
- * run behind a strict CSP, and a cross-origin font is a third party learning
- * every reader's IP on first paint.
- */
+/** Vendored `.woff2` faces from this app's OWN origin, emitted as build assets
+ * so `FONT_FILES` alone decides what ships. A CDN is not an option: the shell
+ * paints offline under a strict CSP, and a cross-origin font hands a third
+ * party every reader's IP. */
 function centraidFonts(): Plugin {
   const byPath = new Map(
     FONT_FILES.map((file) => [`${FONT_BASE}/${file.fileName}`, file])
   );
   return {
     name: "centraid-fonts",
-    // `vite dev` has no dist to read from; answer the same URLs from the
-    // package directory so dev and prod resolve identically.
+    // `vite dev` has no dist: answer the same URLs from the package directory.
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const file = byPath.get((req.url ?? "").split("?")[0] ?? "");
@@ -64,9 +45,8 @@ function centraidFonts(): Plugin {
       for (const file of FONT_FILES) {
         this.emitFile({
           type: "asset",
-          // Unhashed and outside `/assets/`: the URL is baked into the token
-          // CSS string the preload/boot injects, so it must be predictable,
-          // and `_headers` long-caches `/fonts/*` by that same literal path.
+          // Unhashed and outside `/assets/`: the URL is baked into the injected
+          // token CSS, and `_headers` long-caches `/fonts/*` by that path.
           fileName: `fonts/${file.fileName}`,
           source: readFileSync(fontFilePath(file)),
         });
@@ -77,17 +57,15 @@ function centraidFonts(): Plugin {
 
 export default defineConfig({
   resolve: {
-    // Array form, and every pattern anchored: `@centraid/design` must not
-    // swallow its own subpaths.
+    // Every pattern anchored: `@centraid/design` must not swallow its subpaths.
     alias: [
       {
         find: "@centraid/client",
         replacement: fromHere("../../packages/client/src"),
       },
       {
-        // The browser element substrate the blueprint apps render on. Kept a
-        // subpath, never folded into the barrel: the design root export is
-        // reachable from Expo and must stay DOM-free.
+        // Never folded into the barrel: the design root is reachable from Expo
+        // and must stay DOM-free.
         find: /^@centraid\/design\/elements$/u,
         replacement: fromHere("../../packages/design/src/elements/index.ts"),
       },
@@ -102,13 +80,9 @@ export default defineConfig({
     ],
   },
   define: {
-    // Real package version for the web shell (#468).
     __APP_VERSION__: JSON.stringify(appVersion),
-    // The `@font-face` block, generated in Node at config time and inlined as
-    // a string constant. `@centraid/design/fonts` reaches for `node:path`, so
-    // it can never be imported by the browser bundle — but its OUTPUT is a
-    // plain string, and `define` is the seam that already carries build-time
-    // facts into this app (#707).
+    // `@centraid/design/fonts` reaches for `node:path`, so the browser bundle
+    // can never import it; `define` carries its string OUTPUT instead (#707).
     __CENTRAID_FONT_FACE_CSS__: JSON.stringify(toFontFaceCss(FONT_BASE)),
   },
   build: {
@@ -118,57 +92,14 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         codeSplitting: {
-          // Vite 8 moved to rolldown, whose splitting carved the cold shell's
-          // critical path from 8 requests (Vite 7) to 15 — same bytes, more
-          // round trips. This folds back the small client-owned modules that
-          // rolldown split out individually: 15 -> 12 requests, bytes flat.
-          //
-          // Deliberately NARROW, by explicit module path. Two broader shapes
-          // were tried and BOTH ship a blank page (`Cannot read properties of
-          // undefined (reading 'onGatewayChanged')`):
-          //   - `{ test: /node_modules/ }` (a "vendor" chunk)
-          //   - `{ test: /packages\/(client\/src|blob-format\/dist)\// }`
-          // Cause: `apps/web/src/web-host.ts` assigns `window.CentraidApi` at
-          // module-evaluation time, and hoisting its consumers into one chunk
-          // reorders them ahead of that assignment. Grouping cannot express
-          // "after web-host"; getting below 12 needs those consumers to stop
-          // reading the global at import time, which is a source change.
-          //
-          // If you widen this regex, re-run apps/web/tests/e2e/perf-waterfall
-          // .spec.ts — it asserts the app RENDERS. Request count alone is
-          // gameable: the blank-page builds above "improved" to 6 requests.
-          //
-          // ROUTE-LEVEL CODE SPLITTING WAS TRIED AND WAIVED (#659).
-          // Recorded here so nobody repeats the experiment from scratch.
-          //
-          // Making the shell's 18 non-first-paint routes `React.lazy` MEASURED
-          // WORSE on the cold shell, not better:
-          //
-          //     requests 12 -> 73     transfer 387,990 B -> 857,155 B
-          //
-          // The routes themselves were NOT the cost — 0 of those 73 requests
-          // was a lazy route chunk. The damage was indirect: 18 `import()`
-          // boundaries fragmented the EAGER graph into ~70 chunks (40 of them
-          // under 3 KB, 60 KB in total), and compressing 70 small files
-          // separately costs far more than compressing a few large ones.
-          //
-          // Four ways out were measured. `codeSplitting.minSize` changed
-          // nothing; `minShareCount: 4` made it worse (100 -> 103 chunks);
-          // grouping routes + screens gave 21 chunks but a 1.24 MB chunk the
-          // eager graph pulls; grouping only the 18 route modules gave 22
-          // chunks AND A BLANK APP — the ordering hazard above.
-          //
-          // PRECONDITION for retrying: `packages/client/src/gateway-client-
-          // core.ts` and `packages/client/src/vault-change-feed.ts` each
-          // subscribe to `window.CentraidApi` at MODULE-EVALUATION time, and
-          // their relative order is itself load-bearing (vault-change-feed's
-          // own comment relies on gateway-client-core being imported above it).
-          // Splitting is viable only once those subscriptions stop being
-          // eval-time side effects — an explicit init the host calls after
-          // installing the API, ordered deliberately rather than by import
-          // order — and it must then be RE-MEASURED, because nothing here shows
-          // splitting wins even with the hazard gone. A blank app is a far
-          // worse outcome than an unsplit bundle.
+          // NARROW by module path: broader groups ship a BLANK PAGE, because
+          // `web-host.ts` assigns `window.CentraidApi` at module-evaluation
+          // time and grouping reorders its consumers ahead of it. Widening this
+          // regex means re-running `tests/e2e/perf-waterfall.spec.ts`, which
+          // asserts the app RENDERS — request count alone is gameable.
+          // Route-level `React.lazy` is waived and measured worse (#659):
+          // retrying means first ending the eval-time subscriptions in
+          // `gateway-client-core.ts` and `vault-change-feed.ts`.
           groups: [
             {
               name: "shell-common",

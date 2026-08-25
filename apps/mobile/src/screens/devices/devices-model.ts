@@ -1,33 +1,15 @@
-// The Devices place, as pure model (#765, spec §7).
-//
-// Everything the screen SAYS is derived here so the copy contract is under
-// test without a renderer — the split `screens/home/home-status.ts` and
-// `kit/components/health-line.ts` already make. The screen owns pressing,
-// this file owns wording, grouping and the five states.
-//
-// Two honest omissions live in this file rather than in a comment on the
-// screen, because they are facts about the DATA, not about the layout:
-//
-//  1. `DeviceRow` carries no "last seen" (the route's `toDto` never emits
-//     `lastUsedAt`), so no row can say `Dormant` and none of them tries. The
-//     reference's `seen 11 minutes ago` clause is simply absent rather than
-//     rendered as an always-empty phrase.
-//  2. There is no recovery plane on this wire at all — no nominated people,
-//     no two-of-three. The reference's "Shared recovery" section and its note
-//     are therefore not built: a section with invented rows would be the one
-//     failure mode this screen cannot afford.
+// The Devices place as pure model (#765, §7). Two DATA facts bound it:
+// `DeviceRow` carries no "last seen", so no row says `Dormant`, and this wire
+// has no recovery plane, so no recovery section is built.
 
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
 import { memberFacingError } from "../../kit/member-error";
 import type { DeviceRow, DeviceTicket } from "../../lib/devices";
 import type { VaultRow } from "../../lib/gateway";
 
-/** The roster size at which the page reads as `full` rather than `ready` —
- *  the reference's own full-state roster (spec §7: 8 devices). */
 export const FULL_ROSTER = 8;
 
-/** Raw transport errors are member-facing here, so architecture vocabulary is
- * lowered before it reaches Copies. */
+/** Member-facing: architecture vocabulary is lowered. */
 export function memberDeviceError(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : fallback;
   return memberFacingError(message).replace(
@@ -36,30 +18,24 @@ export function memberDeviceError(error: unknown, fallback: string): string {
   );
 }
 
-/** What one device says, before the screen decides what pressing it does. */
 export interface DeviceRowCopy {
-  /** `deviceId` — the revocation handle, and the row's list identity. */
   key: string;
   title: string;
   sub: string;
   meta: string;
-  /** A revoked binding: present for attribution, inert. */
+  /** A revoked binding: kept for attribution, inert. */
   off: boolean;
 }
 
-/** One band of the roster. `label`/`meta` feed `SectionBlock` verbatim. */
 export interface DeviceGroup {
   key: string;
   label: string;
   meta: string;
-  /** The devices themselves, so the screen can wire per-row verbs. */
   devices: DeviceRow[];
   rows: DeviceRowCopy[];
 }
 
-/** The day something happened, in the reader's locale ("3 March"). A pairing
- *  is remembered as a date; nothing here is read as an age, because the wire
- *  carries no clock for these rows. */
+/** A date, never an age: the wire carries no clock here. */
 export function pairedOn(iso: string | undefined): string {
   if (!iso) return "";
   const at = Date.parse(iso);
@@ -70,7 +46,6 @@ export function pairedOn(iso: string | undefined): string {
   });
 }
 
-/** A time of day, for the one clock this screen does have: a ticket expiry. */
 export function expiresAt(iso: string): string {
   const at = Date.parse(iso);
   if (Number.isNaN(at)) return "";
@@ -87,7 +62,6 @@ function computePhrase(device: DeviceRow): string {
     : "not contributing compute";
 }
 
-/** The row's one state word: what this device IS to you right now. */
 export function stateWord(device: DeviceRow, other: boolean): string {
   if (device.revoked) return "Revoked";
   if (device.current === true) return "This device";
@@ -95,7 +69,6 @@ export function stateWord(device: DeviceRow, other: boolean): string {
   return "Fine";
 }
 
-/** The row's sub line — whose it is, what it is doing, and since when. */
 export function subLine(device: DeviceRow, other: boolean): string {
   return [
     other ? device.ownerLabel : "",
@@ -121,16 +94,7 @@ export function deviceRowCopy(
   };
 }
 
-/**
- * Who "you" are on this roster.
- *
- * The phone reads the roster as itself over its own paired tunnel, so the row
- * marked `current` names the caller. When nothing is marked — a roster read
- * through a link that predates the flag — a roster with exactly ONE owner
- * still answers the question, and a roster with several does not: rather than
- * guess, `rosterGroups` then names each band after its owner instead of
- * calling one of them yours.
- */
+/** `undefined` rather than a guess: several owners, no `current` row. */
 export function selfOwnerId(devices: readonly DeviceRow[]): string | undefined {
   const current = devices.find((device) => device.current === true);
   if (current) return current.ownerId;
@@ -148,20 +112,13 @@ function groupOf(
     devices,
     key,
     label,
-    // The count is of what the band holds, tombstones included — a revoked
-    // binding is still a row a member has to scroll past.
+    // Tombstones counted: a revoked row is still scrolled past.
     meta: String(devices.length),
     rows: devices.map((device) => deviceRowCopy(device, other)),
   };
 }
 
-/**
- * The roster, split into the bands the page shows.
- *
- * `Yours` first, then everyone else under one `Other people` heading — the
- * reference's split, driven by `ownerId` rather than by a row index, because
- * on a real gateway the caller's own devices are almost all of them.
- */
+/** Split on `ownerId`, not a row index. */
 export function rosterGroups(devices: readonly DeviceRow[]): DeviceGroup[] {
   const self = selfOwnerId(devices);
   if (self === undefined) {
@@ -181,15 +138,12 @@ export function rosterGroups(devices: readonly DeviceRow[]): DeviceGroup[] {
   return groups;
 }
 
-/** Does a band of other people's hardware render at all? The note about what
- *  a person on your gateway can reach is published only when it does. */
 export function hasOtherPeople(groups: readonly DeviceGroup[]): boolean {
   if (groups.length > 1) return true;
   return groups.length === 1 && groups[0]?.key !== "yours";
 }
 
-/** One owned vault, as a fact row. No verb: this screen reads the registry,
- *  and vault administration is the host's command line (`lib/gateway.ts`). */
+/** No verb: vault administration is the host's CLI. */
 export function vaultRowCopy(vault: VaultRow): DeviceRowCopy {
   return {
     key: vault.vaultId,
@@ -200,13 +154,6 @@ export function vaultRowCopy(vault: VaultRow): DeviceRowCopy {
   };
 }
 
-/**
- * Which of the five states the page is in.
- *
- * `empty` is the reference's own reading of it: a roster whose only live
- * binding is the phone asking. One device is not a list, it is the sentence
- * "only this device is enrolled".
- */
 export function devicesState(input: {
   status: "loading" | "ready" | "error";
   devices: readonly DeviceRow[];
@@ -218,17 +165,8 @@ export function devicesState(input: {
   return live.length >= FULL_ROSTER ? "full" : "ready";
 }
 
-/**
- * The standing sentence, in the reference's shape (`label · detail`) but off
- * live facts only.
- *
- * The one thing that can be PENDING here is a pairing ticket this phone has
- * minted and nobody has redeemed — the gateway serves no inbound "Ana asked
- * to connect" plane to the phone, so that is the request the line reports.
- * It publishes no inline verb: the ticket it is talking about is on the
- * screen already, and "Review it" would scroll to what the member is looking
- * at.
- */
+/** The only PENDING thing is an unredeemed ticket minted here; the phone gets
+ * no inbound-request plane. No inline verb. */
 export function devicesHealthCopy(input: {
   devices: readonly DeviceRow[];
   pendingTickets: number;
@@ -258,7 +196,6 @@ export function devicesHealthCopy(input: {
   };
 }
 
-/** What the minted ticket's panel says beside the token itself. */
 export function ticketFacts(
   ticket: DeviceTicket
 ): Array<{ key: string; label: string; value: string }> {
@@ -272,23 +209,12 @@ export function ticketFacts(
   ];
 }
 
-/**
- * Did the gateway refuse this revocation because it would strand a vault?
- *
- * The gateway answers 409 for exactly that, and `fetchJson` raises a
- * `GatewayError` whose message carries the status and NOT the body (mobile's
- * HTTP core never surfaces a response body — see `lib/devices.ts`). So the
- * status is all there is to read, and the vault name the member must echo
- * back has to come from the device row rather than from the refusal. Any
- * other conflict on this route would be read the same way; the confirm that
- * follows asks for a name the member has to type, so a misread costs a
- * correct-looking prompt, never an unintended revocation.
- */
+/** Status only: mobile's HTTP core surfaces no body, so the name to echo back
+ * comes from the device row. A misread costs a prompt, never a revocation. */
 export function isLastDeviceRefusal(error: unknown): boolean {
   return error instanceof Error && /\b409\b/u.test(error.message);
 }
 
-/** The vault whose name the member must type to revoke this device. */
 export function strandedVaultName(device: DeviceRow): string {
   return device.vaultName ?? device.vaultId;
 }

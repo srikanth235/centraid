@@ -1,21 +1,6 @@
-/**
- * Local-side automation fire (#98) — `runAutomation`, the harness-runtime
- * wrapper over the fire spine (#147, Concern 2).
- *
- * The per-fire orchestration (resolve the automation, open its ledger, run
- * `handler.js`, cascade `onFailure`) lives in `@centraid/server/automation`'s `runFire`
- * — it only touches app-engine primitives. The one thing it needs from
- * agent-runtime is the `ctx.delegate` dispatch surface: a bounded model turn
- * against the user's real provider. This file builds that surface (capturing
- * the harness kind) and injects it as `openDispatch`, leaving the spine — and
- * the onFailure cascade — to app-engine.
- *
- * The captured kind is any registered `HarnessKind`: `startLiveDispatch` routes
- * `ctx.delegate` through the `HarnessSpec` registry (#479). `'codex'`
- * is the default for a caller that names no harness. There is no `ctx.tool`
- * rail (#484), so a fire whose handler never calls `ctx.delegate` starts zero
- * child processes and zero HTTP servers.
- */
+// The harness-runtime wrapper over the fire spine (#98, #147): orchestration
+// stays in `runFire`; this file injects the `ctx.delegate` surface. No
+// `ctx.tool` rail (#484), so a handler that never delegates spawns nothing.
 
 import { randomUUID } from "node:crypto";
 
@@ -39,70 +24,32 @@ import {
 } from "./run-automation-live-dispatch.js";
 
 export interface RunAutomationOptions {
-  /** `<appId>/<automationId>` handle of the automation to fire. */
   automationRef: string;
-  /**
-   * Caller-supplied run id. Lets the caller open the run viewer before the
-   * fire completes. Defaults to `<ref>:<ts>:<uuid8>`.
-   */
   runId?: string;
-  /**
-   * Directory holding the per-app *state* folders (logs, settings.json),
-   * inside the vault's workspace. Survives version swaps.
-   */
   appsDir: string;
-  /**
-   * The vault's `journal.db` file — the run ledger every fire writes
-   * (#280: one per-vault ledger; the per-app `runtime.sqlite` is gone).
-   */
+  /** The one per-vault run ledger (#280). */
   journalDbFile: string;
-  /** Accounted host turn seam. Required so a fire cannot construct an unmetered door. */
+  /** Required: a fire must not construct an unmetered door. */
   runTurn: RunTurnFn;
-  /**
-   * Directory holding the per-app *code* folders — automation manifests +
-   * handlers resolve from `<codeAppsDir>/<appId>/automations/<id>/` (issue
-   * #137). Defaults to `appsDir` for the legacy/flat layout.
-   */
   codeAppsDir?: string;
-  /**
-   * Host-injected `ctx.vault` executor factory keyed by app id (duaility
-   * §12) — forwarded to the fire spine. Absent → `ctx.vault` fails closed.
-   */
   vaultFor?: (
     appId: string,
     automationRef: string
   ) => VaultBridge | undefined | Promise<VaultBridge | undefined>;
-  /** Which CLI to drive. Defaults to codex. */
   harness?: HarnessKind;
-  /**
-   * Whether `harness` came from the user's own settings (`prefs`) or from the
-   * automation's artifact-writable manifest (`manifest`). Only the former is
-   * consent for unattended egress; a manifest pin must still be a live ladder
-   * member or carry an existing grant (#567).
-   */
+  /** Only `prefs` is consent for unattended egress; a manifest pin must be a
+   *  live ladder member or carry a grant (#567). */
   harnessSelectionSource?: "prefs" | "manifest";
-  /**
-   * Fallback model id/alias for this fire's `ctx.delegate` calls, applied only
-   * when the automation's manifest doesn't set `requires.model` (that always
-   * wins — see `runFire`'s `OpenDispatchArgs.model`). The caller resolves
-   * this from prefs (`model.<harnessKind>.automations` → `model.<harnessKind>.default`)
-   * before calling in; `undefined` here means "no prefs fallback either" —
-   * the harness sends no `model` field and uses its own built-in default.
-   */
+  /** Fallback only: the manifest's `requires.model` always wins. */
   model?: string;
-  /** Semantic ACP configuration pins resolved for the automation subsystem. */
   configPins?: Readonly<Record<string, string>>;
-  /** Ordered, pre-consented fallback harnesses for ctx.delegate calls. */
   harnessLadder?: readonly HarnessKind[];
-  /** Load launch settings/default pins for each failover rung. */
   harnessPrefsFor?: (harness: HarnessKind) => Promise<HarnessPrefs | undefined>;
   harnessHealth?: HarnessHealthController;
   harnessHealthContext?: string;
-  /** Required durable conversation×provider grant controller for unattended fires. */
+  /** Required for unattended fires. */
   providerEgressConsent: ProviderEgressConsentController;
-  /** Resolve historical attachment hashes for scheduled handoff hydration. */
   hydrationAttachmentPath?: (hash: string) => string;
-  /** Alert/monitor seam when a failed fire advances to the next rung. */
   onFailover?: (event: {
     automationRef: string;
     from: HarnessKind;
@@ -111,47 +58,20 @@ export interface RunAutomationOptions {
     failedRunId: string;
     nextRunId: string;
   }) => void;
-  /** Hard timeout. Defaults to 5 minutes. */
   timeoutMs?: number;
-  /** Optional logger. */
   onLog?: (level: "info" | "warn" | "error", msg: string) => void;
-  /** Live run-stream sink (#158); forwarded to the fire spine. */
   onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
-  /** Host-owned detached queue for another bounded pass over remaining work. */
   rearm?: automation.RunFireOptions["rearm"];
-  /**
-   * Trigger that caused this fire. Defaults to `'scheduled'`. The onFailure
-   * dispatch loop uses `'on_failure'`.
-   */
   triggerKind?: AutomationTriggerKind;
-  /**
-   * Source that fired this run (`cron` / `webhook` / `manual`). Defaults to
-   * `'cron'` — the scheduler is the usual local caller.
-   */
   triggerOrigin?: AutomationTriggerOrigin;
-  /** Human-readable trigger-gap/cursor note stored on the turn. */
   note?: string;
-  /** Optional input payload (e.g. for on_failure dispatch). */
   input?: unknown;
-  /** Optional parent run id for the onFailure sub-run DAG link. */
   parentRunId?: string;
-  /**
-   * Recursion guard for `onFailure` cascades. Defaults to 0 — the runtime
-   * refuses to push the chain past depth 3.
-   */
+  /** Recursion guard: the runtime refuses to push the chain past depth 3. */
   failureDepth?: number;
-  /**
-   * Gateway broker seam (#304) — forwarded to the fire spine so a
-   * connector's connection credential resolves and injects per fire.
-   */
   resolveConnection?: automation.ResolveConnection;
-  /**
-   * Enrichment-tier seam (privacy enforcement) — forwarded verbatim to the
-   * fire spine, which refuses any automation declaring `manifest.enrich`
-   * when this is absent or cannot answer. See `enrich-gate.ts`.
-   */
+  /** The spine refuses `manifest.enrich` when this is absent. */
   resolveEnrichPolicy?: automation.RunFireOptions["resolveEnrichPolicy"];
-  /** Resolve each onFailure target's own automation pin. */
   resolveNestedRuntime?: (automationRef: string) => Promise<{
     harnessKind?: HarnessKind;
     model?: string;
@@ -159,11 +79,7 @@ export interface RunAutomationOptions {
   }>;
 }
 
-/**
- * Single automation fire. Returns the run record + the handler outcome. A
- * missing automation app throws; a handler failure surfaces in
- * `outcome.ok === false`.
- */
+/** A missing app throws; a handler failure is `outcome.ok === false`. */
 export async function runAutomation(opts: RunAutomationOptions): Promise<{
   outcome: automation.HandlerOutcome;
   record: automation.RunRecord;
@@ -185,12 +101,9 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
   const runRung = async (index: number): Promise<void> => {
     const harness = ladder[index]!;
     const isPrimary = index === 0;
-    // A known-open breaker is decided BEFORE the handler runs. `ctx.delegate`
-    // checks it too, but by then the handler's earlier side effects
-    // (`ctx.fetch`, vault writes) have already landed and the next rung would
-    // replay them. Scoped only when the caller supplied the same health
-    // context the dispatcher uses — otherwise the keys would not match and the
-    // dispatcher's check stays the only honest one.
+    // A known-open breaker is decided BEFORE the handler runs: by the time
+    // `ctx.delegate` checks, side effects have landed and the next rung replays
+    // them.
     if (opts.harnessHealthContext && opts.harnessHealth) {
       const breaker = opts.harnessHealth.canAttempt(
         opts.harnessHealthContext,
@@ -240,8 +153,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         journalDbFile: opts.journalDbFile,
         runTurn: opts.runTurn,
         harness: isHarnessKind(args.harnessKind) ? args.harnessKind : harness,
-        // A manifest capability tier, when present, still wins. Provider-
-        // specific owner pins are deliberately cleared after the first rung.
+        // Provider-specific owner pins are cleared after the first rung.
         ...((args.model ?? model) ? { model: args.model ?? model } : {}),
         ...((args.configPins ?? configPins)
           ? { configPins: args.configPins ?? configPins }
@@ -257,9 +169,8 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         ...(opts.hydrationAttachmentPath
           ? { hydrationAttachmentPath: opts.hydrationAttachmentPath }
           : {}),
-        // A manifest-pinned primary is not user-authored consent; it may still
-        // egress if the user's live failover ladder contains that harness, which
-        // is exactly what `recordDerived('ladder', …)` verifies.
+        // A manifest-pinned primary is not user-authored consent: it egresses
+        // only if the live ladder holds that harness.
         consentSource:
           isPrimary && opts.harnessSelectionSource !== "manifest"
             ? "direct"
@@ -289,8 +200,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         ...(opts.rearm ? { rearm: opts.rearm } : {}),
         ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
         ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
-        // The caller's trigger-gap/cursor note stays on every rung; a failover
-        // notice is additive evidence, not a replacement for it.
+        // The caller's note stays on every rung; a failover notice is additive.
         ...(turnNote ? { note: turnNote } : {}),
         ...(failoverNotice ? { failoverNotice } : {}),
         ...(opts.input === undefined ? {} : { input: opts.input }),
@@ -344,10 +254,8 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
   await runRung(0);
 
   if (!last) {
-    // Every rung was condemned before its handler could run. Surfacing this as
-    // a throw keeps the caller's "failed before the ledger opened" path — which
-    // closes the run stream and records the health error — instead of inventing
-    // a run record for work that never started.
+    // Throw, so the caller keeps its "failed before the ledger opened" path
+    // rather than inventing a record for work that never started.
     throw new Error(
       `automation ${opts.automationRef}: no harness available — ${condemned.join("; ")}`
     );

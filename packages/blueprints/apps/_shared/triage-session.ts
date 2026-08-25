@@ -1,73 +1,25 @@
-// THE TRIAGE SESSION (#712) — the one state machine behind every
-// "work through a queue of proposals, one at a time" surface in this app.
-//
-// Two flows read it, in two different dialects:
-//
-//   * FACE REVIEW (components/FaceReview.tsx + the native twin) — DURABLE
-//     answers. Each answer is a vault write; the queue is re-read afterwards
-//     and the answered proposal is gone from it.
-//   * DUPLICATE REVIEW (duplicates.tsx + components/DuplicateReview.tsx) —
-//     EPHEMERAL decisions. Nothing persists a "reviewed this cluster" state
-//     by design (there is no proposal table; the only write is trashing the
-//     redundant copies), so the queue is a SNAPSHOT the cursor walks.
-//
-// This module deliberately does NOT unify those two. It unifies what they
-// genuinely share and nothing else:
-//
-//   1. an ordered queue and a cursor into it, with exactly one item current;
-//   2. a FROZEN denominator, so the numerator counts UP as the member works
-//      ("1 of 54") instead of the total sliding around under them as the
-//      backlog changes mid-session — the single trickiest bit of both flows,
-//      and the one both had reimplemented with a `sessionStartTotal` ref;
-//   3. SKIP vs ANSWER as different acts — skip moves the cursor and records
-//      nothing (so "it stays in the queue" is literally true), an answer
-//      records an outcome and moves on;
-//   4. per-outcome counts, so a surface can say what the session did.
-//
-// Everything is a pure function over an immutable value: no React, no DOM, no
-// timers. That is what lets the native twin import it verbatim
-// (`@centraid/blueprints/apps/_shared/triage-session`) rather than keeping a
-// parallel copy that drifts — the same arrangement `enrichment-consent.ts`
-// already has with its own screen.
-//
-// The third consumer (Docs OCR corrections) joins here by naming its own
-// outcome vocabulary; nothing in this file knows what a face or a cluster is.
+// TRIAGE SESSION (#712) — queue+cursor machine shared by Face Review (durable
+// answers, queue re-read per write), Duplicate Review (ephemeral snapshot) and
+// Docs OCR. Shared surface only: one current item, a FROZEN denominator,
+// skip-vs-answer, per-outcome counts. Pure values, so native twins import it.
 
-/** One session over one queue. Treat as immutable — every verb returns a new
- *  value rather than mutating this one, so a React state setter can take the
- *  result directly and a DOM-imperative caller can reassign one variable. */
+/** Immutable; `cursor === queue.length` means finished. */
 export interface TriageSession<Item> {
-  /** The items still to answer, in the order the surface walks them. */
   readonly queue: readonly Item[];
-  /** Which one is current. `queue.length` means the session is finished. */
   readonly cursor: number;
-  /** The denominator, frozen when the session opened (see 2 above). */
   readonly total: number;
-  /** How many answers of each outcome this session recorded. */
   readonly counts: Readonly<Record<string, number>>;
 }
 
-/** What a surface prints. Derived, never stored, so it cannot go stale. */
 export interface TriageProgress {
-  /** 1-based position for `N of M` — never past `total`, never below 1. */
   readonly position: number;
   readonly total: number;
-  /** Answers recorded so far, across every outcome. */
   readonly answered: number;
-  /** Items left in the queue behind the current one. */
   readonly remaining: number;
-  /** True when there is nothing current — the zero-remaining state. */
   readonly done: boolean;
 }
 
-/**
- * Open a session over a queue.
- *
- * `total` exists for the durable flow, whose queue page is BOUNDED (the face
- * queue reads one page at a time) while the real backlog it is working
- * through is larger: the surface passes the true backlog size so the
- * denominator is the member's actual queue, not the page in hand.
- */
+/** Pass `total` when the queue is one page of a larger backlog. */
 export function openTriage<Item>(
   queue: readonly Item[],
   options?: { total?: number; at?: number }
@@ -80,21 +32,13 @@ export function openTriage<Item>(
   };
 }
 
-/** The one item on screen, or `undefined` when the session is finished. */
 export function triageCurrent<Item>(
   session: TriageSession<Item>
 ): Item | undefined {
   return session.queue[session.cursor];
 }
 
-/**
- * Move past the current item WITHOUT recording anything.
- *
- * Wraps, because a skipped item genuinely stays in the queue — the member
- * meets it again after the ones behind it, which is what "decide later" means
- * on both surfaces. A one-item queue therefore stays on that item rather than
- * pretending the session is over.
- */
+/** Records nothing and WRAPS: a skip leaves the item in the queue. */
 export function triageSkip<Item>(
   session: TriageSession<Item>
 ): TriageSession<Item> {
@@ -102,15 +46,7 @@ export function triageSkip<Item>(
   return { ...session, cursor: (session.cursor + 1) % session.queue.length };
 }
 
-/**
- * Record an answer for the current item and move on.
- *
- * The cursor advances rather than wraps: an answered item is finished with,
- * so running off the end is the correct, reachable end of the session —
- * `triageCurrent` then returns `undefined` and the surface shows its
- * zero-remaining state. A durable flow follows this with `triageRefill` once
- * the write has landed and the queue has been re-read.
- */
+/** Advances; running off the end ends the session. */
 export function triageAnswer<Item>(
   session: TriageSession<Item>,
   outcome: string
@@ -125,16 +61,7 @@ export function triageAnswer<Item>(
   };
 }
 
-/**
- * Replace the queue, keeping the session's own memory (the frozen total and
- * the outcome counts).
- *
- * This is the durable flow's re-read: the answered proposal is gone from the
- * vault's queue, so the fresh page is shorter and every index in it has
- * shifted. The cursor therefore goes back to the head unless the caller names
- * a position — there is no "same item" to hold, and a stale index would land
- * the member on a proposal they never navigated to.
- */
+/** Keeps total and counts; indexes shifted, so the cursor returns to head. */
 export function triageRefill<Item>(
   session: TriageSession<Item>,
   queue: readonly Item[],
@@ -162,9 +89,6 @@ export function triageProgress<Item>(
   };
 }
 
-/** A cursor inside the queue, or `length` (finished) for an empty one. A
- *  caller's requested position is a hint — an out-of-range one starts at the
- *  head rather than leaving the session pointing at nothing. */
 function clampCursor(at: number, length: number): number {
   if (length === 0) return 0;
   return Number.isInteger(at) && at >= 0 && at < length ? at : 0;

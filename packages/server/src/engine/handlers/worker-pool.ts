@@ -1,27 +1,8 @@
 /*
- * Warm-spare worker pool for app-handler dispatch (#404 mobile fast
- * path). Without it, every query / action invocation pays the full cost of
- * spinning up a fresh `node:worker_threads` Worker — thread creation plus this
- * repo's worker-runner module evaluation (and, under the tsx test loader, the
- * loader re-registration) — on the request's critical path, ~10-30ms+ each.
- *
- * ISOLATION FIRST. Handler code loads via dynamic `import()` inside the
- * worker, so a worker's module registry accumulates whatever handlers it has
- * run; reusing one worker across two handlers would let app A's module-level
- * state leak into app B (and mask A's own between-call state). This pool does
- * NOT reuse workers for that reason. Instead it keeps N **warm spares**:
- * workers that have finished booting (thread + runner module evaluated) and
- * are parked waiting for a single `run` message. `acquire()` hands out a warm
- * spare and immediately schedules a replacement, so the boot cost is paid on a
- * spare thread while a previous request runs — off the acquiring request's
- * critical path. The acquired worker still runs EXACTLY ONE handler and is
- * then terminated by the caller: isolation is byte-for-byte identical to the
- * old spawn-per-run model, we just move the spawn earlier in time.
- *
- * The pool is intentionally tiny and self-healing: a warm spare that dies
- * while idle is dropped from the ready set (a fresh one is spun up on the next
- * acquire/prewarm), and because each run owns its worker's lifecycle a crash
- * mid-run never poisons the spares.
+ * Warm-spare pool for app-handler dispatch (#404). ISOLATION FIRST: handler
+ * code arrives by dynamic `import()`, so a worker's module registry keeps every
+ * handler it ran. NEVER reuse a worker across handlers — pooling pre-boots
+ * single-use spares and must never widen that boundary.
  */
 
 import { Worker } from "node:worker_threads";
@@ -29,7 +10,7 @@ import { Worker } from "node:worker_threads";
 import { isConstrainedWorkerHost } from "./worker-admission.js";
 import type { WorkerHostCapacity } from "./worker-admission.js";
 
-/** Resource caps mirrored from `handler-runner.ts`'s spawn. */
+/** Keep in step with `handler-runner.ts`'s spawn. */
 export interface WorkerResourceLimits {
   maxOldGenerationSizeMb: number;
   maxYoungGenerationSizeMb: number;
@@ -78,24 +59,12 @@ export function workerResourceLimitsFromEnv(
   };
 }
 
-/** Default warm-spare count when unset by env/option (small: 2 threads). */
 export const DEFAULT_WORKER_POOL_SIZE = 2;
 
-/**
- * Warm spares on a constrained host (#659). Zero spares makes every
- * handler invocation pay a cold `new Worker()` boot, which is backwards: the
- * constrained host is precisely the one where a cold thread boot is slowest and
- * most visible, and it is the target hardware, not an edge case. ONE spare
- * keeps the common single-in-flight case warm for roughly one worker's idle
- * footprint, which the per-worker heap limits already bound.
- */
+/** Not zero (#659): the constrained host is where a cold boot hurts most. */
 export const CONSTRAINED_WORKER_POOL_SIZE = 1;
 
-/**
- * Read the configured warm-spare count from the environment, clamped to a
- * sane band. `CENTRAID_WORKER_POOL_SIZE=0` disables warming (every acquire
- * spawns cold) — useful for memory-constrained hosts or debugging.
- */
+/** `CENTRAID_WORKER_POOL_SIZE=0` disables warming; every acquire spawns cold. */
 export function workerPoolSizeFromEnv(
   env: NodeJS.ProcessEnv = process.env
 ): number {
@@ -110,16 +79,9 @@ export function workerPoolSizeFromEnv(
   if (raw === undefined || raw === "") return fallback;
   const n = Math.trunc(Number(raw));
   if (!Number.isFinite(n) || n < 0) return fallback;
-  // A very large pool defeats the point (idle memory) — cap it.
   return Math.min(n, 8);
 }
 
-/**
- * A pool of pre-booted, single-use worker threads. `acquire()` returns a
- * worker that has (or is finishing) its boot and is waiting for a `run`
- * message; the caller posts the handler request and owns the worker's
- * lifecycle from there (listeners, timeout, terminate).
- */
 export class WorkerPool {
   private readonly idle: Worker[] = [];
   private disposed = false;
@@ -130,37 +92,26 @@ export class WorkerPool {
     private readonly resourceLimits: WorkerResourceLimits = workerResourceLimitsFromEnv()
   ) {}
 
-  /** Live warm-spare count — for a health/metrics surface or tests. */
   get warm(): number {
     return this.idle.length;
   }
 
-  /** Fill the ready set up to `size`. Idempotent; safe to call repeatedly. */
   prewarm(): void {
     this.refill();
   }
 
-  /**
-   * Hand out a warm spare (or spawn one cold if the set is empty / warming is
-   * disabled), then schedule a replacement so the next acquire finds a spare.
-   * The returned worker has NO listeners attached by the pool — the caller
-   * attaches its own run/error/exit/timeout handling.
-   */
+  /** No pool listeners survive: the caller owns the worker's lifecycle. */
   acquire(): Worker {
     const spare = this.idle.shift();
     const worker = spare ?? this.spawn();
-    // Strip the idle-phase drop listeners; the caller owns this worker now.
     worker.removeAllListeners();
-    // A parked spare is unref'd so it can't hold the process open; once it's
-    // doing real work it must keep the loop alive until it finishes.
+    // Spares park unref'd; a working worker must hold the loop open.
     worker.ref();
-    // Replenish off the hot path so a burst of sequential dispatches keeps
-    // finding warm spares rather than paying cold-start each time.
+    // Replenish off the hot path so bursts keep finding spares.
     queueMicrotask(() => this.refill());
     return worker;
   }
 
-  /** Terminate every warm spare and stop refilling (host shutdown / tests). */
   dispose(): void {
     this.disposed = true;
     for (const worker of this.idle.splice(0)) {
@@ -181,11 +132,9 @@ export class WorkerPool {
       workerData: { pooled: true },
       resourceLimits: this.resourceLimits,
     });
-    // A warm spare must not keep the host process alive just by sitting idle.
     worker.unref();
-    // If a spare dies before it is acquired, quietly evict it. We do NOT
-    // auto-refill from here: a worker that crashes on boot would otherwise
-    // spin a tight respawn loop. The next acquire/prewarm re-tops the set.
+    // Evict on death, but never auto-refill here: a boot crash would spin a
+    // respawn loop. The next acquire/prewarm re-tops the set.
     const drop = (): void => {
       const i = this.idle.indexOf(worker);
       if (i >= 0) this.idle.splice(i, 1);

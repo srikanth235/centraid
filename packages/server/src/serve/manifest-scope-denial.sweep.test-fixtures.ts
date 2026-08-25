@@ -1,42 +1,9 @@
 /*
- * Shared fixtures for the bundled-manifest scope-denial sweep (#839).
- *
- * WHAT THIS GATES. `packages/vault/src/gateway/consent.ts` is the RLS
- * replacement: every read, act and reveal a non-owner caller makes passes
- * `evaluateConsent`, and the execution clamp built from an app's / automation's
- * declared `vault.scopes` is the first thing that can refuse. Individual clamp
- * behaviours are pinned by hand (`gateway/execution-clamp.test.ts`), and the
- * bundled manifests are checked for *parseability*
- * (`packages/blueprints/src/app-manifests.test.ts`) — neither drives the real
- * consent engine over the real manifests. Without this sweep, "the 37 shipped
- * manifests deny everything they did not declare" is an assumption rather than
- * a proof.
- *
- * WHAT THIS SWEEP DOES. It loads every bundled `app.json` (8 apps + 29
- * automations) through the runtime validators that actually govern them
- * (`validateAppManifest`, and `parseManifest` for the automation manifest that
- * carries an automation's vault block), turns each declared scope list into the
- * SAME `scopeClamp` the production seam builds (`vault-plane.ts`
- * `agentBridgeFor`), and drives `evaluateConsent` over it — declared
- * combinations and, adversarially, undeclared ones. The three sibling
- * `*.test.ts` files import this module; each owns its own vault fixture.
- *
- * WHY THE GRANT IS DELIBERATELY MAXIMAL. The one agent this file enrolls holds
- * a durable grant covering every schema and every (schema, table) pair any
- * manifest names, for `read+act` and for `reveal`. That is not laxity: it makes
- * every denial in the sweep attributable to the MANIFEST CLAMP and nothing
- * else. A deny that came from a missing grant would prove nothing about the
- * manifest. The grant layer's own refusals are pinned separately, in the closed
- * grammar section.
- *
- * WHY IT LIVES IN `packages/server` AND NOT BESIDE `consent.ts`. The manifest
- * validators are app-engine and automation-engine code, and the vault package
- * must never depend on app-engine (see the note in
- * `packages/vault/src/conversation-archive-roots.test.ts`). `packages/server`
- * is the one package that declares BOTH `@centraid/vault` and
- * `@centraid/blueprints` as real dependencies and owns both validators, so it
- * is where the real machinery can meet the real consent engine without a
- * layering inversion or an undeclared cross-package import.
+ * Fixtures for the bundled-manifest scope-denial sweep (#839): every bundled
+ * manifest goes through its real validator into the SAME `scopeClamp`
+ * `vault-plane.ts` builds, then through `evaluateConsent`. The agent's grant is
+ * DELIBERATELY MAXIMAL so every denial is attributable to the manifest clamp
+ * alone. It lives here because the vault package cannot depend on app-engine.
  */
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -62,40 +29,28 @@ import type {
 import { parseManifest } from "../automation/manifest/manifest.js";
 import { validateManifest as validateAppManifest } from "../engine/registry/manifest.js";
 
-/** The blueprint template tree, reached by path (it is a sibling package). */
 const BLUEPRINTS_ROOT = path.resolve(
   import.meta.dirname,
   "../../../blueprints"
 );
 
-/** One execution-clamp scope, as `Identity` carries it. */
 export type ClampScope = NonNullable<Identity["scopeClamp"]>[number];
 export type Verb = "read" | "act" | "reveal";
 
 export const VERBS: readonly Verb[] = ["read", "act", "reveal"];
 
-/**
- * A schema no bundled manifest declares, and a table name no manifest uses.
- * Asserted against the loaded set below so a future manifest cannot quietly
- * turn the sweep's negative probes into positives.
- */
+/** Asserted below, so a new manifest cannot turn a negative probe positive. */
 export const ALIEN_SCHEMA = "zzzz_never_declared";
 export const ALIEN_TABLE = "zzzz_never_declared_table";
-/** Stand-in entity for a schema-wide scope, which names no table of its own. */
 export const PROBE_TABLE = "probe_entity";
 
 export interface LoadedManifest {
-  /** `apps/tasks` or `automations/faces` — the label every failure names. */
   readonly label: string;
   readonly kind: "apps" | "automations";
   readonly id: string;
   readonly purpose: string | null;
   readonly scopes: readonly ClampScope[];
 }
-
-/* ------------------------------------------------------------------ *
- * Loading: the real validators, over the real bundled manifests.
- * ------------------------------------------------------------------ */
 
 function templateDirs(kind: "apps" | "automations"): string[] {
   return readdirSync(path.join(BLUEPRINTS_ROOT, kind), { withFileTypes: true })
@@ -104,7 +59,6 @@ function templateDirs(kind: "apps" | "automations"): string[] {
     .toSorted();
 }
 
-/** Manifest scopes are structurally the clamp — the same shape `vault-plane.ts` copies. */
 function toClampScopes(
   scopes: readonly {
     schema: string;
@@ -146,12 +100,7 @@ function loadAppManifest(id: string): LoadedManifest {
   };
 }
 
-/**
- * An automation template's `app.json` is its gallery identity; the vault block
- * it actually runs under lives in the `automation.json` beside its handler
- * (#98's unified folder model). Both are parsed with their own runtime
- * validator, so a manifest that would not load at runtime cannot pass here.
- */
+/** The vault block lives in `automation.json`, not the gallery `app.json` (#98). */
 function loadAutomationManifest(id: string): LoadedManifest {
   const appManifest = validateAppManifest(
     JSON.parse(
@@ -198,12 +147,9 @@ export const MANIFESTS: readonly LoadedManifest[] = [
   ...templateDirs("automations").map(loadAutomationManifest),
 ];
 
-/* ------------------------------------------------------------------ *
- * Oracles: restatements of consent.ts's contract, written from the
- * documented rule rather than from the implementation's own loop.
- * ------------------------------------------------------------------ */
+/** Oracles restate consent.ts's rule; they never copy its loop. */
 
-/** `verbAllowed` (consent.ts:43): reveal never rides read or act, and vice versa. */
+/** Reveal never rides read or act, and vice versa. */
 function verbCoveredBy(
   declared: ClampScope["verbs"],
   requested: Verb
@@ -214,7 +160,6 @@ function verbCoveredBy(
   return declared === "act" || declared === "read+act";
 }
 
-/** `executionClamp` (consent.ts:108) coverage: any scope on the schema whose table matches and whose verb grades. */
 export function clampCovers(
   scopes: readonly ClampScope[],
   schema: string,
@@ -229,33 +174,23 @@ export function clampCovers(
   );
 }
 
-/** The verbs a declared scope actually grades for. */
 export function verbsOf(declared: ClampScope["verbs"]): Verb[] {
   if (declared === "read+act") return ["read", "act"];
   if (declared === "reveal") return ["reveal"];
   return [declared];
 }
 
-/* ------------------------------------------------------------------ *
- * The closed denial grammar. `ConsentDeny.failing` is a receipted string,
- * so its vocabulary is a contract: every deny this sweep can produce must
- * classify into exactly one of these six, and an unrecognised string is a
- * failure — that is what makes the grammar CLOSED rather than merely
- * "something was denied".
- * ------------------------------------------------------------------ */
+/**
+ * `ConsentDeny.failing` is receipted: every deny must classify into exactly one
+ * of these six, and an unrecognised string fails. That is what CLOSED means.
+ */
 
 export const DENY_CLASSES = [
-  /** consent.ts:258 — a readonly device may browse, never act or reveal. */
   "device-readonly",
-  /** consent.ts:271 — the on-behalf-of cap (#599 d7, #726). */
   "acting-owner-not-owner",
-  /** consent.ts:278 — a standing consent.policy purpose rule. */
   "policy-forbids-purpose",
-  /** consent.ts:289 — THE manifest clamp refusal this sweep is about. */
   "manifest-undeclared",
-  /** consent.ts:297 — nothing active for this purpose. */
   "no-active-grant",
-  /** consent.ts:329 — grants exist, none of their scopes covers this. */
   "no-grant-scope",
 ] as const;
 export type DenyClass = (typeof DENY_CLASSES)[number] | "UNRECOGNISED";
@@ -280,7 +215,7 @@ export function classifyDeny(failing: string): DenyClass {
   return "UNRECOGNISED";
 }
 
-/** The exact sentence consent.ts:289 writes — asserted verbatim, not by substring. */
+/** Asserted verbatim, never by substring. */
 export function undeclaredSentence(
   schema: string,
   table: string,
@@ -288,14 +223,6 @@ export function undeclaredSentence(
 ): string {
   return `execution manifest does not declare ${schema}.${table} for verb ${verb}`;
 }
-
-/* ------------------------------------------------------------------ *
- * Fixture. Each sibling test file opens its own vault in `beforeAll` and
- * closes it in `afterAll`; `openSweepVault` populates the single mutable
- * `sweep` container below, so a test body reads whichever vault its own file
- * bootstrapped. A container (rather than `export let` bindings) keeps the
- * shared state a `const` — mutable exports are disallowed.
- * ------------------------------------------------------------------ */
 
 interface SweepAgent {
   readonly agentId: string;
@@ -306,13 +233,11 @@ interface SweepState {
   db: VaultDb;
   close: () => void;
   clampedAgent: SweepAgent;
-  /** Enrolled, no grant at all — isolates the grant-layer refusals. */
   ungrantedAgent: SweepAgent;
-  /** Granted only on a schema no manifest names — isolates `no grant_scope covers`. */
+  /** Granted where no manifest names — isolates `no grant_scope covers`. */
   elsewhereAgent: SweepAgent;
 }
 
-/** Populated by `openSweepVault`; read by every test through `sweep.*`. */
 export const sweep = {} as SweepState;
 
 export function identityFor(
@@ -369,10 +294,9 @@ export function openSweepVault(): void {
     modelRef: "centraid-automation",
   });
 
-  // The deliberately maximal durable grant — see the header. Both whole-schema
-  // rows (so a schema-wide manifest scope has something to cut against) and
-  // per-table rows (so a `minimization` policy, which excludes a table from
-  // default scopes, cannot masquerade as a manifest refusal).
+  // Maximal grant (see header): whole-schema rows so a schema-wide scope has
+  // something to cut against, per-table rows so a `minimization` policy cannot
+  // masquerade as a manifest refusal.
   const schemas = new Set<string>();
   const tables = new Set<string>();
   for (const manifest of MANIFESTS) {

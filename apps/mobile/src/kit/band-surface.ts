@@ -1,84 +1,21 @@
-// The band's PLATE — the Binding Layer's invariant 1, as code.
-//
-// This lives in the kit, not in an app, because the band belongs to the FRAME.
-// What the two bands share is the PLATE: a 12-radius rectangle with a 1pt
-// `lineStrong` edge on an opaque `bgElev` ground, held 12pt off the side and
-// bottom edges of the stage and 8pt clear of the content above it. An
-// app-local copy is how the claimed band ends up floating while Home's is a
-// flush edge-to-edge bar with a top rule — two bands, visibly different, which
-// is exactly what invariant 1 forbids. One definition, imported by both, makes
-// that drift unrepresentable.
-//
-// The two bands COMPOSE that plate differently, and the handoff is explicit
-// about it:
-//
-//   - The FRAME's band (Home, `mobileBandStyle` :5961-5963) is ONE plate. The
-//     tabs sit directly inside it, behind `padding:0 4px`.
-//   - A CLAIMED band (Photos, `appBandStyle` :4955-4964) is TWO plates inside a
-//     TRANSPARENT row: the frame's capsule (`bandCapsuleStyle` :4961-4963 —
-//     `flex:none`, 52 wide, on the frame's NEUTRAL page colour, never the app's
-//     mat) and the app's tab group (`appBandGroupStyle` :4959-4960 — `flex:1`,
-//     on `t.surf`, `padding:0 2px`, `gap:2px`). The gap between them IS the
-//     group boundary, which is the whole explanation for why the capsule is not
-//     a sixth tab. The transparent row carries the inset; each plate carries its
-//     own radius, edge and ground.
-//
-// So this function states the PLATE, and the claimed band applies the inset on
-// its transparent container instead of on either plate.
-//
-// Plain data, no `react-native` import: the rules below stay assertable without
-// a renderer.
+// The band's PLATE (invariant 1): one definition, so the two bands cannot drift.
 
 import { borders } from "@centraid/design";
 
-/** The gap between the band and the screen edges, on all three sides. */
 export const BAND_INSET = 12;
-/** The gap between the band and the content above it (:5961's `margin` top and
- *  :4955-4956's `padding` top are both `R.gap.s` = 8). */
 export const BAND_TOP_GAP = 8;
-/** The band's corner radius. */
 export const BAND_RADIUS = 12;
-/** The band's edge — the system rule, like every other edge in the app. */
 export const BAND_BORDER = borders.hairline;
-/** A destination's own minimum height inside the plate (:4970-4972). */
 export const BAND_TAB_MIN_HEIGHT = 52;
 
-/**
- * THE ACTIVE MARK, shared by both bands (:4974).
- *
- * A 2px ink rule across the tab's top edge, held off each side — square ends,
- * so it reads as a rule and not as a pill. It lives here rather than in either
- * band because "you are here" is one piece of grammar, and the two bands must
- * say it identically or the Binding Layer's one-band promise is only true of
- * the plate.
- *
- * It is the ONLY visual carrier of selection besides ink colour. Both bands
- * draw their labels from the `control` role, which is weight 500 throughout, so
- * weight cannot mark the active tab — see either band's `label` style for why
- * the role is not negotiable.
- */
+/** The ONLY carrier of selection besides ink colour; weight cannot mark it. */
 export const BAND_ACTIVE_RULE = 2;
-/** How far the active rule is held off each side of its tab (:4974 —
- *  `inset-inline:14px`). */
 export const BAND_ACTIVE_RULE_INSET = 14;
 
-/**
- * How much vertical room a band occupies, before the home-indicator inset.
- *
- * The band's own floor, derived from its parts rather than typed as a number:
- * top gap + tallest tab + both edges + the bottom inset. It is a floor, not a
- * reserve — no scroll surface subtracts it. A band is a FLEX SIBLING
- * of the content slot (handoff `appBandStyle` :4955 — `flex:none` below the
- * scroll region), so the viewport is short by the band's real measured height
- * and nothing can pass under it. A reserve padded onto every scroll surface
- * would clear only the END of the content: mid-scroll, day headers and
- * captions would still run under the bar.
- */
+/** A floor, not a reserve: the band is a flex SIBLING, so nothing subtracts it. */
 export const BAND_HEIGHT =
   BAND_TOP_GAP + BAND_TAB_MIN_HEIGHT + 2 * BAND_BORDER + BAND_INSET;
 
-/** A minimal structural style record — plain data, so this module stays free
- *  of `react-native` and the rules below can be asserted without a renderer. */
 export interface BandSurfaceStyle {
   backgroundColor: string;
   borderColor: string;
@@ -89,21 +26,7 @@ export interface BandSurfaceStyle {
   marginTop: number;
 }
 
-/**
- * §G, as code — the PLATE, not the whole band. Callers that draw one plate
- * (Home) spread this on the band itself; callers that draw two (Photos) put the
- * inset on their transparent row and give each plate its own ground.
- *
- * The band's ground is the surface's own OPAQUE page colour: no blur, no tint
- * film, no sheen, and — the part that keeps being re-added —
- * no shadow or elevation. The bar sits over unpredictable content, so label
- * contrast, the active bar and the focus ring must not depend on what the
- * member photographed; and `prefers-reduced-transparency` would need the
- * opaque bar anyway, so glass would mean maintaining two bands.
- *
- * `page` must be an opaque colour. Passing an `rgba()`/`transparent` value is
- * the exact regression this function exists to make visible.
- */
+/** `page` must be OPAQUE — no blur, tint or shadow. */
 export function bandSurfaceStyle(
   page: string,
   line: string,
@@ -116,24 +39,17 @@ export function bandSurfaceStyle(
     borderRadius: BAND_RADIUS,
     marginBottom: BAND_INSET,
     marginHorizontal: BAND_INSET,
-    // The fourth side. The handoff's frame band is `margin:8px 12px 12px`
-    // (:5961) and the claimed band's container is `padding:8px 12px 12px`
-    // (:4955-4956) — the top gap is 8, not 0, on both. This was missing, so the
-    // band sat flush against whatever the last row of content was.
     marginTop: BAND_TOP_GAP,
   };
 }
 
-/** Whether a colour value is opaque — the band's ground has to be. */
 export function isOpaqueColor(value: string): boolean {
   if (/^rgba?\(/iu.test(value)) {
-    // The fourth comma-field still carries the closing paren ("0.5)") — strip
-    // it before coercing, since Number() refuses what parseFloat forgave.
+    // Number() refuses the trailing paren that parseFloat forgave.
     const alpha = value.split(",")[3]?.replace(")", "").trim();
     return alpha === undefined || Number(alpha) === 1;
   }
   if (value === "transparent") return false;
-  // #RGBA and #RRGGBBAA carry an alpha channel; #RGB and #RRGGBB do not.
   if (/^#(?<withAlpha>[0-9a-f]{4}|[0-9a-f]{8})$/iu.test(value)) {
     const digits = value.slice(1);
     const alpha =

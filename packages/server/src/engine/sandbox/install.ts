@@ -1,57 +1,25 @@
 /**
- * Installs the handler sandbox inside a worker thread, immediately before the
- * untrusted handler graph is imported.
+ * Installs the handler sandbox in a worker thread, immediately before the
+ * untrusted handler graph is imported. Two in-process mechanisms:
  *
- * ============================ ENFORCEMENT MODEL ============================
+ * (1) SYNCHRONOUS MODULE HOOKS (`module.registerHooks`, Node >= 22.15) run on
+ *     THIS thread and intercept `import` AND `require` — handler dependencies
+ *     are usually CJS. Taint spreads from the handler file down, so only
+ *     tainted graphs are confined; the runner, TS loader and tests are not.
+ * (2) AMBIENT-AUTHORITY REVOCATION covers what no module allowlist reaches:
+ *     the network globals and the `process` loader/env escapes.
  *
- * Two mechanisms, both in-process, both honest about their edges.
- *
- * (1) SYNCHRONOUS MODULE HOOKS — `module.registerHooks` (Node >= 22.15).
- *     Unlike `module.register`, these run on THIS thread and intercept BOTH
- *     `import` and CommonJS `require`, which matters because a transitive
- *     dependency of a handler is usually CJS. The hook tracks taint: the
- *     handler file is tainted, and anything resolved with a tainted parent
- *     becomes tainted too. Only tainted graphs are confined, so the worker
- *     runner's own imports, the TypeScript loader hooks, and the test harness
- *     are untouched. Inside a tainted graph a builtin is refused unless the
- *     lane allowlists it, and `fs` / `fs/promises` are rewritten to the
- *     read-only root-confined mirror in `confined-fs.ts`.
- *
- * (2) AMBIENT-AUTHORITY REVOCATION — the globals a module allowlist cannot
- *     reach: `fetch`, `WebSocket`, `EventSource`, `XMLHttpRequest`,
- *     `navigator.sendBeacon`, `process.binding`, `process.dlopen`,
- *     `process.getBuiltinModule` (re-filtered through the same allowlist,
- *     since it is a documented loader bypass), and `process.env`.
- *
- * ========================= WHAT IT DOES NOT ENFORCE =========================
- *
- * These are limits, not oversights. Do not describe a lane as sandboxed
- * without them.
- *
- *  - NOT AN OS SANDBOX. Handler code shares the gateway's process, address
- *    space, file descriptors, and uid. Anything that escapes JavaScript
- *    escapes all of this. A per-handler OS boundary needs a child process
- *    under seccomp/AppArmor (Linux), Seatbelt (macOS), or an AppContainer
- *    (Windows) — none of which a `worker_threads` thread can carry, because
- *    those facilities are per-process and Centraid runs handlers as threads
- *    for the sub-millisecond dispatch budget.
- *  - NOT A V8 ISOLATE. There is one heap. A handler can exhaust it (the
- *    `resourceLimits` on the pool bound that, crudely) and can observe timing.
- *  - NATIVE ADDONS DEFEAT IT ENTIRELY. When a lane sets `nativeAddons: true`
- *    (the model-runtime lane, which loads `onnxruntime-node`), `process.dlopen`
- *    stays live and the loaded `.node` binary is outside every check here.
- *  - FILESYSTEM CONFINEMENT IS USERLAND AND TOCTOU-EXPOSED. `confined-fs.ts`
- *    realpaths immediately before each syscall, which is the narrowest window
- *    a wrapper can achieve, not zero. Only an OS facility closes it.
- *  - THE MIRROR IS PARTIAL. An fs entry point the mirror does not export is
- *    `undefined` in the untrusted graph. Fail-closed, but it means a granted
- *    lane must be integration-tested against its real dependency graph.
- *  - REVOCATION IS THREAD-WIDE AND ONE-WAY. It is safe only because a pooled
- *    worker runs EXACTLY ONE handler and is then discarded
- *    (`engine/handlers/worker-pool.ts`). Reusing a worker would leak a
- *    revoked-global thread into unrelated code.
- *  - NODE < 22.15 HAS NO `registerHooks`. Installation THROWS there rather
- *    than returning a handle that enforces nothing.
+ * WHAT IT DOES NOT ENFORCE — never call a lane sandboxed without these:
+ *  - Not an OS sandbox. Handlers share the process, fds and uid; a real
+ *    boundary needs a child process, which the dispatch budget forbids.
+ *  - Not a V8 isolate: one heap, observable timing, only `resourceLimits`.
+ *  - Native addons defeat it entirely (`nativeAddons: true` keeps `dlopen`).
+ *  - Filesystem confinement is userland and TOCTOU-exposed.
+ *  - The fs mirror is partial: unexported entry points are `undefined`, so a
+ *    granted lane must be integration-tested against its real graph.
+ *  - Revocation is thread-wide and one-way, safe ONLY because a pooled worker
+ *    runs exactly one handler and is then discarded.
+ *  - Node < 22.15 throws here rather than enforcing nothing.
  */
 
 import { existsSync } from "node:fs";
@@ -65,20 +33,15 @@ import type { SandboxPolicy } from "./policy.js";
 
 export interface SandboxHandle {
   readonly policy: SandboxPolicy;
-  /**
-   * The real `fetch`, captured before revocation. The runner keeps this
-   * private and exposes it only through the governed `ctx` rail, so network
-   * reach is a capability the parent hands out rather than ambient authority
-   * the handler already has.
-   */
+  /** Captured before revocation; reachable only through the governed `ctx`
+   * rail, so network access stays a granted capability. */
   readonly hostFetch: typeof globalThis.fetch;
-  /** Mark a module URL untrusted; its whole transitive graph is confined. */
+  /** Confines the URL's whole transitive graph. */
   readonly taint: (url: string) => void;
-  /** Is this URL inside the confined graph? Exposed for assertions. */
   readonly isTainted: (url: string) => boolean;
 }
 
-/** Strip the `?query#hash` a loader may append before comparing identities. */
+/** Strip the `?query#hash` a loader may append. */
 function bareUrl(url: string): string {
   const cut = Math.min(
     ...[url.indexOf("?"), url.indexOf("#")]
@@ -88,7 +51,7 @@ function bareUrl(url: string): string {
   return url.slice(0, cut);
 }
 
-/** Resolve a sibling sandbox module, preferring compiled `.js` over `.ts`. */
+/** Prefers compiled `.js` over `.ts`. */
 function siblingUrl(base: string): string {
   const js = new URL(`${base}.js`, import.meta.url);
   if (existsSync(fileURLToPath(js))) return js.href;
@@ -99,12 +62,8 @@ const SANDBOX_DIR = new URL(".", import.meta.url).href;
 
 let installed: SandboxHandle | undefined;
 
-/**
- * Install the sandbox for this thread. Idempotent per thread: a second call
- * with the same policy returns the existing handle, and a second call with a
- * DIFFERENT policy throws — silently re-pointing a live sandbox at another
- * lane would be a containment bug wearing a convenience API.
- */
+/** Idempotent per thread; a DIFFERENT policy throws — re-pointing a live
+ * sandbox at another lane is a containment bug wearing a convenience API. */
 export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
   if (installed) {
     if (installed.policy.lane !== policy.lane) {
@@ -129,12 +88,8 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
     policy.filesystem === "denied" ? [] : policy.filesystem.readRoots
   );
 
-  /**
-   * The redirect target for `node:fs` / `node:fs/promises`. `format` must be
-   * `module-typescript` when the mirror resolves to a `.ts` source: this hook
-   * supplies no transformed source, so Node still has to strip the types, and
-   * declaring plain `module` makes the file fail to parse.
-   */
+  /** `format` must be `module-typescript` for a `.ts` mirror: this hook
+   * supplies no source, so Node still strips the types itself. */
   const confinedFsResolution = (
     promises: boolean
   ): { url: string; format: string; shortCircuit: true } => {
@@ -149,8 +104,7 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
   registerHooks({
     resolve(specifier, context, nextResolve) {
       const parent = context.parentURL;
-      // Sandbox modules themselves must reach the real builtins — the confined
-      // mirror is implemented in terms of them. They are never tainted.
+      // The mirror is built on the real builtins: never taint sandbox modules.
       if (parent !== undefined && bareUrl(parent).startsWith(SANDBOX_DIR)) {
         return nextResolve(specifier, context);
       }
@@ -167,8 +121,7 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
         return nextResolve(specifier, context);
       }
       const resolved = nextResolve(specifier, context);
-      // A userland specifier can still land on a builtin (an alias, a
-      // re-export); re-check the resolved URL rather than trusting the input.
+      // An alias or re-export can land on a builtin: re-check the resolved URL.
       if (resolved.url.startsWith("node:")) {
         const resolvedId = builtinId(resolved.url);
         if (resolvedId !== null) {
@@ -203,7 +156,6 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
   return installed;
 }
 
-/** Test-only: forget the per-thread install so a fresh policy can be applied. */
 export function resetWorkerSandboxForTests(): void {
   installed = undefined;
 }
@@ -246,9 +198,8 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
     };
   }
 
-  // `process.getBuiltinModule` is a documented loader bypass — it returns a
-  // builtin without consulting any hook. Re-filter it through the same
-  // decision function so the allowlist has exactly one meaning.
+  // A documented loader bypass: re-filter it through the same decision
+  // function so the allowlist has exactly one meaning.
   const realGetBuiltinModule = process.getBuiltinModule.bind(process);
   proc.getBuiltinModule = (specifier: string): unknown => {
     const id = builtinId(specifier);

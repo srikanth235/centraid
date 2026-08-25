@@ -1,13 +1,7 @@
 /*
- * Manifest build/seal/open (FORMAT.md § Manifest). The manifest is the one
- * object every restore starts from: a PUBLIC envelope (format, keyEpoch,
- * chunkIndex, appMeta — readable and verifiable without any key) wrapping a
- * SEALED payload (the entry list — paths and per-entry chunk lists, which
- * do carry semantic content).
- *
- * `manifestHash` is SHA-256 over the *exact stored bytes* of the canonical
- * JSON serialization, so any two engines (or engine versions) that build
- * the same logical manifest object must produce byte-identical output —
+ * Manifest build/seal/open (FORMAT.md § Manifest): a PUBLIC envelope readable
+ * without a key, wrapping a SEALED entry list. `manifestHash` is SHA-256 over
+ * the EXACT stored bytes, so one manifest always serializes byte-identically —
  * hence `canonicalJson`.
  */
 
@@ -28,66 +22,32 @@ export interface ManifestEntry {
   path: string;
   kind: ManifestEntryKind;
   size: number;
-  /**
-   * Source mtime (ms since epoch) at snapshot time. FORMAT.md's example
-   * sealed-payload entry doesn't show this field, but it lives entirely
-   * inside the encrypted sealed payload — providers never parse it, and
-   * it is an optional field within the still-unreleased `/1` format. The
-   * engine needs it for the incremental fast path (§ engine.ts createSnapshot):
-   * same path + size + mtime as the previous snapshot means the file is
-   * provably unchanged, so its chunk refs can be reused without a re-read.
-   */
+  /** Sealed, so no provider parses it. Same path + size + mtime means chunk
+   * refs can be reused unread. */
   mtimeMs: number;
   chunks: string[];
-  /**
-   * /1, `kind: 'db'` only: SHA-256 hex of the base file's plaintext — the
-   * capture-time marker the G9 restore-verification job re-derives after a
-   * real restore-to-base.
-   */
+  /** /1, `db` only: plaintext SHA-256, re-derived after restore. */
   sha256?: string;
-  /**
-   * /1, `kind: 'db'` only: the WAL stream generation this base anchors
-   * (FORMAT.md § WAL segments). Restore lists `wal/{db}/{walGeneration}/`
-   * and replays on top of the base; PITR cuts that list at a tick.
-   */
+  /** /1, `db` only: restore replays `wal/{db}/{walGeneration}/` on it. */
   walGeneration?: string;
   /**
-   * /1, `kind: 'db'` only: the tick at which the shipper TRUNCATE-checkpointed
-   * and cloned this base.
-   *
-   * The two `db` entries' values MUST be EQUAL — the databases break their
-   * generations together, in one tick — and a manifest whose bases are from
-   * two different instants MUST NOT be registered and MUST NOT be restored.
-   * A journal base minted after the vault's already contains receipts for rows
-   * that live only in the vault's segments; lose one of those and the restore
-   * hands back history asserting data it does not have. This field is what
-   * makes that pair refusable instead of silently restorable.
+   * /1, `db` only: the tick this base was cloned at. The two `db` entries MUST
+   * be EQUAL; a mismatched pair is never registered or restored, since a newer
+   * journal base holds receipts for rows the restore may lack.
    */
   baseTickMs?: number;
   /**
-   * /1, `kind: 'db'` only: the newest pair-marker tick the producer WATCHED the
-   * provider accept, at the moment this manifest was registered.
-   *
-   * It is a floor on what the store owes us. A restore or verification that
-   * cannot reach it is looking at a store that has LOST objects it once
-   * acknowledged — the only way to catch a provider that deletes the marker
-   * stream, which is otherwise perfectly silent (no hole, no damage, nothing
-   * missing; the restore just quietly falls back to the base pair).
-   *
-   * Sourced from CONFIRMED uploads, never from local intent: a drain
-   * interrupted between a tick's segments and its marker simply yields a lower
-   * tip. The manifest can therefore never claim a marker the store does not
-   * have, which is what makes the check safe to fail loudly on.
+   * /1, `db` only: a FLOOR on what the store owes us. A restore that cannot
+   * reach it reads a store that LOST acknowledged objects — otherwise silent.
+   * From CONFIRMED uploads only, so it never claims a marker the store lacks.
    */
   walTipTickMs?: number;
 }
 
-/** The sealed payload's decrypted shape (FORMAT.md's `sealedPayload` plaintext). */
 export interface SealedPayload {
   entries: ManifestEntry[];
 }
 
-/** The manifest's public envelope, exactly as stored (minus `sealedPayload`'s plaintext). */
 export interface ManifestPublic {
   format: string;
   keyEpoch: number;
@@ -98,7 +58,6 @@ export interface ManifestPublic {
   appMeta: Record<string, string>;
 }
 
-/** The full stored object: public envelope + the base64 sealed payload. */
 export interface StoredManifest extends ManifestPublic {
   sealedPayload: string;
 }
@@ -107,20 +66,12 @@ function manifestPublicBytes(publicEnvelope: ManifestPublic): Uint8Array {
   return new TextEncoder().encode(canonicalJson(publicEnvelope));
 }
 
-/** The base-plus-WAL format (#408). Its chunk objects seal RAW part bytes. */
+/** Base-plus-WAL (#408); its chunk objects seal RAW part bytes. */
 export const SNAPSHOT_FORMAT_V1 = "centraid-snapshot/1";
-/**
- * `/2` (#405) adds entropy-gated compression INSIDE the chunk seal:
- * the sealed plaintext is a framed payload `[algo-id][body]` rather than the
- * bare part. That is a payload-framing change, so the string bumps and `/1`
- * becomes unreadable — a `/1` reader would treat the algo byte as content, and
- * a `/2` reader would treat a `/1` object's first byte as an algo id. v0 is
- * pre-release with no shipped predecessor, so there is no dual-format reader:
- * the bump plus FORMAT.md IS the whole migration story.
- */
+/** `/2` (#405) frames chunk plaintext as `[algo-id][body]`, so `/1` and `/2`
+ * readers misread each other. No dual-format reader: the bump IS it. */
 export const SNAPSHOT_FORMAT_V2 = "centraid-snapshot/2";
-/** The format new snapshots are written as; v0 has one readable format at a
- * time: a reader MUST reject every other string. */
+/** v0 has ONE readable format: reject every other string. */
 export const READABLE_SNAPSHOT_FORMATS: readonly string[] = [
   SNAPSHOT_FORMAT_V2,
 ];
@@ -141,14 +92,8 @@ export interface SnapshotBasePair {
   walTipTickMs?: number;
 }
 
-/**
- * Canonical JSON: object keys sorted (recursively), no insignificant
- * whitespace, array order preserved (arrays are semantically ordered).
- * `undefined` values are dropped (matches `JSON.stringify`'s own behavior
- * for object properties) so a manifest built by two code paths that only
- * differ in whether they set an optional field explicitly-undefined still
- * serializes identically.
- */
+/** Keys sorted recursively, no insignificant whitespace, array order kept;
+ * `undefined` dropped, so an explicitly-undefined optional still matches. */
 export function canonicalJson(value: unknown): string {
   return stringifyCanonical(value);
 }
@@ -174,15 +119,10 @@ function stringifyCanonical(value: unknown): string {
   throw new Error(`canonicalJson: unsupported value type ${typeof value}`);
 }
 
-/** SHA-256 hex of the exact stored bytes. */
 export function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/**
- * Build + seal a manifest. Returns the exact bytes to write to the data
- * plane (`manifests/{Date.now()}-{hash8}.json`) and the hash to register.
- */
 export function sealManifest(opts: {
   keyring: Keyring;
   vaultId: string;
@@ -208,12 +148,8 @@ export function sealManifest(opts: {
     appMeta: opts.appMeta,
   };
   const aad = manifestPublicBytes(publicEnvelope);
-  // Deterministic nonce (#408): derived from the payload's own
-  // content hash, so the same logical manifest seals to byte-identical
-  // output — a retried registration re-uploads the identical object under
-  // the identical manifestHash instead of minting a fresh ciphertext. A
-  // different payload hashes differently, so the (key, nonce) pair never
-  // repeats with different plaintext.
+  // Deterministic nonce (#408) from the payload's own hash: a retry re-uploads
+  // an identical object, and (key, nonce) never repeats with new plaintext.
   const nonceIdentity = sha256Hex(
     new TextEncoder().encode(
       canonicalJson({ publicEnvelope, payloadHash: sha256Hex(payloadBytes) })
@@ -233,7 +169,7 @@ export function sealManifest(opts: {
   return { bytes, manifestHash, manifest };
 }
 
-/** Verify stored manifest bytes against a registered hash — before parsing anything else. */
+/** Verify against the registered hash BEFORE parsing anything. */
 export function verifyManifest(
   bytes: Uint8Array,
   expectedHash: string
@@ -350,7 +286,7 @@ function validateManifestEntry(
   return value as ManifestEntry;
 }
 
-/** Registry rows are routing metadata, never an authority over the manifest. */
+/** Registry rows are routing metadata, not authority. */
 export function assertManifestMatchesRegistry(
   publicEnvelope: ManifestPublic,
   entries: ManifestEntry[],
@@ -376,7 +312,6 @@ export function assertManifestMatchesRegistry(
   }
 }
 
-/** Strict semantic contract for a /1 coordinated database base pair. */
 export function validateSnapshotBasePair(
   entries: ManifestEntry[]
 ): SnapshotBasePair {
@@ -440,7 +375,6 @@ export function validateSnapshotBasePair(
   };
 }
 
-/** Reject path-traversal / absolute entry paths. */
 export function isSafeEntryPath(p: string): boolean {
   if (p.length === 0) return false;
   if (p.startsWith("/") || p.startsWith("\\")) return false;
@@ -449,11 +383,7 @@ export function isSafeEntryPath(p: string): boolean {
   return segments.every((seg) => seg !== ".." && seg !== ".");
 }
 
-/**
- * Parse + verify + decrypt a stored manifest. Throws on: bad JSON, hash
- * mismatch (if `expectedHash` given), an unknown key epoch, decryption
- * failure (tamper/wrong key), or a hostile entry path.
- */
+/** Throws on tamper, wrong key, hash mismatch or a hostile entry path. */
 export function openManifest(
   bytes: Uint8Array,
   keyring: Keyring,
@@ -471,8 +401,7 @@ export function openManifest(
   const master = masterKeyForEpoch(keyring, parsed.keyEpoch);
   const dataKey = deriveDataKey(master, vaultId);
   const { sealedPayload: _sealedPayload, ...pub } = parsed;
-  // The public envelope is GCM AAD: a provider cannot rewrite
-  // format/generation/appMeta and recompute the registry hash around an
+  // The public envelope is GCM AAD: a provider cannot rewrite it around an
   // unchanged sealed payload.
   const aad = manifestPublicBytes(pub);
   const plainBytes = decrypt(
