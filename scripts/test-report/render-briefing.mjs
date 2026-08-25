@@ -1,13 +1,19 @@
 /**
- * The briefing half of the nightly report (#839 Wave 5) — the verdict strip,
- * the attention queue, grids E/F/G and the consent ledger, rendered above the
- * detail shelf that report v1 already draws.
+ * The briefing half of the nightly report (#839 Wave 5) — the attention queue,
+ * grids E/F/G and the consent ledger, rendered above the detail shelf that
+ * report v1 already draws. The verdict is no longer built here: #862 moved it
+ * into the page's own masthead bar, beside the run identity it grades.
  *
  * Nothing here decides anything: every state, count and rank arrives already
  * computed by `report-verdict.mjs` and `report-grids.mjs`. Keeping the markup
  * in its own module is what lets `generate.mjs`'s single-pass model stay one
  * file while the briefing grows, and it means a rendering change cannot
  * accidentally change a verdict.
+ *
+ * All five sections speak the Night Watch register (#862): a row is a CSS grid
+ * whose columns line up down the section, a verdict is a coloured WORD rather
+ * than a fill, and a column with no source renders an em dash rather than a
+ * plausible number.
  */
 
 /** Shared HTML escape for every report renderer. */
@@ -19,16 +25,6 @@ export function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
-/** Glyph for an evidence-derived state; grey glyphs never read as absence. */
-function glyph(state) {
-  if (state === "passed") return "●";
-  if (state === "failed" || state === "infra-mismatch") return "▲";
-  if (state === "flaky") return "◐";
-  if (state === "skipped") return "–";
-  if (state === "pinned") return "◈";
-  return "○";
-}
-
 /** Milliseconds as a compact human duration, or an em dash. */
 function duration(value) {
   if (!Number.isFinite(value)) return "—";
@@ -37,80 +33,129 @@ function duration(value) {
   return `${Math.round(value)}ms`;
 }
 
-/** A signed delta, where zero reads as "flat" rather than as nothing. */
-function signed(value) {
-  if (!Number.isFinite(value)) return "—";
-  return value > 0 ? `+${value}` : value < 0 ? String(value) : "±0";
+/**
+ * The tone a verdict word is spoken in. Tone is the SECOND reading — the word
+ * carries the meaning on its own, so a reader who sees no hue loses nothing.
+ */
+function tone(state) {
+  if (state === "passed") return "ok";
+  if (state === "failed" || state === "infra-mismatch") return "red";
+  if (state === "flaky" || state === "pinned" || state === "stale")
+    return "warn";
+  return "grey";
+}
+
+/** What tonight's evidence for a ledger row actually was, as one word. */
+function verdictWord(state) {
+  return (
+    {
+      passed: "green",
+      failed: "red",
+      flaky: "flaky",
+      stale: "stale",
+      skipped: "n/a",
+      pinned: "pinned",
+      unowned: "no owner",
+      missing: "no evidence",
+      "infra-mismatch": "infra",
+      "owner-silent": "silent",
+      "lane-did-not-run": "no lane",
+      "evidence-unmatched": "unmatched",
+    }[state] ?? state
+  );
+}
+
+/** A row's verdict cell: the word, in its tone. */
+function stateCell(state) {
+  return `<span class="state ${tone(state)}">${escapeHtml(verdictWord(state))}</span>`;
 }
 
 /**
- * The verdict strip: one computed level, the reasons behind it, and the deltas
- * against last night's durable history point.
- * @param {object} verdict From `computeVerdict`.
- * @param {object} delta From `verdictDelta`.
- * @param {object} queueCounts Severity-band counts for the queue.
+ * One ledger row. A cell is either an HTML fragment or a `[class, fragment]`
+ * pair; the roles are spelled out because these are grid divs rather than a
+ * table, and a grid with no roles reads to a screen reader as one run-on line.
+ * @param {(string|string[])[]} cells The row's cells, already escaped.
+ * @param {{head?: boolean}} [options] `head` marks the column-header row.
  * @returns {string} HTML.
  */
-export function renderVerdictStrip(verdict, delta, queueCounts) {
-  const deltaChips = Object.entries(delta.deltas ?? {})
-    .map(
-      ([key, value]) =>
-        `<span class="chip delta-${value > 0 ? "worse" : value < 0 ? "better" : "flat"}">${escapeHtml(key)} ${escapeHtml(signed(value))}</span>`
-    )
-    .join("");
-  const priorNote = delta.priorLabel
-    ? `vs <strong>${escapeHtml(delta.priorLabel)}</strong> · ${escapeHtml(delta.direction)}`
-    : "no prior nightly in the durable history — nothing to compare against yet";
-  const bands = ["S1", "S2", "S3", "S4"]
-    .map(
-      (band) =>
-        `<span class="chip band-${band}">${band} <b>${queueCounts?.[band] ?? 0}</b></span>`
-    )
-    .join("");
-  return `<section class="verdict verdict-${escapeHtml(verdict.level)}" aria-label="Nightly verdict">
-<div class="verdict-main"><span class="eyebrow">Verdict</span><strong class="verdict-level">${escapeHtml(verdict.label)}</strong><p class="lede">${escapeHtml(verdict.reasons.join(" · "))}</p></div>
-<div class="verdict-side"><div class="chips">${deltaChips}</div><p class="muted">${priorNote}</p><div class="chips">${bands}</div></div>
-</section>`;
+function lrow(cells, { head = false } = {}) {
+  const role = head ? "columnheader" : "cell";
+  return `<div class="lrow${head ? " head" : ""}" role="row">${cells
+    .map((cell) => {
+      const [name, html] = Array.isArray(cell) ? cell : ["", cell];
+      return `<span role="${role}"${name ? ` class="${name}"` : ""}>${html}</span>`;
+    })
+    .join("")}</div>`;
+}
+
+/** A ledger's frame, with the label the section is known by. */
+function ledger(kind, label, rows) {
+  return `<div class="ledger ${kind}" role="table" aria-label="${escapeHtml(label)}">${rows.join("")}</div>`;
+}
+
+/** An owner path, or the honest absence in its place. */
+function ownerCell(owner, absent) {
+  return owner
+    ? `<span class="path">${escapeHtml(owner)}</span>`
+    : `<small class="quiet">${escapeHtml(absent)}</small>`;
+}
+
+/** The chip family and word for a queue entry's kind. */
+function queueChip(entry) {
+  if (entry.kind === "red") return ["red", "red"];
+  if (entry.kind === "pinned-finding") return ["pinned", "pinned"];
+  if (entry.kind === "stale") return ["stale", "stale"];
+  return entry.isNew ? ["newgrey", "new grey"] : ["stale", "grey"];
 }
 
 /**
  * The attention queue: every red, newly-grey, still-grey and stale item, each
- * carrying the file that owns it and its tracking-issue hook.
+ * carrying the file that owns it, how old its newest evidence is, and its
+ * tracking-issue hook.
  * @param {object[]} queue From `buildAttentionQueue`.
+ * @param {(lastAt: string|null) => string|null} ageOf Evidence age formatter.
  * @returns {string} HTML.
  */
-export function renderAttentionQueue(queue) {
+export function renderAttentionQueue(queue, ageOf) {
+  const bands = `<p class="keyline"><i>S1</i> a cell the matrix calls solid went red · <i>S2</i> any other red, or a lane that reported last night and is silent tonight · <i>S3</i> an absence or staleness that was already there · <i>S4</i> a standing finding awaiting a product decision. S1 and S2 ride into the auto-filed nightly tracking issue under the 24h SLA.</p>`;
   if (!queue.length) {
-    return `<section class="card wide"><h2>Attention queue</h2><p class="empty">Nothing is red, newly grey, stale, or pinned. This is the only state in which the queue is empty — an empty queue with grey cells on the page would be a bug in the queue, not good news.</p></section>`;
+    return `<div class="queue" aria-label="Attention queue"><p class="empty">Nothing is red, newly grey, stale, or pinned. This is the only state in which the queue is empty — an empty queue with grey cells on the page would be a bug in the queue, not good news.</p></div>${bands}`;
   }
   const rows = queue
-    .map(
-      (entry) =>
-        `<tr class="queue-row ${escapeHtml(entry.severity)}"><td><span class="chip band-${escapeHtml(entry.severity)}">${escapeHtml(entry.severity)}</span></td><td><strong>${escapeHtml(entry.title)}</strong>${entry.isNew ? '<span class="chip chip-new">new tonight</span>' : ""}${entry.pinned ? '<span class="chip chip-pinned">pinned</span>' : ""}<br><small>${escapeHtml(entry.why)}</small></td><td>${escapeHtml(entry.state)}</td><td><code class="path">${escapeHtml(entry.owner ?? "no owner declared")}</code></td><td>${
-          entry.trackingIssue
-            ? entry.trackingUrl
-              ? `<a href="${escapeHtml(entry.trackingUrl)}">#${entry.trackingIssue}</a>`
-              : `#${entry.trackingIssue}`
-            : '<small class="muted">auto-files under the nightly issue</small>'
-        }</td></tr>`
-    )
+    .map((entry) => {
+      const [family, word] = queueChip(entry);
+      const age = ageOf(entry.lastAt);
+      const tracking = entry.trackingIssue
+        ? entry.trackingUrl
+          ? `<a href="${escapeHtml(entry.trackingUrl)}">#${entry.trackingIssue}</a>`
+          : `#${entry.trackingIssue}`
+        : `<small class="quiet">auto-files under the nightly issue</small>`;
+      return `<div class="qrow" role="listitem"><span class="qband"><span class="chip ${family}">${word}</span><small class="sev">${escapeHtml(entry.severity)}</small></span><span class="what">${escapeHtml(entry.title)}<small>${escapeHtml(entry.why)}${entry.isNew ? " · new tonight" : ""}</small></span><span class="own path">${escapeHtml(entry.owner ?? "no owner declared")}</span><span class="age num">${escapeHtml(age ?? "—")}</span><span class="act">${tracking}</span></div>`;
+    })
     .join("");
-  return `<section class="card wide"><h2>Attention queue</h2><p class="muted axis-note">Ranked by severity derived from the matrix's own claim for each cell against tonight's observed state: <strong>S1</strong> a cell the matrix calls solid went red · <strong>S2</strong> any other red, or a lane that reported last night and is silent tonight · <strong>S3</strong> an absence or staleness that was already there · <strong>S4</strong> a standing finding awaiting a product decision. S1 and S2 entries ride into the auto-filed nightly tracking issue under the 24h SLA.</p><div class="matrix-scroll"><table class="data"><thead><tr><th>Sev</th><th>Item</th><th>State</th><th>Owner</th><th>Tracking</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  return `<div class="queue" role="list" aria-label="Attention queue">${rows}</div>${bands}`;
 }
 
 /**
  * Grid E — join laws and simulation laws over the join rig.
  * @param {object} grid From `buildJoinGrid`.
+ * @param {(lastAt: string|null) => string|null} ageOf Evidence age formatter.
  * @returns {string} HTML.
  */
-export function renderJoinGrid(grid) {
-  const rows = grid.rows
-    .map(
-      (row) =>
-        `<tr><td class="metric ${escapeHtml(row.state)}">${glyph(row.state)}</td><td><strong>${escapeHtml(row.label)}</strong><br><small>${escapeHtml(row.statement)}</small></td><td>${escapeHtml(row.kind)}</td><td>${escapeHtml(row.lane)}</td><td><code class="path">${escapeHtml(row.owner)}</code></td></tr>`
-    )
-    .join("");
-  return `<section class="card wide"><h2>Join laws and simulation</h2><p class="muted axis-note">Every row derives from <code>tests/matrix.json#joinLaws</code>, and a validator pins that list to the owning suites' own test declarations — a deleted join law fails the matrix gate rather than quietly leaving this grid. ${grid.counts.scripted} scripted · ${grid.counts.simulation} simulation · ${grid.counts.passed} green tonight.</p><div class="matrix-scroll"><table class="data"><thead><tr><th></th><th>Law</th><th>Kind</th><th>Lane</th><th>Owner</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+export function renderJoinGrid(grid, ageOf) {
+  const rows = [
+    lrow(["Law", "Claim", "Evidence", "Verdict"], { head: true }),
+    ...grid.rows.map((row) => {
+      const age = ageOf(row.lastAt);
+      return lrow([
+        `<strong>${escapeHtml(row.label)}</strong><small class="quiet">${escapeHtml(row.kind)} · ${escapeHtml(row.lane)}</small>`,
+        `${escapeHtml(row.statement)}<small class="quiet path">${escapeHtml(row.owner)}</small>`,
+        ["quiet num", age ? `ran ${escapeHtml(age)} ago` : "no run stamp"],
+        stateCell(row.state),
+      ]);
+    }),
+  ];
+  return `<p class="budget"><b>${grid.rows.length} laws</b> from <code>tests/matrix.json#joinLaws</code>, pinned by a validator to the owning suites' own test declarations — a deleted law fails the matrix gate rather than quietly leaving this ledger · <b>${grid.counts.scripted}</b> scripted · <b>${grid.counts.simulation}</b> simulation · <b>${grid.counts.passed}</b> green tonight</p>${ledger("joins", "Join laws and simulation", rows)}`;
 }
 
 /** One sparkline, or the empty slot that fills as nights accrue. */
@@ -122,99 +167,148 @@ function sparkline(values, renderTrend) {
 
 /**
  * Grid F — the adversary panel: mutation, fuzz, and property flows.
+ *
+ * Three catalogs, three ledgers, one column geometry. They are not folded into
+ * the design's five summary rows because nothing computes those summaries: a
+ * median mutation score and a seeded-orderings tally would each be a number
+ * this repo does not measure, and the per-seed and per-target rows are what it
+ * actually has.
+ *
  * @param {object} panel From `buildAdversaryPanel`.
  * @param {(values: number[]) => string} renderTrend Sparkline renderer.
  * @returns {string} HTML.
  */
 export function renderAdversaryPanel(panel, renderTrend) {
-  const mutation = panel.mutation
-    .map(
-      (row) =>
-        `<tr><td class="metric ${escapeHtml(row.state)}">${glyph(row.state)}</td><td>${escapeHtml(row.label)}<br><code class="path">${escapeHtml(row.id)}</code></td><td class="metric ${escapeHtml(row.state)}">${row.score ?? "—"}% <small>/ ${row.floor ?? "—"}%</small></td><td>${sparkline(row.sparkline, renderTrend)}</td></tr>`
-    )
-    .join("");
-  const fuzz = panel.fuzz
-    .map(
-      (row) =>
-        `<tr><td class="metric ${escapeHtml(row.state)}">${glyph(row.state)}</td><td>${escapeHtml(row.label)}<br><code class="path">${escapeHtml(row.entry ?? row.id)}</code></td><td>${row.seeds} seed(s) · ${row.crashers} crasher(s)</td><td>${
+  const mutation = [
+    lrow(["Seed", "Score", "Floor", "30-night trend", "Status"], {
+      head: true,
+    }),
+    ...panel.mutation.map((row) =>
+      lrow([
+        `<strong>${escapeHtml(row.label)}</strong><small class="quiet path">${escapeHtml(row.id)}</small>`,
+        [
+          `num state ${tone(row.state)}`,
+          row.score == null ? "—" : `${row.score.toFixed(1)}%`,
+        ],
+        ["quiet num", row.floor == null ? "no floor" : `${row.floor}%`],
+        sparkline(row.sparkline, renderTrend),
+        [
+          "quiet",
+          row.state === "passed"
+            ? "at or above its floor"
+            : row.state === "failed"
+              ? "below its floor"
+              : "no score tonight — the nightly Stryker lane did not report",
+        ],
+      ])
+    ),
+  ];
+  const fuzz = [
+    lrow(["Target", "Corpus", "Crashers", "Verdict", "Standing findings"], {
+      head: true,
+    }),
+    ...panel.fuzz.map((row) =>
+      lrow([
+        `<strong>${escapeHtml(row.label)}</strong><small class="quiet path">${escapeHtml(row.entry ?? row.id)}</small>`,
+        ["quiet num", `${row.seeds} seed(s)`],
+        ["quiet num", String(row.crashers)],
+        stateCell(row.state),
+        [
+          "quiet",
           row.findings.length
             ? row.findings
                 .map(
                   (finding) =>
-                    `<span class="chip chip-pinned">${escapeHtml(finding.id)} (#${escapeHtml(String(finding.issue ?? "?"))})</span>`
+                    `${escapeHtml(finding.id)} (#${escapeHtml(String(finding.issue ?? "?"))})`
                 )
-                .join("")
-            : '<small class="muted">no standing findings</small>'
-        }</td></tr>`
-    )
-    .join("");
-  const properties = panel.properties
-    .map(
-      (row) =>
-        `<tr><td class="metric ${escapeHtml(row.state)}">${glyph(row.state)}</td><td>${escapeHtml(row.label)}</td><td>${
-          row.flow
-            ? `<code class="path">${escapeHtml(row.owner ?? row.flow)}</code>`
-            : '<small class="muted">no property flow owns this engine yet</small>'
-        }</td><td>${row.mutationSeed ? `<code class="path">${escapeHtml(row.mutationSeed)}</code>` : '<small class="muted">unseeded</small>'}</td></tr>`
-    )
-    .join("");
-  return `<section class="card wide"><h2>Adversary panel</h2><p class="muted axis-note">The three ways this repo attacks itself, on one surface: <strong>mutation</strong> attacks the tests, <strong>fuzz</strong> attacks the code, <strong>property flows</strong> attack the orderings. ${panel.counts.mutationSeeds} mutation seed(s), ${panel.counts.mutationBelowFloor} under floor · ${panel.counts.fuzzTargets} fuzz target(s), ${panel.counts.fuzzCorpusSeeds} committed corpus input(s), ${panel.counts.pinnedFindings} standing finding(s) · ${panel.counts.propertyFlows} engine(s) with a property flow, ${panel.counts.enginesWithoutProperty} without. Sparklines draw from the durable nightly history and stay empty until at least two nights exist — an invented trend line would be the one lie a trust panel cannot afford.</p>
-<div class="adversary-grid">
-<div><h3>Mutation seeds vs floor</h3><div class="matrix-scroll"><table class="data"><thead><tr><th></th><th>Seed</th><th>Score</th><th>30-night trend</th></tr></thead><tbody>${mutation}</tbody></table></div></div>
-<div><h3>Fuzz targets and corpus</h3><div class="matrix-scroll"><table class="data"><thead><tr><th></th><th>Target</th><th>Corpus</th><th>Standing findings</th></tr></thead><tbody>${fuzz}</tbody></table></div></div>
-<div><h3>Engine property flows</h3><div class="matrix-scroll"><table class="data"><thead><tr><th></th><th>Engine</th><th>Property owner</th><th>Mutation seed</th></tr></thead><tbody>${properties}</tbody></table></div></div>
-</div></section>`;
+                .join(" · ")
+            : "no standing findings",
+        ],
+      ])
+    ),
+  ];
+  const properties = [
+    lrow(["Engine", "Verdict", "Mutation seed", "Property flow", "Owner"], {
+      head: true,
+    }),
+    ...panel.properties.map((row) =>
+      lrow([
+        `<strong>${escapeHtml(row.label)}</strong>`,
+        stateCell(row.state),
+        [
+          "quiet path",
+          row.mutationSeed ? escapeHtml(row.mutationSeed) : "unseeded",
+        ],
+        ["quiet path", row.flow ? escapeHtml(row.flow) : "—"],
+        ownerCell(row.owner, "no property flow owns this engine yet"),
+      ])
+    ),
+  ];
+  return `<div aria-label="Adversary panel"><p class="budget"><b>Mutation</b> attacks the tests · ${panel.counts.mutationSeeds} seed(s) · ${panel.counts.mutationBelowFloor} under floor</p>${ledger("adv", "Mutation seeds vs floor", mutation)}
+<p class="budget"><b>Fuzz</b> attacks the code · ${panel.counts.fuzzTargets} target(s) · ${panel.counts.fuzzCorpusSeeds} committed corpus input(s) · ${panel.counts.fuzzCrashers} crasher(s) · ${panel.counts.pinnedFindings} standing finding(s)</p>${ledger("adv", "Fuzz targets and corpus", fuzz)}
+<p class="budget"><b>Property flows</b> attack the orderings · ${panel.counts.propertyFlows} engine(s) covered · ${panel.counts.enginesWithoutProperty} without</p>${ledger("adv", "Engine property flows", properties)}</div>`;
 }
 
 /**
- * Grid G — journeys, grouped by budgeting suite, budget against actual.
+ * Grid G — journeys, grouped by the suite that budgets them, budget against
+ * actual. The app × platform axis the design draws is not rendered here: see
+ * the section's own note for what would have to be declared first.
  * @param {object} grid From `buildJourneyGrid`.
  * @returns {string} HTML.
  */
 export function renderJourneyGrid(grid) {
   const suites = grid.suites
     .map((suite) => {
-      const rows = suite.rows
-        .map(
-          (row) =>
-            `<tr><td class="metric ${escapeHtml(row.state)}">${glyph(row.state)}</td><td>${escapeHtml(row.label)}<br><code class="path">${escapeHtml(row.owner)}</code></td><td>${escapeHtml(duration(row.duration))}</td></tr>`
-        )
-        .join("");
       const budget =
         suite.budgetMinutes == null
-          ? '<span class="chip delta-worse">no aggregate budget declared</span>'
-          : `<span class="chip">budget ${suite.budgetMinutes}m</span>`;
+          ? "no aggregate budget declared"
+          : `<b>budget ${suite.budgetMinutes}m</b>`;
+      // A suite is only over budget once EVERY journey in it reported; the
+      // null case says so rather than reading a partial sum against a whole
+      // suite's ceiling.
       const actual =
         suite.actualMs == null
-          ? '<span class="chip">actual — · no complete run evidence</span>'
-          : `<span class="chip delta-${suite.budgetMs != null && suite.actualMs >= suite.budgetMs ? "worse" : "better"}">actual ${escapeHtml(duration(suite.actualMs))}</span>`;
-      return `<div><h3>${escapeHtml(suite.label)}</h3><p class="chips">${budget}${actual}${suite.budgetDoc ? `<span class="chip"><code class="path">${escapeHtml(suite.budgetDoc)}</code></span>` : ""}</p><div class="matrix-scroll"><table class="data"><thead><tr><th></th><th>Journey</th><th>Actual</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+          ? "<b>actual —</b> · no complete run evidence"
+          : `<b class="state ${suite.budgetMs != null && suite.actualMs >= suite.budgetMs ? "red" : "ok"}">actual ${escapeHtml(duration(suite.actualMs))}</b>`;
+      const rows = [
+        lrow(["Journey", "Owner", "Actual", "Verdict"], { head: true }),
+        ...suite.rows.map((row) =>
+          lrow([
+            `<strong>${escapeHtml(row.label)}</strong>`,
+            ownerCell(row.owner, "no owner declared"),
+            ["quiet num", escapeHtml(duration(row.duration))],
+            stateCell(row.state),
+          ])
+        ),
+      ];
+      return `<p class="budget"><b>${escapeHtml(suite.label)}</b> · ${budget} · ${actual}${suite.budgetDoc ? ` · <code class="path">${escapeHtml(suite.budgetDoc)}</code>` : ""}</p>${ledger("journeys", `${suite.label} journeys`, rows)}`;
     })
     .join("");
-  return `<section class="card wide"><h2>Journeys · budget vs actual</h2><p class="muted axis-note">Rows derive from <code>tests/matrix.json#journeys</code>, whose suite membership and budget are pinned to each runner's own <code>FLOWS</code> list and <code>BUDGET_MS</code> ceiling, and whose union is pinned to every flow file on disk. ${grid.counts.journeys} journey(s), ${grid.counts.passed} green tonight, ${grid.counts.unbudgeted} outside any aggregate budget.</p><div class="adversary-grid">${suites}</div></section>`;
+  return `<div aria-label="Journeys · budget vs actual"><p class="budget"><b>${grid.counts.journeys} journey(s)</b> from <code>tests/matrix.json#journeys</code>, whose suite membership and budget are pinned to each runner's own flow list and ceiling · <b>${grid.counts.passed}</b> green tonight · <b>${grid.counts.unbudgeted}</b> outside any aggregate budget</p>${suites}</div>`;
 }
 
 /**
  * The consent ledger — one row per permission layer.
- * @param {object} ledger From `buildConsentLedger`.
+ * @param {object} ledgerModel From `buildConsentLedger`.
  * @returns {string} HTML.
  */
-export function renderConsentLedger(ledger) {
-  const seatHeaders = ledger.seats
-    .map((seat) => `<th scope="col">${escapeHtml(seat.label)}</th>`)
-    .join("");
-  const rows = ledger.rows
-    .map(
-      (row) =>
-        `<tr><td class="metric ${escapeHtml(row.state)}">${glyph(row.state)}</td><td><strong>${escapeHtml(row.label)}</strong><br><small>${escapeHtml(row.note)}</small></td><td>${row.enforcement.map((file) => `<code class="path">${escapeHtml(file)}</code>`).join("<br>")}</td><td><code class="path">${escapeHtml(row.refusalGrammar)}</code></td><td>${row.adversaryOwner ? `<code class="path">${escapeHtml(row.adversaryOwner)}</code>` : '<small class="muted">no adversary owns this layer</small>'}</td>${row.seatCoverage
-          .map(
-            (seat) =>
-              `<td class="metric ${seat.covered ? "passed" : "missing"}">${seat.covered ? "●" : "○"}</td>`
-          )
-          .join("")}</tr>`
-    )
-    .join("");
-  return `<section class="card wide"><h2>Consent ledger</h2><p class="muted axis-note">One row per permission layer, from <code>tests/matrix.json#consentLedger</code>: where consent is enforced, the words it refuses in, the adversary that attacks it, and which seats it covers. ${ledger.counts.layers} layer(s) · ${ledger.counts.withoutAdversary} with no adversary · ${ledger.counts.fullSeatCoverage} covering all three seats.</p><div class="matrix-scroll"><table class="data"><thead><tr><th></th><th>Layer</th><th>Enforcement point</th><th>Refusal grammar</th><th>Adversary</th>${seatHeaders}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
+export function renderConsentLedger(ledgerModel) {
+  const rows = [
+    lrow(["Layer", "Enforcement point", "Adversary", "Seats", "Verdict"], {
+      head: true,
+    }),
+    ...ledgerModel.rows.map((row) => {
+      const covered = row.seatCoverage.filter((seat) => seat.covered).length;
+      return lrow([
+        `<strong>${escapeHtml(row.label)}</strong><small class="quiet">${escapeHtml(row.note)}</small>`,
+        `<span class="path">${row.enforcement.map((file) => escapeHtml(file)).join(" · ")}</span><small class="quiet">refuses in <code>${escapeHtml(row.refusalGrammar)}</code></small>`,
+        ownerCell(row.adversaryOwner, "no adversary owns this layer"),
+        ["quiet num", `${covered} / ${row.seatCoverage.length}`],
+        stateCell(row.state),
+      ]);
+    }),
+  ];
+  return `<p class="budget"><b>${ledgerModel.counts.layers} layer(s)</b> from <code>tests/matrix.json#consentLedger</code> · <b>${ledgerModel.counts.withoutAdversary}</b> with no adversary · <b>${ledgerModel.counts.fullSeatCoverage}</b> covering every seat</p>${ledger("consent", "Consent ledger", rows)}`;
 }
 
 /**
@@ -222,5 +316,11 @@ export function renderConsentLedger(ledger) {
  * (`report-theme.mjs`), which sits on top of the generated design-system sheet.
  * Same rule as that layer: a declaration here names the STATE it paints and
  * takes its `--st-*` rung, and declares no colour, face or scale of its own.
+ *
+ * What is left is the DETAIL SHELF's vocabulary only. The briefing's own chips,
+ * bands and sub-grids moved into the Night Watch register in `report-theme.mjs`
+ * (#862), and rules for markup nothing emits any more are deleted rather than
+ * left to rot: an unreferenced rule is how a `var()` outlives the token it
+ * names without any gate noticing.
  */
-export const BRIEFING_CSS = `.verdict{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,360px);gap:var(--sp-5);align-items:center;padding:var(--sp-5);margin-bottom:var(--sp-3);border:1px solid var(--line);border-radius:var(--r-lg);background:var(--bg-elev);border-left:5px solid var(--st-absent)}.verdict-shippable{border-left-color:var(--st-solid)}.verdict-degraded{border-left-color:var(--st-degraded)}.verdict-red{border-left-color:var(--st-failed)}.verdict-no-evidence{border-left-color:var(--st-absent)}.verdict-level{display:block;font-family:var(--font-sans);font-weight:600;font-size:var(--t-chapter-size);letter-spacing:var(--t-display-tracking);line-height:1.05;margin:var(--sp-1) 0 var(--sp-2)}.verdict-shippable .verdict-level{color:var(--st-solid-text)}.verdict-degraded .verdict-level{color:var(--st-degraded-text)}.verdict-red .verdict-level{color:var(--st-failed-text)}.verdict-no-evidence .verdict-level{color:var(--st-absent-text)}.chips{display:flex;gap:var(--sp-1);flex-wrap:wrap;margin:0 0 var(--sp-2)}.chip{display:inline-flex;align-items:center;gap:var(--sp-1);padding:3px var(--sp-2);border:1px solid var(--line-strong);border-radius:var(--r-pill);font:var(--t-control);color:var(--text-soft);margin-right:var(--sp-1)}.chip b{color:var(--text);font-variant-numeric:var(--t-mono-numeric)}.delta-worse{border-color:var(--st-failed-text);color:var(--st-failed-text)}.delta-better{border-color:var(--st-solid-text);color:var(--st-solid-text)}.chip-new{border-color:var(--st-degraded-text);color:var(--st-degraded-text)}.chip-pinned{border-color:var(--st-pinned);color:var(--st-pinned)}.band-S1{border-color:var(--st-s1);color:var(--st-s1)}.band-S2{border-color:var(--st-s2);color:var(--st-s2)}.band-S3{border-color:var(--st-s3);color:var(--st-s3)}.band-S4{border-color:var(--st-s4);color:var(--st-s4)}.queue-row td{vertical-align:top}.metric.pinned{color:var(--st-pinned)}.metric.unowned,.metric.stale{color:var(--st-absent-text)}.metric.flaky{color:var(--st-flaky-text)}.metric.skipped{color:var(--st-na-text)}.metric.infra-mismatch{color:var(--st-failed-text)}.metric.owner-silent,.metric.lane-did-not-run,.metric.evidence-unmatched{color:var(--st-silent-text)}.spark-slot{display:inline-block;min-width:120px;padding:var(--sp-1) 0;color:var(--text-soft);font:var(--t-annot-label);border-bottom:1px dashed var(--line-strong)}.adversary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--sp-4)}.adversary-grid h3{font:var(--t-annot-label-on);margin:0 0 var(--sp-2);color:var(--text-soft)}@media(max-width:900px){.verdict{grid-template-columns:1fr}}`;
+export const BRIEFING_CSS = `.metric.stale{color:var(--st-absent-text)}.metric.flaky{color:var(--st-flaky-text)}.metric.skipped{color:var(--st-na-text)}.metric.infra-mismatch{color:var(--st-failed-text)}.spark-slot{display:inline-block;min-width:96px;padding:var(--sp-1) 0;color:var(--text-soft);font:var(--t-annot-label);border-bottom:1px dashed var(--line-strong)}`;

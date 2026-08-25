@@ -57,6 +57,10 @@ export function historyPoint(record) {
     passed: numeric(record.passed),
     failed: numeric(record.failed),
     stale: numeric(record.stale),
+    // #862 — the verdict bar's "+N green" since last night. Nights recorded
+    // before that pass carry no `cellsPassed`, so they read null and the bar
+    // renders no green delta at all rather than a movement from zero.
+    cellsPassed: numeric(record.cellsPassed),
     cellsFailed: numeric(record.cellsFailed),
     cellsMissing: numeric(record.cellsMissing),
     unhandledErrors: numeric(record.unhandledErrors),

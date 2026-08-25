@@ -393,9 +393,14 @@ async function ensureMainScopeBanner(indexPath) {
   if (html.includes("/test-report/nightly/") && html.includes("per-push"))
     return;
   const banner = `<p class="lede scope">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/">/test-report/nightly/</a>.</p>`;
-  // Prefer after the primary lede paragraph.
-  const next = html.includes('<p class="lede">')
-    ? html.replace('<p class="lede">', `${banner}<p class="lede">`)
-    : html.replace("<body>", `<body>${banner}`);
+  // Land it where the generator itself renders this banner (#862): inside
+  // `main`, after the verdict bar's honesty banners and above the section
+  // index. Splicing on `<body>` would put it OUTSIDE `main.page`, where the
+  // page has no column and the banner renders full-bleed against the ground.
+  const next = html.includes('<nav class="toc"')
+    ? html.replace('<nav class="toc"', `${banner}<nav class="toc"`)
+    : html.includes('<main class="page">')
+      ? html.replace('<main class="page">', `<main class="page">${banner}`)
+      : html.replace("<body>", `<body>${banner}`);
   if (next !== html) await writeFile(indexPath, next, "utf8");
 }

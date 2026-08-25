@@ -49,9 +49,13 @@ describe("app × seat and app × designed state grids", () => {
     expect(result.status).toBe(0);
     expect(result.html).toContain("Blueprint app × seat");
     expect(result.html).toContain("Blueprint app × designed state");
-    // A declared owner is neutral, never the green that means "evidence ran".
-    expect(result.html).toContain('class="metric axis-declared"');
-    expect(result.html).toContain('class="metric axis-unowned"');
+    // A declared owner is neutral, never the green that means "evidence ran" —
+    // and since #862 the register says which it is in WORDS, with the tint only
+    // the second reading. Class and word are pinned together because either
+    // alone survives the other being dropped: a cell that keeps its tint but
+    // loses its text is exactly the unreadable grid the restructure removed.
+    expect(result.html).toMatch(/class="cell axis-declared"[^>]*>owned</u);
+    expect(result.html).toMatch(/class="cell axis-unowned"[^>]*>unowned</u);
     expect(result.html).toContain("Locker declares seats.disabledOn viewer.");
     expect(result.html).toContain("no seat owner yet — tracked by #839");
     expect(result.html).toContain("no owner yet — tracked by #839");
@@ -106,7 +110,12 @@ describe("app × seat and app × designed state grids", () => {
     expect(result.html).toContain(
       "designed, but held with the interface pending #831"
     );
-    expect(result.html).toMatch(/axis-skipped[^>]*>–<small>#831<\/small>/u);
+    // The cell's own text and its citation badge, in one match: the word says
+    // the seat is not taken and the badge says which ruling held it. A held
+    // cell that renders one without the other is the silence this forbids.
+    expect(result.html).toMatch(
+      /class="cell axis-skipped"[^>]*>n\/a<small>#831<\/small>/u
+    );
     // Counted, not dropped: a held cell is never missing from the tally.
     expect(result.summary.appStateCells).toEqual({
       declared: 1,

@@ -112,9 +112,11 @@ describe("the layers the report authors", () => {
   });
 
   test("reference only tokens the generated sheet declares", () => {
-    // `--row` is the one per-instance knob: the markup writes it inline on the
-    // cell to stagger a matrix row's entry, so it is declared where it is used.
-    const resolvable = declared(designSystemCss()).add("--row");
+    // No per-instance knob is exempt any more: `--row`, the inline stagger the
+    // old matrix wrote on each cell, went with the layout it belonged to
+    // (#862). Allowing a name the sheet does not declare is how an undeclared
+    // `var()` gets in, so the sheet is now the whole vocabulary.
+    const resolvable = declared(designSystemCss());
     const unresolved = [...referenced(live(AUTHORED))].filter(
       (name) => !resolvable.has(name)
     );
@@ -157,7 +159,7 @@ describe("the layers the report authors", () => {
     }
     // Two pairs deliberately share a treatment, and each is named here rather
     // than absorbed by a loose count: `infra-mismatch` rides the consequence
-    // tone with `failed` and is told apart by its glyph, and `lane-did-not-run`
+    // tone with `failed` and is told apart by its word, and `lane-did-not-run`
     // is the same absence as `stale` — the legend says "lane did not run /
     // stale" as one entry. Both halves of each pair must still MATCH, so a
     // future edit cannot silently split one of them either.
@@ -185,7 +187,7 @@ describe("the rendered page", () => {
     const style =
       /<style>(?<css>[\s\S]*?)<\/style>/u.exec(result.html)?.groups?.css ?? "";
     expect(style.length).toBeGreaterThan(0);
-    const resolvable = declared(style).add("--row");
+    const resolvable = declared(style);
     const unresolved = [...referenced(live(style))].filter(
       (name) => !resolvable.has(name)
     );
