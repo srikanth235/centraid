@@ -9,8 +9,7 @@
 // produced here; the isolation is applied where it is painted, because
 // `unicode-bidi: isolate` is a property of the box, not of the string.
 
-import { identityColor } from "@centraid/design";
-import { localDayKey } from "@centraid/design/elements";
+import { identityColor, localDayKey } from "@centraid/design";
 
 import type { AgEvent, Calendar } from "./types.ts";
 import { UNTITLED } from "./view-copy.ts";
@@ -235,4 +234,6 @@ export function snippetSegments(
     .filter((segment) => segment.text !== "");
 }
 
-export { localDayKey } from "@centraid/design/elements";
+// Token-layer `localDayKey`, not `@centraid/design/elements`: Metro pulls this
+// file into the phone bundle, and the elements subpath is DOM-only / dist-only.
+export { localDayKey } from "@centraid/design";

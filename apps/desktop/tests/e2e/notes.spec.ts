@@ -6,6 +6,7 @@ import type { Page } from "@playwright/test";
 
 import {
   cleanupEnv,
+  clearFirstRunSample,
   closeApp,
   launchApp,
   makeEnv,
@@ -70,10 +71,13 @@ async function foundDesktop(page: Page): Promise<void> {
   await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
   await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
+  // Auto-seed is the first-run product path; day-one empty copy is only true
+  // after the sample is cleared through the control Home already shows.
+  await clearFirstRunSample(page);
 }
 
 test("Notes writes a passage on the custodian seat and its body survives an Electron reload", async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const env = await makeEnv();
   const { app, page } = await launchApp(env);
   try {
@@ -111,7 +115,10 @@ test("Notes writes a passage on the custodian seat and its body survives an Elec
     await expect(
       page.getByText("Write the first one.", { exact: true })
     ).toBeVisible({ timeout: 60_000 });
-    await page.getByRole("button", { name: "New note", exact: true }).click();
+    await page
+      .getByTestId("inline-app-view")
+      .getByRole("button", { name: "New note", exact: true })
+      .click();
 
     // The editor is the whole composer: a title at the display rung and the
     // body under it, both saved as they are typed. No dialog, no template.

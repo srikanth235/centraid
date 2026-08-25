@@ -6,6 +6,7 @@ import type { Page } from "@playwright/test";
 
 import {
   cleanupEnv,
+  clearFirstRunSample,
   closeApp,
   launchApp,
   makeEnv,
@@ -70,10 +71,13 @@ async function foundDesktop(page: Page): Promise<void> {
   await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
   await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
+  // Auto-seed is the first-run product path; day-one empty copy is only true
+  // after the sample is cleared through the control Home already shows.
+  await clearFirstRunSample(page);
 }
 
 test("People mints a person on the custodian seat and it survives an Electron reload", async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const env = await makeEnv();
   const { app, page } = await launchApp(env);
   try {
@@ -113,7 +117,10 @@ test("People mints a person on the custodian seat and it survives an Electron re
     await expect(
       page.getByText("Add the people you keep up with", { exact: true })
     ).toBeVisible({ timeout: 60_000 });
-    await page.getByRole("button", { name: "Add person", exact: true }).click();
+    await page
+      .getByTestId("inline-app-view")
+      .getByRole("button", { name: "Add person", exact: true })
+      .click();
 
     // The form, filled through its own fields and chips — no synthetic write.
     await page

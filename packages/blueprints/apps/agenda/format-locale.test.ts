@@ -25,6 +25,9 @@
 // constructor is the one way to write a wall-clock assertion that holds in
 // every runner zone.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
@@ -247,5 +250,19 @@ describe(eventBounds, () => {
     expect(bounds.dtend).toBe("2026-11-15");
     expect(bounds.recurrence_semantics).toBe("all-day");
     expect(toLocalInput("2026-11-15").slice(0, 10)).toBe("2026-11-15");
+  });
+});
+
+describe("Metro reachability", () => {
+  it("does not import the DOM-only elements subpath", () => {
+    // The phone's day list imports this file. `@centraid/design/elements` has
+    // no `react-native` condition and resolves only through `dist/`, which
+    // mobile-smoke never builds.
+    const source = readFileSync(
+      fileURLToPath(new URL("format.ts", import.meta.url)),
+      "utf8"
+    );
+    expect(source).not.toMatch(/from\s+"@centraid\/design\/elements"/u);
+    expect(source).toMatch(/from\s+"@centraid\/design"/u);
   });
 });

@@ -29,3 +29,30 @@ export function formatBytes(value: number): string {
   }
   return `${size.toFixed(1)} ${units[unit] ?? "KB"}`;
 }
+
+/**
+ * The viewer's local YYYY-MM-DD for an instant — never the UTC slice.
+ *
+ * Lives in the token layer (Expo-reachable) rather than
+ * `@centraid/design/elements`, which has no `react-native` condition and
+ * resolves only through `dist/`. `timeZone` is an IANA name; omit it for the
+ * host zone.
+ */
+export function localDayKey(
+  dateish: string | number | Date,
+  timeZone?: string
+): string {
+  const d = dateish instanceof Date ? dateish : new Date(dateish);
+  if (Number.isNaN(d.getTime())) return String(dateish).slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return String(dateish).slice(0, 10);
+  return `${year}-${month}-${day}`;
+}

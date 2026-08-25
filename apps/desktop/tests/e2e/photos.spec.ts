@@ -7,6 +7,7 @@ import type { Page } from "@playwright/test";
 
 import {
   cleanupEnv,
+  clearFirstRunSample,
   closeApp,
   launchApp,
   makeEnv,
@@ -88,6 +89,10 @@ async function foundDesktop(page: Page): Promise<void> {
   await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
   await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
+  // Auto-seed is the first-run product path; the Photos replica stays busy
+  // while sample photographs land. Clear through Home so the write rail is
+  // actually idle before this journey's readiness probe.
+  await clearFirstRunSample(page);
 }
 
 /**
@@ -109,7 +114,7 @@ async function localCasBytes(
 }
 
 test("Photos imports a real photograph and its bytes stay on this machine", async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const env = await makeEnv();
   const { app, page } = await launchApp(env);
   try {

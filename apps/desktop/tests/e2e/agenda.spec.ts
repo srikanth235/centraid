@@ -6,6 +6,7 @@ import type { Page } from "@playwright/test";
 
 import {
   cleanupEnv,
+  clearFirstRunSample,
   closeApp,
   launchApp,
   makeEnv,
@@ -75,6 +76,9 @@ async function foundDesktop(page: Page): Promise<void> {
   await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
   await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
+  // Auto-seed is the first-run product path; day-one empty copy is only true
+  // after the sample is cleared through the control Home already shows.
+  await clearFirstRunSample(page);
 }
 
 /** Schedule is the view whose window is unbounded forward, so it is the one
@@ -96,7 +100,7 @@ async function showSchedule(page: Page): Promise<void> {
 }
 
 test("Agenda composes an event on the custodian seat and it survives an Electron reload", async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const env = await makeEnv();
   const { app, page } = await launchApp(env);
   try {
@@ -173,7 +177,13 @@ test("Agenda composes an event on the custodian seat and it survives an Electron
     const custodianOutcome = await page.evaluate(
       async ({ title }) => {
         type Upcoming = {
-          events: Array<{ event_id: string; summary: string }>;
+          events: Array<{
+            event_id: string;
+            summary: string;
+            calendar_id?: string | null;
+            dtstart: string;
+            dtend?: string | null;
+          }>;
         };
         const upcoming = await window.centraid.read<Upcoming>({
           query: "upcoming",
@@ -181,10 +191,23 @@ test("Agenda composes an event on the custodian seat and it survives an Electron
         });
         const event = upcoming.events.find((row) => row.summary === title);
         if (!event) return "no-such-event";
+        // `edit-event` maps to `schedule.edit_event` (`confirm: true`), which
+        // parks for every non-owner-device caller. The app's own Save uses
+        // `propose` — the same door, and the one that must come back executed
+        // on this seat.
+        const start = Date.parse(event.dtstart);
+        const later = Number.isFinite(start)
+          ? start + 2 * 60 * 60 * 1000
+          : Date.now();
         const outcome = await window.centraid.write({
-          action: "edit-event",
-          input: { event_id: event.event_id, summary: title },
-          intentId: "agenda-desktop-e2e-custodian-edit",
+          action: "propose",
+          input: {
+            summary: `${title} check`,
+            dtstart: new Date(later).toISOString(),
+            dtend: new Date(later + 60 * 60 * 1000).toISOString(),
+            calendar_id: event.calendar_id,
+          },
+          intentId: "agenda-desktop-e2e-custodian-propose",
         });
         return outcome.status;
       },

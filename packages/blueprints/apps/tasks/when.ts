@@ -15,15 +15,33 @@
  * definition of `landsToday`, wherever they are called from.
  */
 
+/**
+ * Local YYYY-MM-DD for an instant in `timeZone` (IANA), or the host zone when
+ * omitted. Intl, not `Date#getFullYear` plus a post-start `process.env.TZ`
+ * write: Node ignores TZ after boot, which is how "Today is the member's day"
+ * went green on a Mac and red on UTC CI.
+ */
+function civilDay(instant: Date, timeZone?: string): string | null {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return null;
+  return `${year}-${month}-${day}`;
+}
+
 /** A civil day key (`2026-08-21`) for an ISO instant or a date-only value.
  *  Instants use the member's local calendar day — never the UTC prefix. */
-export function dayKey(value: string): string {
+export function dayKey(value: string, timeZone?: string): string {
   if (isDateOnly(value)) return value.slice(0, 10);
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value.slice(0, 10);
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
-  const day = String(parsed.getDate()).padStart(2, "0");
-  return `${parsed.getFullYear()}-${month}-${day}`;
+  return civilDay(parsed, timeZone) ?? value.slice(0, 10);
 }
 
 /**
@@ -36,9 +54,13 @@ export function isDateOnly(due: string | null | undefined): boolean {
 }
 
 /** Whole civil days from `from` to `to`, negative when `to` is earlier. */
-export function daysBetween(from: string, to: string): number {
-  const a = Date.parse(`${dayKey(from)}T00:00:00Z`);
-  const b = Date.parse(`${dayKey(to)}T00:00:00Z`);
+export function daysBetween(
+  from: string,
+  to: string,
+  timeZone?: string
+): number {
+  const a = Date.parse(`${dayKey(from, timeZone)}T00:00:00Z`);
+  const b = Date.parse(`${dayKey(to, timeZone)}T00:00:00Z`);
   if (Number.isNaN(a) || Number.isNaN(b)) return 0;
   return Math.round((b - a) / 86_400_000);
 }
@@ -91,10 +113,11 @@ export function timeOfDay(value: string): string {
  */
 export function dueLabel(
   due: string | null | undefined,
-  now: string
+  now: string,
+  timeZone?: string
 ): string | null {
   if (!due) return null;
-  const delta = daysBetween(now, due);
+  const delta = daysBetween(now, due, timeZone);
   const clock = isDateOnly(due) ? "" : `, ${timeOfDay(due)}`;
   if (delta === 0) return `today${clock}`;
   if (delta === 1) return `tomorrow${clock}`;

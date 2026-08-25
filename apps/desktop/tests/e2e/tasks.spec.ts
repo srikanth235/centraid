@@ -6,6 +6,7 @@ import type { Page } from "@playwright/test";
 
 import {
   cleanupEnv,
+  clearFirstRunSample,
   closeApp,
   launchApp,
   makeEnv,
@@ -71,6 +72,9 @@ async function foundDesktop(page: Page): Promise<void> {
   await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
   await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
+  // Auto-seed is the first-run product path; day-one empty copy is only true
+  // after the sample is cleared through the control Home already shows.
+  await clearFirstRunSample(page);
 }
 
 /** The Logbook place, from the rail on a pointer window or the More sheet's
@@ -90,7 +94,7 @@ async function showLogbook(page: Page): Promise<void> {
 }
 
 test("Tasks files and completes a task on the custodian seat, and the Logbook survives an Electron reload", async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const env = await makeEnv();
   const { app, page } = await launchApp(env);
   try {

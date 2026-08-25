@@ -3,7 +3,7 @@
 // The clock is injected in every case here for the reason the module takes it
 // as an argument: the midnight problem is a boundary problem, and a helper that
 // read the wall clock for itself could be asserted on only one side of it.
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   ageLabel,
@@ -210,17 +210,16 @@ describe("the small conversions", () => {
 });
 
 describe("Today is the member's day, not UTC", () => {
-  const realTz = process.env.TZ;
-  afterEach(() => {
-    if (realTz === undefined) delete process.env.TZ;
-    else process.env.TZ = realTz;
-  });
-
   it("keys a timed due on the local calendar day even when UTC has already rolled", () => {
-    process.env.TZ = "Pacific/Kiritimati";
+    // Named zone, not `process.env.TZ`: Node does not apply TZ after boot, so
+    // a post-start mutation is a no-op on UTC CI and the member's day collapses
+    // to the UTC prefix.
+    const zone = "Pacific/Kiritimati";
     expect("2026-08-21T23:00:00Z".slice(0, 10)).toBe("2026-08-21");
-    expect(dayKey("2026-08-21T23:00:00Z")).toBe("2026-08-22");
-    expect(dueLabel("2026-08-21", "2026-08-21T23:00:00Z")).toBe("yesterday");
-    expect(dueLabel("2026-08-22", "2026-08-21T23:00:00Z")).toBe("today");
+    expect(dayKey("2026-08-21T23:00:00Z", zone)).toBe("2026-08-22");
+    expect(dueLabel("2026-08-21", "2026-08-21T23:00:00Z", zone)).toBe(
+      "yesterday"
+    );
+    expect(dueLabel("2026-08-22", "2026-08-21T23:00:00Z", zone)).toBe("today");
   });
 });
