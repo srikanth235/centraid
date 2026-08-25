@@ -423,24 +423,33 @@ Remaining concurrency/compat cells still happy-path.
 
 ### W3/W4 remainder — remaining M6–M11 notes stop overclaiming
 
-The leftover "proves the current happy path; missing crash/adversary/
-interleaving" cells either gained a cheapest falsifying test next to the
+This did **Rewrite remaining M6–M11 notes that overclaimed "happy path
+only"; add cheapest durability/adversary proofs beside existing owners**.
+The leftover cells either gained a cheapest falsifying test next to the
 existing owner, or the note now names what the owner actually proves and
 what is still open under #864 (scale second volume, perf longitudinal
 drift, cross-surface journeys, two-process fire, file-backed replica
 reopen, named-rig gateway crash).
 
+This did **Add exclusive two-device lease claims and concurrent
+handler-pool dispatch**.
+
 New tests this remainder:
 
-- `leases.test.ts` — two poster jobs claimed by two devices never share a
-  `requestId`
-- `handler-pool.test.ts` — two concurrent dispatches both complete
-- `disk-health.test.ts` — a replacement probe still names ENOSPC after the
-  previous health loop is dropped
-- **Mobile origin seat (primary):** `agenda-days.test.ts` — a Friday–Sunday
+- `packages/vault/src/enrich/leases.test.ts` — two poster jobs claimed by
+  two devices never share a `requestId`
+- `packages/server/src/engine/handlers/handler-pool.test.ts` — two
+  concurrent dispatches both complete
+- `packages/server/src/serve/disk-health.test.ts` — a replacement probe
+  still names ENOSPC after the previous health loop is dropped
+- **Mobile origin seat (primary):** `apps/mobile/src/apps/agenda/agenda-days.ts`
+  and `apps/mobile/src/apps/agenda/agenda-days.test.ts` — a Friday–Sunday
   run occupies every local day on the native list, not only the start day.
-  The phone does not render `packages/blueprints` components; it groups
-  replica occurrences itself via the shared `spanLocalDays` arithmetic.
+  `apps/mobile/src/apps/agenda/AgendaHome.tsx` groups replica occurrences
+  itself via the shared `spanLocalDays` arithmetic. The phone does not
+  render `packages/blueprints` components.
+- `apps/mobile/src/apps/people/INTEGRATION-NOTES.md` — overdue is
+  `daysSinceContact > cadence`, matching the shared `format.ts` rule.
 
 **Maestro.** Wave 1 added exactly one flow:
 `tests/agent-e2e-mobile/flows/people-roster.mjs` (People origin seat,
@@ -459,9 +468,12 @@ is Wave 1's `tests/agent-e2e-mobile/flows/people-roster.mjs`.
 
 ### W5 — deferred
 
-Named-rig skips (disk-full, launchd, Clawgnition weekly pretence) stay
-inventoried under #864. This PR does not stand up those machines. The
-deferral is the close of Wave 5 for this umbrella, not a silent "owned".
+This did **Explicitly deferred: the 18 skip sites still wait on named rigs
+(disk-full, launchd, Clawgnition interop); standing those up is out of
+this PR's machine budget. No Maestro flows added in this remainder.**
+Named-rig skips stay inventoried under #864. This PR does not stand up
+those machines. The deferral is the close of Wave 5 for this umbrella,
+not a silent "owned".
 
 ### CI ratchets for this branch
 
@@ -781,7 +793,13 @@ bunx vitest run packages/blueprints/apps/notes/format.test.ts \
   packages/server/src/automation/handler/lint.test.ts \
   apps/mobile/src/lib/upload/transfer-policy.test.ts \
   apps/mobile/src/lib/replica/sqlite-intent-store.test.ts \
-  apps/web/src/web-host.test.ts
+  apps/web/src/web-host.test.ts \
+  packages/vault/src/enrich/leases.test.ts \
+  packages/server/src/engine/handlers/handler-pool.test.ts \
+  packages/server/src/serve/disk-health.test.ts \
+  apps/mobile/src/apps/agenda/agenda-days.test.ts \
+  apps/mobile/src/apps/people/people-model.test.ts
+bun run lint:schema-export
 ```
 
 This change did **Fix the cheap S2 wrong-display bugs with a failing test
@@ -836,7 +854,20 @@ Staged paths: `apps/mobile/native-fingerprints.json`,
 `packages/vault/src/commands/people-dates.test.ts`,
 `packages/vault/src/commands/people.ts`,
 `receipts/issue-864-close-the-matrix.md`, `tests/matrix.json`,
-`tests/quality/classification-ratchet.json`.
+`tests/quality/classification-ratchet.json`,
+`tests/schema-export-fingerprint.json`,
+`packages/vault/src/gateway/portable-export.ts`,
+`packages/vault/src/enrich/leases.test.ts`,
+`packages/server/src/engine/handlers/handler-pool.test.ts`,
+`packages/server/src/serve/disk-health.test.ts`,
+`apps/mobile/src/apps/agenda/AgendaHome.tsx`,
+`apps/mobile/src/apps/agenda/agenda-days.ts`,
+`apps/mobile/src/apps/agenda/agenda-days.test.ts`,
+`apps/mobile/src/apps/people/INTEGRATION-NOTES.md`,
+`apps/desktop/tests/e2e/agenda.spec.ts`,
+`apps/desktop/tests/e2e/notes.spec.ts`,
+`apps/desktop/tests/e2e/people.spec.ts`,
+`apps/desktop/tests/e2e/photos.spec.ts`.
 
 ## Audit
 
