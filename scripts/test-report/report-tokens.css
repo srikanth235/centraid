@@ -632,6 +632,7 @@
   --nw-partial: #175F6A;
   --nw-flaky: #6B3E8C;
   --nw-gap: #8E2F63;
+  --nw-bug: #3A3A8C;
   --nw-dangerbg: #F7EBE8;
   --nw-attnbg: #FAF2E2;
   --nw-okbg: #EDF2EE;
@@ -639,6 +640,7 @@
   --nw-partialbg: #E9F2F3;
   --nw-flakybg: #F2ECF8;
   --nw-gapbg: #FAEBF2;
+  --nw-bugbg: #EEEDF8;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -661,6 +663,7 @@
     --nw-partial: #69B3BD;
     --nw-flaky: #C39BD8;
     --nw-gap: #E094BA;
+    --nw-bug: #C2BEEA;
     --nw-dangerbg: #241614;
     --nw-attnbg: #241D0E;
     --nw-okbg: #151D16;
@@ -668,6 +671,7 @@
     --nw-partialbg: #0F1E20;
     --nw-flakybg: #1D1726;
     --nw-gapbg: #26161F;
+    --nw-bugbg: #1A1828;
   }
 }
 
@@ -690,6 +694,7 @@
   --nw-partial: #69B3BD;
   --nw-flaky: #C39BD8;
   --nw-gap: #E094BA;
+  --nw-bug: #C2BEEA;
   --nw-dangerbg: #241614;
   --nw-attnbg: #241D0E;
   --nw-okbg: #151D16;
@@ -697,4 +702,5 @@
   --nw-partialbg: #0F1E20;
   --nw-flakybg: #1D1726;
   --nw-gapbg: #26161F;
+  --nw-bugbg: #1A1828;
 }

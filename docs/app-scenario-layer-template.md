@@ -42,5 +42,13 @@ Row rules, from the admission contract:
 
 ## Instances
 
-- Photos — [TESTING.md](../TESTING.md#photos-scenario--layer-contract-716) (reference instance, native-first).
+- Photos — [docs/apps/photos-scenarios.md](apps/photos-scenarios.md) (reference instance, native-first; TESTING.md still cites it).
 - Docs — [docs/apps/docs-scenarios.md](apps/docs-scenarios.md).
+- Notes — [docs/apps/notes-scenarios.md](apps/notes-scenarios.md).
+- Tasks — [docs/apps/tasks-scenarios.md](apps/tasks-scenarios.md).
+- Agenda — [docs/apps/agenda-scenarios.md](apps/agenda-scenarios.md).
+- People — [docs/apps/people-scenarios.md](apps/people-scenarios.md).
+- Locker — [docs/apps/locker-scenarios.md](apps/locker-scenarios.md).
+- Tally — [docs/apps/tally-scenarios.md](apps/tally-scenarios.md) (held with #831).
+
+The machine-readable promotion of these tables is `tests/matrix.json#appScenarios`, rendered as §3b of the nightly report.

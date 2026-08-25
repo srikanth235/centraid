@@ -786,14 +786,6 @@
       "url": "https://github.com/srikanth235/centraid/issues/470",
       "state": "closed"
     },
-    "842": {
-      "url": "https://github.com/srikanth235/centraid/issues/842",
-      "state": "closed"
-    },
-    "844": {
-      "url": "https://github.com/srikanth235/centraid/issues/844",
-      "state": "closed"
-    },
     "471": {
       "url": "https://github.com/srikanth235/centraid/issues/471",
       "state": "closed"
@@ -842,14 +834,6 @@
       "url": "https://github.com/srikanth235/centraid/issues/781",
       "state": "closed"
     },
-    "831": {
-      "url": "https://github.com/srikanth235/centraid/issues/831",
-      "state": "closed"
-    },
-    "834": {
-      "url": "https://github.com/srikanth235/centraid/issues/834",
-      "state": "closed"
-    },
     "790": {
       "url": "https://github.com/srikanth235/centraid/issues/790",
       "state": "closed"
@@ -858,8 +842,24 @@
       "url": "https://github.com/srikanth235/centraid/issues/791",
       "state": "closed"
     },
+    "831": {
+      "url": "https://github.com/srikanth235/centraid/issues/831",
+      "state": "closed"
+    },
+    "834": {
+      "url": "https://github.com/srikanth235/centraid/issues/834",
+      "state": "closed"
+    },
     "839": {
       "url": "https://github.com/srikanth235/centraid/issues/839",
+      "state": "closed"
+    },
+    "842": {
+      "url": "https://github.com/srikanth235/centraid/issues/842",
+      "state": "closed"
+    },
+    "844": {
+      "url": "https://github.com/srikanth235/centraid/issues/844",
       "state": "closed"
     },
     "864": {
@@ -2981,6 +2981,611 @@
             "owner": "packages/blueprints/apps/tasks/logic.test.ts"
           }
         }
+      }
+    ]
+  },
+  "appScenarios": {
+    "trackingIssue": "864",
+    "layers": [
+      {
+        "id": "unit",
+        "label": "U"
+      },
+      {
+        "id": "component",
+        "label": "C"
+      },
+      {
+        "id": "journey",
+        "label": "E"
+      }
+    ],
+    "apps": [
+      {
+        "id": "agenda",
+        "doc": "docs/apps/agenda-scenarios.md",
+        "scenarios": [
+          {
+            "id": "week-origin",
+            "label": "week origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/agenda-week.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/offline/conflict/stale/dayone",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
+          },
+          {
+            "id": "view-derivation",
+            "label": "view derivation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/views.test.ts"
+          },
+          {
+            "id": "edit-occurrence-model",
+            "label": "edit-occurrence model",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/edits.test.ts"
+          },
+          {
+            "id": "day-context",
+            "label": "day-context copy",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/day-context.test.ts"
+          },
+          {
+            "id": "reminder-rrule",
+            "label": "a recurring event's reminder fires on each occurrence",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "due-reminders.ts never expands the rrule; the reminder fires once, on the anchor"
+          },
+          {
+            "id": "recurring-dst",
+            "label": "recurring events keep wall-clock time across DST",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "no surface sends start_tz; occurrences drift +1h"
+          },
+          {
+            "id": "refused-create",
+            "label": "a refused create (busy-overlap) keeps the typed draft",
+            "layer": "component",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "the refused create discards everything typed on web"
+          },
+          {
+            "id": "allday-recurring",
+            "label": "an all-day recurring event lands on the day it names",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "all-day recurring lands a day early off UTC+0"
+          },
+          {
+            "id": "edit-this-occurrence",
+            "label": "edit this occurrence keeps every field that was set",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "the occurrence edit drops 5 of 8 fields"
+          },
+          {
+            "id": "multiday-visibility",
+            "label": "multi-day events stay visible on every day they span",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "multi-day visibility is wrong (S2)"
+          }
+        ]
+      },
+      {
+        "id": "docs",
+        "doc": "docs/apps/docs-scenarios.md",
+        "scenarios": [
+          {
+            "id": "upload-reload",
+            "label": "upload a file; the document and its bytes survive a reload",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/docs-drive.spec.ts"
+          },
+          {
+            "id": "preview-reading",
+            "label": "Preview opens a reading sheet named for the file",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-reading-surface.test.ts"
+          },
+          {
+            "id": "drive-window",
+            "label": "drive window: folders, newest-filed-first, bounded window",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-drive.test.ts"
+          },
+          {
+            "id": "shelves",
+            "label": "shelf strip routing and band tabs",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-shelves.test.ts"
+          },
+          {
+            "id": "custody-mark",
+            "label": "custody mark: annotate the exception, never the norm",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/docs/custody-row-mark.test.ts"
+          },
+          {
+            "id": "kind-colours",
+            "label": "file-kind colours meet the contrast rulebook",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/docs/kind-colours.test.ts"
+          },
+          {
+            "id": "download-on-demand",
+            "label": "download on demand: explicit act, honest progress, no fabricated totals",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/download-on-demand.test.ts"
+          },
+          {
+            "id": "pdf-extraction",
+            "label": "device-side PDF text extraction with gateway degradation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-media.test.ts"
+          },
+          {
+            "id": "version-restore",
+            "label": "edit in place / version restore lands the exact restored bytes",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/vault/src/gateway/gateway.contract.test.ts"
+          },
+          {
+            "id": "pending-writes",
+            "label": "pending writes: replica overlay on Docs actions",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts"
+          },
+          {
+            "id": "mobile-origin",
+            "label": "drive origin journey on the phone",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/docs-drive.mjs"
+          },
+          {
+            "id": "title-only-empty-body",
+            "label": "title-only edit on phone does not write an empty body",
+            "layer": "component",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "editing the title while the body is still fetching overwrites the document with an empty body"
+          },
+          {
+            "id": "export-path-traversal",
+            "label": "export filename cannot traverse out of the share folder",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "docs-export.ts interpolates the title into a path, so ../../x escapes"
+          }
+        ]
+      },
+      {
+        "id": "locker",
+        "doc": "docs/apps/locker-scenarios.md",
+        "scenarios": [
+          {
+            "id": "gate-origin",
+            "label": "gate origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/locker-gate.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed dayone",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/states.test.tsx"
+          },
+          {
+            "id": "totp",
+            "label": "TOTP generation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/totp.test.ts"
+          },
+          {
+            "id": "origin-matching",
+            "label": "origin matching for autofill",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/origin-matching.test.ts"
+          },
+          {
+            "id": "item-type",
+            "label": "item type partition",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/locker-item-type.test.ts"
+          },
+          {
+            "id": "logic",
+            "label": "list/detail derivation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/logic.test.ts"
+          }
+        ]
+      },
+      {
+        "id": "notes",
+        "doc": "docs/apps/notes-scenarios.md",
+        "scenarios": [
+          {
+            "id": "library-origin",
+            "label": "library origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/notes-library.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/offline/conflict",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/states.test.tsx"
+          },
+          {
+            "id": "shelves",
+            "label": "shelf routing",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/shelves.test.ts"
+          },
+          {
+            "id": "format",
+            "label": "format / commonmark",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/format.test.ts"
+          },
+          {
+            "id": "commands",
+            "label": "command dispatch",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/logic-commands.test.ts"
+          },
+          {
+            "id": "pin-empty-overwrite",
+            "label": "Pin/Add-tag/Attach in the editor keeps the body",
+            "layer": "component",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "in-editor write refreshes from an empty loaded body and overwrites the note"
+          },
+          {
+            "id": "autosave-drop",
+            "label": "autosave debounce does not drop a write on note-switch",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "600ms debounce drops the in-flight body"
+          },
+          {
+            "id": "conflict-both-kept",
+            "label": "Both are kept conflict panel is a live control",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "the panel is dead UI; neither branch writes"
+          },
+          {
+            "id": "untitled-web",
+            "label": "a new web note is named from its title, not Untitled note",
+            "layer": "component",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "every web note is named Untitled note (S2)"
+          }
+        ]
+      },
+      {
+        "id": "people",
+        "doc": "docs/apps/people-scenarios.md",
+        "scenarios": [
+          {
+            "id": "roster-origin",
+            "label": "roster origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/dayone",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/states.test.tsx"
+          },
+          {
+            "id": "grants",
+            "label": "per-person grants",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/components/PersonGrants.test.tsx"
+          },
+          {
+            "id": "share-links",
+            "label": "share-link projection",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/queries/share-links.test.ts"
+          },
+          {
+            "id": "erase-after-30-days",
+            "label": "Erased after 30 days erases the person",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "purge leaves core_party/tag/channel and the deleted person still push-notifies"
+          },
+          {
+            "id": "merge-destructive",
+            "label": "merge keeps folded-in cadence, last-contacted, and colour",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "merge is destructive and a wrong-person merge is one mistap"
+          },
+          {
+            "id": "overdue-arithmetic",
+            "label": "overdue arithmetic matches the cadence",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "overdue arithmetic is wrong (S2)"
+          },
+          {
+            "id": "leap-day",
+            "label": "leap-day birthdays fire on 28 Feb in non-leap years",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "leap-day handling is wrong (S2)"
+          },
+          {
+            "id": "month-day-validation",
+            "label": "month_day validation refuses impossible days",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "month_day validation is missing (S2)"
+          },
+          {
+            "id": "row-cap",
+            "label": "the roster is not silently capped at 200 rows",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "200-row cap drops people with no notice (S2)"
+          }
+        ]
+      },
+      {
+        "id": "photos",
+        "doc": "docs/apps/photos-scenarios.md",
+        "scenarios": [
+          {
+            "id": "drawer-activity",
+            "label": "drawer activity, hide timer, pinned summary grains",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/photos/PhotosHome.test.tsx"
+          },
+          {
+            "id": "library-origin",
+            "label": "library origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/photos-library.mjs"
+          },
+          {
+            "id": "search-grouping",
+            "label": "search grouping and no-hits",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/search-groups.test.ts"
+          },
+          {
+            "id": "search-journey",
+            "label": "search device journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/photos-search.mjs"
+          },
+          {
+            "id": "viewer-chrome",
+            "label": "viewer chrome and filmstrip",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/viewer.test.ts"
+          },
+          {
+            "id": "collections",
+            "label": "Collections shelves and grouping",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/grouping.test.ts"
+          },
+          {
+            "id": "permission-refused",
+            "label": "permission-refused takeover",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs"
+          },
+          {
+            "id": "select-write",
+            "label": "selection trash + restore write",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/photos-select-write.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/conflict",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/states.test.tsx"
+          },
+          {
+            "id": "storage-arithmetic",
+            "label": "storage custody arithmetic",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/storage-model.test.ts"
+          },
+          {
+            "id": "import-runupload",
+            "label": "web/desktop import does not drop files",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "the web/desktop import path is untested; a large drop can silently lose files"
+          },
+          {
+            "id": "free-up-pinned",
+            "label": "free-up-space preserves pinned originals",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "exclusion join unproven; confirm dialog still promises exclusion"
+          },
+          {
+            "id": "hide-vs-archive",
+            "label": "hide vs archive mean the same thing on every seat",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "hide and archive diverge across surfaces (S2)"
+          }
+        ]
+      },
+      {
+        "id": "tally",
+        "doc": "docs/apps/tally-scenarios.md",
+        "scenarios": [
+          {
+            "id": "interface-held",
+            "label": "rendered interface",
+            "layer": "unit",
+            "status": "held",
+            "citation": "#831"
+          }
+        ]
+      },
+      {
+        "id": "tasks",
+        "doc": "docs/apps/tasks-scenarios.md",
+        "scenarios": [
+          {
+            "id": "board-origin",
+            "label": "board origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/tasks-board.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/offline/conflict/stale",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
+          },
+          {
+            "id": "board-derivation",
+            "label": "board derivation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/logic.test.ts"
+          },
+          {
+            "id": "routes",
+            "label": "route table",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/routes.test.ts"
+          },
+          {
+            "id": "parent-hides-subtasks",
+            "label": "completing a parent leaves unfinished subtasks visible",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "completing/releasing a parent hides every unfinished subtask"
+          },
+          {
+            "id": "release-all-redates",
+            "label": "catch-up Release all does not re-date the someday pile",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "Release all re-dates undated tasks into Today irreversibly"
+          },
+          {
+            "id": "house-scope",
+            "label": "a HOUSE-scope write stays in the HOUSE scope",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "act() never passes scope, so every write targets the wrong scope"
+          },
+          {
+            "id": "delete-cancels",
+            "label": "delete-confirm removes the row, it does not cancel it",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "confirm copy promises removal but the handler sets status:cancelled"
+          },
+          {
+            "id": "priority-scale",
+            "label": "priority scale matches the north star",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "priority scale is inverted versus Todoist (S2)"
+          },
+          {
+            "id": "today-utc",
+            "label": "Today is the member's day, not UTC",
+            "layer": "unit",
+            "status": "product-bug",
+            "trackingIssue": "864",
+            "note": "Today is computed in UTC (S2)"
+          }
+        ]
       }
     ]
   },

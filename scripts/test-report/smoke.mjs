@@ -110,6 +110,8 @@ try {
     // the state whose whole point is that both grids now agree about it.
     '<b class="cell gap">no owner</b>',
     '<b class="cell axis-unowned">no owner</b>',
+    '<b class="cell axis-bug">product bug</b>',
+    "Scenarios · per-app verb ledger",
     /<ul class="legend" aria-label="Cell register">[\s\S]*<div class="gridwrap">/u,
     "owner.latest.status",
     "duration(owner.latest.duration)",

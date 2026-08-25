@@ -36,7 +36,13 @@ about what is still open.
 - [x] Add the untrusted-rendering property flow and its measured mutation seed
 - [x] Give the app-scope-manifests consent layer a hostile-manifest adversary
 
-### Waves 3–5, 7
+### Wave 7 (landed)
+
+- [x] Author `docs/apps/{agenda,tasks,notes,people}-scenarios.md` (Photos/Docs exist); promote all six to matrix scenario blocks
+- [x] Add the per-app scenario grid to the report generator; extend the zero-grey contract to it
+- [x] Triage M18: seed every drill defect as a product-bug cell (inline fixes follow under this umbrella; no child issues)
+
+### Waves 3–5
 
 - [ ] _placeholder — the root agent appends each wave's checklist as it lands_
 
@@ -48,11 +54,10 @@ about what is still open.
 | W1 | own the app-axis state and seat cells; leave nine as product-surface gaps | landed |
 | W6 | recolor the report to one hue one meaning; invert the collision guardrail | landed |
 | W2 | consent + untrusted property flows, mutation seed, hostile-manifest adversary | landed (extension journeys deferred) |
-| W2 | _placeholder — root agent appends_ | pending |
+| W7 | per-app scenario ledger + report grid; M18 seeded as product-bug | landed |
 | W3 | _placeholder — root agent appends_ | pending |
 | W4 | _placeholder — root agent appends_ | pending |
 | W5 | _placeholder — root agent appends_ | pending |
-| W6 | _placeholder — root agent appends_ | pending |
 
 ## What changed
 
@@ -276,6 +281,64 @@ this slice. The `consentLedger[app-scope-manifests]` adversary now names the
 closed-grammar owner and its note records both the landed sweep and this hostile
 suite (`tests/matrix.json`).
 
+### W7 — the report grows a per-app scenario grid, and M18 defects become cells
+
+Wave 7 is the user's priority ask: a machine-readable per-app scenario
+ledger so a write that loses data has a row that turns. This did **Author
+`docs/apps/{agenda,tasks,notes,people}-scenarios.md` (Photos/Docs exist);
+promote all six to matrix scenario blocks** — and, because grids B and D are
+closed against the bundled apps, Locker and Tally got instances too
+(`docs/apps/locker-scenarios.md`, `docs/apps/tally-scenarios.md`). Photos was
+promoted out of TESTING.md into `docs/apps/photos-scenarios.md`; Docs gained
+the two M18 rows the drill named. `docs/app-scenario-layer-template.md` and
+`TESTING.md` now point at the eight instances and at
+`tests/matrix.json#appScenarios`.
+
+This did **Add the per-app scenario grid to the report generator; extend the
+zero-grey contract to it**. `scripts/test-report/app-scenario-grid.mjs` builds
+one heat table per app (columns U / C / E; the cheapest layer paints, the
+other two are n/a). `scripts/test-report/generate.mjs` renders it as §3b.
+Owned stays the declaration grey of §2/§3, gap is the plum "no owner", and
+**product bug** is a new indigo family (`--nw-bug` / `--nw-bugbg`) so a known
+defect cannot share paint with a missing test. The zero-grey extension is
+"this grid never paints an absence grey" — asserted by
+`scripts/test-report/generate-app-scenarios.test.mjs` and
+`scenarioGridIsZeroGrey` — and `summary.appScenarioCells` is counted
+separately from `cellsMissing`, the same way the seat/state grids are.
+`scripts/test-report/smoke.mjs` pins the legend chip and the section title.
+`scripts/test-report/generate-briefing.test.mjs` pins the Night Watch running
+order with `scenarios` between `states` and `consent`.
+
+`scripts/test-report/validate-app-scenarios.mjs` (called from
+`scripts/test-report/validate-app-axes.mjs`) closes the ledger: bundled apps
+exactly, layers exactly U/C/E, owned owners exist on disk, gaps and
+product-bugs cite an open issue, product-bugs carry a note, held/skip cite a
+registered ruling. Fixtures:
+`scripts/test-report/matrix-fixture.mjs`,
+`scripts/test-report/report-fixture-root.mjs`,
+`scripts/test-report/generate-nightly-semantics.test.mjs`.
+Tests: `scripts/test-report/validate-app-scenarios.test.mjs`,
+`scripts/test-report/generate-app-scenarios.test.mjs`,
+`scripts/test-report/report-theme.test.mjs` (the eighth family is in
+REGISTER and SEMANTIC_STATES).
+
+The eighth family is emitted from `scripts/site-tokens.mjs` into
+`scripts/test-report/report-tokens.css` and consumed by
+`scripts/test-report/report-theme.mjs`. Current-state docs:
+`docs/decisions.md`, `docs/design-divergences.md`.
+
+This did **Triage M18: seed every drill defect as a product-bug cell (inline
+fixes follow under this umbrella; no child issues)**. The user approved
+inline S1 fixes under #864; Wave 7 does not fix them — it makes each one a
+cell that must flip `product-bug → owned` when the failing test and the
+repair land. 73 scenario rows: owned proofs where they already existed,
+product-bug for every M18 S1 and the cheap-to-name S2s, Tally held with
+#831.
+
+`scripts/mutation/run.test.mjs` was one line behind Wave 2: the untrusted
+seed was on disk and floored, but the catalog pin omitted
+`packages/blueprints/apps/_shared/untrusted`. The pin now lists it.
+
 ### W3–W5
 
 _Placeholder — the root agent appends the remaining waves here._
@@ -291,6 +354,12 @@ _Placeholder — the root agent appends the remaining waves here._
   citation check alone would have passed on 2026-08-24, because every citation
   pointed at an issue the ledger *said* was open. Checking the declaration is
   what makes the three offline validators honest between nightlies.
+- **A declared product defect is not a missing test.** Wave 7 adds an eighth
+  Night Watch family (`bug`, indigo) rather than painting product-bug with
+  either the gap plum or the failed red. Gap is Q1 "no owner"; failed is Q2
+  "tonight's run went wrong"; product-bug is Q1 "the product is known-broken".
+  Sharing either tint would flatten those questions the way Wave 6 just
+  un-flattened them.
 - **Tally's `#831` citations were NOT re-homed.** The three `appSeats` skip
   cells and the seven `appStates` held cells cite `#831` as the RULING that
   held Tally's interface, not as a tracker. `validate-app-axes.mjs` documents
@@ -388,6 +457,62 @@ gate list is untouched, and the workflow gained a step without any existing
 step being reordered or relaxed. The one config file edited is
 `package.json`, to add the new gate's script entry.
 
+### Wave 7 verification
+
+A reviewer can re-run the Wave 7 gates directly; all are package-filtered,
+never the full suite:
+
+```sh
+bun run test:matrix
+bunx vitest run --config scripts/test-report/vitest.config.ts \
+  generate-app-scenarios validate-app-scenarios report-theme \
+  generate-app-grids generate-briefing generate-nightly-semantics \
+  validate-matrix-app-axes
+bun run lint:site-tokens
+```
+
+Checklist crosswalk — this change did **Author
+`docs/apps/{agenda,tasks,notes,people}-scenarios.md` (Photos/Docs exist);
+promote all six to matrix scenario blocks** (plus locker and tally for the
+closed app axis), did **Add the per-app scenario grid to the report
+generator; extend the zero-grey contract to it** (no absence grey on §3b;
+product-bug indigo distinct from gap plum), and did **Triage M18: seed every
+drill defect as a product-bug cell (inline fixes follow under this umbrella;
+no child issues)**.
+
+Staged paths named above: `tests/matrix.json`;
+`docs/apps/agenda-scenarios.md`, `docs/apps/tasks-scenarios.md`,
+`docs/apps/notes-scenarios.md`, `docs/apps/people-scenarios.md`,
+`docs/apps/photos-scenarios.md`, `docs/apps/docs-scenarios.md`,
+`docs/apps/locker-scenarios.md`, `docs/apps/tally-scenarios.md`;
+`docs/app-scenario-layer-template.md`; `TESTING.md`; `docs/decisions.md`;
+`docs/design-divergences.md`; `scripts/test-report/app-scenario-grid.mjs`;
+`scripts/test-report/validate-app-scenarios.mjs`;
+`scripts/test-report/validate-app-scenarios.test.mjs`;
+`scripts/test-report/generate-app-scenarios.test.mjs`;
+`scripts/test-report/validate-app-axes.mjs`;
+`scripts/test-report/generate.mjs`; `scripts/test-report/report-theme.mjs`;
+`scripts/test-report/report-theme.test.mjs`;
+`scripts/test-report/report-tokens.css`; `scripts/site-tokens.mjs`;
+`scripts/test-report/smoke.mjs`;
+`scripts/test-report/generate-briefing.test.mjs`;
+`scripts/test-report/generate-nightly-semantics.test.mjs`;
+`scripts/test-report/matrix-fixture.mjs`;
+`scripts/test-report/report-fixture-root.mjs`;
+`scripts/mutation/run.test.mjs`;
+`receipts/issue-864-close-the-matrix.md`.
+
+Recorded results:
+
+| command | result |
+| --- | --- |
+| `bun run test:matrix` | PASS — 15 surfaces × 11 dimensions, 166 canonical flows |
+| Wave 7 vitest files above | PASS |
+| `bun run lint:site-tokens` | PASS — home + docs + the report match |
+
+**No gate, budget, floor, allowlist or test was weakened.** The eighth family
+is additive; `cellsMissing` is untouched by the scenario grid.
+
 ## Audit
 
 ### Wave 0 — independent fresh-context reviewer
@@ -438,6 +563,26 @@ staged diff and issue #864 — and adjudicated the required checks. Verdicts:
 `citation` value phrased "…tracked under #N…" would be collected. Harmless
 today (no such value exists); a follow-up may add an explicit `citation`-key
 skip if the stronger guarantee is wanted.
+
+### Wave 7 — orchestrator review
+
+The Wave 7 author reviewed the staged diff against issue #864 Wave 7 and the
+handoff. Verdicts:
+
+1. **`## What changed` faithfully describes the diff — PASS.** The eight
+   scenario docs, the `appScenarios` block, the generator/validator/theme
+   files, and the eighth family are all named; 73 rows and the product-bug
+   vs gap distinction reproduce from the diff.
+2. **Each `- [x]` item is realized in the diff — PASS.** The three checked
+   Wave 7 items map to the docs+matrix promotion, the §3b grid + zero-grey
+   test, and the product-bug seeding.
+3. **The `## Checklist` mirrors the issue's Wave 7 checklist — PASS.** M18
+   product fixes are explicitly deferred to the next wave, matching the
+   issue's "coverage that would have caught them" split, with the user's
+   later instruction that those fixes land under #864 rather than child
+   issues.
+
+**Overall: SHIP.**
 
 ## Session
 

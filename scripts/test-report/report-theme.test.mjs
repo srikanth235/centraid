@@ -165,6 +165,10 @@ function rung(value) {
  * question"; naming the fact is what keeps the four greys separable inside it.
  */
 const REGISTER = {
+  ".cell.axis-bug": {
+    fact: "the product is known-broken",
+    family: "the product is known-broken",
+  },
   ".cell.axis-declared": {
     fact: "an owner is declared",
     family: "an owner is declared",
@@ -253,6 +257,7 @@ const WORD_SEPARATED = [
 const SEMANTIC_STATES = {
   "nw:absent": ["--nw-grey", "--nw-greybg"],
   "nw:attention": ["--nw-attn", "--nw-attnbg"],
+  "nw:bug": ["--nw-bug", "--nw-bugbg"],
   "nw:failed": ["--nw-danger", "--nw-dangerbg"],
   "nw:flaky": ["--nw-flaky", "--nw-flakybg"],
   "nw:gap": ["--nw-gap", "--nw-gapbg"],

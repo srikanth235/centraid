@@ -9,6 +9,11 @@ import path from "node:path";
 
 import { FUZZ_TARGETS } from "../fuzz/targets.mjs";
 import { MUTATION_SEEDS } from "../mutation/seeds.mjs";
+import {
+  buildAppScenarioGrid,
+  countScenarioCells,
+  renderAppScenarioGrids,
+} from "./app-scenario-grid.mjs";
 import { EXPECTED_GREY } from "./expected-grey.mjs";
 import { historyPoint } from "./history-point.mjs";
 import {
@@ -169,6 +174,7 @@ const enrichmentLive = buildEnrichmentLive(enrichmentLiveResult, {
 const appEngineGrid = buildAppEngineGrid(matrix, evidence);
 const appSeatGrid = buildAppSeatGrid(matrix);
 const appStateGrid = buildAppStateGrid(matrix);
+const appScenarioGrid = buildAppScenarioGrid(matrix);
 // #781 — reclassify registered no-lane absences AFTER normal cell states are
 // derived, so real evidence always wins and only enumerated no-evidence cells
 // become expected-grey (void the moment their lane has a start marker).
@@ -265,6 +271,10 @@ const summary = {
   // here may reach the nightly zero-grey or ratchet arithmetic.
   appSeatCells: countAxisCells(appSeatGrid),
   appStateCells: countAxisCells(appStateGrid),
+  // #864 Wave 7 — per-app scenario ledger. Declarations, not evidence, so
+  // these counts never reach cellsMissing; the grid's own zero-grey rule is
+  // "no absence grey", asserted in generate-app-scenarios.test.mjs.
+  appScenarioCells: countScenarioCells(appScenarioGrid),
   cellsSolid: cells.filter((cell) => cell.assessment === "solid").length,
   cellsPartial: cells.filter((cell) => cell.assessment === "partial").length,
   cellsGap: cells.filter((cell) => cell.assessment === "gap").length,
@@ -402,6 +412,7 @@ const model = {
   appEngineGrid,
   appSeatGrid,
   appStateGrid,
+  appScenarioGrid,
   joinGrid,
   journeyGrid,
   consentLedger,
@@ -1416,6 +1427,11 @@ function render(modelLocal) {
   );
   const appSeatCounts = modelLocal.summary.appSeatCells ?? {};
   const appStateCounts = modelLocal.summary.appStateCells ?? {};
+  const appScenarioCounts = modelLocal.summary.appScenarioCells ?? {};
+  const scenarioTables = renderAppScenarioGrids(modelLocal.appScenarioGrid, {
+    escapeHtml,
+    axisWord,
+  });
   const coverageRowsLocal = modelLocal.coverageRows
     .map((row) => {
       const lineState =
@@ -1627,6 +1643,7 @@ function render(modelLocal) {
     ["queue", "Attention"],
     ["product", "Product"],
     ["states", "States"],
+    ["scenarios", "Scenarios"],
     ["consent", "Consent"],
     ["joins", "Joins"],
     ["journeys", "Journeys"],
@@ -1656,6 +1673,10 @@ function render(modelLocal) {
     [
       legendChip("axis-skipped", "n/a"),
       "not taken by this app, or held with its interface, with the citation beside it",
+    ],
+    [
+      legendChip("axis-bug", "product bug"),
+      "the product is known-broken — a declared defect, not a missing test and not tonight's failed run",
     ],
   ]);
   const matrixLegend = legend("Cell register", [
@@ -1723,6 +1744,10 @@ ${axisLegend}
 <p class="why">One column per canonical designed state, mirrored from each app's <code>app.json#states</code>: the grid that loses a seat the night an owner disappears. Same register as §2. ${appStateCounts.declared ?? 0} owned · ${appStateCounts.unowned ?? 0} with no owner · ${appStateCounts.skipped ?? 0} excluded or held.</p>
 ${axisLegend}
 <div class="gridwrap"><table class="heat"><thead><tr><th scope="col">App</th>${appStateHeaders}</tr></thead><tbody>${appStateRows}</tbody></table></div>
+<h2 id="scenarios"><span class="tag">§3b</span>Scenarios · per-app verb ledger</h2>
+<p class="why">One cheapest falsifying layer per product verb — U, C, or E — so a write that loses data has a row that turns. These cells are DECLARATIONS: owned is never a green run, no owner is the same plum hole as §2/§3/§8, and a product bug is indigo so a known defect cannot hide as a missing test. The grid extends the nightly zero-grey contract by refusing the absence greys: every cell is owned, no owner, product bug, or n/a. ${appScenarioCounts.owned ?? 0} owned · ${appScenarioCounts.gap ?? 0} with no owner · ${appScenarioCounts.bug ?? 0} product bug · ${appScenarioCounts.skipped ?? 0} held or excluded.</p>
+${axisLegend}
+${scenarioTables}
 <h2 id="consent"><span class="tag">§4</span>Consent ledger</h2>
 <p class="why">Sovereignty is the promise, so it gets a panel rather than a cell: one row per permission layer, where it is enforced, the words it refuses in, the adversary that attacks it, and which seats prove it.</p>
 ${renderConsentLedger(modelLocal.consentLedger)}
@@ -1828,8 +1853,12 @@ function legend(label, entries) {
  */
 function axisWord(state) {
   return (
-    { declared: "owned", skipped: "n/a", unowned: "no owner" }[state] ??
-    "no owner"
+    {
+      declared: "owned",
+      skipped: "n/a",
+      unowned: "no owner",
+      bug: "product bug",
+    }[state] ?? "no owner"
   );
 }
 

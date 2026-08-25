@@ -202,10 +202,11 @@ table.heat tbody tr:last-child th,table.heat tbody tr:last-child td{border-botto
 .cell small{font-weight:400;margin-inline-start:5px;color:inherit}
 
 /* The state register — ONE HUE, ONE MEANING (#864).
-   Seven families, and a family answers exactly one question: ok (passed against
+   Eight families, and a family answers exactly one question: ok (passed against
    a solid claim), partial (passed, partial claim), danger (tonight's run went
    wrong), flaky (unreliable, not broken), gap (no test exists), attn (the
-   report cannot vouch for its own evidence), grey (evidence absent). No tint
+   report cannot vouch for its own evidence), grey (evidence absent), bug (the
+   product is known-broken — a declared defect, not a missing test). No tint
    appears in two families, so a reader who has learned one hue has learned one
    fact. Inside a family each state still differs by weight, slope or rule.
    ONE cross-family collapse survives and is asserted by name in
@@ -234,6 +235,7 @@ table.heat tbody tr:last-child th,table.heat tbody tr:last-child td{border-botto
 .cell.axis-declared{background:var(--nw-surf);color:var(--nw-ink)}
 .cell.gap,.cell.axis-unowned{background:var(--nw-gapbg);color:var(--nw-gap);font-weight:400}
 .cell.axis-skipped{background:transparent;color:var(--nw-ghost);font-weight:400}
+.cell.axis-bug{background:var(--nw-bugbg);color:var(--nw-bug);font-weight:600}
 
 /* The painted legend. The old keyline glossed the register in coloured TEXT
    below one grid, which asked the reader to map a word's ink onto a cell's
