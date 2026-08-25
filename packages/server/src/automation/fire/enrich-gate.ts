@@ -1,20 +1,10 @@
 /**
- * Enrichment tier enforcement — the decision half. The vault's per-domain tier
- * (`off | device | gateway`) orders how far work may run; `runFire` applies it.
- *
- * THE LINE THIS RUNTIME DRAWS is not "does this leave the device": the gateway
- * is the member's own infrastructure, so egress is a property of the HARNESS
- * that reaches a provider, never of the machine issuing the call — which is why
- * the dispatcher gates each `ctx.delegate` call behind egress consent (#567).
- * An enricher DECLARES its lane, and the gate is `rank(lane) <= rank(tier)`; a
- * manifest omitting the lane reads as `gateway`, because assuming the cheaper
- * lane would be assuming consent.
- *
- * Under the cascade (#807) the tier is one layer, folded in
- * `enrich-resolve.ts` and re-exported here on purpose: there is ONE gate, and
- * the resolver is its first half, never a second policy path. The tier survives
- * as an EGRESS-CLASS CEILING no deeper level can raise.
+ * Enrichment tier enforcement — the decision half. Egress is a property of the
+ * HARNESS reaching a provider, never the issuing machine (#567). Lanes are
+ * DECLARED; the gate is rank(lane) <= rank(tier); an omitted lane reads as
+ * `gateway` — assuming cheaper assumes consent.
  */
+
 import type { EnrichConsentRecord, EnrichEgressClass } from "@centraid/vault";
 
 import { egressWithinCeiling } from "./enrich-resolve.js";
@@ -53,14 +43,11 @@ export interface EnrichGateInput {
   readonly domain: EnrichDomain;
   readonly capability: string;
   readonly lane: EnrichLane;
-  /** `undefined` is a REFUSAL, never a default. */
+  /** undefined is a REFUSAL, never a default. */
   readonly tier: EnrichTier | undefined;
   readonly policy?: ResolvedEnrichPolicy;
-  /** `undefined` (no such profile here) is a refusal, not a fallback. */
   readonly profileEgress?: EnrichEgressClass | undefined;
-  /** A LOOKUP, NOT A GRANT: the host hands over what the vault holds and this
-   *  gate decides, so a host that wires nothing fails closed. `null` means the
-   *  question was never asked. Read only for the `provider` class. */
+  /** LOOKUP NOT GRANT; wiring nothing fails closed; null = never asked. */
   readonly egressConsent?: EnrichEgressConsentLookup;
 }
 
@@ -71,10 +58,8 @@ export type EnrichEgressConsentLookup = (
 export type EnrichGateDecision =
   | {
       readonly allowed: true;
-      /** True under `device`: the fire runs, `ctx.delegate` is refused. */
+      /** True under `device`: fire runs, ctx.delegate refused. */
       readonly sealModelTurns: boolean;
-      /** Downstream reads it to SAY what an allowed run's egress was, never to
-       *  decide again. */
       readonly egressConsentNeeded?: EnrichEgressClass;
     }
   | { readonly allowed: false; readonly reason: string };
@@ -91,8 +76,7 @@ export function decideEnrichmentGate(
         `and an unreadable policy is a refusal, not a default.`,
     };
   }
-  // BEFORE the rank comparison, so "a rule switched this off" is the reason
-  // read rather than a message about a tier nobody touched.
+  // Before the rank check so the refusal names the switch, not a tier.
   const policy = input.policy;
   if (policy && !policy.enabled && input.tier !== "off") {
     return {
@@ -121,8 +105,7 @@ export function decideEnrichmentGate(
   if (!policy)
     return { allowed: true, sealModelTurns: input.tier !== "gateway" };
 
-  // A deeper level may PICK an engine, never one past the vault's ceiling. An
-  // unknown profile is a refusal: unnameable egress cannot be judged safe.
+  // Deeper levels pick engines only within the vault ceiling.
   const egress = input.profileEgress;
   if (egress === undefined) {
     return {
@@ -132,11 +115,8 @@ export function decideEnrichmentGate(
         `"${policy.profileId}", which this gateway does not carry.`,
     };
   }
-  // THE CEILING, then THE ANSWER — two independent questions, in that order.
-  // `provider` is the one class no standing tier answers for, so a `gateway`
-  // ceiling defers to the EGRESS-CONSENT LEDGER rather than refusing. Below a
-  // `gateway` ceiling the tier refuses first: a vault that never allowed work to
-  // leave the device is not asking a consent question at all.
+  // Ceiling first, then answer: below gateway the tier refuses first; at it,
+  // `provider` defers to the ledger — no standing tier answers for that class.
   const providerOverGatewayCeiling =
     egress === "provider" && policy.egressCeiling === "gateway";
   if (
@@ -152,11 +132,10 @@ export function decideEnrichmentGate(
     };
   }
   if (egress === "provider") {
-    // INDEPENDENT of everything above. `on-device` and `gateway` are not asked:
-    // the standing tier IS their recorded answer, which is why enrichers from
-    // before #807 run with no rows at all. AN `on-device` ROW IS A RECORD, NOT
-    // A SECOND GATE — that latch is per-device by law (#712 C3), so enforcing
-    // one device's "not now" here would bind every device and the gateway.
+    // INDEPENDENT of everything above; on-device/gateway are not asked — the
+    // standing tier IS their recorded answer (pre-#807 rows run with none).
+    // An ON-DEVICE ROW IS A RECORD, NOT A SECOND GATE (#712 C3): enforcing it
+    // binds every device.
     const record = input.egressConsent?.(egress) ?? null;
     if (record === null) {
       return {

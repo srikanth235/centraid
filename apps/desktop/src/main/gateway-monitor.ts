@@ -1,15 +1,9 @@
 /*
- * Gateway heartbeat (main process): probe `/centraid/_gateway/health`, fold it
- * through gateway-monitor-core.ts, broadcast to every window, and fire the OS
- * notifications (gateway down/recovered, per-component error, remote version
- * skew, supervised-restart crash loop).
- *
- * Lives in main, not the renderer, so the watch survives navigation and alerts
- * land while backgrounded. Transition tracking is per-launch; the durable alert
- * history (gateway-outage-log.ts) is the only health that outlives the process.
- *
- * Health must NOT reach the vault Notifications (#665) — that surface is for
- * what the owner can RESOLVE, and no action there un-degrades a gateway.
+ * Gateway heartbeat (main): probe health, fold through gateway-monitor-core,
+ * broadcast to windows, fire OS notifications (down/recovered, component error,
+ * version skew, crash loop). Main, not renderer: survives navigation, alerts
+ * land backgrounded. Health must NOT reach vault Notifications (#665) — that
+ * surface is for what the owner can resolve.
  */
 
 import { BrowserWindow, Notification } from "electron";
@@ -50,11 +44,10 @@ import { pushPowerContext } from "./power-context-push.js";
 import { loadSettings } from "./settings.js";
 
 export const GATEWAY_RUNTIME_POLL_MS = 5000;
-/** Broadcast channel — keep in sync with `Channel` in ipc.ts + preload.ts. */
+/** Keep in sync with `Channel` in ipc.ts + preload.ts. */
 const RUNTIME_EVENT_CHANNEL = "centraid:gateway-runtime:event";
 
-/** `previousSession` marks an entry loaded from disk at boot, not recorded
- *  this run. */
+/** Loaded from disk at boot, not recorded this run. */
 export interface OutageLogSnapshotEntry extends Omit<
   OutageLogEvent,
   "gatewayId" | "gatewayLabel"
@@ -62,8 +55,7 @@ export interface OutageLogSnapshotEntry extends Omit<
   previousSession: boolean;
 }
 
-/** `componentAlerts` and `versionSkewAlertedAt` are internal alert-dedupe
- *  bookkeeping and must stay out of the broadcast payload. */
+/** Internal alert-dedupe bookkeeping must stay out of the broadcast payload. */
 export interface GatewayRuntimeSnapshot extends Omit<
   GatewayRuntimeState,
   "componentAlerts" | "versionSkewAlertedAt"
@@ -79,8 +71,7 @@ let lastSnapshot: GatewayRuntimeSnapshot | undefined;
 let timer: NodeJS.Timeout | undefined;
 let inFlight: Promise<void> | undefined;
 const crashLoopNotified = new Set<string>();
-/** `historyBootAt` is captured when this loads, so any older entry predates
- *  the launch. */
+/** Captured at load: older entries predate this launch. */
 let outageHistory: OutageLogEvent[] | undefined;
 let historyBootAt: number | undefined;
 
@@ -157,9 +148,7 @@ function broadcast(snapshot: GatewayRuntimeSnapshot): void {
 }
 
 async function tick(): Promise<void> {
-  // `loadSettings()` itself rejects when the local gateway is mid-backoff.
-  // A tracked gateway keeps folding a synthetic down probe through the SAME
-  // state so the alerts below still fire; a cold boot has nothing to key off.
+  // loadSettings() rejects mid-backoff; fold a synthetic down probe so alerts still fire.
   let settings: Awaited<ReturnType<typeof loadSettings>> | undefined;
   let settingsError: string | undefined;
   try {
@@ -195,8 +184,7 @@ async function tick(): Promise<void> {
   // Always defined here: settings resolved above, or the early return fired.
   const trackedState = state as GatewayRuntimeState;
 
-  // Nothing will listen until a manual restart: skip the round-trip and report
-  // the real startup error rather than a generic connection failure.
+  // Nothing listens until manual restart: report the real startup error.
   const activeGatewayKind =
     settings?.activeGatewayKind ?? trackedState.gatewayKind;
   const localSupervisor =
@@ -225,19 +213,16 @@ async function tick(): Promise<void> {
         detail: settingsError ?? "settings unavailable",
         bootPhase: true,
       };
-  // The only place the desktop learns its daemon died after starting cleanly —
-  // the supervisor sees start failures only. Awaited so a revival lands first.
+  // Only place the desktop learns its daemon died post-clean-start; awaited so revival lands first.
   if (!probe.ok && activeGatewayKind === "local") {
     await reviveLocalGatewayIfDead(trackedState.gatewayId);
   }
-  // Piggybacked on the heartbeat (#528) so host power posture never nears its
-  // 120s staleness window. Best-effort, independent of the probe outcome.
+  // Piggybacked heartbeat (#528): power posture must not near 120s staleness.
   if (settings?.gatewayUrl) {
     void pushPowerContext(settings.gatewayUrl, settings.gatewayToken);
   }
 
-  // Captured before `applyProbe` folds this tick in: the durable outage-log
-  // derivation below needs the BEFORE value to detect a real transition.
+  // Captured before applyProbe: outage-log derivation needs the BEFORE value.
   const prevStatus = trackedState.status;
   const prevHealthStatus = trackedState.healthStatus;
   // A boot-phase pseudo-failure stays at `unknown` rather than folding to
@@ -246,8 +231,7 @@ async function tick(): Promise<void> {
     ? trackedState
     : applyProbe(trackedState, probe);
 
-  // No down-alert during first-run setup (#603): the gateway is deliberately
-  // unstarted. A FAILED settings read still alerts.
+  // No down-alert in first-run setup (#603); failed settings read still alerts.
   const inFirstRunSetup =
     settings !== undefined && settings.onboardingCompletedAt === undefined;
   const alert: GatewayAlertConfig = {
@@ -324,8 +308,7 @@ async function tick(): Promise<void> {
     alertHistory,
   };
   broadcast(lastSnapshot);
-  // main.ts sets the tray label once at boot, before a first run has started
-  // the gateway (#603). The heartbeat is the correction — no second poller.
+  // Tray set once at boot (#603); the heartbeat corrects it — no second poller.
   setTrayGatewayRunning(state.status === "up");
 }
 
@@ -357,8 +340,7 @@ export function stopGatewayMonitor(): void {
   timer = undefined;
 }
 
-/** Probes immediately when no broadcast has landed, so the first renderer read
- *  never sees an empty monitor. */
+/** Probes immediately when no broadcast has landed: first read never empty. */
 export async function getGatewayRuntimeSnapshot(): Promise<GatewayRuntimeSnapshot> {
   if (!lastSnapshot) await runTick();
   if (!lastSnapshot) throw new Error("gateway monitor produced no snapshot");

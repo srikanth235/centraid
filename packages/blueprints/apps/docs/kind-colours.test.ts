@@ -1,20 +1,10 @@
 // @vitest-environment jsdom
 //
-// The `docs` file-kind colour code, pinned to the design contract.
-//
-// A file kind is painted in two different jobs — the "PDF"/"IMG" label as
-// TEXT, and the thumbnail tint / mock-page rules as a FILL — and one hex cannot
-// serve both. `--c-<hue>` is an icon fill (DESIGN.md: "These are icon fills,
-// not text surfaces"); `--c-<hue>-text` is the rung the design package solves
-// per theme so the same hue can be `color:`.
-//
-// This app reads the raw `--c-*` rungs, never a hand-picked kind hex (#686):
-// a hex literal doing solved-contrast work by hand is how five of six kinds
-// fall below AA as text — `--kind-pdf` at 2.24:1. The contrast
-// itself is measured in `packages/design/src/contrast.test.ts`, off the emitted
-// CSS, for every hue in both themes. What is checked HERE is the binding those
-// measurements assume: that this app reads the text rung for text and the fill
-// rung for fills, and that its six kinds are six DISTINCT hues.
+// Docs kind colours vs the design contract (#686): TEXT reads the solved
+// --c-<hue>-text rung, FILL the raw --c-<hue> (icon fills are not text
+// surfaces). Hand-picked hexes fell below AA (--kind-pdf 2.24:1); contrast
+// itself is measured in packages/design contrast.test.ts — this pins binding
+// + distinct hues.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -23,9 +13,7 @@ import { describe, expect, test } from "vitest";
 
 import { fillVar, tintBg, typeMeta } from "./format.js";
 
-// `import.meta.dirname`, not `new URL(…, import.meta.url)`: this file runs
-// under jsdom (the app's kit subclasses `HTMLElement` at import time), and
-// there `import.meta.url` is an http: origin that `fileURLToPath` rejects.
+// jsdom makes import.meta.url an http: origin fileURLToPath rejects.
 const chrome = readFileSync(
   path.join(import.meta.dirname, "Chrome.module.css"),
   "utf8"
@@ -56,8 +44,6 @@ describe("docs file-kind colours", () => {
   test.each(KINDS)("--kind-%s reads the SOLVED text rung", (kind) => {
     const value = shell[`--kind-${kind}`];
     expect(value, `--kind-${kind} is declared`).toBeDefined();
-    // Not a literal, and not the raw fill: the text rung, which is what
-    // carries a measured floor in both themes.
     expect(value, `--kind-${kind}`).toMatch(/^var\(--c-[a-z]+-text\)$/u);
   });
 
@@ -83,24 +69,20 @@ describe("docs file-kind colours", () => {
   });
 
   test("the six kinds are six distinct hues", () => {
-    // Reusing one hue for two kinds makes the colour code lie regardless of
-    // how well each individual rung measures.
     const hues = KINDS.map(
       (kind) =>
         /--c-(?<hue>[a-z]+)-text/u.exec(shell[`--kind-${kind}`] ?? "")?.groups
           ?.hue ?? ""
     );
     expect(new Set(hues).size, hues.join(",")).toBe(KINDS.length);
-    // `ochre` is `amber` at lower chroma; solved to the same contrast floor the
-    // two converge (0.125 apart in oklab as fills, 0.028 as light text), so
-    // this app must not carry both. See contrast.test.ts in packages/design.
+    // `ochre` is amber at lower chroma, converging at the same contrast
+    // floor — never carry both.
     expect(hues).not.toContain("ochre");
   });
 
   test("no dark override re-declares the kind rungs", () => {
-    // The design package emits both halves of `--c-*-text`, so an app-local
-    // dark block for these would be a second, unmeasured source of truth —
-    // which is exactly what the pre-#686 file had.
+    // The design package emits both halves of `--c-*-text`; an app-local dark
+    // block would be an unmeasured second source of truth.
     const dark = chrome.slice(chrome.indexOf('data-theme="dark"'));
     for (const kind of KINDS) {
       expect(dark, `--kind-${kind} redeclared in a dark block`).not.toContain(
@@ -110,8 +92,6 @@ describe("docs file-kind colours", () => {
   });
 
   test("tints are built from the FILL rung, never the text rung", () => {
-    // Tinting a surface with the ink that lands on it walks the background
-    // toward the foreground and eats the contrast the solve just bought.
     const meta = typeMeta("application/pdf");
     expect(meta.cv).toBe("--kind-pdf");
     expect(fillVar(meta.cv)).toBe("--kind-pdf-fill");

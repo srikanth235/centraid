@@ -1,29 +1,11 @@
-// Vocabulary guard for the Photos app (#599). A multi-scope app mounts
-// over the member's own scope AND shared audience scopes, so app-facing copy
-// speaks of scopes by their human label ("Library", "Family") — the storage
-// noun "vault" must never reach a user-visible string except for the small,
-// reviewed #731 phrases that explain ownership or literally name the
-// receiver-side "Save to my vault" action.
+// Vocabulary guard for the Photos app (#599): the storage noun "vault" must
+// never reach user-visible copy except reviewed #731 phrases.
 //
-// HOW THE SCAN TELLS APP-FACING COPY FROM CODE. Two filters, both deliberately
-// simple enough to reason about:
-//
-//  1. Comments are removed first, by a quote-aware state machine (single,
-//     double and template strings are tracked so a `//` inside a string, e.g.
-//     a URL, is not mistaken for a comment). Design notes and file headers
-//     therefore say "vault" as often as they need to.
-//  2. What survives is code + string literals + JSX text, and the offence
-//     regex requires the word to be WHITESPACE- OR EDGE-bounded:
-//     `(^|\s)vault(\s|punctuation|$)`. Prose ("your vault", "the vault.")
-//     matches; a dotted member expression never does, because `ctx.vault.read`
-//     puts a `.` immediately before the word. Same for `vaultDenied` and
-//     `VAULT_CONSENT`, where the neighbouring character is a word character
-//     and even a plain `\bvault\b` would not fire.
-//
-// The scan covers the app's `.ts`/`.tsx`/`.html` sources — the only files that
-// can render text. `app.json` is excluded on purpose: its descriptions are the
-// machine-readable contract read by handlers and agents, and the gallery copy
-// users actually see comes from the blueprint index, not from there.
+// HOW THE SCAN TELLS COPY FROM CODE: (1) comments stripped by a quote-aware
+// state machine so `//` inside strings survives; (2) the offence regex is
+// edge-bounded — prose matches, `x.vault.read`/`vaultDenied`/`VAULT_CONSENT`
+// never do. Only .ts/.tsx/.html scanned; app.json excluded on purpose (it is
+// the machine-readable contract, not copy).
 import fs from "node:fs";
 import path from "node:path";
 
@@ -129,7 +111,7 @@ describe("Photos app vocabulary (#599)", () => {
   });
 
   it("distinguishes code and comments from prose", () => {
-    // Code: the read API is a dotted member expression, never prose.
+    // Code: dotted member expression, never prose.
     expect(
       offences("await ctx.vault.read({ entity: 'media.asset' })")
     ).toStrictEqual([]);
@@ -137,11 +119,11 @@ describe("Photos app vocabulary (#599)", () => {
     expect(offences("if (e.code === 'VAULT_CONSENT') return;")).toStrictEqual(
       []
     );
-    // Comments: stripped before the scan, in both comment forms.
+    // Comments: stripped before the scan, both forms.
     expect(offences("// the vault owns the meaning here")).toStrictEqual([]);
     expect(offences("/* a projection of your vault */")).toStrictEqual([]);
     expect(offences("<!-- your vault, rendered -->")).toStrictEqual([]);
-    // A `//` inside a string is not a comment, so the prose after it is scanned.
+    // A `//` inside a string is not a comment; the prose after it is scanned.
     expect(
       offences("const help = 'https://x/y — see your vault';")
     ).toHaveLength(1);

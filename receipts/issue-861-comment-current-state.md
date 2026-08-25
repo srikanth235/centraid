@@ -4169,6 +4169,223 @@ Files changed (full inventory):
 - `tests/comment-density-ratchet.json`
 
 
+
+### Wave 6 — compression sweep, 160 heaviest remaining files (2026-08-25)
+
+Eight worker sub-agents, ownership-disjoint 20-file batches (one batch
+re-dispatched after a provider failure; one batch split after a mid-flight
+connection loss — its 11 already-edited files kept, the remaining 9 re-swept).
+Worklist regenerated from `measureTree` sorted by chars-over-cap: 1,340
+eligible at dispatch. Root restored four code changes the proof caught before
+formatting: a deleted `rebuildMemories(this.db.vault)` call (`gateway.ts`), a
+deleted JSX `{/* */}` container (`places-pin.tsx`), a deleted
+`delete?: string;` interface member (`doc-table.ts`), and three lines inside a
+template literal that only look like comments but are harness-script content
+(`app-navigation-rail.spec.ts`) — all restored verbatim; lint also forced back
+the required `@yields` tag on `parts.ts`.
+
+A residue re-pass (three workers, 12 files) then cut every file a first agent
+had nominated for the allowlist below 15% instead — no allowlist entries were
+added this wave (allowlist stays 55).
+
+| figure | after Wave 5 | after Wave 6 |
+| --- | --- | --- |
+| global character share | 15.34% | **14.59%** |
+| global line density | 8.70% | **8.20%** |
+| files over 15% cap | 1,425 | 1,359 |
+
+Verification (all green before commit):
+
+```
+node scripts/comment-only-diff.mjs HEAD   # 159 changed file(s) — all comment-only
+bun run format && bun run format:check    # proof re-run green after formatting
+bun run lint                              # clean (after @yields restore)
+node scripts/check-comment-density-ratchet.mjs --write
+node scripts/check-comment-density-ratchet.mjs
+# ok comment-density — no pin rose, no unpinned file over cap
+```
+
+Allowlist rulings (0 accepted): twelve nominations arrived
+(app-paths.ts, skeleton.ts, replicate-driver.ts, doc-table.ts,
+power-context-push.ts, member-prefs.ts, enumerators.ts, json-cli.ts,
+permissions.ts, distribution.ts, SectionBlock.tsx, gateway-auth.ts,
+atlasBrowseData.ts, wal-address.test-fixtures.ts, db.ts, scan-consent.ts,
+fetch-gate/index.ts, wal-shipper-clone.test.ts, ops-state.ts, replica/store.ts,
+gateway-client-owners.ts, parts.ts) — ten of them are under 40 non-blank lines
+(cap-ineligible, nothing to exempt); the other twelve went through the residue
+re-pass and landed 11.6–14.4%, so no exemption was needed.
+
+Residues above 13% that stay cap-eligible (honest floors, 129 files): the
+largest are justify.ts (41%), conditional-fetch.ts (38%), notes/people
+frame.tsx (~36%), face-review-queue.ts (32%), journal-stores.ts (31%),
+edges-reconcile.ts (30%), evict.ts (28%), support-bundle-source.ts /
+icons.tsx / EnrichmentConsent.tsx / BarsBlock.styles.ts (~28%) — per-agent
+adjudication: each survivor names a prohibition or issue-referenced constraint;
+deeper cuts delete real guardrails.
+
+Files changed (full inventory):
+
+- `apps/desktop/src/main/changelog.ts`
+- `apps/desktop/src/main/gateway-connectivity-core.ts`
+- `apps/desktop/src/main/gateway-monitor.ts`
+- `apps/desktop/src/main/local-gateway.test.ts`
+- `apps/desktop/src/main/local-gateway.ts`
+- `apps/desktop/src/main/power-context-push.ts`
+- `apps/desktop/src/main/settings.ts`
+- `apps/mobile/modules/centraid-tunnel/index.ts`
+- `apps/mobile/src/apps/docs/useDocsGrantAudiences.ts`
+- `apps/mobile/src/apps/photos/EnrichmentConsent.tsx`
+- `apps/mobile/src/apps/photos/PhotoInfoSheet.tsx`
+- `apps/mobile/src/apps/photos/PhotosCollectionsView.test.tsx`
+- `apps/mobile/src/apps/photos/PlacesMap.tsx`
+- `apps/mobile/src/apps/photos/camera-roll-import.ts`
+- `apps/mobile/src/apps/photos/face-review-queue.ts`
+- `apps/mobile/src/apps/photos/justify.ts`
+- `apps/mobile/src/apps/photos/people-model.ts`
+- `apps/mobile/src/apps/photos/photo-access.ts`
+- `apps/mobile/src/apps/photos/photo-grants.ts`
+- `apps/mobile/src/apps/photos/photos-rungs.ts`
+- `apps/mobile/src/apps/photos/pinned-thumbnails.ts`
+- `apps/mobile/src/apps/photos/places-pin.tsx`
+- `apps/mobile/src/apps/photos/viewer-export.ts`
+- `apps/mobile/src/apps/tasks/tasks-band.ts`
+- `apps/mobile/src/kit/components/BarsBlock.styles.ts`
+- `apps/mobile/src/kit/components/PanelBlock.tsx`
+- `apps/mobile/src/kit/components/TopSafeArea.tsx`
+- `apps/mobile/src/kit/fetch-gate/index.ts`
+- `apps/mobile/src/lib/conditional-fetch.ts`
+- `apps/mobile/src/lib/upload/store-migrations.ts`
+- `apps/mobile/src/lib/upload/uploader.ts`
+- `apps/mobile/src/screens/approvals/useApprovals.ts`
+- `apps/mobile/src/screens/connectors/useConnectors.ts`
+- `apps/mobile/src/screens/devices/Devices.tsx`
+- `apps/mobile/src/screens/home/blueprint-search.ts`
+- `apps/mobile/src/screens/scan-consent.ts`
+- `apps/mobile/src/screens/settings/EnrichmentSection.tsx`
+- `apps/web/tests/e2e/app-navigation-rail.spec.ts`
+- `apps/web/tests/e2e/photos-grants.spec.ts`
+- `apps/web/tests/e2e/rebuilt-apps.spec.ts`
+- `packages/backup/src/parts.ts`
+- `packages/backup/src/recovery-kit.ts`
+- `packages/backup/src/wal-address.test-fixtures.ts`
+- `packages/blueprints/apps/_shared/NavRail.tsx`
+- `packages/blueprints/apps/_shared/journal-scheme.ts`
+- `packages/blueprints/apps/agenda/day-context-copy.ts`
+- `packages/blueprints/apps/agenda/logic.test-fixtures.ts`
+- `packages/blueprints/apps/agenda/member-prefs.ts`
+- `packages/blueprints/apps/agenda/queries/upcoming.ts`
+- `packages/blueprints/apps/agenda/types.ts`
+- `packages/blueprints/apps/docs/app-root.tsx`
+- `packages/blueprints/apps/docs/components/BulkBar.tsx`
+- `packages/blueprints/apps/docs/components/DriveRoute.tsx`
+- `packages/blueprints/apps/docs/components/QuickLookInfo.tsx`
+- `packages/blueprints/apps/docs/components/RowStateSlot.tsx`
+- `packages/blueprints/apps/docs/components/SearchField.tsx`
+- `packages/blueprints/apps/docs/components/SeatStates.tsx`
+- `packages/blueprints/apps/docs/folder-counts.ts`
+- `packages/blueprints/apps/docs/kind-colours.test.ts`
+- `packages/blueprints/apps/docs/popovers.ts`
+- `packages/blueprints/apps/locker/app-root.tsx`
+- `packages/blueprints/apps/notes/frame.tsx`
+- `packages/blueprints/apps/notes/types.ts`
+- `packages/blueprints/apps/people/components/EditRoute.tsx`
+- `packages/blueprints/apps/people/components/PersonRoute.tsx`
+- `packages/blueprints/apps/people/components/RosterRoute.tsx`
+- `packages/blueprints/apps/people/frame.tsx`
+- `packages/blueprints/apps/photos/app-root.tsx`
+- `packages/blueprints/apps/photos/components/AlbumGrid.tsx`
+- `packages/blueprints/apps/photos/enrichment-consent.test.ts`
+- `packages/blueprints/apps/photos/grant-audiences.ts`
+- `packages/blueprints/apps/photos/icons.tsx`
+- `packages/blueprints/apps/photos/library-reads.ts`
+- `packages/blueprints/apps/photos/memories.ts`
+- `packages/blueprints/apps/photos/place-map.test.ts`
+- `packages/blueprints/apps/tasks/format.ts`
+- `packages/blueprints/apps/tasks/logic.ts`
+- `packages/blueprints/src/blueprint-seats.test.ts`
+- `packages/blueprints/src/photos-faces.test.ts`
+- `packages/blueprints/src/photos-shelves-v4.test.ts`
+- `packages/blueprints/src/photos-vocabulary.test.ts`
+- `packages/client/src/device-enrichment-compute.ts`
+- `packages/client/src/format.ts`
+- `packages/client/src/gateway-auth.ts`
+- `packages/client/src/gateway-client-edges.ts`
+- `packages/client/src/gateway-client-local-storage.ts`
+- `packages/client/src/gateway-client-owners.ts`
+- `packages/client/src/react/screens/AtlasOrreryChart.tsx`
+- `packages/client/src/react/screens/AtlasRecordsSection.tsx`
+- `packages/client/src/react/screens/SettingsHarnessLanes.tsx`
+- `packages/client/src/react/screens/atlasBrowseData.ts`
+- `packages/client/src/react/screens/device-groups.ts`
+- `packages/client/src/react/shell/AppBand.tsx`
+- `packages/client/src/react/shell/gatewaySwitcher.ts`
+- `packages/client/src/react/shell/launcherModel.test.ts`
+- `packages/client/src/react/shell/routes/approvalsData.ts`
+- `packages/client/src/react/shell/routes/settingsConnectionsData.ts`
+- `packages/client/src/react/ui/SectionBlock.tsx`
+- `packages/client/src/replica/store.ts`
+- `packages/design/src/blocks/distribution.ts`
+- `packages/design/src/blocks/doc-table.ts`
+- `packages/design/src/blocks/ops-state.ts`
+- `packages/design/src/blocks/skeleton.ts`
+- `packages/design/src/elements/popover.ts`
+- `packages/design/src/font-faces.ts`
+- `packages/design/src/native-contract.test.ts`
+- `packages/design/src/tile.ts`
+- `packages/model-runtime/src/image-geometry.ts`
+- `packages/model-runtime/src/preprocess.ts`
+- `packages/server/src/acp/backends/acp/harness-errors.ts`
+- `packages/server/src/acp/backends/acp/launch.ts`
+- `packages/server/src/acp/backends/acp/permissions.ts`
+- `packages/server/src/acp/models/enumerators.ts`
+- `packages/server/src/acp/models/tiers.ts`
+- `packages/server/src/automation/fire/enrich-gate.ts`
+- `packages/server/src/automation/fire/enrich-resolve.ts`
+- `packages/server/src/backup/storage.integration.test.ts`
+- `packages/server/src/cli/json-cli.ts`
+- `packages/server/src/engine/conversation/archive/selector.ts`
+- `packages/server/src/engine/registry/app-paths.ts`
+- `packages/server/src/engine/settings/app-settings.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/journal-stores.ts`
+- `packages/server/src/routes/edges-reconcile.ts`
+- `packages/server/src/routes/edges-routes.ts`
+- `packages/server/src/routes/gateway-info-routes.ts`
+- `packages/server/src/serve/build-gateway.test.ts`
+- `packages/server/src/serve/host-limits.ts`
+- `packages/server/src/serve/peer-route-assertion.ts`
+- `packages/server/src/serve/resource-evidence.ts`
+- `packages/server/src/serve/resource-mode.ts`
+- `packages/server/src/serve/scheduler-health.ts`
+- `packages/server/src/serve/support-bundle-source.ts`
+- `packages/server/src/serve/trigger-ingress-cursor.ts`
+- `packages/server/src/serve/vault-quarantine.ts`
+- `packages/server/src/serve/vault-registry.test.ts`
+- `packages/server/src/worktree-store/remote.ts`
+- `packages/test-kit/src/vault.ts`
+- `packages/vault/src/blob/evict.ts`
+- `packages/vault/src/blob/pipeline.ts`
+- `packages/vault/src/blob/replicate-driver.ts`
+- `packages/vault/src/blob/staging.ts`
+- `packages/vault/src/commands/flags.ts`
+- `packages/vault/src/commands/inline-body-guard.ts`
+- `packages/vault/src/commands/links.ts`
+- `packages/vault/src/commands/sync.ts`
+- `packages/vault/src/db.ts`
+- `packages/vault/src/enrich/clusters.ts`
+- `packages/vault/src/enrich/face-clusters.ts`
+- `packages/vault/src/enrich/leases.ts`
+- `packages/vault/src/gateway/duties.ts`
+- `packages/vault/src/gateway/gateway.ts`
+- `packages/vault/src/gateway/reseal.ts`
+- `packages/vault/src/ingest/takeout-sidecar.ts`
+- `packages/vault/src/restore-check.ts`
+- `packages/vault/src/scope-extent.ts`
+- `packages/vault/src/share/commons.ts`
+- `packages/vault/src/wal-shipper-clone.test.ts`
+- `packages/vault/src/wal-shipper-detectors.test.ts`
+- `tests/comment-density-ratchet.json`
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
@@ -4179,3 +4396,4 @@ Files changed (full inventory):
 | --- | --- | --- |
 | 2026-08-24 | claude-code | 9988c109-6474-5924-b263-ee0ff5fa132d |
 | 2026-08-25 | claude-code | 7e716dba-b403-5671-bd5f-8093c70768bc |
+| 2026-08-25 | opencode | - |

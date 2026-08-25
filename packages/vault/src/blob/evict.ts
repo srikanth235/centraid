@@ -1,20 +1,11 @@
-// Eviction categorization queries (#405) — the pure SQL that tells
-// the cache coordinator (blob/cache.ts) which local shas are PINNED (never
-// evict), which are MEDIUM previews (evict first), and which are still in
-// staging or have a pending offsite obligation (never evict). Split out so
-// cache.ts stays the policy loop and this stays the model read.
+// Eviction categorization (#405): PINNED, MEDIUM (evict first), staging/
+// pending-offsite (never). Pure SQL; `cache.ts` keeps policy.
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { BINARY_DERIVATIVE_SQL } from "./derivatives.js";
 
-/**
- * The browse rung (#405 §3/#414): every `thumb` and video `poster`
- * derivative sha is PINNED —
- * unevictable under any cache-pressure path. Tinies are ~20-40 KB each, they
- * back the browse grid, and losing one forces a remote round-trip to paint a
- * tile the user is actively scrolling. Pin them all.
- */
+/** Browse rung (#405 §3/#414): PINNED — tinies back the browse grid. */
 export function pinnedThumbShas(vault: DatabaseSync): Set<string> {
   const rows = vault
     .prepare(
@@ -25,11 +16,7 @@ export function pinnedThumbShas(vault: DatabaseSync): Set<string> {
   return new Set(rows.map((r) => r.sha256));
 }
 
-/**
- * The MEDIUM rung (#405): `preview` derivative shas — the first thing
- * the eviction pass sheds (LRU), because a lightbox preview re-reads cheaply
- * from remote and is not on the critical browse path the way a tiny is.
- */
+/** MEDIUM rung (#405): shed first; previews re-read cheaply from remote. */
 export function previewShas(vault: DatabaseSync): Set<string> {
   const rows = vault
     .prepare(
@@ -40,11 +27,8 @@ export function previewShas(vault: DatabaseSync): Set<string> {
 }
 
 /**
- * Bytes still in `blob_staging` (#405 §3, "anything in blob_staging not
- * yet promoted"): NEVER evictable by the cache pass. Staged bytes are pre-
- * commit plumbing whose lifecycle belongs to the TTL sweep (blob/staging.ts
- * `sweepBlobStaging`), not the cache — the review pause of a draft import must
- * not race a disk-pressure delete. The cache pass leaves them entirely alone.
+ * NEVER cache-evictable — owned by the TTL sweep; a draft's review pause must
+ * not race a disk-pressure delete.
  */
 export function stagingShas(vault: DatabaseSync): Set<string> {
   const rows = vault
@@ -56,12 +40,7 @@ export function stagingShas(vault: DatabaseSync): Set<string> {
   return new Set(rows.map((r) => r.sha256));
 }
 
-/**
- * Promoted bytes with an outstanding offsite upload remain the only durable
- * local copy even when a stale/healed replica row exists. Promotion consumes
- * `blob_staging`, so the outbox itself must remain an explicit eviction guard
- * until the transfer runner deletes the obligation after remote verification.
- */
+/** Eviction guard until the transfer runner clears it post-verify. */
 export function pendingOutboxShas(vault: DatabaseSync): Set<string> {
   const rows = vault.prepare("SELECT sha256 FROM blob_outbox").all() as {
     sha256: string;

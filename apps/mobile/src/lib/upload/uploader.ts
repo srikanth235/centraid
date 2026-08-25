@@ -1,18 +1,13 @@
-// The drainer (#419.4): turns durable queue rows into settled CAS objects.
-//
-// Every step is written so that a process death at ANY point leaves the queue
-// recoverable from SQLite alone, with no duplicate object and no lost item:
-//
-//  * `begin` is keyed by content sha, so it is the resume primitive AND the
-//    D10 dedupe check. Re-begin returns the same session plus the parts the
-//    gateway has already accepted; `alreadyPresent` means transfer nothing.
-//  * A part's ETag is persisted BEFORE the gateway receipt is requested, so a
+// The drainer (#419.4): durable queue rows → settled CAS objects. Death at
+// ANY point leaves the queue recoverable from SQLite alone — no duplicate
+// object, no lost item:
+//  * `begin` is keyed by content sha: resume primitive AND D10 dedupe check;
+//    `alreadyPresent` transfers nothing.
+//  * A part's ETag is persisted BEFORE its gateway receipt is requested, so a
 //    crash in that window replays the receipt instead of re-uploading bytes.
-//  * Re-sealing is byte-identical (see cbsf.ts), so even a lost ETag costs
-//    only a repeated PUT of the exact same object, never a divergent one.
-//  * `complete` is the settlement point; the receipt it returns is the only
-//    thing that marks an item settled. A crash before persisting it re-begins,
-//    finds `alreadyPresent`, and settles from there.
+//  * Re-sealing is byte-identical (cbsf.ts): a lost ETag costs one repeated
+//    PUT of the same object, never a divergent one.
+//  * `complete` is settlement; its receipt is the only settled marker.
 
 import { base64ToBytes } from "./bytes";
 import { sealDirectory, sealPart } from "./cbsf";
@@ -37,11 +32,8 @@ export type PartPutter = (input: {
   transferId: string;
 }) => Promise<string | null>;
 
-/**
- * Network-policy seam (Wi-Fi-only, charger-only). M1 owns the real policy;
- * the drainer only asks. Returning false halts the drain cleanly, leaving
- * every item recoverable.
- */
+/** Network-policy seam (Wi-Fi-only etc.). M1 owns the real policy; false
+ *  halts the drain cleanly, leaving every item recoverable. */
 export interface UploadPolicy {
   canTransfer: () => boolean | Promise<boolean>;
 }
@@ -77,11 +69,8 @@ export interface DrainSummary {
 export class UploadDrainer {
   constructor(private readonly deps: UploadDrainerDeps) {}
 
-  /**
-   * One pass over every non-terminal item, oldest first. Recovery needs no
-   * special path: a restart simply calls this, because the queue's own rows
-   * are the only state that matters.
-   */
+  /** One pass over every non-terminal item, oldest first; restart just
+   *  calls this — recovery needs no special path. */
   async drainOnce(): Promise<DrainSummary> {
     const summary: DrainSummary = {
       settled: 0,
@@ -134,11 +123,10 @@ export class UploadDrainer {
       ...(item.filename ? { filename: item.filename } : {}),
     });
 
-    // D10: the gateway already holds these bytes. Nothing to transfer. The
-    // gateway alone is authoritative about durability: persist its settlement
-    // receipt verbatim. If (defensively) it issued none, settle WITHOUT a
-    // casAck — an absent casAck safely withholds device-original deletion,
-    // where a fabricated `replicated` would authorize it.
+    // D10: gateway holds these bytes; it is authoritative on durability —
+    // persist its receipt verbatim; if none issued (defensive), settle WITHOUT
+    // casAck: absent casAck withholds device-original deletion, where a
+    // fabricated `replicated` would authorize it.
     if (plan.alreadyPresent) {
       this.deps.store.settle(
         item.itemId,
@@ -234,8 +222,8 @@ export class UploadDrainer {
         ? 1
         : (this.deps.partConcurrency ?? DEFAULT_PART_CONCURRENCY);
     await pool(ctx.outstanding, limit, async (part) => {
-      // The crash-window replay: bytes are already at the provider and the
-      // ETag survived, only the gateway receipt did not. Replay the receipt.
+      // Crash-window replay: bytes are at the provider and the ETag survived;
+      // only the gateway receipt did not. Replay the receipt.
       if (part.state === "put" && part.etag) {
         if (kind === "multipart") {
           await this.deps.client.recordPart(
@@ -328,10 +316,8 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * A simulated process death must never be caught and retried as if it were a
- * network error — the crash tests rely on it unwinding the whole drain.
- */
+/** Simulated process death unwinds the whole drain — never retried as a
+ *  network error; crash tests rely on it. */
 function isKill(error: unknown): boolean {
   return error instanceof Error && error.name === "UploadKillSignalError";
 }

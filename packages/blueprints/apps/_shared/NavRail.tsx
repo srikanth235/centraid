@@ -1,40 +1,27 @@
-// ONE APP's own destinations, on the leading edge of its content area, under a
-// pointer. Stem = which app, rail = where in it. An app earns a rail only above
-// four destinations.
-//
-// AN APP WITH A RAIL MUST STILL WORK WITHOUT IT: on touch, or in a pane too
-// narrow for the 232px column, the same destinations are the app band or shelf
-// strip. A destination existing only here is a defect, so this component never
-// invents one — it draws the rows it is handed.
-//
-// WHAT IT DOES NOT DRAW, each deliberate: no hue, icon chip, badge, dot,
-// disclosure triangle, expandable row, or drop target. Hover firms nothing and a
-// route change does not animate.
+// One app's destinations on the leading edge of its content area; earned only
+// above four rows. MUST work without it: touch and narrow panes reach the same
+// destinations via the app band/shelf strip — draw only handed-in rows, none
+// invented. No hue/icon/badge/dot/disclosure/expand/drop-target chrome; hover
+// firms nothing and routes don't animate.
 import { useCallback, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import styles from "./NavRail.module.css";
 
-/**
- * `head` is a GROUP — a distinction the horizontal strip flattened. `rule` is a
- * hairline: below it is a STATE of the set, a weaker separation than a head.
- */
+/** `rule` separates states of a set — weaker than a `head`. */
 export type NavRailItem =
   | { kind: "head"; label: string }
   | { kind: "rule" }
   | {
       kind: "row";
-      /** Stable across renders; the React key and focus identity, never rendered. */
       id: string;
       label: string;
-      /** Absent where unknown: an invented zero reports a shelf never read. */
+      /** Absent means unknown, never zero. */
       count?: number;
       /** Exactly one row per rail. */
       current?: boolean;
-      /** Nested under the head above it. One level; there is no second. */
       indent?: boolean;
-      /** **Absent means not a destination**, drawn as inert text: a row routing
-       *  elsewhere while wearing its own number would lie about where it led. */
+      /** Absent = not a destination, drawn as inert text. */
       onSelect?: () => void;
     };
 
@@ -48,18 +35,13 @@ export function NavRail({
   label,
   items,
 }: {
-  /** The `nav`'s accessible name — the APP, so a screen reader announcing
-   *  "navigation" twice can tell the frame's stem from this. */
+  /** Accessible name = the APP: distinguishes frame nav from this rail. */
   label: string;
   items: readonly NavRailItem[];
 }): ReactNode {
-  // ONE TAB STOP, then up/down: ten tab stops would push the content column
-  // further away than the strip this replaces. Roving tabindex.
+  // ONE TAB STOP then up/down (roving tabindex): ten stops push content away.
   const refs = useRef(new Map<string, HTMLButtonElement>());
-  /**
-   * Where the member arrowed to, AND the route they were on. Never reset this by
-   * effect: that would be a second idea of "where you are", one frame behind.
-   */
+  /** Never reset by effect: that would be a second, stale idea of "here". */
   const [walked, setWalked] = useState<{
     id: string;
     from: string | undefined;
@@ -67,10 +49,8 @@ export function NavRail({
 
   const destinations = items.filter(isDestination);
   const currentId = destinations.find((row) => row.current)?.id;
-  // Last arrowed-to row on THIS route, else the current route, so tabbing in
-  // lands on WHERE YOU ARE. `walked !== null` is load-bearing: with no current
-  // row both `currentId` and `walked?.from` are `undefined`, and comparing those
-  // alone answers yes for a walk that never happened.
+  // Last arrow-to on THIS route else current. `walked !== null` is load-bearing:
+  // undefined-vs-undefined would match vacuously.
   const walkedHere =
     walked !== null &&
     walked.from === currentId &&
@@ -114,7 +94,6 @@ export function NavRail({
     <nav className={styles.rail} aria-label={label}>
       {items.map((item, index) => {
         if (item.kind === "rule") {
-          // Presentational: the rows either side already carry the separation.
           // Keyed by position — a rule has no identity but where it sits.
           return (
             <div

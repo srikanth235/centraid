@@ -1,17 +1,7 @@
 /**
- * WHO THE DOCS SEAT CAN NAME IN A GRANT (#825), native side.
- *
- * The share kit draws the sheet; the roster is the HOST's obligation, and on
- * this seat the host is Docs. Everything below is already the native seat's
- * own reading of People — the replica party rows, the approved links, the
- * named circles — so this hook composes those readers rather than adding a
- * second directory that could disagree with them.
- * The MAPPING from those rows to audiences is not restated here either:
- * `_shared/grant-audiences.ts` owns it for every app and both seats.
- *
- * `null` is "not an answer" — not read yet, or read and unreadable — which is
- * not the same fact as a vault that knows nobody: Docs draws no Share verb
- * until the roster is an actual answer, and an empty answer is one.
+ * Who the docs seat can name in a grant (#825), native side: composes existing
+ * People readers (parties, links, circles) — no second directory. Mapping owned
+ * by _shared/grant-audiences.ts. null = unreadable-or-unread, distinct from empty.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -36,20 +26,13 @@ export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
     "people",
     useMemo(() => ({ entity: "core.vault", limit: 1 }), [])
   );
-  // `null` is "not read yet"; `unreadable` is "asked, and the answer never
-  // came" — the two are not the same fact and neither is an empty list.
   const [links, setLinks] = useState<GatewayLink[] | "unreadable" | null>(null);
   const gatewayBase = replica.gatewayBase;
 
-  // Every write is deferred off the effect body: a synchronous setState here
-  // cascades a second render before the first has painted.
   useEffect(() => {
     let active = true;
     void Promise.resolve()
-      // A links read that fails is never a reason to withhold the People rows
-      // that were already read — but it is recorded as unreadable rather than
-      // as an empty list, because the two differ where People named nobody
-      // either. A seat with no gateway yet genuinely has no links.
+      // Failed links read = "unreadable", never empty.
       .then(() => (gatewayBase ? listLinks(gatewayBase) : []))
       .catch((): GatewayLink[] | "unreadable" => "unreadable")
       .then((rows) => {
@@ -74,11 +57,7 @@ export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
   const circles = useNamedShareCircles(targets, ownerPartyId);
   if (links === null) return null;
   const audiences = grantAudiencesFrom(targets, circles);
-  // A FAILED READ IS NOT AN EMPTY ROSTER. People's own rows still count — a
-  // linked-vault read that fell over never made the people this member added
-  // disappear — but when they name nobody either, the only honest answer is
-  // "no answer": Docs draws no Share verb rather than a sheet that would
-  // accuse a member of knowing nobody on the strength of a broken read.
+  // Unreadable + nobody named = "no answer": no Share verb off a broken read.
   if (links === "unreadable" && audiences.length === 0) return null;
   return audiences;
 }

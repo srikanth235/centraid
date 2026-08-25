@@ -1,16 +1,6 @@
-// The Connectors place's data half (#765): one read, two writes, and the
-// re-authorization ceremony — nothing about layout or copy.
-//
-// The read is `listConnections()`; the writes are `setConnectionStatus()`
-// (pause/resume) and the OAuth flow mobile already owns. That flow is
-// deliberately NOT reimplemented here: `lib/connections.ts` re-exports the
-// working pair under Connectors-facing names, and the browser half is the same
-// in-app auth session Notifications opens — see `lib/connection-reauth.ts` for
-// why a system browser cannot finish it on a phone.
-//
-// Every action re-reads the list afterwards rather than patching a row in
-// place: health is the gateway's to report, and a row that says `Fine` because
-// this screen assumed so is the failure mode the page exists to prevent.
+// Connectors data half (#765): one read, two writes, re-auth ceremony. OAuth is
+// NOT reimplemented (`lib/connections.ts`; see lib/connection-reauth.ts).
+// Every action re-reads the list: health is the gateway's to report.
 
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -32,20 +22,14 @@ import { resolveGatewayBase } from "../../lib/gateway";
 import { opsStateFor } from "./connectors-model";
 import type { ConnectorAct, ConnectorFilter } from "./connectors-model";
 
-/** How often the page re-reads health while it is open (Approvals' cadence). */
+/** How often the page re-reads health while open. */
 const POLL_MS = 60_000;
 
 /** What the gateway answered. `empty`/`full` are derived, never stored. */
 export type ConnectorsLoad =
   | { kind: "loading" }
-  /** `at` is when the answer landed. Every "4 minutes ago" on the page is
-   *  measured from it rather than from `Date.now()` at render time: a clock
-   *  read during render is impure (the compiler says so), and a row that
-   *  silently re-ages on an unrelated re-render is claiming a freshness
-   *  nothing re-checked. */
+  /** Every relative phrase measures from it, never Date.now() at render. */
   | { at: number; kind: "ready"; connections: ConnectionEntry[] }
-  /** `reason` is the underlying failure, shown as the error panel's one fact —
-   *  the panel's own body never changes, because what is safe does not. */
   | { kind: "error"; reason: string };
 
 export interface ConnectorsController {
@@ -84,7 +68,7 @@ async function read(apply: (next: ConnectorsLoad) => void): Promise<void> {
   }
 }
 
-/** Run the OAuth ceremony for one lapsed connection, in-app. */
+/** Run the OAuth ceremony for one lapsed connection. */
 async function reauthorize(connectionId: string): Promise<void> {
   const authUrl = await beginConnectionAuthorization(connectionId);
   const outcome = classifyAuthSession(
@@ -94,9 +78,7 @@ async function reauthorize(connectionId: string): Promise<void> {
   if (failure) throw new Error(failure);
   if (outcome.kind === "assist-handoff")
     await completeConnectionAuthorization(outcome.handoff);
-  // `closed` needs nothing: a BYO ceremony finishes at the gateway's own
-  // callback page, and the caller re-reads either way — a connection that was
-  // authorized stops saying `Needs re-auth` on its own.
+  // `closed`: BYO finishes at the gateway callback; caller re-reads either way.
 }
 
 export function useConnectors(): ConnectorsController {
@@ -104,10 +86,8 @@ export function useConnectors(): ConnectorsController {
   const [filter, setFilter] = useState<ConnectorFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | undefined>();
-  // A ref, not state: the guard has to hold WITHIN a tick. Two taps on
-  // `Re-authorize` before React re-renders would otherwise open two consent
-  // ceremonies, and the gateway binds a pending ceremony to one client
-  // session — the second would strand the first.
+  // Ref, not state: the guard must hold WITHIN a tick — two taps before
+  // re-render would strand a consent ceremony.
   const inFlight = useRef(false);
 
   useEffect(() => {
@@ -154,8 +134,6 @@ export function useConnectors(): ConnectorsController {
   );
 
   const connections = load.kind === "ready" ? load.connections : [];
-  // Nothing that is not `ready` shows a time, so the epoch is a fine stand-in
-  // — and it keeps the clock out of the render path entirely.
   const now = load.kind === "ready" ? load.at : 0;
   const state = useMemo(
     () =>

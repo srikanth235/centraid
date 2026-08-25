@@ -52,8 +52,7 @@ export function revokeGrantCascade(
     )
     .run(now, grantId);
   // The owner's "no" outlives the grant row (#308): tombstone each revoked
-  // scope so the install-grant top-up cannot silently re-mint it. Uninstall
-  // clears them — a reinstall is fresh consent.
+  // scope so a top-up cannot silently re-mint it. Uninstall clears them.
   const revokedScopes = db.vault
     .prepare(
       `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
@@ -199,8 +198,8 @@ function enforceRetention(
   const refused: RetentionRefusal[] = [];
   for (const policy of policies) {
     const requestedEntity = `${policy.applies_schema}.${policy.applies_table}`;
-    // Imported rows may carry the PHYSICAL table where policies normally
-    // store the logical one, so normalize before applying standing decisions.
+    // Imported rows may carry the PHYSICAL table where policies normally store
+    // the logical one; normalize before applying standing decisions.
     const entity = resolveEntity(requestedEntity, db.vault)
       ? requestedEntity
       : (listVaultEntities(db.vault).find(
@@ -337,9 +336,8 @@ function deleteAssetRow(
   assetId: string
 ): void {
   writeProvenance(db.journal, owner, "media.asset", assetId, "sweep.purge");
-  // A face region is itself a polymorphic TARGET (#724). Deleting it without
-  // sweeping enrich_embedding/enrich_derivation leaves an orphan FACE vector —
-  // the one leftover that could match a new photograph to a deleted person.
+  // A face region is itself a polymorphic TARGET (#724); deleting it without
+  // sweeping enrich_* leaves an orphan FACE vector matchable to new photos.
   const regions = db.vault
     .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
     .all(assetId) as { region_id: string }[];
@@ -372,14 +370,12 @@ function purgeContentItem(
     .prepare("SELECT asset_id FROM media_asset WHERE content_id = ?")
     .get(contentId) as { asset_id: string } | undefined;
   if (asset) {
-    // Edit lineage (#711): both ways through are dishonest — NULLing the
-    // child's column forges "camera original", cascading destroys a photograph
-    // the owner never trashed. media.purge_asset refuses interactively for the
-    // same reason; a sweep makes the SAME refusal and keeps going rather than
-    // dying on the FK and taking every later duty down with it. The WHOLE
-    // content item is declined because the asset's content_id FK is NOT NULL.
-    // `purge_at` stays lapsed, so the next sweep retries once the copy is gone,
-    // and the skip is named in the receipt — declined, never silent.
+    // Edit lineage (#711): NULLing the child's column forges "camera original";
+    // cascading destroys an untrashed photograph — media.purge_asset refuses
+    // interactively for the same reason, and the sweep makes the SAME refusal,
+    // keeping going rather than dying on the FK. The whole content item is
+    // declined (content_id FK NOT NULL); purge_at stays lapsed for retry and
+    // the skip is named in the receipt — never silent.
     if (isLineageSource(db, asset.asset_id))
       return { reclaimed: 0, blockedByAssetId: asset.asset_id };
     deleteAssetRow(db, owner, now, asset.asset_id);
@@ -398,8 +394,7 @@ function purgeContentItem(
     )
     .run(contentId);
   // Derivatives go with their parent (#296), registry rows first for the FK.
-  // sha256 is UNIQUE on content items, so nothing else claims the original;
-  // remote replicas fall to the reconciliation sweep by design.
+  // sha256 is UNIQUE on content items, so nothing else claims the original.
   const variants = db.vault
     .prepare(
       "SELECT sha256 FROM core_content_derivative WHERE content_id = ? AND sha256 IS NOT NULL"
@@ -415,9 +410,8 @@ function purgeContentItem(
     .prepare("DELETE FROM core_content_item WHERE content_id = ?")
     .run(contentId);
   // Bytes go only when their FINAL claim disappears (#750). sha256 is UNIQUE
-  // on content items but NOT on derivatives, so re-derive the live set AFTER
-  // the deletes above and skip any sha another row still claims — the orphan
-  // sweep reclaims a skipped copy once its last claim drops.
+  // on content items but NOT derivatives, so re-derive the live set AFTER the
+  // deletes; a skipped sha falls to the orphan sweep once its last claim drops.
   const live = liveBlobShas(db.vault);
   for (const v of variants) {
     if (live.has(v.sha256)) continue;
@@ -531,12 +525,12 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       `SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`
     )
     .all(now) as { content_id: string }[];
-  // Purges are the one hard delete outside the command pipeline, so
-  // polymorphic cleanup runs here too. schema/poly-refs.ts is the single
-  // complete enumeration — never re-derive a partial list by hand.
+  // Purges are the one hard delete outside the command pipeline, so poly-ref
+  // cleanup runs here too — schema/poly-refs.ts is the complete enumeration;
+  // never re-derive a partial list by hand.
   //
-  // Notes purge FIRST (#308): the note rents its body content NOT NULL, so the
-  // row must go before the content purge can delete those bytes this pass.
+  // Notes FIRST (#308): note rents its body NOT NULL; row must go before this
+  // pass can free the bytes.
   const lapsedNotes = db.vault
     .prepare(
       "SELECT note_id FROM knowledge_note WHERE purge_at IS NOT NULL AND purge_at <= ?"
@@ -555,9 +549,8 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       .run(n.note_id);
     cleanupPolyRefs(db.vault, now, "knowledge.note", n.note_id);
   }
-  // Documents next (#352), same NOT NULL reason. Retention stance: superseded
-  // bodies are durable while the document lives; only at purge time is each
-  // chain item judged, and only THIS document's chain is considered.
+  // Documents next (#352), same NOT NULL reason. Superseded bodies are durable
+  // while the document lives; only at purge time is each chain item judged.
   const revisesId = revisesConceptId(db);
   const lapsedDocuments = db.vault
     .prepare(
@@ -600,11 +593,9 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     else contentBlockedByLineage.push(row.content_id);
   }
   // A lapsed trashed asset purges even while its bytes stay rented elsewhere
-  // (#274): asset meaning and byte custody have independent lifecycles. Runs
-  // AFTER the content purge, so a photograph whose derived copy lapses in the
-  // same sweep gives up its asset row now while the content item behind it
-  // waits one more sweep — the price of leaving the content → asset → domain
-  // order alone.
+  // (#274): asset meaning and byte custody have independent lifecycles. After
+  // the content purge, so a same-sweep derived-copy lapse frees the asset now
+  // and waits one more sweep for its content.
   const lapsedAssets = purgeLapsedAssets(db, owner, now);
   // Runs after the content/asset passes so a row referencing now-purged bytes
   // is judged last (#441).

@@ -6,27 +6,15 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// THE REBUILT AGENDA AND TASKS SURFACES, in a real browser (#834).
+// REBUILT AGENDA AND TASKS SURFACES in a real browser (#834): UI-impact
+// evidence. Each capture mounts the SHIPPED component over shipped tokens and
+// `kit.css`; asserted strings come from the app's own view-copy.
+//   Tasks — overdue is the ONE attention-tone group, with quiet bulk verbs
+//     (re-entry, not a wall of shame); families render whole.
+//   Agenda — layers paint as ANNOTATION, never a fourth calendar; the shelf
+//     hands off to Tasks.
 //
-// The two captures here are the UI-impact evidence, and each mounts the SHIPPED
-// component over the SHIPPED design tokens and `kit.css` — nothing is
-// reimplemented, and every string asserted comes from the app's own view-copy
-// rather than being retyped here.
-//
-// What a browser proves that the jsdom suites cannot:
-//
-//   Tasks — overdue is the ONE group drawn in the attention tone and the only
-//     one carrying bulk verbs, and it carries them as quiet verbs beside the
-//     header rather than as the loudest control on screen (the re-entry
-//     surface the Tasks brief rules in place of a wall of shame). A family
-//     renders whole under its parent, and the window's end says so honestly.
-//
-//   Agenda — the day-context layers paint as ANNOTATION, not as a fourth
-//     calendar: no hue dot, the ribbon and the collapsed `2 due` shelf sit in
-//     the annotation register, and the shelf opens to names that hand off to
-//     Tasks instead of being editable here.
-//
-// Both specs run against chromium in CI (`bun run --cwd apps/web e2e`).
+// Runs against chromium in CI (`bun run --cwd apps/web e2e`).
 
 const here = import.meta.dirname;
 const REPO_ROOT = path.resolve(here, "../../../..");
@@ -44,11 +32,7 @@ const AGENDA_DAY_CONTEXT = path.join(
   "packages/blueprints/apps/agenda/components/DayContext.tsx"
 );
 
-/**
- * The Tasks harness entry. One overdue group with its two bulk verbs, one
- * dated group holding a parent and its one level of children, and the honest
- * end of the window.
- */
+/** Tasks harness: one overdue group with verbs, one parent/child, window end. */
 const TASKS_ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -120,10 +104,7 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/**
- * The Agenda harness entry. The rail's three layer switches, a day ribbon
- * carrying two costless facts, and the collapsed due-task shelf.
- */
+/** Agenda harness: layer switches, day ribbon, collapsed due shelf. */
 const AGENDA_ENTRY = `
 import { createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -170,7 +151,7 @@ function Harness() {
 createRoot(document.getElementById("root")).render(createElement(Harness));
 `;
 
-/** Bundle a shipped component, its CSS modules included, for the browser. */
+/** Bundle a shipped component, CSS modules included, for the browser. */
 async function bundle(
   contents: string,
   name: string
@@ -179,9 +160,8 @@ async function bundle(
     stdin: { contents, resolveDir: here, loader: "tsx", sourcefile: name },
     bundle: true,
     write: false,
-    // Never written (`write: false`), but esbuild needs a path to name the CSS
-    // module output against — the class map and the stylesheet are two halves
-    // of one build.
+    // Never written (`write: false`), but esbuild needs a path for the CSS
+    // module output name.
     outdir: path.join(here, `.${name}-bundle`),
     format: "iife",
     jsx: "automatic",
@@ -222,11 +202,8 @@ test("the rebuilt Tasks board offers overdue re-entry, not a wall of shame", asy
   test.setTimeout(120_000);
   await mount(page, TASKS_ENTRY, "tasks-board-harness", 820);
 
-  // Overdue is the one group in the attention tone, and the only one with
-  // bulk verbs — both quiet, neither filled.
-  // `div[...]`, not `[...]`: the attention tone is also carried by the overdue
-  // row's own due phrase (a span), which is the point — attention lives on the
-  // phrase and the group head, and nowhere else.
+  // Overdue: one attention-tone group, quiet bulk verbs. `div[...]`, not
+  // `[...]`: attention also lives on the row's own due phrase.
   const overdue = page.locator('div[data-attention="true"]');
   await expect(overdue).toHaveCount(1);
   await expect(overdue.getByText("Overdue")).toBeVisible();
@@ -241,12 +218,10 @@ test("the rebuilt Tasks board offers overdue re-entry, not a wall of shame", asy
     )
   );
 
-  // A repeating task shows ONE live occurrence with its collapse, in the
-  // summariser's words — never a stack of copies, never a raw rule.
+  // ONE live occurrence with its collapse, in the summariser's words.
   await expect(page.getByText("every Friday")).toBeVisible();
   await expect(page.getByText("RRULE")).toHaveCount(0);
 
-  // The family renders whole, and the window's end is honest about itself.
   await expect(page.getByText("Book the van")).toBeVisible();
   await expect(
     page.getByText("3 of 214 · this is a window, not everything open")
@@ -271,8 +246,7 @@ test("Agenda's day context draws layers as annotation, never as a calendar", asy
   test.setTimeout(120_000);
   await mount(page, AGENDA_ENTRY, "agenda-day-context-harness", 420);
 
-  // Three switches, each saying where its facts live, and one sentence that
-  // says once what a layer is not.
+  // Three switches naming where facts live; layers are not writable here.
   await Promise.all(
     [
       ["Birthdays", "from People"],
@@ -287,8 +261,7 @@ test("Agenda's day context draws layers as annotation, never as a calendar", asy
     page.getByText("Layers decorate a day; none of them is writable.")
   ).toBeVisible();
 
-  // Two birthdays collapse to a count rather than pushing the day's events out
-  // of the cell, and the due shelf is collapsed — never a grid chip.
+  // Birthdays collapse to a count; the due shelf starts collapsed.
   await expect(page.getByText("2 birthdays")).toBeVisible();
   const shelf = page.getByRole("button", { name: "2 due" });
   await expect(shelf).toHaveAttribute("aria-expanded", "false");
@@ -299,8 +272,7 @@ test("Agenda's day context draws layers as annotation, never as a calendar", asy
     fullPage: true,
   });
 
-  // Opening the shelf lists names that hand off to Tasks; Agenda shows the
-  // fact and never edits it.
+  // The shelf lists names that hand off to Tasks; Agenda never edits.
   await shelf.click();
   await page
     .getByRole("button", { name: "Renew the passport", exact: true })
@@ -312,9 +284,9 @@ test("Agenda's day context draws layers as annotation, never as a calendar", asy
 
 declare global {
   interface Window {
-    /** What the Tasks harness collected from the board's callbacks. */
+    /** Collected from the board's callbacks. */
     __tasksActs: string[];
-    /** What the Agenda harness collected from the layers and the shelf. */
+    /** Collected from the layers and the shelf. */
     __agendaActs: string[];
   }
 }

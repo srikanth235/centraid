@@ -1,21 +1,9 @@
-// Schema migrations for the durable upload queue (#419.4).
-//
-// The queue is unreplicated source-of-truth: a migration that half-applies and
-// then bricks every subsequent open would strand a photo that exists nowhere
-// else yet (the same class of brick as the #406 vault-open bug). So every
-// migration here obeys two rules:
-//
-//   1. It runs inside ONE transaction with the `user_version` bump, so a kill
-//      mid-migration rolls back atomically — the next open re-runs it from the
-//      prior version rather than finding a half-migrated schema.
-//   2. It is idempotent anyway: each step checks the current shape (a column's
-//      existence) before mutating, so even a bump that somehow landed without
-//      its ALTER (e.g. a pre-transaction database from an older build) heals on
-//      the next open instead of throwing "duplicate column name" forever.
+// Upload queue schema migrations (#419.4): ONE transaction per step with the
+// version bump; every step idempotent.
 
 import type { ReplicaSqliteDriver } from "@centraid/client/replica/native";
 
-/** Bumped when the DDL changes. Each step from any prior version is idempotent. */
+/** Bumped when the DDL changes. */
 export const SCHEMA_VERSION = 5;
 
 type Driver = Pick<ReplicaSqliteDriver, "exec" | "run" | "all">;
@@ -24,7 +12,7 @@ interface ColumnRow {
   name: string;
 }
 
-/** True when `table` already has `column` — the guard before every ALTER ADD. */
+/** Guard before every ALTER ADD. */
 function hasColumn(driver: Driver, table: string, column: string): boolean {
   return driver
     .all<ColumnRow>(`SELECT name FROM pragma_table_info(${quote(table)})`)
@@ -35,7 +23,7 @@ function quote(literal: string): string {
   return `'${literal.replace(/'/gu, "''")}'`;
 }
 
-/** Run `work` and the version bump atomically; roll back together on a kill. */
+/** Run `work` + the version bump atomically. */
 function inTransaction(
   driver: Driver,
   toVersion: number,
@@ -52,11 +40,6 @@ function inTransaction(
   }
 }
 
-/**
- * Bring an existing database from `version` up to {@link SCHEMA_VERSION},
- * applying one transactional step per version gap. `followupDdl` recreates the
- * v1 follow-up ledger in place without touching the byte ledger.
- */
 export function migrateUploadSchema(
   driver: Driver,
   version: number,
@@ -65,12 +48,12 @@ export function migrateUploadSchema(
   if (version < 1 || version >= SCHEMA_VERSION) return;
 
   if (version < 2) {
-    // v1 → v2: add the follow-up ledger next to transfers already in flight.
+    // v1 → v2: add the follow-up ledger.
     inTransaction(driver, 2, () => driver.exec(followupDdl));
   }
 
   if (version < 3) {
-    // v2 → v3: stable intent id for payload-idempotent replica writes.
+    // v2 → v3: stable intent_id for payload-idempotent writes.
     inTransaction(driver, 3, () => {
       if (!hasColumn(driver, "upload_followup", "intent_id")) {
         driver.exec("ALTER TABLE upload_followup ADD COLUMN intent_id TEXT;");
@@ -87,9 +70,7 @@ export function migrateUploadSchema(
   }
 
   if (version < 4) {
-    // v3 → v4: per-follow-up retry accounting and a terminal poison state, so
-    // one un-replayable follow-up can be quarantined instead of starving the
-    // rest (F4). NULL defaults keep the column add cheap on a large ledger.
+    // v3 → v4: retry accounting + poison state (F4).
     inTransaction(driver, 4, () => {
       if (!hasColumn(driver, "upload_followup", "attempts")) {
         driver.exec(
@@ -106,8 +87,7 @@ export function migrateUploadSchema(
   }
 
   if (version < 5) {
-    // v4 → v5: a global transfer ledger still needs a durable target so the
-    // vault-first storage screen and headless follow-up replay stay truthful.
+    // v4 → v5: durable target_vault_id.
     inTransaction(driver, 5, () => {
       if (!hasColumn(driver, "upload_item", "target_vault_id")) {
         driver.exec("ALTER TABLE upload_item ADD COLUMN target_vault_id TEXT;");

@@ -1,21 +1,8 @@
 /*
- * Renderer-side client for snapshot edges and circle-backed commons (#731 —
- * `packages/server/src/routes/edges-routes.ts`). An edge is a one-shot copy
- * of a fixed item set between two vaults ONE PERSON owns. Ongoing co-owned
- * sharing uses the commons route below.
- *
- *   GET  /centraid/_gateway/edges              — this owner's own edges
- *
- * SAME-OWNER ONLY since #825 (ruling G-copy): giving another person a copy is
- * no longer a verb, so a cross-owner pair is refused with
- * `cross_owner_give_retired` and sharing with somebody else is a standing
- * GRANT on `/centraid/_vault/grants` (`react/blueprints/grant-wire.ts`).
- *
- * This is the People panel's data source, independent of any one blueprint
- * app mount — a placement is a fact about the household, not about Photos or
- * Tasks. `centraid-inline.ts`'s `place()` covers the SAME wire door
- * from inside an app; this module exists because the People panel runs at
- * shell level, outside any app's `window.centraid`.
+ * Renderer client for snapshot edges and circle-backed commons (#731).
+ * SAME-OWNER ONLY since #825 (ruling G-copy): edges copy between two vaults
+ * ONE PERSON owns — cross-owner give retired (`cross_owner_give_retired`);
+ * other-people sharing is a standing GRANT on `/centraid/_vault/grants`.
  */
 
 import {
@@ -41,7 +28,6 @@ export type EdgeStatus =
   | "completed"
   | "failed";
 
-/** One snapshot placement, as `share_edges` answers it. */
 export interface GatewayEdge {
   edgeId: string;
   kind: EdgeKind;
@@ -58,7 +44,6 @@ export interface GatewayEdge {
   updatedAt: string;
 }
 
-/** Every snapshot edge this owner made. */
 export async function listGatewayEdges(): Promise<GatewayEdge[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, EDGES_PATH, {
@@ -90,8 +75,7 @@ export async function createCommons(input: {
   return readJson<Record<string, unknown>>(res, "share commons");
 }
 
-/** One ongoing Commons offer awaiting receiver consent. Domain rows are not
- * projected until the receiver explicitly accepts it. */
+/** Commons offer awaiting receiver consent; rows project only after acceptance. */
 export interface CommonsInvitation {
   invitationId: string;
   grantId: string;
@@ -120,8 +104,7 @@ export async function listCommonsInvitations(
   return out.invitations ?? [];
 }
 
-/** Redeem a one-time, user-carried claim into this owner's chosen vault. The
- * raw token is sent once and is never retained by the client. */
+/** Redeems a one-time claim; raw token sent once, never retained client-side. */
 export async function claimCommonsInvitation(
   actorVaultId: string,
   stewardVaultId: string,
@@ -158,14 +141,7 @@ export async function answerCommonsInvitation(
   return out.invitation;
 }
 
-/**
- * One commons grant this vault holds, as the recovery door describes it
- * (`commons-recovery-routes.ts`). The gateway answers a much wider
- * observability record per grant; only the fields a member surface renders are
- * named here. `actorVaultId` is not on the wire — the caller asked about one
- * vault, and the answer has to stay attributable once several vaults' rows are
- * shown in one list.
- */
+/** One commons grant this vault holds (`commons-recovery-routes.ts` shape); actorVaultId added client-side so rows stay attributable. */
 export interface CommonsRecoveryGrant {
   actorVaultId: string;
   grantId: string;
@@ -182,11 +158,9 @@ export interface CommonsRecoveryGrant {
     silentForMs?: number;
     fault?: string;
   };
-  /** Set once this seat has already re-founded the grant. */
   supersededBy?: string;
 }
 
-/** How one successor invitation reached (or failed to reach) a roster seat. */
 export interface CommonsRecoveryDelivery {
   partyId: string;
   memberVaultId?: string;
@@ -196,15 +170,13 @@ export interface CommonsRecoveryDelivery {
 export interface CommonsRecoveryOutcome {
   state: "recovered";
   grantId: string;
-  /** Seats that must still accept the successor invitation. */
   invitedPartyIds: string[];
   invitations: CommonsRecoveryDelivery[];
   replayed: boolean;
 }
 
-/** Plain words for the ceremony's NAMED refusals. Recovery refuses on purpose
- *  far more often than it fails, so the member must read a reason, not a code
- *  or a raw body. An unmapped reason still reaches them verbatim. */
+/** Plain words for NAMED refusals: recovery refuses on purpose far more often
+ * than it fails — the member reads a reason, not a code. */
 const RECOVERY_REFUSALS: Record<string, string> = {
   "already-steward": "You already run this shared space.",
   "parked-on-fault":
@@ -214,7 +186,6 @@ const RECOVERY_REFUSALS: Record<string, string> = {
     "This vault holds no copy of that shared space to re-found it from.",
 };
 
-/** Steward presence for every commons grant one of this owner's vaults holds. */
 export async function listCommonsRecovery(
   actorVaultId: string
 ): Promise<CommonsRecoveryGrant[]> {
@@ -231,12 +202,7 @@ export async function listCommonsRecovery(
   return (out.grants ?? []).map((grant) => ({ ...grant, actorVaultId }));
 }
 
-/**
- * Re-found a commons from this vault's own copy after its steward is gone.
- * Deliberate and never automatic — the caller has already put the absence in
- * front of the owner. A refusal is an answer, not a transport failure, so it
- * arrives as an Error carrying the ceremony's own reason.
- */
+/** Re-found after steward loss — deliberate, never automatic; refusal arrives as Error with the ceremony's reason. */
 export async function recoverCommons(
   actorVaultId: string,
   grantId: string

@@ -2,17 +2,12 @@ import crypto from "node:crypto";
 import path from "node:path";
 /*
  * End-to-end coverage for #367 §C — the vault blob CAS's S3-compatible
- * remote tier — against a REAL S3-compatible HTTP server
- * (`@centraid/backup`'s committed `S3TestServer`, the same one
- * `remote-provider.test.ts`/`interop-clawgnition.test.ts` use). No moto, no
- * mocked fetch: `S3BlobStore` signs real SigV4 requests over real sockets,
- * `BlobCustody` drives real AES-256-GCM sealing, and every assertion reads
- * back either through the client (round-trip) or through the test server's
- * direct object map (raw-bytes / ciphertext checks).
- *
- * Covers: S3BlobStore round-trip incl. the multipart path (§C8), replication
- * sweep + sealed-object verification (§C3/§C4), reconcile orphan deletion,
- * the lease-gate skip (§C6), and endpoint-rotation reset (§C9).
+ * remote tier — against a REAL S3-compatible HTTP server (`S3TestServer`):
+ * real SigV4 over real sockets, real AES-256-GCM sealing; assertions read
+ * back through the client or the server's direct object map. Covers
+ * round-trip incl. multipart (§C8), replication + sealed-object verification
+ * (§C3/C4), reconcile orphan deletion, lease-gate skip (§C6), rotation reset
+ * (§C9).
  */
 import { Readable } from "node:stream";
 
@@ -87,9 +82,7 @@ describe("storage", () => {
 
       await s3.putStream(sha, Readable.from([bytes]), size);
 
-      // Prove multipart actually ran, not a silent fallback to one PUT: the
-      // test server saw a `?uploads` initiate, at least 2 part PUTs, and a
-      // `?uploadId=` complete POST.
+      // Prove multipart ran, not a silent single-PUT fallback.
       const initiated = server.requests.some(
         (r) => r.method === "POST" && r.path.includes("uploads")
       );
@@ -153,9 +146,7 @@ describe("storage", () => {
       const moved = await custody.replicate([sha]);
       expect(moved).toStrictEqual([sha]);
 
-      // Raw bytes straight off the test server's object map — never through
-      // the client's own unseal path, so this can't be fooled by a client bug
-      // that seals on write and silently un-seals wrong on read.
+      // Raw bytes off the server's object map, not the client's unseal path.
       const raw = server.getObjectDirect(BUCKET, `vaultA/blobs/sha256/${sha}`);
       expect(raw).toBeDefined();
       expect(raw!.equals(plaintext)).toBe(false); // NOT plaintext on the wire
@@ -173,8 +164,7 @@ describe("storage", () => {
       const { sha256: liveSha } = custody.ingestSync(
         Buffer.from("live content")
       );
-      // An orphan: present remotely (seeded directly), no local claim, and NOT
-      // in the live set — reconcile should delete it.
+      // Orphan: seeded remotely, no local claim, not in the live set.
       const orphanSha = crypto
         .createHash("sha256")
         .update("orphan")
@@ -214,13 +204,12 @@ describe("storage", () => {
       });
       expect(result.orphansDeleted).toStrictEqual([]);
       expect(result.orphansSkipped).toContain(orphanSha);
-      // Still there — a conflicted gateway instance must never delete what
-      // might be the OTHER instance's live write.
+      // Still there — a conflicted gateway must never delete the other's live write.
       expect(
         server.hasObjectDirect(BUCKET, `vaultD/blobs/sha256/${orphanSha}`)
       ).toBe(true);
 
-      // Once the lease conflict clears, a normal reconcile finishes the job.
+      // Lease conflict cleared: a normal reconcile finishes the job.
       const cleared = await custody.reconcile(new Set());
       expect(cleared.orphansDeleted).toContain(orphanSha);
     });
@@ -244,19 +233,16 @@ describe("storage", () => {
         sha,
       ]);
 
-      // Rotate — a real caller does this by changing `blob_store.endpoint`/
-      // `bucket` (or `connectionId`) in vault settings; here it's the same
-      // effect at the `remoteTier()` seam directly.
+      // Rotate at the `remoteTier()` seam — what a real caller does in settings.
       currentPrefix = "vaultE-new";
 
-      // The old prefix's object is untouched — nothing ever addresses it again.
+      // Old prefix untouched — nothing addresses it again.
       expect(
         server.hasObjectDirect(BUCKET, "vaultE-old/blobs/sha256/" + sha)
       ).toBe(true);
 
-      // The new prefix is empty, so a fresh reconcile reads this sha as
-      // local-only and replicates it fresh — never treating the old remote
-      // copy as if it already covered the new target.
+      // New prefix is empty: reconcile must read the sha as local-only and
+      // replicate fresh, never treating the old remote copy as coverage.
       const before = await custody.statusFor([sha]);
       expect(before.get(sha)).toBe("local-only");
       const result = await custody.reconcile(new Set([sha]));
@@ -267,21 +253,17 @@ describe("storage", () => {
     });
 
     test("sealBlob/sealBlobStream produce the same framed wire shape (modulo per-frame nonces) and both round-trip through unsealBlob", async () => {
-      // Issue #405 §1: the remote-tier seal is now FRAMED (CBSF header, per-frame
-      // GCM `nonce|ct|tag` + `[algoId]` compression, sealed directory + trailer)
-      // rather than a single whole-blob `nonce|ct|tag` envelope. The buffered and
-      // streaming sealers are two implementations of ONE format, so they must
-      // agree on the wire shape byte-for-byte EXCEPT for the random per-frame
-      // nonces — same frame count, same compression verdicts (content-derived,
-      // deterministic), so identical sealed lengths. Both must round-trip.
+      // Issue #405 §1: the seal is FRAMED (CBSF header, per-frame GCM
+      // `nonce|ct|tag` + `[algoId]`, trailer). The buffered and streaming
+      // sealers implement ONE format: identical lengths (only nonces differ,
+      // compression verdicts deterministic), both must round-trip.
       const key = ephemeralSealKey();
       const sha = crypto
         .createHash("sha256")
         .update("stream-vs-buffer")
         .digest("hex");
-      // Multiple frames at a small frame size, with an odd tail, so the streaming
-      // frame carver is exercised across chunk boundaries — and incompressible
-      // (random) so both paths store frames verbatim and land on equal lengths.
+      // Multiple frames at a small frame size with an odd tail, incompressible
+      // so both paths store frames verbatim at equal lengths.
       const frameSize = 64 * 1024;
       const plaintext = crypto.randomBytes(frameSize * 3 + 777);
 
@@ -299,11 +281,9 @@ describe("storage", () => {
       });
       const streamed = Buffer.concat(chunks);
 
-      // Same framed wire shape: identical total length (per-frame nonces differ,
-      // but nonce size is fixed, so the byte COUNT is invariant across paths).
+      // Same wire shape: identical total length (nonce size fixed, count invariant).
       expect(streamed).toHaveLength(buffered.length);
-      // Both decrypt back to the same plaintext (the nonces differ, so the sealed
-      // bytes themselves are NOT expected to be identical).
+      // Both decrypt back; sealed bytes differ because nonces differ.
       expect(unsealBlob(key, sha, buffered).equals(plaintext)).toBe(true);
       expect(unsealBlob(key, sha, streamed).equals(plaintext)).toBe(true);
     });

@@ -1,32 +1,16 @@
-// Centraid — the bundled face, described without touching a filesystem.
-//
-// This is the half of the font seam a BROWSER may hold. `fonts.ts` owns the
-// other half: where the `.woff2` bytes live on disk, which needs `node:path`
-// and `require.resolve`.
-//
-// The split is structural, not stylistic. Electron's preload runs in the
-// sandboxed renderer, where `require("node:path")` does not resolve — a single
-// module carrying both halves takes the whole preload down with it, and with
-// the preload goes the entire desktop app (#707). A build-time-only
-// consumer can reach past this into `./fonts`; anything that ships to a
-// browser, a renderer, or an app surface behind a strict CSP imports HERE.
+// The half of the font seam a BROWSER may hold; fonts.ts owns disk paths.
+// Electron's sandboxed preload cannot resolve node:path — mixing the halves
+// takes down the preload and desktop app (#707). Browser/renderer/CSP import HERE.
 
 import { fonts } from "./typography";
 import type { BundledFace } from "./typography";
 
-/** Filename stem of each vendored face, matching the upstream convention.
- *  Only the one BUNDLED face appears: `code` is the platform code stack and
- *  ships no bytes, so it has no slug and no `@font-face` rule. */
 const FONT_SLUG = {
   sans: "instrument-sans",
 } as const satisfies Record<BundledFace, string>;
 
 export type FontSubset = "latin" | "latin-ext";
 
-/**
- * The Unicode coverage of each subset, copied from the upstream `unicode.json`
- * so a browser downloads `latin-ext` only when a page actually needs it.
- */
 export const FONT_SUBSET_RANGE = {
   latin:
     "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
@@ -35,20 +19,14 @@ export const FONT_SUBSET_RANGE = {
 } as const satisfies Record<FontSubset, string>;
 
 export interface FontFile {
-  /** The type-scale genus this file serves (`--font-<genus>`). */
   genus: BundledFace;
-  /** The CSS `font-family` name, as the type scale spells it. */
   family: string;
   weight: 400 | 600;
   subset: FontSubset;
-  /** File name inside `FONTS_DIR`. */
   fileName: string;
 }
 
-/**
- * Every vendored file, and only those. The one face carries the ramp's two
- * weights. Code uses the platform stack and ships no bytes.
- */
+/** Every vendored file, and only those. */
 export const FONT_FILES: readonly FontFile[] = (
   [
     ["sans", 400],
@@ -65,11 +43,9 @@ export const FONT_FILES: readonly FontFile[] = (
 );
 
 /**
- * The `@font-face` block for the bundled faces, pointing at `baseUrl`.
- *
- * `font-display: swap` is deliberate: the fallback stacks in `fontStacks`
- * carry the CJK coverage neither bundled face has, so a blocking swap period
- * would show nothing at all to the readers who need the fallback most.
+ * The @font-face block for the bundled faces. font-display: swap is deliberate:
+ * fontStacks fallbacks carry the CJK coverage the face lacks; blocking would
+ * show those readers nothing.
  */
 export function toFontFaceCss(baseUrl: string): string {
   const base = baseUrl.replace(/\/+$/u, "");

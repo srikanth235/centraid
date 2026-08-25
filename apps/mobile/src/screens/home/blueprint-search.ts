@@ -3,19 +3,14 @@ import { apps } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 /**
- * One matched vault OBJECT — a photo, a doc, a person, a task, an event, a
- * note, a tally entry (#708, mobile close-out). Never "open app X": the
- * app is context for the object (the group it belongs to), not the result
- * itself. `kind` is the mono-register word the row leads with ("doc",
- * "person", "event", …); `meta` is the raw ISO instant behind the
- * numeric-register column, formatted by the caller — never pre-formatted
- * here, so this module stays a pure data fetch with no locale/date logic.
+ * One matched vault OBJECT (#708), never "open app X": the app is context.
+ * `meta` is a raw ISO instant formatted by the caller — pure data fetch, no
+ * locale/date logic here.
  */
 export interface BlueprintSearchHit {
   appId: string;
   appLabel: string;
-  /** Absent when the id is not in the design registry — the renderer supplies
-   *  a neutral token rather than this layer inventing a colour. */
+  /** Absent when not in the design registry; renderer supplies a neutral token. */
   appColor: string | undefined;
   appIconKey: IconName;
   entity: string;
@@ -40,29 +35,19 @@ interface SearchSession {
 interface SearchTarget {
   appId: string;
   appLabel: string;
-  /** Mono-register word the row leads with — "doc", "person", "event", … */
   kind: string;
   entity: string;
   idField: string;
   labelFields: string[];
   detailFields: string[];
-  /** Column holding the row's date, when the entity's replica shape is known
-   *  to carry one (verified against an existing read elsewhere in this repo —
-   *  see the comment on each target). `undefined` means the row has no
-   *  numeric-register meta rather than a guessed column that would come back
-   *  empty. */
+  /** Date column verified against an existing repo read; undefined = none. */
   metaField?: string;
 }
 
 const appMetaById = new Map(apps.map((meta) => [meta.id, meta]));
 
-// Locker is NOT a search target here. Its RPC-backed items (LockerHome uses
-// `appQuery("locker", "items", …)`, never a replica read) have no replica
-// shape on mobile at all — the same seam useSpringboardTiles.ts documents for
-// the springboard tile ("Locker issues NO read... sealed columns behind an
-// online, session-gated RPC"). A search target with no shape would silently
-// return zero hits forever, which is a faked affordance, not a real one; so
-// Locker is excluded rather than shipped broken.
+// Locker excluded: RPC-backed items have no replica shape on mobile; a shapeless
+// target silently returns zero hits forever.
 export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
   {
     appId: "agenda",
@@ -72,8 +57,7 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "event_id",
     labelFields: ["summary"],
     detailFields: ["description"],
-    // dtstart: read by useSpringboardTiles' `events` query and consumed via
-    // `row.dtstart` in expandOccurrences, so it is a confirmed column.
+    // dtstart: confirmed via useSpringboardTiles' events query.
     metaField: "dtstart",
   },
   {
@@ -103,7 +87,7 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "note_id",
     labelFields: ["title"],
     detailFields: ["body", "_snippet"],
-    // updated_at: read + ordered on by useSpringboardTiles' `notes` query.
+    // updated_at: confirmed via useSpringboardTiles' notes query.
     metaField: "updated_at",
   },
   {
@@ -114,7 +98,7 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "document_id",
     labelFields: ["title"],
     detailFields: ["_snippet"],
-    // updated_at: read + ordered on by useSpringboardTiles' `documents` query.
+    // updated_at: confirmed via useSpringboardTiles' documents query.
     metaField: "updated_at",
   },
   {
@@ -125,9 +109,7 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "content_id",
     labelFields: ["title"],
     detailFields: ["_snippet", "media_type"],
-    // No confirmed date column on core.content_item's search shape (photos'
-    // captured_at lives on media.asset, a different entity) — left
-    // undefined rather than guessed.
+    // No confirmed date column (captured_at lives on media.asset).
   },
   {
     appId: "tally",
@@ -137,7 +119,7 @@ export const BLUEPRINT_SEARCH_TARGETS: readonly SearchTarget[] = [
     idField: "expense_id",
     labelFields: ["description"],
     detailFields: ["category"],
-    // `spent_on` is the column useSpringboardTiles filters `expenses` on.
+    // spent_on: filtered on by useSpringboardTiles' expenses query.
     metaField: "spent_on",
   },
 ] as const;

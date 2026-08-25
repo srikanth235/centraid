@@ -1,30 +1,15 @@
-// First-run camera-roll import, as data (#724).
-//
-// Rides the vault's STAGING SPINE (`POST /centraid/_vault/imports`, the route a
-// Takeout zip uses), not the ad-hoc upload queue `photos-backup.ts` writes to:
-// an unreviewed pile needs an inspectable batch. That route stages ONE file per
-// call — the bulk `sync.stage_rows` door has no HTTP entry for mobile — which
-// is per-call failure isolation, with `mediaAssetPublisher.probe`'s sha256
-// dedupe keeping creates exactly-once on resume.
-//
-// The bulk-walk law (`timeline-engine.ts`) holds: selection reads nothing off
-// the device, and Live Photo pairing costs one native call per photograph
-// ACTUALLY imported, never a pre-scan. Capture groups use `photos-backup.ts`'s
-// `live:<localId>` convention.
+// First-run camera-roll import as data (#724): vault staging spine, sha256 dedupe.
 import type { PhotoAsset } from "./timeline-model";
 
-/** Not the whole `PhotoAsset`: this module stays provable without a device. */
 export interface ImportCandidate {
-  /** What progress is keyed by — never the localId, which a merged row can
-   *  have several of. */
+  /** Never the localId. */
   id: string;
   localId: string;
   filename: string;
   kind: "photo" | "video";
 }
 
-/** `automaticBackupCandidates` shares this predicate but is deliberately not
- *  imported: it pulls React in, and OFFER may diverge from SWEEP later. */
+/** Do not import `automaticBackupCandidates`: it pulls React in. */
 export function selectImportCandidates(
   assets: readonly PhotoAsset[]
 ): ImportCandidate[] {
@@ -44,15 +29,12 @@ export function selectImportCandidates(
 
 export type ImportOutcome = "imported" | "skipped" | "failed";
 
-/** Persisted as plain JSON between launches so a kill mid-import resumes. */
 export interface ImportProgress {
-  /** The resumability boundary: an id here is never attempted again, whatever
-   *  its outcome was. */
+  /** An id here is never retried. */
   done: readonly string[];
   imported: number;
   skipped: number;
-  /** Candidate id → its failure sentence: a count alone is an honest number
-   *  about a dishonest silence. */
+  /** Candidate id → failure sentence. */
   failed: Readonly<Record<string, string>>;
 }
 
@@ -88,16 +70,7 @@ export function recordOutcome(
   };
 }
 
-/**
- * SERIAL by contract, and run to completion: a rejection is recorded as
- * `failed` rather than aborting, so one photograph never costs the rest of the
- * roll its turn.
- *
- * RESUMABLE BY CONSTRUCTION, not by a checkpoint file: `progress` is handed to
- * `onProgress` after every candidate, so a caller can persist it and call this
- * again with exactly the record it last saw. This bookkeeping makes resuming
- * cheap, not correct — exactly-once creation is the vault's sha256 dedupe.
- */
+/** SERIAL: rejections recorded as `failed`, never abort; resumable via `onProgress`. */
 export async function runCameraRollImport(
   candidates: readonly ImportCandidate[],
   progress: ImportProgress,
@@ -114,8 +87,7 @@ export async function runCameraRollImport(
       // oxlint-disable-next-line no-await-in-loop -- serial by contract, see above.
       outcome = await deps.attempt(candidate);
     } catch (error) {
-      // The recovery IS the feature: record and move on, as `applyBatchTx`
-      // isolates one row's publish failure from its batch.
+      // Record and move on.
       outcome = "failed";
       reason = error instanceof Error ? error.message : String(error);
     }
@@ -125,8 +97,7 @@ export async function runCameraRollImport(
   return current;
 }
 
-/** Honest counts, never a spinner (§18); failures are named, not folded into
- *  "skipped". */
+/** Honest counts (§18); failures named. */
 export function importSummary(progress: ImportProgress): string {
   const failedCount = Object.keys(progress.failed).length;
   const parts = [`${progress.imported} imported`];

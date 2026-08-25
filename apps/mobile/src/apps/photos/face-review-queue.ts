@@ -1,21 +1,13 @@
-// Pure derivations for the Face review queue (#711), shared by
-// FaceReview.tsx. Framework-free so the two rules it exists to hold are
-// unit-testable without mounting a screen:
+// Pure derivations for the Face review queue (#711), shared by FaceReview.tsx;
+// framework-free so its two rules stay unit-testable:
+//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285): matchCountFor answers
+//      "how many OTHER photographs propose the same person" — same derivation
+//      as queries/face-queue.ts over the same table; the two must agree.
+//   2. ONE FACE AT A TIME (v4 3967): buildQueue returns an ORDERED list;
+//      FaceReview.tsx shows only queue[cursor].
 //
-//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285). `matchCountFor`
-//      answers "how many OTHER photographs propose the same person", not the
-//      enricher's raw similarity score — the same derivation
-//      packages/blueprints/apps/photos/queries/face-queue.ts uses for the web
-//      surface, computed here from the replica's own rows instead of a vault
-//      read (the two clients read the same table, `media.face_region`, so
-//      the two derivations must agree).
-//   2. ONE FACE AT A TIME (v4 3967). `buildQueue` returns an ORDERED list;
-//      FaceReview.tsx is responsible for ever showing only `queue[cursor]`.
-//
-// `first seen` is a real gap, not an invented fact — see FaceReview.tsx's own
-// header for why `media_face_region` cannot honestly say when a proposal was
-// first made (no `created_at` column). This derives the closest true
-// substitute: the earliest CAPTURE date among the matching photographs.
+// firstSeenAt: no created_at column exists (see FaceReview.tsx); earliest
+// CAPTURE date among matching photographs is the closest true substitute.
 export interface FaceRegionRow {
   region_id: unknown;
   asset_id: unknown;
@@ -46,15 +38,10 @@ function str(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
-/** Every UNANSWERED region, in a deterministic order (no timestamp exists to
- *  sort on, so region_id is the tiebreak — same choice the web query makes).
- *
- *  "Unanswered", not "unconfirmed" (#712): a rejected region — which
- *  is a remembered decision rather than a deleted row — and one the member
- *  deliberately left unnamed are both finished with. Filtering on
- *  `confirmed_by_party_id` alone would put every one of them back in front of
- *  the member on the next replica pull, which is the exact bug that made this
- *  queue impossible to empty. */
+/** Every UNANSWERED region, region_id order (no timestamp to sort on; same
+ *  as the web query). "Unanswered", not "unconfirmed" (#712): rejected and
+ *  deliberately-unnamed regions are finished with — filtering on
+ *  confirmed_by_party_id resurrects them every pull (the unemptyable-queue bug). */
 export function buildQueue(
   faceRows: readonly FaceRegionRow[],
   assetRows: readonly AssetRow[]

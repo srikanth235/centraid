@@ -1,17 +1,9 @@
-// Inline-body threshold (#367): notes, draft messages, and the
-// data: URI door commands (attachments/documents/media) all mint a
-// `core_content_item` row inline as a `data:` URI. Binary payloads already
-// spill to the blob CAS unconditionally in `mintContentFromDataUri`
-// (blob/mint.ts) — this guard closes the gap for text/*, which CANNOT
-// redirect to the CAS (the FTS sync triggers decode `content_uri`
-// in-transaction and cannot do I/O — see schema/fts.ts's header). A text
-// body over budget has nowhere safe to go, so it is refused with a typed
-// error instead of silently bloating vault.db forever.
-//
-// This is a TIGHTER, second gate below the existing `MAX_INLINE_DATA_URI_CHARS`
-// door check (blob/mint.ts, ~256KB decoded / ~350KB base64-encoded URI) —
-// that one bounds the whole inline-payload door; this one specifically
-// targets the text/* case the door check cannot redirect away from.
+// Inline-body threshold (#367): notes, draft messages, and data: URI door
+// commands mint `core_content_item` rows inline. Binary already spills to the
+// blob CAS unconditionally (blob/mint.ts); this guard closes the gap for
+// text/*, which CANNOT redirect to the CAS (FTS sync triggers decode
+// `content_uri` in-transaction and cannot do I/O). Tighter second gate below
+// the MAX_INLINE_DATA_URI_CHARS door check.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -47,13 +39,8 @@ export function assertTextBodyWithinBudget(
     throw new InlineBodyTooLargeError(byteSize, budgetBytes, mediaType);
 }
 
-/**
- * Guard for the `data:` URI inline door (attachments/documents/media):
- * decodes the URI's declared media type and byte length WITHOUT minting
- * anything, and only enforces the budget for text/* — binary payloads
- * already spill to the CAS unconditionally in `mintContentFromDataUri`
- * regardless of size, so no additional gate is needed there.
- */
+/** `data:` URI inline door: decode media type + length WITHOUT minting;
+ *  budget enforced for text/* only — binary spills to CAS regardless. */
 export function assertInlineDataUriWithinBudget(
   dataUri: string,
   budgetBytes: number = INLINE_BODY_BUDGET_BYTES
@@ -65,7 +52,8 @@ export function assertInlineDataUriWithinBudget(
 }
 
 export interface InlineBodyViolationEntry {
-  /** The referencing entity ("knowledge.note", "social.message", "core.document"), or "core.content_item" for unattributed rows. */
+  /** Referencing entity ("knowledge.note", "social.message", "core.document"),
+   *  or "core.content_item" for unattributed rows. */
   entity: string;
   count: number;
   bytes: number;
@@ -77,13 +65,8 @@ export interface InlineBodyViolationScan {
   byEntity: InlineBodyViolationEntry[];
 }
 
-/**
- * Diagnostics scan (#367): pre-existing inline text bodies already
- * over budget (rows written before this guard shipped, or via a path this
- * guard doesn't cover yet). Read-only — `byte_size` is decoded-bytes,
- * recorded at write time by every minting path, so this is exact, not a
- * char-length approximation.
- */
+/** Diagnostics scan (#367): pre-existing inline text bodies over budget.
+ *  Read-only; `byte_size` is exact decoded-bytes, not an approximation. */
 export function scanInlineBodyViolations(
   vault: DatabaseSync,
   budgetBytes: number = INLINE_BODY_BUDGET_BYTES
@@ -123,9 +106,8 @@ export function scanInlineBodyViolations(
       .all(...ids) as { content_id: string }[];
     for (const h of hits) add(entity, h.content_id);
   }
-  // Anything over budget but not owned by one of the known body columns
-  // above (e.g. an attachment/media asset whose declared media type is
-  // text/* — rare, but real) still counts, bucketed generically.
+  // Over budget but owned by no known body column (e.g. an attachment whose
+  // declared type is text/* — rare but real) still counts, bucketed generically.
   for (const contentId of ids) {
     if (!attributed.has(contentId)) add("core.content_item", contentId);
   }

@@ -17,41 +17,18 @@ import type {
 } from "./types.js";
 
 /**
- * The async storage surface a {@link import('./coordinator.js').ReplicaCoordinator}
- * consumes, independent of where the SQLite engine lives. On web it is satisfied
- * by `ReplicaWorkerClient` (an OPFS worker reached over postMessage); on React
- * Native by an in-process op-sqlite store. Extracting it lets one coordinator,
- * intent queue and change-feed loop drive either platform unchanged.
- *
- * Both a guarded and a clone-safe read path are exposed on purpose:
- *
- * - `read` returns rows wrapped in an {@link OnlineOnlyGuard} proxy, so touching
- *   an unavailable field throws instead of silently reading `undefined`. This is
- *   the path local live queries use.
- * - `readWire`/`searchWire` return plain, structured-clone-safe envelopes with no
- *   proxy, because on web the rows must survive a shell→worker `postMessage` hop
- *   and be guarded on the far side. Native implementations return the same
- *   envelopes directly (no hop), keeping the coordinator identical across
- *   platforms. They stay on the interface because the coordinator itself calls
- *   them for the shell's MessagePort transport.
+ * Storage backend behind ReplicaCoordinator; `read` rows are
+ * OnlineOnlyGuard-wrapped: unavailable fields throw.
  */
 export interface ReplicaStore {
   status: () => Promise<ReplicaStatus>;
   catalog: () => Promise<ReplicaShape[]>;
   bootstrap: (snapshot: ReplicaSnapshot) => Promise<ReplicaCursor>;
-  /**
-   * Page-wise bootstrap for windowed mode (a 50k+ asset library cannot land in
-   * one envelope). `bootstrapBegin` clears the replica and installs the page-1
-   * catalog; each `bootstrapPage` applies one window atomically; only
-   * `bootstrapCommit` writes the cursor that makes the replica readable. Until
-   * then `status().cursor` is null, so an interrupted bootstrap is indistinguishable
-   * from none and restarts rather than presenting partial data as complete.
-   */
+  /** Commit alone writes the readable cursor. */
   bootstrapBegin: (header: ReplicaBootstrapHeader) => Promise<undefined>;
   bootstrapPage: (rows: ReplicaSnapshotRow[]) => Promise<undefined>;
-  /** Make the first page readable without claiming bootstrap is complete. */
   bootstrapPreview?: (cursor: ReplicaCursor) => Promise<undefined>;
-  /** Commit at the PAGE-1 cursor; the caller must then replay changes from it. */
+  /** Commits at the PAGE-1 cursor; replay from it. */
   bootstrapCommit: (cursor: ReplicaCursor) => Promise<ReplicaCursor>;
   applyChanges: (batch: ReplicaChangeBatch) => Promise<ApplyChangesResult>;
   read: (

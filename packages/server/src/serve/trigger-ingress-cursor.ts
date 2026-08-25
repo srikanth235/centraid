@@ -1,21 +1,11 @@
 /*
- * Durable-ingress cursor reads (#541 review).
+ * Durable-ingress cursor reads (#541 review). The invariant:
  *
- * `trigger_ingress` is the durable landing zone for webhook deliveries and
- * polled provider events. The one invariant this module exists to hold:
+ *   A cursor may only advance to the position of an element actually
+ *   delivered. Never report a target beyond the last element returned.
  *
- *   A cursor may only advance to the position of an element that was actually
- *   delivered. Never report a target position beyond the last element
- *   returned.
- *
- * Rows past the per-read catch-up cap are still durably present, so they are
- * SURPLUS, not a gap: the next tick delivers them. Only genuinely
- * unrecoverable losses — a missed cron window, an expired Gmail history, a
- * pruned ingress row — are reported as `skipped`/`gapReason`, because the
- * source can no longer produce them at all.
- *
- * Kept out of `build-gateway.ts` so the invariant is unit-testable without
- * booting a gateway.
+ * Rows past the catch-up cap are SURPLUS (next tick delivers them); only
+ * unrecoverable losses become `skipped`/`gapReason`.
  */
 
 import type { CursorReadResult } from "@centraid/server/automation";
@@ -25,14 +15,8 @@ import type {
 } from "@centraid/server/engine";
 
 /**
- * What the retention TTL cost *this* source, as the reader that owns it sees.
- *
- * `pruneIngress` deletes every row past its TTL and reports the loss per source
- * key. A row at or below the reader's own delivered position was already fired,
- * so dropping it costs nothing. A row ABOVE it was never delivered — that is a
- * real, unrecoverable gap (the landing zone no longer holds it), so it is
- * reported as `skipped` with an `ingress_retention` reason rather than
- * disappearing between two ticks.
+ * TTL cost to *this* source: rows above `deliveredThrough` were never
+ * delivered — an unrecoverable gap.
  */
 export function ingressRetentionGap(
   prune: PruneIngressResult,
@@ -44,7 +28,7 @@ export function ingressRetentionGap(
   return { skipped: lost.pruned, gapReason: "ingress_retention" };
 }
 
-/** A `positionJson` for an ingress source is just the last delivered row id. */
+/** Last delivered row id. */
 function parseIngressPosition(positionJson: string | undefined): number {
   if (!positionJson) return 0;
   try {
@@ -55,7 +39,7 @@ function parseIngressPosition(positionJson: string | undefined): number {
   }
 }
 
-/** Stored payloads are JSON; a non-JSON body rides through as its raw text. */
+/** Stored payloads are JSON; non-JSON rides through as raw text. */
 function parseIngressPayload(payloadJson: string | undefined): unknown {
   if (payloadJson === undefined) return undefined;
   try {
@@ -65,7 +49,7 @@ function parseIngressPayload(payloadJson: string | undefined): unknown {
   }
 }
 
-/** One ingress row, shaped as a cursor element. */
+/** One ingress row as a cursor element. */
 export function ingressElement(record: {
   id: number;
   receivedAt: number;
@@ -82,10 +66,7 @@ export function ingressElement(record: {
   };
 }
 
-/**
- * Read at most `limit` undelivered ingress rows for one source, advancing the
- * cursor only as far as the last row returned.
- */
+/** Advance the cursor only as far as the last row returned. */
 export function readIngressCursor(
   store: Pick<AutomationTriggerStore, "listIngressAfter" | "pruneIngress">,
   sourceKey: string,
@@ -94,9 +75,8 @@ export function readIngressCursor(
   now: number
 ): CursorReadResult {
   const afterId = parseIngressPosition(positionJson);
-  // Prune here, where the reader's own delivered position is known, so a row
-  // that expired before it was ever delivered is accounted instead of silently
-  // dropped.
+  // Prune where the delivered position is known: expired-before-delivery rows
+  // are accounted, not silently dropped.
   const retention = ingressRetentionGap(
     store.pruneIngress(now),
     sourceKey,

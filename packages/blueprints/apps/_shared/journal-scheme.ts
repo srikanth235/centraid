@@ -1,26 +1,6 @@
-/**
- * The People-journal marker, and the one bounded read that resolves it.
- *
- * An owner journal entry is not a row of its own (#450): it is a
- * `knowledge.note` carrying exactly one `core.tag` → concept whose
- * `notation` is `entry` inside the concept scheme
- * `https://centraid.dev/schemes/people-journal`. Notes' library, search and
- * link-target surfaces must EXCLUDE those notes (#834 R-journal): the
- * Journal place inside Notes — a filter over this same scheme — is their one
- * home, while opening one by id (`note`, `history`) still works.
- *
- * The vault has no `not-in` where-op, so the exclusion happens in-handler
- * over the id set this module returns. Two other copies of the scheme URI
- * exist on purpose and are left alone: `packages/vault/src/commands/people.ts`
- * (the writer) and `packages/blueprints/apps/people/queries/journal.ts` (the
- * Journal projection). They live in other trees; this constant is the Notes
- * app's single copy, shared by its three excluding queries.
- */
-
-/** The concept scheme every People-journal marker concept belongs to. */
+// URI copies in vault/people.ts + queries/journal.ts are deliberate.
 export const JOURNAL_SCHEME_URI = "https://centraid.dev/schemes/people-journal";
 
-/** The marker concept's SKOS notation inside that scheme. */
 export const JOURNAL_ENTRY_NOTATION = "entry";
 
 interface SchemeRow {
@@ -39,20 +19,8 @@ interface TagRow {
   concept_id: string;
 }
 
-/**
- * The ids of every `knowledge.note` marked as a People-journal entry.
- *
- * Three bounded reads, each narrowed by an `op: "eq"` so none of them can
- * degrade into a whole-table walk: the scheme by URI, the marker concept by
- * scheme, then the tags by that concept. An absent scheme or marker concept
- * (a vault where the owner has never journalled) short-circuits to an empty
- * set without touching `core.tag` at all.
- *
- * A denied read THROWS rather than answering "nothing is a journal entry" —
- * silently failing open would leak journal notes into the very surfaces
- * R-journal keeps them out of. Callers translate the throw into their own
- * absence contract.
- */
+// Bounded `op: "eq"` reads only. A denied read THROWS — answering "empty"
+// would leak journal notes into excluded surfaces.
 export async function readJournalNoteIds(
   vault: VaultApi,
   purpose: string

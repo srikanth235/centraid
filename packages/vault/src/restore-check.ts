@@ -1,18 +1,7 @@
 /*
- * Restored-pair verification (#408, G8/G9): structural and
- * cross-database checks over a RESTORED `vault.db` + `journal.db` directory
- * — never a live vault. The restore-verification job (BackupService) and
- * the acceptance tests both run this after a real restore from the remote.
- *
- * The cross-database check ("no journal receipt references a vault row
- * absent from the restored vault") is reported, not thrown: receipts are
- * history and vault rows may be legitimately hard-deleted AFTER a receipt
- * referenced them, so in production a non-zero count is a DEGRADED signal
- * to investigate. In controlled test workloads (no deletions), the caller
- * asserts zero — that is the G8 acceptance criterion: a write landing
- * between the two databases' capture instants must never produce a receipt
- * whose row is missing, and capture order (journal head first, then vault)
- * plus receipts-after-commit makes it structurally impossible.
+ * Restored-pair verification (#408, G8/G9) over a RESTORED directory — never
+ * a live vault. Dangling receipts are REPORTED, not thrown: rows may
+ * legitimately be hard-deleted after a receipt referenced them.
  */
 
 import path from "node:path";
@@ -26,23 +15,15 @@ import {
 import { resolveEntity } from "./schema/tables.js";
 
 /**
- * Seal-key custody verdict for a restored pair (#439). FORMAT.md calls
- * a restore whose sealed columns can't be opened "a placebo"; this proves it or
- * catches it:
- *   - `not-sealed`: the vault never sealed a value (no stamped fingerprint) — no
- *     key is expected, nothing to prove.
- *   - `ok`: the vault has sealed secrets and the recovery-kit DEK matches the
- *     fingerprint stamped in `core_vault` — it would actually unseal.
- *   - `missing`: the vault has sealed secrets but no recovery key was supplied.
- *   - `mismatch`: the supplied key is not the DEK those secrets were sealed
- *     with (regenerated/foreign/corrupt) — GCM garbage on every reveal.
+ * Seal-key custody verdict (#439): `not-sealed` | `ok` | `missing` |
+ * `mismatch` (foreign/corrupt key).
  */
 export type SealKeyVerdict = "not-sealed" | "ok" | "missing" | "mismatch";
 
 export interface RestoredPairReport {
   vault: { integrity: string; foreignKeyViolations: number };
   journal: { integrity: string; foreignKeyViolations: number };
-  /** Receipts whose (object_type, object_id) names a vault table row that is absent. */
+  /** Receipts naming a vault table row absent from the restore. */
   receiptsChecked: number;
   danglingReceipts: {
     receiptId: string;
@@ -50,11 +31,11 @@ export interface RestoredPairReport {
     objectType: string;
     objectId: string;
   }[];
-  /** Whether the restored seal key is present and unseals (#439). */
+  /** Restored seal key present and unsealing (#439). */
   sealKey: { verdict: SealKeyVerdict; expected?: string };
 }
 
-/** Prove the supplied recovery-kit DEK matches the restored vault fingerprint. */
+/** DEK must match the restored vault fingerprint. */
 function checkSealKey(
   destDir: string,
   vault: DatabaseSync,
@@ -64,9 +45,7 @@ function checkSealKey(
   if (expected === null) return { verdict: "not-sealed" };
   let key: Buffer | null;
   if (recoveryKey === undefined) {
-    // Compatibility for callers verifying an older snapshot that carried the
-    // now-retired loose seal.key entry. New recovery paths always supply the
-    // DEK from KeyStore/recovery-kit custody.
+    // Pre-DEK snapshots carried a loose seal.key entry.
     try {
       key = loadSealKey(path.join(destDir, "seal.key"));
     } catch {
@@ -107,7 +86,7 @@ function pkOf(db: DatabaseSync, physical: string): string | undefined {
   return cols.find((c) => c.pk === 1)?.name;
 }
 
-/** Verify a restored vault directory (both files + the G8 cross-check). */
+/** Verify a restored vault directory. */
 export function verifyRestoredPair(
   destDir: string,
   recoveryKey?: Buffer | null

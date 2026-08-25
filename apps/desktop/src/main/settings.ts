@@ -15,59 +15,35 @@ import {
 import { mergePersistedSettings } from "./settings-merge.js";
 
 /**
- * `<userData>/centraid-settings.json`, mode 0600: UI preferences and a pointer
- * at the active gateway (#109) and nothing else — connection state belongs to
- * `gateway-store.ts`, device identity and the loopback secret to the keychain.
- *
- * `PersistedSettings` is exactly what serializes; `DesktopSettings` adds the
- * fields derived from the active gateway and is what every IPC handler reads.
+ * `<userData>/centraid-settings.json`, mode 0600: UI prefs + active gateway
+ * pointer (#109), NOTHING else — connection state lives in gateway-store.ts,
+ * secrets in the keychain. `PersistedSettings` serializes; `DesktopSettings`
+ * adds active-gateway-derived fields (what IPC handlers read).
  */
 
 export interface PersistedSettings {
   activeGatewayId: string;
-  /**
-   * Client-owned vault pointer per gateway (#289), sent as `x-centraid-vault`.
-   * A missing entry means "let the gateway pick".
-   */
+  /** Per-gateway vault pointer (#289), sent as `x-centraid-vault`; missing = gateway picks. */
   activeVaultByGateway?: Record<string, string>;
-  /**
-   * The onboarding gate. Deliberately keyed here rather than on the profile's
-   * `displayName`, which is auto-created on boot and would read as "user has
-   * personalized". Once written it is permanent.
-   */
+  /** The onboarding gate — NOT keyed on `displayName`, which boot auto-creates. Once written, permanent. */
   onboardingCompletedAt?: string;
-  /** Absent → {@link DEFAULT_ALERT_SECONDS}. Clamped on read and write. */
   gatewayAlertSeconds?: number;
-  /** Absent → enabled. */
   gatewayAlertsEnabled?: boolean;
-  /** The build version at the last "What's new" auto-open; absent → never. */
   changelogSeenVersion?: string;
-  /**
-   * Absent → disabled: a fresh install never silently adds itself to login
-   * items. Applied via `login-item.ts`; a no-op on Linux, where Electron does
-   * not implement `setLoginItemSettings`.
-   */
+  /** Absent → disabled: a fresh install never silently adds itself to login items. No-op on Linux (no Electron `setLoginItemSettings`). */
   launchAtLogin?: boolean;
-  /**
-   * Whether onboarding OFFERS the OS service install (H5 / #468). Default off,
-   * and silent install is forbidden — this flag is only the settings key.
-   */
+  /** Whether onboarding OFFERS the OS service install (H5 / #468); silent install forbidden. */
   offerGatewayService?: boolean;
 }
 
 export interface DesktopSettings {
-  /** Inlined so desktop settings do not depend on the turn runtime (#141). */
   gatewayUrl: string;
-  /** Empty string disables the header — loopback `auth.mode: "none"` only. */
   gatewayToken?: string;
   activeGatewayId: string;
   activeVaultId?: string;
-  /** `'local'` means this desktop owns the loopback listener. */
   activeGatewayKind: "local" | "remote";
   activeGatewayLabel: string;
-  /** Always populated: `displayName` defaults to `label` at read time (#113). */
   activeProfileDisplayName: string;
-  /** `#RRGGBB`; defaults to a palette pick keyed by gateway id. */
   activeProfileAvatarColor: string;
   onboardingCompletedAt?: string;
   gatewayAlertSeconds?: number;
@@ -89,8 +65,6 @@ function persistedDefaults(): PersistedSettings {
   };
 }
 
-/** Defensive parsing for malformed writes, not migration: v0 has no prior
- *  on-disk shape to support. */
 function narrow(raw: Record<string, unknown>): PersistedSettings {
   const base = persistedDefaults();
   const activeRaw = raw.activeGatewayId;
@@ -156,16 +130,9 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
   await fs.rename(tmp, file);
 }
 
-/**
- * First-run keychain deferral (#603). Starting the local gateway mints device
- * secrets through `safeStorage` — on macOS an OS keychain prompt, which on a
- * fresh install would fire before the user has seen any UI. So with no
- * `onboardingCompletedAt`, `resolveEffective` returns empty local URL/token
- * instead of booting; the chooser's local-connect flips this latch.
- */
+/** First-run keychain deferral (#603): the local gateway's `safeStorage` mint must not prompt before any UI, so with no `onboardingCompletedAt` resolveEffective returns empty local URL/token instead of booting. */
 let localGatewayStartRequested = false;
 
-/** Process-lifetime only; the deferral is moot once onboarding is persisted. */
 export function requestLocalGatewayStart(): void {
   localGatewayStartRequested = true;
 }
@@ -173,8 +140,6 @@ export function requestLocalGatewayStart(): void {
 async function resolveEffective(
   p: PersistedSettings
 ): Promise<DesktopSettings> {
-  // A stale `activeGatewayId` falls back to local rather than crashing the
-  // whole settings read.
   await ensureLocalGateway();
   let resolved = await resolveGateway(p.activeGatewayId);
   if (!resolved) {
@@ -187,9 +152,6 @@ async function resolveEffective(
     // Unreachable after `ensureLocalGateway`, but TypeScript cannot see it.
     throw new Error("Local gateway resolution failed unexpectedly.");
   }
-  // An unstarted local runtime still returns settings with empty URL/token, so
-  // boot paths that only need `appsDir` do not deadlock — the same state a
-  // deferred first run holds.
   const deferLocalStart =
     p.onboardingCompletedAt === undefined && !localGatewayStartRequested;
   if (resolved.profile.kind === "local" && !resolved.url && !deferLocalStart) {
@@ -239,13 +201,11 @@ export async function loadSettings(): Promise<DesktopSettings> {
   return resolveEffective(persisted);
 }
 
-/** Does NOT resolve the active gateway, so it never boots the runtime. */
 export async function loadPersistedSettings(): Promise<PersistedSettings> {
   return readPersisted();
 }
 
-/** Connection state is NOT settable here — it belongs to the gateways IPC
- *  surface, and patching it throws. */
+/** Connection state is NOT settable here (gateways IPC surface owns it) — patching it throws. */
 export async function saveSettings(
   patch: Partial<DesktopSettings>
 ): Promise<DesktopSettings> {
@@ -268,20 +228,16 @@ export async function saveSettings(
   return resolveEffective(next);
 }
 
-/** Throws on an unresolvable id, so no caller writes a dangling pointer. */
 export async function setActiveGatewayId(id: string): Promise<DesktopSettings> {
   if (!(await listGateways()).some((g) => g.id === id)) {
     throw new Error(`Cannot activate unknown gateway: ${id}`);
   }
-  // A deliberate user act, so it lifts the first-run keychain deferral.
+  // Deliberate user act — lifts the first-run keychain deferral.
   requestLocalGatewayStart();
   return saveSettings({ activeGatewayId: id });
 }
 
-/**
- * A client-side pointer flip (#289): no server call, no re-root. `undefined`
- * clears it. Keyed by gateway, so each gateway restores its last vault.
- */
+/** Client-side pointer flip (#289): no server call, no re-root; `undefined` clears; keyed by gateway. */
 export async function setActiveVaultId(
   vaultId: string | undefined
 ): Promise<DesktopSettings> {
@@ -301,8 +257,7 @@ export async function setActiveVaultId(
   return resolveEffective(next);
 }
 
-/** Disposable gateway-data state, outside userData; a copy here shadows the
- *  bundled template when its semver is higher. */
+/** Disposable gateway-data state; a copy here shadows the bundled template when its semver is higher. */
 export function templatesCacheDir(activeGatewayId: string): string {
   return gatewayTemplatesCacheDir(activeGatewayId);
 }

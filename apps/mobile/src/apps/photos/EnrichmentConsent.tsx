@@ -1,30 +1,14 @@
 import React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
-// THE ENRICHMENT CONSENT SURFACE, NATIVE (v4 handoff §8, prototype
-// `s==='enrich'`).
-//
-// WHY A SURFACE AND NOT A ROW, and why that is a privacy question rather than
-// a styling one: an `Enrichment` row whose meta reads `N consent policies ·
-// request faces, places and metadata` and whose ONE TAP fires
-// `request-enrichment` lets a member start the work without ever being told
-// where it will run, what will leave the device, what will be written, or how
-// to undo it — and the cloud-helper option is the only place the product says
-// photographs can leave the device at all.
-//
-// So: a header (back chevron, title, status line) around the shared §8 gate
-// (`kit/components/ConsentGate.tsx`, #712) — the panels/facts/
-// actions live in the gate so Docs' capture-time OCR consent (the second
-// instance of this product law) reads the same renderer. This
-// file supplies only Photos' own chrome and copy — literally the same copy
-// module the web client renders
-// (`@centraid/blueprints/apps/photos/enrichment-consent`), so the two clients
-// cannot drift on a promise about a member's photographs.
-//
-// A PURE VIEW: it holds no state, reads nothing and writes nothing. Every
-// answer leaves through a callback, so "can an enrichment write be issued
-// without an explicit answer" is a question about this file's props. The gate
-// lives in PhotosLibrary.tsx.
+// THE ENRICHMENT CONSENT SURFACE, NATIVE (v4 handoff §8). A surface, not a
+// row, for a privacy reason: one tap on a summary row could start enrichment
+// without the member ever learning where it runs or that photographs can
+// leave the device at all — this screen is the only place the product says
+// so. Header chrome around the shared §8 gate (`ConsentGate`, #712); copy is
+// the SAME module the web client renders, so the two clients cannot drift.
+// A PURE VIEW: no state, no reads, no writes; every answer leaves through a
+// callback. The gate lives in PhotosLibrary.tsx.
 import {
   CLOUD_PANEL,
   ENRICHMENT_NOTE,
@@ -43,9 +27,7 @@ import { useTheme } from "../../kit/theme";
 import { styles } from "./EnrichmentConsent.styles";
 
 export interface EnrichmentConsentProps {
-  /** How many photographs the question is about. `null` while the count is
-   *  unknown — the title then asks about "these photographs" rather than
-   *  inventing a number. */
+  /** Photographs the question is about; `null` when unknown — the title then says "these photographs" rather than inventing a number. */
   count: number | null;
   onDevice: AnswerAvailability;
   cloud: AnswerAvailability;
@@ -55,8 +37,7 @@ export interface EnrichmentConsentProps {
   answered?: "device" | "declined" | null;
   onRunOnDevice: () => void;
   onDecline: () => void;
-  /** Absent while no cloud helper can be chosen — see `CLOUD_ANSWER` in the
-   *  shared module. The panel renders either way. */
+  /** Absent while no cloud helper can be chosen — see `CLOUD_ANSWER` in the shared module. */
   onChooseCloud?: () => void;
   onClose: () => void;
 }
@@ -87,12 +68,10 @@ export default function EnrichmentConsent({
         <Text style={[styles.title, { color: colors.text }]}>
           {ENRICHMENT_TITLE}
         </Text>
-        {/* No trailing action: there is NO app-bar primary on this screen
-            (prototype 4799). The only commits are the answers in the panels. */}
+        {/* NO app-bar primary here (prototype 4799) — the only commits are the answers in the panels. */}
         <View style={styles.headerBtn} />
       </View>
-      {/* The status line — what is true of this vault right now, stated before
-          the question rather than after the answer. */}
+      {/* Status line: what is true of this vault right now, before the answer. */}
       <Text style={[styles.status, { color: colors.textFaint }]}>
         {ENRICHMENT_STATUS_LINE}
       </Text>

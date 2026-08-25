@@ -1,11 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit — Locker's authentication,
 // inactivity/background erasure, and mutable UI state form one React lifecycle;
 // splitting those invariants across owners would make secret cleanup fail-open.
-// Locker — query-free React tree (#505). Holds the `Root` component and
-// every constant, helper and type it needs that does NOT depend on the
-// node-side `./queries/*` handler modules. The shell's InlineAppModule
-// descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
-// wiring; there is deliberately no parallel served-system-app entry.
+// Locker — query-free React tree (#505): `Root` plus everything not depending
+// on node-side `./queries/*`. The shell's descriptor imports `Root` and
+// `CHANGE_TABLES`; there is deliberately no parallel served-system-app entry.
 
 import {
   useCallback,
@@ -59,9 +57,8 @@ export const CHANGE_TABLES = [
   "core.concept_scheme",
 ];
 
-// The detail pane already holds the full (secret-bearing) item — reuse it so
-// edit never re-fetches. Map only the action-key fields into the form. Verbatim
-// from app.tsx.
+// Reuse the detail pane's full (secret-bearing) item so edit never re-fetches;
+// map only the action-key fields. Verbatim from app.tsx.
 const EDIT_FIELD_KEYS = [
   "username",
   "password",
@@ -115,11 +112,7 @@ function makeState(): AppState {
   };
 }
 
-/**
- * Erase every secret-bearing or secret-derived client value when the gateway
- * says the session is no longer valid. Keeping this outside the component lets
- * the refresh-expiry path and the explicit lock path share the same invariant.
- */
+/** Erase every secret-bearing or secret-derived value when the session goes invalid; kept outside the component so refresh-expiry and explicit lock share the invariant. */
 function wipeSecretState(state: AppState, data: AppData): void {
   state.locked = true;
   state.authSession = null;
@@ -173,17 +166,15 @@ interface AuthPayload {
 export function Root({ rootRef }: InlineAppProps): ReactNode {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [loaded, setLoaded] = useState(false);
-  // Gates the drawer's slide transition: false until one frame after mount so
-  // the pre-paint narrow snap (useLayoutEffect below) applies with no animation.
+  // Gates the drawer slide transition: false until one frame after mount, so the pre-paint narrow snap below is animation-free.
   const [ready, setReady] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef<AppState>(makeState());
   const dataRef = useRef<AppData>({ items: [], truncated: false });
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
 
-  // Verbatim from app.tsx's refresh(), minus the served skeleton (reads are
-  // local off the replica). Denial routes through logic.applyDenied, which now
-  // drives the real #consentBanner/#consentDetail Chrome renders.
+  // Verbatim from app.tsx's refresh(), minus the served skeleton; denial
+  // routes through logic.applyDenied (drives #consentBanner/#consentDetail).
   const refresh = useCallback(async () => {
     const state = stateRef.current;
     const data = dataRef.current;
@@ -224,9 +215,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     data.items = next?.items ?? [];
     data.truncated = Boolean(next?.truncated);
 
-    // Watchtower counts come free with the items read (#404): that query
-    // already unseals passwords once to derive weak/reused, so it returns the
-    // summary rather than a second full read + receipted unseal.
+    // Watchtower counts ride the items read (#404): it already unseals once
+    // to derive weak/reused — no second read + receipted unseal.
     if (next?.watchtower) {
       state.watch = {
         compromised: next.watchtower.compromised ?? 0,
@@ -243,8 +233,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         if (r && !r.vaultDenied) state.trashRows = r.items ?? [];
       })
       .catch((error: unknown) => {
-        // Trash is advisory UI; a failed pull must not leave the unlock
-        // surface looking successful with a stale list — surface in console.
+        // Trash is advisory; surface failure rather than show a stale list as success.
         console.warn(
           "locker trash refresh failed",
           error instanceof Error ? error.message : error
@@ -407,7 +396,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     [rootRef]
   );
 
-  // ──── Edit / new / lock plumbing (verbatim from app.tsx, render → bump) ────
+  // Edit / new / lock plumbing (verbatim from app.tsx; render → bump)
   const openNew = useCallback(() => {
     const state = stateRef.current;
     state.edit = {
@@ -453,8 +442,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   const submitEdit = useCallback(
     async (payload: Parameters<typeof logic.saveItem>[0]) => {
       const outcome = await logicRef.current!.saveItem(payload);
-      // Only close on an executed write — parked/failed/denied leave the modal
-      // open (the notice banner explains why), same as app.tsx's submitEdit.
+      // Close only on an executed write — parked/failed/denied stay open (banner explains).
       if (outcome?.status === "executed") {
         stateRef.current.edit = null;
         bump();
@@ -463,15 +451,10 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     []
   );
 
-  // Seed the narrow layout BEFORE the first paint. The served app sets
-  // is-narrow pre-render from clientWidth; here observeWidth in the mount effect
-  // below only fires post-paint, so without this the sidebar would paint as an
-  // in-flow pane and then the reused Sidebar.module.css `transition: transform`
-  // would slide it out — a visible flash at narrow widths (#505). Runs in
-  // useLayoutEffect (after commit, before paint) and bumps synchronously, so the
-  // FIRST painted frame is already narrow with the drawer hidden. The slide
-  // transition stays gated on `.ready` (set one frame later) so this snap is
-  // instant.
+  // Seed narrow BEFORE first paint (#505): observeWidth fires post-paint, so
+  // without this the sidebar paints in-flow then slides out — a visible flash.
+  // Pre-paint + synchronous bump means the FIRST frame is already narrow with
+  // the drawer hidden; the slide transition stays gated on `.ready`.
   useLayoutEffect(() => {
     const el = rootElRef.current;
     if (!el) return;
@@ -481,15 +464,14 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       bump();
     }
   }, []);
-  // Enable the drawer slide transition only after the first painted frame, so
-  // the mount-time narrow snap above is instant and user open/close still
-  // animate (and a Tasks→Locker remount snaps cleanly too).
+  // Enable the slide transition one frame after mount: the snap above stays
+  // instant while open/close still animate.
   useEffect(() => {
     const id = requestAnimationFrame(() => setReady(true));
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // ──── chrome wiring: doorbell, focus refresh, layered Escape, width ────
+  // Chrome wiring: doorbell, focus refresh, layered Escape, width
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, refresh);
     const stopFocus = onFocusRefresh(refresh);
@@ -555,10 +537,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       .then((status) => {
         const state = stateRef.current;
         state.authConfigured = status.configured;
-        // `status` normally receives no token and therefore boots locked.
-        // A host may resume an already user-present in-memory session (the
-        // local app-boot harness exercises this path); persisted tokens can
-        // never do so because the gateway forgets them on restart.
+        // Boots locked unless a host resumes an in-memory session (harness
+        // path); persisted tokens never survive a gateway restart.
         state.locked = !(status.authenticated && status.sessionToken);
         state.authSession =
           status.authenticated && status.sessionToken
@@ -585,9 +565,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, [authenticate, closeEdit, refresh]);
 
-  // A live Locker session lasts at most five inactive minutes. Any background
-  // transition locks immediately; foreground interaction only resets the
-  // local timer while a host session exists.
+  // A live session lasts at most five inactive minutes: background locks
+  // immediately; foreground interaction only resets the timer.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const arm = () => {
@@ -617,12 +596,10 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   const data = dataRef.current;
   const pool = currentPool(state, data);
 
-  // The whole surface, mirroring app.tsx's render() one-for-one — sidebar / list
-  // / detail as slots on the frame, overlays in the display:contents host.
+  // The whole surface, mirroring app.tsx's render() one-for-one.
   return (
-    // Fill the app pane (a flex child of the route body) so the inline chrome
-    // gets real width — otherwise it collapses to content width and the
-    // component-width narrow observer wrongly flips to the phone drawer layout.
+    // Fill the app pane so inline chrome gets real width — else it collapses
+    // and the narrow observer wrongly flips to the phone drawer.
     <div
       ref={setRoot}
       style={{

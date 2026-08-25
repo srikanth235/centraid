@@ -1,27 +1,8 @@
-/*
- * Fixed-size file parts (FORMAT.md § Parts — centraid-snapshot/2).
- *
- * The format uses fixed parts instead of FastCDC content-defined chunking:
- * objects left in a snapshot are SQLite base files, git bundles and the seal
- * key. SQLite updates pages IN PLACE (no insert-shift), so fixed boundaries
- * dedup consecutive bases at ~O(changed pages) via the existing HMAC content
- * addressing — CDC's insert-resilience bought nothing here while costing a
- * frozen gear table and a cross-repo parameter-unification liability
- * (#405). Part boundaries are unchanged by /2's entropy-gated compression:
- * ids and boundaries key off RAW plaintext, and compression lives INSIDE the
- * per-part seal (compress.ts), downstream of splitting. Part size is part of
- * the format: same bytes must produce the same part ids everywhere, so it MUST
- * NOT change within the format.
- */
+// Fixed-size parts per FORMAT.md § Parts; size MUST NOT change in-format.
 
 export const PART_BYTES = 16 * 1024 * 1024;
 
-/**
- * Re-frame a byte stream into exact `partBytes` slices (last part short).
- * An empty source yields no parts — a zero-byte file is an entry with an
- * empty part list, matching /1's chunker behavior.
- * @yields {Uint8Array} Owned `partBytes`-sized slices (final slice short), in order.
- */
+/** @yields {Uint8Array} Owned exact-`partBytes` slices, in order. */
 export async function* partStream(
   source: AsyncIterable<Uint8Array>,
   partBytes: number = PART_BYTES
@@ -36,10 +17,7 @@ export async function* partStream(
     while (pendingBytes + rest.length >= partBytes) {
       const take = partBytes - pendingBytes;
       const slice = rest.subarray(0, take);
-      // When `pending` is empty this slice IS the whole part and `concat`
-      // returns it as-is — copy it, or the yielded part would be a live view
-      // of the caller's (reused) read buffer and mutate after yield. With
-      // `pending` non-empty, `concat` always allocates, so the view is safe.
+      // Copy when pending is empty, else this aliases the caller's buffer.
       pending.push(pending.length === 0 ? Uint8Array.from(slice) : slice);
       yield concat(pending, partBytes);
       pending = [];
@@ -47,8 +25,7 @@ export async function* partStream(
       rest = rest.subarray(take);
     }
     if (rest.length > 0) {
-      // Copy the tail: callers (readFileStream) reuse their read buffer, so
-      // holding a subarray across loop iterations would alias mutated bytes.
+      // Copy the tail: callers reuse their read buffer.
       pending.push(Uint8Array.from(rest));
       pendingBytes += rest.length;
     }
@@ -67,7 +44,6 @@ function concat(pieces: Uint8Array[], total: number): Uint8Array {
   return out;
 }
 
-/** Split an in-memory buffer (small inputs / tests). */
 export async function partBuffer(
   data: Uint8Array,
   partBytes: number = PART_BYTES

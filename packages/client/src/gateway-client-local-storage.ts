@@ -1,23 +1,9 @@
-/*
- * Renderer-side client for the gateway's LOCAL disk surface (#544 —
- * `packages/server/src/routes/storage-routes.ts`). Sibling of
- * `gateway-client-storage.ts`, which speaks to the same route prefix but
- * about the PROVIDER: that file answers "what does my storage provider hold",
- * this one answers "what is Centraid using on this machine, and what ceiling
- * have I put on it".
- *
- *   GET     /centraid/_gateway/storage/local     (+ `?refresh=1` to re-walk)
- *   GET|PUT /centraid/_gateway/storage/limits
- *
- * Kept in its own module rather than appended to `gateway-client-storage.ts`
- * for the plain reason that the two have no shared types and that file is
- * already near the repo's file-size cap.
- */
+// Renderer client for the gateway's LOCAL disk surface (#544) — sibling of
+// gateway-client-storage.ts, the PROVIDER side. Kept separate: no shared types.
 
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
 
-/** Stable component vocabulary — mirrors `serve/local-usage.ts`'s
- *  `LocalComponentId`. Renaming one of these is a wire change. */
+/** Mirrors serve/local-usage.ts LocalComponentId; renaming is a wire change. */
 export type LocalComponentId =
   | "ledger"
   | "vault-db"
@@ -33,9 +19,7 @@ export type LocalComponentId =
 export interface LocalComponentUsageDTO {
   component: LocalComponentId;
   bytes: number;
-  /** File count for directory components; `null` for the DB-file components. */
   files: number | null;
-  /** Set when part of the tree could not be read — `bytes` is a floor. */
   unreadable?: string;
 }
 
@@ -47,42 +31,31 @@ export interface LocalVaultUsageDTO {
 }
 
 export interface StorageLimitsDTO {
-  /** The owner's whole-of-Centraid disk budget, or `null` for unlimited. */
   totalLimitBytes: number | null;
-  /** Percent of the budget at which the health component degrades. */
   warnAtPercent: number;
-  /** `journal.db` size that triggers early archival, or `null` for off. */
+  /** journal.db size triggering early archival; null = off. */
   journalLimitBytes: number | null;
 }
 
 export interface StorageLimitEvaluationDTO {
   status: "ok" | "degraded" | "error";
-  /** `null` when no budget is set — nothing to be a fraction of. */
   fractionUsed: number | null;
   usedBytes: number;
   limitBytes: number | null;
 }
 
 export interface LocalUsageReportDTO {
-  /** Epoch ms the walk behind these figures finished. */
   scannedAt: number;
   totalBytes: number;
-  /** Gateway-level components, not attributable to one vault. */
   components: LocalComponentUsageDTO[];
   vaults: LocalVaultUsageDTO[];
-  /** The volume the vault root sits on; `null` when statfs is unavailable. */
   disk: { freeBytes: number; totalBytes: number } | null;
   limits: StorageLimitsDTO;
   limit: StorageLimitEvaluationDTO;
-  /** Set when the last refresh threw — figures are last-known-good. */
   error?: string;
 }
 
-/**
- * The local footprint report. A plain call is served from the gateway's TTL
- * cache; `refresh` forces a full re-walk and should only ever come from an
- * explicit owner action, never a poll — the walk covers the whole blob CAS.
- */
+/** TTL-cached; `refresh` re-walks the whole blob CAS — owner action, never a poll. */
 export async function getLocalStorageUsage(
   opts: { refresh?: boolean } = {}
 ): Promise<LocalUsageReportDTO> {
@@ -110,8 +83,7 @@ export async function getStorageLimits(): Promise<StorageLimitsDTO> {
   return out.limits;
 }
 
-/** Partial patch — an explicit `null` on either limit clears it. Omitted
- *  fields are left alone, so the two controls never overwrite each other. */
+/** Explicit null clears a limit; omitted fields untouched. */
 export interface StorageLimitsPatchDTO {
   totalLimitBytes?: number | null;
   warnAtPercent?: number;

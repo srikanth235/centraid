@@ -1,20 +1,7 @@
-// THE PIN, once, for all three drawings (#816).
-//
-// Places renders the same pin over three different grounds — the private
-// sketch's graticule, MapKit on iOS, and MapLibre's vector tiles on Android —
-// and they have to be the same object. A pin that looked like a photograph on
-// the sketch and like a coloured bubble on a basemap would make the mode
-// switch a change of product rather than a change of ground.
-//
-// It is a real `Pressable` with an accessible name, never a shape with an
-// `onPress`: a screen reader has to have something to land on, and the map is
-// the one surface where the alternative (an SVG shape, or a native marker) is
-// the tempting shortcut. On the basemaps the same control is what a native
-// marker's press events would otherwise have to provide — see `PlacesRealMap`
-// for why those events cannot be relied on at the app's iOS floor.
-//
-// Positioned by its CENTRE by every caller. A pin hanging down-right of its
-// point would put every photograph slightly south-east of where it was taken.
+// THE PIN, once for all three grounds (#816): sketch graticule, MapKit,
+// MapLibre. A real `Pressable` with an accessible name — never a bare shape;
+// native marker press events are unreliable at this iOS floor. Positioned by
+// its CENTRE by every caller.
 
 import React, { useMemo } from "react";
 import { Image, Pressable, StyleSheet } from "react-native";
@@ -28,12 +15,10 @@ import { pinLabel } from "./places-model";
 
 export interface PlacePinProps {
   pin: MapPin;
-  /** The drawn edge of the pin, from `pinSize` — area tracks the count. */
+  /** Drawn edge; area tracks the count. */
   size: number;
-  /** The place being read, drawn as the one ringed pin. */
   active: boolean;
   onPress: () => void;
-  /** Where the caller puts it: absolute on the sketch, anchored on a basemap. */
   style?: object;
 }
 
@@ -65,8 +50,7 @@ export default function PlacePin({
           style={styles.shot}
         />
       ) : null}
-      {/* A count is a numeral, so it reads in mono like every other count in
-          this app. */}
+      {/* Reads in mono like every other count in this app. */}
       <Text style={styles.pinCount}>{pin.count}</Text>
     </Pressable>
   );
@@ -81,15 +65,9 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: borders.hairline,
       overflow: "hidden",
     },
-    // The place being read: an ink-edged sheet standing off the ground. No
-    // scale transform — a pin positioned by its centre would have to be
-    // re-laid-out to grow, and a ring says "this one" just as clearly.
+    // Ring, not scale: centre-positioned pins would need re-layout to grow.
     pinActive: { borderColor: colors.accent, borderWidth: 2 },
-    // Ink over media takes the stage rung, the one ink that does not flip
-    // with the theme because the surface under it does not either. Solid
-    // rather than the web's translucent veil: RN cannot `color-mix`, and
-    // deriving an alpha by slicing the token string would be inventing a
-    // colour the design package never published.
+    // Solid stage ink; RN cannot `color-mix` and slicing tokens invents colours.
     pinCount: {
       ...t("mono"),
       backgroundColor: colors.stage,

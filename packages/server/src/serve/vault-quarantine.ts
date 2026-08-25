@@ -1,32 +1,9 @@
-/*
- * FORMAT.md restore rule 4 ("side-effect quarantine"): a directory the
- * offsite backup engine's `restoreSnapshot` materializes carries a
- * `RESTORE_QUARANTINE.json` marker. When the gateway MOUNTS a vault dir
- * that carries one (an operator adopted a restored directory as a live
- * vault — `restoreSnapshot` itself never swaps anything live), it must not
- * let yesterday's outbox or automations silently resume: "restoring a
- * backup must never re-send an email."
- *
- * What this module does, and — honestly — does NOT do:
- *
- *   - outbox: PARKS every approved-but-undrained item back to `pending`
- *     and revokes every live standing grant. A plain SQL UPDATE against
- *     `outbox_item` / `outbox_grant` (vault.db) — the exact shape
- *     `outbox.revoke_grant` already performs through the command pipeline
- *     (`packages/vault/src/commands/outbox.ts`). Contained, obvious,
- *     idempotent (a second mount finds nothing left to park).
- *
- *   - automations: NOT auto-disabled. `enabled` is NOT a DB row — it lives
- *     in the automation app's manifest file INSIDE the git code store;
- *     toggling it (`lifecycle-automation-routes.ts`'s `set-enabled` route)
- *     opens a `WorktreeStore` session, rewrites the file, and PUBLISHES a
- *     commit, for every installed automation. That is not "an obvious SQL
- *     update" — it needs the vault's code store mounted (this runs at
- *     PLANE construction, before any per-vault host/store is built) and a
- *     git commit per automation. The marker therefore STAYS in place (NOT
- *     renamed to `.applied.json`) and the caller reports a health error
- *     until an operator reviews and pauses automations by hand.
- */
+// Restore quarantine (FORMAT.md rule 4): a restored dir carries
+// RESTORE_QUARANTINE.json; mounting one parks undrained outbox items and
+// revokes standing grants — restoring must never re-send. Automations are NOT
+// auto-disabled (that needs the code store + publish, unavailable here): the
+// marker STAYS and the caller reports a health error until an operator pauses
+// them by hand.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -39,7 +16,7 @@ export interface QuarantineStatus {
   sourceSeq: number;
   outboxParked: number;
   outboxGrantsRevoked: number;
-  /** Always `true` when a status is returned — see module header. */
+  /** Always true — see module header. */
   automationsNeedManualReview: true;
 }
 
@@ -50,7 +27,6 @@ interface QuarantineMarker {
 
 export const QUARANTINE_MARKER_FILE = "RESTORE_QUARANTINE.json";
 
-/** Detect + act on a quarantine marker at `dir`. `null` when there is none. */
 export function applyRestoreQuarantine(
   dir: string,
   db: VaultDb,

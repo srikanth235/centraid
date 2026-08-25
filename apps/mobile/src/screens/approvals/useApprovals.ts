@@ -1,18 +1,8 @@
-// The Notifications place's data half (#765) — everything above the render,
-// kept out of the way of the blocks.
-//
-// ALL OF IT IS LOAD-BEARING: the read (`getNotifications(true)`, archived
-// included), the SSE doorbell, the 60s poll, the push-permission request and
-// replica wake registration, and all five writes — outbox decide (with the
-// edited artifact and the always-allow flag), parked confirm, scope decide,
-// notice read/archive, and the in-app OAuth reconnection ceremony.
-//
-// The standing-grant plane rides here too. `GET /centraid/_vault/outbox-grants`
-// and `DELETE …/<grantId>` (#308) are read through the shared HTTP core here
-// rather than by growing `lib/gateway.ts`,
-// and a gateway that does not serve them leaves the section absent instead of
-// failing the page: the queue is what the page is FOR, and a missing reference
-// list must never take it down.
+// The Notifications place's data half (#765): read (`getNotifications(true)`),
+// SSE doorbell, poll, push permission, replica wake, and all five writes —
+// all load-bearing. Standing grants ride here too (`/centraid/_vault/
+// outbox-grants`, #308): a gateway without them leaves the section absent
+// rather than failing the page — the queue is what the page is FOR.
 
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,17 +38,14 @@ const POLL_MS = 60_000;
 
 export type ApprovalsLoad =
   | { kind: "loading" }
-  /** `at` is when the answer landed. Every relative phrase on the page is
-   *  measured from it rather than from a clock read during render, so nothing
-   *  silently re-ages behind an unrelated re-render. */
+  /** `at` anchors every relative phrase — never a render-time clock read. */
   | {
       at: number;
       kind: "ready";
       data: MobileNotifications;
       grants: OutboxGrant[];
     }
-  /** `reason` is the underlying failure, shown as the error panel's one fact —
-   *  the panel's body never changes, because what is safe does not. */
+  /** `reason` is the error panel's one fact; its body never changes. */
   | { kind: "error"; reason: string; unpaired: boolean };
 
 export interface ApprovalsController {
@@ -66,11 +53,10 @@ export interface ApprovalsController {
   state: OpsState;
   data: MobileNotifications | undefined;
   grants: readonly OutboxGrant[];
-  /** The clock every relative phrase on the page is measured from. */
   now: number;
   waiting: number;
   refreshing: boolean;
-  /** The id of the one decision currently mid-flight; its verb is withdrawn. */
+  /** Id of the decision mid-flight; its verb is withdrawn. */
   busyId: string | undefined;
   actionError: string | undefined;
   refresh: () => Promise<void>;
@@ -118,9 +104,7 @@ async function read(apply: (next: ApprovalsLoad) => void): Promise<void> {
       apply({ kind: "error", reason: NOT_PAIRED, unpaired: true });
       return;
     }
-    // Archived notices ride along on the same read: the page shows them in
-    // their own section rather than behind a filter, so a second request for
-    // them would be a second answer about the same queue.
+    // Archived notices ride the same read; their section needs no second fetch.
     const data = await getNotifications(true);
     apply({ at: Date.now(), data, grants: await readGrants(), kind: "ready" });
   } catch (error) {
@@ -128,10 +112,9 @@ async function read(apply: (next: ApprovalsLoad) => void): Promise<void> {
   }
 }
 
-/** The reconnection ceremony, in-app: the host app must stay active so the
- *  phone-local tunnel keeps serving the gateway's own OAuth callback, and so
- *  the Assist return resolves back into THIS process. See
- *  `lib/connection-reauth.ts`. */
+/** In-app reconnection: the host app must stay active so the phone-local
+ *  tunnel serves the gateway's OAuth callback and the Assist return resolves
+ *  into THIS process. See `lib/connection-reauth.ts`. */
 async function reauthorize(connectionId: string): Promise<void> {
   const authUrl = await beginNotificationsConnectionAuthorization(connectionId);
   const outcome = classifyAuthSession(
@@ -141,9 +124,7 @@ async function reauthorize(connectionId: string): Promise<void> {
   if (failure) throw new Error(failure);
   if (outcome.kind === "assist-handoff")
     await completeNotificationsConnectionAuthorization(outcome.handoff);
-  // `closed` needs nothing: a BYO ceremony finishes at the gateway's own
-  // callback, and the caller re-reads either way — an authorized connection
-  // stops being a decision.
+  // `closed` needs nothing: BYO finishes at the gateway; caller re-reads.
 }
 
 async function revoke(grantId: string): Promise<void> {
@@ -159,8 +140,8 @@ export function useApprovals(): ApprovalsController {
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | undefined>();
-  // A ref, not state: the guard has to hold WITHIN a tick. Two taps before
-  // React re-renders would otherwise stage two decisions about one item.
+  // A ref, not state: the guard must hold WITHIN a tick — two taps before a
+  // re-render would otherwise stage two decisions about one item.
   const inFlight = useRef(false);
 
   useEffect(() => {
@@ -244,8 +225,7 @@ export function useApprovals(): ApprovalsController {
       act(itemId, () => decideNotificationsOutbox(itemId, "discard")),
     grants: load.kind === "ready" ? load.grants : [],
     load,
-    // Nothing that is not `ready` shows a time, so the epoch is a fine stand-in
-    // — and it keeps the clock out of the render path entirely.
+    // Nothing not `ready` shows a time; epoch keeps clocks out of render.
     now: load.kind === "ready" ? load.at : 0,
     readNotice: (noticeId) =>
       act(noticeId, () => updateMobileNotice(noticeId, "read")),

@@ -1,11 +1,9 @@
 /*
- * Pure core for GATEWAY_TEST_CONNECTION (#382) — the ConnectFlow
- * "handshake ladder". Every raw signal (a fetch outcome, a decoded ticket)
- * is folded into `ConnectivityStage`s here; `gateway-connectivity.ts` owns
- * the actual network calls and threads their results through these fold
- * functions in sequence, skipping later stages once an earlier one fails
- * (the "ladder" never runs a step whose precondition didn't pass). Same
- * "electron-free pure core" split as `gateway-pairing-core.ts`.
+ * Pure core for GATEWAY_TEST_CONNECTION (#382) — the ConnectFlow handshake
+ * ladder. Raw signals fold into `ConnectivityStage`s here;
+ * `gateway-connectivity.ts` owns the network calls, folding in sequence,
+ * skipping stages once one fails. Same electron-free split as
+ * `gateway-pairing-core.ts`.
  */
 
 import {
@@ -88,7 +86,7 @@ function s(
   return stage(id, STAGE_LABEL[id], status, detail);
 }
 
-/** Assemble the final report: `ok` iff no stage failed; `error` carries the
+/** Assemble the report: `ok` iff no stage failed; `error` carries the
  *  caller-supplied code for the first failure (undefined when `ok`). */
 export function assembleReport(
   stages: ConnectivityStage[],
@@ -113,15 +111,11 @@ export function assembleReport(
 // ── url / gateway kind: reach → identify → auth ─────────────────────────
 
 /**
- * Fold a `handshakeGateway` result into the reach/identify/auth trio.
- * `handshakeGateway` itself collapses every non-2xx response into
- * `reason: 'unreachable'` (see its doc comment), but its `detail` string
- * still carries `HTTP <status>` for a response that DID arrive — that's the
- * one thread we pull on to split "never got a response" (reach fails) from
- * "got a 401/403" (auth fails) from "got some other bad response" (identify
- * fails, host is up). A genuine network exception's detail is the raw error
- * message and never matches `HTTP <digits>`, so it falls into the true
- * reach-failure branch.
+ * Fold a `handshakeGateway` result into reach/identify/auth. It collapses all
+ * non-2xx into `reason: 'unreachable'` but its `detail` still carries
+ * `HTTP <status>` when a response DID arrive — the thread pulled here to split
+ * no-response (reach) from 401/403 (auth) from other bad responses (identify).
+ * Exceptions never match `HTTP <digits>` → true reach-failure.
  */
 export function foldUrlIdentityStages(handshake: HandshakeResult): {
   stages: ConnectivityStage[];
@@ -148,8 +142,7 @@ export function foldUrlIdentityStages(handshake: HandshakeResult): {
       : Number(statusMatch.groups.status);
 
   if (status === undefined) {
-    // No HTTP response reached us at all (or the body wasn't even parseable
-    // JSON — `malformed` with no HTTP-status detail reads the same way here).
+    // No HTTP response reached us (unparseable body reads the same way here).
     if (handshake.reason === "unreachable") {
       return {
         stages: [
@@ -215,9 +208,8 @@ export function foldVaultsStageFromHttp(result: ListGatewayVaultsResult): {
   };
 }
 
-/** A `reach` failure that never got as far as a fetch at all — the
- *  `assertDirectUrlAllowed` guardrail rejecting a plain-http-to-public-host
- *  URL before any network call is made. */
+/** A `reach` failure before any fetch — the `assertDirectUrlAllowed`
+ *  guardrail rejecting plain-http-to-public-host. */
 export function reachGuardFailureStages(message: string): ConnectivityStage[] {
   return [
     s("reach", "fail", message),
@@ -229,13 +221,10 @@ export function reachGuardFailureStages(message: string): ConnectivityStage[] {
 // ── ticket kind: decode only ────────────────────────────────────────────
 
 /**
- * Pure client-side ticket decode + expiry check — no dial, per the design
- * doc ("the redemption itself is the live test"). `gatewayEndpointId` is
- * the ticket's raw iroh EndpointTicket string (`payload.gw`), not a parsed
- * EndpointId: decoding that requires the iroh native binding, which this
- * client-side-only check has no other reason to load, and the raw ticket
- * string already serves the same practical purpose (a stable per-gateway
- * identifier — it's exactly what `findReusableProfile` dedupes profiles on).
+ * Pure client-side decode + expiry check — no dial ("the redemption itself is
+ * the live test"). `gatewayEndpointId` is the raw iroh EndpointTicket string,
+ * not a parsed EndpointId: that needs the iroh native binding this check has
+ * no other reason to load; the raw string already serves as the stable id.
  */
 export function buildTicketReport(
   rawTicket: string,

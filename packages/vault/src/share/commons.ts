@@ -61,8 +61,7 @@ export interface CommonsMemberInput {
   capability: CommonsCapability;
   /** Invitation without this seat stays pending and compiles no data. */
   vault?: ShareVaultRef;
-  /** Host-only replica executor for command-tail replay (#750). Never
-   * serialized, never reachable from member or app code. */
+  /** Host-only replica executor (#750): never serialized, never member-reachable. */
   applyCommand?: CommonsReplicaExecutor;
 }
 
@@ -212,8 +211,8 @@ export function createCommonsGrant(
       .get(circleId) as { owner_party_id: string } | undefined;
     if (!selectedCircle)
       throw new Error(`commons circle ${circleId} is not available`);
-    // Named audiences are reusable, but only by their authority. A projected
-    // circle in a member seat must never become a new grant's control plane.
+    // Named audiences are reusable only by their authority; a projected circle
+    // in a member seat never becomes a new grant's control plane.
     if (selectedCircle.owner_party_id !== input.ownerPartyId)
       throw new Error("commons requires an owner-controlled circle");
     if (
@@ -347,8 +346,8 @@ export function createCommonsGrant(
   return readCommonsGrant(input.origin, grantId);
 }
 
-/** Commons carries source domain rows and source blobs, never another seat's
- * model output; each seat's projection-ingest hooks enqueue its own. */
+/** Commons carries source domain rows and source blobs only — each seat's
+ *  projection-ingest hooks enqueue its own derivatives. */
 export function commonsClosure(
   origin: DatabaseSync,
   originVaultId: string,
@@ -370,8 +369,8 @@ export function commonsClosure(
   };
 }
 
-/** The honest full-copy footprint shown before acceptance. Domain rows are
- * their exact UTF-8 wire representation; content bytes count once per sha. */
+/** The honest full-copy footprint shown before acceptance: exact UTF-8 wire
+ *  rows; content bytes once per sha. */
 export function commonsClosureSizeBytes(closure: WireClosure): number {
   const blobSizes = new Map<string, number>();
   for (const blob of closure.blobs) blobSizes.set(blob.sha256, blob.size);
@@ -381,28 +380,24 @@ export function commonsClosureSizeBytes(closure: WireClosure): number {
   );
 }
 
-/** Fail-closed ceiling when a grant declares no maximum: without one a member
- * could grow the co-owned closure without bound (#731). Four gibibytes is
- * generous for a shared album/folder/ledger yet finite. */
+/** Fail-closed ceiling when a grant declares none (#731) — generous yet finite. */
 export const COMMONS_DEFAULT_MAX_SIZE_BYTES = 4 * 1024 * 1024 * 1024;
 
-/** Verbose ops retained past the checkpoint before a lagging member must
- * re-bootstrap from the snapshot, so one laggard cannot stall compaction. */
+/** Verbose ops kept past the checkpoint so one laggard cannot stall compaction. */
 export const COMMONS_OP_RETENTION_FLOOR = 256;
 
-/** Ops between stored checkpoints (#750 invariant 7). The full closure is
- * serialized onto the grant row only when a checkpoint is CUT, never on every
- * compile, so one write does not rewrite `checkpoint_json` for the commons. */
+/** Ops between stored checkpoints (#750 invariant 7); serialized onto the
+ *  grant row only when a checkpoint is CUT, never per compile. */
 export const COMMONS_CHECKPOINT_INTERVAL = 32;
 
-/** Store the full closure + sequence on the grant row and attest it. The ONLY
- * writer of `checkpoint_json` outside a projected control frame (#750). */
+/** Store + attest the full closure on the grant row. ONLY writer of
+ *  `checkpoint_json` outside a projected control frame (#750). */
 export function checkpointCommonsState(input: {
   steward: ShareVaultRef;
   stewardVaultId: string;
   grantId: string;
-  /** Thunked on purpose: building the closure is the O(commons size) walk this
-   * design exists to avoid, so it must not run when no checkpoint is due. */
+  /** Thunked: building it is the O(commons size) walk to skip when no
+   *  checkpoint is due. */
   closure: () => WireClosure;
   now: string;
   force?: boolean;
@@ -449,8 +444,7 @@ export class CommonsMaxSizeError extends Error {
   }
 }
 
-/** Call before appending/committing the operation, so a write crossing the
- * declared ceiling rolls the domain row and journal back too. */
+/** Call BEFORE appending/committing, so an over-ceiling write rolls back too. */
 export function assertCommonsWithinMax(
   steward: DatabaseSync,
   stewardVaultId: string,
@@ -471,8 +465,8 @@ export interface CompileCommonsInput {
   grantId: string;
   seats: readonly CommonsMemberInput[];
   now: string;
-  /** Skip command-tail replay and re-project every seat from the closure —
-   * for crash-repair fan-out and restore, never for ordinary compiles. */
+  /** Skip tail replay and re-project every seat — crash-repair/restore only,
+   *  never ordinary compiles. */
   forceFullProjection?: boolean;
 }
 
@@ -503,9 +497,8 @@ export function acknowledgeCommonsSeatCursor(input: {
     .run(input.grantId, input.memberVaultId, input.sequence, input.now);
 }
 
-/** Bound the verbose op log at the minimum current member acknowledgement. A
- * complete checkpoint covers every pruned sequence, and signed replay decisions
- * move into the compact nonce ledger before their command rows leave. */
+/** Bound the verbose op log at the minimum current member acknowledgement;
+ *  signed replay decisions move into the compact nonce ledger first. */
 export function compactCommonsOperations(
   steward: DatabaseSync,
   grantId: string,
@@ -516,8 +509,8 @@ export function compactCommonsOperations(
       .prepare("SELECT COUNT(*) AS n FROM share_commons_op WHERE grant_id = ?")
       .get(grantId) as { n: number }
   ).n;
-  // A checkpoint every command would churn the compact ledgers; mount/tests may
-  // force an immediate pass when proving recovery semantics.
+  // Checkpointing every command churns the compact ledgers; force is for
+  // tests/mount proving recovery.
   if (!force && verboseCount < 32) return 0;
   const grant = readCommonsGrant(steward, grantId);
   const expected = steward
@@ -542,12 +535,11 @@ export function compactCommonsOperations(
         WHERE c.grant_id = ?`
     )
     .get(grantId) as { n: number; minimum: number | null };
-  // Prune verbose ops only to a point every replica can still recover from: the
-  // checkpoint covers everything pruned, so a too-far-behind member
-  // re-bootstraps instead of tailing. A current member that never established a
-  // cursor must NOT pin the tail forever (the old all-members-advanced gate
-  // stalled here); advanced members hold the tail back to their slowest cursor
-  // but never past the bounded floor.
+  // Prune only to a point every replica can recover from: the checkpoint covers
+  // everything pruned, so a too-far-behind member re-bootstraps instead of
+  // tailing. A current member with no cursor must NOT pin the tail forever (the
+  // old all-members-advanced gate stalled here); advanced members hold the tail
+  // to their slowest cursor, never past the bounded floor.
   const laggards = expected.n > 0 && cursors.n < expected.n;
   const advancedFloor =
     cursors.n === 0 ? grant.checkpointSequence : (cursors.minimum ?? 0);
@@ -889,19 +881,18 @@ function projectRoster(
     .run(grant.grantId, grant.lastSequence, now);
 }
 
-/** Idempotent. An invite with no vault is represented but receives no rows;
- * joining later is snapshot-at-current-sequence plus tail. */
+/** Invites without a vault are represented but receive no rows; joining later
+ *  is snapshot-at-current-sequence plus tail. */
 export function compileCommons(
   input: CompileCommonsInput
 ): CompiledCommonsSeat[] {
   const grant = readCommonsGrant(input.steward.vault, input.grantId);
   if (grant.revokedAt)
     throw new Error(`commons grant ${input.grantId} is revoked`);
-  // Lazy on purpose (#750 invariant 7): reading and projecting the whole
-  // closure is the O(commons size) cost this compile exists to avoid, so the
-  // declared-ceiling check rides inside the same thunk rather than forcing the
-  // walk. The ceiling still fails closed on every WRITE — `executeCommonsCommand`
-  // asserts it inside the command's own transaction.
+  // Lazy (#750 invariant 7): reading/projecting the whole closure is the
+  // O(commons size) cost this compile exists to avoid, so the ceiling check
+  // rides inside the thunk. It still fails closed on every WRITE via
+  // `executeCommonsCommand`'s in-transaction assert.
   let loadedClosure: WireClosure | undefined;
   const closure = (): WireClosure => {
     if (!loadedClosure) {
@@ -926,9 +917,8 @@ export function compileCommons(
     }
     if (seat.vault.vault === input.steward.vault) {
       projectRoster(seat.vault.vault, input.steward.vault, grant, input.now);
-      // The current source becomes an ordinary member seat after a steward
-      // transfer, so record the managed root here too: the successor must be
-      // able to REPLACE this seat's changing snapshot, not merely dedupe it.
+      // After a steward transfer this seat's root must be REPLACEABLE by the
+      // successor, not merely deduped: record the managed lineage root here too.
       seat.vault.vault
         .prepare(
           `INSERT INTO share_commons_lineage
@@ -950,10 +940,9 @@ export function compileCommons(
         )
         .get(grant.stewardPartyId) as { vault_id: string } | undefined;
       if (successorVault && successorVault.vault_id !== input.stewardVaultId) {
-        // Mid-handoff the old steward is still the readable source for the
-        // final snapshot, but ownership of later writes has moved. Marking the
-        // root successor-managed lets the next compile replace it; ordinary
-        // unshare still refuses authored roots.
+        // Mid-handoff the old steward stays readable for the final snapshot but
+        // no longer owns writes; marking successor-managed lets the next compile
+        // replace it. Ordinary unshare still refuses authored roots.
         seat.vault.vault
           .prepare(
             `INSERT INTO core_share_origin
@@ -987,8 +976,8 @@ export function compileCommons(
             deduped: true,
           },
         ],
-        // The steward reads its own bytes; enumerating the closure just to say
-        // so would force the walk the replay path exists to skip.
+        // The steward reads its own bytes; enumerating would force the walk
+        // replay exists to skip.
         blobs: [],
       });
       continue;
@@ -1000,8 +989,8 @@ export function compileCommons(
       )
       .get(grant.grantId, grant.containerType, grant.containerId);
     if (retained) {
-      // A retained root is now receiver-authored: keep control truth current,
-      // but never re-project or re-lineage it on later steward writes.
+      // Retained roots are receiver-authored: refresh control truth, but never
+      // re-project or re-lineage them on later steward writes.
       projectRoster(seat.vault.vault, input.steward.vault, grant, input.now);
       results.push({
         partyId: seat.partyId,
@@ -1019,26 +1008,23 @@ export function compileCommons(
       });
       continue;
     }
-    // The ordinary placement projector is idempotent for a ONE-TIME copy, so an
-    // existing root means "already placed". A commons is a changing complete
-    // closure, so replace this grant's prior projection first; lineage confines
-    // the scrub to rows this grant introduced.
+    // The one-time placement projector is idempotent, so an existing root means
+    // "already placed" — but a commons CHANGES, so replace this grant's prior
+    // projection first; lineage confines the scrub to rows it introduced.
     const hasProjection = seat.vault.vault
       .prepare(
         "SELECT 1 AS n FROM share_commons_lineage WHERE grant_id = ? LIMIT 1"
       )
       .get(grant.grantId);
-    // Command-tail replay (#750 invariant 7): a seat holding a projection whose
-    // cursor sits on the retained op chain RE-EXECUTES the operations it missed
-    // instead of receiving one. Its unchanged items and seat-local derived rows
-    // (OCR/embeddings/FTS) are untouched and the steward never walks the
-    // closure. ANY replay failure falls back to the full scrub + re-project
-    // below, which stays the one destructive path.
+    // Command-tail replay (#750 invariant 7): a seat whose cursor sits on the
+    // retained op chain RE-EXECUTES missed operations instead of receiving one.
+    // Unchanged items and seat-local derived rows are untouched; the steward
+    // never walks the closure. ANY replay failure falls back to the full
+    // scrub + re-project below — still the one destructive path.
     if (!input.forceFullProjection && hasProjection && seat.vaultId) {
-      // The SEAT's own cursor row, never the steward's belief about it: a
-      // member vault restored from an old backup carries its real, rewound
-      // cursor, and replaying from the wrong anchor applies a command to state
-      // it was never authored against.
+      // The SEAT's own cursor, never the steward's belief: a member restored
+      // from an old backup carries its real rewound cursor, and replaying from
+      // the wrong anchor applies commands to state never authored against.
       const cursor = seat.vault.vault
         .prepare(
           `SELECT sequence FROM share_commons_cursor
@@ -1059,10 +1045,9 @@ export function compileCommons(
           headSequence: grant.lastSequence,
         });
       if (replayable) {
-        // Bytes claimed by sha cannot be re-derived from a command's input the
-        // way ids can, so they travel first. Placement is filesystem-idempotent
-        // and independent of the domain rows, so it stays outside the
-        // transaction below.
+        // Bytes claimed by sha cannot be re-derived from command input like ids
+        // can, so they travel first. Placement is filesystem-idempotent and
+        // independent of domain rows; keep it outside the transaction below.
         const manifest = commonsTailBlobs(input.steward.vault, tail);
         const tailBlobs = manifest.map((entry) => ({
           sha256: entry.sha256,
@@ -1116,8 +1101,8 @@ export function compileCommons(
         }
       }
     }
-    // Filesystem-idempotent and independent of the domain rows, so it stays
-    // outside the DB transaction below.
+    // Filesystem-idempotent, independent of domain rows: outside the
+    // transaction below.
     const blobs = closure().blobs.map((entry) => ({
       sha256: entry.sha256,
       mode: placeBlob(
@@ -1126,18 +1111,17 @@ export function compileCommons(
         entry.sha256
       ),
     }));
-    // Scrub + re-project + roster + lineage are ONE atomic unit: a crash
-    // between the destructive scrub and the re-projection must never leave the
-    // commons deleted on disk. Savepoint when the caller already owns the seat
-    // transaction, so BEGIN is never double-opened.
+    // Scrub + re-project + roster + lineage are ONE atomic unit: a crash between
+    // scrub and re-projection must not leave the commons deleted on disk.
+    // Savepoint when the caller owns the seat transaction; never double-BEGIN.
     const seatDb = seat.vault.vault;
     const nested = seatDb.isTransaction;
     seatDb.exec(nested ? "SAVEPOINT compile_commons_seat" : "BEGIN IMMEDIATE");
     let projection: ReturnType<typeof projectShareClosure>;
     try {
       if (hasProjection) {
-        // The projected grant references the projected circle, so drop that
-        // local roster snapshot first; `projectRoster` reinstates it.
+        // The projected grant references the projected circle: drop that local
+        // roster snapshot first; `projectRoster` reinstates it.
         seatDb
           .prepare("DELETE FROM share_circle_grant WHERE grant_id = ?")
           .run(grant.grantId);
@@ -1192,10 +1176,9 @@ export function compileCommons(
         sequence: grant.lastSequence,
         now: input.now,
       });
-  // The full closure lands on the grant row only when a checkpoint is DUE —
-  // every COMMONS_CHECKPOINT_INTERVAL ops, or the first compile — never on
-  // every command (#750 defect c). Between checkpoints the stored snapshot
-  // stays put as the seat's proof anchor.
+  // The full closure lands on the grant row only when a checkpoint is DUE,
+  // never per command (#750 defect c); between checkpoints the stored snapshot
+  // stays as the seat's proof anchor.
   checkpointCommonsState({
     steward: input.steward,
     stewardVaultId: input.stewardVaultId,
@@ -1229,8 +1212,8 @@ export interface AppendCommonsOpInput {
   now: string;
 }
 
-/** Every append goes through the hash chain (#731): the op's fields and its
- * predecessor's hash decide its own, so no writer can slip in an unchained row. */
+/** Every append goes through the hash chain (#731): fields + predecessor hash
+ *  decide the op's own, so no writer slips in an unchained row. */
 function chainFields(
   input: AppendCommonsOpInput,
   sequence: number
@@ -1281,8 +1264,8 @@ export function appendCommonsOperationInTransaction(
   return sequence;
 }
 
-/** Mutate control state and sequence the matching control event in the same
- * log as member commands, atomically. */
+/** Mutate control state and sequence the control event atomically, in the
+ *  same log as member commands. */
 export function mutateCommonsControl(
   input: AppendCommonsOpInput & {
     apply: (steward: DatabaseSync, grant: CommonsGrantRecord) => void;
@@ -1308,9 +1291,9 @@ export interface CommonsCommandDecision {
   sequence: number;
 }
 
-/** Deliberately does NOT apply the command allowlist: the normal app/automation
- * door must first recognize an undeclared in-container write so it can refuse,
- * rather than fall through to a private local mutation. */
+/** Deliberately skips the command allowlist: the normal door must first
+ *  recognize an undeclared in-container write to refuse it, not fall through
+ *  to a private local mutation. */
 export function commonsGrantForCommand(
   db: DatabaseSync,
   command: string,
@@ -1325,8 +1308,8 @@ export function commonsGrantForCommand(
   return undefined;
 }
 
-/** Each resolution kind is a fixed query — the routing decision was made by
- * the table in `commons-routing.ts`, never by inspecting the command string. */
+/** Fixed query per resolution kind — routing was decided by the table in
+ *  `commons-routing.ts`, never by inspecting the command string. */
 function resolveCommonsContainer(
   db: DatabaseSync,
   declared: CommonsCommandRoute,
@@ -1427,15 +1410,12 @@ function docsFolderContains(input: {
   return Boolean(row);
 }
 
-/** Prefix on a `staleContextConflict` refusal (#731 goal 1): a distinct
- * classification callers pattern-match, instead of one refusal bucket. */
+/** Distinct classification for `staleContextConflict` refusals (#731 goal 1). */
 export const STALE_CONTEXT_REASON_PREFIX = "stale-context:";
 
-/** Keys whose string value names a row this command reasons about, DERIVED
- * from the declared routing vocabulary (#750) rather than a second hand-kept
- * list that could drift. The container's own id key is filtered by VALUE below
- * instead: every op in a grant's log shares it, so matching on it would flag
- * nearly every pair of commands (#731 goal 1 anti-goal). */
+/** Row keys DERIVED from the declared routing vocabulary (#750), never a
+ *  hand-kept list that could drift. The container's own id key is filtered by
+ *  VALUE below: every op shares it, so matching on it flags nearly every pair. */
 const STALE_CONTEXT_ROW_KEYS = new Set(
   COMMONS_CONTAINER_KEYS.map((key) => key.inputKey)
 );
@@ -1449,9 +1429,8 @@ const STALE_CONTEXT_PARTY_KEYS = new Set([
   "to_party",
 ]);
 
-/** Control ops naming a party added, removed, or recapabilitied.
- * `member_joined` is excluded: it records a vault linking to a membership that
- * was already current, so it never conflicts. */
+/** Roster kinds naming a party changed; `member_joined` excluded — it records
+ *  linking to an already-current membership, so never conflicts. */
 const STALE_CONTEXT_ROSTER_KINDS = new Set([
   "member_added",
   "member_removed",
@@ -1480,9 +1459,8 @@ function collectStaleContextIds(
 }
 
 /** Every row/party a command's input concretely names. The SAME extraction runs
- * on the command being authorized and on each historical op's stored input —
- * that symmetry is what makes `staleContextConflict`'s overlap test mean
- * anything. The container's own id is never a signal. */
+ *  on the authorizing command and each historical op — that symmetry makes the
+ *  overlap test mean anything. The container id is never a signal. */
 function staleContextTargets(
   containerId: string,
   value: unknown
@@ -1494,9 +1472,10 @@ function staleContextTargets(
 }
 
 /**
- * Stale-context (#731 goal 1). Do not refuse merely because something executed in between.
- * Refuse only when an intervening executed op names the same row or a referenced party.
- * Compacted roster changes conflict conservatively (partyId unrecoverable); compacted ordinary commands do not.
+ * Stale-context (#731 goal 1): never refuse merely because something executed
+ * in between; refuse only when an intervening executed op names the same row or
+ * referenced party. Compacted roster changes conflict conservatively (partyId
+ * unrecoverable); compacted ordinary commands do not.
  */
 function staleContextConflict(input: {
   steward: DatabaseSync;
@@ -1548,7 +1527,7 @@ function staleContextConflict(input: {
   return undefined;
 }
 
-/** Named fault for a re-minted member identity (#750) — not "invalid vault signature". Cure is re-invitation. */
+/** Named fault for a re-minted member identity (#750) — cure is re-invitation. */
 export const COMMONS_MEMBER_IDENTITY_CHANGED =
   "commons_member_identity_changed";
 
@@ -1585,9 +1564,8 @@ function commandRefuses(input: {
   command: string;
   commandInput: unknown;
   memberSignature?: CommonsMemberSignature;
-  /** The member vault's CURRENT identity key as proven by the transport
-   * (base64). Compared against the pinned binding so a re-mint is NAMED rather
-   * than reported as a bad signature. */
+  /** The member vault's CURRENT identity key per transport; compared to the
+   *  pinned binding so a re-mint is NAMED, not "bad signature". */
   presentedVaultPublicKey?: string;
   basedOnSequence?: number;
 }): string | undefined {
@@ -1602,10 +1580,8 @@ function commandRefuses(input: {
   if (!member) return "the actor is not a member of this commons";
   if (member.capability !== "read+write")
     return "this commons is read-only for this member";
-  // Identity is checked BEFORE what the command says: if the seat is not the
-  // vault this commons pinned, nothing it sends can be attributed to it, and
-  // the person deserves "re-invite this member" rather than whatever the
-  // command would otherwise have been refused for (#750).
+  // Identity BEFORE command content: an unpinned seat cannot be attributed,
+  // and the person deserves "re-invite this member" (#750).
   if (input.presentedVaultPublicKey && input.memberSignature) {
     const pinned = pinnedMemberVaultKey(
       input.steward,
@@ -1724,8 +1700,7 @@ function priorSignedDecision(input: {
 }): CommonsCommandDecision | undefined {
   if (!input.memberSignature) return undefined;
   // Idempotency holds only when a reused nonce names the SAME command; a
-  // different command/input under a replayed nonce is a collision, not a retry,
-  // and must refuse explicitly instead of returning the earlier outcome.
+  // different command under a replayed nonce is a collision — refuse explicitly.
   const op = input.steward
     .prepare(
       `SELECT sequence, command, input_json, outcome, reason
@@ -1766,9 +1741,8 @@ function priorSignedDecision(input: {
       sequence: op.sequence,
     };
   }
-  // Past compaction only the compact replay decision survives, so command and
-  // input can no longer be re-compared; the signature that minted this nonce
-  // already bound it to one command.
+  // Past compaction only the compact replay decision survives; the signature
+  // that minted this nonce already bound it to one command.
   const replay = input.steward
     .prepare(
       `SELECT sequence, outcome, reason FROM share_commons_replay
@@ -1805,9 +1779,8 @@ export interface ExecuteCommonsCommandInput {
   seats: readonly CommonsMemberInput[];
   memberSignature?: CommonsMemberSignature;
   presentedVaultPublicKey?: string;
-  /** The grant sequence the actor had projected locally when this command was
-   * composed (#731 goal 1). Optional: the stale-context check runs only when a
-   * caller actually supplies it. */
+  /** Grant sequence the actor had projected when composing (#731 goal 1);
+   *  stale-context check runs only when supplied. */
   basedOnSequence?: number;
   invocationId?: string;
   intentId?: string;
@@ -1820,9 +1793,8 @@ export interface ExecuteCommonsCommandResult {
   seats?: CompiledCommonsSeat[];
 }
 
-/** A roster mutation changes EVERY active Commons backed by that circle, not
- * only the container the command arrived through. Reconcile each grant's consent
- * state and sequence the same control fact before the vault transaction commits. */
+/** A roster mutation changes EVERY active Commons on that circle, not just the
+ *  addressed container. Reconcile each grant before the transaction commits. */
 export function sequenceCommonsCircleCommandInTransaction(input: {
   steward: DatabaseSync;
   primaryGrantId: string;
@@ -1918,10 +1890,9 @@ export function executeCommonsCommand(
   });
   if (prior) return { decision: prior };
   const grant = readCommonsGrant(input.steward.vault, input.grantId);
-  // Fork guard (#731): only the vault that currently OWNS the grant may
-  // authorize and sequence a write. After a steward transfer an intent still
-  // addressed to the old steward would otherwise be appended to its orphaned
-  // log — an acknowledged-then-lost write. Refuse without appending.
+  // Fork guard (#731): only the vault currently OWNING the grant authorizes.
+  // Post-transfer intents to the old steward would append to its orphaned log;
+  // refuse without appending.
   const localOwner = input.steward.vault
     .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
     .get() as { owner_party_id: string | null } | undefined;
@@ -1969,9 +1940,8 @@ export function executeCommonsCommand(
     };
   }
   const executeAndSequence = () => {
-    // Seeding the steward's own execution with the replica key is what lets
-    // every member re-execute the operation and mint byte-identical row ids
-    // (#750 invariant 7) — the whole reason catch-up can ship commands.
+    // Seeding with the replica key lets members re-execute and mint
+    // byte-identical row ids (#750 invariant 7) — why catch-up can ship commands.
     const outcome = input.gateway.invokeCommonsCanonical(
       input.credential,
       {
@@ -2061,9 +2031,9 @@ export function executeCommonsCommand(
     seats: input.seats,
     now: input.now,
   });
-  // Explicit Commons calls compile the addressed grant synchronously; sibling
-  // grants changed by a reusable circle are picked up by the host's
-  // reconciliation callback, their truth already durable in the same transaction.
+  // Addressed grant compiles synchronously; siblings changed by a reusable
+  // circle are picked up by the host's reconciliation callback, already durable
+  // in the same transaction.
   void reconciledGrantIds;
   if (input.intentId) {
     for (const seat of input.seats) {
@@ -2079,8 +2049,8 @@ export function executeCommonsCommand(
   return { decision: { accepted: true, sequence }, outcome, seats };
 }
 
-/** `expired`/`cancelled` are settled states like `denied` (#731 goal 2): once
- * reached, an intent never re-appears as pending/parked. */
+/** `expired`/`cancelled` are settled like `denied` (#731 goal 2): never
+ *  re-appear as pending/parked. */
 export type CommonsIntentStatus =
   | "queued"
   | "parked"
@@ -2089,10 +2059,8 @@ export type CommonsIntentStatus =
   | "expired"
   | "cancelled";
 
-/** How long a parked intent waits on an unreachable steward before settling as
- * `expired` (#731 goal 2). Two weeks is generous for a genuinely offline
- * steward while still bounding how far a member's model can drift; composing
- * again re-anchors `basedOnSequence` for goal 1. */
+/** Parked-intent wait on an unreachable steward before `expired` (#731 goal 2);
+ *  composing again re-anchors `basedOnSequence` for goal 1. */
 export const COMMONS_INTENT_PARK_HORIZON_MS = 14 * 24 * 60 * 60 * 1000;
 
 export function queueCommonsIntent(input: {
@@ -2105,17 +2073,15 @@ export function queueCommonsIntent(input: {
   stewardLabel?: string;
   now: string;
 }): string {
-  // Opportunistic maintenance: a new submission is a natural moment to settle
-  // this seat's long-parked intents, so they stop crowding the overlay even
-  // without a dedicated background sweep (#731 goal 2).
+  // Opportunistic maintenance: settle long-parked intents at submission, so
+  // they stop crowding the overlay without a dedicated sweep (#731 goal 2).
   expireParkedCommonsIntents({ seat: input.seat, now: input.now });
   const intentId = input.intentId ?? uuidv7();
-  // The sequence this seat has projected right now — live for the steward's own
-  // seat, or whatever the last successful pull left for a member seat. Either
-  // way this IS "the sequence the member had applied when the intent was
-  // formed" (#731 goal 1), so no caller supplies it and it cannot be
-  // stale-by-construction. A seat with no local grant row has no baseline; 0 is
-  // the honest answer for an unobserved history — everything since looks stale.
+  // The seat's projected sequence right now — live for the steward's own seat,
+  // else the last successful pull. This IS "the sequence applied when formed"
+  // (#731 goal 1), so no caller supplies it and it cannot be stale by
+  // construction. No local grant row ⇒ 0: an unobserved history is honestly
+  // all-stale.
   const localGrant = input.seat
     .prepare(`SELECT last_sequence FROM share_circle_grant WHERE grant_id = ?`)
     .get(input.grantId) as { last_sequence: number } | undefined;
@@ -2141,8 +2107,8 @@ export function queueCommonsIntent(input: {
   return intentId;
 }
 
-/** Read back the baseline `queueCommonsIntent` recorded, so a caller holding
- * only the intentId can forward it as `basedOnSequence` without re-deriving it. */
+/** Read back `queueCommonsIntent`'s baseline so callers can forward it from
+ *  just the intentId. */
 export function readCommonsIntentBasedOnSequence(
   seat: DatabaseSync,
   intentId: string
@@ -2170,9 +2136,8 @@ export function settleCommonsIntent(input: {
     .run(input.status, input.reason ?? null, input.now, input.intentId);
 }
 
-/** Bounded life for a parked intent (#731 goal 2): settles every `parked`
- * intent older than the horizon to `expired`, so the peer sweep's
- * `status IN ('queued','parked')` retry leaves it alone. Idempotent. */
+/** Bounded life for parked intents (#731 goal 2): settle past-horizon `parked`
+ *  rows to `expired`, out of the peer retry sweep. Idempotent. */
 export function expireParkedCommonsIntents(input: {
   seat: DatabaseSync;
   now: string;
@@ -2194,12 +2159,10 @@ export function expireParkedCommonsIntents(input: {
   );
 }
 
-/** Member-initiated cancel for an intent that has not yet executed (#731 goal
- * 2). A genuine race is possible, so the WHERE clause IS the guard, not a prior
- * read: cancelling only moves a still-open row to `cancelled`, and
- * `settleCommonsIntent`'s later unconditional update — the steward's real
- * answer — always wins, so a lost race resolves to the true outcome. The caller
- * reads the status back to tell "cancelled" from "lost the race". */
+/** Member-initiated cancel before execution (#731 goal 2). A genuine race is
+ *  possible, so the WHERE clause IS the guard: only still-open rows move to
+ *  `cancelled`, and `settleCommonsIntent`'s later unconditional update — the
+ *  steward's real answer — always wins. Read status back to tell them apart. */
 export function cancelCommonsIntent(input: {
   seat: DatabaseSync;
   intentId: string;
@@ -2222,10 +2185,9 @@ export function cancelCommonsIntent(input: {
   return { status: row.status, cancelled: row.status === "cancelled" };
 }
 
-/** Receiver-owned "Save to my vault": promote the whole resident grant closure
- * containing the clicked root. Bootstrap/revoke work grant-wide, so a root-only
- * detach would later scrub descendants and leave a hollow folder or album. A
- * durable marker makes retries idempotent. */
+/** Receiver-side "Save to my vault": promote the whole resident grant closure.
+ *  Root-only detach would later scrub descendants (hollow folder/album); a
+ *  durable marker makes retries idempotent. */
 export function retainCommonsItem(input: {
   seat: DatabaseSync;
   itemType: ShareableItemType;
@@ -2274,9 +2236,8 @@ export function retainCommonsItem(input: {
     itemIds: [input.itemId],
     crossOwner: true,
   });
-  // Save is the receiver-side give gesture: re-run the shipped one-shot
-  // projector first (dedup keeps physical ids). The transaction below remains
-  // the only state-changing promotion.
+  // Save re-runs the shipped one-shot projector first (dedup keeps physical
+  // ids); the transaction below stays the only state-changing promotion.
   projectShareClosure(input.seat, receiverCopy, {
     sharedBy: provenance.shared_by,
     now: () => Date.parse(input.now),
@@ -2317,7 +2278,7 @@ export function retainCommonsItem(input: {
 export function removeCommonsFromSeat(input: {
   seat: ShareVaultRef;
   grantId: string;
-  /** Reconciliation replaces domain rows but keeps the local intent overlay. */
+  /** Reconciliation replaces domain rows but keeps the intent overlay. */
   preserveControlState?: boolean;
 }): number {
   const localGrant = input.seat.vault
@@ -2333,9 +2294,8 @@ export function removeCommonsFromSeat(input: {
       `SELECT item_type, item_id FROM share_commons_lineage WHERE grant_id = ?`
     )
     .all(input.grantId) as { item_type: ShareableItemType; item_id: string }[];
-  // A changing Commons replaces the control row immediately after domain
-  // removal. Drop it FIRST so a Tally container may delete its circle without
-  // the old grant's FK pinning it; intents/cursors/op history remain.
+  // Drop the control row FIRST so a Tally container may delete its circle
+  // without the old grant's FK pinning it; intents/cursors/history remain.
   input.seat.vault
     .prepare("DELETE FROM share_circle_grant WHERE grant_id = ?")
     .run(input.grantId);
@@ -2382,9 +2342,9 @@ export function removeCommonsFromSeat(input: {
       )
       .get(row.item_type, row.item_id) as { grant_id: string } | undefined;
     if (remaining) {
-      // Physical rows are deduplicated across grants: revoking one grant removes
-      // only its authorization edge, so keep the row and move its single
-      // provenance slot onto another Commons that still authorizes it.
+      // Physical rows are deduped across grants: revoking removes only an
+      // authorization edge — move its provenance slot to a still-authorizing
+      // Commons and keep the row.
       input.seat.vault
         .prepare(
           `UPDATE core_share_origin SET shared_by = ?

@@ -1,22 +1,11 @@
-// The People shelf's model (#724). Pure — no React, navigation or theme.
-//
-// THREE KINDS OF ROW, NEVER MERGED INTO ONE LIST. `people` counts CONFIRMED
-// regions only: a named card is an assertion, and only the member's own answer
-// may make one. `pendingByParty` is a QUESTION carrying a candidate party id,
-// and deliberately has no `name` field so a caller cannot render it as a
-// person. `unnamed` is a stranger group keyed by `cluster_id`, with no party.
-//
-// COUNTS ARE PHOTOGRAPHS, NOT REGIONS: two faces of one person in one
-// photograph is one photograph, or the count disagrees with the tiles shown.
+// People shelf model (#724), pure. THREE ROW KINDS, never merged: people =
+// CONFIRMED only; pendingByParty = question, no `name`; unnamed = cluster.
+// Counts are photographs, not regions.
 
 import { groupPeopleFaces } from "@centraid/blueprints/apps/_shared/people-counts";
-//
-// "DETECT FACES" IS GATED ON THE GATEWAY RUNG, NOT THE DEVICE ONE: the sweep
-// runs on the gateway. `deviceAnswerFor` answers a different question and
-// returns `available: false` for this very tier — a surface offering both must
-// ask each helper its own question.
-//
-// HONEST ABSENCE: nothing here invents a cover, a name, or a count.
+
+// "DETECT FACES" gates on the gateway rung — the sweep runs there;
+// `deviceAnswerFor` answers a different tier. Nothing here invents data.
 
 export interface FaceRegionRow {
   region_id: string;
@@ -38,7 +27,6 @@ export interface FaceClusterRow {
   cluster_id: string;
 }
 
-/** The app-readable tier mirror. */
 export interface EnrichPolicyRow {
   domain?: string | null;
   tier?: string | null;
@@ -53,16 +41,13 @@ export interface PeopleCover {
 
 export interface PersonEntry {
   partyId: string;
-  /** "Unnamed" is the VIEW's word: a null here is a fact, a label is a
-   *  rendering. */
+  /** "Unnamed" is the view's word: null is fact, label is rendering. */
   name: string | null;
-  /** Distinct photographs carrying a CONFIRMED face. */
   count: number;
   cover: PeopleCover | null;
 }
 
 export interface PendingEntry {
-  /** Proposed AS this party; never resolved to a name here. */
   partyId: string;
   count: number;
   cover: PeopleCover | null;
@@ -71,14 +56,13 @@ export interface PendingEntry {
 export interface UnnamedGroupEntry {
   clusterId: string;
   count: number;
-  /** Every region, so naming the group is one gesture over all of them. */
+  /** All regions: naming the group names them all. */
   regionIds: string[];
   cover: PeopleCover | null;
 }
 
 export interface DetectFacesAvailability {
   available: boolean;
-  /** Shown in place of the action; absent when available. */
   reason?: string;
 }
 
@@ -86,7 +70,6 @@ export interface PeopleShelf {
   people: PersonEntry[];
   pendingByParty: PendingEntry[];
   unnamed: UnnamedGroupEntry[];
-  /** The review queue's real size. */
   pendingTotal: number;
   empty: string;
   detectFaces: DetectFacesAvailability;
@@ -97,12 +80,9 @@ export interface PeopleFacts {
   parties: readonly PartyRow[];
   clusters: readonly FaceClusterRow[];
   policies: readonly EnrichPolicyRow[];
-  /** In flight — see `detectFacesFor`. */
   policiesLoading?: boolean;
 }
 
-/** One sentence (DESIGN.md `## Copy`). The faces disclosure proper belongs to
- *  the Collections People shelf; a second copy here weakens the promise. */
 export const PEOPLE_EMPTY =
   "Face detection runs when you ask for it — the people it finds wait here for you to name.";
 
@@ -117,7 +97,7 @@ const DETECT_REASONS = {
 } as const;
 
 /**
- * The `gateway` rung is the one the faces sweep runs at.
+ * The `gateway` rung is where the faces sweep runs.
  *
  * COMPAT(enrich-tier-rename #712): `model` is the pre-rename name for
  * `gateway`, and such a row must not read as "not allowed".
@@ -129,7 +109,7 @@ export function detectFacesFor(
   if (tier === "device" || tier === "local")
     return { available: false, reason: DETECT_REASONS.device };
   if (tier === "off") return { available: false, reason: DETECT_REASONS.off };
-  // `null` is "not read yet", not a refusal: nothing true to say yet.
+  // null = "not read yet", not a refusal.
   if (tier == null) return { available: false };
   return { available: false, reason: DETECT_REASONS.unknown };
 }
@@ -145,8 +125,7 @@ function parseBbox(json: unknown): PeopleCover["bbox"] {
   return { x: x as number, y: y as number, w: w as number, h: h as number };
 }
 
-/** The EARLIEST region id with a photograph behind it: region ids sort stably,
- *  so a cover does not shuffle between loads. */
+// Earliest region id with a photograph behind it — stable across loads.
 function coverOf(regions: readonly FaceRegionRow[]): PeopleCover | null {
   const usable = regions
     .filter((region) => Boolean(region.asset_id))
@@ -160,7 +139,7 @@ function coverOf(regions: readonly FaceRegionRow[]): PeopleCover | null {
   };
 }
 
-/** Deterministic ordering throughout, so one library renders one shelf. */
+/** Deterministic order throughout. */
 export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
   const nameOf = new Map(
     facts.parties
@@ -184,7 +163,6 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
       ),
     }))
     .sort((a, b) => {
-      // Named first, then by name, then by id — a stable rendering order.
       if ((a.name === null) !== (b.name === null))
         return a.name === null ? 1 : -1;
       if (a.name !== null && b.name !== null && a.name !== b.name)
@@ -207,8 +185,7 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
       a.count === b.count ? (a.partyId < b.partyId ? -1 : 1) : b.count - a.count
     );
 
-  // Intersected with the regions this read carries: a cluster whose region is
-  // absent contributes nothing, rather than a card the member cannot open.
+  // Absent regions contribute nothing, not an unopenable card.
   const unnamed: UnnamedGroupEntry[] = grouped.unnamed
     .map((group) => ({
       clusterId: group.id,
@@ -238,8 +215,7 @@ export function buildPeopleShelf(facts: PeopleFacts): PeopleShelf {
     pendingByParty,
     unnamed,
     pendingTotal: grouped.pendingTotal,
-    // A member who already asked is owed "it has not finished", not a second
-    // invitation to ask.
+    // Already-asked members get "not finished", not a second invite.
     empty: facts.faces.length > 0 ? PEOPLE_PENDING_EMPTY : PEOPLE_EMPTY,
     detectFaces: detectFacesFor(tier),
   };
@@ -250,8 +226,7 @@ export interface DetectFacesIntent {
   input: { entity_type: "media.asset" };
 }
 
-/** `reason` and `capability` are pinned SERVER-side by the blueprint action,
- *  so a client cannot widen its own consent by editing an input. */
+/** reason/capability pinned SERVER-side; no client-side consent widening. */
 export function detectFacesIntent(): DetectFacesIntent {
   return {
     action: "request-enrichment",
@@ -264,11 +239,7 @@ export interface NameFaceIntent {
   input: { region_id: string; answer: "confirm"; party_id: string };
 }
 
-/**
- * One confirm per region, deliberately NOT one command: the member asserts a
- * fact about each face, and a batch verb would record an assertion about a face
- * they never saw. Batching belongs here, in the surface that showed the group.
- */
+/** One confirm per region, NOT a batch verb: assertions are per face seen. */
 export function nameGroupIntents(
   group: Pick<UnnamedGroupEntry, "regionIds">,
   partyId: string

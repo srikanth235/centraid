@@ -1,31 +1,14 @@
 // @vitest-environment jsdom
-// THE ENRICHMENT CONSENT MOMENT (v4 handoff §8, prototype `s==='enrich'`).
-//
-// Two rules are load-bearing here — this is a privacy regression net, not a
-// styling snapshot:
-//
-//   1. NO ENRICHMENT WRITE MAY BE ISSUED WITHOUT AN EXPLICIT ANSWER. A
-//      popover with a `Detect faces now` button is one click, one write, no
-//      facts. Mounting, opening the question, reading the
-//      policy, declining and closing must all write nothing. This build has
-//      no device-side faces producer, so its on-device answer is unavailable
-//      and cannot reach `window.centraid.write` either.
-//   2. THE EGRESS DISCLOSURE MUST BE ON SCREEN. The cloud panel is the only
-//      place in Photos where the product says a downscaled copy of every
-//      photograph would leave the device. It renders even though this repo
-//      has no cloud helper to choose — an unwired action is a stated fact, not
-//      a reason to delete a disclosure.
-//
-// The copy assertions read from the shared consent module rather than
-// re-typing its strings, because the same module is what the native client
-// renders (apps/mobile/src/apps/photos/EnrichmentConsent.tsx) — a drift there
-// is a drift here.
-//
-// jsdom for the whole file: the panel view is asserted through
-// `renderToStaticMarkup` (it is a pure view over its props, so the markup IS
-// the behaviour), while the GATE (`enrichment-gate.ts`) is a plain closure
-// over `window.centraid` — driven directly, because "did a call write" is a
-// question the closure's own return value answers without a mounted DOM.
+// THE ENRICHMENT CONSENT MOMENT (v4 handoff §8) — a privacy regression net.
+//   1. NO ENRICHMENT WRITE WITHOUT AN EXPLICIT ANSWER: mounting, opening,
+//      reading the policy, declining, closing all write nothing. No
+//      device-side faces producer exists here; that answer cannot reach
+//      `window.centraid.write`.
+//   2. THE EGRESS DISCLOSURE STAYS ON SCREEN: the cloud panel is the only
+//      place Photos says photographs would leave the device; it renders even
+//      though no cloud helper can be chosen.
+// Copy asserted via the shared consent module (the native client renders the
+// same one). Views via renderToStaticMarkup; gate driven directly.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -140,8 +123,8 @@ describe("the enrichment consent surface", () => {
     // THE line. Its absence is the defect this file exists to catch.
     expect(html).toContain(copy.CLOUD_EGRESS_DISCLOSURE);
     expect(html).toContain("a downscaled copy of every photograph");
-    // Flagged as egress — `data-net` is what the stylesheet turns into the 2px
-    // `--net` rule, so this pins the mark and not a class name.
+    // Flagged as egress: `data-net` is what the stylesheet turns into the
+    // 2px `--net` rule, so this pins the mark, not a class name.
     expect(html).toMatch(
       /data-net="true"[^]*?a downscaled copy of every photograph/u
     );
@@ -149,8 +132,8 @@ describe("the enrichment consent surface", () => {
   });
 
   it("renders the cloud panel even though no cloud helper can be chosen", () => {
-    // The action is present and unavailable, with the reason stated — never
-    // omitted, because omitting it removes the disclosure above with it.
+    // Present and unavailable, with the reason stated — never omitted;
+    // omitting it removes the disclosure above with it.
     const html = markup();
     expect(html).toContain(copy.CLOUD_PANEL.action);
     expect(html).toContain(copy.ENRICHMENT_UNAVAILABLE.cloudUnavailable);
@@ -169,8 +152,8 @@ describe("the enrichment consent surface", () => {
     const html = markup();
     expect(html).toContain("Run on this device");
     expect(html).toContain("Not now");
-    // The ONE filled element on the surface is the run answer (§18); the cloud
-    // answer is outlined destructive, never a fill.
+    // The ONE filled element is the run answer (§18); the cloud answer is
+    // outlined destructive, never a fill.
     expect(html).toMatch(/class="kit-btn primary"[^]*?Run on this device/u);
     expect(html).toMatch(
       /class="kit-btn destructive"[^]*?Choose the cloud helper/u
@@ -178,8 +161,7 @@ describe("the enrichment consent surface", () => {
   });
 
   it("withholds the device answer when the library points at the gateway tier", () => {
-    // "what leaves the device: nothing" is FALSE for such a library, so the
-    // answer is not offered and the reason is named.
+    // "what leaves the device: nothing" is FALSE there, so no answer; name it.
     expect(copy.deviceAnswerFor("gateway").available).toBe(false);
     expect(copy.deviceAnswerFor("gateway").reason).toBe(
       copy.ENRICHMENT_UNAVAILABLE.modelTier
@@ -194,9 +176,8 @@ describe("the enrichment consent surface", () => {
   });
 
   it("[C5] also accepts the pre-rename 'local'/'model' spellings, the same way", () => {
-    // A raw `enrich.policy` row can reach this module without going through
-    // packages/vault's own normalizing read (queries/enrichment-status.ts
-    // reads the table directly) — see this file's C5 COMPAT comment.
+    // A raw `enrich.policy` row can bypass vault's normalizing read — see
+    // this file's C5 COMPAT comment.
     expect(copy.deviceAnswerFor("local")).toStrictEqual({
       available: false,
       reason: copy.ENRICHMENT_UNAVAILABLE.deviceUnavailable,
@@ -209,10 +190,9 @@ describe("the enrichment consent surface", () => {
 });
 
 describe("the enrichment gate (issue #712 C2, re-homed into People's empty state)", () => {
-  // `enrichment-gate.ts` is the gate's state machine, driving `PeopleShelf`'s
-  // `gate` prop — a plain closure over `window.centraid`, so these tests drive
-  // it directly rather than through a mounted component. THE LOAD-BEARING
-  // RULE: no enrichment write without an explicit answer.
+  // `enrichment-gate.ts` drives `PeopleShelf`'s `gate` prop — a plain closure
+  // over `window.centraid`, driven directly. LOAD-BEARING: no enrichment write
+  // without an explicit answer.
   const write = vi.fn<(intent: unknown) => Promise<{ status: string }>>(
     async () => ({ status: "executed" })
   );
@@ -248,8 +228,8 @@ describe("the enrichment gate (issue #712 C2, re-homed into People's empty state
     await vi.waitFor(() => expect(onData).toHaveBeenCalledWith());
     gate.props(6214)?.onDecline();
     expect(write).not.toHaveBeenCalled();
-    // Declining answers the question — the caller falls back to its own
-    // plain empty copy rather than leaving a half-answered gate up.
+    // Declining answers the question — the caller falls back to its own copy
+    // rather than leaving a half-answered gate up.
     expect(gate.props(6214)).toBeNull();
   });
 

@@ -1,19 +1,5 @@
-/**
- * The policy cascade's RESOLVER (#807) — the half of the one gate that folds a
- * scope chain into a single answer. A SIBLING of `enrich-gate.ts`, never a
- * rival: imported by the gate, re-exported through it, and read by nothing
- * else, because the cascade must not become a second policy path.
- *
- * `null` in a rule means inherit, so the fold is "most specific non-null wins"
- * per FIELD, not per rule. A RULE MAY NOT MOVE THE EGRESS CEILING — the whole
- * safety argument: the legacy tier migrates in as a ceiling nothing deeper can
- * raise, so pinning a provider-backed profile onto one album cannot widen
- * egress past the vault's standing answer.
- *
- * FAIL-CLOSED: an unreadable tier with no rules resolves to `undefined`, which
- * the gate refuses; with rules it resolves against the most conservative base,
- * disabled at an `on-device` ceiling.
- */
+// Policy gate resolver (#807): most-specific non-null per FIELD; ceiling
+// immovable. Fail-closed: no honourable policy → undefined.
 
 import { BUILT_IN_PROFILE } from "@centraid/vault";
 import type {
@@ -27,8 +13,7 @@ import type {
 import type { HarnessKind } from "../../engine/conversation/turn.js";
 import type { EnrichDomain, EnrichLane, EnrichTier } from "./enrich-gate.js";
 
-/** `provider` is deliberately NOT reachable from a legacy tier: it is answered
- *  by the egress-consent ledger. */
+/** Legacy tiers cannot reach `provider`. */
 export type EnrichEgressCeiling = EnrichEgressClass | "off";
 
 export interface ResolvedEnrichPolicy {
@@ -60,8 +45,7 @@ export function egressWithinCeiling(
   return EGRESS_RANK[egress] <= EGRESS_RANK[ceiling];
 }
 
-/** Stops at the domain: the automation engine does not know which collection a
- *  fire is "about". */
+/** Stops at the domain — never the collection. */
 export function automationScopeChain(domain: EnrichDomain): EnrichScope[] {
   return [
     { type: "vault", ref: "" },
@@ -69,46 +53,35 @@ export function automationScopeChain(domain: EnrichDomain): EnrichScope[] {
   ];
 }
 
-/* ---------- The host seam (`RunFireOptions.resolveEnrichPolicy`) ---------- */
-
 export interface EnrichPolicyRequest {
   readonly domain: EnrichDomain;
   readonly capability: string;
   readonly lane: EnrichLane;
-  /** Least-specific first; a field, so an on-demand run can pass a longer one. */
   readonly scopeChain: readonly EnrichScope[];
 }
 
-/** A bare {@link EnrichTier} stays a legal answer. */
 export interface EnrichPolicyResolution {
   readonly tier: EnrichTier | undefined;
   readonly rules?: readonly EnrichPolicyRule[];
-  /** `undefined` for a profile this gateway lacks, which the gate refuses. */
+  /** Unknown profile — the gate refuses. */
   readonly egressForProfile?: (
     profileId: string
   ) => EnrichEgressClass | undefined;
-  /** A SECOND LOOKUP, NOT A SECOND POLICY PATH: the cascade says which engine a
-   *  scope prefers, this says whether the member ever agreed to its egress
-   *  class, and `decideEnrichmentGate` is still the only decider. `null` means
-   *  never asked, which is not a grant; omitting it fails closed. */
+  /** Prior consent; `null` = never asked; omitting fails closed. */
   readonly egressConsent?: (
     egress: EnrichEgressClass
   ) => EnrichConsentRecord | null | undefined;
-  /** Two lookups over one registry on purpose: the gate reads the egress class
-   *  and nothing else, and this is read only AFTER the gate allowed the run, so
-   *  no engine detail can influence a permission decision. */
+  /** Read only AFTER the gate allows the run. */
   readonly engineForProfile?: (
     profileId: string
   ) => ResolvedEngineBinding | undefined;
 }
 
-/** Deliberately NOT the whole profile: the fire path has no business knowing a
- *  profile's label or egress class — only whether the bundled engine or a
- *  harness computes this, and with what binding. */
+/** NOT the whole profile — harness kind + binding only. */
 export interface ResolvedEngineBinding {
   readonly kind: "built-in" | "delegate";
   readonly harness?: HarnessKind;
-  /** Whatever id the harness offered — data, never a literal. */
+  /** Harness-offered id — data, never a literal. */
   readonly model?: string;
   readonly configPins?: Readonly<Record<string, string>>;
   readonly promptRev?: string;
@@ -122,10 +95,7 @@ export type ResolveEnrichPolicy = (
   | EnrichTier
   | undefined;
 
-/** `rules` must be the chain for ONE capability, least-specific first; rules
- *  naming another are ignored rather than trusted. `undefined` means the vault
- *  stated no policy this runtime can honour, and the caller MUST read that as a
- *  refusal. */
+/** ONE capability's chain, least-specific first; `undefined` = refuse. */
 export function resolveEnrichmentPolicy(
   rules: readonly EnrichPolicyRule[],
   legacyTier: EnrichTier | undefined,

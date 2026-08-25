@@ -1,14 +1,6 @@
-// How a task row says WHEN, and how its meta line is composed (spec §5).
-//
-// Pure, clock-injected and DOM-free on purpose. Every rule here is one a board
-// gets wrong by expressing it inline in a render function: "2 days ago" versus
-// "today, 17:00" is the date-only/timed distinction the midnight problem is
-// made of (§9), and a helper that read `Date.now()` for itself could not be
-// tested against either side of a boundary.
-//
-// NOTHING HERE DERIVES A RECURRENCE. `missed`, `next_due` and
-// `recurrence_summary` arrive on the row from the ONE summariser behind
-// `ctx.time` (queries/board.ts); this module only lays them out.
+// Task-row WHEN formatting and meta-line composition (spec §5). Pure,
+// clock-injected, DOM-free. NOTHING HERE DERIVES A RECURRENCE — this module
+// only lays out what the summariser produced.
 import type { Task } from "./types.ts";
 import { familyProgress, missedLabel, sittingSince } from "./view-copy.ts";
 import {
@@ -19,10 +11,7 @@ import {
   weekdayName,
 } from "./when.ts";
 
-// THE WHEN RULES LIVE IN ONE PLACE — `when.ts`, an import-free leaf both the
-// shell's Home tile and the phone can read (#834). They are re-exported here
-// so every existing caller of `format.ts` is unchanged and there is still
-// exactly one definition of each.
+// WHEN rules live once in when.ts (#834).
 export {
   dayKey,
   daysBetween,
@@ -34,14 +23,11 @@ export {
   weekdayName,
 } from "./when.ts";
 
-/** Is this row past its moment? The one question overdue tone is drawn from. */
 export function isOverdue(task: Task, now: string): boolean {
   return isOverdueWhen(task, now);
 }
 
-/** Every substring in the meta slot may be a number, and every number in this
- *  product is tabular and bidi-isolated — so a meta part declares whether it
- *  is one rather than leaving the row to guess. */
+/** A meta part; numbers are tabular and bidi-isolated. */
 export interface MetaPart {
   text: string;
   numeric?: boolean;
@@ -49,11 +35,7 @@ export interface MetaPart {
   attention?: boolean;
 }
 
-/**
- * The row's meta line, clamped to one line by the stylesheet and composed in
- * the spec's own order: project · due · repeats · missed · reminder · effort ·
- * tag · age · pending. A part that has nothing to say is absent, never blank.
- */
+/** Meta line, spec order: project · due · repeats · missed · reminder · effort · tag. */
 export function metaParts(input: {
   task: Task;
   now: string;
@@ -100,11 +82,7 @@ export function metaParts(input: {
   return parts;
 }
 
-/**
- * The age signal — drawn only once a row has genuinely been sitting, because a
- * fact about last week is not a fact worth a slot. Ninety days is the point at
- * which "when did I write this" stops being answerable from memory.
- */
+/** Age signal: only once an undated row has sat 90+ days. */
 export function ageLabel(task: Task, now: string): string | null {
   const born = task.created_at;
   if (!born || task.due_at) return null;

@@ -1,22 +1,15 @@
-// PERMISSION IS A SURFACE, NOT AN ERROR (§13): an ungranted grant is a state
-// the product is designed for, drawn whole. LIMITED is why this is a state
-// machine and not a boolean — its third answer makes both "Photos has access"
-// and "Photos has no access" false. Never pretend to have looked (§14).
-//
-// Free of `react-native` and `expo-media-library` imports, so every state's
-// copy and offered action is assertable directly.
+// PERMISSION IS A SURFACE, NOT AN ERROR (§13); LIMITED makes this a state
+// machine, not a boolean. Never pretend to have looked (§14). No RN imports.
 
-/** The four cases the screen has distinct copy for. */
 export type PhotoAccessState =
   | "granted"
   | "limited"
   | "denied"
   | "undetermined";
 
-/** Structural, so this module never imports the native module. */
 export interface PhotoAccessPermission {
   status: "granted" | "denied" | "undetermined";
-  /** iOS 14+ only. `undefined` on Android, where there is no limited tier. */
+  /** iOS 14+ only. */
   accessPrivileges?: "all" | "limited" | "none";
   canAskAgain: boolean;
 }
@@ -24,22 +17,15 @@ export interface PhotoAccessPermission {
 export function photoAccessState(
   permission: PhotoAccessPermission
 ): PhotoAccessState {
-  // Ahead of `status`: a limited grant reports `status: "granted"` on iOS, and
-  // treating that as full access is the lie this screen exists to prevent.
+  // BEFORE `status`: limited reports granted on iOS.
   if (permission.accessPrivileges === "limited") return "limited";
   if (permission.status === "granted") return "granted";
   return permission.status === "denied" ? "denied" : "undetermined";
 }
 
 /**
- * Whether the permission content REPLACES the grid (#712) — never a dead grid,
- * never a banner over one. Unknown is not denied, so `null`/`loading` keep the
- * grid; a takeover happens only when there is nothing readable to hide, since
- * replica photographs need no OS grant.
- *
- * CONSEQUENCE: with vault photographs present and the grant refused, the panel
- * — the only place the grant is asked for — is not drawn, so re-asking means
- * the Settings app. A reachable library beats a reachable prompt.
+ * Permission content REPLACES the grid (#712) only when nothing readable hides
+ * behind it (replica photos need no OS grant); re-asking then means Settings.
  */
 export function photoAccessTakesOverTimeline({
   state,
@@ -48,11 +34,10 @@ export function photoAccessTakesOverTimeline({
   loading,
 }: {
   state: PhotoAccessState | null;
-  /** Photographs Photos is reading off THIS device right now. */
+  /** Photographs Photos reads off THIS device right now. */
   deviceReadableCount: number;
-  /** Photographs already here through the replica — no OS grant involved. */
+  /** Already here via replica — no OS grant involved. */
   vaultReadableCount?: number;
-  /** The device walk has not finished. */
   loading: boolean;
 }): boolean {
   if (state === null || state === "granted") return false;
@@ -66,17 +51,12 @@ export interface PhotoAccessRow {
   label: string;
   sub: string;
   meta: string;
-  /** Bordered in `net`: the row saying what Photos cannot reach. */
   net?: true;
 }
 
-/**
- * NO "CHOOSE MORE PHOTOGRAPHS" ACTION: the Next API (#573) keeps
- * `presentPermissionsPickerAsync` only to throw, and a filled control that
- * raises is worse than none — limited routes to Settings instead.
- */
+/** NO "choose more" action: the Next API (#573) only throws it; Settings instead. */
 export type PhotoAccessAction =
-  /** Only offered while the OS will still show the prompt. */
+  /** Only while the OS will still prompt. */
   "ask" | "settings";
 
 export interface PhotoAccessControl {
@@ -87,7 +67,7 @@ export interface PhotoAccessControl {
 export interface PhotoAccessCopy {
   headline: string;
   lede: string;
-  /** The one filled control (§18); `null` when there is nothing to ask for. */
+  /** The one filled control (§18); null when nothing to ask. */
   primary: PhotoAccessControl | null;
   /** Plain, never filled. */
   secondary: PhotoAccessControl | null;
@@ -112,8 +92,7 @@ const OPEN_SETTINGS: PhotoAccessControl = {
   label: "Open Settings",
 };
 
-/** `readableCount: null` leaves the meta column blank rather than printing a
- *  zero the app has not finished counting. */
+/** Null blanks the meta rather than an unfinished zero. */
 export function photoAccessCopy(
   state: PhotoAccessState,
   {
@@ -171,8 +150,7 @@ export function photoAccessCopy(
     return {
       headline: "Photos cannot reach your camera roll",
       lede: "The grant that let Photos read the photographs on this device has been refused. Nothing has been lost: the photographs are still here, and the app goes dark rather than showing you a stale copy.",
-      // Once the OS stops asking, "Allow access" would be a control that
-      // cannot fire.
+      // Once the OS stops asking, "Allow access" cannot fire.
       primary: canAskAgain
         ? { action: "ask", label: "Allow access" }
         : OPEN_SETTINGS,

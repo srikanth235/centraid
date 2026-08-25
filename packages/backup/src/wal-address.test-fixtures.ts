@@ -6,12 +6,7 @@ import type {
   WalSegmentAddress,
 } from "./wal-format.js";
 
-/**
- * Shared address domain for the WAL addressing suites.
- *
- * Shared by the addressing-law and prefix/minting-law suites so neither
- * re-derives the domain (#656).
- */
+/** WAL address domain (#656). */
 
 export const hex32: fc.Arbitrary<string> = fc
   .uint8Array({ minLength: 16, maxLength: 16 })
@@ -47,26 +42,11 @@ export const closerAddr: fc.Arbitrary<WalGroupCloser> = fc.record({
   endOffset: fc.integer({ min: 1, max: 1_000_000 }),
 });
 
-// ───────────────────────────────────────────────────────────────────────────
-// Mutation-kill campaign (#656 Layer 1C).
-//
-// The laws below are the ones the addressing surface actually owes its
-// callers. They are stated as total properties over the address domain rather
-// than as assertions about how any particular clause is written:
-//
-//   L1 (encoder totality)  An encoder either REFUSES an address or emits a key
-//                          that parses back to exactly that address. It never
-//                          emits a key that means something else — a restore
-//                          reading a provider LIST has nothing but the key.
-//   L2 (prefix soundness)  A list prefix matches every key of its stream and
-//                          no key outside it. A prefix that over-matches makes
-//                          GC delete a live stream; one that under-matches
-//                          makes restore read a truncated stream as "idle".
-//   L3 (diagnosability)    A refusal names the field it refused, because the
-//                          operator seeing it is holding a corrupt listing.
-// ───────────────────────────────────────────────────────────────────────────
+// Mutation-kill laws (#656 Layer 1C): L1 key parses back;
+// L2 prefix soundness (over-match GC-deletes live streams);
+// L3 refusal names the field it refused.
 
-/** Values outside the non-negative-integer domain every offset/group/tick lives in. */
+/** Outside the non-negative-int domain. */
 export const notNonNegativeInt: fc.Arbitrary<number> = fc.oneof(
   fc.integer({ min: 1, max: 1_000_000 }).map((n) => -n),
   fc.integer({ min: 0, max: 1_000_000 }).map((n) => n + 0.5),
@@ -74,7 +54,7 @@ export const notNonNegativeInt: fc.Arbitrary<number> = fc.oneof(
   fc.constant(Number.POSITIVE_INFINITY)
 );
 
-/** Strings that are not a 32-lowercase-hex WAL generation. */
+/** Not a 32-lowercase-hex generation. */
 export const notGeneration: fc.Arbitrary<string> = fc.oneof(
   fc.constant(""),
   hex32.map((g) => g.slice(1)),
@@ -85,10 +65,7 @@ export const notGeneration: fc.Arbitrary<string> = fc.oneof(
     .filter((s) => !/^[0-9a-f]{32}$/u.test(s))
 );
 
-/**
- * A segment address with exactly one field pushed outside its domain — the
- * shape a corrupt caller (or a mutant validator) would hand the encoder.
- */
+/** One field bad — mutant-validator shape. */
 export const corruptSegmentAddr: fc.Arbitrary<WalSegmentAddress> = fc
   .tuple(
     segmentAddr,
@@ -109,15 +86,11 @@ export const corruptSegmentAddr: fc.Arbitrary<WalSegmentAddress> = fc
     if (field === "group") return { ...addr, group: badGroup };
     if (field === "startOffset") return { ...addr, startOffset: badStart };
     if (field === "endOffset") return { ...addr, endOffset: badEnd };
-    // A zero-length segment: well-formed characters, but names no bytes.
+    // Zero-length: names no bytes.
     return { ...addr, endOffset: addr.startOffset };
   });
 
-/**
- * Run an encoder and report ONLY whether a key came out. Refusing is a legal
- * outcome; emitting a key that means something else is not. Folding the two
- * outcomes into one value lets the law below be asserted unconditionally.
- */
+/** Key emitted, or null on refusal. */
 export function emitted<T>(
   encode: (value: T) => string,
   value: T

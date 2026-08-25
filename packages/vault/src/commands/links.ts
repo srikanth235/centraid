@@ -1,11 +1,9 @@
-// Links (core §01/§08, #272): the typed, temporal relationship fabric,
-// activated as commands. All cross-entity meaning goes through core.link — a
-// SKOS-governed relation concept, valid_from/valid_to, who asserted it —
-// never an ad-hoc junction table. These two commands are the whole write
-// surface: any app or agent gets universal cross-referencing by declaring
-// one act scope, and backlinks come free as a reverse read of the same
-// table. Unlink is temporal, not destructive: history is never rewritten
-// (rule R3); the gateway's dangling-link sweep end-dates the rest.
+// Links (core §01/§08, #272): the typed, temporal relationship fabric as
+// commands. All cross-entity meaning goes through core.link — a SKOS-governed
+// relation concept, valid_from/valid_to, who asserted it — never an ad-hoc
+// junction table. These two commands are the whole write surface; backlinks
+// come free as a reverse read. Unlink is temporal, not destructive: history is
+// never rewritten (R3); the gateway's dangling-link sweep end-dates the rest.
 
 import { evaluateConsent } from "../gateway/consent.js";
 import type { Gateway } from "../gateway/gateway.js";
@@ -36,11 +34,8 @@ function pkOf(ctx: HandlerCtx, physical: string): string {
 }
 
 /**
- * An endpoint must resolve in the entity registry, exist as a live row, and
- * be READABLE under the caller's grant and purpose — a caller must never
- * assert a relationship to a row it is not allowed to see. The shell picker
- * satisfies this trivially (the owner reads everything); apps satisfy it
- * exactly when their scopes already cover both sides.
+ * An endpoint must resolve in the registry, exist live, and be READABLE under
+ * the caller's grant and purpose — never link to a row the caller can't see.
  */
 function requireEndpoint(
   ctx: HandlerCtx,
@@ -76,11 +71,9 @@ function requireEndpoint(
   }
 }
 
-// The standoff anchor selector (#282): a W3C-style text-quote selector
-// plus a position hint, pointing into the from-endpoint's decoded body text.
-// `start` is a char offset in UTF-16 code units (the JS-string convention the
-// projections decode to). The anchor is a locator for the link, never a
-// second judgment — resolution is presentation-side and best-effort.
+// Standoff anchor selector (#282): W3C text-quote selector + position hint
+// into the from-endpoint's decoded body; `start` is UTF-16 code units. A
+// locator, never a second judgment — resolution is presentation-side.
 const SELECTOR_SCHEMA = {
   type: "object",
   required: ["exact", "prefix", "suffix", "start"],
@@ -161,8 +154,8 @@ const LINK: CommandDefinition = {
   },
   preconditions: [
     {
-      // Relations are vocabulary, never caller-invented: the notation must
-      // already be a concept in the relations scheme.
+      // Relations are vocabulary: the notation must already be a concept in
+      // the relations scheme, never caller-invented.
       name: "relation_in_scheme",
       sql: `SELECT count(*) AS n FROM core_concept c
              JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
@@ -173,7 +166,7 @@ const LINK: CommandDefinition = {
     },
     {
       // Refuse an exact duplicate while the first assertion is still live;
-      // after an unlink the same relationship may be asserted again.
+      // after an unlink the same relationship may be reasserted.
       name: "no_identical_live_link",
       sql: `SELECT count(*) AS n FROM core_link l
              JOIN core_concept c ON c.concept_id = l.relation_concept_id
@@ -307,13 +300,10 @@ function unlinkEntities(ctx: HandlerCtx): Record<string, unknown> {
   return { link_id: input.link_id };
 }
 
-// Re-anchor / re-baseline (#282): move (or clear) the standoff anchor
-// an existing live link carries. This is a locator write, not a new judgment
-// — the link's endpoints, relation and validity are untouched. With a
-// selector it upserts the anchor (the @-gesture re-anchoring an orphaned
-// edge, or the editor re-baselining after a save); without one it clears the
-// anchor, demoting the reference to strip-only — which also makes it exempt
-// from the editor's orphan auto-retract by construction.
+// Re-anchor / re-baseline (#282): move (or clear) a live link's standoff
+// anchor — a locator write, not a new judgment; endpoints, relation, validity
+// untouched. With selector: upsert. Without: clear → strip-only (and exempt
+// from orphan auto-retract).
 const ANCHOR: CommandDefinition = {
   name: "core.anchor_link",
   ownerSchema: "core",

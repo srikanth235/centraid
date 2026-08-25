@@ -1,19 +1,12 @@
-// What each route SHOWS, derived from one board read (spec §1, §4).
-//
-// Pure and DOM-free: every one of the twelve states in §4 is a fact about the
-// rows plus the clock, so each is a function here rather than a switch in a
-// render — which is also why they are real reachable states of the app and not
-// a demo toggle. `boardState` is the single answer to "what is this screen
-// currently saying", and the routes read it rather than each inventing one.
+// What each route SHOWS, derived from one board read (spec §1, §4). Pure,
+// DOM-free; boardState is the one answer to "what is this screen saying".
 import { showsEmptyState } from "../_shared/view-state-kit.ts";
 import { daysBetween, isOverdue } from "./format.ts";
 import type { BoardData, ReentryBucket, Task, TaskGroup } from "./types.ts";
 import { GROUPS, inboxMeta, overdueMeta } from "./view-copy.ts";
 import { landsToday } from "./when.ts";
 
-// `landsToday` lives in `when.ts` — the import-free leaf the shell's Home tile
-// and the phone read too (#834) — and is re-exported here so every caller of
-// `logic.ts` is unchanged and there is still exactly one definition.
+// Re-exported so every caller of logic.ts has one definition (#834).
 export { landsToday } from "./when.ts";
 
 const OPEN = new Set(["needs-action", "in-process"]);
@@ -22,18 +15,12 @@ export function isOpen(task: Task): boolean {
   return OPEN.has(task.status);
 }
 
-/**
- * Timed after date-only within a day, then by moment, then by title. The
- * midnight problem in sort form: a date-only task carries no moment, so
- * ordering it against 17:00 by string would put "sometime Tuesday" after a
- * meeting it should precede.
- */
+/** Date-only first, then moment, then title — a date-only task has no moment
+ *  and must not string-sort after a 17:00 meeting (the midnight problem). */
 export function byDue(a: Task, b: Task): number {
   const left = a.next_due ?? a.due_at ?? "";
   const right = b.next_due ?? b.due_at ?? "";
-  // An undated task sorts LAST, never first: it carries no claim on a moment,
-  // and floating it to the top of a list would be exactly the visibility it has
-  // not earned (ruling 4).
+  // Undated sorts LAST, never first (ruling 4).
   if (left === "" || right === "") {
     if (left !== right) return left === "" ? 1 : -1;
     return a.title.localeCompare(b.title);
@@ -65,8 +52,7 @@ export function todayGroups(rows: readonly Task[], now: string): TaskGroup[] {
   return groups;
 }
 
-/** Upcoming: one group per civil day, nearest first. Today's own rows are
- *  Today's; this route starts at tomorrow. */
+/** Upcoming: one group per civil day, nearest first; Today keeps its own rows. */
 export function upcomingGroups(
   rows: readonly Task[],
   now: string,
@@ -111,8 +97,7 @@ export function anytimeGroups(
     }));
 }
 
-/** All: two groups and no third. Dated work and undated work are two different
- *  kinds of commitment, and the spec draws exactly that split. */
+/** All: dated and undated, two groups and no third (the spec's split). */
 export function allGroups(rows: readonly Task[]): TaskGroup[] {
   const open = rows.filter(isOpen);
   const dated = open.filter((task) => task.due_at ?? task.next_due);
@@ -148,8 +133,7 @@ export function inboxGroup(rows: readonly Task[]): TaskGroup {
   };
 }
 
-/** How long the member has been away, measured from the oldest thing that came
- *  due while they were. Zero means they were not away. */
+/** Away-days measured from the oldest thing that came due; zero = not away. */
 export function awayDays(rows: readonly Task[], now: string): number {
   const overdue = rows.filter((task) => isOpen(task) && isOverdue(task, now));
   if (overdue.length === 0) return 0;
@@ -160,8 +144,8 @@ export function awayDays(rows: readonly Task[], now: string): number {
   return oldest ? Math.max(0, daysBetween(oldest, now)) : 0;
 }
 
-/** The absence the notice describes, or null when there is no absence to name.
- *  A week is the threshold because a two-day pile is a Tuesday, not an absence. */
+/** The absence to name, or null; a week is the threshold (a two-day pile is a
+ *  Tuesday). */
 export function absence(
   rows: readonly Task[],
   now: string
@@ -174,8 +158,8 @@ export function absence(
   return due > 0 ? { days, due } : null;
 }
 
-/** Catch up's three piles (§3). A row belongs to exactly one, in this order,
- *  so no bulk verb can act on the same task twice. */
+/** Catch up's three piles (§3); a row belongs to exactly one, so no bulk verb
+ *  acts on the same task twice. */
 export function reentryBuckets(
   rows: readonly Task[],
   now: string,
@@ -209,11 +193,8 @@ export function reentryBuckets(
   ].filter((entry) => entry.rows.length > 0);
 }
 
-/**
- * The one answer to "what is this screen saying right now" (§4). Ordered by
- * what OVERRIDES what: a denial is not a quiet Today, and a screen that has not
- * read yet may not claim either.
- */
+/** The one answer to "what is this screen saying right now" (§4), ordered by
+ *  what OVERRIDES what: denial > loading > empties > live. */
 export type BoardStateName =
   | "loading"
   | "denied"
@@ -242,9 +223,7 @@ export function boardState(input: {
   }
   const dueToday = open.filter((task) => landsToday(task, input.now));
   if (dueToday.length > 0) return "live";
-  // The two quiets are DIFFERENT FACTS, and the difference is whether anything
-  // was ever due today at all. A member who finished four things has earned a
-  // different sentence from one who scheduled nothing.
+  // The two quiets are different facts: did anything come due today at all?
   const closedToday = input.logbook.filter(
     (task) =>
       task.completed_at && daysBetween(task.completed_at, input.now) === 0
@@ -252,8 +231,8 @@ export function boardState(input: {
   return closedToday.length > 0 ? "all-done" : "nothing-scheduled";
 }
 
-/** Is the board showing a WINDOW rather than everything open? The query already
- *  answered; this only pairs the answer with the two numbers the notice says. */
+/** Is the board showing a window? The query answered; this pairs it with the
+ *  two numbers the notice says. */
 export function windowEnd(
   data: Pick<BoardData, "counts" | "open">,
   truncated: boolean

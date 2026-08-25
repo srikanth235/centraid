@@ -1,16 +1,5 @@
-// PHOTOS' WAY INTO THE GRANT SHEET, native seat (#825).
-//
-// The kit draws the sheet and owns the whole write door; the HOST says who is
-// in the room and where an outcome is spoken. That is all this module is.
-//
-// The mapping itself is NOT restated here: `grantAudiencesFrom` is the
-// blueprint law every app and both seats read
-// (`apps/_shared/grant-audiences.ts`), so "a grant is addressed to a party,
-// never to a vault, and never to a pending overlay id" is decided once for
-// the phone and the desktop together. What native
-// genuinely supplies differently is only where the roster comes from —
-// replica queries plus the gateway's link list, exactly as the commons sheet
-// reads them.
+// Grant-sheet host seam (#825): kit owns the write door; this says who is in
+// the room and where refusals land. Addressing law lives in grantAudiencesFrom.
 
 import { useMemo, useState } from "react";
 
@@ -30,26 +19,19 @@ import {
 import { listLinks } from "../../lib/replica/links-transport";
 import type { GatewayLink } from "../../lib/replica/links-transport";
 
-/** What a phone with no gateway session says. It names the missing thing. */
 export const NO_GATEWAY_TO_SHARE_THROUGH =
   "Not connected to a gateway, so nothing can be shared from here.";
 
 export interface PhotoGrantEntry {
-  /** Who the sheet may name. Read on request, not held open on every screen. */
+  /** Read on request, never held open. */
   audiences: readonly GrantAudienceOption[];
   visible: boolean;
-  /**
-   * The member asked to share. The roster is read HERE and the refusal — no
-   * gateway, nobody to name, or a roster that could not be read — is spoken on
-   * the status line BEFORE a sheet opens. An empty picker is not an answer to
-   * "who can see this", and neither is "you know nobody" after a failed read.
-   */
+  /** Refusals land on the status line BEFORE any sheet opens. */
   request: () => void;
   dismiss: () => void;
 }
 
 export function usePhotoGrantEntry(
-  /** The screen's one status line. Every refusal lands there. */
   refuse: (message: string) => void
 ): PhotoGrantEntry {
   const replica = useReplica();
@@ -61,9 +43,7 @@ export function usePhotoGrantEntry(
     "people",
     useMemo(() => ({ entity: "core.vault", limit: 1 }), [])
   );
-  // The named-audience source, read the one way the commons sheet reads it —
-  // only a circle this member owns AND decorates with a group is a deliberate
-  // audience, and `nativeNamedShareCircles` is where that stays decided.
+  // Only an owned, group-decorated circle is a deliberate audience.
   const circles = useReplicaQuery(
     "tally",
     useMemo(() => ({ entity: "social.circle", limit: 500 }), [])
@@ -101,14 +81,10 @@ export function usePhotoGrantEntry(
         try {
           links = await listLinks(base);
         } catch {
-          // A link read that failed is not a roster: People still names
-          // everyone this member added, and an invitation is a real target.
-          // But it is not NOTHING either — see the refusal below.
+          // A failed link read is not an empty roster — see refusal below.
           links = [];
           linksUnread = true;
         }
-        // Built from the links just read, not from the ones a previous render
-        // closed over — the decision below is about the roster as it IS.
         const targets = nativeShareTargets({
           sourceVaultId: replica.vaultId ?? "",
           ...(ownerPartyId ? { ownerPartyId } : {}),
@@ -131,9 +107,7 @@ export function usePhotoGrantEntry(
           setVisible(true);
           return;
         }
-        // NOBODY, OR NOT KNOWN? People's own rows carried nobody either way,
-        // but a link read that FAILED means half the roster never answered —
-        // saying "you know nobody" then blames the member for a broken read.
+        // A failed link read half-answered the roster — never say "you know nobody".
         refuse(linksUnread ? ROSTER_UNREADABLE : NOBODY_TO_SHARE_WITH);
       })();
     },
