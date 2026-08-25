@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Pixel Jumper</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0b1020;
+    color: #e8ecff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #wrap {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px;
+  }
+  #game {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #5c94fc;
+    max-width: 100vw; max-height: 78vh;
+    width: auto; height: auto;
+    border-radius: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.55), 0 0 0 2px #1b2547;
+    display: block;
+  }
+  #hint {
+    font-size: 12px; color: #9fb0e0; text-align: center; line-height: 1.5;
+    padding: 0 12px; max-width: 720px;
+  }
+  #hint b { color: #ffd54a; }
+  #touch {
+    display: none;
+    width: 100%; max-width: 720px;
+    justify-content: space-between;
+    padding: 0 14px 14px; gap: 10px;
+  }
+  .pad { display: flex; gap: 10px; }
+  .btn {
+    width: 62px; height: 62px; border-radius: 12px;
+    background: #223065; color: #dfe6ff; border: 2px solid #34468c;
+    font-size: 22px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; -webkit-tap-highlight-color: transparent;
+  }
+  .btn:active { background: #3a4f9e; transform: translateY(1px); }
+  .btn.fire { background: #7a1f2b; border-color: #b5313f; }
+  .btn.jump { background: #1f5a2b; border-color: #2f8a41; }
+  @media (pointer: coarse) { #touch { display: flex; } }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="512" height="480"></canvas>
+  <div id="hint">
+    <b>←</b> / <b>→</b> move &nbsp;·&nbsp; hold <b>→</b>+<b>Shift</b> or <b>Z</b> to run &nbsp;·&nbsp;
+    <b>↑</b> / <b>Space</b> jump &nbsp;·&nbsp; <b>S</b> shoot fireball (with Fire Flower) &nbsp;·&nbsp;
+    <b>P</b> pause &nbsp;·&nbsp; <b>Enter</b> start
+  </div>
+  <div id="touch">
+    <div class="pad">
+      <div class="btn" data-k="left">◀</div>
+      <div class="btn" data-k="right">▶</div>
+    </div>
+    <div class="pad">
+      <div class="btn fire" data-k="fire">S</div>
+      <div class="btn jump">A</div>
+    </div>
+  </div>
+</div>
+<script>
+"use strict";
+/* =========================================================================
+   PIXEL JUMPER — an original side-scrolling platformer.
+   Inspired by classic 8-bit platformers; all art and levels are original.
+   Single-file HTML5 canvas game. No external assets.
+   ========================================================================= */
+
+(() => {
+  const TILE = 16;                 // tile size in source pixels
+  const VW = 32, VH = 30;          // viewport in tiles (512x480)
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSizeSmoothingEnabled = false;
+
+  // ---- Palette -----------------------------------------------------------
+  const C = {
+    sky:'#5c94fc', skyNight:'#101830', skyCave:'#000000',
+    ground:'#c8611c', groundDark:'#7a3a0f', groundTop:'#3aa93a',
+    brick:'#c8611c', brickDark:'#8a3f10', brickMortar:'#000000',
+    qblock:'#e39b1a', qblockDark:'#9a6210', qblockShine:'#ffe08a',
+    used:'#9a7d55', usedDark:'#5c4b32',
+    pipe:'#2fbf2f', pipeDark:'#1a7a1a', pipeLight:'#7fe07f',
+    hard:'#9aa0b0', hardDark:'#5b6070',
+    coin:'#ffd23f', coinDark:'#c99a12',
+    flag:'#2fbf2f', pole:'#dedede', poleDark:'#9a9a9a',
+    hero:'#e03030', heroDark:'#9a1414', skin:'#ffcf9e', overall:'#2a52d0', boot:'#5a2a12',
+    fire1:'#ffffff', fire2:'#ff7a1a', fire3:'#ff2a2a',
+    enemy:'#8a4a1a', enemyDark:'#5a2f0f', enemyFoot:'#3a1f08', enemyEye:'#ffffff',
+    shell:'#2fbf5f', shellDark:'#1a7a3a', shellRim:'#e6ffe6',
+    mushroom:'#e03030', mushDot:'#ffffff', mushStem:'#ffe0b0',
+    flower:'#ff7a1a', flowerMid:'#ffd23f', flowerStem:'#2fbf2f',
+    star:'#ffe23f', starDark:'#c9a012',
+    text:'#ffffff', shadow:'#000000',
+    cloud:'#ffffff', hill:'#3aa93a', hillDark:'#2a7a2a', bush:'#3aa93a',
+  };
+
+  // ---- Input -------------------------------------------------------------
+  const keys = {};
+  const KEYMAP = {
+    ArrowLeft:'left', ArrowRight:'right', ArrowUp:'jump', ArrowDown:'down',
+    Space:'jump', KeyZ:'run', ShiftLeft:'run', ShiftRight:'run',
+    KeyS:'fire', KeyX:'jump', KeyP:'pause', Enter:'start', KeyR:'reset',
+  };
+  addEventListener('keydown', e => {
+    const a = KEYMAP[e.code];
+    if (a) { e.preventDefault(); keys[a] = true; handleAction(a, true); }
+  }, {passive:false});
+  addEventListener('keyup', e => {
+    const a = KEYMAP[e.code];
+    if (a) { e.preventDefault(); keys[a] = false; }
+  }, {passive:false});
+
+  // Touch controls
+  document.querySelectorAll('#touch .btn').forEach(el => {
+    const k = el.dataset.k || 'jump';
+    const on = e => { e.preventDefault(); keys[k] = true; handleAction(k, true); };
+    const off = e => { e.preventDefault(); keys[k] = false; };
+    el.addEventListener('touchstart', on, {passive:false});
+    el.addEventListener('touchend', off, {passive:false});
+    el.addEventListener('touchcancel', off, {passive:false});
+    el.addEventListener('mousedown', on);
+    el.addEventListener('mouseup', off);
+    el.addEventListener('mouseleave', off);
+  });
+
+  function handleAction(a, down) {
+    if (!down) return;
+    if (a === 'start') {
+      if (game.state === 'title' || game.state === 'gameover' || game.state === 'win') startGame();
+      else if (game.state === 'levelclear') nextLevel();
+    }
+    if (a === 'pause' && game.state === 'play') game.paused = !game.paused;
+    if (a === 'reset' && (game.state === 'play')) { /* handled in loop */ }
+  }
+
+  // =======================================================================
+  //  LEVELS  (original layouts)
+  //  Legend:
+  //   ' ' empty        'G' ground        'b' brick(breakable)
+  //   '?' question(coin)  'M' question(mushroom/flower)  'S' question(star)
+  //   'o' coin          '[' pipe top-left ']' pipe top-right
+  //   '{' pipe body-left '}' pipe body-right
+  //   '=' hard block    'H' hill deco(bg)  'C' cloud deco(bg)  'u' bush deco(bg)
+  //   'e' enemy(walker) 'k' enemy(shell)   'F' flagpole        'x' flag base/castle
+  //   '@' player start
+  //  Rows are top->bottom. Levels are padded to equal width automatically.
+  // =======================================================================
+
+  const LEVELS = [
+    // ---- 1-1  Overworld intro -------------------------------------------
+    {
+      name: '1-1', bg: 'day', time: 400,
+      map: [
+        "                                                                                                    ",
+        "                                                                                                    ",
+        "          C                        C                          C                                     ",
+        "                                                                                                    ",
+        "      C            ?   b?b                    C                                                      ",
+        "                                                                                                    ",
+        "                                          bMb                                bb?bb                  ",
+        "                                                                                                    ",
+        "   C          H              e                                e      e                    C          ",
+        "                                                     [ ]                                            ",
+        "         u          ?                e         [ ]   { }        b b            F                    ",
+        "               [ ]        e    e     { }       { }   { }    e                  F                    ",
+        "  @        e   { }    e               { }      { }   { }   e e                  F                   x",
+        "GGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGG  GGGG{ }GGGGGG{ }GGG{ }GGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGGGGGGGx",
+        "GGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGG  GGGG{ }GGGGGG{ }GGG{ }GGGGGGGGGGGGGGGGGGGGGGGFGGGGGGGGGGGGGGGGGGGx",
+      ],
+    },
+    // ---- 1-2  Underground coins -----------------------------------------
+    {
+      name: '1-2', bg: 'cave', time: 400,
+      map: [
+        "====================================================================================================",
+        "=                                                                                                  =",
+        "=   o o o     bbbb        o o o o                  bMb                  o o o                       =",
+        "=            b    b                    ====                                       ====             =",
+        "=   e        b    b   o o     e e              o o o        e                                       =",
+        "=          =====     ===          ====   b?b        ===           bbbbb        e        e          =",
+        "=                                                                                                  =",
+        "=       o o        e        [ ]          k          o o o           e          [ ]        o o      =",
+        "=      =====      ===       { }    ====                 ===        ===         { }       ====      =",
+        "=  @               e        { }                e e                              { }              F =",
+        "=GGGGGGGGGGGG  GGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGGGGGGGGGGG   GGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGFGx",
+        "=GGGGGGGGGGGG  GGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGGGGGGGGGGG   GGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGFGx",
+      ],
+    },
+    // ---- 1-3  Sky platforms ---------------------------------------------
+    {
+      name: '1-3', bg: 'day', time: 300,
+      map: [
+        "                                                                                                    ",
+        "         C                     C                        C                     C                     ",
+        "                    ?Mb                                                                             ",
+        "            ===                     ===          k                                                  ",
+        "                          e                 ===        ===             o o                          ",
+        "     ===          ===                                          ===            ===        F          ",
+        "              o o         ===        e            ===                   e                F          ",
+        "  ===   e                        ===        o o          e        ===          ===       F          ",
+        "                    ===   o o                     ===                                    F          ",
+        "        ===                          ===   e            ===   e            ===           F         x",
+        "  @                                                                                      FGGGGGGGGGx",
+        "=====        ==        ===        ==        ====        ==        ===        =====        FGGGGGGGGGx",
+        "GGGGG        GG        GGG        GG        GGGG        GG        GGG        GGGGG        FGGGGGGGGGx",
+      ],
+    },
+    // ---- 1-4  Castle finale ---------------------------------------------
+    {
+      name: '1-4', bg: 'night', time: 300,
+      map: [
+        "====================================================================================================",
+        "=                                                                                                  =",
+        "=   bbbb      b?b         bSb              bbbb            bMb                 bbbbbb                =",
+        "=                                                                                                  =",
+        "=       e         [ ]           e e            k          e e         [ ]          e               =",
+        "=   =====         { }     =====          =====      =====         ====={ }  =====       =====       =",
+        "=                 { }                                                     { }                      =",
+        "=      k    e     { }    e      [ ]     e     e      k       e   e         { }    e e     e      F  =",
+        "=GGGGGGGGGGGGGGGGG{ }GGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGFGx",
+        "=GGGGGGGGGGGGGGGGG{ }GGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGFGx",
+      ],
+    },
+    // ---- 2-1  Bigger overworld ------------------------------------------
+    {
+      name: '2-1', bg: 'day', time: 400,
+      map: [
+        "                                                                                                    ",
+        "        C                 C                     C                        C                          ",
+        "                b?bMb                                     bbb?bbb                                    ",
+        "                                        ===                              ===                        ",
+        "     C                       e e                    e            k                    C              ",
+        "              H        [ ]              ===              e                 ===                 F     ",
+        "         u             { }       e            [ ]              e e                 e   e        F     ",
+        "  @      e      e      { }   e         e      { }      e             [ ]      e                  F    x",
+        "GGGGGGGGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGGGGGGGFGGGx",
+        "GGGGGGGGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGG{ }GGGGGGGGGGGGGGGGGGGGGGGGGFGGGx",
+      ],
+    },
+  ];
+
+  // =======================================================================
+  //  GAME STATE
+  // =======================================================================
+  const game = {
+    state: 'title',     // title | play | levelclear | gameover | win | dying
+    paused: false,
+    levelIndex: 0,
+    score: 0, coins: 0, lives: 3,
+    time: 400, timeAcc: 0,
+    world: null,
+    cam: 0,
+    t: 0,
+    message: '', messageT: 0,
+  };
+
+  // ---- World / level build ----------------------------------------------
+  function buildLevel(idx) {
+    const def = LEVELS[idx];
+    const rows = def.map.slice();
+    const width = Math.max(...rows.map(r => r.length));
+    const padded = rows.map(r => r.padEnd(width, r === rows[rows.length-1] ? 'G' : ' '));
+    const h = padded.length;
+    const grid = [];       // tile chars for solid/interactive
+    const deco = [];       // background deco markers
+    const items = [];      // coins, powerups pending in blocks handled by grid
+    const enemies = [];
+    let start = {x: 2*TILE, y: 2*TILE};
+    let flagX = width*TILE - 3*TILE;
+
+    for (let y=0; y<h; y++) grid.push(new Array(width).fill(' '));
+
+    for (let y=0; y<h; y++) {
+      for (let x=0; x<width; x++) {
+        const ch = padded[y][x];
+        switch (ch) {
+          case '@': start = {x: x*TILE, y: y*TILE}; break;
+          case 'e': enemies.push(makeEnemy(x*TILE, y*TILE, 'walker')); break;
+          case 'k': enemies.push(makeEnemy(x*TILE, y*TILE, 'shell')); break;
+          case 'C': deco.push({t:'cloud', x:x*TILE, y:y*TILE}); break;
+          case 'H': deco.push({t:'hill', x:x*TILE, y:y*TILE}); break;
+          case 'u': deco.push({t:'bush', x:x*TILE, y:y*TILE}); break;
+          case 'o': grid[y][x] = 'o'; break;             // free coin
+          case 'F': grid[y][x] = 'F'; if (x*TILE < flagX) {} flagX = Math.min(flagX, x*TILE); break;
+          case 'G': case 'b': case '?': case 'M': case 'S':
+          case '[': case ']': case '{': case '}': case '=':
+          case 'x':
+            grid[y][x] = ch; break;
+          default: break;
+        }
+      }
+    }
+    // find true flag column (leftmost F)
+    let fx = null;
+    for (let x=0; x<width && fx===null; x++) {
+      for (let y=0; y<h; y++) if (grid[y][x]==='F') { fx = x; break; }
+    }
+    if (fx!==null) flagX = fx*TILE;
+
+    return {
+      def, grid, deco, enemies,
+      width, height: h,
+      pxWidth: width*TILE, pxHeight: h*TILE,
+      start, flagX,
+      particles: [],
+      fireballs: [],
+      floaters: [],   // popped power-ups / coins animating
+      flagDone: false,
+    };
+  }
+
+  // ---- Player ------------------------------------------------------------
+  function makePlayer(start) {
+    return {
+      x: start.x, y: start.y, w: 12, h: 14,
+      vx:0, vy:0, dir:1, onGround:false,
+      power:0,            // 0 small, 1 big, 2 fire
+      invuln:0,           // i-frames after hit
+      star:0,             // star timer
+      shootCd:0,
+      crouch:false,
+      walkT:0, jumpHeld:false,
+      alive:true,
+    };
+  }
+
+  function playerBox(p) {
+    const big = p.power > 0 && !p.crouch;
+    return { x:p.x, y:p.y, w:p.w, h: big ? 24 : 14 };
+  }
+
+  // ---- Enemies -----------------------------------------------------------
+  function makeEnemy(x, y, type) {
+    return {
+      x, y, w:14, h: type==='shell'?15:14,
+      vx: -0.5, vy:0, dir:-1, type,
+      state:'walk',       // walk | shell | slide | dead
+      onGround:false, t:0, alive:true, stompT:0, awake:false,
+    };
+  }
+
+  // =======================================================================
+  //  TILE HELPERS
+  // =======================================================================
+  const SOLID = new Set(['G','b','?','M','S','[',']','{','}','=','x','U']); // U=used block
+  function tileAt(w, tx, ty) {
+    if (ty<0 || ty>=w.height || tx<0 || tx>=w.width) return ' ';
+    return w.grid[ty][tx];
+  }
+  function isSolid(ch) { return SOLID.has(ch); }
+
+  function rectVsWorld(w, box) {
+    // returns list of solid tile rects overlapping box (for collision)
+    const x0 = Math.floor(box.x/TILE), x1 = Math.floor((box.x+box.w-1)/TILE);
+    const y0 = Math.floor(box.y/TILE), y1 = Math.floor((box.y+box.h-1)/TILE);
+    const hits = [];
+    for (let ty=y0; ty<=y1; ty++)
+      for (let tx=x0; tx<=x1; tx++)
+        if (isSolid(tileAt(w,tx,ty))) hits.push({tx,ty});
+    return hits;
+  }
+
+  // =======================================================================
+  //  PHYSICS
+  // =======================================================================
+  const GRAV = 0.42, MAXFALL = 8;
+  const WALK = 1.3, RUN = 2.35, ACC = 0.22, RUNACC = 0.30, FRICTION = 0.18;
+  const JUMP_V = 7.4, JUMP_CUT = 0.42;
+
+  function moveActor(w, a, box) {
+    // horizontal
+    a.x += a.vx;
+    let b = {x:a.x, y:a.y, w:box.w, h:box.h};
+    let hits = rectVsWorld(w, b);
+    for (const {tx} of hits) {
+      const tileL = tx*TILE, tileR = tx*TILE+TILE;
+      if (a.vx > 0) { a.x = tileL - box.w; }
+      else if (a.vx < 0) { a.x = tileR; }
+      a.vx = 0;
+      b.x = a.x;
+    }
+    // vertical
+    a.y += a.vy;
+    a.onGround = false;
+    b = {x:a.x, y:a.y, w:box.w, h:box.h};
+    hits = rectVsWorld(w, b);
+    let headHit = null;
+    for (const {tx,ty} of hits) {
+      const tileT = ty*TILE, tileB = ty*TILE+TILE;
+      if (a.vy > 0) { a.y = tileT - box.h; a.onGround = true; a.vy = 0; }
+      else if (a.vy < 0) { a.y = tileB; a.vy = 0; headHit = {tx,ty}; }
+      b.y = a.y;
+    }
+    return headHit;
+  }
+
+  // =======================================================================
+  //  UPDATE
+  // =======================================================================
+  function update(dt) {
+    game.t++;
+    if (game.state !== 'play' || game.paused) return;
+    const w = game.world;
+    const p = w.player;
+
+    // timer
+    game.timeAcc += dt;
+    if (game.timeAcc > 0.4) { game.timeAcc = 0; if (game.time>0) game.time--; if (game.time<=0) killPlayer(); }
+
+    updatePlayer(w, p);
+    for (const e of w.enemies) updateEnemy(w, e, p);
+    updateFireballs(w);
+    updateFloaters(w);
+    updateParticles(w);
+
+    // camera follows player, never scrolls back past current max
+    const target = p.x - VW*TILE*0.4;
+    w.camMax = Math.max(w.camMax||0, target);
+    game.cam = clamp(w.camMax, 0, w.pxWidth - VW*TILE);
+
+    // fell in a pit
+    if (p.y > w.pxHeight + 40) killPlayer();
+
+    // flag reached
+    if (!w.flagDone && p.x + 6 >= w.flagX) reachFlag(w, p);
+  }
+
+  function updatePlayer(w, p) {
+    if (!p.alive) return;
+    const box = playerBox(p);
+
+    // timers
+    if (p.invuln>0) p.invuln--;
+    if (p.star>0) { p.star--; if (p.star===0) {} }
+    if (p.shootCd>0) p.shootCd--;
+
+    const run = keys.run;
+    const maxSpd = run ? RUN : WALK;
+    const acc = run ? RUNACC : ACC;
+
+    p.crouch = keys.down && p.power>0 && p.onGround;
+
+    if (!p.crouch) {
+      if (keys.left)  { p.vx -= acc; p.dir=-1; }
+      if (keys.right) { p.vx += acc; p.dir=1; }
+    }
+    if (!keys.left && !keys.right || p.crouch) {
+      if (p.vx>0) p.vx = Math.max(0, p.vx-FRICTION);
+      else if (p.vx<0) p.vx = Math.min(0, p.vx+FRICTION);
+    }
+    p.vx = clamp(p.vx, -maxSpd, maxSpd);
+
+    // jump
+    if (keys.jump && p.onGround && !p.jumpHeld) {
+      p.vy = -JUMP_V - Math.abs(p.vx)*0.28;
+      p.onGround = false; p.jumpHeld = true;
+      sfx('jump');
+    }
+    if (!keys.jump) p.jumpHeld = false;
+    if (!keys.jump && p.vy < -2) p.vy *= JUMP_CUT; // variable jump
+
+    // shoot fireball
+    if (keys.fire && p.power===2 && p.shootCd===0 && !p.crouch) {
+      shootFireball(w, p);
+      p.shootCd = 16;
+    }
+
+    // gravity
+    p.vy = Math.min(MAXFALL, p.vy + GRAV);
+
+    const head = moveActor(w, p, playerBox(p));
+    if (head) hitBlockFromBelow(w, p, head.tx, head.ty);
+
+    // coin pickup by overlap
+    collectCoins(w, p);
+
+    if (Math.abs(p.vx) > 0.1 && p.onGround) p.walkT += Math.abs(p.vx);
+  }
+
+  function hitBlockFromBelow(w, p, tx, ty) {
+    const ch = tileAt(w, tx, ty);
+    if (ch === 'b') {
+      if (p.power>0) {
+        // break brick
+        w.grid[ty][tx] = ' ';
+        spawnDebris(w, tx*TILE, ty*TILE);
+        game.score += 50; sfx('break');
+      } else {
+        bumpTile(w, tx, ty);
+        sfx('bump');
+      }
+    } else if (ch === '?' || ch === 'M' || ch === 'S') {
+      w.grid[ty][tx] = 'U'; // used
+      bumpTile(w, tx, ty);
+      if (ch === '?') { spawnCoinPop(w, tx, ty); game.score += 200; addCoin(); }
+      else if (ch === 'M') spawnPowerup(w, tx, ty, p.power===0 ? 'mushroom' : 'flower');
+      else if (ch === 'S') spawnPowerup(w, tx, ty, 'star');
+      sfx('item');
+    }
+  }
+
+  function bumpTile(w, tx, ty) {
+    w.bumps = w.bumps || [];
+    w.bumps.push({tx, ty, t:0});
+    // knock enemies above
+    const bx = tx*TILE, by = ty*TILE;
+    for (const e of w.enemies) {
+      if (e.alive && Math.abs((e.x+e.w/2)-(bx+TILE/2))<TILE && Math.abs((e.y+e.h)-(by))<6) {
+        stompDeath(w, e, true);
+      }
+    }
+  }
+
+  // ---- Power-ups (floaters) ---------------------------------------------
+  function spawnPowerup(w, tx, ty, kind) {
+    w.floaters.push({
+      kind, x: tx*TILE, y: ty*TILE, w:14, h:14,
+      vx: kind==='star'?1.5:0.6, vy: kind==='star'?-3:0, phase:'emerge', emerge:0,
+      dir:1, onGround:false, collected:false,
+    });
+  }
+  function spawnCoinPop(w, tx, ty) {
+    w.floaters.push({kind:'coinpop', x:tx*TILE+3, y:ty*TILE, w:10, h:14, vy:-4.2, phase:'pop', life:26});
+  }
+
+  function updateFloaters(w) {
+    const p = w.player;
+    for (const f of w.floaters) {
+      if (f.kind === 'coinpop') {
+        f.vy += 0.28; f.y += f.vy; f.life--;
+        if (f.life<=0) f.dead = true;
+        continue;
+      }
+      if (f.phase === 'emerge') {
+        f.emerge += 1; f.y -= 0.6;
+        if (f.emerge >= TILE) f.phase = (f.kind==='star') ? 'bounce' : 'move';
+        continue;
+      }
+      // mushroom/flower move; flower stays put
+      if (f.kind === 'flower') {
+        // stationary, just sit
+      } else {
+        f.vy = Math.min(MAXFALL, f.vy + GRAV);
+        // horizontal
+        f.x += f.vx;
+        let hits = rectVsWorld(w, f);
+        for (const {tx} of hits) {
+          if (f.vx>0) f.x = tx*TILE - f.w; else f.x = tx*TILE+TILE;
+          f.vx *= -1; f.dir *= -1;
+        }
+        f.y += f.vy;
+        f.onGround=false;
+        hits = rectVsWorld(w, f);
+        for (const {ty} of hits) {
+          if (f.vy>0) { f.y = ty*TILE - f.h; f.onGround=true; if (f.kind==='star') f.vy=-3.6; else f.vy=0; }
+          else { f.y = ty*TILE+TILE; f.vy=0; }
+        }
+      }
+      // pickup
+      if (!f.dead && aabb(playerBox(p), f)) {
+        f.dead = true;
+        applyPowerup(w, p, f.kind);
+      }
+    }
+    w.floaters = w.floaters.filter(f => !f.dead);
+  }
+
+  function applyPowerup(w, p, kind) {
+    if (kind === 'mushroom') {
+      if (p.power===0) { p.power=1; p.y -= 12; }
+      game.score += 1000; sfx('grow');
+    } else if (kind === 'flower') {
+      p.power = 2; if (p.power===2) {} game.score += 1000; sfx('grow');
+    } else if (kind === 'star') {
+      p.star = 600; game.score += 1000; sfx('star');
+    }
+    game.message = kind==='star' ? 'INVINCIBLE!' : (kind==='flower'?'FIRE POWER!':'POWER UP!');
+    game.messageT = 90;
+  }
+
+  // ---- Fireballs ---------------------------------------------------------
+  function shootFireball(w, p) {
+    const b = playerBox(p);
+    w.fireballs.push({
+      x: p.dir>0 ? b.x+b.w : b.x-6, y: b.y+6, w:6, h:6,
+      vx: p.dir*4.2, vy:2, bounces:0, dead:false,
+    });
+    sfx('shoot');
+  }
+  function updateFireballs(w) {
+    for (const f of w.fireballs) {
+      f.vy = Math.min(6, f.vy + 0.4);
+      f.x += f.vx;
+      let hits = rectVsWorld(w, f);
+      if (hits.length) { f.dead = true; }
+      f.y += f.vy;
+      hits = rectVsWorld(w, f);
+      for (const {ty} of hits) {
+        if (f.vy>0) { f.y = ty*TILE - f.h; f.vy = -3.4; f.bounces++; }
+        else { f.dead = true; }
+      }
+      if (f.bounces>4) f.dead = true;
+      if (f.x < game.cam-20 || f.x > game.cam+VW*TILE+20) f.dead = true;
+      // hit enemies
+      for (const e of w.enemies) {
+        if (e.alive && e.state!=='dead' && aabb(f, e)) {
+          f.dead = true; enemyDie(w, e); game.score += 100;
+        }
+      }
+      if (f.dead) spawnPuff(w, f.x, f.y);
+    }
+    w.fireballs = w.fireballs.filter(f => !f.dead);
+  }
+
+  // ---- Enemies -----------------------------------------------------------
+  function updateEnemy(w, e, p) {
+    if (!e.alive) return;
+    if (!e.awake) {
+      if (e.x < game.cam + VW*TILE + 32 && e.x > game.cam - 32) e.awake = true;
+      else return;
+    }
+    e.t++;
+
+    if (e.state === 'dead') { return; }
+
+    if (e.state === 'shell') {
+      // idle shell; if player pushes, it may already be sliding
+      e.vx = 0;
+    }
+
+    // gravity + move
+    e.vy = Math.min(MAXFALL, e.vy + GRAV);
+    // horizontal
+    e.x += e.vx;
+    let hits = rectVsWorld(w, e);
+    for (const {tx} of hits) {
+      if (e.vx>0) e.x = tx*TILE - e.w; else if (e.vx<0) e.x = tx*TILE+TILE;
+      e.vx = (e.state==='slide') ? -e.vx : -Math.abs(e.vx)*Math.sign(e.vx||1);
+      e.dir *= -1;
+      if (e.state==='slide') e.vx = e.dir* 3.2;
+    }
+    // vertical
+    e.y += e.vy;
+    e.onGround=false;
+    hits = rectVsWorld(w, e);
+    for (const {ty} of hits) {
+      if (e.vy>0){ e.y = ty*TILE - e.h; e.onGround=true; e.vy=0; }
+      else { e.y = ty*TILE+TILE; e.vy=0; }
+    }
+    // ledge turn for walkers (don't walk off edges) — optional gentle behavior
+    if (e.onGround && (e.state==='walk')) {
+      const aheadX = e.dir>0 ? e.x+e.w+1 : e.x-1;
+      const belowTile = tileAt(w, Math.floor(aheadX/TILE), Math.floor((e.y+e.h+2)/TILE));
+      if (!isSolid(belowTile)) { e.dir*=-1; e.vx = e.dir*Math.abs(e.vx||0.5); }
+    }
+    if (e.state==='walk' && Math.abs(e.vx)<0.1) e.vx = e.dir*0.5;
+
+    // fell out
+    if (e.y > w.pxHeight+40) { e.alive=false; return; }
+
+    // slide shell hits other enemies
+    if (e.state==='slide') {
+      for (const o of w.enemies) {
+        if (o!==e && o.alive && o.state!=='dead' && aabb(e,o)) { enemyDie(w,o); game.score+=100; }
+      }
+    }
+
+    // player collision
+    if (p.alive && aabb(playerBox(p), e)) {
+      const pb = playerBox(p);
+      const stomping = p.vy > 0 && (pb.y + pb.h) - e.y < 12;
+      if (p.star>0) {
+        enemyDie(w, e); game.score += 100;
+      } else if (stomping) {
+        if (e.type==='shell' || e.state==='shell' || e.state==='slide') {
+          if (e.state==='slide') { e.state='shell'; e.vx=0; e.stompT=0; }
+          else { e.state='slide'; e.dir = (p.x < e.x)?1:-1; e.vx = e.dir*3.2; }
+          p.vy = -5; game.score += 100;
+        } else {
+          stompDeath(w, e, false);
+          p.vy = keys.jump ? -6.4 : -4.4;
+          game.score += 100;
+        }
+        sfx('stomp');
+      } else if (e.state==='shell' && Math.abs(e.vx)<0.1) {
+        // kick idle shell
+        e.state='slide'; e.dir = (p.x < e.x)?1:-1; e.vx = e.dir*3.2;
+        p.vx = e.dir*1.2;
+        sfx('stomp');
+      } else {
+        hurtPlayer(w, p);
+      }
+    }
+  }
+
+  function stompDeath(w, e, fromBelow) {
+    if (fromBelow) { enemyDie(w, e); return; }
+    if (e.type==='shell') { e.state='shell'; e.vx=0; e.stompT=0; return; }
+    e.state='dead'; e.squashT=0; e.vy=0;
+    e.deadTimer=30;
+    spawnPuff(w, e.x, e.y);
+    // squashed sprite for a moment
+    e._squashed = true;
+    setTimeout(()=>{}, 0);
+    e.alive = true; // keep for draw of squash
+    e.squashUntil = game.t + 24;
+  }
+  function enemyDie(w, e) {
+    // flip and fall off
+    e.state='dead'; e.alive=true; e.flip=true; e.vy=-4; e.vx=0; e.dieY=e.y; e.dying=true;
+    spawnPuff(w, e.x, e.y);
+    // animate falling in particles system via floaters
+    w.deadEnemies = w.deadEnemies || [];
+    w.deadEnemies.push({x:e.x, y:e.y, w:e.w, h:e.h, vy:-4, type:e.type, t:0});
+    e.alive=false;
+  }
+
+  // ---- Player damage -----------------------------------------------------
+  function hurtPlayer(w, p) {
+    if (p.invuln>0 || p.star>0) return;
+    if (p.power>0) {
+      p.power = 0; p.invuln = 90; p.y += 10; sfx('shrink');
+      game.message = 'OUCH!'; game.messageT = 50;
+    } else {
+      killPlayer();
+    }
+  }
+  function killPlayer() {
+    const p = game.world.player;
+    if (!p.alive) return;
+    p.alive = false; p.vy = -8; p.vx = 0;
+    game.state = 'dying'; game.dyingT = 0;
+    sfx('die');
+  }
+
+  // ---- Flag / level clear -----------------------------------------------
+  function reachFlag(w, p) {
+    w.flagDone = true;
+    p.vx = 0;
+    game.message = 'LEVEL CLEAR!';
+    game.messageT = 999;
+    game.score += 2000 + game.time*10;
+    game.state = 'levelclear';
+    game.clearT = 0;
+    sfx('clear');
+  }
+
+  // ---- Coins -------------------------------------------------------------
+  function collectCoins(w, p) {
+    const b = playerBox(p);
+    const x0 = Math.floor(b.x/TILE), x1 = Math.floor((b.x+b.w-1)/TILE);
+    const y0 = Math.floor(b.y/TILE), y1 = Math.floor((b.y+b.h-1)/TILE);
+    for (let ty=y0; ty<=y1; ty++)
+      for (let tx=x0; tx<=x1; tx++)
+        if (tileAt(w,tx,ty)==='o') { w.grid[ty][tx]=' '; addCoin(); spawnSparkle(w, tx*TILE, ty*TILE); }
+  }
+  function addCoin() {
+    game.coins++; game.score += 200; sfx('coin');
+    if (game.coins>=100) { game.coins-=100; game.lives++; sfx('1up'); game.message='1-UP!'; game.messageT=60; }
+  }
+
+  // ---- Particles ---------------------------------------------------------
+  function spawnDebris(w, x, y) {
+    for (let i=0;i<4;i++)
+      w.particles.push({x:x+8, y:y+8, vx:(i<2?-1:1)*(1+Math.random()), vy:-3-Math.random()*2, life:40, c:C.brickDark, s:4});
+  }
+  function spawnPuff(w, x, y) {
+    for (let i=0;i<5;i++)
+      w.particles.push({x:x+7, y:y+7, vx:(Math.random()-0.5)*2, vy:(Math.random()-0.8)*2, life:22, c:'#ffffff', s:2});
+  }
+  function spawnSparkle(w, x, y) {
+    for (let i=0;i<4;i++)
+      w.particles.push({x:x+8, y:y+8, vx:(Math.random()-0.5)*1.5, vy:-1-Math.random(), life:18, c:C.coin, s:2});
+  }
+  function updateParticles(w) {
+    for (const q of w.particles) { q.vy+=0.22; q.x+=q.vx; q.y+=q.vy; q.life--; }
+    w.particles = w.particles.filter(q=>q.life>0);
+    if (w.deadEnemies) {
+      for (const d of w.deadEnemies) { d.vy+=0.3; d.y+=d.vy; d.t++; }
+      w.deadEnemies = w.deadEnemies.filter(d=>d.t<70);
+    }
+    if (w.bumps) { for (const b of w.bumps) b.t++; w.bumps = w.bumps.filter(b=>b.t<10); }
+  }
+
+  // =======================================================================
+  //  RENDER
+  // =======================================================================
+  function render() {
+    const w = game.world;
+    // background
+    drawBackground();
+
+    if (!w) { drawTitle(); return; }
+
+    const cam = Math.floor(game.cam);
+
+    // deco (parallax-ish, drawn at 0.5 scroll)
+    for (const d of w.deco) {
+      const dx = d.x - cam*0.5;
+      if (dx < -64 || dx > VW*TILE+64) continue;
+      if (d.t==='cloud') drawCloud(dx, d.y);
+      else if (d.t==='hill') drawHill(dx, d.y);
+      else if (d.t==='bush') drawBush(dx, d.y);
+    }
+
+    // tiles
+    const tx0 = Math.floor(cam/TILE)-1, tx1 = tx0 + VW + 2;
+    for (let ty=0; ty<w.height; ty++) {
+      for (let tx=tx0; tx<=tx1; tx++) {
+        const ch = tileAt(w,tx,ty);
+        if (ch===' ') continue;
+        let sy = ty*TILE;
+        // bump animation
+        if (w.bumps) for (const b of w.bumps) if (b.tx===tx && b.ty===ty) sy -= Math.sin((b.t/10)*Math.PI)*5;
+        drawTile(ch, tx*TILE - cam, sy, w, tx, ty);
+      }
+    }
+
+    // flag
+    drawFlag(w, cam);
+
+    // floaters (powerups/coin pops)
+    for (const f of w.floaters) drawFloater(f, cam);
+
+    // fireballs
+    for (const f of w.fireballs) drawFireball(f, cam, game.t);
+
+    // enemies
+    for (const e of w.enemies) if (e.alive || e.squashUntil>game.t) drawEnemy(e, cam);
+    if (w.deadEnemies) for (const d of w.deadEnemies) drawDeadEnemy(d, cam);
+
+    // particles
+    for (const q of w.particles) { ctx.fillStyle=q.c; ctx.fillRect(Math.floor(q.x-cam), Math.floor(q.y), q.s, q.s); }
+
+    // player
+    drawPlayer(w.player, cam);
+
+    // HUD
+    drawHUD();
+
+    // overlays
+    if (game.paused) overlay('PAUSED', 'Press P to resume');
+    if (game.state==='levelclear') overlay('LEVEL CLEAR!', 'Press Enter for next level');
+    if (game.state==='gameover') overlay('GAME OVER', 'Press Enter to try again');
+    if (game.state==='win') overlay('YOU WIN! 🏆', 'Press Enter to play again');
+
+    // floating message
+    if (game.messageT>0 && game.state==='play') {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, game.messageT/20);
+      drawText(game.message, VW*TILE/2, 90, 'center', C.star, 2);
+      ctx.restore();
+      game.messageT--;
+    }
+  }
+
+  function drawBackground() {
+    const def = game.world?.def;
+    let top = C.sky, bot = C.sky;
+    if (def) {
+      if (def.bg==='cave') { top='#0a0a16'; bot='#000000'; }
+      else if (def.bg==='night') { top='#0a1030'; bot='#1a2050'; }
+      else { top='#5c94fc'; bot='#9ec4ff'; }
+    } else { top='#0b1020'; bot='#1a2450'; }
+    const g = ctx.createLinearGradient(0,0,0,VH*TILE);
+    g.addColorStop(0, top); g.addColorStop(1, bot);
+    ctx.fillStyle = g; ctx.fillRect(0,0,VW*TILE,VH*TILE);
+  }
+
+  // ---- Tiles -------------------------------------------------------------
+  function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x|0,y|0,w,h); }
+
+  function drawTile(ch, x, y, wld, tx, ty) {
+    switch (ch) {
+      case 'G': {
+        const top = !isSolid(tileAt(wld,tx,ty-1));
+        px(x,y,TILE,TILE, C.ground);
+        px(x,y,TILE,4, C.groundDark);
+        if (top) px(x,y,TILE,4, C.groundTop);
+        px(x+2,y+7,3,3, C.groundDark); px(x+9,y+11,3,3, C.groundDark);
+        break;
+      }
+      case 'b': {
+        px(x,y,TILE,TILE, C.brick);
+        px(x,y,TILE,1,C.brickDark); px(x,y+7,TILE,1,C.brickMortar); px(x,y+15,TILE,1,C.brickDark);
+        px(x+7,y,1,7,C.brickMortar); px(x+3,y+8,1,7,C.brickMortar); px(x+11,y+8,1,7,C.brickMortar);
+        break;
+      }
+      case '?': case 'M': case 'S': {
+        const shine = (Math.floor(game.t/12)%3);
+        px(x,y,TILE,TILE, C.qblock);
+        px(x,y,TILE,2, C.qblockShine);
+        px(x,y+14,TILE,2, C.qblockDark);
+        px(x,y,2,TILE, C.qblockShine); px(x+14,y,2,TILE, C.qblockDark);
+        // corner rivets
+        px(x+2,y+2,2,2,C.qblockDark); px(x+12,y+2,2,2,C.qblockDark);
+        px(x+2,y+12,2,2,C.qblockDark); px(x+12,y+12,2,2,C.qblockDark);
+        // "?" glyph blinking
+        const gc = shine===0 ? '#fff' : C.qblockDark;
+        px(x+6,y+4,4,2,gc); px(x+9,y+5,2,3,gc); px(x+7,y+8,3,2,gc); px(x+7,y+11,2,2,gc);
+        break;
+      }
+      case 'U': {
+        px(x,y,TILE,TILE, C.used);
+        px(x,y,TILE,2, '#c2a878'); px(x,y+14,TILE,2, C.usedDark);
+        px(x+2,y+2,2,2,C.usedDark); px(x+12,y+2,2,2,C.usedDark);
+        px(x+2,y+12,2,2,C.usedDark); px(x+12,y+12,2,2,C.usedDark);
+        break;
+      }
+      case '=': {
+        px(x,y,TILE,TILE, C.hard);
+        px(x,y,TILE,3, '#c2c8d8'); px(x,y+13,TILE,3, C.hardDark);
+        px(x+1,y+1,6,6,'#c8cede'); px(x+9,y+9,6,6,C.hardDark);
+        break;
+      }
+      case 'x': { // castle/hard end block
+        px(x,y,TILE,TILE, '#7a4a2a');
+        px(x,y,TILE,2,'#5a3418'); px(x+7,y,2,TILE,'#5a3418'); px(x,y+7,TILE,2,'#5a3418');
+        break;
+      }
+      case '[': px(x,y,TILE,TILE,C.pipe); px(x,y,TILE,3,C.pipeLight); px(x,y,3,TILE,C.pipeLight); px(x+13,y,3,TILE,C.pipeDark); px(x,y+13,TILE,3,C.pipeDark); break;
+      case ']': px(x,y,TILE,TILE,C.pipe); px(x,y,TILE,3,C.pipeLight); px(x+13,y,3,TILE,C.pipeDark); px(x,y,3,TILE,C.pipeLight); px(x,y+13,TILE,3,C.pipeDark); break;
+      case '{': px(x,y,TILE,TILE,C.pipe); px(x+1,y,3,TILE,C.pipeLight); px(x+12,y,4,TILE,C.pipeDark); break;
+      case '}': px(x,y,TILE,TILE,C.pipe); px(x,y,3,TILE,C.pipeLight); px(x+12,y,4,TILE,C.pipeDark); break;
+      case 'o': drawCoinTile(x,y); break;
+      case 'F': /* pole drawn separately */ break;
+      default: break;
+    }
+  }
+
+  function drawCoinTile(x,y){
+    const t = Math.floor(game.t/8)%4;
+    const wdt = [8,5,2,5][t];
+    const ox = x + (TILE-wdt)/2;
+    px(ox, y+2, wdt, 12, C.coin);
+    px(ox, y+2, Math.max(1,wdt/4|0), 12, C.coinDark);
+    px(ox+wdt-1, y+2, 1, 12, C.coinDark);
+  }
+
+  // ---- Flagpole ----------------------------------------------------------
+  function drawFlag(w, cam) {
+    const fx = w.flagX - cam + 7;
+    // find pole height: draw from a few tiles up to ground
+    let topY = 0;
+    // find flag base column ground
+    const tcol = Math.floor(w.flagX/TILE);
+    let groundY = w.height*TILE;
+    for (let ty=0; ty<w.height; ty++) if (tileAt(w,tcol,ty)==='F') { groundY = ty*TILE; break; }
+    const poleTop = 32;
+    px(fx-1, poleTop, 3, groundY-poleTop, C.poleDark);
+    px(fx, poleTop, 1, groundY-poleTop, C.pole);
+    // ball on top
+    px(fx-2, poleTop-4, 5, 4, C.flag);
+    // flag cloth
+    const wave = Math.sin(game.t/10)*2;
+    let fy = poleTop + 6;
+    if (w.flagDone) fy = Math.min(groundY-20, poleTop + 6 + (game.clearT||0)*3);
+    ctx.fillStyle = C.flag;
+    ctx.beginPath();
+    ctx.moveTo(fx-1, fy);
+    ctx.lineTo(fx-14+wave, fy+7);
+    ctx.lineTo(fx-1, fy+14);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // ---- Deco --------------------------------------------------------------
+  function drawCloud(x,y){
+    ctx.fillStyle=C.cloud;
+    for (const [ox,oy,r] of [[0,6,6],[8,2,8],[18,4,7],[26,7,6]]) { ctx.beginPath(); ctx.arc(x+ox,y+oy,r,0,7); ctx.fill(); }
+    px(x-4,y+8,40,6,C.cloud);
+  }
+  function drawHill(x,y){
+    ctx.fillStyle=C.hillDark; ctx.beginPath(); ctx.moveTo(x-24,y+16); ctx.quadraticCurveTo(x,y-18,x+24,y+16); ctx.fill();
+    ctx.fillStyle=C.hill; ctx.beginPath(); ctx.moveTo(x-20,y+16); ctx.quadraticCurveTo(x,y-12,x+20,y+16); ctx.fill();
+  }
+  function drawBush(x,y){
+    ctx.fillStyle=C.bush;
+    for (const [ox,r] of [[0,7],[9,9],[19,7]]) { ctx.beginPath(); ctx.arc(x+ox,y+12,r,Math.PI,2*Math.PI); ctx.fill(); }
+    px(x-6,y+11,34,5,C.bush);
+  }
+
+  // ---- Coin pop / floaters ----------------------------------------------
+  function drawFloater(f, cam) {
+    const x = f.x - cam, y = f.y;
+    if (f.kind==='coinpop') { drawCoinTile(x-3, y); return; }
+    if (f.kind==='mushroom') {
+      px(x+1,y+6,12,8, C.mushStem);
+      px(x,y,14,7, C.mushroom); px(x+1,y-1,12,2,C.mushroom);
+      px(x+2,y+2,3,3, C.mushDot); px(x+9,y+2,3,3, C.mushDot); px(x+6,y+4,2,2,C.mushDot);
+      px(x+3,y+8,2,3,'#000'); px(x+9,y+8,2,3,'#000');
+    } else if (f.kind==='flower') {
+      const t = Math.floor(game.t/6)%2;
+      px(x+6,y+7,2,7, C.flowerStem);
+      px(x+2,y+8,4,3, C.flowerStem); px(x+8,y+9,4,3, C.flowerStem);
+      const petal = t? C.flower : '#ff9a4a';
+      px(x+4,y,6,3,petal); px(x+2,y+2,10,4, C.flowerMid); px(x+4,y+5,6,3, petal);
+      px(x+2,y+2,3,4,petal); px(x+9,y+2,3,4,petal);
+      px(x+6,y+3,2,2,'#fff');
+    } else if (f.kind==='star') {
+      drawStar(x+7,y+7, (Math.floor(game.t/6)%2)? C.star : '#fff');
+    }
+  }
+  function drawStar(cx,cy,c){
+    ctx.fillStyle=c; ctx.beginPath();
+    for (let i=0;i<5;i++){
+      const a = -Math.PI/2 + i*2*Math.PI/5;
+      const a2 = a + Math.PI/5;
+      ctx.lineTo(cx+Math.cos(a)*7, cy+Math.sin(a)*7);
+      ctx.lineTo(cx+Math.cos(a2)*3, cy+Math.sin(a2)*3);
+    }
+    ctx.closePath(); ctx.fill();
+    px(cx-3,cy-1,2,2,'#000'); px(cx+1,cy-1,2,2,'#000');
+  }
+
+  function drawFireball(f, cam, t) {
+    const x = f.x-cam, y=f.y;
+    const spin = Math.floor(t/3)%2;
+    px(x-1,y-1,8,8, C.fire3);
+    px(x,y,6,6, C.fire2);
+    px(x+ (spin?1:2), y+(spin?2:1), 2,2, C.fire1);
+  }
+
+  // ---- Enemies -----------------------------------------------------------
+  function drawEnemy(e, cam) {
+    const x = Math.floor(e.x-cam), y = Math.floor(e.y);
+    if (e.squashUntil>game.t && e.state==='dead') {
+      px(x, y+e.h-6, e.w, 6, C.enemy);
+      px(x+2,y+e.h-4,3,2,C.enemyEye); px(x+9,y+e.h-4,3,2,C.enemyEye);
+      return;
+    }
+    if (e.type==='shell' || e.state==='shell' || e.state==='slide') {
+      // shell creature
+      const bob = e.state==='walk'? Math.sin(e.t/6)*1:0;
+      if (e.state==='shell' || e.state==='slide') {
+        px(x, y+3, 14, 12, C.shell);
+        px(x, y+3, 14, 3, C.shellRim);
+        px(x+3,y+6,8,6, C.shellDark);
+        px(x+5,y+7,4,4, C.shell);
+      } else {
+        // walking shell-creature (green)
+        px(x+2, y-4+bob, 10, 8, C.shell); // head
+        px(x+3,y-2+bob,2,2,'#fff'); px(x+9,y-2+bob,2,2,'#fff');
+        px(x+3,y-1+bob,1,1,'#000'); px(x+9,y-1+bob,1,1,'#000');
+        px(x, y+4, 14, 8, C.shell);
+        px(x, y+4, 14, 3, C.shellRim);
+        px(x+2,y+12,4,3, C.shellDark); px(x+8,y+12,4,3, C.shellDark);
+      }
+      return;
+    }
+    // walker (brown mushroom-ish creature)
+    const step = Math.floor(e.t/6)%2;
+    px(x+1, y+1, 12, 9, C.enemy);
+    px(x+1, y+1, 12, 3, C.enemyDark);
+    px(x, y+5, 14, 5, C.enemy);
+    // eyes
+    px(x+2, y+5, 3, 3, C.enemyEye); px(x+9, y+5, 3, 3, C.enemyEye);
+    px(x+3, y+6, 1, 2, '#000'); px(x+10, y+6, 1, 2, '#000');
+    // brow
+    px(x+2,y+4,4,1,'#000'); px(x+8,y+4,4,1,'#000');
+    // feet
+    if (step) { px(x, y+11, 6, 3, C.enemyFoot); px(x+9, y+11, 5, 3, C.enemyFoot); }
+    else { px(x+1, y+11, 5, 3, C.enemyFoot); px(x+8, y+11, 6, 3, C.enemyFoot); }
+  }
+  function drawDeadEnemy(d, cam) {
+    const x=Math.floor(d.x-cam), y=Math.floor(d.y);
+    ctx.save(); ctx.translate(x+d.w/2, y+d.h/2); ctx.scale(1,-1); ctx.translate(-(d.w/2),-(d.h/2));
+    px(1,1,12,9,C.enemy); px(2,5,3,3,C.enemyEye); px(9,5,3,3,C.enemyEye);
+    ctx.restore();
+  }
+
+  // ---- Player ------------------------------------------------------------
+  function drawPlayer(p, cam) {
+    if (!p) return;
+    if (p.invuln>0 && Math.floor(game.t/3)%2===0 && p.alive) return; // blink
+    const b = playerBox(p);
+    const x = Math.floor(p.x - cam), y = Math.floor(b.y);
+    const big = b.h > 14;
+    const dir = p.dir;
+    // star flashing tint
+    let heroC = C.hero, capC = C.hero;
+    if (p.star>0) { const c=[ '#e03030','#ffd23f','#2fbf5f','#2a52d0'][Math.floor(game.t/4)%4]; heroC=c; capC=c; }
+    else if (p.power===2) { heroC='#ffffff'; capC='#e03030'; } // fire suit: white body, red cap
+
+    ctx.save();
+    if (dir<0) { ctx.translate(x+b.w, 0); ctx.scale(-1,1); ctx.translate(-x,0); }
+
+    if (big) {
+      // cap
+      px(x+2, y, 9, 3, capC); px(x+8, y+1, 5, 2, capC);
+      // face
+      px(x+3, y+3, 8, 5, C.skin);
+      px(x+9, y+4, 2, 2, '#000'); // eye
+      px(x+3, y+3, 2, 3, heroC);  // hair/side
+      // body / overalls
+      px(x+2, y+8, 10, 8, C.overall);
+      px(x+2, y+8, 3, 8, heroC);  // shirt sleeve
+      px(x+9, y+8, 3, 8, heroC);
+      px(x+5, y+9, 4, 5, C.overall);
+      px(x+5, y+9, 1,1,'#ffd23f'); px(x+8,y+9,1,1,'#ffd23f'); // buttons
+      // legs
+      const step = (p.onGround && Math.abs(p.vx)>0.2) ? Math.floor(p.walkT/6)%2 : (p.onGround?2:3);
+      if (p.onGround && Math.abs(p.vx)>0.2) {
+        if (step) { px(x+2,y+16,4,6,C.overall); px(x+8,y+16,4,5,C.overall); px(x+1,y+21,5,3,C.boot); px(x+9,y+20,5,3,C.boot); }
+        else { px(x+8,y+16,4,6,C.overall); px(x+2,y+16,4,5,C.overall); px(x+8,y+21,5,3,C.boot); px(x+1,y+20,5,3,C.boot); }
+      } else if (!p.onGround) {
+        px(x+2,y+16,4,5,C.overall); px(x+9,y+15,4,5,C.overall); px(x+1,y+20,5,3,C.boot); px(x+10,y+19,4,3,C.boot);
+      } else {
+        px(x+3,y+16,4,6,C.overall); px(x+8,y+16,4,6,C.overall); px(x+2,y+21,5,3,C.boot); px(x+8,y+21,5,3,C.boot);
+      }
+    } else {
+      // small hero
+      px(x+2, y, 9, 3, capC);          // cap
+      px(x+8, y+1, 4, 2, capC);        // brim
+      px(x+3, y+3, 8, 4, C.skin);      // face
+      px(x+9, y+4, 2, 2, '#000');      // eye
+      px(x+2, y+3, 2, 2, heroC);
+      px(x+2, y+7, 10, 4, C.overall);  // body
+      px(x+2, y+7, 2, 4, heroC); px(x+10,y+7,2,4,heroC);
+      const step = (p.onGround && Math.abs(p.vx)>0.2) ? Math.floor(p.walkT/6)%2 : 2;
+      if (p.onGround && Math.abs(p.vx)>0.2) {
+        if (step){ px(x+2,y+11,4,3,C.boot); px(x+8,y+11,4,2,C.boot); }
+        else { px(x+3,y+11,4,2,C.boot); px(x+8,y+11,4,3,C.boot); }
+      } else if (!p.onGround) { px(x+1,y+11,4,3,C.boot); px(x+9,y+10,4,3,C.boot); }
+      else { px(x+2,y+11,4,3,C.boot); px(x+8,y+11,4,3,C.boot); }
+    }
+    ctx.restore();
+  }
+
+  // ---- HUD ---------------------------------------------------------------
+  function drawHUD() {
+    // top black strip
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(0,0,VW*TILE,26);
+    drawText('SCORE', 16, 4, 'left', '#fff', 1);
+    drawText(String(game.score).padStart(6,'0'), 16, 13, 'left', '#fff', 1);
+    // coins
+    drawCoinTile(150, 5);
+    drawText('x'+String(game.coins).padStart(2,'0'), 164, 9, 'left', '#fff', 1);
+    // level name
+    drawText('WORLD', 250, 4, 'left', '#fff', 1);
+    drawText(game.world?.def.name || '1-1', 258, 13, 'left', '#fff', 1);
+    // time
+    drawText('TIME', 340, 4, 'left', '#fff', 1);
+    drawText(String(game.time).padStart(3,'0'), 348, 13, 'left', '#fff', 1);
+    // lives
+    drawText('LIVES', 420, 4, 'left', '#fff', 1);
+    drawText('x'+game.lives, 430, 13, 'left', '#fff', 1);
+    // power indicator
+    const pw = game.world?.player?.power;
+    const label = pw===2?'FIRE': pw===1?'BIG':'SMALL';
+    const col = pw===2?C.flower: pw===1?C.mushroom:'#bcd';
+    drawText(label, 480, 9, 'left', col, 1);
+  }
+
+  // ---- Text (pixel font) -------------------------------------------------
+  const FONT = buildFont();
+  function drawText(str, x, y, align, color, scale) {
+    scale = scale||1;
+    str = String(str).toUpperCase();
+    const cw = 6*scale;
+    let px0 = x;
+    if (align==='center') px0 = x - (str.length*cw)/2;
+    else if (align==='right') px0 = x - str.length*cw;
+    ctx.fillStyle = color||'#fff';
+    for (let i=0;i<str.length;i++){
+      const g = FONT[str[i]] || FONT[' '];
+      for (let r=0;r<7;r++) for (let c=0;c<5;c++)
+        if (g[r] & (1<<(4-c))) ctx.fillRect(Math.floor(px0+i*cw+c*scale), Math.floor(y+r*scale), scale, scale);
+    }
+  }
+
+  function overlay(title, sub) {
+    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,VW*TILE,VH*TILE);
+    drawText(title, VW*TILE/2, VH*TILE/2-30, 'center', C.star, 3);
+    drawText(sub, VW*TILE/2, VH*TILE/2+16, 'center', '#fff', 1);
+  }
+
+  // ---- Title screen ------------------------------------------------------
+  function drawTitle() {
+    drawText('PIXEL JUMPER', VW*TILE/2, 120, 'center', C.star, 3);
+    drawText('AN ORIGINAL PLATFORMER', VW*TILE/2, 168, 'center', '#bcd', 1);
+    // draw a little hero and enemy
+    const w0 = {player:makePlayer({x:0,y:0})};
+    // arrows
+    const lines = [
+      'ARROWS  MOVE  AND  JUMP',
+      'Z / SHIFT  RUN',
+      'S  SHOOT  FIREBALL  (FIRE FLOWER)',
+      'STOMP  ENEMIES  ·  GRAB  POWER-UPS',
+      'REACH  THE  FLAG  TO  CLEAR',
+    ];
+    lines.forEach((l,i)=> drawText(l, VW*TILE/2, 230+i*20, 'center', '#e8ecff', 1));
+    if (Math.floor(game.t/20)%2) drawText('PRESS  ENTER  TO  START', VW*TILE/2, 360, 'center', C.coin, 2);
+    drawText('© ORIGINAL WORK · NOT AFFILIATED WITH ANY EXISTING GAME', VW*TILE/2, 452, 'center', '#5a6a9a', 1);
+  }
+
+  // =======================================================================
+  //  FLOW
+  // =======================================================================
+  function startGame() {
+    game.score=0; game.coins=0; game.lives=3; game.levelIndex=0;
+    loadLevel(0);
+  }
+  function loadLevel(i) {
+    game.levelIndex = i;
+    const w = buildLevel(i);
+    w.player = makePlayer(w.start);
+    w.camMax = 0;
+    game.world = w;
+    game.time = w.def.time;
+    game.cam = 0;
+    game.state = 'play';
+    game.paused = false;
+    game.message = w.def.name; game.messageT = 60;
+  }
+  function nextLevel() {
+    if (game.levelIndex+1 >= LEVELS.length) { game.state='win'; return; }
+    loadLevel(game.levelIndex+1);
+  }
+  function respawn() {
+    game.lives--;
+    if (game.lives < 0) { game.state='gameover'; return; }
+    const keepPower = 0;
+    loadLevel(game.levelIndex);
+  }
+
+  // =======================================================================
+  //  MAIN LOOP
+  // =======================================================================
+  let last = performance.now(), acc = 0;
+  const STEP = 1000/60;
+  function loop(now) {
+    let frame = now - last; last = now;
+    if (frame > 200) frame = 200;
+    acc += frame;
+    while (acc >= STEP) {
+      tick(STEP/1000);
+      acc -= STEP;
+    }
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  function tick(dt) {
+    game.t++;
+    if (game.state==='play') update(dt);
+    else if (game.state==='dying') {
+      game.dyingT++;
+      const p = game.world.player;
+      p.vy = Math.min(MAXFALL, p.vy + GRAV); p.y += p.vy;
+      if (game.dyingT>90) respawn();
+    }
+    else if (game.state==='levelclear') {
+      game.clearT = (game.clearT||0)+1;
+      // slide flag / auto-advance after a beat
+      if (game.clearT>110) nextLevel();
+    }
+    // Enter handled via keydown; also allow held-less transitions here:
+    if ((game.state==='title'||game.state==='gameover'||game.state==='win') && keys.start) startGame();
+  }
+
+  // =======================================================================
+  //  Helpers + tiny SFX (WebAudio, original beeps)
+  // =======================================================================
+  function clamp(v,a,b){ return v<a?a:v>b?b:v; }
+  function aabb(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+
+  let AC = null;
+  function ac(){ if(!AC){ try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return AC; }
+  const SFX = {
+    jump:[520,0.10,'square',0.05,880], stomp:[180,0.09,'square',0.05,90],
+    coin:[988,0.08,'square',0.04,1319], item:[660,0.10,'square',0.05,990],
+    grow:[440,0.16,'square',0.06,880], shrink:[440,0.16,'square',0.06,180],
+    bump:[120,0.06,'square',0.05,120], break:[220,0.08,'square',0.05,80],
+    shoot:[720,0.06,'square',0.04,300], die:[440,0.5,'triangle',0.06,110],
+    clear:[523,0.5,'square',0.05,1046], star:[880,0.12,'square',0.05,1320],
+    '1up':[660,0.3,'square',0.05,1320], stompb:[180,0.09,'square',0.05,90],
+  };
+  function sfx(name){
+    const a = ac(); if(!a) return;
+    const s = SFX[name]; if(!s) return;
+    const [f0,dur,type,vol,f1] = s;
+    const o=a.createOscillator(), g=a.createGain();
+    o.type=type; o.frequency.setValueAtTime(f0, a.currentTime);
+    if (f1) o.frequency.exponentialRampToValueAtTime(f1, a.currentTime+dur);
+    g.gain.setValueAtTime(vol, a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime+dur);
+    o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+dur);
+  }
+  // resume audio on first interaction
+  addEventListener('keydown', ()=>{ const a=ac(); if(a && a.state==='suspended') a.resume(); }, {once:true});
+  addEventListener('pointerdown', ()=>{ const a=ac(); if(a && a.state==='suspended') a.resume(); }, {once:true});
+
+  // 5x7 pixel font (bit rows, MSB=leftmost of 5 columns)
+  function buildFont(){
+    const F = {};
+    const d = {
+      'A':[0x0E,0x11,0x11,0x1F,0x11,0x11,0x11],'B':[0x1E,0x11,0x1E,0x11,0x11,0x11,0x1E],
+      'C':[0x0E,0x11,0x10,0x10,0x10,0x11,0x0E],'D':[0x1E,0x11,0x11,0x11,0x11,0x11,0x1E],
+      'E':[0x1F,0x10,0x1E,0x10,0x10,0x10,0x1F],'F':[0x1F,0x10,0x1E,0x10,0x10,0x10,0x10],
+      'G':[0x0E,0x11,0x10,0x17,0x11,0x11,0x0F],'H':[0x11,0x11,0x1F,0x11,0x11,0x11,0x11],
+      'I':[0x0E,0x04,0x04,0x04,0x04,0x04,0x0E],'J':[0x07,0x02,0x02,0x02,0x12,0x12,0x0C],
+      'K':[0x11,0x12,0x14,0x18,0x14,0x12,0x11],'L':[0x10,0x10,0x10,0x10,0x10,0x10,0x1F],
+      'M':[0x11,0x1B,0x15,0x15,0x11,0x11,0x11],'N':[0x11,0x19,0x15,0x13,0x11,0x11,0x11],
+      'O':[0x0E,0x11,0x11,0x11,0x11,0x11,0x0E],'P':[0x1E,0x11,0x11,0x1E,0x10,0x10,0x10],
+      'Q':[0x0E,0x11,0x11,0x11,0x15,0x12,0x0D],'R':[0x1E,0x11,0x11,0x1E,0x14,0x12,0x11],
+      'S':[0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E],'T':[0x1F,0x04,0x04,0x04,0x04,0x04,0x04],
+      'U':[0x11,0x11,0x11,0x11,0x11,0x11,0x0E],'V':[0x11,0x11,0x11,0x11,0x11,0x0A,0x04],
+      'W':[0x11,0x11,0x11,0x15,0x15,0x1B,0x11],'X':[0x11,0x11,0x0A,0x04,0x0A,0x11,0x11],
+      'Y':[0x11,0x11,0x0A,0x04,0x04,0x04,0x04],'Z':[0x1F,0x01,0x02,0x04,0x08,0x10,0x1F],
+      '0':[0x0E,0x11,0x13,0x15,0x19,0x11,0x0E],'1':[0x04,0x0C,0x04,0x04,0x04,0x04,0x0E],
+      '2':[0x0E,0x11,0x01,0x0E,0x10,0x10,0x1F],'3':[0x1F,0x02,0x04,0x02,0x01,0x11,0x0E],
+      '4':[0x02,0x06,0x0A,0x12,0x1F,0x02,0x02],'5':[0x1F,0x10,0x1E,0x01,0x01,0x11,0x0E],
+      '6':[0x06,0x08,0x10,0x1E,0x11,0x11,0x0E],'7':[0x1F,0x01,0x02,0x04,0x08,0x08,0x08],
+      '8':[0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E],'9':[0x0E,0x11,0x11,0x0F,0x01,0x02,0x0C],
+      ' ':[0,0,0,0,0,0,0],'-':[0,0,0,0x1F,0,0,0],'!':[0x04,0x04,0x04,0x04,0x04,0,0x04],
+      '.':[0,0,0,0,0,0,0x04],':':[0,0x04,0,0,0,0x04,0],'/':[0x01,0x02,0x04,0x04,0x08,0x10,0x10],
+      'x':[0,0,0x11,0x0A,0x04,0x0A,0x11],'©':[0x0E,0x11,0x17,0x15,0x17,0x11,0x0E],
+      '🏆':[0x1F,0x11,0x0A,0x04,0x04,0x0A,0x1F],'+':[0,0x04,0x04,0x1F,0x04,0x04,0],
+    };
+    for (const k in d) F[k]=d[k];
+    return F;
+  }
+
+  // kick off
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
