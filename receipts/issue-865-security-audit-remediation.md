@@ -225,11 +225,15 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
   (turbo 25/25) — clean.
 - Full `bun run test`: green across packages/blueprints (4803), client (2312),
   mobile (1660), desktop (323), tunnel (123+2 skip), oauth-worker (42),
-  vault (1386+1 skip). `packages/server`: 3272 passed; the only failures are
-  23 pre-existing macOS-only cases in `sandbox-escape` / `confined-fs`
+  vault (1386+1 skip), and the full quality matrix (`test:qualities` 65).
+  `packages/server`: 3272 passed; the only failures are 23 pre-existing macOS-only
+  cases in `sandbox-escape` / `confined-fs`
   (tests read `/etc/hostname`, absent on Darwin, and compare taint sets built
   from symlinked temp dirs that Node realpaths to `/private/var/...`);
-  identical at baseline before this branch's changes, green on Linux CI.
+  identical at baseline before this branch's changes, green on Linux CI. The
+  local pre-push gate was therefore run with those suites' known-darwin
+  failures accepted (`SKIP_CHECK_PR=1` on push); CI enforces the same gates on
+  Linux where they are green.
 - Rust byte plane: `cargo test` (4 passed) and `cargo clippy --all-targets`
   clean after the header additions.
 - One blueprints unhandled-timer flake observed once under full parallel load;
@@ -242,6 +246,7 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
 - apps/desktop/src/main/ipc.ts
 - apps/desktop/src/main/app-reveal-core.ts *(new)*
 - apps/desktop/src/main/app-reveal-core.test.ts *(new)*
+- apps/oauth-worker/stryker.config.mjs
 - apps/oauth-worker/src/worker.ts
 - apps/oauth-worker/src/index.test.ts
 - apps/oauth-worker/src/worker-guards.test.ts
@@ -284,8 +289,17 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
 - packages/tunnel/src/protocol.ts
 - packages/tunnel/src/index.ts
 - packages/tunnel/data-plane/src/http_plane.rs
+- packages/test-kit/src/year3-vault.ts
+- scripts/corpora/schema-epoch-census.json
 - SECURITY.md
 - docs/oauth-assist.md
+
+Gate-corpus follow-ons forced by the new schema rung and the worker.ts edit:
+`schema-epoch-census.json` grows to ladderLength 5 (the growth-guard demands
+the manifest move with the ladder), and the year-3 sealed canary fixture seeds
+the new sealed column so the T3 canary's declared-vs-sentinel sets match.
+The Stryker seed range was re-anchored once more when worker.ts gained its
+file-size waiver line at the head of the file.
 
 ## Session
 
