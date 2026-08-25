@@ -523,6 +523,17 @@ paints) and belongs in the PR body, not a hidden skip.
   these re-homed anyway, it needs a schema change to carry the provenance —
   flagged rather than done.**
 
+## User impact
+
+A Friday–Sunday Agenda run now paints Saturday on the phone's origin seat,
+not only the start day. Desktop/web already walked `spanLocalDays`; the
+native list now uses the same interval.
+
+First-run: after founding a Personal vault and opening Agenda, compose a
+timed event and it lands as a schedule row. Evidence:
+`artifacts/e2e/ui-impact/desktop-agenda-custodian.png`, emitted by
+`apps/desktop/tests/e2e/agenda.spec.ts`.
+
 ## Out of scope
 
 - `#791` and `#844` remain registered in `trackingIssues` with no citation
