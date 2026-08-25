@@ -559,7 +559,12 @@
   --st-failed: var(--danger);
   --st-flaky: var(--c-violet);
   --st-na: var(--c-slate);
-  --st-gap: var(--seam);
+  /* `--seam` until #864: it resolved to the same literal the Night Watch
+     attention rung carried, so one value meant "pending", "attention" and
+     "no test exists" at once. `gap` takes the rose identity hue instead — the
+     family `--nw-gap` paints the cells in — so the ramp and the register
+     cannot disagree about which hue a hole is. */
+  --st-gap: var(--c-rose);
   --st-unmatched: var(--c-amber);
   --st-silent: var(--attention);
   --st-missing: var(--text-faint);
@@ -579,7 +584,7 @@
   --st-failed-text: var(--danger);
   --st-flaky-text: var(--c-violet-text);
   --st-na-text: var(--c-slate-text);
-  --st-gap-text: var(--seam);
+  --st-gap-text: var(--c-rose-text);
   --st-unmatched-text: var(--c-amber-text);
   --st-silent-text: var(--attention);
   --st-missing-text: var(--text-faint);
@@ -626,15 +631,23 @@
   --nw-surf: #F5F4F2;
   --nw-sunken: #F9F8F6;
   --nw-danger: #9A3B2E;
-  --nw-attn: #B4441F;
+  --nw-attn: #8A5A12;
   --nw-link: #2D4BA8;
   --nw-ring: #4A67C8;
   --nw-ok: #3E6B45;
   --nw-grey: #8B8A87;
+  --nw-partial: #175F6A;
+  --nw-flaky: #6B3E8C;
+  --nw-gap: #8E2F63;
+  --nw-bug: #3A3A8C;
   --nw-dangerbg: #F7EBE8;
-  --nw-attnbg: #F8EFE7;
+  --nw-attnbg: #FAF2E2;
   --nw-okbg: #EDF2EE;
   --nw-greybg: #F1F0EE;
+  --nw-partialbg: #E9F2F3;
+  --nw-flakybg: #F2ECF8;
+  --nw-gapbg: #FAEBF2;
+  --nw-bugbg: #EEEDF8;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -649,15 +662,23 @@
     --nw-surf: #171716;
     --nw-sunken: #121211;
     --nw-danger: #E08878;
-    --nw-attn: #E0864F;
+    --nw-attn: #E5B15E;
     --nw-link: #9DB0F0;
     --nw-ring: #8098E8;
     --nw-ok: #7FA886;
     --nw-grey: #666664;
+    --nw-partial: #69B3BD;
+    --nw-flaky: #C39BD8;
+    --nw-gap: #E094BA;
+    --nw-bug: #C2BEEA;
     --nw-dangerbg: #241614;
-    --nw-attnbg: #231A12;
+    --nw-attnbg: #241D0E;
     --nw-okbg: #151D16;
     --nw-greybg: #1A1A19;
+    --nw-partialbg: #0F1E20;
+    --nw-flakybg: #1D1726;
+    --nw-gapbg: #26161F;
+    --nw-bugbg: #1A1828;
   }
 }
 
@@ -672,15 +693,23 @@
   --nw-surf: #171716;
   --nw-sunken: #121211;
   --nw-danger: #E08878;
-  --nw-attn: #E0864F;
+  --nw-attn: #E5B15E;
   --nw-link: #9DB0F0;
   --nw-ring: #8098E8;
   --nw-ok: #7FA886;
   --nw-grey: #666664;
+  --nw-partial: #69B3BD;
+  --nw-flaky: #C39BD8;
+  --nw-gap: #E094BA;
+  --nw-bug: #C2BEEA;
   --nw-dangerbg: #241614;
-  --nw-attnbg: #231A12;
+  --nw-attnbg: #241D0E;
   --nw-okbg: #151D16;
   --nw-greybg: #1A1A19;
+  --nw-partialbg: #0F1E20;
+  --nw-flakybg: #1D1726;
+  --nw-gapbg: #26161F;
+  --nw-bugbg: #1A1828;
 }
 
     body { font: var(--t-reading); max-width: 44rem; margin: var(--sp-6) auto; padding: 0 var(--page-margin); background: var(--bg); color: var(--text); }
@@ -701,7 +730,7 @@
 </head>
 <body>
   <h1>Centraid test health reports</h1>
-  <p class="meta">srikanth235/centraid · updated 2026-08-25T11:28:35.166Z</p>
+  <p class="meta">srikanth235/centraid · updated 2026-08-25T12:30:48.237Z</p>
   <p>Public reports publish from <code>main</code> (per-merge CI) and the <strong>nightly</strong> e2e workflow only — <strong>no PR slots</strong>.</p>
   <h2>What “solid” means</h2>
   <p class="meta">A matrix cell is <strong>solid</strong> only when an owning test exists, runs in the intended lane (per-PR or nightly), and is not whole-file env-gated off default CI. Grey / missing cells are intentional: absence of proof must stay visible. See TESTING.md (Nightly SLA, floors ratchet, confidence map) and issue #496.</p>
