@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { openJournalDb } from "../../stores/gateway-db.js";
 import {
   runConversationArchival,
   readArchivedConversationSegment,
@@ -156,6 +157,74 @@ describe("custody-gated prune", () => {
     expect(again.segmentsPruned).toBe(0);
     expect(again.turnsPruned).toBe(0);
     journal.close();
+  });
+
+  it("a journal close/reopen keeps the archive index so a crash cannot rewrite or prune without custody", () => {
+    const { journal, dbPath } = openTempJournal();
+    const blobSink = new MemoryBlobSink();
+    seedConversation(journal, {
+      id: "c/crash",
+      kind: "automation",
+      automationId: "c/crash",
+      updatedAt: now,
+    });
+    seedTurn(journal, {
+      turnId: "t0",
+      conversationId: "c/crash",
+      seq: 0,
+      startedAt: daysAgo(120),
+      model: "m",
+    });
+    seedTurn(journal, {
+      turnId: "t1",
+      conversationId: "c/crash",
+      seq: 1,
+      startedAt: daysAgo(119),
+      model: "m",
+    });
+    seedTurn(journal, {
+      turnId: "t2",
+      conversationId: "c/crash",
+      seq: 2,
+      startedAt: daysAgo(1),
+      model: "m",
+    });
+
+    const first = runConversationArchival(
+      { journal, blobSink, custodyProven: () => false },
+      { nowMs: now }
+    );
+    expect(first.segmentsWritten).toBe(1);
+    expect(first.turnsPruned).toBe(0);
+    const sha = first.archived[0]!.segmentSha256;
+    expect(blobSink.has(sha)).toBe(true);
+    journal.close();
+
+    const reopened = openJournalDb(dbPath);
+    const afterCrash = runConversationArchival(
+      { journal: reopened, blobSink, custodyProven: () => false },
+      { nowMs: now }
+    );
+    expect(afterCrash.segmentsWritten).toBe(0);
+    expect(afterCrash.turnsPruned).toBe(0);
+    expect(countTurns(reopened, "c/crash")).toBe(3);
+    const index = reopened
+      .prepare(
+        `SELECT segment_sha256, pruned_at FROM conversation_archive WHERE conversation_id = 'c/crash'`
+      )
+      .all() as { segment_sha256: string; pruned_at: number | null }[];
+    expect(index).toHaveLength(1);
+    expect(index[0]!.segment_sha256).toBe(sha);
+    expect(index[0]!.pruned_at).toBeNull();
+
+    const pruned = runConversationArchival(
+      { journal: reopened, blobSink, custodyProven: () => true },
+      { nowMs: now }
+    );
+    expect(pruned.segmentsPruned).toBe(1);
+    expect(pruned.turnsPruned).toBe(2);
+    expect(countTurns(reopened, "c/crash")).toBe(1);
+    reopened.close();
   });
 });
 

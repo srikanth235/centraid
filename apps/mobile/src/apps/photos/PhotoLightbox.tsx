@@ -38,7 +38,10 @@ import { readableName } from "@centraid/blueprints/apps/photos/place-map";
 import { gazetteerNameFrom } from "@centraid/blueprints/apps/photos/place-phrase";
 import type { NamedPlace } from "@centraid/blueprints/apps/photos/place-phrase";
 import type { SharePlaceInput } from "@centraid/blueprints/apps/photos/share-place";
-import { PHOTOS_SAVED_AS_NEW } from "@centraid/blueprints/apps/photos/shared-copy";
+import {
+  PHOTOS_SAVED_AS_NEW,
+  photosArchiveMoved,
+} from "@centraid/blueprints/apps/photos/shared-copy";
 
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
@@ -521,11 +524,7 @@ export default function PhotoLightbox({
       archived: hiding ? 1 : 0,
     }).then((reason) => {
       if (reason) return;
-      postStatus(
-        hiding
-          ? "Moved to the archived shelf — the device original is untouched."
-          : "Back in your library."
-      );
+      postStatus(photosArchiveMoved(hiding));
     });
   };
 

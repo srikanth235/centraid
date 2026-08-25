@@ -58,7 +58,7 @@ import {
   SearchRoute,
 } from "./components/Screens.tsx";
 import { EmptyState, Notices } from "./components/States.tsx";
-import { dayKey, weekdayName } from "./format.ts";
+import { dayKey, priorityFromDigit, weekdayName } from "./format.ts";
 import { appBar, bandClaim } from "./frame.tsx";
 import {
   absence,
@@ -548,7 +548,7 @@ export function Root({
               "edit",
               {
                 task_id: focused.task_id,
-                priority: Number(event.key) - 1,
+                priority: priorityFromDigit(Number(event.key)),
               },
               { scope: focused.scope_id }
             );

@@ -361,18 +361,15 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       });
     }
 
-    // Priority per RFC 5545: 1 is highest, 0 is unset (sorts after 9).
-    const prio = (t: RawTask) => {
-      const p = Number(t.priority ?? 0);
-      return p > 0 ? p : 10;
-    };
+    // Priority per Todoist: higher is more urgent, 0 is unset (sorts last).
+    const prio = (t: RawTask) => Number(t.priority ?? 0);
     const byUrgency = (a: RawTask, b: RawTask) => {
       if (a.due_at == null && b.due_at != null) return 1;
       if (a.due_at != null && b.due_at == null) return -1;
       if (a.due_at != null && a.due_at !== b.due_at) {
         return String(a.due_at).localeCompare(String(b.due_at));
       }
-      if (prio(a) !== prio(b)) return prio(a) - prio(b);
+      if (prio(a) !== prio(b)) return prio(b) - prio(a);
       return String(a.title).localeCompare(String(b.title));
     };
 

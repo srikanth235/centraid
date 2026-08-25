@@ -79,8 +79,8 @@ function GridEvent({
       <span className={styles.eventTitle}>
         <Safe value={eventTitle(ev)} />
       </span>
-      {/* A run that leaves this day says so in words. V1 draws it on the day
-          it starts rather than as a bar across columns. */}
+      {/* A run that leaves this day says so in words. The same event still
+          occupies every later day it spans; this row is only today's slice. */}
       {segment.clamped ? (
         <span className={styles.eventNote}>{CONTINUES}</span>
       ) : null}

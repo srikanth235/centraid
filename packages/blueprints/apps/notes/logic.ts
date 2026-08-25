@@ -15,7 +15,7 @@
 import { debounce, outcomeMessage } from "@centraid/design/elements";
 
 import { coalesceByKey } from "./draft-writes.ts";
-import { checkStats, deriveTitle, promote } from "./format.ts";
+import { checkStats, deriveTitle, promote, UNTITLED_NOTE } from "./format.ts";
 import { sendLineToTasks } from "./send-to-tasks.ts";
 import { NOTE, TRASH, notebookIdFrom } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
@@ -265,7 +265,7 @@ export function createLogic({
    */
   async function createNote(seed = ""): Promise<string | null> {
     const input: Record<string, unknown> = {
-      title: deriveTitle("", seed) || "Untitled note",
+      title: deriveTitle("", seed) || UNTITLED_NOTE,
       body_text: seed || " ",
       format: "markdown",
     };

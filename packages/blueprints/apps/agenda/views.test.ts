@@ -107,7 +107,7 @@ describe("each view reads a bounded window", () => {
   });
 });
 
-describe("bucketing puts an event on one day", () => {
+describe("bucketing puts an event on the days it occupies", () => {
   it("keys a timed event by its own local day", () => {
     const buckets = bucketByDay([
       event({
@@ -120,9 +120,7 @@ describe("bucketing puts an event on one day", () => {
     expect(buckets.get("2026-08-21")?.[0]?.clamped).toBe(false);
   });
 
-  it("clamps a MULTI-DAY run to the day it starts and marks it", () => {
-    // The deliberate v1 bound: one row on one day, said in words, rather than
-    // a bar reaching across columns.
+  it("keeps a MULTI-DAY run visible on every local day it spans", () => {
     const buckets = bucketByDay([
       event({
         event_id: "e2",
@@ -130,10 +128,37 @@ describe("bucketing puts an event on one day", () => {
         dtend: at(2026, 8, 23, 9),
       }),
     ]);
-    expect([...buckets.keys()]).toStrictEqual(["2026-08-21"]);
-    const segment = buckets.get("2026-08-21")?.[0];
-    expect(segment?.clamped).toBe(true);
-    expect(segment?.endsHere).toBe(false);
+    expect([...buckets.keys()]).toStrictEqual([
+      "2026-08-21",
+      "2026-08-22",
+      "2026-08-23",
+    ]);
+    const first = buckets.get("2026-08-21")?.[0];
+    const middle = buckets.get("2026-08-22")?.[0];
+    const last = buckets.get("2026-08-23")?.[0];
+    expect(first?.startsHere).toBe(true);
+    expect(first?.clamped).toBe(true);
+    expect(first?.endsHere).toBe(false);
+    expect(middle?.startsHere).toBe(false);
+    expect(middle?.spansAll).toBe(true);
+    expect(last?.endsHere).toBe(true);
+    expect(last?.clamped).toBe(false);
+  });
+
+  it("keeps an all-day run on every civil day the member named, end inclusive", () => {
+    const buckets = bucketByDay([
+      event({
+        event_id: "away",
+        dtstart: "2026-08-21",
+        dtend: "2026-08-23",
+        recurrence_semantics: "all-day",
+      }),
+    ]);
+    expect([...buckets.keys()]).toStrictEqual([
+      "2026-08-21",
+      "2026-08-22",
+      "2026-08-23",
+    ]);
   });
 
   it("an all-day recurring event lands on the day it names", () => {

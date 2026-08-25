@@ -28,9 +28,9 @@ import type {
   TrashedPerson,
 } from "./types.ts";
 
-/** How many people the roster window asks for. The query caps and reports
- *  `truncated`, which the app bar's count reads rather than hiding. */
-const ROSTER_WINDOW = 200;
+/** How many people the roster window asks for. Matches the query's read max;
+ *  `truncated` is named on the status line when a cap still bites. */
+const ROSTER_WINDOW = 9_999;
 
 interface DeniedRead {
   vaultDenied?: { message?: string } | null;
@@ -348,9 +348,15 @@ export function createLogic({
           counts.people,
           counts.toLink,
           counts.due,
-          counts.starred
+          counts.starred,
+          data.truncated
         )
-      : STATUS.roster(counts.people, counts.due, counts.starred);
+      : STATUS.roster(
+          counts.people,
+          counts.due,
+          counts.starred,
+          data.truncated
+        );
   }
 
   return {

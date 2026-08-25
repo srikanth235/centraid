@@ -18,5 +18,5 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | catch-up "Release all" does not re-date the someday pile | ✅ | — | — | `packages/blueprints/apps/tasks/logic.test.ts` (`catchUpWrites`) |
 | a HOUSE-scope write stays in the HOUSE scope | ✅ | — | — | `packages/blueprints/apps/tasks/writes.test.ts` (`taskWrite`) |
 | delete-confirm removes the row, it does not cancel it | ✅ | — | — | `packages/blueprints/apps/tasks/writes.test.ts` (`removeTaskWrite`) |
-| priority scale matches the north star | — | — | — | **product-bug** (#864, S2): priority scale is inverted versus Todoist |
-| "Today" is the member's day, not UTC | — | — | — | **product-bug** (#864, S2): Today is computed in UTC |
+| priority scale matches the north star | ✅ | — | — | `packages/blueprints/apps/tasks/format.test.ts` (`priorityLevel`) |
+| "Today" is the member's day, not UTC | ✅ | — | — | `packages/blueprints/apps/tasks/format.test.ts` (`dayKey`) |

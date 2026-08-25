@@ -15,9 +15,15 @@
  * definition of `landsToday`, wherever they are called from.
  */
 
-/** A civil day key (`2026-08-21`) for an ISO instant or a date-only value. */
+/** A civil day key (`2026-08-21`) for an ISO instant or a date-only value.
+ *  Instants use the member's local calendar day — never the UTC prefix. */
 export function dayKey(value: string): string {
-  return value.slice(0, 10);
+  if (isDateOnly(value)) return value.slice(0, 10);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10);
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${parsed.getFullYear()}-${month}-${day}`;
 }
 
 /**

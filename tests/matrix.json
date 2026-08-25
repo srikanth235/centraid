@@ -974,7 +974,7 @@
     "desktop.offline": "Partial: apps/desktop/tests/e2e/pending-overlay.spec.ts owns the renderer's offline honesty — a write made with the network severed queues in the durable replica outbox and BOTH the optimistic row and its pending chip survive a full Electron reload. The journey drove Tally, Tasks and Agenda until #831 cleared those interfaces; the same change rebuilt it on Docs, whose production rows render the shared pending overlay, so the contract moved seats rather than lapsing. It stays on Docs now that #834 has given Agenda, Notes and Tasks interfaces again: the rebuilt Agenda proves the held-write chip at the boot tier instead (packages/blueprints/src/app-boot/agenda.test.ts drives a queued cancel through the production intent-invalidation derivation in airplane mode), which is a cheaper seat for the same contract than a second Electron journey. Still missing on this seat, and what keeps the cell partial: the reconnect half (the PWA's apps/web/tests/e2e/offline-reconnect.spec.ts proves replay settles exactly once; desktop has no equivalent) and a UI-driven offline write, which Docs cannot offer while its rename affordances live off the inline seat. Detached-gateway outage logging still covers host-side continuity. Tracked under #864 (originally #781).",
     "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #864 (originally #656).",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #864 (originally #656).",
+    "web.compat": "apps/web/src/web-host.test.ts enrolls a pre-multi-vault gateway reply (vaultId only). Web storage/version-skew fixtures beyond that remain tracked under #864 (originally #656).",
     "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #864 (originally #656).",
     "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #864 (originally #656).",
     "tunnel-pairing.durability": "Was `skip` — durability read as not-applicable to a transport. #842 W3.1 made it applicable: tests/quality/network-chaos.integration.test.ts drives eight injected fault shapes (latency, jitter, fragmentation, asymmetric bandwidth, mid-request abort, mid-response disconnect, endpoint restart, address rebind) over a REAL iroh connection against the replica intent plane, and asserts the no-loss / apply-exactly-once / converge laws on real schedule_task and replica_intent_outcome rows. Byte-level loss and reorder are deliberately absent: QUIC converts those into delay, delivery, or connection failure, so injecting them would model a corrupt QUIC implementation rather than a lossy network. The two netem-tier faults that would need a privileged runner are declared, excluded from the schedule, and cannot be claimed for free. Partial rather than solid: no coverage floor gates the workspace that owns the rig, so the cell rests on the lane alone. Remaining depth tracked under #864.",
@@ -1019,12 +1019,12 @@
     "gateway.concurrency": "packages/server/src/serve/serve-multiclient.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
     "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #864 (originally #659).",
     "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #864 (originally #656).",
-    "app-engine.durability": "packages/server/src/engine/conversation/archive/archive.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #864 (originally #656).",
+    "app-engine.durability": "packages/server/src/engine/conversation/archive/archive.contract.test.ts proves crash/reopen keeps the archive index (close journal.db, reopen, no second segment). Tracked remaining: none for the happy-path-only hole (#864 W3).",
     "app-engine.concurrency": "packages/server/src/engine/handlers/handler-pool.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
     "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #864 (originally #659).",
-    "automations.durability": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #864 (originally #656).",
+    "automations.durability": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts proves lastTickAt survives a new store over the same KV (one gateway-down miss, never again). Tracked remaining: none for the happy-path-only hole (#864 W3).",
     "automations.concurrency": "packages/server/src/automation/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
-    "automations.security": "packages/server/src/automation/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #864 (originally #656).",
+    "automations.security": "packages/server/src/automation/handler/lint.test.ts refuses node:https/http/tls and process.argv/hrtime in addition to fs/net/child_process/process.env. Tracked under #864 (originally #656).",
     "agent-runtime.correctness": "packages/server/src/acp/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #864 (originally #656).",
     "agent-runtime.security": "packages/server/src/acp/preflight.test.ts proves the current happy path; adversarial input now covered by agent-prompt-injection-red-team (injected instructions carried in read content, driven over the real turn loop, #842 W2.2); authorization cases still missing. Tracked under #864 (originally #656).",
     "agent-runtime.compat": "packages/server/src/acp/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #864 (originally #656).",
@@ -1033,8 +1033,8 @@
     "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #864 (originally #656).",
     "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #864 (originally #656).",
     "web.correctness": "apps/web/src/web-host.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #864 (originally #656).",
-    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
-    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #864 (originally #656).",
+    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves two claimNext actors on one queued intent: one sending, the other empty (#864 W4). Tracked under #864 (originally #656).",
+    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts refuses path traversal, unsigned, and cleartext provider URLs. Tracked remaining: broader authz cases under #864 (originally #656).",
     "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #864 (originally #656).",
     "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #864 (originally #656).",
     "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
@@ -1055,7 +1055,7 @@
     "desktop.accessibility": "Desktop deliberately reuses the web axe owner: both hosts compile packages/client/src/react/boot.tsx as the renderer entry, so a second axe pass over Electron would duplicate the same DOM and rules. Electron-specific keyboard depth remains tracked under #864 (originally #781).",
     "web.accessibility": "The connect screen, connected Home shell, and a shipped first-party app inline renderer are scanned with axe WCAG A/AA in Chromium by apps/web/tests/e2e/accessibility.spec.ts. Broader route/state depth is tracked under #864 (originally #781).",
     "mobile.accessibility": "RNTL observes native role, accessible-name, and state/trait contracts in apps/mobile/src/apps/photos/PhotosHome.test.tsx; Maestro remains the device/runtime layer because its selectors cannot falsify RN role and trait semantics. Broader screen depth is tracked under #864 (originally #781).",
-    "web.performance": "The owning rig tests/perf/pwa-waterfall.perf.test.ts self-skips when the nightly waterfall artifact is missing, so a green run does not prove the budget ran. Tracked under #864 (originally #656).",
+    "web.performance": "The owning rig tests/perf/pwa-waterfall.perf.test.ts throws in CI when the waterfall artifact is missing; a local skip is expected because the artifact is produced by the web-e2e job. Tracked under #864 (originally #656).",
     "web.security": "apps/web/tests/e2e/web-pwa.spec.ts is a single test asked to carry both the session-isolation law and the journey; the isolation claim needs a test of its own. Tracked under #864 (originally #656).",
     "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #864 (originally #656).",
     "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #864 (originally #656).",
@@ -3079,9 +3079,8 @@
             "id": "multiday-visibility",
             "label": "multi-day events stay visible on every day they span",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "multi-day visibility is wrong (S2)"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/views.test.ts"
           }
         ]
       },
@@ -3293,10 +3292,9 @@
           {
             "id": "untitled-web",
             "label": "a new web note is named from its title, not Untitled note",
-            "layer": "component",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "every web note is named Untitled note (S2)"
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/format.test.ts"
           }
         ]
       },
@@ -3350,33 +3348,29 @@
             "id": "overdue-arithmetic",
             "label": "overdue arithmetic matches the cadence",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "overdue arithmetic is wrong (S2)"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/format.test.ts"
           },
           {
             "id": "leap-day",
             "label": "leap-day birthdays fire on 28 Feb in non-leap years",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "leap-day handling is wrong (S2)"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/format.test.ts"
           },
           {
             "id": "month-day-validation",
             "label": "month_day validation refuses impossible days",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "month_day validation is missing (S2)"
+            "status": "owned",
+            "owner": "packages/vault/src/commands/people-dates.test.ts"
           },
           {
             "id": "row-cap",
             "label": "the roster is not silently capped at 200 rows",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "200-row cap drops people with no notice (S2)"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/queries/people-roster.test.ts"
           }
         ]
       },
@@ -3472,9 +3466,8 @@
             "id": "hide-vs-archive",
             "label": "hide vs archive mean the same thing on every seat",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "hide and archive diverge across surfaces (S2)"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/archive-copy.test.ts"
           }
         ]
       },
@@ -3555,17 +3548,15 @@
             "id": "priority-scale",
             "label": "priority scale matches the north star",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "priority scale is inverted versus Todoist (S2)"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/format.test.ts"
           },
           {
             "id": "today-utc",
             "label": "Today is the member's day, not UTC",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "Today is computed in UTC (S2)"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/format.test.ts"
           }
         ]
       }

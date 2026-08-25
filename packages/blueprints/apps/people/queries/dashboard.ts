@@ -1,6 +1,6 @@
 /**
  * The keep-in-touch summary, derived from the vault: who is overdue to
- * reconnect with (last contact older than their cadence), which reminders are
+ * reconnect with (last contact strictly past their cadence), which reminders are
  * coming up next (birthdays and dates with their reminder on), the most recent
  * touches you have logged, and the headline counts. A person never contacted
  * counts from when they were added, so a fresh contact reads as on-track.
@@ -24,6 +24,7 @@
  * byte-for-byte the pre-conversion JS.
  */
 
+import { daysSinceContact, daysUntilMonthDay, isOverdue } from "../format.ts";
 import { readLiveBindings } from "./_shared.ts";
 
 interface RawProfile {
@@ -86,27 +87,10 @@ interface PartyEntry {
 }
 
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
-const DAY = 86400000;
-
-function daysSince(iso: string): number {
-  const t = new Date(iso).getTime();
-  return Number.isNaN(t) ? 0 : Math.floor((Date.now() - t) / DAY);
-}
-
-// Days until the next annual occurrence of an MM-DD, from today (0 = today).
-function daysUntilMonthDay(monthDay: string): number {
-  const [m, d] = String(monthDay).split("-").map(Number);
-  if (!m || !d) return 9999;
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  let next = new Date(now.getFullYear(), m - 1, d);
-  if (next < today) next = new Date(now.getFullYear() + 1, m - 1, d);
-  return Math.round((next.getTime() - today.getTime()) / DAY);
-}
 
 export default async function dashboard({ ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
-  const window = 500;
+  const window = 9_999;
   try {
     const [profiles, concepts, schemes] = await Promise.all([
       ctx.vault.read({
@@ -245,13 +229,11 @@ export default async function dashboard({ ctx }: HandlerArgs) {
     }
 
     const reconnect = profileRows
-      .filter((pr) => pr.cadence_days > 0)
+      .filter((pr) => isOverdue(pr))
       .map((pr) => ({
         pr,
-        over:
-          daysSince(pr.last_contacted_at ?? pr.created_at) - pr.cadence_days,
+        over: daysSinceContact(pr) - pr.cadence_days,
       }))
-      .filter((x) => x.over >= 0)
       .toSorted((a, b) => b.over - a.over)
       .map((x) => card(x.pr.party_id));
 

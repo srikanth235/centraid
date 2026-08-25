@@ -340,7 +340,7 @@ export function projectDashboard(input: DashboardInput): DashboardData {
       person,
       over: daysSinceContact(person, now) - person.cadence_days,
     }))
-    .filter((entry) => entry.over >= 0)
+    .filter((entry) => entry.over > 0)
     .sort((a, b) => b.over - a.over)
     .map((entry) => card(entry.person.party_id));
 

@@ -24,4 +24,4 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | storage custody arithmetic | ✅ | — | — | `packages/blueprints/apps/photos/storage-model.test.ts` |
 | web/desktop import (`runUpload`) does not drop files | ✅ | — | — | `packages/blueprints/apps/photos/upload.test.ts` — drop completeness over `dataTransfer.items`, 96-file claim order |
 | free-up-space preserves pinned originals | ✅ | — | — | `apps/mobile/src/apps/photos/photos-library-pins.test.ts` — pin join against folded asset ids |
-| hide vs archive mean the same thing on every seat | — | — | — | **product-bug** (#864, S2): hide and archive diverge across surfaces |
+| hide vs archive mean the same thing on every seat | ✅ | — | — | `packages/blueprints/apps/photos/archive-copy.test.ts`; mobile overflow in `apps/mobile/src/apps/photos/viewer-menu.test.ts` |

@@ -18,4 +18,4 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | Pin/Add-tag/Attach in the editor keeps the body | — | ✅ | — | `packages/blueprints/apps/notes/editor-keep-body.test.tsx` |
 | autosave debounce does not drop a write on note-switch | ✅ | — | — | `packages/blueprints/apps/notes/logic-commands.test.ts` |
 | "Both are kept" conflict panel is a live control | ✅ | — | — | `packages/blueprints/apps/notes/logic.test.ts` |
-| a new web note is named from its title, not Untitled note | — | — | — | **product-bug** (#864, S2): every web note is named "Untitled note" |
+| a new web note is named from its title, not Untitled note | ✅ | — | — | `packages/blueprints/apps/notes/format.test.ts` (`promote`) |

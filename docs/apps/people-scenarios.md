@@ -16,7 +16,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | share-link projection | ✅ | — | — | `packages/blueprints/apps/people/queries/share-links.test.ts` |
 | "Erased after 30 days" erases the person | ✅ | — | — | `packages/vault/src/gateway/duties.test.ts`: the grace-lapse sweep deletes party, identifiers, tags, and channels |
 | merge keeps folded-in cadence, last-contacted, and colour | ✅ | — | — | `packages/vault/src/commands/merge.test.ts`: `core.merge_party` folds cadence, last-contacted, and colour onto the survivor |
-| overdue arithmetic matches the cadence | — | — | — | **product-bug** (#864, S2): overdue arithmetic is wrong |
-| leap-day birthdays fire on 28 Feb in non-leap years | — | — | — | **product-bug** (#864, S2): leap-day handling is wrong |
-| month_day validation refuses impossible days | — | — | — | **product-bug** (#864, S2): month_day validation is missing |
-| the roster is not silently capped at 200 rows | — | — | — | **product-bug** (#864, S2): 200-row cap drops people with no notice |
+| overdue arithmetic matches the cadence | ✅ | — | — | `packages/blueprints/apps/people/format.test.ts` |
+| leap-day birthdays fire on 28 Feb in non-leap years | ✅ | — | — | `packages/blueprints/apps/people/format.test.ts` |
+| month_day validation refuses impossible days | ✅ | — | — | `packages/vault/src/commands/people-dates.test.ts` |
+| the roster is not silently capped at 200 rows | ✅ | — | — | `packages/blueprints/apps/people/queries/people-roster.test.ts` |

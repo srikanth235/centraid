@@ -40,4 +40,40 @@ describe("native background transfer policy", () => {
       )
     ).rejects.toThrow("outside blob transfer scope");
   });
+
+  test("rejects path traversal, unsigned, and cleartext provider URLs", async () => {
+    await expect(
+      assertGatewayMintedUploadUrl(
+        "https://provider.example/vault-cas/owners/one/tmp/blobs/../../blobs/sha256/secret" +
+          "?partNumber=1&X-Amz-Expires=600&X-Amz-Signature=abc",
+        scope
+      )
+    ).rejects.toThrow("outside blob transfer scope");
+    await expect(
+      assertGatewayMintedUploadUrl(
+        "https://provider.example/vault-cas/owners/one/tmp/blobs/direct-one" +
+          "?partNumber=1&X-Amz-Expires=600",
+        scope
+      )
+    ).rejects.toThrow("not a gateway-presigned capability");
+    const cleartext = {
+      ...scope,
+      fetchImpl: vi.fn<typeof fetch>(async () =>
+        Response.json({
+          blob_store: {
+            kind: "s3",
+            endpoint: "http://provider.example",
+            allowedUploadPrefix: "/vault-cas/owners/one/tmp/blobs/",
+          },
+        })
+      ),
+    };
+    await expect(
+      assertGatewayMintedUploadUrl(
+        "http://provider.example/vault-cas/owners/one/tmp/blobs/direct-one" +
+          "?X-Amz-Expires=600&X-Amz-Signature=abc",
+        cleartext
+      )
+    ).rejects.toThrow("not HTTPS");
+  });
 });

@@ -20,4 +20,4 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | a refused create (busy-overlap) keeps the typed draft | — | ✅ | — | `packages/blueprints/apps/agenda/states.test.tsx`: the composer stays open unless propose settles |
 | an all-day recurring event lands on the day it names | ✅ | — | — | `packages/blueprints/apps/agenda/format-locale.test.ts`: all-day writes store civil `YYYY-MM-DD` |
 | "edit this occurrence" keeps every field that was set | ✅ | — | — | `packages/blueprints/apps/agenda/edits.test.ts`: occurrence payload keeps all eight fields |
-| multi-day events stay visible on every day they span | — | — | — | **product-bug** (#864, S2): multi-day visibility is wrong |
+| multi-day events stay visible on every day they span | ✅ | — | — | `packages/blueprints/apps/agenda/views.test.ts` (`bucketByDay`) |

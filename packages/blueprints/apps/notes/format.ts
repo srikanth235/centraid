@@ -97,14 +97,18 @@ export interface Promoted {
   preview: string;
 }
 
+/** Stored name for a note that has no title of its own. */
+export const UNTITLED_NOTE = "Untitled note";
+
 /**
  * First-line promotion, the one implementation.
  *
- * A note is UNTITLED when it carries no title of its own, and also when its
- * title IS its first line — which is what a note created from a body alone
- * ends up with, since the vault's `create_note` will not accept an empty
- * name. Both cases read the same on screen and neither repeats the line
- * twice, because the preview starts below whatever the heading took.
+ * A note is UNTITLED when it carries no title of its own, when the stored
+ * name is the empty-note sentinel, and also when its title IS its first
+ * line — which is what a note created from a body alone ends up with, since
+ * `create_note` will not accept an empty name. Both cases read the same on
+ * screen and neither repeats the line twice, because the preview starts
+ * below whatever the heading took.
  */
 export function promote(note: {
   title?: unknown;
@@ -119,10 +123,11 @@ export function promote(note: {
   const firstLine =
     firstIndex === -1 ? "" : stripInline(lines[firstIndex]).trim();
   const typed = stripInline(note.title).trim();
-  const untitled = typed === "" || typed === firstLine;
+  const untitled =
+    typed === "" || typed === firstLine || typed === UNTITLED_NOTE;
   const rest = firstIndex === -1 ? [] : lines.slice(firstIndex + 1);
   return {
-    heading: untitled ? firstLine : typed,
+    heading: untitled ? firstLine || typed : typed,
     untitled,
     preview: (untitled ? rest : lines)
       .join("\n")

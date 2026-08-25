@@ -84,6 +84,8 @@
 // to dismiss it to reach a row the same menu has on their phone. The safety
 // was never the row being hard to find — it is the confirm step behind it.
 
+import { photosArchiveVerb } from "@centraid/blueprints/apps/photos/shared-copy";
+
 import type { MenuGroup } from "../../kit/components/AnchoredMenu";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
@@ -98,7 +100,7 @@ export const NOT_IN_A_VAULT_YET_REASON =
 
 /**
  * The one refusal ladder every writing row in this menu climbs: read-only
- * beats no-vault-row, and either beats a plain grant. Add to Album and Hide
+ * beats no-vault-row, and either beats a plain grant. Add to Album and Archive
  * are the two writes here that can be refused, and they refuse for the same
  * two reasons — this is the one place that logic is spelled out, so it
  * cannot drift into two re-typed copies.
@@ -118,7 +120,7 @@ export interface ViewerOverflowMenuInput {
   writable: boolean;
   /** Whether the photograph has a vault row to write against at all. */
   hasVaultAsset: boolean;
-  /** `PhotoAsset.archived` — which label the row shows, Hide or Unhide. */
+  /** `PhotoAsset.archived` — which label the row shows, Archive or Unarchive. */
   archived: boolean;
   /**
    * The albums THIS photograph already belongs to, resolved by the caller
@@ -184,7 +186,7 @@ export function viewerOverflowMenuGroups(
   const canAddToAlbum = addToAlbumReason === undefined;
   const hideReason = writeRefusalReason(input);
   const canHide = hideReason === undefined;
-  const hideVerb = input.archived ? "Unhide" : "Hide";
+  const archiveVerb = photosArchiveVerb(input.archived);
   // Same refusal ladder as Add to Album — read-only beats no-vault-row, either
   // beats a plain grant — because setting a cover is the same kind of write
   // against the same photograph. Album MEMBERSHIP is a separate, third gate:
@@ -202,7 +204,7 @@ export function viewerOverflowMenuGroups(
           // One text slot, so the refusal rides after an em dash — see the
           // same carry on Add to Album below for why this is not a second,
           // shorter phrasing of the read-only truth.
-          label: canHide ? hideVerb : `${hideVerb} — ${hideReason}`,
+          label: canHide ? archiveVerb : `${archiveVerb} — ${hideReason}`,
           icon: "Archive",
           disabled: !canHide,
           onSelect: input.onHide,

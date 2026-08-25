@@ -48,9 +48,25 @@ about what is still open.
 - [x] Write the failing test first at the cheapest falsifying layer, then fix the S1 product bugs
 - [x] Flip each repaired scenario-ledger cell from product-bug to owned
 
-### Waves 3–5
+### Wave M18 S2 (landed)
 
-- [ ] _placeholder — the root agent appends each wave's checklist as it lands_
+- [x] Fix the cheap S2 wrong-display bugs with a failing test first
+- [x] Flip each repaired S2 scenario-ledger cell from product-bug to owned
+
+### Wave 3 (landed, partial)
+
+- [x] Add crash/reopen durability tests for app-engine and automations
+- [x] Add adversarial-input tests for automations lint and mobile transfer-policy
+- [x] Correct the stale pwa-waterfall honesty note (CI already throws)
+
+### Wave 4 (landed, partial)
+
+- [x] Add a two-actor claimNext interleaving on the mobile intent store
+- [x] Add a pre-multi-vault gateway reply version-skew fixture on web host
+
+### Wave 5
+
+- [ ] Deferred: the 18 skip sites still wait on named rigs (disk-full, launchd, Clawgnition interop); standing those up is out of this PR's machine budget
 
 ## Waves
 
@@ -62,9 +78,10 @@ about what is still open.
 | W2 | consent + untrusted property flows, mutation seed, hostile-manifest adversary | landed (extension journeys deferred) |
 | W7 | per-app scenario ledger + report grid; M18 seeded as product-bug | landed |
 | M18 S1 | fix data-loss / consent / false-promise bugs; flip product-bug → owned | landed |
-| W3 | _placeholder — root agent appends_ | pending |
-| W4 | _placeholder — root agent appends_ | pending |
-| W5 | _placeholder — root agent appends_ | pending |
+| M18 S2 | cheap wrong-display bugs; flip product-bug → owned | landed |
+| W3 | durability crash/reopen + adversarial lint/transfer; pwa-waterfall honesty | landed (partial — remaining surfaces still happy-path) |
+| W4 | mobile claimNext interleaving + web pairing version-skew | landed (partial — remaining concurrency cells still happy-path) |
+| W5 | named rigs (disk-full, launchd, …) | deferred |
 
 ## What changed
 
@@ -373,9 +390,49 @@ in `tests/matrix.json#appScenarios` (18 cells). S2 rows stay `product-bug`
 (untitled web note, People overdue/leap-day/month_day/cap, Photos hide vs
 archive, Tasks priority/Today UTC, Agenda multi-day visibility).
 
-### W3–W5
+### M18 S2 — silently-wrong-display, cheapest layer first
 
-_Placeholder — the root agent appends the remaining waves here._
+This did **Fix the cheap S2 wrong-display bugs with a failing test first**:
+Notes `promote()` names a stored "Untitled note" from the first line
+(`format.test.ts`); Tasks chips follow Todoist and `dayKey()` is the member's
+civil day (`format.test.ts`); Agenda `bucketByDay()` emits every spanned local
+day (`views.test.ts`); People overdue is `daysSince > cadence`, leap-day
+clamps to 28 Feb, month_day schema refuses impossible dates, roster window
+9999 with a named remaining count (`format.test.ts`,
+`people-dates.test.ts`, `people-roster.test.ts`); Photos Archive/Unarchive
+copy is shared (`archive-copy.test.ts`).
+
+This did **Flip each repaired S2 scenario-ledger cell from product-bug to
+owned** (9 cells). Remaining product-bug: none in the six-app S2 list.
+
+### W3 — durability crash/reopen and adversarial inputs
+
+This did **Add crash/reopen durability tests for app-engine and automations**
+(`archive.contract.test.ts`, `scheduler-ledger.contract.test.ts`), **Add
+adversarial-input tests for automations lint and mobile transfer-policy**
+(`lint.test.ts`, `transfer-policy.test.ts`), and **Correct the stale
+pwa-waterfall honesty note (CI already throws)**. Remaining M6/M7 surfaces
+still happy-path only (vault-core, replica-sync, gateway, blob-custody, …).
+
+### W4 — one interleaving and one version-skew fixture
+
+This did **Add a two-actor claimNext interleaving on the mobile intent store**
+and **Add a pre-multi-vault gateway reply version-skew fixture on web host**.
+Remaining concurrency/compat cells still happy-path.
+
+### W5 — deferred
+
+Named-rig skips (disk-full, launchd, Clawgnition weekly pretence) stay
+inventoried under #864. This PR does not stand up those machines.
+
+### CI ratchets for this branch
+
+`tests/quality/classification-ratchet.json` re-pins the `tests/matrix.json`
+whole-file fingerprint (governed qualities payload unchanged).
+`apps/mobile/native-fingerprints.json` L4 iOS identity only (L1–L3 green;
+JS under `apps/mobile/src` moved the Expo fingerprint).
+`packages/blueprints/manifest.json` lists the S1/S2 files (covers the
+earlier manifest-only commit that CI rejected for not touching the receipt).
 
 ## Decisions
 
@@ -388,6 +445,7 @@ _Placeholder — the root agent appends the remaining waves here._
   citation check alone would have passed on 2026-08-24, because every citation
   pointed at an issue the ledger *said* was open. Checking the declaration is
   what makes the three offline validators honest between nightlies.
+- **tests/matrix.json whole-file fingerprint is re-pinned by #864 because Wave 7 added the appScenarios ledger and M18 flipped product-bug cells to owned. No quality lost a gate, no gate lost its evidence, no classification was weakened, and the remaining governed fingerprints are unmoved.**
 - **A declared product defect is not a missing test.** Wave 7 adds an eighth
   Night Watch family (`bug`, indigo) rather than painting product-bug with
   either the gap plum or the failed red. Gap is Q1 "no owner"; failed is Q2
@@ -659,6 +717,81 @@ Staged paths: `tests/matrix.json`;
 `packages/vault/src/schema/domains-people.ts`.
 
 Recorded results: `bun run test:matrix` PASS; the owner vitest command above PASS (268 tests / 21 files).
+
+### Waves S2 / 3 / 4 / CI verification
+
+```sh
+bun run test:matrix
+bun run lint:quality-knobs
+bun run --cwd apps/mobile ci:native-state
+bunx vitest run packages/blueprints/apps/notes/format.test.ts \
+  packages/blueprints/apps/tasks/format.test.ts \
+  packages/blueprints/apps/agenda/views.test.ts \
+  packages/blueprints/apps/people/format.test.ts \
+  packages/blueprints/apps/people/queries/people-roster.test.ts \
+  packages/blueprints/apps/photos/archive-copy.test.ts \
+  packages/vault/src/commands/people-dates.test.ts \
+  packages/server/src/engine/conversation/archive/archive.contract.test.ts \
+  packages/server/src/automation/fire/scheduler-ledger.contract.test.ts \
+  packages/server/src/automation/handler/lint.test.ts \
+  apps/mobile/src/lib/upload/transfer-policy.test.ts \
+  apps/mobile/src/lib/replica/sqlite-intent-store.test.ts \
+  apps/web/src/web-host.test.ts
+```
+
+This change did **Fix the cheap S2 wrong-display bugs with a failing test
+first**, did **Flip each repaired S2 scenario-ledger cell from product-bug to
+owned**, did **Add crash/reopen durability tests for app-engine and
+automations**, did **Add adversarial-input tests for automations lint and
+mobile transfer-policy**, did **Correct the stale pwa-waterfall honesty note
+(CI already throws)**, did **Add a two-actor claimNext interleaving on the
+mobile intent store**, and did **Add a pre-multi-vault gateway reply
+version-skew fixture on web host**.
+
+Staged paths: `apps/mobile/native-fingerprints.json`,
+`apps/mobile/src/apps/people/people-model.test.ts`,
+`apps/mobile/src/apps/people/people-model.ts`,
+`apps/mobile/src/apps/photos/PhotoLightbox.tsx`,
+`apps/mobile/src/apps/photos/PhotoStateView.tsx`,
+`apps/mobile/src/apps/photos/viewer-menu.test.ts`,
+`apps/mobile/src/apps/photos/viewer-menu.ts`,
+`apps/mobile/src/lib/replica/sqlite-intent-store.test.ts`,
+`apps/mobile/src/lib/upload/transfer-policy.test.ts`,
+`apps/web/src/web-host.test.ts`,
+`docs/apps/agenda-scenarios.md`, `docs/apps/notes-scenarios.md`,
+`docs/apps/people-scenarios.md`, `docs/apps/photos-scenarios.md`,
+`docs/apps/tasks-scenarios.md`,
+`packages/blueprints/apps/agenda/components/Grid.tsx`,
+`packages/blueprints/apps/agenda/types.ts`,
+`packages/blueprints/apps/agenda/views.test.ts`,
+`packages/blueprints/apps/agenda/views.ts`,
+`packages/blueprints/apps/notes/format.test.ts`,
+`packages/blueprints/apps/notes/format.ts`,
+`packages/blueprints/apps/notes/logic.ts`,
+`packages/blueprints/apps/people/app.json`,
+`packages/blueprints/apps/people/format.test.ts`,
+`packages/blueprints/apps/people/format.ts`,
+`packages/blueprints/apps/people/logic.ts`,
+`packages/blueprints/apps/people/people-copy.ts`,
+`packages/blueprints/apps/people/queries/dashboard.ts`,
+`packages/blueprints/apps/people/queries/people-roster.test.ts`,
+`packages/blueprints/apps/people/queries/people.ts`,
+`packages/blueprints/apps/photos/archive-copy.test.ts`,
+`packages/blueprints/apps/photos/shared-copy.ts`,
+`packages/blueprints/apps/photos/view-copy.ts`,
+`packages/blueprints/apps/tasks/app-root.tsx`,
+`packages/blueprints/apps/tasks/format.test.ts`,
+`packages/blueprints/apps/tasks/format.ts`,
+`packages/blueprints/apps/tasks/queries/board.ts`,
+`packages/blueprints/apps/tasks/when.ts`,
+`packages/blueprints/manifest.json`,
+`packages/server/src/automation/fire/scheduler-ledger.contract.test.ts`,
+`packages/server/src/automation/handler/lint.test.ts`,
+`packages/server/src/engine/conversation/archive/archive.contract.test.ts`,
+`packages/vault/src/commands/people-dates.test.ts`,
+`packages/vault/src/commands/people.ts`,
+`receipts/issue-864-close-the-matrix.md`, `tests/matrix.json`,
+`tests/quality/classification-ratchet.json`.
 
 ## Audit
 
