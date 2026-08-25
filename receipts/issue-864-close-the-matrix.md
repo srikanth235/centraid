@@ -437,7 +437,8 @@ handler-pool dispatch**.
 New tests this remainder:
 
 - `packages/vault/src/enrich/leases.test.ts` — two poster jobs claimed by
-  two devices never share a `requestId`
+  two devices never share a `requestId` (sort compare pinned for
+  `lint:types`)
 - `packages/server/src/engine/handlers/handler-pool.test.ts` — two
   concurrent dispatches both complete
 - `packages/server/src/serve/disk-health.test.ts` — a replacement probe

@@ -136,10 +136,11 @@ describe("leases", () => {
       ttlMs: 30_000,
       token: "token-b",
     });
-    expect([left?.requestId, right?.requestId].sort()).toStrictEqual([
-      "poster-1",
-      "poster-2",
-    ]);
+    expect(
+      [left?.requestId, right?.requestId]
+        .filter((id): id is string => id !== undefined)
+        .sort((a, b) => a.localeCompare(b))
+    ).toStrictEqual(["poster-1", "poster-2"]);
     expect(left?.deviceId).not.toBe(right?.deviceId);
     expect(
       leaseNextEnrichmentRequest(db.vault, {
