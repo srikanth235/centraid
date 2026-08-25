@@ -30,7 +30,13 @@ about what is still open.
 - [x] Unify the vocabulary and paint the legend chips
 - [x] Invert the guardrail test to forbid shared tints
 
-### Waves 2–5, 7
+### Wave 2 (landed, partial — extension journeys deferred)
+
+- [x] Add the consent engine property flow with six named laws
+- [x] Add the untrusted-rendering property flow and its measured mutation seed
+- [x] Give the app-scope-manifests consent layer a hostile-manifest adversary
+
+### Waves 3–5, 7
 
 - [ ] _placeholder — the root agent appends each wave's checklist as it lands_
 
@@ -41,6 +47,7 @@ about what is still open.
 | W0 | re-home closed-issue citations to #864; add the open-citation gate | landed |
 | W1 | own the app-axis state and seat cells; leave nine as product-surface gaps | landed |
 | W6 | recolor the report to one hue one meaning; invert the collision guardrail | landed |
+| W2 | consent + untrusted property flows, mutation seed, hostile-manifest adversary | landed (extension journeys deferred) |
 | W2 | _placeholder — root agent appends_ | pending |
 | W3 | _placeholder — root agent appends_ | pending |
 | W4 | _placeholder — root agent appends_ | pending |
@@ -225,7 +232,51 @@ the `--st-gap` re-point off `--seam`), the generated `scripts/test-report/report
 `scripts/test-report/smoke.mjs`; the divergence and decision records
 `docs/design-divergences.md` and `docs/decisions.md`.
 
-### W2–W5
+### W2 — the adversary panel gains three owners it was missing
+
+Wave 2 raised author-blind adversaries against the engines the §7 panel showed
+`unowned` (M4) and the one consent layer with no adversary (M5). Three of the
+eleven property-flow-less engines are now owned; the extension journeys (M3) and
+the remaining engines are deferred to a later batch.
+
+`packages/vault/src/gateway/consent-properties.test.ts` is a node property suite
+over identity × grants × policies × clamp, and this did **add the consent engine
+property flow with six named laws**: consent-denial-monotone, clamp-order-
+independent, clamp-only-narrows, reveal-never-rides, explicit-scope-unbypassable
+and onbehalf-cap-precedes-grants — all held (the order-independence law is
+correctly stated as a set invariant, since clause order is deliberate and
+already pinned elsewhere). The engineRegistry `consent.propertyFlow` now names it.
+
+`packages/blueprints/apps/_shared/untrusted-properties.test.ts` is a node suite
+that also unlocks the mutation seed the jsdom suite could never back — this did
+**add the untrusted-rendering property flow and its measured mutation seed**:
+four laws (display-total, url-allowlist-closed, media-subsumed-by-document,
+background-image-unescapable), a new seed `packages/blueprints/apps/_shared/untrusted`
+wired through `packages/blueprints/stryker.untrusted.config.mjs`,
+`packages/blueprints/vitest.untrusted.mutation.config.ts` and
+`scripts/mutation/seeds.mjs`, and a floor of 84 in `tests/mutation-floors.json`
+(local Stryker measured 95.14%, floor = measured − 11 per the #839 provisional
+precedent; `_w864Comment` records the obligation to re-seed to CI−3 on the first
+green nightly, and the "deliberately not seeded" clause was deleted). Two `it.fails`
+pin genuine latent boundaries in `untrusted.ts` (the vault-blob/`data:` sink arms
+don't scrub control units; a raw newline in a `data:` body breaks CSS `url()`
+token integrity) — self-correcting characterizations, not injections today.
+
+`packages/server/src/serve/manifest-scope-denial.hostile.test.ts` drives
+synthetic attacker-authored manifests through the real validators — this did
+**give the app-scope-manifests consent layer a hostile-manifest adversary**: case/
+NFKC/whitespace/`__proto__` name variants and a 10 000-scope list deny as
+`manifest-undeclared` inside the six DENY_CLASSES, and the automation validator
+rejects a garbage `rowFilter.op` the app schema waves through. Three `test.fails`
+characterize a real, unowned hole (the app manifest validator types `rowFilter.op`
+as a bare string and `executionClamp` carries clause contents opaquely, so a
+structurally-invalid clause reaches ALLOW and throws downstream outside the
+grammar) — pinned with a filed note per the pin doctrine, the fix deferred out of
+this slice. The `consentLedger[app-scope-manifests]` adversary now names the
+closed-grammar owner and its note records both the landed sweep and this hostile
+suite (`tests/matrix.json`).
+
+### W3–W5
 
 _Placeholder — the root agent appends the remaining waves here._
 

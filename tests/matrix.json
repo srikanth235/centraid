@@ -1955,6 +1955,56 @@
     }
   ],
   "laws": {
+    "consent-denial-monotone": {
+      "statement": "Deleting a grant, removing a grant_scope, narrowing a clamp verb, or adding a consent_policy row can only turn an allow into a deny, never a deny into an allow.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-clamp-order-independent": {
+      "statement": "The decision, the set of returned rowFilter clauses, and the fieldMask are invariant under permutation of identity.scopeClamp.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-clamp-only-narrows": {
+      "statement": "For every allow, the returned rowFilter is a superset of the grant scope's and the clamp's clauses, and the fieldMask is exactly grantMask ∩ clampMask (null only when both are null).",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-reveal-never-rides": {
+      "statement": "Reveal is allowed only when both a grant_scope and a clamp scope carry the 'reveal' verb; a 'reveal' scope never satisfies a read or act request.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-explicit-scope-unbypassable": {
+      "statement": "A table under a kind:'minimization' policy row is never allowed by a whole-schema (table_name IS NULL) grant scope; only a scope naming the table explicitly covers it.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-onbehalf-cap-precedes-grants": {
+      "statement": "When onBehalfOfOwner.mayAct is false, no grant set produces an allow for act or reveal, and the deny names the owner id, checked before any grant is consulted.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "untrusted-display-total": {
+      "statement": "displayText never throws for any input (non-strings included), preserves code-point length and is idempotent for strings, and emits no character in the forbidden C0-control/DEL/bidi-override/bidi-isolate set.",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "flow": "untrusted-render-properties"
+    },
+    "untrusted-url-allowlist-closed": {
+      "statement": "safeExternalUrl/safeMediaUrl/safeDocumentUrl each return null or a value in that function's own scheme allowlist, never matching javascript:/vbscript:/data:text/html/data:image/svg; safeExternalUrl additionally never returns a value carrying a control code unit (<=32 or 127).",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "flow": "untrusted-render-properties"
+    },
+    "untrusted-media-subsumed-by-document": {
+      "statement": "Every value safeMediaUrl accepts, safeDocumentUrl accepts with an identical result; the converse (document accepts, media rejects) occurs only for data:application/pdf and data:text/plain.",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "flow": "untrusted-render-properties"
+    },
+    "untrusted-background-image-unescapable": {
+      "statement": "safeBackgroundImage output is undefined or a single sealed CSS url(\"…\") token whose every quote and backslash is escaped and which recovers exactly the URL the media sink admitted, so no member string can break out of the quoted string.",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "flow": "untrusted-render-properties"
+    },
     "commons-steward-ordered-convergence": {
       "statement": "Each Commons grant has one independent monotonic steward sequence; cursor-gapped members converge to the same domain state, and capability downgrades govern commands from their exact stream position onward.",
       "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
@@ -2961,7 +3011,7 @@
         "packages/vault/src/gateway/consent.ts",
         "packages/blueprints/apps/_shared/consent-gate.ts"
       ],
-      "propertyFlow": null,
+      "propertyFlow": "consent-chain-properties",
       "mutationSeed": null,
       "appEngineColumn": true
     },
@@ -3068,8 +3118,8 @@
       "id": "untrusted-rendering",
       "label": "Untrusted rendering",
       "source": ["packages/blueprints/apps/_shared/untrusted.ts"],
-      "propertyFlow": null,
-      "mutationSeed": null,
+      "propertyFlow": "untrusted-render-properties",
+      "mutationSeed": "packages/blueprints/apps/_shared/untrusted",
       "appEngineColumn": false
     },
     {
@@ -3138,12 +3188,11 @@
       ],
       "refusalGrammar": "execution manifest does not declare <scope>",
       "adversary": {
-        "owner": null,
-        "flow": null,
-        "trackingIssue": "864"
+        "owner": "packages/server/src/serve/manifest-scope-denial.closed-grammar.test.ts",
+        "flow": "manifest-scope-denial-closed-grammar"
       },
       "seats": ["origin", "custodian", "viewer"],
-      "note": "Gap G4: no generated command × missing-scope denial sweep exists yet (#839 Wave 2)."
+      "note": "The G4 sweep landed (#839): manifest-scope-denial.{sweep,closed-grammar,fuzz} drive the real validateManifest + parseManifest + evaluateConsent over all 37 bundled manifests — every declared scope×verb allows, every undeclared combination denies closed inside the six DENY_CLASSES, and property fuzz holds. #864 M5 adds manifest-scope-denial.hostile: synthetic third-party/attacker manifests built in memory and pushed through the real validators — case, NFKC, whitespace and __proto__/constructor name variants and a 10000-scope list deny as manifest-undeclared, and the validator layer refuses malformed shapes (a garbage rowFilter op the app schema waves through is rejected by the automation validator). Open hole characterized by test.fails + a filed note: the app manifest validator types rowFilter.op as a bare string and executionClamp carries rowFilter/fieldMask contents opaquely, so a structurally-invalid clause reaches ALLOW and is refused only as a bare throw at filters.ts compile, outside the receipt grammar."
     },
     {
       "id": "grant-plane",
@@ -3481,6 +3530,33 @@
     ]
   },
   "flows": [
+    {
+      "id": "consent-chain-properties",
+      "name": "Consent chain: denial is monotone, order-independent, and the clamp only narrows",
+      "surface": "vault-core",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "minimumTests": 6
+    },
+    {
+      "id": "manifest-scope-denial-hostile",
+      "name": "Hostile third-party manifests deny inside the grammar, never throw",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "integration",
+      "owner": "packages/server/src/serve/manifest-scope-denial.hostile.test.ts",
+      "minimumTests": 12
+    },
+    {
+      "id": "untrusted-render-properties",
+      "name": "Untrusted display text and URL sinks are total, closed, and unescapable",
+      "surface": "blueprints",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "minimumTests": 12
+    },
     {
       "id": "blueprint-placement-law",
       "name": "Blueprint placement registry parity and exclusions",
