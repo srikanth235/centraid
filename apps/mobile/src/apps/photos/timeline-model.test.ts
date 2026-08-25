@@ -118,6 +118,9 @@ describe("native Photos timeline model", () => {
       canWrite: true,
     });
     expect(rows[0]?.scopeIds).toStrictEqual(["personal", "family"]);
+    // The personal copy's id is not the canonical write target, but album
+    // membership and keep-originals pins still name it.
+    expect(rows[0]?.assetIds).toStrictEqual(["asset-personal", "asset-family"]);
   });
 
   test("sections by capture-local day using tzOffsetMin, not the raw UTC slice", () => {

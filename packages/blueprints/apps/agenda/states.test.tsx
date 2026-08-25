@@ -28,6 +28,7 @@ import type { AgEvent } from "./types.ts";
 import {
   CANCEL_EVENT,
   NEW_EVENT,
+  SAVE,
   STATE_DAY_ONE,
   STATE_DAY_ONE_ACTION,
   STATE_OFFLINE,
@@ -49,6 +50,10 @@ interface MountOptions {
   events: readonly AgEvent[] | "reject";
   /** The default-view knob, as the host stamps it. */
   view?: string;
+  write?: (opts: {
+    action: string;
+    input?: Record<string, unknown>;
+  }) => Promise<unknown>;
   retryPendingWrite?: (key: string, scopeId?: string) => void;
   discardPendingWrite?: (key: string, scopeId?: string) => void;
 }
@@ -78,6 +83,7 @@ async function mount(options: MountOptions): Promise<HTMLDivElement> {
   };
   (window as unknown as { centraid: unknown }).centraid = {
     read,
+    write: options.write ?? (async () => ({ status: "executed", output: {} })),
     ...(options.retryPendingWrite
       ? { retryPendingWrite: options.retryPendingWrite }
       : {}),
@@ -189,6 +195,34 @@ describe("day one is an empty VAULT, not an empty window", () => {
     const empty = container.querySelector(".kit-empty");
     expect(empty?.textContent).toContain("Nothing is waiting on your answer.");
     expect(empty?.textContent).not.toContain(STATE_DAY_ONE);
+  });
+
+  test("a refused create keeps the typed draft", async () => {
+    const container = await mount({
+      events: [],
+      write: async () => ({
+        status: "failed",
+        predicate: "no_busy_conflict: overlap",
+      }),
+    });
+    await act(async () => buttonNamed(container, STATE_DAY_ONE_ACTION).click());
+    const title =
+      container.querySelector<HTMLInputElement>('input[type="text"]');
+    expect(title).not.toBeNull();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value"
+      )?.set?.call(title, "Site visit");
+      title!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => buttonNamed(container, SAVE).click());
+    expect(container.querySelector("#agendaEditorTitle")?.textContent).toBe(
+      NEW_EVENT
+    );
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="text"]')?.value
+    ).toBe("Site visit");
   });
 });
 

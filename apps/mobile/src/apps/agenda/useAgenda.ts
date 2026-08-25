@@ -108,6 +108,11 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
                 let override: {
                   scope?: "occurrence" | "future";
                   start?: string;
+                  end?: string;
+                  summary?: string;
+                  description?: string;
+                  recurrence_semantics?: "zoned" | "floating" | "all-day";
+                  calendar_id?: string;
                 } = {};
                 if (raw) {
                   try {

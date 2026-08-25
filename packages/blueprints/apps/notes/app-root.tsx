@@ -44,6 +44,7 @@ import {
   VoiceRoute,
   WindowEnd,
 } from "./components/States.tsx";
+import { carryLoadedBodies } from "./draft-writes.ts";
 import { hasConcurrentVersions } from "./format.ts";
 import { appBar, bandClaim } from "./frame.tsx";
 import {
@@ -232,8 +233,10 @@ export function Root({
         return;
       }
       // Mutated in place — logic.ts closed over this exact object at boot.
-      data.notes = next?.notes ?? [];
-      data.trash = next?.trash ?? [];
+      // The library window has no body; keep the one the editor already holds
+      // so Pin / tag / attach cannot refresh it into an empty overwrite.
+      data.notes = carryLoadedBodies(data.notes, next?.notes ?? []);
+      data.trash = carryLoadedBodies(data.trash, next?.trash ?? []);
       data.notebooks = next?.notebooks ?? [];
       data.tags = next?.tags ?? [];
       data.truncated = Boolean(next?.truncated);
@@ -249,7 +252,9 @@ export function Root({
         });
         // The Journal place answers for itself: a denial here darkens Journal
         // and nothing else, because no other route reads this query.
-        data.journal = answer?.vaultDenied ? [] : (answer?.entries ?? []);
+        data.journal = answer?.vaultDenied
+          ? []
+          : carryLoadedBodies(data.journal, answer?.entries ?? []);
       } catch {
         data.journal = [];
       }
@@ -380,6 +385,7 @@ export function Root({
       stopDoorbell();
       stopFocus();
       stopWidth();
+      void logic.flushSave();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);

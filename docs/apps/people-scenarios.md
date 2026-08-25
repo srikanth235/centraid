@@ -14,8 +14,8 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | designed pending/parked/dayone | — | ✅ | — | `packages/blueprints/apps/people/states.test.tsx` |
 | per-person grants | — | ✅ | — | `packages/blueprints/apps/people/components/PersonGrants.test.tsx` |
 | share-link projection | ✅ | — | — | `packages/blueprints/apps/people/queries/share-links.test.ts` |
-| "Erased after 30 days" erases the person | — | — | — | **product-bug** (#864): purge leaves core_party/tag/channel and the deleted person still push-notifies |
-| merge keeps folded-in cadence, last-contacted, and colour | — | — | — | **product-bug** (#864): merge is destructive and a wrong-person merge is one mistap |
+| "Erased after 30 days" erases the person | ✅ | — | — | `packages/vault/src/gateway/duties.test.ts`: the grace-lapse sweep deletes party, identifiers, tags, and channels |
+| merge keeps folded-in cadence, last-contacted, and colour | ✅ | — | — | `packages/vault/src/commands/merge.test.ts`: `core.merge_party` folds cadence, last-contacted, and colour onto the survivor |
 | overdue arithmetic matches the cadence | — | — | — | **product-bug** (#864, S2): overdue arithmetic is wrong |
 | leap-day birthdays fire on 28 Feb in non-leap years | — | — | — | **product-bug** (#864, S2): leap-day handling is wrong |
 | month_day validation refuses impossible days | — | — | — | **product-bug** (#864, S2): month_day validation is missing |

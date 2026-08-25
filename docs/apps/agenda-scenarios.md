@@ -15,9 +15,9 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | view derivation | ✅ | — | — | `packages/blueprints/apps/agenda/views.test.ts` |
 | edit-occurrence model | ✅ | — | — | `packages/blueprints/apps/agenda/edits.test.ts` |
 | day-context copy | ✅ | — | — | `packages/blueprints/apps/agenda/day-context.test.ts` |
-| a recurring event's reminder fires on each occurrence | — | — | — | **product-bug** (#864): `due-reminders.ts` never expands the rrule; the reminder fires once, on the anchor |
-| recurring events keep wall-clock time across DST | — | — | — | **product-bug** (#864): no surface sends `start_tz`; occurrences drift +1h |
-| a refused create (busy-overlap) keeps the typed draft | — | — | — | **product-bug** (#864): the refused create discards everything typed on web |
-| an all-day recurring event lands on the day it names | — | — | — | **product-bug** (#864): all-day recurring lands a day early off UTC+0 |
-| "edit this occurrence" keeps every field that was set | — | — | — | **product-bug** (#864): the occurrence edit drops 5 of 8 fields |
+| a recurring event's reminder fires on each occurrence | ✅ | — | — | `packages/server/src/reminders/due-reminders.test.ts`: rrule expansion keys a fire per occurrence |
+| recurring events keep wall-clock time across DST | ✅ | — | — | `packages/blueprints/apps/agenda/format-locale.test.ts`: create/edit send `start_tz` |
+| a refused create (busy-overlap) keeps the typed draft | — | ✅ | — | `packages/blueprints/apps/agenda/states.test.tsx`: the composer stays open unless propose settles |
+| an all-day recurring event lands on the day it names | ✅ | — | — | `packages/blueprints/apps/agenda/format-locale.test.ts`: all-day writes store civil `YYYY-MM-DD` |
+| "edit this occurrence" keeps every field that was set | ✅ | — | — | `packages/blueprints/apps/agenda/edits.test.ts`: occurrence payload keeps all eight fields |
 | multi-day events stay visible on every day they span | — | — | — | **product-bug** (#864, S2): multi-day visibility is wrong |

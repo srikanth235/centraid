@@ -9,17 +9,41 @@ import { showsEmptyState } from "../_shared/view-state-kit.ts";
 import { daysBetween, isOverdue } from "./format.ts";
 import type { BoardData, ReentryBucket, Task, TaskGroup } from "./types.ts";
 import { GROUPS, inboxMeta, overdueMeta } from "./view-copy.ts";
-import { landsToday } from "./when.ts";
+import { isOpenStatus, landsToday } from "./when.ts";
 
-// `landsToday` lives in `when.ts` — the import-free leaf the shell's Home tile
-// and the phone read too (#834) — and is re-exported here so every caller of
-// `logic.ts` is unchanged and there is still exactly one definition.
-export { landsToday } from "./when.ts";
-
-const OPEN = new Set(["needs-action", "in-process"]);
+// `landsToday` and family nesting live in `when.ts` — the import-free leaf
+// the shell's Home tile and the phone read too (#834) — and are re-exported
+// here so every caller of `logic.ts` is unchanged and there is still exactly
+// one definition of "is this still on the board".
+export { landsToday, nestTaskFamilies } from "./when.ts";
 
 export function isOpen(task: Task): boolean {
-  return OPEN.has(task.status);
+  return isOpenStatus(task.status);
+}
+
+/** One Catch-up bulk verb → the writes it actually fires. Sitting is Release
+ *  all: cancel, never stamp Today onto an undated someday row. */
+export function catchUpWrites(
+  key: ReentryBucket["key"],
+  rows: readonly Pick<Task, "task_id">[],
+  today: string
+): Array<{ action: string; input: Record<string, unknown> }> {
+  if (key === "sitting") {
+    return rows.map((row) => ({
+      action: "set-status",
+      input: { task_id: row.task_id, status: "cancelled" },
+    }));
+  }
+  if (key === "repeating") {
+    return rows.map((row) => ({
+      action: "set-status",
+      input: { task_id: row.task_id, status: "completed" },
+    }));
+  }
+  return rows.map((row) => ({
+    action: "edit",
+    input: { task_id: row.task_id, due_at: today },
+  }));
 }
 
 /**

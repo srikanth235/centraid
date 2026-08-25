@@ -2,6 +2,9 @@
 // this app turns a press into a vault ask, and the one place it puts the
 // answer back on screen before the vault has replied.
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,6 +15,11 @@ import {
   projectRsvpInto,
 } from "./edits.ts";
 import type { AgEvent, Attendee } from "./types.ts";
+
+const EDITOR = readFileSync(
+  path.resolve(import.meta.dirname, "components/EventEditor.tsx"),
+  "utf8"
+);
 
 const series: AgEvent = {
   event_id: "standup",
@@ -64,6 +72,45 @@ describe("the scope panel maps a press to one edit-occurrence ask", () => {
     });
     expect(skipped?.action).toBe("skip");
     expect(skipped?.summary).toBeUndefined();
+  });
+
+  it("keeps every field that was set on this occurrence", () => {
+    const changes = {
+      summary: "Moved standup",
+      dtstart: "2026-08-21T10:00:00.000Z",
+      dtend: "2026-08-21T10:30:00.000Z",
+      recurrence_semantics: "zoned" as const,
+      calendar_id: "cal-home",
+      reminders: [{ minutes_before: 15 }],
+      conferencing_uri: "https://meet.example.test/standup",
+      attendee_party_ids: ["p-dana"],
+    };
+    expect(
+      occurrenceEdit({
+        event: series,
+        scope: "occurrence",
+        intent: "edit",
+        changes,
+      })
+    ).toMatchObject(changes);
+  });
+
+  it("the editor hands all eight occurrence fields to the ask", () => {
+    for (const field of [
+      "summary",
+      "dtstart",
+      "dtend",
+      "recurrence_semantics",
+      "calendar_id",
+      "reminders",
+      "conferencing_uri",
+      "attendee_party_ids",
+    ]) {
+      expect(EDITOR, field).toContain(field);
+    }
+    expect(EDITOR).toMatch(
+      /occurrenceEdit\(\{[\s\S]*attendee_party_ids: \[\.\.\.invited\]/u
+    );
   });
 
   it("REFUSES to skip a whole series, so no control is drawn for it", () => {

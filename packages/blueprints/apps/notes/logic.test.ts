@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 // status line. The friendly-predicate table is the one place this app
 // translates the vault's own words, so each mapped predicate is asserted by
 // the sentence it produces rather than by "some message appeared".
+import { hasConcurrentVersions } from "./format.ts";
 import { harness, note } from "./logic.test-fixtures.ts";
 import { NOTE, notebookShelf } from "./shelves.ts";
 import { RENAME_REFUSAL } from "./view-copy.ts";
@@ -141,30 +142,43 @@ describe("finding a note the member is looking at", () => {
 describe("opening a note pulls the body lazily", () => {
   it("routes to the editor and clears the previous version chain first", async () => {
     const app = harness({
-      state: { versions: [] },
+      state: {
+        versions: [
+          {
+            content_id: "old",
+            body: "previous note",
+            current: true,
+            asserted_at: "2026-08-01T00:00:00Z",
+          },
+        ],
+      },
       data: { notes: [note({ note_id: "n1", body: "already here" })] },
     });
     await app.logic.openNote("n1");
     expect(app.state.noteId).toBe("n1");
-    expect(app.state.versions).toBeNull();
+    expect(app.state.versions).toStrictEqual([]);
     expect(app.routes).toStrictEqual([NOTE]);
   });
 
-  it("skips the round trip when the body is already in hand", async () => {
+  it("skips the body round trip when the body is already in hand", async () => {
     const app = harness({
       data: { notes: [note({ note_id: "n1", body: "already here" })] },
     });
     await app.logic.openNote("n1");
-    expect(app.asked).toStrictEqual([]);
+    expect(app.asked).toStrictEqual([
+      { query: "history", input: { note_id: "n1" } },
+    ]);
   });
 
   it("fetches the canonical body for a preview-only row", async () => {
     const app = harness({
       data: { notes: [note({ note_id: "n1", preview: "first line" })] },
-      read: async () => ({ body: "the whole note" }),
+      read: async (opts) =>
+        opts.query === "note" ? { body: "the whole note" } : {},
     });
     await app.logic.openNote("n1");
     expect(app.asked).toStrictEqual([
+      { query: "history", input: { note_id: "n1" } },
       { query: "note", input: { note_id: "n1" } },
     ]);
     expect(app.data.notes[0]?.body).toBe("the whole note");
@@ -208,6 +222,35 @@ describe("opening a note pulls the body lazily", () => {
     await app.logic.openNote("n1");
     expect(app.data.notes[0]?.preview).toBe("first line");
   });
+
+  it("loads the version chain so a concurrent pair can actually surface", async () => {
+    const concurrent = [
+      {
+        content_id: "c-a",
+        body: "written on the phone",
+        current: true,
+        asserted_at: "2026-08-20T09:00:00Z",
+      },
+      {
+        content_id: "c-b",
+        body: "written at the desk",
+        current: false,
+        asserted_at: "2026-08-20T09:00:00Z",
+      },
+    ];
+    const app = harness({
+      data: { notes: [note({ note_id: "n1", body: "already here" })] },
+      read: async (opts) =>
+        opts.query === "history" ? { versions: concurrent } : {},
+    });
+    await app.logic.openNote("n1");
+    expect(app.asked).toContainEqual({
+      query: "history",
+      input: { note_id: "n1" },
+    });
+    expect(app.state.versions).toStrictEqual(concurrent);
+    expect(hasConcurrentVersions(app.state.versions ?? [])).toBe(true);
+  });
 });
 
 describe("the version chain", () => {
@@ -246,6 +289,42 @@ describe("the version chain", () => {
     });
     await app.logic.loadHistory("n1");
     expect(app.state.versions).toBeNull();
+  });
+
+  it("restores a concurrent branch by appending, not by dropping the other", async () => {
+    const row = note({ note_id: "n1", body: "written on the phone" });
+    const app = harness({
+      state: { noteId: "n1" },
+      data: { notes: [row] },
+      read: async (opts) =>
+        opts.query === "history"
+          ? {
+              versions: [
+                {
+                  content_id: "c-a",
+                  body: "written on the phone",
+                  current: true,
+                  asserted_at: "2026-08-20T09:00:00Z",
+                },
+                {
+                  content_id: "c-desk",
+                  body: "written at the desk",
+                  current: false,
+                  asserted_at: "2026-08-20T09:00:00Z",
+                },
+              ],
+            }
+          : { body: "written at the desk" },
+    });
+    await app.logic.restoreVersion("n1", "c-desk");
+    expect(app.sent).toStrictEqual([
+      {
+        action: "restore-note-version",
+        input: { note_id: "n1", content_id: "c-desk" },
+      },
+    ]);
+    expect(row.body).toBe("written at the desk");
+    expect(app.state.versions).toHaveLength(2);
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { expandEvent } from "./recurrence";
+import { expandEvent, nativeEventBounds } from "./recurrence";
 
 describe("recurrence", () => {
   test("native Agenda materializes the same bounded weekly recurrence read model", () => {
@@ -23,6 +23,26 @@ describe("recurrence", () => {
       "2026-07-22T09:00:00.000Z",
     ]);
     expect(rows[1]?.isRecurrenceInstance).toBe(true);
+  });
+
+  test("native writes send the viewer zone and civil all-day dates", () => {
+    const timed = nativeEventBounds(
+      new Date(2026, 2, 8, 9),
+      new Date(2026, 2, 8, 10),
+      false
+    );
+    expect(timed.start_tz).toBe(
+      Intl.DateTimeFormat().resolvedOptions().timeZone
+    );
+    expect(timed.recurrence_semantics).toBe("zoned");
+    const allDay = nativeEventBounds(
+      new Date(2026, 10, 15),
+      new Date(2026, 10, 15),
+      true
+    );
+    expect(allDay.dtstart).toBe("2026-11-15");
+    expect(allDay.dtend).toBe("2026-11-15");
+    expect(allDay.recurrence_semantics).toBe("all-day");
   });
 
   // Shared parity fixtures — the SAME rules + windows are asserted against the

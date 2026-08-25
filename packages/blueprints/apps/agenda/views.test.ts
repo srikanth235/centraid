@@ -136,6 +136,19 @@ describe("bucketing puts an event on one day", () => {
     expect(segment?.endsHere).toBe(false);
   });
 
+  it("an all-day recurring event lands on the day it names", () => {
+    const buckets = bucketByDay([
+      event({
+        event_id: "holiday",
+        dtstart: "2026-11-15",
+        dtend: "2026-11-15",
+        recurrence_semantics: "all-day",
+        rrule: "FREQ=YEARLY",
+      }),
+    ]);
+    expect([...buckets.keys()]).toStrictEqual(["2026-11-15"]);
+  });
+
   it("separates all-day from timed by the vault's own semantics", () => {
     const buckets = bucketByDay([
       event({

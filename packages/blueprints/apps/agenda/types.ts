@@ -104,6 +104,11 @@ export interface OccurrenceEditPayload {
   dtend?: string;
   summary?: string;
   description?: string;
+  recurrence_semantics?: "zoned" | "floating" | "all-day";
+  calendar_id?: string;
+  reminders?: { minutes_before: number }[];
+  conferencing_uri?: string;
+  attendee_party_ids?: string[];
   [key: string]: unknown;
 }
 

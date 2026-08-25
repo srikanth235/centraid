@@ -22,6 +22,6 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | selection trash + restore write | — | — | ✅ | `tests/agent-e2e-mobile/flows/photos-select-write.mjs` |
 | designed pending/parked/conflict | — | ✅ | — | `packages/blueprints/apps/photos/states.test.tsx` |
 | storage custody arithmetic | ✅ | — | — | `packages/blueprints/apps/photos/storage-model.test.ts` |
-| web/desktop import (`runUpload`) does not drop files | — | — | — | **product-bug** (#864): the web/desktop import path is untested; a large drop can silently lose files |
-| free-up-space preserves pinned originals | — | — | — | **product-bug** (#864): exclusion join unproven; confirm dialog still promises exclusion |
+| web/desktop import (`runUpload`) does not drop files | ✅ | — | — | `packages/blueprints/apps/photos/upload.test.ts` — drop completeness over `dataTransfer.items`, 96-file claim order |
+| free-up-space preserves pinned originals | ✅ | — | — | `apps/mobile/src/apps/photos/photos-library-pins.test.ts` — pin join against folded asset ids |
 | hide vs archive mean the same thing on every seat | — | — | — | **product-bug** (#864, S2): hide and archive diverge across surfaces |

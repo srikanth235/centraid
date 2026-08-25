@@ -736,6 +736,7 @@ export function Root({
               summary: draft.title,
               dtstart: draft.start.toISOString(),
               dtend: draft.end.toISOString(),
+              start_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
               calendar_id: data.calendars[0]?.calendar_id ?? "",
             });
           }}
@@ -752,8 +753,18 @@ export function Root({
           parties={data.parties}
           onClose={closeOverlays}
           onCreate={(payload) => {
-            closeOverlays();
-            void logic.proposeEvent(payload);
+            void (async () => {
+              const outcome = await logic.proposeEvent(payload);
+              const status = outcome?.status;
+              if (
+                status === "executed" ||
+                status === "parked" ||
+                status === "queued" ||
+                status === "in-flight"
+              ) {
+                closeOverlays();
+              }
+            })();
           }}
           onEdit={(payload) => {
             closeOverlays();

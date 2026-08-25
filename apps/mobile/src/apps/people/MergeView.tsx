@@ -10,6 +10,7 @@
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
+import { cadenceLabel } from "@centraid/blueprints/apps/people/format";
 import {
   CONFIRMS,
   EMPTY,
@@ -88,10 +89,24 @@ export default function MergeView({
   const source: PersonRowModel | null =
     candidates.find((person) => person.party_id === sourceId) ?? null;
 
+  const cadenceDays =
+    keep && keep.cadence_days > 0
+      ? keep.cadence_days
+      : (source?.cadence_days ?? keep?.cadence_days ?? 0);
   const rows = keep
     ? [
         resultRow(FIELDS.name, keep.name, source?.name),
         resultRow(FIELDS.role, keep.role, source?.role),
+        resultRow(
+          FIELDS.colour,
+          keep.avatar_color ?? source?.avatar_color ?? "",
+          source?.avatar_color ?? undefined
+        ),
+        resultRow(
+          FIELDS.cadence,
+          cadenceLabel(cadenceDays),
+          source ? cadenceLabel(source.cadence_days) : undefined
+        ),
       ].filter((row) => row.name)
     : [];
 
@@ -133,7 +148,13 @@ export default function MergeView({
                       {...(candidate.party_id === sourceId
                         ? { meta: "✓" }
                         : {})}
-                      onOpen={() => setSourceId(candidate.party_id)}
+                      onOpen={() =>
+                        setSourceId((current) =>
+                          current === candidate.party_id
+                            ? null
+                            : candidate.party_id
+                        )
+                      }
                       last={index === candidates.length - 1}
                     />
                   ))

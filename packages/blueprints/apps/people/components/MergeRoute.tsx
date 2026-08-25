@@ -20,6 +20,7 @@
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
+import { cadenceLabel } from "../format.ts";
 import {
   EMPTY,
   FIELDS,
@@ -60,9 +61,24 @@ export function MergeRoute(props: MergeRouteProps): ReactNode {
   const source: PersonRow | null = props.source;
   // A field neither person filled in is not a result — an empty row under a
   // field label would be this screen reporting a value nobody holds.
+  // Blank keep fields take the duplicate's value, matching core.merge_party.
+  const cadenceDays =
+    keep.cadence_days > 0
+      ? keep.cadence_days
+      : (source?.cadence_days ?? keep.cadence_days);
   const rows = [
     resultRow(FIELDS.name, keep.name, source?.name),
     resultRow(FIELDS.role, keep.role, source?.role),
+    resultRow(
+      FIELDS.colour,
+      keep.avatar_color ?? source?.avatar_color ?? "",
+      source?.avatar_color ?? undefined
+    ),
+    resultRow(
+      FIELDS.cadence,
+      cadenceLabel(cadenceDays),
+      source ? cadenceLabel(source.cadence_days) : undefined
+    ),
   ].filter((row) => row.name);
 
   return (

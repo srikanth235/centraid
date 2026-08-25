@@ -53,7 +53,7 @@ The eleven document screens (`DocumentRead`, `DocumentViewer`, `DocumentEditor`,
 ### Actions newly dispatched from this directory
 
 - `upload` — AddToDocs' blank-document composer (an empty `data:text/markdown;charset=utf-8,` body — the vault mints empty bytes like any other), and as the settled follow-up of `backupDocument` (`lib/upload/media-producer.ts`) behind BulkUpload and the root Scan cover's Docs destination.
-- `edit` — the editor, via raw `session.write` rather than `useDocsWrite`: the seven-outcome posture row IS the outcome surfacing, and a 6-second status line cannot carry a standing outcome. Byte-identical saves are compared BEFORE dispatch and never leave the device.
+- `edit` — the editor, via raw `session.write` rather than `useDocsWrite`: the seven-outcome posture row IS the outcome surfacing, and a 6-second status line cannot carry a standing outcome. Byte-identical saves are compared BEFORE dispatch and never leave the device. Title-only (body still fetching, or body unchanged) dispatches `rename` so it cannot write an empty body.
 - `restore-version` — DocumentVersions, through `useDocsWrite`. No Undo: a restore is itself a new version; there is no reverse write.
 - Still UNdispatched: `replace` (see withholdings), `tag`, `untag` (no per-document tag editor in this wave; tags render read-only on Properties).
 

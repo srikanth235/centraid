@@ -3044,41 +3044,36 @@
             "id": "reminder-rrule",
             "label": "a recurring event's reminder fires on each occurrence",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "due-reminders.ts never expands the rrule; the reminder fires once, on the anchor"
+            "status": "owned",
+            "owner": "packages/server/src/reminders/due-reminders.test.ts"
           },
           {
             "id": "recurring-dst",
             "label": "recurring events keep wall-clock time across DST",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "no surface sends start_tz; occurrences drift +1h"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/format-locale.test.ts"
           },
           {
             "id": "refused-create",
             "label": "a refused create (busy-overlap) keeps the typed draft",
             "layer": "component",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "the refused create discards everything typed on web"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
           },
           {
             "id": "allday-recurring",
             "label": "an all-day recurring event lands on the day it names",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "all-day recurring lands a day early off UTC+0"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/format-locale.test.ts"
           },
           {
             "id": "edit-this-occurrence",
             "label": "edit this occurrence keeps every field that was set",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "the occurrence edit drops 5 of 8 fields"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/edits.test.ts"
           },
           {
             "id": "multiday-visibility",
@@ -3174,18 +3169,16 @@
           {
             "id": "title-only-empty-body",
             "label": "title-only edit on phone does not write an empty body",
-            "layer": "component",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "editing the title while the body is still fetching overwrites the document with an empty body"
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/docs/editor-write.test.ts"
           },
           {
             "id": "export-path-traversal",
             "label": "export filename cannot traverse out of the share folder",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "docs-export.ts interpolates the title into a path, so ../../x escapes"
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/docs/docs-export.test.ts"
           }
         ]
       },
@@ -3280,25 +3273,22 @@
             "id": "pin-empty-overwrite",
             "label": "Pin/Add-tag/Attach in the editor keeps the body",
             "layer": "component",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "in-editor write refreshes from an empty loaded body and overwrites the note"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/editor-keep-body.test.tsx"
           },
           {
             "id": "autosave-drop",
             "label": "autosave debounce does not drop a write on note-switch",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "600ms debounce drops the in-flight body"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/logic-commands.test.ts"
           },
           {
             "id": "conflict-both-kept",
             "label": "Both are kept conflict panel is a live control",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "the panel is dead UI; neither branch writes"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/logic.test.ts"
           },
           {
             "id": "untitled-web",
@@ -3346,17 +3336,15 @@
             "id": "erase-after-30-days",
             "label": "Erased after 30 days erases the person",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "purge leaves core_party/tag/channel and the deleted person still push-notifies"
+            "status": "owned",
+            "owner": "packages/vault/src/gateway/duties.test.ts"
           },
           {
             "id": "merge-destructive",
             "label": "merge keeps folded-in cadence, last-contacted, and colour",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "merge is destructive and a wrong-person merge is one mistap"
+            "status": "owned",
+            "owner": "packages/vault/src/commands/merge.test.ts"
           },
           {
             "id": "overdue-arithmetic",
@@ -3470,17 +3458,15 @@
             "id": "import-runupload",
             "label": "web/desktop import does not drop files",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "the web/desktop import path is untested; a large drop can silently lose files"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/upload.test.ts"
           },
           {
             "id": "free-up-pinned",
             "label": "free-up-space preserves pinned originals",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "exclusion join unproven; confirm dialog still promises exclusion"
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/photos/photos-library-pins.test.ts"
           },
           {
             "id": "hide-vs-archive",
@@ -3541,33 +3527,29 @@
             "id": "parent-hides-subtasks",
             "label": "completing a parent leaves unfinished subtasks visible",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "completing/releasing a parent hides every unfinished subtask"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/logic.test.ts"
           },
           {
             "id": "release-all-redates",
             "label": "catch-up Release all does not re-date the someday pile",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "Release all re-dates undated tasks into Today irreversibly"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/logic.test.ts"
           },
           {
             "id": "house-scope",
             "label": "a HOUSE-scope write stays in the HOUSE scope",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "act() never passes scope, so every write targets the wrong scope"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/writes.test.ts"
           },
           {
             "id": "delete-cancels",
             "label": "delete-confirm removes the row, it does not cancel it",
             "layer": "unit",
-            "status": "product-bug",
-            "trackingIssue": "864",
-            "note": "confirm copy promises removal but the handler sets status:cancelled"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/writes.test.ts"
           },
           {
             "id": "priority-scale",

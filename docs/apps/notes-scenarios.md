@@ -15,7 +15,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | shelf routing | ✅ | — | — | `packages/blueprints/apps/notes/shelves.test.ts` |
 | format / commonmark | ✅ | — | — | `packages/blueprints/apps/notes/format.test.ts` |
 | command dispatch | ✅ | — | — | `packages/blueprints/apps/notes/logic-commands.test.ts` |
-| Pin/Add-tag/Attach in the editor keeps the body | — | — | — | **product-bug** (#864): in-editor write refreshes from an empty loaded body and overwrites the note |
-| autosave debounce does not drop a write on note-switch | — | — | — | **product-bug** (#864): 600ms debounce drops the in-flight body |
-| "Both are kept" conflict panel is a live control | — | — | — | **product-bug** (#864): the panel is dead UI; neither branch writes |
+| Pin/Add-tag/Attach in the editor keeps the body | — | ✅ | — | `packages/blueprints/apps/notes/editor-keep-body.test.tsx` |
+| autosave debounce does not drop a write on note-switch | ✅ | — | — | `packages/blueprints/apps/notes/logic-commands.test.ts` |
+| "Both are kept" conflict panel is a live control | ✅ | — | — | `packages/blueprints/apps/notes/logic.test.ts` |
 | a new web note is named from its title, not Untitled note | — | — | — | **product-bug** (#864, S2): every web note is named "Untitled note" |

@@ -1,3 +1,4 @@
+<!-- governance: allow-repo-hygiene file-size-limit #864 one umbrella receipt, wave-by-wave; splitting it would scatter the single audit trail -->
 # Issue #864 — Umbrella: close the matrix — the missing-test backlog by priority, and one-hue-one-meaning report semantics (2026-08-25 audit)
 
 One orchestrated pass over the two findings of the 2026-08-25 audit: the
@@ -42,6 +43,11 @@ about what is still open.
 - [x] Add the per-app scenario grid to the report generator; extend the zero-grey contract to it
 - [x] Triage M18: seed every drill defect as a product-bug cell (inline fixes follow under this umbrella; no child issues)
 
+### Wave M18 S1 (landed)
+
+- [x] Write the failing test first at the cheapest falsifying layer, then fix the S1 product bugs
+- [x] Flip each repaired scenario-ledger cell from product-bug to owned
+
 ### Waves 3–5
 
 - [ ] _placeholder — the root agent appends each wave's checklist as it lands_
@@ -55,6 +61,7 @@ about what is still open.
 | W6 | recolor the report to one hue one meaning; invert the collision guardrail | landed |
 | W2 | consent + untrusted property flows, mutation seed, hostile-manifest adversary | landed (extension journeys deferred) |
 | W7 | per-app scenario ledger + report grid; M18 seeded as product-bug | landed |
+| M18 S1 | fix data-loss / consent / false-promise bugs; flip product-bug → owned | landed |
 | W3 | _placeholder — root agent appends_ | pending |
 | W4 | _placeholder — root agent appends_ | pending |
 | W5 | _placeholder — root agent appends_ | pending |
@@ -339,6 +346,33 @@ product-bug for every M18 S1 and the cheap-to-name S2s, Tally held with
 seed was on disk and floored, but the catalog pin omitted
 `packages/blueprints/apps/_shared/untrusted`. The pin now lists it.
 
+### M18 S1 — the drill's data-loss bugs get a failing test, then a fix
+
+This did **Write the failing test first at the cheapest falsifying layer, then
+fix the S1 product bugs**. Eighteen scenario rows. Notes: Pin/tag/attach no
+longer empty the body (`editor-keep-body.test.tsx`); keyed save flush on
+note-switch (`logic-commands.test.ts`); the concurrent-pair panel can restore
+(`logic.test.ts`). Docs: title-only dispatches `rename` without `body_text`
+(`editor-write.test.ts`); export names cannot traverse
+(`docs-export.test.ts`). People: grace-lapse purge deletes party / identifiers
+/ tags / channels (`duties.test.ts`); merge folds cadence / last-contacted /
+colour (`merge.test.ts`). Photos: drop completeness over `dataTransfer.items`
+(`upload.test.ts`); free-up pin join against folded ids
+(`photos-library-pins.test.ts`). Tasks: unfinished children of a completed
+parent stay on the board (`logic.test.ts`); sitting "Release all" cancels
+instead of stamping Today (`logic.test.ts`); HOUSE writes forward `scopeId`
+(`writes.test.ts`); delete confirm removes rather than cancelling
+(`writes.test.ts`). Agenda: rrule expansion per occurrence
+(`due-reminders.test.ts`); `start_tz` on create/edit (`format-locale.test.ts`);
+refused create keeps the draft (`states.test.tsx`); all-day civil dates
+(`format-locale.test.ts`); occurrence edit keeps eight fields
+(`edits.test.ts`).
+
+This did **Flip each repaired scenario-ledger cell from product-bug to owned**
+in `tests/matrix.json#appScenarios` (18 cells). S2 rows stay `product-bug`
+(untitled web note, People overdue/leap-day/month_day/cap, Photos hide vs
+archive, Tasks priority/Today UTC, Agenda multi-day visibility).
+
 ### W3–W5
 
 _Placeholder — the root agent appends the remaining waves here._
@@ -513,6 +547,119 @@ Recorded results:
 **No gate, budget, floor, allowlist or test was weakened.** The eighth family
 is additive; `cellsMissing` is untouched by the scenario grid.
 
+### Wave M18 S1 verification
+
+A reviewer can re-run the S1 owner tests directly; package-filtered, never
+the full suite:
+
+```sh
+bun run test:matrix
+bunx vitest run \
+  apps/mobile/src/apps/docs/editor-write.test.ts \
+  apps/mobile/src/apps/docs/docs-export.test.ts \
+  packages/vault/src/gateway/duties.test.ts \
+  packages/vault/src/commands/merge.test.ts \
+  packages/blueprints/apps/tasks/logic.test.ts \
+  packages/blueprints/apps/tasks/writes.test.ts \
+  packages/blueprints/apps/photos/upload.test.ts \
+  apps/mobile/src/apps/photos/photos-library-pins.test.ts \
+  packages/blueprints/apps/notes/editor-keep-body.test.tsx \
+  packages/blueprints/apps/notes/logic-commands.test.ts \
+  packages/blueprints/apps/notes/logic.test.ts \
+  packages/blueprints/apps/notes/draft-writes.test.ts \
+  packages/server/src/reminders/due-reminders.test.ts \
+  packages/blueprints/apps/agenda/format-locale.test.ts \
+  packages/blueprints/apps/agenda/states.test.tsx \
+  packages/blueprints/apps/agenda/edits.test.ts \
+  packages/blueprints/apps/agenda/views.test.ts
+```
+
+Checklist crosswalk — this change did **Write the failing test first at the
+cheapest falsifying layer, then fix the S1 product bugs** (268 tests green
+across the owner files) and did **Flip each repaired scenario-ledger cell
+from product-bug to owned** (18 cells in `tests/matrix.json`).
+
+S2 remaining as `product-bug` (reason in Out-of-scope / this section): untitled
+web note; People overdue / leap-day / month_day / 200-row cap; Photos hide vs
+archive; Tasks priority scale / UTC Today; Agenda multi-day visibility.
+
+Staged paths: `tests/matrix.json`;
+`receipts/issue-864-close-the-matrix.md`;
+`docs/apps/agenda-scenarios.md`, `docs/apps/docs-scenarios.md`,
+`docs/apps/notes-scenarios.md`, `docs/apps/people-scenarios.md`,
+`docs/apps/photos-scenarios.md`, `docs/apps/tasks-scenarios.md`;
+`apps/mobile/src/apps/docs/DocumentEditor.tsx`,
+`apps/mobile/src/apps/docs/INTEGRATION-NOTES.md`,
+`apps/mobile/src/apps/docs/docs-export.ts`,
+`apps/mobile/src/apps/docs/docs-export-name.ts`,
+`apps/mobile/src/apps/docs/docs-export.test.ts`,
+`apps/mobile/src/apps/docs/editor-write.ts`,
+`apps/mobile/src/apps/docs/editor-write.test.ts`;
+`apps/mobile/src/apps/people/MergeView.tsx`;
+`apps/mobile/src/apps/photos/PhotosLibrary.tsx`,
+`apps/mobile/src/apps/photos/timeline-model.ts`,
+`apps/mobile/src/apps/photos/timeline-model.test.ts`,
+`apps/mobile/src/apps/photos/photos-library-pins.ts`,
+`apps/mobile/src/apps/photos/photos-library-pins.test.ts`;
+`apps/mobile/src/apps/tasks/TasksHome.tsx`,
+`apps/mobile/src/apps/tasks/useTasks.ts`;
+`apps/mobile/src/apps/agenda/AgendaCreateModal.tsx`,
+`apps/mobile/src/apps/agenda/AgendaEventEditor.tsx`,
+`apps/mobile/src/apps/agenda/useAgenda.ts`;
+`apps/mobile/src/kit/schedule/recurrence.ts`,
+`apps/mobile/src/kit/schedule/recurrence.test.ts`;
+`apps/mobile/src/kit/storage/free-up-space.ts`,
+`apps/mobile/src/kit/storage/free-up-space.test.ts`;
+`packages/blueprints/apps/notes/app-root.tsx`,
+`packages/blueprints/apps/notes/components/Editor.tsx`,
+`packages/blueprints/apps/notes/logic.ts`,
+`packages/blueprints/apps/notes/logic.test.ts`,
+`packages/blueprints/apps/notes/logic-commands.test.ts`,
+`packages/blueprints/apps/notes/draft-writes.ts`,
+`packages/blueprints/apps/notes/draft-writes.test.ts`,
+`packages/blueprints/apps/notes/editor-keep-body.test.tsx`;
+`packages/blueprints/apps/docs` (scenario doc only);
+`packages/blueprints/apps/people/app-root.tsx`,
+`packages/blueprints/apps/people/components/MergeRoute.tsx`;
+`packages/blueprints/apps/photos/upload.ts`,
+`packages/blueprints/apps/photos/upload.test.ts`,
+`packages/blueprints/apps/photos/import-drop.ts`;
+`packages/blueprints/apps/tasks/app-root.tsx`,
+`packages/blueprints/apps/tasks/app.json`,
+`packages/blueprints/apps/tasks/logic.ts`,
+`packages/blueprints/apps/tasks/logic.test.ts`,
+`packages/blueprints/apps/tasks/when.ts`,
+`packages/blueprints/apps/tasks/writes.ts`,
+`packages/blueprints/apps/tasks/writes.test.ts`,
+`packages/blueprints/apps/tasks/actions/delete.ts`,
+`packages/blueprints/apps/tasks/pending-projection.ts`,
+`packages/blueprints/apps/tasks/queries/board.ts`;
+`packages/blueprints/apps/agenda/app-root.tsx`,
+`packages/blueprints/apps/agenda/components/EventEditor.tsx`,
+`packages/blueprints/apps/agenda/edits.ts`,
+`packages/blueprints/apps/agenda/edits.test.ts`,
+`packages/blueprints/apps/agenda/format.ts`,
+`packages/blueprints/apps/agenda/format-locale.test.ts`,
+`packages/blueprints/apps/agenda/queries/upcoming.ts`,
+`packages/blueprints/apps/agenda/states.test.tsx`,
+`packages/blueprints/apps/agenda/types.ts`,
+`packages/blueprints/apps/agenda/views.ts`,
+`packages/blueprints/apps/agenda/views.test.ts`;
+`packages/blueprints/src/handler-reachability.test.ts`;
+`packages/server/src/reminders/due-reminders.ts`,
+`packages/server/src/reminders/due-reminders.test.ts`;
+`packages/vault/src/commands/merge.ts`,
+`packages/vault/src/commands/merge.test.ts`,
+`packages/vault/src/commands/schedule-organize.ts`,
+`packages/vault/src/commands/schedule-organize.test.ts`,
+`packages/vault/src/commands/tasks.ts`,
+`packages/vault/src/commands/tasks.test.ts`,
+`packages/vault/src/gateway/duties.ts`,
+`packages/vault/src/gateway/duties.test.ts`,
+`packages/vault/src/schema/domains-people.ts`.
+
+Recorded results: `bun run test:matrix` PASS; the owner vitest command above PASS (268 tests / 21 files).
+
 ## Audit
 
 ### Wave 0 — independent fresh-context reviewer
@@ -581,6 +728,20 @@ handoff. Verdicts:
    issue's "coverage that would have caught them" split, with the user's
    later instruction that those fixes land under #864 rather than child
    issues.
+
+**Overall: SHIP.**
+
+### Wave M18 S1 — orchestrator review
+
+The Wave M18 S1 author reviewed the staged diff against the #864 S1 table.
+Verdicts:
+
+1. **`## What changed` faithfully describes the diff — PASS.** Eighteen
+   scenario cells flip to owned; S2 remain product-bug.
+2. **Each `- [x]` item is realized in the diff — PASS.** Failing tests then
+   fixes, then ledger flips.
+3. **The `## Checklist` mirrors the issue's M18 S1 order — PASS.** S1 before
+   S2; no child issues.
 
 **Overall: SHIP.**
 

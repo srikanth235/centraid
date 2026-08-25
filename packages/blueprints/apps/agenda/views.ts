@@ -14,7 +14,14 @@
 //   3. A MULTI-DAY OR ZONE-CROSSING EVENT IS ONE DAY'S ROW in v1, clamped and
 //      marked, rather than a bar spanning columns (`bucketByDay`).
 
-import { localDayKey, startOfDay, startOfWeek, DAY_MS } from "./format.ts";
+import {
+  civilMidnight,
+  DAY_MS,
+  localDayKey,
+  namedDay,
+  startOfDay,
+  startOfWeek,
+} from "./format.ts";
 import type { AgEvent, DaySegment, LaidSegment, ViewKind } from "./types.ts";
 
 /** Every view, in the order the switcher draws them. */
@@ -173,11 +180,21 @@ export function bucketByDay(
 ): Map<string, DaySegment[]> {
   const map = new Map<string, DaySegment[]>();
   for (const ev of list) {
-    const start = new Date(ev.dtstart);
+    const civilStart =
+      isAllDay(ev) && !ev.dtstart.includes("T") ? namedDay(ev.dtstart) : null;
+    const start = civilStart ? civilMidnight(civilStart) : new Date(ev.dtstart);
     if (Number.isNaN(start.getTime())) continue;
-    let end = ev.dtend ? new Date(ev.dtend) : start;
+    const civilEnd =
+      isAllDay(ev) && ev.dtend && !ev.dtend.includes("T")
+        ? namedDay(ev.dtend)
+        : null;
+    let end = civilEnd
+      ? civilMidnight(civilEnd)
+      : ev.dtend
+        ? new Date(ev.dtend)
+        : start;
     if (Number.isNaN(end.getTime()) || end < start) end = start;
-    const key = localDayKey(start);
+    const key = civilStart ?? localDayKey(start);
     const dayStart = startOfDay(start).getTime();
     const dayEnd = dayStart + DAY_MS;
     const segment: DaySegment = {

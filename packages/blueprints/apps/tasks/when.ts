@@ -122,3 +122,67 @@ export function isOverdueWhen(task: TaskWhen, now: string): boolean {
   if (!due) return false;
   return daysBetween(now, due) < 0;
 }
+
+/** VTODO open set — the only statuses the live board may still act on. */
+export function isOpenStatus(status: string): boolean {
+  return status === "needs-action" || status === "in-process";
+}
+
+/** The fields family nesting reads off a board row. */
+export interface FamilyRow {
+  task_id: string;
+  parent_task_id?: string | null;
+  status: string;
+}
+
+/**
+ * Does this row belong on the OPEN board as a family root? An unfinished
+ * child of a completed or released parent is a root of its own — completing
+ * the parent must not hide remaining work.
+ */
+export function isOpenBoardRoot(
+  task: FamilyRow,
+  parent: FamilyRow | undefined
+): boolean {
+  if (!isOpenStatus(task.status)) return false;
+  if (!task.parent_task_id) return true;
+  return !parent || !isOpenStatus(parent.status);
+}
+
+/**
+ * Split a flat task list into the open board and the logbook. Unfinished
+ * children of a closed parent are promoted onto the open board; the logbook
+ * parent keeps only closed children, so the same row is never drawn twice.
+ */
+export function nestTaskFamilies<T extends FamilyRow>(
+  rows: readonly T[],
+  decorate: (task: T, children: T[]) => T
+): { open: T[]; logbook: T[] } {
+  const byId = new Map(rows.map((row) => [row.task_id, row]));
+  const childrenOf = new Map<string, T[]>();
+  for (const row of rows) {
+    const parentId = row.parent_task_id;
+    if (!parentId) continue;
+    const list = childrenOf.get(parentId);
+    if (list) list.push(row);
+    else childrenOf.set(parentId, [row]);
+  }
+
+  const open: T[] = [];
+  const logbook: T[] = [];
+  for (const row of rows) {
+    const parent = row.parent_task_id
+      ? byId.get(row.parent_task_id)
+      : undefined;
+    if (isOpenBoardRoot(row, parent)) {
+      open.push(decorate(row, childrenOf.get(row.task_id) ?? []));
+      continue;
+    }
+    if (row.parent_task_id || isOpenStatus(row.status)) continue;
+    const nested = (childrenOf.get(row.task_id) ?? []).filter(
+      (child) => !isOpenStatus(child.status)
+    );
+    logbook.push(decorate(row, nested));
+  }
+  return { open, logbook };
+}

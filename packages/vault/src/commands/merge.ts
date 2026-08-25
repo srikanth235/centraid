@@ -11,7 +11,8 @@
 // members of the same tally group; both holding a people_profile) is the
 // survivor already owning that relation — the duplicate row deletes, except
 // identifiers, which demote to non-primary rather than vanish (a handle is
-// never lost in a merge).
+// never lost in a merge), and people_profile, which folds cadence,
+// last-contacted, colour, role and met onto the survivor first (#864).
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -111,6 +112,63 @@ function partyFkColumns(ctx: HandlerCtx): FkRef[] {
   return refs;
 }
 
+function laterIso(left: string | null, right: string | null): string | null {
+  if (!left) return right;
+  if (!right) return left;
+  return left >= right ? left : right;
+}
+
+/**
+ * `people_profile.party_id` is UNIQUE, so the generic re-point would delete
+ * the duplicate's cadence / last-contacted / colour. Fold those onto the
+ * survivor first; a blank on the keep takes the folded-in value (#864).
+ */
+function foldPeopleProfile(
+  ctx: HandlerCtx,
+  survivor: string,
+  merged: string
+): void {
+  type Profile = {
+    cadence_days: number;
+    last_contacted_at: string | null;
+    avatar_color: string | null;
+    role: string | null;
+    met: string | null;
+  };
+  const load = (partyId: string): Profile | undefined =>
+    ctx.db
+      .prepare(
+        `SELECT cadence_days, last_contacted_at, avatar_color, role, met
+           FROM people_profile WHERE party_id = ?`
+      )
+      .get(partyId) as Profile | undefined;
+  const kept = load(survivor);
+  const extra = load(merged);
+  if (!extra) return;
+  if (!kept) {
+    ctx.db
+      .prepare("UPDATE people_profile SET party_id = ? WHERE party_id = ?")
+      .run(survivor, merged);
+    return;
+  }
+  ctx.db
+    .prepare(
+      `UPDATE people_profile
+          SET cadence_days = ?, last_contacted_at = ?, avatar_color = ?,
+              role = ?, met = ?
+        WHERE party_id = ?`
+    )
+    .run(
+      kept.cadence_days > 0 ? kept.cadence_days : extra.cadence_days,
+      laterIso(kept.last_contacted_at, extra.last_contacted_at),
+      kept.avatar_color ?? extra.avatar_color,
+      kept.role ?? extra.role,
+      kept.met ?? extra.met,
+      survivor
+    );
+  ctx.db.prepare("DELETE FROM people_profile WHERE party_id = ?").run(merged);
+}
+
 function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     survivor_party_id: string;
@@ -120,6 +178,8 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
   const merged = input.merged_party_id;
   let repointed = 0;
   let deduped = 0;
+
+  foldPeopleProfile(ctx, survivor, merged);
 
   for (const ref of partyFkColumns(ctx)) {
     const rows = ctx.db
