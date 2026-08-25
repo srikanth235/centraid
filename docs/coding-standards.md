@@ -187,7 +187,7 @@ Code comments are the State layer (AGENTS.md: "code-level facts live in code com
 
 ### Mechanical surrogates
 
-Two warn-only lints find _surrogates_ of rot, never verdicts — a green lint proves nothing about information content, and the deletion test cannot be regexed. `bun scripts/lint-comment-file-refs.mjs` finds dangling file references; `bun scripts/lint-comment-narration.mjs` (fuzzy) flags past-tense narration for review.
+These find _surrogates_ of rot, never verdicts — a green run proves nothing about information content, and the deletion test cannot be regexed. Warn-only: `bun scripts/lint-comment-file-refs.mjs` finds dangling file references; `bun scripts/lint-comment-narration.mjs` (fuzzy) flags past-tense narration for review; `node scripts/lint-comment-blocks.mjs` flags over-long blocks. The one blocking gate is the density ratchet below (`bun run test:comment-density`). `node scripts/comment-only-diff.mjs [<ref>]` is not a gate at all — it reprints both sides of a diff with comments removed and proves a sweep changed no code, which is the evidence a doctrine-sweep PR cites.
 
 **The tense test.** A sentence about the past — _was, used to, until #N, replaced, retired, previously_ — either restates a present obligation (rewrite it forward-facing) or it doesn't (delete it, keeping at most a bare `(#N)` on a surviving sentence). Tense is the surrogate: a changelog conjugated into present tense still fails the deletion test.
 
@@ -206,7 +206,17 @@ Two warn-only lints find _surrogates_ of rot, never verdicts — a green lint pr
 
 **Suppression comments** carry the toolchain's real name (`oxlint-disable…`, never `eslint-disable…`) and a `-- reason` clause.
 
-Deliberate non-goals of this rule: comment **density is not regulated** — count measures encoding failure, so mandating comments mandates failure, and rationale prose on types- and constants-only modules is the documentation strategy working; and **no JSDoc tag vocabulary** — prose JSDoc is house style (`@param`/`@returns` restating types is the canonical zero-information comment).
+### The density budget
+
+Doctrine governs what a comment may say; the budget governs how much ([#861](https://github.com/srikanth235/centraid/issues/861)).
+
+- **The metric is character share** — non-whitespace comment characters over non-whitespace file characters, comment ranges taken from the TypeScript parser. Line counts are gameable: fuse three comment lines into one wrapped sentence and the count falls while the prose is unchanged.
+- **Per-file cap 15%** for files of 40 non-blank lines or more; **global target ≤10%**, printed on every run.
+- **Enforcement is a per-file ratchet** — `tests/comment-density-ratchet.json`, `bun run test:comment-density`. Any rise fails CI. Downward re-pins are free (`--write` recomputes, and refuses to raise a pin). A deliberate raise is a hand edit to the baseline carrying an approved-deviation note in the receipt.
+- **Blocks over 10 lines warn** — 15 for a file-top orientation header — via `scripts/lint-comment-blocks.mjs`.
+- **The allowlist is by name, with a reason**, for registries where the prose _is_ the payload. Never delete load-bearing rationale to hit a number; the allowlist is that pressure valve.
+
+Deliberate non-goal of this rule: **no JSDoc tag vocabulary** — prose JSDoc is house style (`@param`/`@returns` restating types is the canonical zero-information comment).
 
 ## Small invariants
 

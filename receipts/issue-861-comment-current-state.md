@@ -2968,6 +2968,60 @@ what a comment may say; the budget governs how much. Wave 0 lands the
 character-based per-file ratchet, the block-length bound, and the CI global
 figure; compression waves follow. Evidence appended per wave below.
 
+### Wave 0 — enforcement infrastructure (2026-08-25)
+
+Landed, per the issue's enforcement design:
+
+- `scripts/check-comment-density-ratchet.mjs` — the blocking gate (`bun run
+  test:comment-density`, wired into `check:push` in `package.json` after
+  `test:hygiene-ratchet`). Metric: character share — non-whitespace comment
+  characters / non-whitespace file characters, comment ranges from the
+  TypeScript parser (leaf-token leading-trivia walk, deduped by position), so
+  neither line-fusing nor whitespace games the number. Per-file pins live in
+  `tests/comment-density-ratchet.json`: any rise fails (integer
+  cross-multiplication, no float drift); unpinned files ≥40 non-blank lines
+  fail above the 15% cap; `--write` adds/prunes/lowers and refuses to raise.
+  Global character share AND line density print on every run — the CI trend
+  figure. Allowlist seeded with `packages/design/src/blocks/contracts.ts`
+  (prose contracts registry — the prose is the payload); allowlist exempts
+  the cap only, never the pin.
+- `scripts/lint-comment-blocks.mjs` — warn-only block bound: >10 lines
+  (>15 for a file-top orientation header), allowlist skipped. 1,546 blocks
+  over bound at seed time.
+- `scripts/comment-only-diff.mjs` — sweep evidence tool: reprints both sides
+  of a diff through the TypeScript printer with comments removed; exit 0 iff
+  no code changed. Not a gate.
+- `scripts/check-comment-density-ratchet.test.mjs` — 10 tests in the
+  `scripts:test` lane, including the demonstrated-red case ("RED: a pinned
+  file whose comment share rises fails verification"), --write
+  never-raises, new-file cap, allowlist pass, block-length limits, and
+  comment-only-diff verdicts.
+- `docs/coding-standards.md` — "The density budget" subsection replaces the
+  former "density is not regulated" non-goal (the no-JSDoc-tag-vocabulary
+  non-goal survives); "Mechanical surrogates" now names the block lint and
+  the proof tool and points at the ratchet as the one blocking gate.
+
+Seed measurement (pre-sweep tree, doctrine sweep merged): **global character
+share 24.31%**, line density 14.83% (the issue table's 14.9% metric), 3,638
+files pinned, **1,975 files over the 15% cap**. The issue's ~1,648-file
+estimate was modeled on line density; the character metric the enforcement
+design mandates yields the larger worklist, recorded here as the deviation
+between estimate and measurement — the budget's normative metric is
+character share.
+
+Verification (Wave 0):
+
+```sh
+bun run test:comment-density        # verify mode, prints the global figure
+node --test scripts/check-comment-density-ratchet.test.mjs
+node scripts/lint-comment-blocks.mjs
+node scripts/comment-only-diff.mjs HEAD
+bun run format:check && bun run lint && bun run knip
+```
+
+All green at hand-off (10/10 tests; formatter clean over 4,670 files; knip
+finding-free vs baseline).
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
