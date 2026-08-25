@@ -3009,6 +3009,11 @@ design mandates yields the larger worklist, recorded here as the deviation
 between estimate and measurement — the budget's normative metric is
 character share.
 
+Allowlist additions after seeding, per the issue's named-allowlist ruling:
+`apps/web/tests/e2e/leak-budgets.ts` and `apps/web/tests/e2e/perf-budgets.ts`
+(e2e budget registries — the prose is the payload). Cap-exempt only; their
+pins still forbid growth.
+
 Verification (Wave 0):
 
 ```sh
