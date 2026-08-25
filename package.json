@@ -103,6 +103,7 @@
     "test:affected:full": "turbo run test --filter='...[origin/main]' --concurrency=6",
     "test:chaos": "node node_modules/vitest/vitest.mjs run --config vitest.quality.config.ts tests/quality/network-chaos.integration.test.ts tests/quality/component-chaos.integration.test.ts",
     "test:chaos:sweep": "CENTRAID_CHAOS_ITERATIONS=40 bun run test:chaos",
+    "test:citations": "node scripts/test-report/validate-citations-open.mjs",
     "test:collection-tripwire": "node scripts/ci/collection-tripwire.mjs",
     "test:dast": "node scripts/security/dast-scan.mjs",
     "test:diff-coverage": "node scripts/test-report/diff-coverage.mjs",

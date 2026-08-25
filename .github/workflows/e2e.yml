@@ -1103,6 +1103,16 @@ jobs:
         env:
           TEST_REPORT_PUBLIC_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/
         run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL" --title "Nightly test health"
+      # #864 Wave 0 — the ledgers' "still open" claim is a hand-maintained
+      # snapshot, so only GitHub can say whether it went stale. Nightly-only:
+      # the PR lane must not gain a dependency on api.github.com. Runs last and
+      # `if: always()` so it can never suppress the report it follows, and an
+      # unreachable API fails the job rather than passing silently.
+      - name: Every tracked exception cites an open issue
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun run test:citations
 
   # Public nightly HTML (same Pages tree as main; no per-PR slots).
   # #496 E2 — main-only so branch workflow_dispatch cannot red the workflow

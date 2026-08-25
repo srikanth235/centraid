@@ -788,11 +788,11 @@
     },
     "842": {
       "url": "https://github.com/srikanth235/centraid/issues/842",
-      "state": "open"
+      "state": "closed"
     },
     "844": {
       "url": "https://github.com/srikanth235/centraid/issues/844",
-      "state": "open"
+      "state": "closed"
     },
     "471": {
       "url": "https://github.com/srikanth235/centraid/issues/471",
@@ -840,7 +840,7 @@
     },
     "781": {
       "url": "https://github.com/srikanth235/centraid/issues/781",
-      "state": "open"
+      "state": "closed"
     },
     "831": {
       "url": "https://github.com/srikanth235/centraid/issues/831",
@@ -848,49 +848,53 @@
     },
     "834": {
       "url": "https://github.com/srikanth235/centraid/issues/834",
-      "state": "open"
+      "state": "closed"
     },
     "790": {
       "url": "https://github.com/srikanth235/centraid/issues/790",
-      "state": "open"
+      "state": "closed"
     },
     "791": {
       "url": "https://github.com/srikanth235/centraid/issues/791",
-      "state": "open"
+      "state": "closed"
     },
     "839": {
       "url": "https://github.com/srikanth235/centraid/issues/839",
+      "state": "closed"
+    },
+    "864": {
+      "url": "https://github.com/srikanth235/centraid/issues/864",
       "state": "open"
     }
   },
   "gaps": {
     "extension.offline": {
-      "trackingIssue": 781
+      "trackingIssue": 864
     },
     "extension.journey": {
-      "trackingIssue": 781
+      "trackingIssue": 864
     }
   },
   "revisitTriggers": {
     "blob-custody.compat": {
       "glob": "packages/core/src/blob/**/*.ts",
       "contains": "COMPAT\\(|SCHEMA_VERSION|FORMAT_VERSION_2",
-      "trackingIssue": 781
+      "trackingIssue": 864
     },
     "gateway.compat": {
       "glob": "packages/server/src/**/*.ts",
       "contains": "COMPAT\\(",
-      "trackingIssue": 781
+      "trackingIssue": 864
     },
     "app-engine.compat": {
       "glob": "packages/server/src/engine/**/*.ts",
       "contains": "COMPAT\\(",
-      "trackingIssue": 781
+      "trackingIssue": 864
     },
     "automations.compat": {
       "glob": "packages/server/src/automation/**/*.ts",
       "contains": "COMPAT\\(",
-      "trackingIssue": 781
+      "trackingIssue": 864
     }
   },
   "workspaceSurfaces": {
@@ -912,16 +916,16 @@
     "packages/model-runtime": "gateway"
   },
   "notes": {
-    "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #781 (originally #656).",
-    "mobile.performance": "Partial: tests/scale/large-vault.scale.test.ts pins the readiness data-volume/read budgets and native long lists are mechanically required to stay virtualized; a device-frame budget would strengthen this cell. Tracked under #781 (originally #659).",
-    "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake). Tracked under #781 (originally #659).",
+    "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #864 (originally #656).",
+    "mobile.performance": "Partial: tests/scale/large-vault.scale.test.ts pins the readiness data-volume/read budgets and native long lists are mechanically required to stay virtualized; a device-frame budget would strengthen this cell. Tracked under #864 (originally #659).",
+    "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake). Tracked under #864 (originally #659).",
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
-    "agent-runtime.journey": "packages/server/src/acp/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #781 (originally #656; copilot rig originally #657).",
+    "agent-runtime.journey": "packages/server/src/acp/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #864 (originally #656; copilot rig originally #657).",
     "mobile.scalability": "Owned by tests/agent-e2e-mobile/flows/volume-proof.mjs; records a nightly scalability budget and durable numeric measurements.",
-    "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #781 (originally #659).",
-    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire). Tracked under #781 (originally #659).",
-    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch). Tracked under #781 (originally #659).",
+    "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #864 (originally #659).",
+    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire). Tracked under #864 (originally #659).",
+    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch). Tracked under #864 (originally #659).",
     "G4.mutation": "StrykerJS nightly on property-defended core packages: vault, client/replica, automation, backup, blob-format, protocol, tunnel, app-engine, gateway, agent-runtime (#532/#545). Floors in tests/mutation-floors.json; scores in artifacts/mutation/ via e2e.yml mutation-testing job. Not per-PR.",
     "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
     "client.react.floor": "packages/client/src/react/** floors at 65/35 in coverage-floors.json (#587 sustained-level ratchet); journeys + extracted pure modules remain the primary owners.",
@@ -930,18 +934,18 @@
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",
     "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts).",
     "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests.",
-    "appStates.copy-owners": "Copy-level owners in appStates (notes.pending, notes.stale) prove the state's user-facing copy renders under a render condition that can actually fire, not that the state was driven end-to-end; every other owned cell names a proof that reaches the state itself — the app-boot browser journeys, the app's own pending projection, or the view-state predicate that fires the banner. Tracked under #839.",
-    "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
-    "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-durability.test.ts. Tracked under #781 (originally #656).",
-    "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
-    "blueprints.contracts": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
-    "blueprints.durability": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-durability.test.ts. Tracked under #781 (originally #656).",
-    "blueprints.concurrency": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
-    "desktop.contracts": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
-    "desktop.durability": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-durability.test.ts. Tracked under #781 (originally #656).",
-    "desktop.concurrency": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
-    "web.contracts": "Coverable-today suite (#535): owned by apps/web/src/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
-    "web.durability": "Coverable-today suite (#535): owned by apps/web/src/matrix-durability.test.ts. Tracked under #781 (originally #656).",
+    "appStates.copy-owners": "Copy-level owners in appStates (notes.pending, notes.stale) prove the state's user-facing copy renders under a render condition that can actually fire, not that the state was driven end-to-end; every other owned cell names a proof that reaches the state itself — the app-boot browser journeys, the app's own pending projection, or the view-state predicate that fires the banner. Tracked under #864 (originally #839).",
+    "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-contracts.test.ts. Tracked under #864 (originally #656).",
+    "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-durability.test.ts. Tracked under #864 (originally #656).",
+    "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-concurrency.test.ts. Tracked under #864 (originally #656).",
+    "blueprints.contracts": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-contracts.test.ts. Tracked under #864 (originally #656).",
+    "blueprints.durability": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-durability.test.ts. Tracked under #864 (originally #656).",
+    "blueprints.concurrency": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-concurrency.test.ts. Tracked under #864 (originally #656).",
+    "desktop.contracts": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-contracts.test.ts. Tracked under #864 (originally #656).",
+    "desktop.durability": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-durability.test.ts. Tracked under #864 (originally #656).",
+    "desktop.concurrency": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-concurrency.test.ts. Tracked under #864 (originally #656).",
+    "web.contracts": "Coverable-today suite (#535): owned by apps/web/src/matrix-contracts.test.ts. Tracked under #864 (originally #656).",
+    "web.durability": "Coverable-today suite (#535): owned by apps/web/src/matrix-durability.test.ts. Tracked under #864 (originally #656).",
     "vault-core.offline": "Skip: vault is a storage primitive; offline UX is exercised by mobile.offline + web.offline consuming surfaces.",
     "vault-core.compat": "Owned by packages/vault/src/schema/migrate.test.ts: the forward-only ladder replays from older frontiers with owner rows intact, the COMPAT( repairs are idempotent, and a file whose user_version is ahead is refused untouched.",
     "vault-core.journey": "Skip: no end-user vault journey surface; blank-machine restore owns backup-restore.journey and search/enrichment flows own vault correctness paths.",
@@ -962,31 +966,31 @@
     "agent-runtime.performance": "Owned by tests/perf/harness-turn.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "agent-runtime.scalability": "Owned by tests/scale/harness-sessions.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "agent-runtime.offline": "Skip: harnesses require a live CLI/ACP process; offline is not a runtime dimension (client offline owns UX).",
-    "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell, and is the sharper gap since #834 gave Agenda, Notes and Tasks interfaces that render those reads. Tracked under #781 (originally #659).",
+    "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell, and is the sharper gap since #834 gave Agenda, Notes and Tasks interfaces that render those reads. Tracked under #864 (originally #659).",
     "blueprints.scalability": "Owned by tests/scale/blueprint-clones.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #781 (originally #656).",
-    "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #781 (originally #656).",
+    "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #864 (originally #656).",
+    "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #864 (originally #656).",
     "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "desktop.offline": "Partial: apps/desktop/tests/e2e/pending-overlay.spec.ts owns the renderer's offline honesty — a write made with the network severed queues in the durable replica outbox and BOTH the optimistic row and its pending chip survive a full Electron reload. The journey drove Tally, Tasks and Agenda until #831 cleared those interfaces; the same change rebuilt it on Docs, whose production rows render the shared pending overlay, so the contract moved seats rather than lapsing. It stays on Docs now that #834 has given Agenda, Notes and Tasks interfaces again: the rebuilt Agenda proves the held-write chip at the boot tier instead (packages/blueprints/src/app-boot/agenda.test.ts drives a queued cancel through the production intent-invalidation derivation in airplane mode), which is a cheaper seat for the same contract than a second Electron journey. Still missing on this seat, and what keeps the cell partial: the reconnect half (the PWA's apps/web/tests/e2e/offline-reconnect.spec.ts proves replay settles exactly once; desktop has no equivalent) and a UI-driven offline write, which Docs cannot offer while its rename affordances live off the inline seat. Detached-gateway outage logging still covers host-side continuity. Tracked under #781.",
-    "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #781 (originally #656).",
+    "desktop.offline": "Partial: apps/desktop/tests/e2e/pending-overlay.spec.ts owns the renderer's offline honesty — a write made with the network severed queues in the durable replica outbox and BOTH the optimistic row and its pending chip survive a full Electron reload. The journey drove Tally, Tasks and Agenda until #831 cleared those interfaces; the same change rebuilt it on Docs, whose production rows render the shared pending overlay, so the contract moved seats rather than lapsing. It stays on Docs now that #834 has given Agenda, Notes and Tasks interfaces again: the rebuilt Agenda proves the held-write chip at the boot tier instead (packages/blueprints/src/app-boot/agenda.test.ts drives a queued cancel through the production intent-invalidation derivation in airplane mode), which is a cheaper seat for the same contract than a second Electron journey. Still missing on this seat, and what keeps the cell partial: the reconnect half (the PWA's apps/web/tests/e2e/offline-reconnect.spec.ts proves replay settles exactly once; desktop has no equivalent) and a UI-driven offline write, which Docs cannot offer while its rename affordances live off the inline seat. Detached-gateway outage logging still covers host-side continuity. Tracked under #864 (originally #781).",
+    "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #864 (originally #656).",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #781 (originally #656).",
-    "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #781 (originally #656).",
-    "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #781 (originally #656).",
-    "tunnel-pairing.durability": "Was `skip` — durability read as not-applicable to a transport. #842 W3.1 made it applicable: tests/quality/network-chaos.integration.test.ts drives eight injected fault shapes (latency, jitter, fragmentation, asymmetric bandwidth, mid-request abort, mid-response disconnect, endpoint restart, address rebind) over a REAL iroh connection against the replica intent plane, and asserts the no-loss / apply-exactly-once / converge laws on real schedule_task and replica_intent_outcome rows. Byte-level loss and reorder are deliberately absent: QUIC converts those into delay, delivery, or connection failure, so injecting them would model a corrupt QUIC implementation rather than a lossy network. The two netem-tier faults that would need a privileged runner are declared, excluded from the schedule, and cannot be claimed for free. Partial rather than solid: no coverage floor gates the workspace that owns the rig, so the cell rests on the lane alone.",
+    "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #864 (originally #656).",
+    "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #864 (originally #656).",
+    "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #864 (originally #656).",
+    "tunnel-pairing.durability": "Was `skip` — durability read as not-applicable to a transport. #842 W3.1 made it applicable: tests/quality/network-chaos.integration.test.ts drives eight injected fault shapes (latency, jitter, fragmentation, asymmetric bandwidth, mid-request abort, mid-response disconnect, endpoint restart, address rebind) over a REAL iroh connection against the replica intent plane, and asserts the no-loss / apply-exactly-once / converge laws on real schedule_task and replica_intent_outcome rows. Byte-level loss and reorder are deliberately absent: QUIC converts those into delay, delivery, or connection failure, so injecting them would model a corrupt QUIC implementation rather than a lossy network. The two netem-tier faults that would need a privileged runner are declared, excluded from the schedule, and cannot be claimed for free. Partial rather than solid: no coverage floor gates the workspace that owns the rig, so the cell rests on the lane alone. Remaining depth tracked under #864.",
     "tunnel-pairing.scalability": "Owned by tests/scale/tunnel-pairs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "extension.correctness": "Owned by apps/extension/src/origin-matching.test.ts: loopback origin matching accepts true 127.0.0.0/8 and rejects lookalike hostnames. Malformed cross-context payload handling has no owner. Tracked under #781 (originally #656).",
-    "extension.contracts": "Owned by apps/extension/src/credential-gesture.test.ts: only a browser-trusted gesture releases a credential and secret-bearing message properties are dropped after use. Browser-version and gateway protocol-skew fixtures have no owner. Tracked under #781 (originally #656).",
+    "extension.correctness": "Owned by apps/extension/src/origin-matching.test.ts: loopback origin matching accepts true 127.0.0.0/8 and rejects lookalike hostnames. Malformed cross-context payload handling has no owner. Tracked under #864 (originally #656).",
+    "extension.contracts": "Owned by apps/extension/src/credential-gesture.test.ts: only a browser-trusted gesture releases a credential and secret-bearing message properties are dropped after use. Browser-version and gateway protocol-skew fixtures have no owner. Tracked under #864 (originally #656).",
     "extension.durability": "Structural N/A: the extension owns no durable state; paired credentials are browser storage and gateway-owned.",
     "extension.concurrency": "Structural N/A for v0: one active popup/worker transaction is admitted per browser profile.",
     "extension.performance": "Structural N/A for v0: the companion performs no user-visible compute or transfer hot path.",
     "extension.scalability": "Structural N/A for v0: one companion serves one browser profile; fleet scale belongs to the gateway.",
-    "extension.security": "Owned by apps/extension/src/page-fields.test.ts: fills resolve at gesture time and never write into detached or hidden inputs. Hostile-page and revoked-pairing browser journeys have no owner. Tracked under #781 (originally #656).",
-    "extension.offline": "Tracked gap (#781, originally #656): the MV3 companion has no network-loss and reconnect journey.",
+    "extension.security": "Owned by apps/extension/src/page-fields.test.ts: fills resolve at gesture time and never write into detached or hidden inputs. Hostile-page and revoked-pairing browser journeys have no owner. Tracked under #864 (originally #656).",
+    "extension.offline": "Tracked gap (#864, originally #656): the MV3 companion has no network-loss and reconnect journey.",
     "extension.compat": "Structural N/A until a versioned extension storage format exists; gateway protocol contracts own wire compatibility.",
-    "extension.journey": "Tracked gap (#781, originally #656): install-to-paired extension journey evidence is not implemented.",
-    "oauth-worker.correctness": "Courier route tests cover valid exchanges; provider-specific negative responses remain under #587. Tracked under #781 (originally #656).",
-    "oauth-worker.contracts": "Request/response contract tests cover the courier envelope; version-skew fixtures remain under #587. Tracked under #781 (originally #656).",
+    "extension.journey": "Tracked gap (#864, originally #656): install-to-paired extension journey evidence is not implemented.",
+    "oauth-worker.correctness": "Courier route tests cover valid exchanges; provider-specific negative responses remain under #587. Tracked under #864 (originally #656).",
+    "oauth-worker.contracts": "Request/response contract tests cover the courier envelope; version-skew fixtures remain under #587. Tracked under #864 (originally #656).",
     "oauth-worker.durability": "Structural N/A: the OAuth courier intentionally holds no durable application state.",
     "oauth-worker.concurrency": "Structural N/A: stateless Cloudflare Worker isolates provide request concurrency; no shared mutable state exists.",
     "oauth-worker.performance": "Structural N/A: provider and edge latency dominate the stateless one-shot code courier.",
@@ -994,69 +998,69 @@
     "oauth-worker.offline": "Structural N/A: an edge OAuth callback service has no offline product mode.",
     "oauth-worker.compat": "Structural N/A: the courier exposes one versionless, short-lived exchange contract owned by contract tests.",
     "oauth-worker.journey": "Structural N/A: end-user OAuth journeys are owned by the consuming desktop/web surfaces; the worker is a stateless courier.",
-    "vault-core.durability": "packages/vault/src/wal-shipper.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "vault-core.concurrency": "packages/vault/src/enrich/leases.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "vault-core.performance": "tests/perf/vault-write.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
-    "vault-core.scalability": "tests/scale/ontology.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "blob-custody.concurrency": "packages/vault/src/blob/outbox-drain.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "blob-custody.performance": "tests/perf/blob-egress.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
-    "blob-custody.scalability": "tests/scale/blob-gc.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "blob-custody.security": "packages/vault/src/blob/seal.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "vault-core.durability": "packages/vault/src/wal-shipper.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #864 (originally #656).",
+    "vault-core.concurrency": "packages/vault/src/enrich/leases.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
+    "vault-core.performance": "tests/perf/vault-write.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #864 (originally #659).",
+    "vault-core.scalability": "tests/scale/ontology.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #864 (originally #659).",
+    "blob-custody.concurrency": "packages/vault/src/blob/outbox-drain.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
+    "blob-custody.performance": "tests/perf/blob-egress.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #864 (originally #659).",
+    "blob-custody.scalability": "tests/scale/blob-gc.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #864 (originally #659).",
+    "blob-custody.security": "packages/vault/src/blob/seal.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #864 (originally #656).",
     "backup-restore.concurrency": "Skip: restore into a LIVE gateway was deleted with the founding plane (#603) — restore is the offline `recover` verb, so concurrent restore has no surface.",
-    "backup-restore.scalability": "tests/scale/backup-restore.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "backup-restore.journey": "packages/server/src/backup/backup.integration.test.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
-    "replica-sync.durability": "packages/client/src/replica/sqlite-store.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "replica-sync.scalability": "tests/scale/replica-bootstrap.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "replica-sync.security": "packages/client/src/replica/shell-session-admission.contract.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "replica-sync.offline": "packages/client/src/replica/shell-session.test.ts proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
-    "replica-sync.compat": "packages/vault/src/replica/change-log.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
-    "replica-sync.journey": "apps/web/tests/e2e/web-pwa.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
-    "gateway.durability": "packages/server/src/serve/disk-health.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "gateway.concurrency": "packages/server/src/serve/serve-multiclient.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
-    "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
-    "app-engine.durability": "packages/server/src/engine/conversation/archive/archive.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "app-engine.concurrency": "packages/server/src/engine/handlers/handler-pool.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "automations.durability": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "automations.concurrency": "packages/server/src/automation/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "automations.security": "packages/server/src/automation/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "agent-runtime.correctness": "packages/server/src/acp/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "agent-runtime.security": "packages/server/src/acp/preflight.test.ts proves the current happy path; adversarial input now covered by agent-prompt-injection-red-team (injected instructions carried in read content, driven over the real turn loop, #842 W2.2); authorization cases still missing. Tracked under #781 (originally #656).",
-    "agent-runtime.compat": "packages/server/src/acp/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
-    "blueprints.security": "packages/blueprints/src/untrusted-rendering.test.ts proves the current happy path; missing broader adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #657).",
-    "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "web.correctness": "apps/web/src/web-host.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
-    "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; adversarial peer-target input now covered by tunnel-peer-target-differential (JS↔Rust↔route-layer differential, #842 W2.1), and admission/authorization abuse by hostile-peer-state-machine (replay, out-of-order, refused handshake, duplicate assertion, slow-loris, flood, expiry over a real iroh endpoint, #842 W2.3). Remaining depth tracked under #781 (originally #656).",
-    "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
-    "vault-core.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "blob-custody.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "backup-restore.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "replica-sync.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "gateway.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "app-engine.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "automations.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "agent-runtime.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "tunnel-pairing.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "extension.accessibility": "The companion feeds the consuming web surface; its user-visible handoff is covered by the real shared-shell browser accessibility lane. A distinct popup keyboard journey is not claimed by this cell and remains tracked under #781.",
-    "oauth-worker.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "blueprints.accessibility": "A shipped first-party blueprint is scanned in its real inline renderer by apps/web/tests/e2e/accessibility.spec.ts; static source contracts remain a separate fast PR tripwire. Broader app-state depth is tracked under #781.",
-    "desktop.accessibility": "Desktop deliberately reuses the web axe owner: both hosts compile packages/client/src/react/boot.tsx as the renderer entry, so a second axe pass over Electron would duplicate the same DOM and rules. Electron-specific keyboard depth remains tracked under #781.",
-    "web.accessibility": "The connect screen, connected Home shell, and a shipped first-party app inline renderer are scanned with axe WCAG A/AA in Chromium by apps/web/tests/e2e/accessibility.spec.ts. Broader route/state depth is tracked under #781.",
-    "mobile.accessibility": "RNTL observes native role, accessible-name, and state/trait contracts in apps/mobile/src/apps/photos/PhotosHome.test.tsx; Maestro remains the device/runtime layer because its selectors cannot falsify RN role and trait semantics. Broader screen depth is tracked under #781.",
-    "web.performance": "The owning rig tests/perf/pwa-waterfall.perf.test.ts self-skips when the nightly waterfall artifact is missing, so a green run does not prove the budget ran. Tracked under #781 (originally #656).",
-    "web.security": "apps/web/tests/e2e/web-pwa.spec.ts is a single test asked to carry both the session-isolation law and the journey; the isolation claim needs a test of its own. Tracked under #781 (originally #656).",
-    "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #781 (originally #656).",
-    "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #781 (originally #656).",
-    "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #781 (originally #656).",
-    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #781 (originally #656).",
+    "backup-restore.scalability": "tests/scale/backup-restore.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #864 (originally #659).",
+    "backup-restore.journey": "packages/server/src/backup/backup.integration.test.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #864 (originally #656).",
+    "replica-sync.durability": "packages/client/src/replica/sqlite-store.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #864 (originally #656).",
+    "replica-sync.scalability": "tests/scale/replica-bootstrap.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #864 (originally #659).",
+    "replica-sync.security": "packages/client/src/replica/shell-session-admission.contract.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #864 (originally #656).",
+    "replica-sync.offline": "packages/client/src/replica/shell-session.test.ts proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #864 (originally #656).",
+    "replica-sync.compat": "packages/vault/src/replica/change-log.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #864 (originally #656).",
+    "replica-sync.journey": "apps/web/tests/e2e/web-pwa.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #864 (originally #656).",
+    "gateway.durability": "packages/server/src/serve/disk-health.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #864 (originally #656).",
+    "gateway.concurrency": "packages/server/src/serve/serve-multiclient.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
+    "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #864 (originally #659).",
+    "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #864 (originally #656).",
+    "app-engine.durability": "packages/server/src/engine/conversation/archive/archive.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #864 (originally #656).",
+    "app-engine.concurrency": "packages/server/src/engine/handlers/handler-pool.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
+    "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #864 (originally #659).",
+    "automations.durability": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #864 (originally #656).",
+    "automations.concurrency": "packages/server/src/automation/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
+    "automations.security": "packages/server/src/automation/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #864 (originally #656).",
+    "agent-runtime.correctness": "packages/server/src/acp/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #864 (originally #656).",
+    "agent-runtime.security": "packages/server/src/acp/preflight.test.ts proves the current happy path; adversarial input now covered by agent-prompt-injection-red-team (injected instructions carried in read content, driven over the real turn loop, #842 W2.2); authorization cases still missing. Tracked under #864 (originally #656).",
+    "agent-runtime.compat": "packages/server/src/acp/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #864 (originally #656).",
+    "blueprints.security": "packages/blueprints/src/untrusted-rendering.test.ts proves the current happy path; missing broader adversarial input and authorization cases. Tracked under #864 (originally #656).",
+    "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #864 (originally #657).",
+    "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #864 (originally #656).",
+    "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #864 (originally #656).",
+    "web.correctness": "apps/web/src/web-host.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #864 (originally #656).",
+    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
+    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #864 (originally #656).",
+    "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #864 (originally #656).",
+    "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #864 (originally #656).",
+    "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #864 (originally #656).",
+    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; adversarial peer-target input now covered by tunnel-peer-target-differential (JS↔Rust↔route-layer differential, #842 W2.1), and admission/authorization abuse by hostile-peer-state-machine (replay, out-of-order, refused handshake, duplicate assertion, slow-loris, flood, expiry over a real iroh endpoint, #842 W2.3). Remaining depth tracked under #864 (originally #656).",
+    "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #864 (originally #656).",
+    "vault-core.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "blob-custody.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "backup-restore.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "replica-sync.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "gateway.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "app-engine.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "automations.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "agent-runtime.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "tunnel-pairing.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "extension.accessibility": "The companion feeds the consuming web surface; its user-visible handoff is covered by the real shared-shell browser accessibility lane. A distinct popup keyboard journey is not claimed by this cell and remains tracked under #864 (originally #781).",
+    "oauth-worker.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "blueprints.accessibility": "A shipped first-party blueprint is scanned in its real inline renderer by apps/web/tests/e2e/accessibility.spec.ts; static source contracts remain a separate fast PR tripwire. Broader app-state depth is tracked under #864 (originally #781).",
+    "desktop.accessibility": "Desktop deliberately reuses the web axe owner: both hosts compile packages/client/src/react/boot.tsx as the renderer entry, so a second axe pass over Electron would duplicate the same DOM and rules. Electron-specific keyboard depth remains tracked under #864 (originally #781).",
+    "web.accessibility": "The connect screen, connected Home shell, and a shipped first-party app inline renderer are scanned with axe WCAG A/AA in Chromium by apps/web/tests/e2e/accessibility.spec.ts. Broader route/state depth is tracked under #864 (originally #781).",
+    "mobile.accessibility": "RNTL observes native role, accessible-name, and state/trait contracts in apps/mobile/src/apps/photos/PhotosHome.test.tsx; Maestro remains the device/runtime layer because its selectors cannot falsify RN role and trait semantics. Broader screen depth is tracked under #864 (originally #781).",
+    "web.performance": "The owning rig tests/perf/pwa-waterfall.perf.test.ts self-skips when the nightly waterfall artifact is missing, so a green run does not prove the budget ran. Tracked under #864 (originally #656).",
+    "web.security": "apps/web/tests/e2e/web-pwa.spec.ts is a single test asked to carry both the session-isolation law and the journey; the isolation claim needs a test of its own. Tracked under #864 (originally #656).",
+    "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #864 (originally #656).",
+    "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #864 (originally #656).",
+    "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #864 (originally #656).",
+    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #864 (originally #656).",
     "app-admission": "The named claims an app satisfies to sit in the shell are docs/blueprint-seats.md#app-admission-contract; the appSeats, appStates and appEngines blocks here are that contract's ledger, and scripts/test-report/validate-app-axes.mjs is what refuses an app that goes quiet about one of them."
   },
   "cellOwners": {
@@ -2486,11 +2490,11 @@
           },
           "custodian": {
             "status": "gap",
-            "trackingIssue": "839"
+            "trackingIssue": "864"
           },
           "viewer": {
             "status": "gap",
-            "trackingIssue": "839"
+            "trackingIssue": "864"
           }
         }
       },
@@ -2544,11 +2548,11 @@
           },
           "custodian": {
             "status": "gap",
-            "trackingIssue": "839"
+            "trackingIssue": "864"
           },
           "viewer": {
             "status": "gap",
-            "trackingIssue": "839"
+            "trackingIssue": "864"
           }
         }
       },
@@ -2557,11 +2561,11 @@
         "seats": {
           "origin": {
             "status": "gap",
-            "trackingIssue": "839"
+            "trackingIssue": "864"
           },
           "custodian": {
             "status": "gap",
-            "trackingIssue": "839"
+            "trackingIssue": "864"
           },
           "viewer": {
             "status": "owned",
@@ -2580,7 +2584,7 @@
           },
           "custodian": {
             "status": "gap",
-            "trackingIssue": "839"
+            "trackingIssue": "864"
           },
           "viewer": {
             "status": "owned",
@@ -2619,18 +2623,18 @@
           },
           "custodian": {
             "status": "gap",
-            "trackingIssue": "839"
+            "trackingIssue": "864"
           },
           "viewer": {
             "status": "gap",
-            "trackingIssue": "839"
+            "trackingIssue": "864"
           }
         }
       }
     ]
   },
   "appStates": {
-    "trackingIssue": "839",
+    "trackingIssue": "864",
     "states": [
       {
         "id": "dayone",
@@ -3104,7 +3108,7 @@
       "adversary": {
         "owner": null,
         "flow": null,
-        "trackingIssue": "839"
+        "trackingIssue": "864"
       },
       "seats": ["origin", "custodian", "viewer"],
       "note": "Gap G4: no generated command × missing-scope denial sweep exists yet (#839 Wave 2)."
@@ -3311,7 +3315,7 @@
     }
   ],
   "journeys": {
-    "trackingIssue": "839",
+    "trackingIssue": "864",
     "suites": [
       {
         "id": "home-apps",
