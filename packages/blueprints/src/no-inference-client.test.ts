@@ -1,23 +1,10 @@
 /*
- * docs/blueprint-seats.md "Enrichment doctrine" (#712), checked
- * mechanically: provider model calls use `ctx.delegate`, while recognition
- * automations bundle local model execution and use ctx.vault content/invoke.
- * A blueprint app, automation, or mobile seat may not import a provider SDK
- * or resurrect the deleted service/generic-inference roads.
- *
- * This is a TRIPWIRE, not a proof (same caveat as
- * `blueprint-seats.test.ts`'s S1/S2/S5 check): it greps import specifiers
- * for a roster of known provider package names. A determined author could
- * dodge it with an alias, a dynamic `import(computedString)`, or a bare
- * `fetch` to a provider's REST endpoint — the point is to catch the
- * ordinary "I reached for the SDK because it was the fastest way" mistake,
- * not a sabotage attempt.
- *
- * FALSE-POSITIVE GUARD: an `automation.json` may legitimately carry a model
- * id as DATA (`requires.model`, the one billed rail's own pin on
- * `ctx.delegate`), and prose may name a provider package. So this check
- * matches only actual `import`/`require`/`import()` specifiers, never
- * arbitrary file text — pinned by its own case below.
+ * Tripwire for docs/blueprint-seats.md "Enrichment doctrine" (#712): greps
+ * import specifiers for known provider SDKs. Not a proof — aliases, dynamic
+ * `import(computed)`, and bare fetch dodge it. Specifiers only, so a model
+ * pin in `automation.json` and prose naming a package do not trip (pinned
+ * below). Recognition uses ctx.vault content/invoke; billed calls use
+ * `ctx.delegate`. No third road.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -27,29 +14,18 @@ import { describe, expect, it } from "vitest";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 
-// Source roots a blueprint app, automation, or the package's own build/
-// scaffolding tooling lives under. node_modules and dist are build/vendor
-// output, not authored source. `src` is included (not just `apps` and
-// `automations`) because a stray provider import in the package's own
-// tooling would be just as much a third road.
+// Authored source. `src` is in because a provider import in package tooling
+// is still a third road.
 const SOURCE_DIRS = ["apps", "automations", "scripts", "src", "types"] as const;
 
-// WIDENED TO THE NATIVE TREE (#712 E1, engine C). The doctrine says "no
-// blueprint app OR AUTOMATION" invents a third road, and the native client is
-// where the device work-lease lane actually runs (iOS Vision / Android ML
-// Kit): it is the surface with both the motive and the opportunity to reach
-// for a provider SDK instead. `apps/mobile` is a separate package with its own
-// vitest project, so this file reaches ACROSS the package boundary the same
-// way it already reaches into `packages/vault` for `SHAREABLE_ITEM_TYPES` —
-// one check for one rule beats two that drift.
+// Native tree too (#712 E1, engine C): the work-lease lane is where a
+// provider SDK is tempting. One check for one rule — this file already
+// crosses into `packages/vault` the same way.
 const EXTRA_ROOTS = [
   path.resolve(PACKAGE_ROOT, "../../apps/mobile/src"),
   path.resolve(PACKAGE_ROOT, "../server/src/automation"),
 ] as const;
 
-// Known third-party inference/provider SDK package names (and their scoped
-// families) a handler or component has no business importing — the two
-// roads named above are the only ones a blueprint may take to a model.
 const PROVIDER_PACKAGES = [
   "openai",
   "@anthropic-ai/",
@@ -68,9 +44,6 @@ const PROVIDER_PACKAGES = [
   "@aws-sdk/client-bedrock",
 ] as const;
 
-// Matches the specifier of a static `import ... from "X"`, a bare
-// `import "X"`, a `require("X")`, or a dynamic `import("X")` — single or
-// double quoted.
 const IMPORT_SPECIFIER_RE =
   /(?:from\s+|require\(|import\()\s*["'](?<specifier>[^"']+)["']/gu;
 
@@ -127,16 +100,12 @@ const allFiles = [
 
 describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md Enrichment doctrine)", () => {
   it("sanity: the source scan actually found blueprint files", () => {
-    // A regression here means the directory list above drifted from the
-    // package layout, not that the roster went clean — the count guards
-    // against the check silently scanning nothing.
+    // Count guards a layout drift that would scan nothing.
     expect(allFiles.length).toBeGreaterThan(50);
   });
 
   it("sanity: the widened scan actually reaches the native tree", () => {
-    // Without this the EXTRA_ROOTS path could silently resolve to nothing
-    // (a moved package, a renamed `src`) and engine C's native half would go
-    // ungated while the suite stayed green.
+    // EXTRA_ROOTS must actually resolve; otherwise engine C is ungated.
     expect(
       allFiles.filter((f) =>
         f.includes(`${path.sep}apps${path.sep}mobile${path.sep}`)
@@ -160,8 +129,6 @@ describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md 
   );
 
   it("does not false-positive on a provider name that is data or prose", () => {
-    // A manifest's `requires.model` pin and a comment naming the package are
-    // both legitimate; only an actual specifier is a third road.
     expect(
       importedProviderPackages(
         '{ "requires": { "model": "anthropic/claude-3-5-sonnet" } }'
@@ -170,8 +137,7 @@ describe("no blueprint imports a provider SDK directly (docs/blueprint-seats.md 
     expect(
       importedProviderPackages("// never reach for openai or @anthropic-ai/sdk")
     ).toStrictEqual([]);
-    // …and the matcher still catches a real import. The specifier is
-    // interpolated so this file does not trip its own scan above.
+    // Interpolated so this file does not trip its own scan.
     const provider = "openai";
     expect(
       importedProviderPackages(`import OpenAI from "${provider}";`)

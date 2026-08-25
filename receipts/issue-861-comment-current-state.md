@@ -3729,6 +3729,244 @@ Files changed (full inventory):
 - `packages/vault/src/vault-limit.ts`
 - `tests/comment-density-ratchet.json`
 
+### Wave 4 — compression sweep, 160 heaviest remaining files (2026-08-25)
+
+Eight worker sub-agents, ownership-disjoint 20-file batches, worklist regenerated
+from `measureTree` sorted by chars-over-cap, excluding the 47-entry allowlist
+(pre-wave), `packages/vault/src/schema/**`, and classification-ratchet-pinned
+files. Eligible over-cap worklist at dispatch: 1,570 files. This wave takes the
+top 160 (including Wave 1-3 residues still over the cap). Root integration
+restored three premature JSX closing `>` tokens (`PhotoStateView.tsx`
+`<Pressable`, `PhotosHome.tsx` `<View`, `Editor.tsx` `<div`) that would have
+been code; the proof is green only after that restore.
+
+| figure | after Wave 3b | after Wave 4 |
+| --- | --- | --- |
+| global character share | 17.68% | **16.47%** |
+| global line density | 10.27% | **9.44%** |
+| files over 15% cap | 1,647 | 1,570 |
+
+Of the 160 swept files (post-format measurement): 64 landed under 13%; 5 sit
+13-15%; 83 remain cap-eligible above 15% as honest floors or leftover fat for
+the residue re-pass; 8 dropped under the 40-line threshold (cap no longer
+applies). Diff vs HEAD before this receipt: 2,353 insertions / 9,103 deletions.
+
+Verification (all green before commit):
+
+```
+bun scripts/comment-only-diff.mjs HEAD   # 160 changed file(s) — all comment-only
+bun run format && bun run format:check   # clean after oxfmt
+bun run lint                             # oxlint --deny-warnings clean
+bun scripts/check-comment-density-ratchet.mjs --write && bun scripts/check-comment-density-ratchet.mjs
+# ok comment-density — no pin rose, no unpinned file over cap
+```
+
+Allowlist rulings (7 accepted, allowlist now 54 entries): grid-image.ts
+(decode/cache contract leaf), image-cache.ts (platform cache-budget registry),
+search-scaffold.ts (search-state combinator contract), archive/types.ts
+(declaration-leaf archive contract), scope-merge.ts (k-way merge policy leaf),
+capture-consent.ts (capture disclosure leaf), grant-audiences.ts (G-audience
+policy leaf). Nominated but declined: navigation.ts, demo.ts,
+no-inference-client.test.ts, snapshot-blob-roots.ts,
+shell-var-resolution.test.ts, share-effects-retire.ts — remaining comments are
+load-bearing on ordinary code, not a prose-is-the-payload registry. Nominated
+but unnecessary because nbl fell under 40: nav-seat.ts, vault-workspace.ts,
+fonts.ts, destinations.ts, video-scrub-strip.ts, band.ts, orphan-tombstone.ts,
+grid-packing.ts.
+
+Residues staying pinned above 13% without allowlist entries (candidates for the
+residue re-pass): batch 1 leftover fat on photos/docs `app-root.tsx`,
+`gateway.ts`, `sync.ts`, `wal-shipper-detectors.test.ts`, `PhotosHome.tsx`,
+`commons.ts`; honest floors on `db.ts`, `duties.ts`, `media.ts`,
+`navigation.ts`, `tile-model.ts`, and the batch 2-8 floors recorded in agent
+reports (frame-sampler, view-state, useAppScopes, scope-fanout, people-band,
+photo-edit-model, condition, blob-auth, vite.config, sql.ts, HomeKey,
+status-line, HomeBand, etc.). All were pinned downward; none rose.
+
+JSX comment containers rewritten in place, never deleted. Empty-catch one-line
+directives kept where a sweep would have tripped oxlint `no-empty`.
+
+Files changed (full inventory):
+
+- `apps/desktop/src/main/ipc.ts`
+- `apps/desktop/src/main/update-watcher.ts`
+- `apps/desktop/tests/e2e/household.spec.ts`
+- `apps/desktop/tests/e2e/launch-time.spec.ts`
+- `apps/desktop/vite.config.ts`
+- `apps/mobile/App.tsx`
+- `apps/mobile/src/apps/agenda/day-context.ts`
+- `apps/mobile/src/apps/people/people-band.ts`
+- `apps/mobile/src/apps/photos/PhotoEditor.tsx`
+- `apps/mobile/src/apps/photos/PhotoGrainView.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightboxChrome.tsx`
+- `apps/mobile/src/apps/photos/PhotoLightboxToolbar.tsx`
+- `apps/mobile/src/apps/photos/PhotoStateView.tsx`
+- `apps/mobile/src/apps/photos/PhotosHome.styles.ts`
+- `apps/mobile/src/apps/photos/PhotosHome.tsx`
+- `apps/mobile/src/apps/photos/PlacesRealMap.tsx`
+- `apps/mobile/src/apps/photos/image-cache.ts`
+- `apps/mobile/src/apps/photos/memories-model.ts`
+- `apps/mobile/src/apps/photos/photo-edit-model.ts`
+- `apps/mobile/src/apps/photos/photos-backup.ts`
+- `apps/mobile/src/apps/photos/photos-band.test.ts`
+- `apps/mobile/src/apps/photos/photos-collections.ts`
+- `apps/mobile/src/apps/photos/photos-fixtures.ts`
+- `apps/mobile/src/apps/photos/photos-selection-writes.ts`
+- `apps/mobile/src/apps/photos/places-model.ts`
+- `apps/mobile/src/apps/photos/search-hits.ts`
+- `apps/mobile/src/apps/photos/video-scrub-strip.ts`
+- `apps/mobile/src/kit/components/AnchoredMenu.tsx`
+- `apps/mobile/src/kit/components/HomeKey.tsx`
+- `apps/mobile/src/kit/components/status-line.ts`
+- `apps/mobile/src/kit/fetch-gate/pin.ts`
+- `apps/mobile/src/kit/media/grid-image.ts`
+- `apps/mobile/src/kit/storage/custody-status.ts`
+- `apps/mobile/src/lib/automations.ts`
+- `apps/mobile/src/lib/connections.ts`
+- `apps/mobile/src/lib/gateway.ts`
+- `apps/mobile/src/lib/insights.ts`
+- `apps/mobile/src/lib/perf/frame-sampler.ts`
+- `apps/mobile/src/lib/upload/store.ts`
+- `apps/mobile/src/lib/vault-links.ts`
+- `apps/mobile/src/navigation.ts`
+- `apps/mobile/src/screens/Home.tsx`
+- `apps/mobile/src/screens/connectors/Connectors.tsx`
+- `apps/mobile/src/screens/connectors/connectors-model.ts`
+- `apps/mobile/src/screens/home/FirstMoves.tsx`
+- `apps/mobile/src/screens/home/HomeBand.tsx`
+- `apps/mobile/src/screens/home/TileBody.tsx`
+- `apps/mobile/src/screens/home/band.ts`
+- `apps/mobile/src/screens/home/grid-packing.ts`
+- `apps/mobile/src/screens/home/tile-model.ts`
+- `apps/web/tests/e2e/leak-probe.ts`
+- `packages/backup/src/engine.test.ts`
+- `packages/backup/src/local-provider.ts`
+- `packages/backup/src/wal-restore.ts`
+- `packages/blueprints/apps/_shared/GrantSheet.tsx`
+- `packages/blueprints/apps/_shared/capture-consent.ts`
+- `packages/blueprints/apps/_shared/grant-audiences.ts`
+- `packages/blueprints/apps/_shared/nav-seat.ts`
+- `packages/blueprints/apps/_shared/scope-merge.ts`
+- `packages/blueprints/apps/_shared/search-scaffold.ts`
+- `packages/blueprints/apps/agenda/view-copy.ts`
+- `packages/blueprints/apps/docs/app-root.tsx`
+- `packages/blueprints/apps/docs/format.ts`
+- `packages/blueprints/apps/docs/queries/_shared.ts`
+- `packages/blueprints/apps/docs/view-state.ts`
+- `packages/blueprints/apps/notes/powerbox.ts`
+- `packages/blueprints/apps/notes/shelves.ts`
+- `packages/blueprints/apps/people/format.ts`
+- `packages/blueprints/apps/people/queries/_shared.ts`
+- `packages/blueprints/apps/photos/app-root.tsx`
+- `packages/blueprints/apps/photos/components/Duplicates.tsx`
+- `packages/blueprints/apps/photos/components/Editor.tsx`
+- `packages/blueprints/apps/photos/components/LightboxInfo.tsx`
+- `packages/blueprints/apps/photos/duplicate-decision.ts`
+- `packages/blueprints/apps/photos/media.ts`
+- `packages/blueprints/apps/photos/trash-actions.ts`
+- `packages/blueprints/apps/photos/view-state.ts`
+- `packages/blueprints/apps/tasks/Chrome.tsx`
+- `packages/blueprints/apps/tasks/scope-fanout.ts`
+- `packages/blueprints/src/app-rewrites.ts`
+- `packages/blueprints/src/no-inference-client.test.ts`
+- `packages/blueprints/src/photos-people.test.ts`
+- `packages/client/src/app-format.ts`
+- `packages/client/src/gateway-client-atlas.ts`
+- `packages/client/src/gateway-client-automation-editing.ts`
+- `packages/client/src/gateway-client-storage.ts`
+- `packages/client/src/react/blueprints/blob-auth.ts`
+- `packages/client/src/react/screens/AtlasKindsSection.tsx`
+- `packages/client/src/react/screens/DevicesCard.tsx`
+- `packages/client/src/react/screens/SettingsPickRow.tsx`
+- `packages/client/src/react/screens/SettingsVaultScreen.tsx`
+- `packages/client/src/react/screens/gatewayHeartbeat.ts`
+- `packages/client/src/react/screens/vault-custody.ts`
+- `packages/client/src/react/shell/StatusLine.tsx`
+- `packages/client/src/react/shell/routes/settingsHarnessesData.ts`
+- `packages/client/src/react/shell/routes/useAppScopes.ts`
+- `packages/client/src/react/shell/useGatewayRuntime.ts`
+- `packages/client/src/react/ui/BarsBlock.tsx`
+- `packages/client/src/react/ui/states.tsx`
+- `packages/client/src/replica/shell-session.ts`
+- `packages/client/src/shell-var-resolution.test.ts`
+- `packages/core/src/time/time-zoo-recurrence.test.ts`
+- `packages/design/src/destinations.ts`
+- `packages/design/src/fonts.ts`
+- `packages/design/src/themes/centraid.ts`
+- `packages/model-runtime/src/ocr-postprocess.ts`
+- `packages/model-runtime/src/tokenizer.ts`
+- `packages/server/src/acp/models/catalog-warmer.ts`
+- `packages/server/src/acp/prompt-injection/harness.ts`
+- `packages/server/src/acp/prompt-injection/red-team.test.ts`
+- `packages/server/src/automation/fire/condition.ts`
+- `packages/server/src/automation/fire/time-zoo-calendar.test.ts`
+- `packages/server/src/automation/scaffold/app.ts`
+- `packages/server/src/backup/backup-sources.test.ts`
+- `packages/server/src/backup/backup.integration.test.ts`
+- `packages/server/src/backup/restore-drill.integration.test.ts`
+- `packages/server/src/backup/snapshot-blob-roots.ts`
+- `packages/server/src/backup/storage-credentials.ts`
+- `packages/server/src/backup/storage-usage.ts`
+- `packages/server/src/engine/changes/change-bus.ts`
+- `packages/server/src/engine/conversation/archive/types.ts`
+- `packages/server/src/engine/conversation/rehydrate.ts`
+- `packages/server/src/engine/conversation/runner-core.ts`
+- `packages/server/src/engine/handlers/worker-admission.ts`
+- `packages/server/src/engine/insights/analytics-store.ts`
+- `packages/server/src/engine/stores/vault-workspace.ts`
+- `packages/server/src/lifecycle/ext-band.ts`
+- `packages/server/src/routes/route-helpers.ts`
+- `packages/server/src/routes/vault-enrich-rules-routes.ts`
+- `packages/server/src/serve/commons-observability.ts`
+- `packages/server/src/serve/connection-broker.ts`
+- `packages/server/src/serve/enrichment-health.ts`
+- `packages/server/src/serve/outbox-executor.ts`
+- `packages/server/src/serve/share-effects-retire.ts`
+- `packages/server/src/serve/storage-limits.ts`
+- `packages/server/src/serve/support-bundle.ts`
+- `packages/server/src/serve/vault-link-row.ts`
+- `packages/server/src/validate-manifest.ts`
+- `packages/server/src/worktree-store/git.ts`
+- `packages/vault/src/blob/custody-reconcile.ts`
+- `packages/vault/src/blob/orphan-tombstone.ts`
+- `packages/vault/src/commands/atlas.ts`
+- `packages/vault/src/commands/enrich.ts`
+- `packages/vault/src/commands/locker.ts`
+- `packages/vault/src/commands/media.ts`
+- `packages/vault/src/commands/sync.ts`
+- `packages/vault/src/db.ts`
+- `packages/vault/src/enrich/enrich.test.ts`
+- `packages/vault/src/gateway/demo.ts`
+- `packages/vault/src/gateway/duties.ts`
+- `packages/vault/src/gateway/gateway.ts`
+- `packages/vault/src/gateway/sql.ts`
+- `packages/vault/src/grant/fulfillment.ts`
+- `packages/vault/src/host.ts`
+- `packages/vault/src/ingest/enrich-publishers.ts`
+- `packages/vault/src/journal-archive.ts`
+- `packages/vault/src/share/commons-routing.ts`
+- `packages/vault/src/share/commons.ts`
+- `packages/vault/src/share/party-vault-binding.ts`
+- `packages/vault/src/wal-shipper-detectors.test.ts`
+- `receipts/issue-861-comment-current-state.md`
+- `tests/comment-density-ratchet.json`
+
+### Remaining worklist
+
+Eligible over-cap files after Wave 4 (allowlist / schema / classification
+excluded): regenerate from `measureTree` sorted by chars-over-cap. Then:
+
+1. Further sweep waves (~150 files x 8 agents) until the remaining worklist is
+   small enough for a residue re-pass.
+2. Residue re-pass: files that stopped at honest floors >13% — allowlist vs
+   deeper cuts.
+3. Schema wave (root-owned): over-cap files under `packages/vault/src/schema/`
+   plus classification-ratchet-pinned files; re-pin fingerprints with an
+   `approvedDeviation` note.
+4. Final verification: `bun run check:pr` green, closing totals in this
+   receipt, push.
+
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->

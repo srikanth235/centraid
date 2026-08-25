@@ -1,27 +1,5 @@
-// Mobile connections client — the READ half of the Connectors place (#765).
-//
-//   GET   /centraid/_vault/connections        → { connections: [...] }
-//   PATCH /centraid/_vault/connections/<id>   → { status, note? } pause / resume
-//
-// Both are vault-SCOPED owner acts, so they carry `apiHeaders()` (bearer + the
-// active vault) and follow the Vaults switcher, exactly as `lib/insights.ts`'s
-// summary read does.
-//
-// The list endpoint answers in the DB's raw snake_case column shape (see
-// `listConnections` in `packages/server/src/routes/connections-routes.ts`) —
-// this module maps it onto camelCase once, at the boundary, so no screen ever
-// sees a wire name. The mapping and the field set are the same call
-// `packages/client/src/gateway-client-connections.ts` makes for the shell;
-// mobile does not depend on that package, so the shape is mirrored here as a
-// lean local interface (the convention `lib/gateway.ts` and `lib/insights.ts`
-// already follow). A secret cell is never on this wire and so has no type.
-//
-// The AUTHORIZE half is not re-implemented here: mobile already owns a working
-// re-authorization flow (`lib/connection-reauth.ts` for the rules, the two
-// functions below for the wire), built around the in-app auth session and the
-// `centraid://` return the phone can actually receive. It is re-exported under
-// names that read from Connectors rather than from Notifications, its first
-// caller — one implementation, two doors.
+// Connectors read path (#765). Map snake_case at this boundary; never
+// re-implement authorize — re-export `lib/connection-reauth.ts` instead.
 
 import { apiHeaders, fetchJson, requireGatewayBase } from "./gateway";
 
@@ -30,13 +8,10 @@ export {
   completeNotificationsConnectionAuthorization as completeConnectionAuthorization,
 } from "./gateway";
 
-/** Health of one connection. `needs-auth` is the one the screen acts on. */
 export type ConnectionStatus = "active" | "needs-auth" | "failing" | "paused";
 
-/** Whether writes from this connection stage for review or publish directly. */
 export type ConnectionTrust = "staged" | "auto-publish";
 
-/** Raw wire shape of one row — verbatim SQL column names, see the route. */
 interface ConnectionWireRow {
   connection_id: string;
   kind: string;
@@ -56,7 +31,6 @@ interface ConnectionWireRow {
   auth_note: string | null;
 }
 
-/** One data-source connection with its credential's identity + health. */
 export interface ConnectionEntry {
   connectionId: string;
   kind: string;
@@ -66,8 +40,7 @@ export interface ConnectionEntry {
   trust: ConnectionTrust;
   createdAt: string;
   lastRunAt: string | null;
-  /** `null` = no credential attached — the connection rides the
-   *  harness-ambient lane rather than a broker-carried one. */
+  /** `null` = harness-ambient; no broker credential attached. */
   credKind: "oauth2" | "api_key" | null;
   oauthMode: "byo" | "assist" | null;
   provider: string | null;
@@ -75,7 +48,6 @@ export interface ConnectionEntry {
   allowedHosts: string[] | null;
   tokenExpiresAt: string | null;
   hasRefreshToken: boolean;
-  /** Why the connection is unhealthy, in the broker's own words, or `null`. */
   authNote: string | null;
 }
 
@@ -90,9 +62,7 @@ function fromWireRow(r: ConnectionWireRow): ConnectionEntry {
     kind: r.kind,
     label: r.label,
     lastRunAt: r.last_run_at,
-    // The gateway only started sending `oauth_mode` with the Assist lane; a
-    // row without one that carries an OAuth credential is a BYO client, which
-    // is what the shell client infers too.
+    // Missing `oauth_mode` on an OAuth credential is BYO (pre-Assist wire).
     oauthMode: r.oauth_mode ?? (r.cred_kind === "oauth2" ? "byo" : null),
     principal: r.principal,
     provider: r.provider,
@@ -103,7 +73,6 @@ function fromWireRow(r: ConnectionWireRow): ConnectionEntry {
   };
 }
 
-/** Every configured connection, newest-first (the gateway's own ordering). */
 export async function listConnections(): Promise<ConnectionEntry[]> {
   const base = await requireGatewayBase();
   const body = await fetchJson<{ connections?: ConnectionWireRow[] }>(
@@ -113,11 +82,7 @@ export async function listConnections(): Promise<ConnectionEntry[]> {
   return (body.connections ?? []).map(fromWireRow);
 }
 
-/**
- * Pause or resume one connection. The gateway accepts only these two values
- * on this route — `needs-auth` and `failing` are health the broker reports,
- * never states an owner sets — so the parameter is narrowed to what is real.
- */
+/** Pause/resume only — `needs-auth`/`failing` are broker-reported, not settable. */
 export async function setConnectionStatus(
   connectionId: string,
   status: "active" | "paused",

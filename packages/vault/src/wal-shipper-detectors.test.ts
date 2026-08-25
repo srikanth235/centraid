@@ -1,10 +1,6 @@
 import { createHash } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#408) the detector suite shares real SQLite race hooks, restore helpers, and restart fixtures whose correctness depends on one common lifecycle harness
-// WAL shipper detectors + lifecycle (#408): G5 foreign-actor detection
-// (in-process stand-ins — the real second-process test lives in the gateway e2e
-// rig), G7 crash-ordering/restart, generation lifecycle, and the local disk
-// budget. Real vaults, real sqlite, no mocks; capture correctness lives in
-// wal-shipper.test.ts.
+// WAL shipper detectors + lifecycle (#408). Real sqlite, no mocks; capture correctness lives in wal-shipper.test.ts.
 import {
   closeSync,
   copyFileSync,
@@ -129,16 +125,7 @@ describe("wal-shipper-detectors", () => {
     return c;
   }
 
-  /**
-   * Commit a row from a FOREIGN connection at a chosen point INSIDE the
-   * shipper's synchronous checkpoint path, by hooking the `prepare()` of the
-   * pragma that runs there. `'wal_checkpoint(TRUNCATE)'` fires after the
-   * pre-truncate stat has proven the WAL holds nothing past the captured offset
-   * and before the checkpoint takes its writer lock — THE race, where frames are
-   * folded into the main database and zeroed from the WAL. `'data_version'`
-   * fires between capture and that stat, where frames are still capturable.
-   * Fires exactly once; returns the fire count plus its undo.
-   */
+  /** Foreign commit inside the shipper's checkpoint: hook `prepare()` of `'wal_checkpoint(TRUNCATE)'` (post-stat race) or `'data_version'` (still capturable). Once. */
   function raceJournalCommitAt(
     writer: DatabaseSync,
     when: string,
@@ -214,7 +201,7 @@ describe("wal-shipper-detectors", () => {
     }
   }
 
-  // ───────────────────────────────────────────────────────────────────── G5
+  // G5
 
   test("[G5] a foreign checkpoint breaks the generation and mints a fresh pending base", () => {
     const shipper = makeShipper();
@@ -389,7 +376,7 @@ describe("wal-shipper-detectors", () => {
     );
   });
 
-  // ────────────────────────────────────── G5: the capture → TRUNCATE race (P0)
+  // G5: capture → TRUNCATE race (P0)
 
   test("[G5] a writer that races the TRUNCATE is DETECTED, and its row survives the restore", async () => {
     // The hole this feature exists to forbid: a foreign connection commits after
@@ -586,7 +573,7 @@ describe("wal-shipper-detectors", () => {
     expect(shipper.status().dbs.journal!.generation).toBe(before.journal);
   });
 
-  // ──────────────────────────────── I2: the capture micro read-lock (issue #411)
+  // I2: capture micro read-lock (#411)
 
   test("[I2] the capture read-mark pins the WAL: a foreign TRUNCATE/RESTART busys, no reset", () => {
     // Action 2 of #411, belt-and-suspenders to after-the-fact detection.
@@ -666,7 +653,7 @@ describe("wal-shipper-detectors", () => {
     expect(walSize("journal")).toBe(0); // truncated cleanly by our own checkpoint
   });
 
-  // ───────────────────────────────────────────────────────────────────── G7
+  // G7
 
   test("[G7] a fresh shipper over the same dir continues the stream without a break", () => {
     const shipper = makeShipper();
@@ -731,7 +718,7 @@ describe("wal-shipper-detectors", () => {
     expect(reshipped!.addr!.endOffset).toBeGreaterThanOrEqual(offY);
   });
 
-  // ─────────────────────────────────────────────────── base/generation lifecycle
+  // base/generation lifecycle
 
   test("first-ever tick mints generations whose base clones hash-verify, reported as first-run", () => {
     const shipper = makeShipper();
@@ -804,7 +791,7 @@ describe("wal-shipper-detectors", () => {
     expect(bases[0]!.createdAtMs).toBe(bases[1]!.createdAtMs);
   });
 
-  // ───────────────────────────────────────────────── coordinated breaks (G8)
+  // coordinated breaks (G8)
 
   test("a JOURNAL-only break reason re-bases the VAULT too, in the same tick", () => {
     const shipper = makeShipper();
@@ -958,7 +945,7 @@ describe("wal-shipper-detectors", () => {
     expect(shipper2.basesCoordinated()).toBe(true);
   });
 
-  // ───────────────────────────────────────────────────────────── pair markers
+  // pair markers
 
   test("pair markers: a JOURNAL-only tick still emits ONE marker, carrying the vault position", () => {
     const shipper = makeShipper();
@@ -1113,7 +1100,7 @@ describe("wal-shipper-detectors", () => {
     expect(seg.addr!.group).toBe(closed.vault!.group);
   });
 
-  // ───────────────────────────────────────────────────────────── local budget
+  // local budget
 
   test("local budget: over-budget segments break the generations and drop never-restorable history", () => {
     const shipper = makeShipper({ localBudgetBytes: 1000 });

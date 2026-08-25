@@ -1,18 +1,8 @@
-// The structurally distinct tile bodies (#708 A, the Binding Layer brief).
+// Structurally distinct tile bodies (#708 A).
 // governance: allow-repo-hygiene file-size-limit The #712 shared tile-body catalog stays together so every blueprint's shape remains comparable in one binding layer.
 //
-// The header above these is INVARIANT and drawn once by `LauncherGrid`.
-// Everything below it is deliberately NOT: a member should be able to name the
-// app from the shape of the body alone, which is why Docs is ruled file rows
-// and Notes is prose — a title over an opening line made them
-// indistinguishable.
-//
-// Two states are drawn here too:
-//
-//  - `loading` renders STATIC skeletons. Never a spinner: a spinner says the
-//    app is blocked, and the springboard stays usable while a pull settles.
-//  - `empty`/`unknown` renders the app's what-to-do line. Nothing here
-//    fabricates a count or a row.
+// Header is INVARIANT (`LauncherGrid`). Body shape names the app — Docs is ruled file rows, Notes is prose (a title over an opening line made them indistinguishable).
+// `loading` is STATIC skeletons, never a spinner. `empty`/`unknown` is the what-to-do line — fabricate neither a count nor a row.
 
 import { Image } from "expo-image";
 import React from "react";
@@ -48,19 +38,14 @@ export default function TileBody({
   tile: TileData;
   colors: ThemeColors;
   hue: string;
-  /** Which identity ring a derived face circle resolves on: the `--c-*` hues
-   *  are per theme. */
   scheme: Scheme;
 }): React.JSX.Element {
-  // Locker's body is a STATE, not a query result, so it draws its chip in every
-  // status rather than falling through to loading/empty.
+  // Locker is a STATE, not a query result — draw in every status, do not fall through to loading/empty.
   if (tile.body.kind === "locker")
     return (
       <FilledBody body={tile.body} colors={colors} hue={hue} scheme={scheme} />
     );
-  // Photos likewise draws in EVERY status: it carries the waiting state per
-  // cell, and the generic skeleton below would replace that grid with one blank
-  // rectangle.
+  // Photos draws in EVERY status — the generic skeleton would replace the per-cell waiting grid with one blank rectangle.
   if (tile.body.kind === "photos")
     return (
       <FilledBody body={tile.body} colors={colors} hue={hue} scheme={scheme} />
@@ -102,8 +87,6 @@ function FilledBody({
       );
     case "agenda":
       return (
-        // WHEN → title → after (:1083–1098): the time is the numeric anchor a
-        // member scans for first.
         <View style={styles.body}>
           <Text style={[styles.eventAt, { color: colors.textSoft }]}>
             {body.at}
@@ -125,13 +108,7 @@ function FilledBody({
     case "people":
       return (
         <View style={styles.body}>
-          {/* SATURATED discs, one hue per person: the stored `avatar_color`,
-              else `identityFill` off `party_id` — shared with the desktop grid,
-              so one person is one colour on every client. Without the
-              derivation these are near-white discs with grey letters.
-
-              `identityInk` MEASURES rather than assumes, because a stored
-              colour is a fixed hex that does not follow the theme. */}
+          {/* SATURATED discs: stored `avatar_color` else `identityFill(party_id)` — one person, one colour on every client. `identityInk` MEASURES: a stored hex does not follow the theme. */}
           <View style={styles.faces}>
             {body.faces.map((face, index) => {
               const fill = face.color ?? identityFill(face.id, scheme);
@@ -159,10 +136,7 @@ function FilledBody({
               );
             })}
           </View>
-          {/* The brief's line under the faces (:1122–1141) is prose mobile has
-              no read path for, so this states `more` — the rest of the
-              directory the circles sample, off the total the header counts.
-              Never a fabricated 0; an exhausted directory says so plainly. */}
+          {/* `more` from the header total — never a fabricated 0; an exhausted directory says so plainly. */}
           <Text
             numberOfLines={1}
             style={[styles.bodyLine, { color: colors.text }]}
@@ -182,9 +156,7 @@ function FilledBody({
                 style={[
                   styles.checkbox,
                   {
-                    // Ink, never the app's hue: a hue-filled box reads as a
-                    // second identity competing with the header chip. DONE is a
-                    // filled box with NO glyph (:5066–5068).
+                    // Ink, never the app's hue (a hue-filled box is a second identity). DONE is a filled box with NO glyph.
                     borderColor: row.done ? colors.accent : colors.lineStrong,
                     backgroundColor: row.done ? colors.accent : "transparent",
                   },
@@ -221,8 +193,7 @@ function FilledBody({
           <Text style={[styles.tallyLabel, { color: colors.textSoft }]}>
             {body.caption}
           </Text>
-          {/* The brief's third line (:5079/:1174), rendered only once a caller
-              has something true to put there (see `after?` in ./tile-model). */}
+          {/* Render `after` only when the caller has something true. */}
           {body.after ? (
             <Text
               numberOfLines={1}
@@ -236,8 +207,7 @@ function FilledBody({
     case "locker":
       return (
         <View style={styles.body}>
-          {/* No icon (:5082–5085): a lock glyph beside "Locked" says it twice.
-              A STATE label at the app's own -text hue rung, not a control. */}
+          {/* No lock glyph beside "Locked" — that says it twice. STATE label, not a control. */}
           <View
             style={[
               styles.chip,
@@ -251,9 +221,7 @@ function FilledBody({
               {body.locked ? "Locked" : "Unlocked"}
             </Text>
           </View>
-          {/* Instructional, never the prototype's "One shelf · deeds and
-              titles": a shelf count mobile cannot read is not something this
-              tile may claim, however plausible the mock. */}
+          {/* Instructional — never claim a shelf count this tile cannot read. */}
           <Text
             numberOfLines={1}
             style={[styles.bodyLine, { color: colors.text }]}
@@ -265,8 +233,6 @@ function FilledBody({
   }
 }
 
-/** Hairlines BETWEEN rows and never a border around the group: a ruled list is
- *  a rhythm, and a box would make the body a second card inside the tile. */
 function RuledRows({
   rows,
   colors,
@@ -293,7 +259,7 @@ function RuledRows({
           >
             {row.name}
           </Text>
-          {/* No recorded byte count renders nothing, never a zero. */}
+          {/* No recorded size renders nothing, never a zero. */}
           {row.size ? (
             <Text style={[styles.fileSize, { color: colors.textFaint }]}>
               {row.size}
@@ -320,8 +286,6 @@ function Prose({
         {title}
       </Text>
       {excerpt ? (
-        // A compact preview, not the reading view: keep this on the shared body
-        // register so Docs, Notes and Tasks match across web and native.
         <Text numberOfLines={3} style={[styles.prose, { color: colors.text }]}>
           {excerpt}
         </Text>
@@ -330,13 +294,7 @@ function Prose({
   );
 }
 
-/**
- * ONE mosaic slot, a component rather than inline JSX because the cell needs
- * the retry ladder and a ladder needs state per cell: the thumb URL 404s until
- * the gateway's preview backstop generates it, and without this the tile has no
- * failure state and sits on its skeleton ground for ever
- * (`use-image-fallback.ts`).
- */
+/** Per-cell retry ladder (`use-image-fallback.ts`) — the thumb 404s until the preview backstop; without this the tile sits on skeleton forever. */
 function MosaicCell({
   photo,
   skel,
@@ -376,25 +334,14 @@ function PhotoMosaic({
   const cells = mosaicCells(photos);
   return (
     <View style={styles.body}>
-      {/* Bottom bleed drops when there is a line to show, or the negative
-          margin pulls the grid over its own explanation. */}
+      {/* Drop bottom bleed when a line is showing, or the negative margin pulls the grid over its explanation. */}
       <View style={[styles.mosaic, !waiting && styles.mosaicBleed]}>
         {cells.map((photo, index) => (
-          <MosaicCell
-            // Positional: the SLOT is the identity, not the asset — it exists
-            // whether or not a photograph has arrived for it.
-            key={index}
-            photo={photo}
-            skel={colors.skel}
-          />
+          <MosaicCell key={index} photo={photo} skel={colors.skel} />
         ))}
       </View>
-      {/* A grid of grey squares with no explanation reads as a failed render —
-          which is what a gateway-side vault looks like from a phone holding the
-          rows but not the bytes. */}
+      {/* Grey squares with no explanation read as a failed render (rows without bytes). */}
       {waiting ? (
-        // Verbatim brief copy (:5042–5043), and MONO: the one prose line on
-        // Home reporting a system fact rather than writing to the member.
         <Text style={[styles.awaiting, { color: colors.textFaint }]}>
           Photographs live on the gateway — these fill in when it is back.
         </Text>
@@ -403,8 +350,6 @@ function PhotoMosaic({
   );
 }
 
-/** Sized like the body they stand in for, so the tile does not resize when the
- *  read settles. No animation: a pulsing skeleton is a spinner with steps. */
 function Skeleton({
   kind,
   colors,
@@ -420,8 +365,7 @@ function Skeleton({
       accessibilityLabel="Loading"
       style={[styles.body, styles.skeletonBody]}
     >
-      {/* Keyed by position, not width: the people skeleton is two bars of the
-          SAME width. The list is a fixed literal that never reorders. */}
+      {/* Key by position, not width — people skeleton is two bars of the SAME width. */}
       {widths.map((width, i) => (
         <View
           key={i}
@@ -436,13 +380,9 @@ function Skeleton({
 }
 
 const styles = StyleSheet.create({
-  // Shared by Agenda's after-line and Tally's third line (:5057/:5174, one
-  // `eventAfterCss`), pinned to the tile bottom so it reads apart from the body.
   afterLine: { ...t("small"), marginTop: "auto" },
   awaiting: { ...t("mono"), marginTop: "auto", paddingTop: 6 },
   body: { flex: 1, gap: 4 },
-  // Like `afterLine` but full ink (:5077): People's and Locker's second line is
-  // a plain sentence, not a muted aside.
   bodyLine: { ...t("small"), marginTop: "auto" },
   chip: {
     alignItems: "center",
@@ -473,12 +413,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     height: 30,
     justifyContent: "center",
-    // Logical, so the overlap mirrors under RTL (:5072–5074) — never
-    // `marginLeft`.
+    // Logical overlap so it mirrors under RTL — never `marginLeft`.
     marginEnd: -7,
     width: 30,
   },
-  // The section role: the people are content, not a micro control.
   faceInitials: { ...t("smallStrong") },
   figure: {
     ...t("display"),
@@ -486,10 +424,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   invite: { ...t("control") },
-  // No ground and no minimum height: the CELLS are the mosaic. A container that
-  // paints and sizes itself still looks like a tile when every cell has failed
-  // to lay out. The negative margins exactly cancel `TILE_PAD`, which is what
-  // makes the bleed provably flush to the tile edge.
+  // No ground, no min-height: the CELLS are the mosaic. Negative margins cancel `TILE_PAD` so bleed is flush.
   mosaic: {
     flexDirection: "row",
     gap: 2,
@@ -508,18 +443,12 @@ const styles = StyleSheet.create({
   skeletonBody: { gap: 9, paddingTop: 4 },
   taskRow: { alignItems: "center", flexDirection: "row", gap: 8 },
   taskTitle: { ...t("small"), flex: 1 },
-  // The Tally caption (:5081), distinct from `invite`/`chipLabel`.
   tallyLabel: { ...t("small") },
-  // EXPLICIT height, never `aspectRatio`: a derived height can resolve to zero,
-  // and a zero-height cell in a min-height container looks like a designed
-  // blank rectangle. `flex: 1`, not a percentage width, is what lets four cells
-  // and a real 2px `gap` share the row without overflowing.
+  // EXPLICIT height, never `aspectRatio` (derived height can be zero). `flex: 1` so four cells + 2px gap share the row.
   thumb: {
     flex: 1,
     height: MOSAIC_CELL_HEIGHT,
     overflow: "hidden",
   },
-  // Fills the cell it was already given, so the skeleton ground under it is the
-  // exact geometry the photograph lands in — never a resize.
   thumbImage: { height: "100%", width: "100%" },
 });

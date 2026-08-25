@@ -1,35 +1,7 @@
-/**
- * THE CAPTURE-TIME OCR CONSENT MOMENT (#712) — the second instance
- * of the §8 consent gate, after Photos' face detection
- * (`apps/photos/enrichment-consent.ts`).
- *
- * `apps/mobile/src/screens/Scan.tsx` must not run text extraction
- * UNCONDITIONALLY at capture: device `recognizeText` first, then — silently,
- * on failure — a gateway HTTP fallback (`POST …/capture/ocr`). Without a
- * consent moment a member never chooses whether their scan's bytes may leave
- * the phone, because until the device engine fails they never do, and the
- * panel that would say so never renders either way. This module supplies the
- * copy for the latch that closes that gap
- * (`apps/mobile/src/screens/scan-consent.ts`).
- *
- * Copy lives here (`apps/_shared/`) rather than under a `docs` blueprint app
- * because Scan.tsx is a FRAME surface, not Docs' own: the same capture feeds
- * Tally receipts, Docs scans, Photos originals and Locker cards, and only
- * one of those four destinations is Docs.
- *
- * THE TWO REAL LANES, per the #630 Local OCR decision (docs/decisions.md)
- * and the C5 trust-domain doctrine (docs/blueprint-seats.md): device-native
- * first (iOS Vision / Android ML Kit — "No image or recognized text leaves
- * the user's devices"), then a BOUNDED gateway backstop, capped at 20
- * megapixels / 25 MiB, used only when the device engine is unavailable. The
- * backstop is the member's OWN gateway, never a third-party provider — so
- * unlike Photos' cloud panel, it is not a second thing to choose; it is
- * disclosed, not offered, and the on-device answer covers both lanes.
- */
+// Capture-time OCR consent (#712). Scan.tsx must not extract text UNCONDITIONALLY: device first, then gateway `POST …/capture/ocr`. Copy lives in `_shared/` because Scan is a FRAME surface, not Docs'. Gateway backstop is disclosed, not offered — the on-device answer covers both lanes (#630).
 
 import type { ConsentPanelCopy } from "./consent-gate.ts";
 
-/** Panel A — the device. Nothing leaves; covers both lanes below. */
 export const OCR_ON_DEVICE_PANEL: ConsentPanelCopy = {
   eyebrow: "Consent",
   title: "Extract text from this scan?",
@@ -49,12 +21,7 @@ export const OCR_ON_DEVICE_PANEL: ConsentPanelCopy = {
   filled: true,
 };
 
-/**
- * Panel B — the gateway backstop. THE DISCLOSURE PANEL, for the one lane
- * that is not a separate choice: `net.available` is always `false` here (see
- * `scan-consent.ts`), with the reason stating that plainly, because the
- * point of this panel is the disclosure, not an action to take.
- */
+/** Disclosure only — `net.available` is always false here (`scan-consent.ts`); not an action. */
 export const OCR_GATEWAY_PANEL: ConsentPanelCopy = {
   eyebrow: "The backstop",
   net: true,
@@ -79,17 +46,12 @@ export const OCR_GATEWAY_PANEL: ConsentPanelCopy = {
   action: "Not a separate choice",
 };
 
-/** Why the backstop panel's action is never available from here — it is a
- *  disclosure, not a control (mirrors `ENRICHMENT_UNAVAILABLE.cloudUnavailable`
- *  in `apps/photos/enrichment-consent.ts`). */
+/** Disclosure, not a control (mirrors `ENRICHMENT_UNAVAILABLE.cloudUnavailable`). */
 export const OCR_GATEWAY_NOT_A_CHOICE =
   "Not a separate choice: the gateway backstop runs automatically, only when on-device extraction can't. Answering the on-device question above covers both.";
 
-/** The note under both panels — declining is a real answer, not a dead end. */
 export const OCR_CONSENT_NOTE =
   "Declining saves the scan without extracted text, stated on the scan itself — search and receipt-splitting need the text, but nothing else about saving changes.";
 
-/** What the scan screen says once extraction was declined, beside the scan —
- *  never a dead control (#712). */
 export const OCR_DECLINED_INLINE =
   "Text extraction declined — this scan saves without extracted text.";

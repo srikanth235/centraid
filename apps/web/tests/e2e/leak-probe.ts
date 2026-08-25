@@ -1,46 +1,17 @@
 /**
- * Renderer leak probe (#842).
- *
- * The shell is a long-lived document: the desktop app and an installed PWA are
- * opened once and left open for days, and every app open is a route swap
- * inside that ONE document (there is no served-app iframe — #799 — so nothing
- * is ever torn down by a navigation). That makes the four classic
- * renderer leaks product-relevant rather than academic:
- *
- *   detached DOM nodes  — a subtree removed from the document that JS still
- *                         holds, so it survives GC forever
- *   listeners           — `addEventListener` on `window` / `document` that no
- *                         unmount removes
- *   subscriptions       — an `EventSource`, `setInterval`, or observer that
- *                         outlives the component that opened it
- *   caches              — a module-level `Map` that only ever grows
- *
- * This module installs the counters. It is deliberately NOT a spec file: the
- * instrumentation runs inside the page via `addInitScript`, and keeping it
- * beside the assertions would mix two languages of scope in one file.
- *
- * Everything here is standard DOM API wrapping, so the census works on every
- * engine the suite can run (`playwright.config.ts` gates webkit/firefox behind
- * CENTRAID_WEB_CROSS_BROWSER). The Chromium-only half — a post-GC node and
- * heap census over CDP — lives in the spec, because it is a browser capability
- * rather than page instrumentation.
+ * Page-side leak census via `addInitScript` — not a spec file (#842).
+ * Install before any document script; Chromium CDP census lives in the spec.
  */
 
 import type { Page } from "@playwright/test";
 
-/** One census of everything the page-side instrumentation tracks. */
 export interface LeakCensus {
-  /** Live registrations: `addEventListener` calls with no matching removal. */
   listeners: number;
-  /** Live `setInterval` handles (`setTimeout` is excluded — it is one-shot). */
+  /** `setTimeout` is excluded — it is one-shot. */
   intervals: number;
-  /** Open `EventSource` connections — the replica's `_changes` feed and kin. */
   eventSources: number;
-  /** Live `Mutation`/`Resize`/`IntersectionObserver` observe() registrations. */
   observers: number;
-  /** Elements currently attached to the document. */
   domNodes: number;
-  /** Listener registrations broken down by target, for failure attribution. */
   listenersByTarget: Record<string, number>;
 }
 
@@ -52,25 +23,15 @@ declare global {
   }
 }
 
-/**
- * Install the page-side census before any document script runs.
- *
- * Order matters absolutely: a wrapper installed after the shell boots misses
- * every listener the boot registered, so the FIRST census would already be
- * wrong and every delta after it would be measured against a fiction.
- */
+/** Must run before the shell boots or the first census is already a fiction. */
 export async function installLeakProbe(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    // Live registrations per target. A WeakMap keyed by the target keeps the
-    // probe from being a leak itself: a target that goes away takes its entry
-    // with it, exactly as the real listener registry does.
+    // WeakMap so a gone target takes its entry — the probe must not be a leak.
     const registry = new WeakMap<EventTarget, Map<string, Set<unknown>>>();
     const intervals = new Set<unknown>();
     const eventSources = new Set<EventSource>();
     const observed = new Set<unknown>();
-    // Only three targets are named; everything else is bucketed. The named
-    // ones are the ones that OUTLIVE a route swap — a listener on a removed
-    // element dies with it, a listener on `window` does not.
+    // Named targets outlive a route swap; a listener on a removed element dies with it.
     const nameOf = (target: EventTarget): string =>
       target === window
         ? "window"
@@ -95,8 +56,6 @@ export async function installLeakProbe(page: Page): Promise<void> {
           registry.set(this, byType);
         }
         const set = byType.get(type) ?? new Set<unknown>();
-        // A duplicate (listener, type, capture) registration is a no-op in the
-        // DOM, and a Set models that faithfully.
         set.add(listener);
         byType.set(type, set);
       }
@@ -190,8 +149,7 @@ export async function installLeakProbe(page: Page): Promise<void> {
           other: 0,
         };
         let listeners = 0;
-        // Only the three long-lived targets are enumerable from a WeakMap, so
-        // the per-target tally is exact for them and the bucket is a floor.
+        // WeakMap is only enumerable for the three long-lived targets; `other` is a floor.
         for (const target of [
           window,
           document,
@@ -217,7 +175,6 @@ export async function installLeakProbe(page: Page): Promise<void> {
   });
 }
 
-/** Read one census out of the page. */
 export async function readCensus(page: Page): Promise<LeakCensus> {
   return (await page.evaluate(() => {
     const probe = window.__centraidLeak;

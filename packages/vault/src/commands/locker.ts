@@ -1,25 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); Locker owns the whole password-manager write surface — add/edit/trash/restore/purge plus the canonical star — so it is one file by design.
-// Locker commands (schema `locker`): the password-manager write surface.
-// An item is one locker_item row — a login, card, secure note, identity,
-// Wi-Fi or standalone password — with the type's fields and its free-form
-// tags. add_item mints it; edit_item rewrites the type's fields and tags;
-// trash_item soft-deletes with a ~30-day purge date (keeping the star, like
-// Docs) and restore_item brings it back; purge_item is the one destructive,
-// confirmation-gated command that erases the row for good.
-//
-// Favorites are NOT a column: star_item/unstar_item write the shared
-// flags-scheme star on the item (#274) — the same mechanism Docs and
-// Photos use — through setStarred. Every write is a typed command, consent-
-// checked and receipted; only purge carries elevated risk.
-//
-// Secret handling (#293): password, otp_seed, card_number, cvv and
-// content are SEALED columns — the execution pipeline seals them inside the
-// write transaction, default reads show a placeholder, and plaintext takes
-// the `reveal` verb. This pack's own derivative commands (`totp_code`,
-// `watchtower`) decrypt via declared `unseals` and return only derivatives:
-// the seed never crosses the command boundary, and every unseal is receipted.
-// Secret-bearing inputs are declared `sealedInput`, so the append-only
-// journal records keyed hash tokens, never values.
+// Locker write surface. Favorites are NOT a column: star via flags-scheme
+// (#274). Secrets (#293) are SEALED; derivatives (`totp_code`, `watchtower`)
+// unseal inside the command and return only derivatives. `sealedInput` so
+// the journal records keyed hashes, never values. Purge is confirm-gated.
 
 import { createHmac } from "node:crypto";
 
@@ -32,18 +15,13 @@ import { setStarred } from "./flags.js";
 
 export const LOCKER_ITEM_TYPE = "locker.item";
 
-/**
- * Free-form locker tags are SKOS concepts in this scheme, carried by
- * core_tag rows on the item (#310) — the one classification
- * mechanism, not a second per-domain tag table. https URI, not urn:, for
- * the same colon-literal reason as the flags scheme.
- */
+/** SKOS locker-tags scheme (#310), not a second tag table. https, not urn:. */
 export const LOCKER_TAGS_SCHEME_URI =
   "https://centraid.dev/schemes/locker-tags";
 
 const PURGE_WINDOW_DAYS = 30;
 
-/** Columns each item type owns; everything else is nulled on write. */
+/** Columns each type owns; everything else is nulled on write. */
 const TYPE_FIELDS: Record<string, readonly string[]> = {
   login: ["username", "password", "url", "otp_seed", "notes"],
   card: ["cardholder", "card_number", "expiry", "cvv", "brand"],
@@ -72,11 +50,7 @@ const ALL_FIELDS = [
   "network",
 ] as const;
 
-/**
- * Input keys carrying secret material (#293): the journal records a
- * keyed hash token at these paths, never the value. Mirrors the sealed
- * columns of `locker.item` in the schema registry.
- */
+/** Journal records keyed hashes at these paths, never values (#293). */
 const SEALED_INPUT = [
   "password",
   "otp_seed",
@@ -92,14 +66,12 @@ const ITEM_LIVE_SQL =
 const ITEM_TRASHED_SQL =
   "SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id AND deleted_at IS NOT NULL";
 
-/** An ISO instant `days` ahead of ctx.now, for the purge date. */
 function plusDays(iso: string, days: number): string {
   const d = new Date(iso);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString();
 }
 
-/** The locker-tags scheme, created on first use (the flags-scheme pattern). */
 function lockerTagsSchemeId(ctx: HandlerCtx): string {
   const existing = ctx.db
     .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
@@ -115,13 +87,7 @@ function lockerTagsSchemeId(ctx: HandlerCtx): string {
   return schemeId;
 }
 
-/**
- * Replace an item's tags with the given set (deduped, trimmed, non-empty).
- * Each label is a SKOS concept in the locker-tags scheme (created on first
- * use, shared across items) and membership is a core_tag row — who tagged
- * and when come for free, and the graph sees locker items exactly the way
- * it sees tagged photos and documents.
- */
+/** Replace tags: SKOS concepts + core_tag rows, same graph as photos/docs. */
 function setTags(
   ctx: HandlerCtx,
   itemId: string,
@@ -177,11 +143,7 @@ function setTags(
   }
 }
 
-/**
- * Set (or clear, on '') the item's service anchor (#310): the
- * broker connection this credential is for. Validated live — an anchor to a
- * connection the vault does not hold would be the opaque pointer again.
- */
+/** Set or clear (`''`) the service anchor (#310). Validated live — no opaque pointer. */
 function setConnection(
   ctx: HandlerCtx,
   itemId: string,
@@ -204,15 +166,13 @@ function setConnection(
 }
 
 /**
- * Set (or clear, on '') this item's connector alias (#298).
- * Uniqueness AMONG LIVE items is enforced here — the vault is single-writer,
- * so a check-then-write needs no lock. A trashed item still holding the
- * alias yields it: reassigning to a live item steals it.
+ * Set or clear (`''`) the connector alias (#298). Unique among LIVE items;
+ * a trashed holder yields it.
  */
 function setAlias(ctx: HandlerCtx, itemId: string, alias: string): void {
   ctx.db.prepare("DELETE FROM locker_item_alias WHERE item_id = ?").run(itemId);
   const trimmed = alias.trim();
-  if (trimmed.length === 0) return; // cleared
+  if (trimmed.length === 0) return;
   const clash = ctx.db
     .prepare(
       `SELECT a.item_id FROM locker_item_alias a
@@ -229,7 +189,6 @@ function setAlias(ctx: HandlerCtx, itemId: string, alias: string): void {
     .run(trimmed, itemId);
 }
 
-/** The subset of `input` that is a real column for `type`, as column→value. */
 function fieldValues(
   type: string,
   input: Record<string, unknown>
@@ -243,11 +202,7 @@ function fieldValues(
   return out;
 }
 
-/**
- * A round-tripped placeholder is "unchanged", never a value (#293):
- * the app's detail pane shows `«sealed»` for secrets it has not revealed,
- * and an edit that sends it back must not overwrite the stored secret.
- */
+/** Round-tripped `«sealed»` is unchanged, never a value (#293). */
 function isPlaceholder(value: string | null): boolean {
   return value === SEALED_PLACEHOLDER;
 }
@@ -271,11 +226,9 @@ const ADD_ITEM: CommandDefinition = {
       title: { type: "string", minLength: 1 },
       tags: { type: "array", items: { type: "string" } },
       compromised: { type: "boolean" },
-      // A stable connector-binding name (#298): letters, digits,
-      // dot, dash, underscore — the token in `locker:@<alias>:<column>`.
+      // Connector-binding token (#298) in `locker:@<alias>:<column>`.
       alias: { type: "string", pattern: "^[A-Za-z0-9._-]{1,64}$" },
-      // The service anchor (#310): the broker connection this
-      // credential is for, validated live.
+      // Service anchor (#310), validated live.
       connection_id: { type: "string" },
       url_match_policy: {
         type: "string",
@@ -375,9 +328,9 @@ const EDIT_ITEM: CommandDefinition = {
       title: { type: "string", minLength: 1 },
       tags: { type: "array", items: { type: "string" } },
       compromised: { type: "boolean" },
-      // Set to re-point a connector binding at this item; '' clears it.
+      // Re-point; '' clears.
       alias: { type: "string", pattern: "^[A-Za-z0-9._-]{0,64}$" },
-      // Set to re-anchor the service connection; '' clears it.
+      // Re-anchor; '' clears.
       connection_id: { type: "string" },
       url_match_policy: {
         type: "string",
@@ -402,7 +355,7 @@ const EDIT_ITEM: CommandDefinition = {
       .get(itemId) as { type: string } | undefined;
     if (!row) throw new Error("item not found");
     const f = fieldValues(row.type, input);
-    // Only overwrite the type's own columns + title/compromised; leave others.
+    // Only the type's own columns + title/compromised.
     const sets: string[] = ["updated_at = :now"];
     const params: Record<string, string | number | null> = {
       item_id: itemId,
@@ -417,7 +370,7 @@ const EDIT_ITEM: CommandDefinition = {
       params.compromised = input.compromised ? 1 : 0;
     }
     if (input.alias != null) {
-      // Empty string clears the alias (frees it for another item).
+      // Empty string clears the alias.
       setAlias(ctx, itemId, String(input.alias));
     }
     if (input.connection_id != null) {
@@ -430,7 +383,7 @@ const EDIT_ITEM: CommandDefinition = {
       params.url_match_policy = String(input.url_match_policy);
     }
     for (const [col, val] of Object.entries(f)) {
-      if (isPlaceholder(val)) continue; // round-tripped «sealed» = unchanged
+      if (isPlaceholder(val)) continue;
       sets.push(`${col} = :${col}`);
       params[col] = val;
     }
@@ -551,18 +504,13 @@ const PURGE_ITEM: CommandDefinition = {
   ],
   idempotency: "once",
   risk: "medium",
-  // Destructive and irreversible (#306 decision 2) — parks for owner
-  // confirmation on every non-owner-device invocation, matching the
-  // "confirmation": "required" the app manifest already advertises. Without
-  // this the manifest's claim was cosmetic: the app's own two-click "Delete
-  // forever" UI was the only gate, and any caller with the install-time
-  // grant (the app itself, or a misbehaving automation sharing the scope)
-  // could purge immediately with no server-side review.
+  // Destructive (#306 d2): park for owner confirm on every non-owner-device
+  // invoke. Without this the manifest's "confirmation": "required" is cosmetic.
   confirm: true,
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     setStarred(ctx, LOCKER_ITEM_TYPE, itemId, false);
-    setTags(ctx, itemId, []); // core_tag rows are polymorphic — no CASCADE
+    setTags(ctx, itemId, []); // core_tag is polymorphic — no CASCADE
     ctx.db.prepare("DELETE FROM locker_item WHERE item_id = ?").run(itemId);
     cleanupPolyRefs(ctx.db, ctx.now, LOCKER_ITEM_TYPE, itemId);
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
@@ -618,7 +566,6 @@ const UNSTAR_ITEM: CommandDefinition = {
 
 // ── Derivatives without revelation (issue #293 decision 5) ────────────────
 
-/** RFC 4648 base32 decode (case-insensitive, spaces and padding ignored). */
 function base32Decode(seed: string): Buffer {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   const clean = seed.toUpperCase().replace(/[\s=-]/gu, "");
@@ -641,7 +588,6 @@ function base32Decode(seed: string): Buffer {
 const TOTP_PERIOD_S = 30;
 const TOTP_DIGITS = 6;
 
-/** RFC 6238 TOTP (HMAC-SHA1, 30s step, 6 digits) for one instant. */
 export function totpAt(
   seed: string,
   epochMs: number
@@ -696,12 +642,9 @@ const TOTP_CODE: CommandDefinition = {
   postconditions: [],
   idempotency: "retry-safe",
   risk: "low",
-  // The exemplar of the sealed class (#293): the seed unseals INSIDE
-  // the command and only the 6 digits emerge; the unseal is receipted.
+  // Seed unseals INSIDE the command; only the 6 digits emerge (#293).
   unseals: ["locker.item.otp_seed"],
-  // The 6-digit code is secret-derived (#298): the caller gets
-  // the live value, but it is redacted from the durable journal receipt so a
-  // one-time code never persists in a replayable store.
+  // Secret-derived (#298): live to the caller, redacted from the journal.
   transcriptSensitive: true,
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
@@ -712,7 +655,7 @@ const TOTP_CODE: CommandDefinition = {
   },
 };
 
-/** length + character-class score, 0..5; weak at ≤2 (mirrors the app meter). */
+/** 0..5; weak at ≤2 (mirrors the app meter). */
 export function strengthScore(pw: string): number {
   if (!pw) return 0;
   let s = 0;
@@ -737,8 +680,7 @@ const WATCHTOWER: CommandDefinition = {
   postconditions: [],
   idempotency: "retry-safe",
   risk: "low",
-  // Weak/reused/last4 are computed inside the sealed boundary — only
-  // booleans and a card's last four digits emerge (#293 decision 5).
+  // Computed inside the sealed boundary — only booleans + last4 emerge (#293 d5).
   unseals: ["locker.item.password", "locker.item.card_number"],
   handler: (ctx) => {
     const rows = ctx.db
@@ -755,7 +697,7 @@ const WATCHTOWER: CommandDefinition = {
         ctx.unseal(LOCKER_ITEM_TYPE, r.item_id, "password")
       );
     }
-    // Reused: a login password appearing on ≥2 non-trashed logins.
+    // Reused: same password on ≥2 live logins.
     const loginPwCount = new Map<string, number>();
     for (const r of rows) {
       if (r.type !== "login") continue;
@@ -794,7 +736,7 @@ const SET_MEMO: CommandDefinition = {
     additionalProperties: false,
     properties: {
       item_id: { type: "string", minLength: 1 },
-      // '' clears the memo (the one-running-memo-per-entity semantic).
+      // '' clears the memo.
       note: { type: "string" },
     },
   },
@@ -806,11 +748,8 @@ const SET_MEMO: CommandDefinition = {
   idempotency: "idempotent",
   risk: "low",
   handler: (ctx) => {
-    // The owner's remark ABOUT an item — "rotated after the breach" — is a
-    // knowledge.annotation on the canonical row (#310), plaintext
-    // and searchable. Secret material never belongs here: recovery codes
-    // and the like go in the item's SEALED fields (notes/content), which
-    // stay out of every index by the structural gate.
+    // Owner remark is knowledge.annotation (#310), plaintext. Secrets go in
+    // SEALED fields, which stay out of every index.
     const input = ctx.input as { item_id: string; note: string };
     replaceMemo(ctx, LOCKER_ITEM_TYPE, input.item_id, input.note);
     ctx.wrote(LOCKER_ITEM_TYPE, input.item_id);

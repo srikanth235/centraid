@@ -1,5 +1,4 @@
-// One vault owns vault.db, journal.db, and blobs/. Only the gateway holds
-// these handles; apps, agents, and generated views never see a connection.
+// One vault owns vault.db, journal.db, blobs/. Only the gateway holds these handles.
 
 import { mkdirSync, statfsSync } from "node:fs";
 import path from "node:path";
@@ -48,31 +47,20 @@ import type { VaultFootprintBudget } from "./vault-footprint.js";
 export interface VaultDb {
   vault: DatabaseSync;
   journal: DatabaseSync;
-  /** `':memory:'` for an in-memory vault. */
   dir: string;
-  /**
-   * DEK for sealed columns (#293), kept in the `keys/` sibling — outside
-   * anything export/backup/copy moves, so a copy carries ciphertext only.
-   */
+  /** DEK for sealed columns (#293), in `keys/` — outside export/backup/copy, so a copy is ciphertext only. */
   sealKey: Buffer;
   /** Ed25519 signing seed (#726), same custody as `sealKey`. */
   identitySeed: Buffer;
   keyStore?: KeyStore;
-  /**
-   * The remote resolves lazily from `settings_json.blob_store` on every use,
-   * so switching backends needs no reopen (#296).
-   */
+  /** Remote resolves lazily from `settings_json.blob_store` each use — switching backends needs no reopen (#296). */
   blobs: BlobCustody;
   /** Current remote CAS tier, or null when full restore is required. */
   remote: () => RemoteTier | null;
   blobTransfers: BlobTransferCoordinator;
   /** Host-injected (#405); absent means `backfillPreviews` never runs. */
   previewCodec?: PreviewCodec;
-  /**
-   * `skipOptimize` is the WAL-shipper's (#408): it optimizes before its final
-   * checkpoint, so those ANALYZE writes never sit in the WAL at close where
-   * SQLite would fold them in behind the shipper's back.
-   */
+  /** `skipOptimize` is the WAL-shipper's (#408): ANALYZE must not sit in the WAL at close. */
   close: (opts?: { skipOptimize?: boolean }) => void;
 }
 
@@ -84,41 +72,27 @@ export interface BlobStoreSettings {
   prefix?: string;
   /** MUST stay disjoint from `prefix` and the backup prefix (#425). */
   derivedPrefix?: string;
-  /** Legacy settings field. Remote CAS encryption is mandatory in v0. */
+  /** Legacy. Remote CAS encryption is mandatory in v0. */
   encrypt?: boolean;
-  /** Absent = the harness-ambient env-var lane in `VaultPlaneOptions` (#367). */
+  /** Absent = harness-ambient env-var lane in `VaultPlaneOptions` (#367). */
   connectionId?: string;
   connectionKind?: "provider";
   /** Replication upload cap, bytes/sec (#367 §C7). Omitted/0 = unthrottled. */
   throttleBytesPerSec?: number;
-  /**
-   * `x-amz-storage-class` on object-creating writes (#405). The bag is cast
-   * 1:1 from JSON, so this field name IS the wire key. Free-form: no enum.
-   */
+  /** `x-amz-storage-class` (#405). Field name IS the wire key (bag is 1:1 JSON). Free-form. */
   storageClass?: string;
-  /**
-   * Declared at attach time (#425). Direct-to-cold engages only when this
-   * includes `STANDARD_IA`; a BYO-S3 target has no discovery, so it never fires.
-   */
+  /** Attach-time (#425). Direct-to-cold only if this includes `STANDARD_IA`; BYO-S3 never fires. */
   supportedStorageClasses?: string[];
 }
 
 export interface OpenVaultOptions {
-  /** Omit for in-memory (tests). */
   dir?: string;
-  /**
-   * Hosts MUST pass the same store used for endpoint, backup and connection
-   * secrets, or an OS-protected data directory falls back to the file scheme.
-   */
+  /** Same store as endpoint/backup/connection secrets, or OS-protected data dir falls back to the file scheme. */
   keyStore?: KeyStore;
   sealKey?: Buffer;
   identitySeed?: Buffer;
   blobStore?: LocalBlobStore;
-  /**
-   * Credentials never live in settings (#296). Without a resolver an
-   * s3-configured vault stays local-only and the sweep reports the gap rather
-   * than failing writes. `store` (#425) mints a store-scoped grant.
-   */
+  /** Credentials never live in settings (#296). No resolver → s3 vault stays local-only; sweep reports the gap. `store` (#425) mints a store-scoped grant. */
   s3Credentials?: (
     settings: BlobStoreSettings,
     store?: "cas" | "derived"
@@ -126,17 +100,15 @@ export interface OpenVaultOptions {
   /** Raster codec for the preview backstop (#405); omitted = no backstop. */
   previewCodec?: PreviewCodec;
   /**
-   * CANONICAL vault handle only, never `journal.db` (#721). Called ONCE PER
-   * HANDLE right after open — registration is connection-scoped. MUST NOT
-   * throw where the extension is unavailable: a vault without vectors still
-   * opens and searches via the JS cosine scan (`enrich/similarity.ts`).
+   * Canonical vault handle only, never `journal.db` (#721). Once per handle after open.
+   * MUST NOT throw if the extension is unavailable — JS cosine scan (`enrich/similarity.ts`) still searches.
    */
   loadExtensions?: (db: DatabaseSync) => void;
   shouldDeferBackgroundWork?: () => boolean;
   replicationConcurrency?: number;
   /** FULL by default; only a measured low-end profile may choose NORMAL. */
   synchronous?: "FULL" | "NORMAL";
-  /** Per-vault memory TOTAL, not a per-file constant — `VaultFootprintBudget`. */
+  /** Per-vault memory TOTAL, not a per-file constant. */
   footprint?: Partial<VaultFootprintBudget>;
 }
 
@@ -147,40 +119,28 @@ function openFile(
   loadExtensions?: (db: DatabaseSync) => void
 ): DatabaseSync {
   try {
-    // `allowExtension` must be decided at CONSTRUCTION (node:sqlite refuses
-    // `enableLoadExtension` later), so only handles with a wired loader get it.
+    // `allowExtension` at construction (node:sqlite refuses `enableLoadExtension` later).
     const db = new DatabaseSync(
       location,
       loadExtensions ? { allowExtension: true } : {}
     );
-    // Load BEFORE any pragma or migration: migrations may issue vec queries.
+    // Before pragma/migration: migrations may issue vec queries.
     loadExtensions?.(db);
     db.exec("PRAGMA foreign_keys = ON");
     if (location !== ":memory:") {
-      // auto_vacuum=INCREMENTAL bounds journal.db (#438) and MUST precede
-      // journal_mode=WAL — once WAL writes page 1 only a full VACUUM converts.
+      // INCREMENTAL before WAL (#438): once WAL writes page 1 only a full VACUUM converts.
       db.exec("PRAGMA page_size = 8192");
       db.exec("PRAGMA auto_vacuum = INCREMENTAL");
       db.exec("PRAGMA journal_mode = WAL");
-      // Low write rate, so durability beats throughput: FULL fsyncs the WAL on
-      // every commit, where NORMAL can drop the last commits on power loss.
+      // Durability over throughput: FULL fsyncs WAL each commit; NORMAL can drop last commits on power loss.
       db.exec(`PRAGMA synchronous = ${synchronous}`);
-      // A divisible per-vault budget, not per-file constants (#659 L8); a host
-      // re-dividing across live planes calls this same function.
       applyVaultFootprint(db, footprint);
       db.exec("PRAGMA temp_store = MEMORY");
-      // Worker subprocesses open journal.db by path for the conversation
-      // ledger — wait for their locks instead of failing immediately.
+      // Workers open journal.db by path — wait for locks instead of failing immediately.
       db.exec("PRAGMA busy_timeout = 30000");
-      // Checkpointing is the WAL shipper's exclusive duty (#408): segments are
-      // raw WAL byte ranges, valid only while the WAL stays append-only between
-      // its TRUNCATE checkpoints. A performance hint, not correctness (#411) —
-      // but each foreign checkpoint costs a whole-DB re-upload, so keep this
-      // OFF in EVERY by-path opener (app-engine's openJournalDb, key-admin).
+      // WAL-shipper exclusive (#408): foreign checkpoint costs a whole-DB re-upload. OFF in every by-path opener.
       db.exec("PRAGMA wal_autocheckpoint = 0");
-      // One-time conversion for a pre-#438 file: a fresh file reads back 2, so
-      // only a pre-existing NON-empty file reads 0. Safe only here — open holds
-      // no transaction and no other connection is on the file.
+      // Pre-#438 conversion: fresh file reads 2; only a pre-existing non-empty file reads 0. Safe only here (no txn, no other connection).
       const autoVacuum = (
         db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
       ).auto_vacuum;
@@ -191,13 +151,10 @@ function openFile(
     }
     return db;
   } catch (error) {
-    // WAL's `-wal`/`-shm` siblings can ENOSPC during open, before any command
-    // runs. Surface it like every other write path.
     throw asVaultDiskFullError(`opening ${location}`, error);
   }
 }
 
-/** The vault's current `blob_store` settings (`{}`-safe on any shape). */
 export function readBlobStoreSettings(vault: DatabaseSync): BlobStoreSettings {
   try {
     const row = vault
@@ -228,8 +185,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       footprint,
       options.loadExtensions
     );
-    // The journal is durable execution proof: it stays FULL even when an
-    // operator relaxes the canonical vault to NORMAL.
+    // Journal stays FULL even if the canonical vault is relaxed to NORMAL.
     journal = openFile(":memory:", "FULL", footprint);
     local = options.blobStore ?? new MemoryBlobStore();
   } else {
@@ -243,18 +199,14 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     journal = openFile(path.join(dir, "journal.db"), "FULL", footprint);
     local = options.blobStore ?? new FsBlobStore(path.join(dir, "blobs"));
   }
-  // FTS sync triggers decode canonical bodies through this, so it must exist
-  // before migrations touch the file.
+  // FTS triggers decode through this — must exist before migrations.
   registerContentTextFn(vault);
   registerHammingFn(vault);
   migrateVault(vault);
   migrate(journal, JOURNAL_MIGRATIONS);
-  // Database triggers are the durable write choke point (#406): install after
-  // EVERY fresh-schema open, including ext tables restored from a registry.
+  // Durable write choke (#406): after every fresh-schema open, including ext tables restored from a registry.
   initializeReplicaProtocol(vault);
-  // A vault commit can outlive a crash that lost its journal S5/audit
-  // transaction. An unprovable marker fails the open CLOSED — never serve atop
-  // an audit gap.
+  // A vault commit can outlive a lost journal S5/audit txn. Unprovable marker fails open CLOSED.
   try {
     repairReplicaInvocationCommits({ vault, journal });
   } catch (error) {
@@ -262,9 +214,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     journal.close();
     throw error;
   }
-  // AFTER migration, so the stamped fingerprint (#298) is readable: a vault
-  // that has ever sealed must refuse a missing or regenerated key rather than
-  // mint a DEK that garbles every sealed cell.
+  // After migration so the stamped fingerprint (#298) is readable: a sealed vault must refuse a missing/regenerated key.
   const sealKey =
     options.sealKey ??
     (dir === undefined
@@ -281,9 +231,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
         ));
   const blobContentKeys = new BlobContentKeyRegistry(vault, sealKey);
 
-  // One remote per settings snapshot — this IS #367 §C9's rotation: a changed
-  // endpoint/bucket/connectionId changes the key, so nothing migrates custody
-  // rows; `reconcile()`/`statusFor()` re-derive them from the new remote.
+  // One remote per settings snapshot (#367 §C9): changed endpoint/bucket/connectionId changes the key; custody rows are re-derived.
   let cachedRemote: { key: string; tier: RemoteTier | null } | null = null;
   const remoteTier = (): RemoteTier | null => {
     const settings = readBlobStoreSettings(vault);
@@ -298,8 +246,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     });
     if (cachedRemote?.key === key) return cachedRemote.tier;
     const resolver = options.s3Credentials;
-    // Every remote CAS object is a CBSF envelope: ignore stale `false` values
-    // so a direct settings write cannot create plaintext remote objects.
+    // Every remote CAS object is a CBSF envelope: ignore stale `false` so a settings write cannot create plaintext.
     const throttle = policy.throttleBytesPerSec
       ? { throttleBytesPerSec: policy.throttleBytesPerSec }
       : {};
@@ -319,8 +266,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       store: new S3BlobStore(s3Options),
       transfer: new S3TransferStore(s3Options),
       keyFor: (sha256: string) => blobContentKeys.getOrCreate(sha256),
-      // Direct-to-cold (#425): reads policy fresh each call so a
-      // `directToColdOriginals` change needs no reopen.
+      // Direct-to-cold (#425): policy fresh each call so a `directToColdOriginals` change needs no reopen.
       storageClassFor: (sha256, storeClass, originalHint) =>
         storageClassForShaWrite(
           vault,
@@ -330,8 +276,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
           readBackupPolicy(vault),
           originalHint
         ),
-      // A second CAS-shaped store under the derived-grant prefix (#425). No
-      // transfer store: derivatives never take the multipart path.
+      // Derived-grant prefix (#425). No transfer store: derivatives never take the multipart path.
       ...(settings.derivedPrefix
         ? {
             derivedStore: new S3BlobStore({
@@ -346,9 +291,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     return tier;
   };
 
-  // Only a file-backed vault has a volume to measure, so `statfs` is wired for
-  // fs vaults alone (#405); in-memory means an unlimited budget. Settings are
-  // re-read on every check — the same lazy contract as `remoteTier`.
+  // `statfs` for fs vaults only (#405); in-memory = unlimited. Settings re-read each check (same lazy contract as `remoteTier`).
   const blobsDir = dir === undefined ? undefined : path.join(dir, "blobs");
   const blobCache = new BlobCache(vault, local, {
     settings: () => readBlobCacheSettings(vault),
@@ -363,9 +306,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
               const s = statfsSync(blobsDir);
               return { bavail: s.bavail, bsize: s.bsize };
             } catch {
-              // The dir may not exist yet: an unreadable volume means "no
-              // measurement", not a failed budget check. VaultDiskFullError
-              // still guards the real ENOSPC edge.
+              // Unreadable volume = no measurement, not a failed budget. VaultDiskFullError still guards ENOSPC.
               return null;
             }
           },
@@ -381,8 +322,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     remoteConfigured: () => readBlobStoreSettings(vault).kind === "s3",
     policy: () => readBackupPolicy(vault),
     contentKeys: blobContentKeys,
-    // Capture-time previews (#405): rungs + dHash while the plaintext is in
-    // hand. Fire-and-forget; closes over `api` below, so it only fires post-open.
+    // Capture-time previews (#405). Fire-and-forget; closes over `api` so it only fires post-open.
     ...(options.previewCodec && {
       contributePreview: (input: IngressPreviewInput) =>
         void contributeIngressPreviews(api, options.previewCodec!, input).catch(
@@ -404,20 +344,13 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     blobs: new BlobCustody(local, remoteTier, blobCache, (sha) =>
       desiredStoreForSha(vault, sha)
     ),
-    // The lazy restore's "durable remote CAS tier?" oracle (#439 R2).
     remote: remoteTier,
     blobTransfers,
     ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
     close(opts) {
-      // `close` is synchronous, so fence the runner synchronously: no in-flight
-      // provider request may settle against SQLite after the handles close (its
-      // outbox row resumes next open). For a graceful drain, await
-      // blobTransfers.close() first.
+      // Close is sync: fence the runner so no in-flight provider request settles against SQLite. Drain via blobTransfers.close() first.
       blobTransfers.abandon();
-      // Close is the one point every caller passes through, so `PRAGMA
-      // optimize` (#374 tier 5a) runs here for the ad hoc SQL surface the
-      // planner would otherwise plan stats-blind. A failure must never block
-      // the close below.
+      // `PRAGMA optimize` (#374) here — the one point every caller passes. Failure must never block close.
       if (!opts?.skipOptimize) {
         try {
           vault.exec("PRAGMA optimize");

@@ -1,8 +1,5 @@
-// Photos' home surface on the phone (v4 handoff §3.1, §4, §14, §15).
+// Photos' home surface on the phone (v4 §3.1, §4, §14, §15). Wiring only — shaped UI lives in siblings.
 // governance: allow-repo-hygiene file-size-limit The #712 screen intentionally retains its cohesive data/routing orchestration; #716 extracts only independently testable UI bodies.
-//
-// This screen is the wiring — state, data, routing. Anything with a shape of its
-// own belongs in a sibling file that can be tested on its own terms.
 
 import * as Haptics from "expo-haptics";
 import * as Notifications from "expo-notifications";
@@ -87,8 +84,7 @@ function filterSections(
     .filter((section) => section.assets.length > 0);
 }
 
-/** Worded as iOS Photos words it (#712). `count === 0` is unreachable from this
- *  screen today; the branch stays rather than assume no caller ever will. */
+/** iOS Photos wording (#712). Keep the `count === 0` branch — do not assume no caller. */
 function selectionCountLabel(count: number): string {
   if (count === 0) return "Select Items";
   return `${count} ${count === 1 ? "Photo" : "Photos"} Selected`;
@@ -111,8 +107,7 @@ export default function PhotosHome({
   const insets = useSafeAreaInsets();
   const { session, gatewayBase, vaultId, refresh } = useReplica();
   const timeline = usePhotoTimeline();
-  // §13 / P13. Read here, not on a settings screen: the timeline is the surface
-  // that goes blank when the grant is refused, so it must say why.
+  // §13 / P13: read here — the timeline goes blank when the grant is refused, so it must say why.
   const grant = usePhotoAccessGrant();
   const deviceReadable = timeline.assets.filter(
     (asset) => asset.source !== "replica"
@@ -124,9 +119,7 @@ export default function PhotosHome({
     loading: timeline.loading,
   });
 
-  // Collections is the landing, not the timeline. The effect below is
-  // load-bearing: React Navigation updates params without remounting, so initial
-  // state alone would ignore every band tap after the first.
+  // Collections is the landing. Effect is load-bearing: Navigation updates params without remounting.
   const [destination, setDestination] = useState<BandDestinationKey>(
     route.params?.destination ?? "collections"
   );
@@ -137,9 +130,7 @@ export default function PhotosHome({
   }, [routeDestination]);
   const [moreOpen, setMoreOpen] = useState(false);
   const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
-  // Destructure; never hold this as one object. `menuAnchorRef` goes to a `ref`
-  // prop, and react-compiler treats anything reachable through a ref-carrying
-  // value as a ref, so reading `.anchor` off it during render is a ref access.
+  // Destructure; never hold as one object — react-compiler treats a ref-carrying value as a ref.
   const {
     anchor: menuAnchorRect,
     anchorRef: menuAnchorRef,
@@ -178,17 +169,11 @@ export default function PhotosHome({
   }>();
   const [refreshing, setRefreshing] = useState(false);
 
-  // Tile size is one shared per-device preference in `usePhotosRung`, never
-  // screen state — the header menu and the grid's pinch move the same store, so
-  // the two can never disagree.
   const [rung, setRung] = usePhotosRung();
-  // The frame's latch, not Photos' (#712): `shell.bandOwner.<appId>`, written
-  // from frame Settings, never a Photos-owned key.
+  // Frame latch, not Photos' (#712): `shell.bandOwner.<appId>`.
   const { bandOwner } = useBandOwner("photos");
 
-  // The automatic sweep (#711) mounts here, not on the Backup screen: it must
-  // walk wherever Photos is on screen. Consent is the only gate — the latch is
-  // read here, never written.
+  // Automatic sweep (#711) mounts here — must walk wherever Photos is on screen. Consent is the only gate.
   const [backupConsent, setBackupConsent] = useState<BackupConsentRecord>();
   useEffect(() => {
     void hydrateBackupConsent().then(setBackupConsent);
@@ -204,15 +189,11 @@ export default function PhotosHome({
     useMemo(() => ({ entity: "core.collection_entry" }), [])
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
-  // The only place the Library filter acts: Collections, People and Search run
-  // their own queries, where a "what the grid shows" filter has no meaning.
   const visibleSections = useMemo(
     () => filterSections(timeline.sections, libraryFilter),
     [timeline.sections, libraryFilter]
   );
-  // `anchorForGrain` re-expresses the current place as a day the target grain
-  // can land on (`timeline-grains.ts`). Without it, switching UP a grain dumps a
-  // member who had scrolled back to 2019 at the top of the library.
+  // Re-express the current place as a day the target grain can land on — switching up a grain must not dump the scroll.
   const changeGrain = useCallback(
     (next: TimelineGrain): void => {
       setPlaceDay((current) => anchorForGrain(visibleSections, next, current));
@@ -220,9 +201,7 @@ export default function PhotosHome({
     },
     [visibleSections]
   );
-  // Leaving the Library resets grain AND place — both belong to that grid alone.
-  // Deferred out of the effect body: a synchronous setState there is the shape
-  // react-compiler rejects (true of every deferred setState in this file).
+  // Leaving Library resets grain and place. Deferred: sync setState in the effect is the shape react-compiler rejects.
   useEffect(() => {
     if (destination === "library") return;
     queueMicrotask(() => {
@@ -236,12 +215,8 @@ export default function PhotosHome({
     // Off the grain on screen, never a captured copy.
     setGrain((current) => (current === "years" ? "months" : "all"));
   }, []);
-  // THE ONE TRAILING CONTROL IS DESTINATION-SCOPED (#712): each menu acts only
-  // on what its own destination draws, and Search has no honest menu. A chip
-  // that opens a menu it cannot act on claims capability the screen lacks.
-  //
-  // `detectFacesFor` asks the GATEWAY question (can the sweep run at all?), not
-  // `deviceAnswerFor`'s on-device promise (#724).
+  // Trailing control is destination-scoped (#712). Search has no honest menu.
+  // `detectFacesFor` is the gateway question, not `deviceAnswerFor` (#724).
   const enrichPolicies = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "enrich.policy" }), [])
@@ -434,9 +409,7 @@ export default function PhotosHome({
     ]);
   };
 
-  // `batchTrash` is the shared selection write (`photos-selection-writes.ts`) —
-  // never a second implementation here. The confirmation must keep saying the
-  // device original survives; a member cannot infer that from "Trash".
+  // Shared `batchTrash`. Confirmation must say the device original survives.
   const trashSelection = (): void => {
     if (!session) return;
     const targets = vaultAssets(timeline.assets, selection);
@@ -460,9 +433,7 @@ export default function PhotosHome({
     );
   };
 
-  // Gated on `destination` as well as size (#712): only `PhotoTimeline` mutates
-  // `selection`, and the extra guard keeps the header and bar honest for the one
-  // render where a residual selection outlives a destination change.
+  // Destination + size (#712): residual selection must not outlive a destination change.
   const selecting = selection.size > 0 && destination === "library";
 
   const onDestination = (key: BandDestinationKey): void => {
@@ -470,34 +441,21 @@ export default function PhotosHome({
       setMoreOpen(true);
       return;
     }
-    // Nothing else clears `selection` on a destination change, so without this
-    // a stale selection reappears with its tiles still checked when Library is
-    // current again. Both this and the menu close must stay SYNCHRONOUS here —
-    // an effect keyed on `destination` is the cascading-render shape
-    // react-compiler flags (#712).
+    // Clear selection synchronously — an effect keyed on `destination` is the cascading-render shape react-compiler flags (#712).
     if (key !== "library") setSelection(new Set());
     setViewOptionsOpen(false);
-    // Search is a DESTINATION, not a push (proto:4953-4954): `appBandOn`
-    // excludes only the viewer, zoom, video, slideshow and editor, so the band
-    // must stay up with Search current.
+    // Search is a destination, not a push — the band must stay up.
     setDestination(key);
   };
 
   const onMoreRow = (key: PhotosMoreRowKey): void => {
     setMoreOpen(false);
-    // Routed, never inlined, even at one row: `resolveMoreRowRoute` makes an
-    // unwired row fail to typecheck instead of landing on Library. The row is
-    // cross-stack (B2) — Backup health is a frame screen, not a Photos route.
     const nextRoute = resolveMoreRowRoute(key);
     navigation.navigate(nextRoute.screen, nextRoute.params);
   };
 
   return (
-    // `colors.bg` verbatim — no per-app surface tone, or a card drawing the
-    // shell's `bgElev` sits lighter than the page under it (`PAGE` in
-    // `packages/design/src/themes/shared.ts`). Explicit inset, never
-    // SafeAreaView-with-edges: inside this stack's fullScreenModal cover the
-    // edges variant intermittently resolves a zero top inset.
+    // `colors.bg` verbatim. Explicit inset — SafeAreaView-with-edges can resolve a zero top inset in this fullScreenModal.
     <View
       style={[
         styles.safe,
@@ -505,10 +463,7 @@ export default function PhotosHome({
       ]}
     >
       {selecting ? (
-        // iOS parity (#712): Select keeps the page title — still Photos, not a
-        // new surface. The count and the thumb verbs belong on the foot bar
-        // below, not here; Backup stays up here only because the bar's three
-        // plates are spoken for.
+        // iOS parity (#712): Select keeps the page title. Count/verbs live on the foot bar.
         <View style={styles.header}>
           <Text style={styles.title} numberOfLines={1}>
             Photos

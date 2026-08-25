@@ -1,15 +1,10 @@
 // governance: allow-repo-hygiene file-size-limit (#408) WAL restore is one integrity boundary: authenticated planning, checksum-verified spooling, SQLite replay, and coordinated pair validation must remain auditable as one pipeline
 /*
- * WAL replay materialization (#408). SQLITE does the replay: per group,
- * concatenate into `<db>-wal`, open, TRUNCATE-checkpoint, close. Never apply
- * pages here — per-segment GCM authentication plus SQLite recovery are what land
- * a damaged tail on an earlier consistent state (G6) rather than a corrupt file.
- *
- * Corruption handling is COORDINATED (G8): both databases cut at ONE tick, the
- * newest both can prove against an authenticated pair marker. A segment failing
- * at download time is REMOVED FROM THE LISTING and the pair re-planned. Never
- * infer coordination from the listing — an absent segment and an absent write
- * look identical, and that error is how a journal ends up ahead of its vault.
+ * WAL replay (#408). SQLITE does the replay: concatenate `<db>-wal`, open,
+ * TRUNCATE-checkpoint, close. Never apply pages here. G8: both DBs cut at
+ * ONE tick. A download failure is REMOVED FROM THE LISTING and the pair
+ * re-planned. Never infer coordination from the listing — absent segment
+ * and absent write look identical (journal ahead of vault).
  */
 
 import { promises as fs } from "node:fs";
@@ -49,9 +44,7 @@ export interface WalReplayDbOutcome {
   generation: string | null;
   segmentsApplied: number;
   groupsApplied: number;
-  /** Tick of the last applied segment; -1 when only the base was restored. */
   lastTickMs: number;
-  /** The cut fell short of the newest marker: objects missing or damaged. */
   truncated: boolean;
   integrityCheck: string;
   foreignKeyViolations: number;
@@ -59,16 +52,13 @@ export interface WalReplayDbOutcome {
 
 export interface WalReplayOutcome {
   perDb: Record<WalDbName, WalReplayDbOutcome>;
-  /** Segment keys dropped: failed to fetch or authenticate. */
   damaged: string[];
-  /** The single tick both databases were cut at; -1 = the base pair. */
   coordinatedCutMs: number;
-  /** Newest authenticated marker at or before the cut; -1 = none. */
   newestMarkerTickMs: number;
   /**
-   * What this restore SHOULD have reached: newest surviving marker, floored by
-   * `walTipTickMs`. `coordinatedCutMs < expectedCutMs` is the ONLY truncation
-   * signal that survives a provider deleting the marker stream.
+   * Newest surviving marker, floored by `walTipTickMs`.
+   * `coordinatedCutMs < expectedCutMs` is the ONLY truncation signal that
+   * survives a provider deleting the marker stream.
    */
   expectedCutMs: number;
 }
@@ -77,29 +67,23 @@ export interface ReplayWalOptions {
   store: ObjectStore;
   dataKey: Uint8Array;
   vaultId: string;
-  /** Holds the already-written base files. */
   destDir: string;
-  /** From the manifest's `db` entries. */
   generationByDb: Partial<Record<WalDbName, string>>;
-  /**
-   * The tick each base was cloned at. REQUIRED when both databases have a
-   * generation, and the two MUST be equal — an unequal pair is refused.
-   */
+  /** REQUIRED when both DBs have a generation, and the two MUST be equal. */
   baseTickMsByDb?: Partial<Record<WalDbName, number>>;
   /**
-   * The newest marker tick the producer watched this provider ACCEPT. Failing to
-   * reach it means the store lost acknowledged objects: the restore still
-   * succeeds at the older point (G6), but must not be SILENT.
+   * Newest marker tick the producer saw accepted. Missing it is lost
+   * acknowledged objects: restore still succeeds at the older point (G6),
+   * but must not be silent.
    */
   walTipTickMs?: number;
-  /** Point-in-time cut; omit for restore-to-tip. */
   pointInTimeMs?: number;
   log?: EngineLogger;
 }
 
 /**
- * A missing, tampered or mis-addressed closer is simply absent, so the planner
- * refuses to advance past its group — degrading rather than mixing pages.
+ * Missing/tampered closer is absent: planner refuses to advance past its
+ * group — degrade rather than mix pages.
  */
 async function listStream(
   store: ObjectStore,
@@ -140,9 +124,8 @@ async function listStream(
 }
 
 /**
- * The prefix returns only markers minted while exactly these two bases were
- * current. One failing its tag is dropped, never treated as evidence — the
- * restore walks back to an older one, the safe direction.
+ * Markers minted while exactly these two bases were current. A failed tag
+ * is dropped, never evidence — walk back, the safe direction.
  */
 async function listPairMarkers(
   store: ObjectStore,
@@ -172,9 +155,8 @@ async function listPairMarkers(
 }
 
 /**
- * Both bases MUST be from one tick. A violation is REFUSED, never repaired: with
- * bases from two instants there is no floor to degrade to, because a journal base
- * taken after the vault base holds receipts for rows living only in segments.
+ * Both bases MUST be from one tick. REFUSED, never repaired: a later journal
+ * base holds receipts for rows that live only in segments.
  */
 function assertCoordinatedBases(opts: ReplayWalOptions): void {
   if (
@@ -200,10 +182,9 @@ function assertCoordinatedBases(opts: ReplayWalOptions): void {
 }
 
 /**
- * A damaged segment is removed FROM THE LISTING and the pair re-planned at the
- * SAME instant — never "lower the tick cut", which would leave the unusable
- * object still able to satisfy a marker's position check. Each pass either
- * succeeds or strictly shrinks a finite listing.
+ * Damaged segment is removed FROM THE LISTING and the pair re-planned at
+ * the SAME instant — never lower the tick cut (the unusable object could
+ * still satisfy a marker). Each pass succeeds or shrinks the listing.
  */
 async function spoolSegments(opts: {
   store: ObjectStore;
@@ -217,8 +198,6 @@ async function spoolSegments(opts: {
   log: Required<EngineLogger>;
 }): Promise<{ result: CoordinatedReplayResult; damaged: string[] }> {
   const damaged: string[] = [];
-  // Mutable copy: pruning the listing is how the planner sees only what can
-  // actually be materialized.
   const listingByDb: Partial<Record<WalDbName, WalStreamListing>> = {};
   for (const db of WAL_DB_NAMES) {
     const listing = opts.listingByDb[db];
@@ -248,7 +227,7 @@ async function spoolSegments(opts: {
       const spoolPath = path.join(opts.spoolDir, key.replaceAll("/", "_"));
       try {
         await fs.access(spoolPath);
-        return; // already spooled on an earlier pass
+        return;
       } catch {
         /* not yet spooled */
       }
@@ -272,10 +251,6 @@ async function spoolSegments(opts: {
   return { result: await planAndSpool(), damaged };
 }
 
-/**
- * Group by group, the same sequence the live shipper's checkpoints performed, so
- * the file passes through the same states it did in production.
- */
 async function replayDb(
   destDir: string,
   db: WalDbName,
@@ -312,8 +287,7 @@ async function replayDb(
     const scan = validateCommittedWal(walBytes);
     const conn = new DatabaseSync(dbPath);
     try {
-      // The checkpoint IS the first access that triggers recovery, and folds
-      // the frames into the main file so the next group's WAL layers correctly.
+      // Checkpoint is the first access that triggers recovery; next group's WAL layers on it.
       const result = conn.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as {
         busy: number;
         log: number;
@@ -368,20 +342,14 @@ const noopLog: Required<EngineLogger> = {
 };
 
 /**
- * Throws when a restored database fails `integrity_check` OR `foreign_key_check`
- * — FORMAT.md requires BOTH. An FK violation is as fatal as physical corruption:
- * every writer opens with `foreign_keys = ON` and cuts land on commit
- * boundaries, so one means the replay produced a state the database never held.
- *
- * Intra-database only; the CROSS-database dangling-receipt check
- * (`verifyRestoredPair`) is legitimately non-fatal.
+ * FORMAT.md requires both `integrity_check` and `foreign_key_check`. An FK
+ * violation is as fatal as physical corruption. Cross-DB
+ * `verifyRestoredPair` is the non-fatal dangling-receipt check.
  */
 export async function replayWalSegments(
   opts: ReplayWalOptions
 ): Promise<WalReplayOutcome> {
   const log = { ...noopLog, ...opts.log };
-  // Before any byte moves: without one instant there is no coordinated restore
-  // point to aim at, and every degradation is a guess.
   assertCoordinatedBases(opts);
   const spoolDir = await fs.mkdtemp(
     path.join(opts.destDir, ".wal-restore-spool-")
@@ -428,8 +396,7 @@ export async function replayWalSegments(
       log,
     });
     const { plans, coordinatedCutMs, newestMarkerTickMs, coordinated } = result;
-    // The registered tip floors what this store OWES, but only inside the
-    // restored window: a point-in-time cut is deliberate, not truncation.
+    // Tip floors what the store owes, only inside the restored window. PITR is not truncation.
     const tipInWindow =
       opts.walTipTickMs !== undefined &&
       (opts.pointInTimeMs === undefined ||
@@ -449,7 +416,6 @@ export async function replayWalSegments(
     await applyInOrder(WAL_DB_NAMES, async (db) => {
       const generation = opts.generationByDb[db] ?? null;
       if (generation === null) {
-        // No stream: nothing to replay, and nothing we may assume is SQLite.
         perDb[db] = {
           generation: null,
           segmentsApplied: 0,
@@ -475,8 +441,7 @@ export async function replayWalSegments(
         groupsApplied,
         lastTickMs: plan.lastTickMs,
         // Must NOT be `truncatedByHole || damaged.length > 0`: damage beyond
-        // the requested cut is irrelevant here, and a stream whose objects are
-        // simply gone sets neither.
+        // the cut is irrelevant, and a gone stream sets neither.
         truncated: coordinated
           ? expectedCutMs >= 0 && coordinatedCutMs < expectedCutMs
           : plan.truncatedByHole || damaged.length > 0,

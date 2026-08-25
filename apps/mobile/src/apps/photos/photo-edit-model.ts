@@ -1,13 +1,7 @@
-// What the phone's editor IS, as data — separate from what draws it (§7.4).
-//
-// NON-DESTRUCTIVE: nothing is written until `Save as a new photograph`, and it
-// writes a NEW photograph beside the original. Every number answering "what
-// would be written" lives here, not in a component, so the promise is
-// assertable without React Native. Member-facing copy is IMPORTED from the
-// blueprint the web editor renders, never retyped.
-//
-// AUTO-ENHANCE IS DELIBERATELY ABSENT: a curve heuristic needs a decoded RGBA
-// buffer, which nothing here hands React Native without a new native module.
+// Phone editor as data (§7.4). NON-DESTRUCTIVE: nothing is written until
+// `Save as a new photograph` (a NEW photograph beside the original). Copy is
+// IMPORTED from the blueprint, never retyped. AUTO-ENHANCE is absent: a curve
+// heuristic needs a decoded RGBA buffer nothing here hands React Native.
 
 // Import from `shared-copy.ts`, the import-free leaf, NOT from `viewer.ts`:
 // that module uses `.ts`-suffixed specifiers the Expo tsconfig rejects, which
@@ -21,8 +15,6 @@ export const EDITOR_TITLE = "Crop and rotate";
 
 export const EDITOR_CANCEL = "Cancel";
 
-/** Names the SOURCE: what is being edited is not what will be saved, and that
- *  distinction is the editor's whole argument. */
 export function editorMeta(capturedAt?: string): string {
   const when = capturedAt ? new Date(capturedAt) : undefined;
   if (!when || Number.isNaN(when.getTime())) return "from a photograph";
@@ -33,22 +25,17 @@ export function editorMeta(capturedAt?: string): string {
   })}`;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Rotation
-// ───────────────────────────────────────────────────────────────────────────
-
 export const STRAIGHTEN_STEP = 1;
 export const STRAIGHTEN_LIMIT = 15;
 
-/** ONE control, not the desktop's −/readout/+ trio: each press levels a degree
- *  anticlockwise and the press past the limit returns to level. The cost,
- *  stated rather than hidden: the phone cannot straighten CLOCKWISE. */
+/** One control, not the desktop −/readout/+ trio. Each press levels a degree
+ *  anticlockwise; past the limit returns to level. The phone cannot straighten CLOCKWISE. */
 export function nextStraighten(degrees: number): number {
   const next = degrees - STRAIGHTEN_STEP;
   return next < -STRAIGHTEN_LIMIT ? 0 : next;
 }
 
-/** The minus is U+2212, not a hyphen: this is a number in the mono role. */
+/** Minus is U+2212, not a hyphen: a number in the mono role. */
 export function signedDegrees(degrees: number): string {
   if (degrees === 0) return "0°";
   return degrees < 0 ? `−${Math.abs(degrees)}°` : `+${degrees}°`;
@@ -63,8 +50,7 @@ export function totalRotation(quarters: number, straighten: number): number {
 }
 
 /** Straighten is not a multiple of 90°, so the box GROWS rather than swapping
- *  sides; the crop is in fractions of that grown box, which is why the preview
- *  and the saved bytes agree. */
+ *  sides; the crop is in fractions of that grown box. */
 export function rotatedBox(
   width: number,
   height: number,
@@ -84,12 +70,7 @@ export function rotatedFrameRatio(assetRatio: number, degrees: number): number {
   return box.height > 0 ? box.width / box.height : assetRatio;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// The crop rectangle
-// ───────────────────────────────────────────────────────────────────────────
-
-/** FRACTIONS of the current (rotated) frame, so it survives a resize and means
- *  the same on the stage and in the saved pixels. */
+/** FRACTIONS of the current (rotated) frame — survives resize; same on stage and saved pixels. */
 export interface CropRect {
   x: number;
   y: number;
@@ -125,7 +106,7 @@ export function scaleCrop(rect: CropRect, factor: number): CropRect {
   return clampCrop({ h, w, x: cx - w / 2, y: cy - h / 2 });
 }
 
-/** The SPACING is load-bearing: `3 : 2` renders in the mono role. */
+/** Spacing is load-bearing: `3 : 2` renders in the mono role. */
 export const EDITOR_RATIOS = ["Original", "Square", "3 : 2"] as const;
 export type EditorRatio = (typeof EDITOR_RATIOS)[number];
 
@@ -144,8 +125,8 @@ export function centredCrop(frameRatio: number, ratio: number): CropRect {
   return { h: 1, w, x: (1 - w) / 2, y: 0 };
 }
 
-/** Rounded and clamped so a rounding error cannot ask the native manipulator
- *  for a rectangle running off the bitmap. */
+/** Rounded and clamped so rounding cannot ask the native manipulator for a
+ *  rectangle running off the bitmap. */
 export function cropPixels(
   rect: CropRect,
   frame: { width: number; height: number }
@@ -168,15 +149,11 @@ export function cropPixels(
   };
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// What the editor is about to do, in one sentence
-// ───────────────────────────────────────────────────────────────────────────
-
 /** `undefined` is "no flip" — the third state a boolean cannot hold, and the
  *  one an untouched editor must be in. */
 export type FlipAxis = "horizontal" | "vertical" | undefined;
 
-/** A three-way cycle, not two toggles: the manipulator allows one flip per
+/** Three-way cycle, not two toggles: the manipulator allows one flip per
  *  transformation. */
 export function nextFlip(current: FlipAxis): FlipAxis {
   if (current === undefined) return "horizontal";
@@ -190,8 +167,8 @@ export function flipLabel(flip: FlipAxis): string {
   return "Flip";
 }
 
-/** `nothing written yet` is the load-bearing clause and a FACT, not
- *  reassurance: nothing is staged, uploaded or journalled while this is open. */
+/** `nothing written yet` is a FACT: nothing is staged, uploaded or journalled
+ *  while this is open. */
 export function editorStatus(input: {
   ratio: EditorRatio;
   quarters: number;
@@ -224,7 +201,7 @@ export function isEdited(input: {
 }
 
 /** `-edited` rather than a fresh opaque id, so the member can find it by name
- *  — and the same suffix the web editor writes. */
+ *  — same suffix the web editor writes. */
 export function editedFilename(sourceName: string | undefined): string {
   const base = (sourceName ?? "photograph").replace(/\.[a-z0-9]+$/iu, "");
   return `${base || "photograph"}-edited.jpg`;

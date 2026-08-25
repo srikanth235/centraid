@@ -1,24 +1,8 @@
 /**
- * Automation apps on disk.
- *
- * Issue #98 (unified folder model): an automation is never standalone.
- * It always lives inside an app folder, at
- * `<appCodeDir>/automations/<id>/`. The app folder is the unit of
- * upload and versioning — an automation versions *with* its app. There
- * is no separate `automationsDir`.
- *
- *   <appCodeDir>/automations/<id>/automation.json  — the manifest
- *   <appCodeDir>/automations/<id>/handler.js       — the handler
- *
- * `appsDir` here is an app-CODE root: `<appsDir>/<id>/automations/...`.
- * Callers pass the live git-store `main` worktree's `apps/` dir (the
- * gateway's cron scheduler / turn-now / webhook fire paths); the
- * draft builder passes its session worktree's `apps/` dir. Code lives in
- * the worktree (#137); the per-app DATA dir is resolved separately.
- *
- * An automation's globally-unique handle is `<appId>/<id>` — see
- * `formatRef`. This module lists, reads, and mutates manifests
- * of apps that already exist.
+ * Automation apps on disk. #98: an automation is never standalone — always
+ * `<appCodeDir>/automations/<id>/`. No separate `automationsDir`. `appsDir`
+ * is an app-CODE root. Code lives in the worktree (#137); DATA is separate.
+ * Handle is `<appId>/<id>` (`formatRef`).
  */
 
 import { promises as fs } from "node:fs";
@@ -34,35 +18,21 @@ import {
 import type { Manifest, Trigger } from "../manifest/manifest.js";
 import { formatRef, isValidId } from "../manifest/ref.js";
 
-/** Subdirectory under an app's code dir that holds the app's automations. */
 export const APP_AUTOMATIONS_SUBDIR = "automations";
 
-/**
- * A resolved automation app — the directory, its id, the owning app,
- * and the parsed manifest, plus the few fields a scheduler host reads
- * hoisted to the top level.
- */
 export interface Row {
-  /** Directory name — the automation's id, unique within its app. */
   readonly id: string;
-  /** Absolute path to the automation app directory. */
   readonly dir: string;
-  /** Display name from the manifest. */
   readonly name: string;
-  /** Trigger list hoisted from `manifest.triggers`. */
   readonly triggers: readonly Trigger[];
-  /** User on/off toggle from the manifest. */
   readonly enabled: boolean;
-  /** Id of the app folder this automation belongs to. */
   readonly ownerApp: string;
   /** Globally-unique handle — `<ownerApp>/<id>`. */
   readonly ref: string;
   readonly manifest: Manifest;
 }
 
-/** One app that failed to parse during a directory scan. */
 export interface AppError {
-  /** `<appId>/<automationId>` of the app that failed to parse. */
   readonly id: string;
   readonly error: string;
   readonly code?: string;
@@ -99,22 +69,18 @@ function isEnoent(err: unknown): boolean {
   );
 }
 
-/** Absolute path to an automation app's manifest file. */
 export function manifestPath(automationDir: string): string {
   return path.join(automationDir, MANIFEST_FILE);
 }
 
-/** Absolute path to an automation app's generated handler. */
 export function handlerPath(automationDir: string): string {
   return path.join(automationDir, HANDLER_FILE);
 }
 
 /**
- * Read one automation app from an explicit app directory. The
- * id is the directory basename; `ownerApp` is the owning app's id.
- * Returns `undefined` if the directory or its `automation.json` is
- * missing; throws `ManifestError` when the manifest exists but
- * is invalid.
+ * Read one automation from an explicit app directory. `undefined` if the
+ * directory or its `automation.json` is missing; throws `ManifestError` when
+ * the manifest exists but is invalid.
  */
 export async function readAppAt(
   dir: string,
@@ -144,10 +110,9 @@ export async function readAppAt(
 }
 
 /**
- * Resolve one app-owned automation by `(appId, automationId)`, reading
- * from the app's *active version* code dir. Returns `undefined` when the
- * app, the automation directory, or its `automation.json` is missing;
- * throws `ManifestError` when the manifest is invalid.
+ * Resolve one app-owned automation by `(appId, automationId)` from the app's
+ * active-version code dir. `undefined` when missing; throws `ManifestError`
+ * when the manifest is invalid.
  */
 export async function readAppOwned(
   appsDir: string,
@@ -163,11 +128,9 @@ export async function readAppOwned(
 }
 
 /**
- * The full automation registry: scan every app folder under `appsDir`,
- * resolve its active-version code dir, and read every automation under
- * `<codeDir>/automations/`. A missing `appsDir`, or an app with no
- * `automations/` subdir, contributes nothing. Apps with an invalid
- * manifest land in `errors` and don't block the rest.
+ * Scan every app folder under `appsDir`. A missing `appsDir`, or an app with
+ * no `automations/` subdir, contributes nothing. Invalid manifests land in
+ * `errors` and don't block the rest.
  */
 export async function list(appsDir: string): Promise<ListAppsResult> {
   let appEntries: TypeImport_g9tn66.Dirent[];
@@ -239,7 +202,6 @@ export async function list(appsDir: string): Promise<ListAppsResult> {
   return { rows, errors };
 }
 
-/** Overwrite the `automation.json` in an explicit app directory. */
 export async function writeManifestAt(
   dir: string,
   manifest: Manifest

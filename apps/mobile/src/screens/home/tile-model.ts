@@ -1,55 +1,23 @@
-// What each springboard tile SAYS, derived from replica rows (#708 A).
-//
-// Every tile carries an INVARIANT header — icon, name, count — over a body
-// whose structure differs per app. The header makes the grid one grid; the body
-// makes a tile recognisable at a glance without reading a word of it.
-//
-// KEEP PURE (no React, no react-native, no replica imports beyond the row
-// type): the selection rules are the part that can be wrong, so they are the
-// part that is unit-tested. `useSpringboardTiles` owns the reads.
-//
-// TWO HONESTY RULES run through everything here:
-//
-//  1. A tile never invents content. With no read path for an app (Locker), the
-//     tile renders its designed body with no data and a WITHHELD count, never
-//     a zero.
-//  2. "Empty" and "not loaded yet" are different answers, which is why
-//     `springboardState` refuses first-run on an unsettled or unknown tile.
+// Springboard tile payload from replica rows (#708 A). KEEP PURE; `useSpringboardTiles` owns reads.
+// Honesty: never invent content (withheld count, not 0); empty ≠ not-loaded (`springboardState` refuses first-run on unsettled/unknown).
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
-/** Data availability, before any styling decision. */
-export type TileStatus =
-  /** A read this tile needs has not settled. Body renders static skeletons. */
-  | "loading"
-  /** No replica/grant/read path — we cannot say whether content exists. */
-  | "unknown"
-  /** Settled, and the app genuinely holds nothing. */
-  | "empty"
-  /** Settled, with something to show. */
-  | "content";
+export type TileStatus = "loading" | "unknown" | "empty" | "content";
 
 export interface TilePhoto {
   id: string;
-  /** Gateway thumb URL or a pinned on-device path. `undefined` when the asset
-   *  EXISTS but its bytes are not addressable yet — still a CELL, painting the
-   *  skeleton ground at the geometry the photograph will occupy. Dropping the
-   *  row instead renders ten photographs as one blank rectangle under a "10". */
+  /** Thumb/pinned path. `undefined` when the asset exists but bytes are not addressable yet — still a CELL; dropping the row reflows ten photos as one blank under a "10". */
   uri?: string;
-  /** The undownscaled bytes, when `uri` points at a DERIVATIVE of them: the
-   *  thumb variant is generated after the record lands, so `uri` 404s in
-   *  between. Absent for a pinned thumbnail, which is a variant of nothing. */
+  /** Undownscaled bytes when `uri` is a derivative (thumb lands after the record; `uri` 404s in between). Absent for a pinned thumbnail. */
   originalUri?: string;
 }
 
 export interface TileFace {
-  /** `party_id`, never the display name: the renderer derives the circle's hue
-   *  from this, and a rename must not repaint a person. */
+  /** `party_id`, never display name — hue is derived from this; a rename must not repaint. */
   id: string;
   initials: string;
-  /** A stored colour always wins. Blank and whitespace-only are NOT a choice —
-   *  the seeded vault leaves `avatar_color` empty, and treating `""` as a
-   *  colour paints faces with no fill. Those fall through to the derivation. */
+  /** Stored colour wins. Blank/`""` is not a choice (seeded vault leaves `avatar_color` empty) — fall through to derivation. */
   color?: string;
 }
 
@@ -62,20 +30,16 @@ export interface TileTaskRow {
 export interface TileDocRow {
   id: string;
   name: string;
-  /** Already formatted ("4.1 MB"); empty when the byte size is not recorded. */
   size: string;
 }
 
-/** One member per first-party app. */
 export type TileBody =
   | { kind: "photos"; photos: TilePhoto[] }
   | { kind: "docs"; rows: TileDocRow[] }
   | { kind: "agenda"; title: string; at: string; after: string }
   | { kind: "people"; faces: TileFace[]; more: number }
   | { kind: "tasks"; rows: TileTaskRow[] }
-  // `after` is optional because the brief's third line (:5079) needs a
-  // rolling-comparison read `useSpringboardTiles` does not build. The body
-  // renders it the moment a caller supplies one and stays silent otherwise.
+  // `after` optional: rolling-comparison read is not built; render when supplied, else silent.
   | { kind: "tally"; figure: string; caption: string; after?: string }
   | { kind: "locker"; locked: boolean }
   | { kind: "notes"; title: string; excerpt: string };
@@ -83,11 +47,10 @@ export type TileBody =
 export interface TileData {
   appId: string;
   status: TileStatus;
-  /** `undefined` renders the withheld glyph, never a fabricated 0. */
+  /** `undefined` = withheld glyph, never a fabricated 0. */
   count?: number;
-  /** True when `count` hit the read's ceiling, so it renders as `N+`. */
+  /** True when `count` hit the read ceiling (`N+`). */
   countCapped?: boolean;
-  /** What the count counted — "open", "this month", "next 7 days". */
   countLabel: string;
   body: TileBody;
 }
@@ -95,7 +58,6 @@ export interface TileData {
 const text = (row: ReplicaRow, key: string): string =>
   row[key] == null ? "" : String(row[key]);
 
-/** Newest first by an ISO column; ties fall back to the row's own id column. */
 function byDescending(
   column: string,
   idColumn: string
@@ -105,16 +67,7 @@ function byDescending(
     text(left, idColumn).localeCompare(text(right, idColumn));
 }
 
-// ──────────────────────────────────────────────────────────────── photos ───
-
-/**
- * Order is RE-ESTABLISHED here, never trusted: a replica read merges N vault
- * scopes.
- *
- * An asset whose bytes are not addressable yet still yields a CELL with no
- * `uri` — returning fewer cells makes the tile reflow when the bytes land, and
- * returning none draws an empty box under a header saying 10.
- */
+/** Re-sort here: replica reads merge N scopes. Unaddressable bytes still yield a CELL with no `uri` — fewer cells reflow; none draws an empty box under "10". */
 export function selectPhotoMosaic(
   rows: readonly ReplicaRow[],
   gatewayBase: string | undefined,
@@ -126,14 +79,11 @@ export function selectPhotoMosaic(
     .flatMap((row) => {
       const contentId = text(row, "content_id");
       const assetId = text(row, "asset_id");
-      // The one case with no cell: no photograph behind it to wait for.
       if (!contentId || !assetId) return [];
       const scopeId = text(row, "__centraidScopeId");
       const local = pinned(scopeId, contentId);
       if (local) return [{ id: assetId, uri: local }];
       if (!gatewayBase) return [{ id: assetId }];
-      // The same address `timeline-engine` builds, so a tile thumbnail is a
-      // cache hit on the grid the tile opens into.
       const blob = `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
         scopeId
       )}/${encodeURIComponent(contentId)}`;
@@ -145,38 +95,26 @@ export function selectPhotoMosaic(
     .slice(0, count);
 }
 
-/** Cells exist but none can paint bytes yet — the moment the tile must SAY
- *  where the originals are rather than look broken. */
 export function mosaicAwaitingBytes(photos: readonly TilePhoto[]): boolean {
   return photos.length > 0 && photos.every((photo) => !photo.uri);
 }
 
-/** ONE row across the tile's bled width (:5044); mobile never draws the
- *  desktop's second row. A FIXED count is the no-reflow contract: only the
- *  contents of each cell ever change. */
+/** One row, fixed count — no-reflow: only cell contents change. Mobile never draws desktop's second row. */
 export const MOSAIC_SLOTS = 4;
 
-/** STATED, never derived from `aspectRatio`: a percentage-width cell can
- *  resolve to zero height, and a zero-height cell inside a min-height container
- *  reads as one deliberate blank rectangle rather than a layout failure. */
+/** Stated, never from `aspectRatio`: a % width cell can resolve to 0 height and read as a blank rectangle. */
 export const MOSAIC_CELL_HEIGHT = 88;
 
-/** `R.gap.m` (:5031), shared by the card's padding (`LauncherGrid`) and the
- *  mosaic's negative margins (`TileBody`): the bleed reaches the tile edge only
- *  while it exactly cancels that padding. */
+/** `R.gap.m`, shared with `LauncherGrid` padding and `TileBody` negative margins — bleed cancels that padding exactly. */
 export const TILE_PAD = 12;
 
-/** Exactly `MOSAIC_SLOTS`. An empty slot is still a cell and still paints. */
 export function mosaicCells(
   photos: readonly TilePhoto[]
 ): (TilePhoto | undefined)[] {
   return Array.from({ length: MOSAIC_SLOTS }, (_, index) => photos[index]);
 }
 
-// ──────────────────────────────────────────────────────────── prose bodies ───
-
-/** `core.content_item` bodies are always `data:` URIs; anything else (a PDF, an
- *  image) has no prose to excerpt and returns "". */
+/** `core.content_item` bodies are `data:` URIs; anything else has no prose — return "". */
 export function decodeProse(contentUri: unknown): string {
   if (typeof contentUri !== "string" || !contentUri.startsWith("data:"))
     return "";
@@ -184,8 +122,7 @@ export function decodeProse(contentUri: unknown): string {
   if (comma < 0) return "";
   const meta = contentUri.slice(0, comma);
   const payload = contentUri.slice(comma + 1);
-  // Base64 needs `atob`, not worth it here: the editors write the
-  // percent-encoded form, and a tile that cannot read a body shows its title.
+  // Editors write percent-encoded; skip base64 (`atob`) — show the title instead.
   if (meta.includes(";base64")) return "";
   try {
     return decodeURIComponent(payload);
@@ -194,9 +131,7 @@ export function decodeProse(contentUri: unknown): string {
   }
 }
 
-/** Headings are SKIPPED, not stripped: the tile shows the title on the line
- *  above, and `# Heading` is almost always that same title again. Quote and
- *  list markers are stripped from what survives — syntax, not words. */
+/** Skip headings (title is already shown); strip quote/list markers from what survives. */
 export function firstProseLine(body: string, maxChars = 220): string {
   for (const raw of body.split("\n")) {
     if (raw.trimStart().startsWith("#")) continue;
@@ -221,13 +156,9 @@ export function selectNoteExcerpt(
   };
 }
 
-// ────────────────────────────────────────────────────────────────── docs ───
-
 const BYTE_UNITS = ["bytes", "KB", "MB", "GB", "TB"] as const;
 
-/** One decimal above the byte rung and none below it — a size is scanned, not
- *  compared, so a second decimal is noise. A missing or nonsensical count
- *  returns "" (a name with no size), never a fabricated 0 bytes. */
+/** One decimal above the byte rung; missing/nonsensical → "", never fabricated 0 bytes. */
 export function formatBytes(bytes: unknown): string {
   const value = Number(bytes);
   if (!Number.isFinite(value) || value < 0) return "";
@@ -241,9 +172,7 @@ export function formatBytes(bytes: unknown): string {
   return `${rounded.toLocaleString()} ${BYTE_UNITS[unit]}`;
 }
 
-/** RULED ROWS — name and size — never a prose excerpt: Docs and Notes both hold
- *  text, and drawing both as a title over an opening line makes two tiles
- *  indistinguishable at a glance, the one thing a body exists to prevent. */
+/** Name + size, never a prose excerpt — Docs and Notes would otherwise look the same. */
 export function selectDocRows(
   documents: readonly ReplicaRow[],
   contents: readonly ReplicaRow[],
@@ -261,17 +190,13 @@ export function selectDocRows(
     }));
 }
 
-// ──────────────────────────────────────────────────────────────── agenda ───
-
 export interface AgendaOccurrence {
   instanceKey: string;
   summary: string;
   start: string;
 }
 
-/** The after-line is the point of the Agenda body: "then …" answers what a
- *  next-event alone leaves open, and with nothing after it must SAY so — a
- *  blank reads as a missing render. */
+/** After-line is required: blank reads as a missing render; with nothing after, say so. */
 export function selectNextEvent(
   occurrences: readonly AgendaOccurrence[],
   now: Date,
@@ -305,9 +230,6 @@ export function countUpcoming(
   ).length;
 }
 
-// ──────────────────────────────────────────────────────────────── people ───
-
-/** Overlapping face circles: a sample of the directory, name-ordered. */
 export function selectFaces(
   profiles: readonly ReplicaRow[],
   namesByParty: ReadonlyMap<string, string>,
@@ -332,26 +254,20 @@ export function selectFaces(
     }));
 }
 
-/** ONE initial, never two: the 30px disc at 12px/500 is sized for one. An
- *  unnamed person still gets a circle, not a hole. */
+/** One initial (30px disc); unnamed still gets a circle, not a hole. */
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/u).filter(Boolean);
   if (parts.length === 0) return "?";
   return (parts[0]![0] ?? "").toUpperCase();
 }
 
-// ───────────────────────────────────────────────────────────────── tasks ───
-
 const OPEN_STATUSES = new Set(["needs-action", "in-process"]);
 
-/** Open tasks only — the number the tile counts, and the rows it draws. */
 export function openTasks(rows: readonly ReplicaRow[]): ReplicaRow[] {
   return rows.filter((row) => OPEN_STATUSES.has(text(row, "status")));
 }
 
-/** EXACTLY ONE struck row — the most recent completion, appended last — is what
- *  makes this body legible as a task list rather than any list of short
- *  strings. Only present when a completion actually exists. */
+/** At most one struck row (most recent completion), appended last — else this is just a list of short strings. */
 export function selectTaskRows(
   rows: readonly ReplicaRow[],
   limit = 4
@@ -377,14 +293,10 @@ export function selectTaskRows(
   ];
 }
 
-// ───────────────────────────────────────────────────────────────── tally ───
-
-/** Minor units summed over the rows the read already scoped to this month. */
 export function sumMinor(rows: readonly ReplicaRow[]): number {
   return rows.reduce((total, row) => total + Number(row.amount_minor ?? 0), 0);
 }
 
-/** First day of the current local month, as the ISO date `spent_on` stores. */
 export function monthStartDate(now: Date): string {
   return [
     now.getFullYear(),

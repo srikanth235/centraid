@@ -1,30 +1,7 @@
 /*
- * AnalyticsStore — a read-only lens over the per-vault `run_summary` VIEW
- * (#98, decision 4; moved into the vault's own `journal.db` by #280).
- *
- * `run_summary` is a VIEW, not a denormalized table maintained by a
- * best-effort write-through at run completion — that is justified only while
- * the rollup lives in a DIFFERENT file than the ledger. With both in the
- * vault's `journal.db`
- * there is no file boundary to denormalize across, so the view (declared in
- * `CONVERSATION_LEDGER_DDL`) derives every row from `turns ⋈ conversations`
- * plus the dominant model from `items`: no write path, no drift, nothing to
- * rebuild. This store is the single source the Insights screen and the
- * desktop Executions feed read; it is per-vault, so a central store can
- * never aggregate across vaults (#280).
- *
- * The provider usually resolves "the ACTIVE vault's journal.db", so
- * the handle can change across calls (a vault switch); `ensureReady`
- * re-prepares when it does.
- *
- * ROW-GRAIN, LIVE-ONLY (#438). The Executions feed is a list of
- * individual runs, so it reads live `run_summary` rows exactly as before —
- * `conversation_digest` is an AGGREGATE rollup and cannot reconstitute
- * per-run rows, so no digest-derived rows are fabricated here. A run whose
- * raw turn was archived-and-pruned (≥90d idle) drops out of `listSummaries`
- * and `getSummary` returns `undefined` for it — acceptable in v1: the aggregate
- * dashboards (InsightsStore) stay whole via the digest union, and lazy
- * rehydration serves an archived run's transcript on demand.
+ * Live `run_summary` VIEW, row-grain only — do not fabricate from
+ * `conversation_digest` (#438). Archived-and-pruned runs drop out.
+ * `ensureReady` re-prepares on vault switch.
  */
 
 import type { DatabaseSync, StatementSync } from "node:sqlite";
@@ -34,15 +11,10 @@ import type { RunKind } from "../conversation/schema.js";
 import type { DatabaseProvider } from "../stores/gateway-db.js";
 
 export interface ListSummariesOptions {
-  /** Scope to one automation handle. */
   readonly automationRef?: string;
   /**
-   * Drop rows whose `automation_ref` is one of these handles — applied in
-   * SQL, before `LIMIT`, so a flood of runs on an excluded handle can never
-   * crowd everything else out of the window (#731 M2: a 500-photo
-   * import filled the whole `turns` window with recognition runs and left
-   * the member's own "Recent activity" empty). Ignored when `automationRef`
-   * is also set (a single-ref scope has nothing left to exclude).
+   * Applied in SQL before `LIMIT` so an excluded flood cannot crowd the
+   * window (#731 M2). Ignored when `automationRef` is also set.
    */
   readonly excludeAutomationRefs?: readonly string[];
   readonly limit?: number;
@@ -130,23 +102,11 @@ interface PreparedStatements {
   listByRef: StatementSync;
 }
 
-/**
- * Read-only store over a vault's `run_summary` view. Construct with the
- * vault's journal `DatabaseProvider` (`makeJournalDbProvider`, or the
- * gateway's active-vault resolver). Mutations happen on the ledger tables
- * the view derives from (`ConversationStore.setTurnPinned`, conversation
- * deletes) and are visible here immediately.
- */
 export class AnalyticsStore {
   private readonly provider: DatabaseProvider;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
-  /**
-   * `NOT IN (...)` statements are keyed by placeholder count and rebuilt
-   * whenever the db handle changes (vault switch) — the exclude list's
-   * length is small and fixed in practice (the recognition template set),
-   * so this stays a handful of entries.
-   */
+  /** `NOT IN (...)` keyed by placeholder count; rebuilt on vault switch. */
   private excludeStmts = new Map<number, StatementSync>();
 
   constructor(provider: DatabaseProvider) {
@@ -171,7 +131,6 @@ export class AnalyticsStore {
     return this.stmts;
   }
 
-  /** `SELECT * FROM run_summary WHERE automation_ref NOT IN (...)`, prepared once per exclude-list length and reused across calls. */
   private listExcluding(refs: readonly string[]): StatementSync {
     const cached = this.excludeStmts.get(refs.length);
     if (cached) return cached;
@@ -191,7 +150,6 @@ export class AnalyticsStore {
     return raw ? fromRaw(raw) : undefined;
   }
 
-  /** Run summaries newest-first; optionally scoped to one automation, or with a set of automation handles excluded (both applied in SQL, before `LIMIT`). */
   listSummaries(opts: ListSummariesOptions = {}): RunSummary[] {
     const { listAll, listByRef } = this.ensureReady();
     const limit = opts.limit ?? 100;

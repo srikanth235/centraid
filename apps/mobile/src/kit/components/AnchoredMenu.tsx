@@ -1,21 +1,8 @@
-// The ANCHORED MENU — a floating card hanging off the control that opened it,
-// never a sheet (#712): the control stays put and the surface underneath never
-// moves. A bottom sheet answers a destination-weight question instead.
-//
-// IN THE KIT because the anatomy is the frame's: the plate the band draws
-// (`kit/band-surface.ts`), the same 12pt inset. An app-local copy is the drift
-// `bandSurfaceStyle` exists to make unrepresentable.
-//
-// OPAQUE, NEVER GLASS: label contrast, the checkmark and the disabled ink
-// cannot depend on what the member photographed, and
-// `prefers-reduced-transparency` would need the opaque plate anyway.
-//
-// ONE LEVEL OF NESTING, drawn IN THE SAME CARD with a leading ‹ row rather than
-// iOS' second stacked card — same layer count for the member, no second
-// rectangle to measure against the screen edges. It stops at one level for the
-// reason iOS' does: a member cannot hold a path they cannot see.
-//
-// No shadow, no elevation: product surfaces separate by their edge (§G).
+// Anchored menu — a card hanging off the control, never a sheet (#712).
+// Kit-owned plate (`band-surface.ts`). Opaque, never glass: contrast cannot
+// depend on what was photographed. One nesting level in the same card
+// (leading ‹ row), no stacked second card. No shadow: surfaces separate by
+// edge (§G).
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -34,8 +21,7 @@ import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
-/** WINDOW coordinates — what `measureInWindow` reports and where a `Modal`'s
- *  root lives. Screen coordinates are wrong under a status-bar inset. */
+/** Window coords (`measureInWindow` / Modal root). Screen coords fail under a status-bar inset. */
 export interface MenuAnchor {
   x: number;
   y: number;
@@ -43,23 +29,19 @@ export interface MenuAnchor {
   height: number;
 }
 
-/** `checked` states the current answer of the group; the row is never a
- *  switch. */
+/** `checked` is the group's current answer; the row is never a switch. */
 export interface MenuActionRow {
   key: string;
   label: string;
-  /** Leading glyph, after the checkmark slot. */
   icon?: string;
   checked?: boolean;
   destructive?: boolean;
   disabled?: boolean;
-  /** Keep the card up after the tap — for rows a member steps repeatedly. A
-   *  choice about what the surface underneath shows dismisses instead. */
+  /** Keep the card up — repeated steps. A choice about the surface underneath dismisses. */
   staysOpen?: boolean;
   onSelect: () => void;
 }
 
-/** Opens one level of rows in place. */
 export interface MenuSubmenuRow {
   key: string;
   label: string;
@@ -69,8 +51,6 @@ export interface MenuSubmenuRow {
 
 export type MenuRow = MenuActionRow | MenuSubmenuRow;
 
-/** Separated from the next group by a hairline — the menu's only grouping
- *  device; a card has no room for a sheet's section headings. */
 export interface MenuGroup {
   key: string;
   rows: readonly MenuRow[];
@@ -78,22 +58,17 @@ export interface MenuGroup {
 
 export interface AnchoredMenuProps {
   visible: boolean;
-  /** `undefined` until measured — the card falls back to the top trailing
-   *  corner rather than refusing to open. */
+  /** Unmeasured → top trailing corner, never refuse to open. */
   anchor: MenuAnchor | undefined;
   groups: readonly MenuGroup[];
   onClose: () => void;
 }
 
-/** Wide enough for "View Options" plus its chevron, narrow enough to read as
- *  hanging off a chip rather than as a panel. */
 const CARD_WIDTH = 280;
 const ANCHOR_GAP = 6;
-/** A floor however tight the anchor is against an edge: below it the scroll
- *  region has no room to scroll IN. */
+/** Floor: below this the scroll region has no room to scroll in. */
 const MIN_CARD_HEIGHT = 132;
-/** Reserved on EVERY row, checked or not, so labels do not dance left by a
- *  glyph's width as the answer moves. */
+/** Reserved on every row so labels do not dance as the checkmark moves. */
 const CHECK_SLOT = 22;
 
 interface CardPlacement {
@@ -104,12 +79,8 @@ interface CardPlacement {
 }
 
 /**
- * Flips on the space each side actually has, never on a guess at the card's
- * height — that depends on the consumer's rows and is unknown until layout.
- *
- * TRAILING-ALIGNED horizontally, because a header chip lives at the trailing
- * edge, then clamped into the stage's 12pt inset so a centred or leading anchor
- * still yields a card fully on screen.
+ * Flip on space each side actually has, never a guessed card height.
+ * Trailing-aligned, then clamped into the 12pt inset.
  */
 function cardPlacement(
   anchor: MenuAnchor | undefined,
@@ -149,10 +120,8 @@ function isSubmenu(row: MenuRow): row is MenuSubmenuRow {
 }
 
 /**
- * NEVER `onLayout`: it reports a position relative to the PARENT, not the space
- * a `Modal` draws in, so a chip's y lands the card at the top of the screen.
- * `measureInWindow` answers in the modal root's own coordinates, and being
- * imperative it is called on the press rather than cached into staleness.
+ * Never `onLayout` (parent-relative — the card would land at the top of the
+ * screen). `measureInWindow` is the modal root; call on press, never cache.
  */
 export function useMenuAnchor(): {
   anchorRef: React.RefObject<RNView | null>;
@@ -163,8 +132,7 @@ export function useMenuAnchor(): {
   const [anchor, setAnchor] = useState<MenuAnchor | undefined>(undefined);
   const measureAnchor = useCallback(() => {
     const node = anchorRef.current;
-    // Guarded: a host that has not laid out — or any non-native renderer — has
-    // no measure method, and the menu must open unanchored rather than throw.
+    // Unlaid-out / non-native hosts have no measure — open unanchored, never throw.
     if (!node || typeof node.measureInWindow !== "function") return;
     node.measureInWindow((x, y, width, height) => {
       setAnchor({ height, width, x, y });
@@ -173,8 +141,6 @@ export function useMenuAnchor(): {
   return { anchor, anchorRef, measureAnchor };
 }
 
-/** Derived from the sheet, so a renamed key is a type error rather than a
- *  silently missing style. */
 type MenuStyles = ReturnType<typeof makeStyles>;
 
 function ActionRowView({
@@ -197,8 +163,7 @@ function ActionRowView({
   return (
     <Pressable
       accessibilityRole="menuitem"
-      // The label carries the answer too: `selected` alone is announced
-      // inconsistently across the two platforms' menu roles.
+      // `selected` alone is announced inconsistently across the two platforms.
       accessibilityLabel={
         row.checked === true ? `${row.label}. Selected` : row.label
       }
@@ -216,7 +181,7 @@ function ActionRowView({
       <Text
         style={[
           styles.label,
-          // The leaf takes the state's token; never a container opacity (§18).
+          // Leaf takes the state's token; never a container opacity (§18).
           disabled ? styles.labelDisabled : undefined,
           !disabled && row.destructive === true
             ? styles.labelDestructive
@@ -269,8 +234,6 @@ function MenuBody({
   styles: MenuStyles;
   onClose: () => void;
 }): React.JSX.Element {
-  // Mounted only while the card is up, so the path resets on close without an
-  // effect writing state off its own prop.
   const [openKey, setOpenKey] = useState<string | undefined>(undefined);
   const submenu = useMemo(() => {
     if (openKey === undefined) return undefined;
@@ -293,8 +256,7 @@ function MenuBody({
   if (submenu) {
     return (
       <>
-        {/* A ROW, not a title-bar chevron: first under the thumb that arrived
-            here, and it names the group it returns to. */}
+        {/* A row, not a title-bar chevron: names the group it returns to. */}
         <Pressable
           accessibilityRole="menuitem"
           accessibilityLabel={`Back to ${submenu.label}`}
@@ -353,9 +315,6 @@ function MenuBody({
   );
 }
 
-/** A transparent `Modal`, never an absolutely positioned View: the card must
- *  float over the header, the band and everything between, which no sibling of
- *  the header can do. */
 export default function AnchoredMenu({
   visible,
   anchor,
@@ -365,14 +324,12 @@ export default function AnchoredMenu({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const screen = useWindowDimensions();
-  // Unmounting on close is what lets `MenuBody` keep its submenu path in plain
-  // state: no component holds a stale path to reset.
+  // Unmount on close so MenuBody's submenu path is plain state, never stale.
   if (!visible) return null;
   const placement = cardPlacement(anchor, screen);
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
-      {/* Transparent, never a scrim: dimming would claim a sheet's weight, and
-          the card is opaque so legibility never depended on one. */}
+      {/* No scrim: dimming claims a sheet's weight; the card is already opaque. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Close menu"
@@ -414,7 +371,6 @@ const makeStyles = (colors: ThemeColors) =>
       width: CARD_WIDTH,
     },
     group: {},
-    // The menu's ONLY grouping device: the boundary IS the rule.
     groupSeparated: {
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
@@ -422,7 +378,6 @@ const makeStyles = (colors: ThemeColors) =>
     label: { ...t("small"), color: colors.text, flex: 1 },
     labelDestructive: { color: colors.danger },
     labelDisabled: { color: colors.textDisabled },
-    // 44pt, the frame's minimum target: a menu row is a control, not a line.
     row: {
       alignItems: "center",
       flexDirection: "row",

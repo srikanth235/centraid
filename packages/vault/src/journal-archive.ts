@@ -1,32 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#367) one coherent archival engine — the eligibility closure, segment builder, hash-chained manifest writer, and its verifier are one integrity unit; splitting the chain-hash writer from its verifier invites drift
-// Journal segment archival (#367 §E2). journal.db is append-only and grows
-// without bound; this seals rows past an active window into a content-addressed
-// segment in the vault's blob CAS and keeps only a manifest row
-// (`journal_archive_manifest`) behind — audit-chain verifiability without
-// keeping every row forever.
-//
-// Two archival streams, matched to the table's FK topology exactly (journal.db
-// runs `PRAGMA foreign_keys = ON`, so deleting a row a live row references
-// throws):
-//
-//   - `provenance` — `consent_provenance` self-references via `prev_prov_id`
-//     and is pointed at by `agent_evidence.prov_id`, so a row archives only
-//     when no LIVE row still points back at it.
-//   - `invocation_cluster` — `agent_command_invocation` and `consent_receipt`
-//     hold MUTUAL foreign keys, so neither can be deleted alone under immediate
-//     checking. Both directions are computed as one linked set by a fixed-point
-//     closure (`computeEligibleCluster`) and deleted under
-//     `PRAGMA defer_foreign_keys = ON`, so order does not matter.
-//     `agent_invocation_check`, `agent_evidence` and `agent_explanation` are
-//     true leaves and archive with their invocation unconditionally.
-//
-// Segments are gzip(JSON) written through `db.blobs.ingestSync` — the SAME
-// local CAS every other blob uses (#296) — so `readArchivedSegment` /
-// `verifyArchivedSegment` are the round-trip and integrity proof.
-//
-// NEEDS-WIRING (#367): nothing calls `runJournalArchival` automatically.
-// `VaultPlane.runSweep` is the natural home. Archival is window-gated AND
-// call-gated, so a vault that never calls this never archives.
+// Journal archival (#367 §E2): seal rows past the window into CAS; keep the manifest. Two streams match FK topology (provenance chain; invocation↔receipt cluster under deferred FKs).
+// NEEDS-WIRING (#367): nothing calls `runJournalArchival` automatically. Window-gated AND call-gated.
 
 import type { DatabaseSync } from "node:sqlite";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -38,13 +12,7 @@ import { nowIso, sha256Hex, uuidv7 } from "./ids.js";
 /** Rows older than this are eligible for archival, unless overridden. */
 export const DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS = 90;
 
-/**
- * Invocations (and, separately, provenance rows) one run may seal (#659 L2).
- * Without a cap the engine reads EVERY eligible row of five tables into JS and
- * gzips the lot, so a first archival over a year of history is an unbounded
- * memory spike and a multi-second stall. Mirrors the ledger prune's
- * `maxSegments` (#438): bounded work, and `capped` tells the host to return.
- */
+/** Cap per run (#659 L2) — without it a first archival is an unbounded memory spike. */
 export const DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS = 5_000;
 
 const SEGMENT_VERSION = 1;
@@ -168,18 +136,8 @@ function selectColumnsByIds<T>(
 }
 
 /**
- * The invocation⇄receipt mutual-FK closure: start from the OLDEST `maxRows`
- * invocations old enough by their own clock, then drop any whose linked receipt
- * (either FK direction) is too young, missing, or shared with an ineligible
- * invocation.
- *
- * Two shapes are load-bearing for cost (#659 L2). The link and receipt-time
- * maps are built from id-scoped queries over the candidate set, never from full
- * scans of `consent_receipt` and `agent_command_invocation`. And the fixed
- * point uses a WORKLIST rather than rescanning the eligible set after every
- * removal: removing an invocation can only make its receipts' OTHER referrers
- * ineligible, so those are exactly what needs re-examining — same fixed point,
- * linear in edges instead of quadratic in candidates.
+ * Invocation⇄receipt mutual-FK closure: oldest `maxRows` invocations, then drop any whose linked receipt is too young, missing, or shared.
+ * Cost (#659 L2): id-scoped queries over candidates, never full scans. Worklist fixed-point, linear in edges.
  */
 function computeEligibleCluster(
   journal: DatabaseSync,
@@ -361,16 +319,7 @@ interface SegmentBuild {
   toTime: string;
 }
 
-/**
- * Serialize row-by-row instead of `JSON.stringify`-ing the whole payload
- * (#659): one stringify builds a string as large as the segment on top of the
- * row objects, then copies it into a Buffer, so peak memory was ~3x the
- * segment. Per-row encoding keeps the peak at one row plus the accumulated
- * chunks, bounded by the run cap.
- *
- * The output is byte-identical to `JSON.stringify(payload)` for the
- * `ArchivedSegmentRows` shape, so segments written either way decode the same.
- */
+/** Row-by-row gzip (#659) — whole-payload stringify peaked at ~3x the segment. Byte-identical to `JSON.stringify(payload)`. */
 function gzipJson(payload: ArchivedSegmentRows): Buffer {
   const chunks: Buffer[] = [];
   const push = (text: string): void => {
@@ -564,12 +513,7 @@ function reclaimSpace(journal: DatabaseSync): {
   return { mode, ranVacuum: false };
 }
 
-/**
- * Every archive segment the manifest chain still references. These blobs are
- * CLAIMED and MUST join `liveBlobShas()`'s set wherever custody reconciliation
- * or purge runs, or the remote sweep reads them as orphans and deletes the only
- * durable copy of archived journal rows.
- */
+/** Claimed CAS shas — MUST join `liveBlobShas()` or the remote sweep deletes the only durable copy. */
 export function archivedSegmentShas(journal: DatabaseSync): Set<string> {
   const shas = new Set<string>();
   const rows = journal

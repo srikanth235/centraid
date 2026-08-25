@@ -1,10 +1,7 @@
-// Photos' seat on the frame's transfer engine (#711). The serial run, counters
-// and failure shape belong to `kit/transfer/transfer-run.ts`; what stays here
-// is what only Photos knows — opening a camera-roll original, a Live Photo as
-// two durable uploads sharing one capture group, and Photos' own stall words.
-//
-// `runBackup` is the manual OVERRIDE; `automaticBackupCandidates` is the
-// consent-gated default path (S4).
+// Photos' seat on the transfer engine (#711). Serial run lives in
+// `kit/transfer/transfer-run.ts`. Here: camera-roll originals, Live Photo as
+// two uploads sharing a capture group, stall copy. `runBackup` is the
+// manual override; `automaticBackupCandidates` is the consent-gated path (S4).
 
 import { File } from "expo-file-system";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -35,11 +32,10 @@ import { usePhotoTimeline } from "./timeline-source";
 
 export type BackupProgress = TransferProgress;
 
-/** Opaque to the engine, which passes it straight back to `send`. */
+/** Opaque to the engine; passed straight back to `send`. */
 interface PhotoRecord {
   kind: PhotoAsset["kind"];
-  /** Omitted from the upload rather than sent empty: the vault stores the fact
-   *  the device had, or nothing. */
+  /** Omit rather than send empty — the vault stores the device's fact or nothing. */
   capturedAt?: string;
   captureGroupId?: string;
   width?: number;
@@ -54,8 +50,6 @@ export interface BackupRunDeps {
     mediaType: string;
     plaintextSize: number;
     kind: PhotoAsset["kind"];
-    /** An asset with no capture time uploads without one rather than being
-     *  held back from backup. */
     capturedAt?: string;
     captureGroupId?: string;
     width?: number;
@@ -67,15 +61,12 @@ export interface BackupRunDeps {
 }
 
 export interface BackupOutcome {
-  /** Originals that never came down from iCloud. They stay selected, so a
-   *  retry is one tap. */
+  /** iCloud originals stay selected so retry is one tap. */
   inCloud: Set<string>;
-  /** Already member-facing. */
   paused?: string;
 }
 
-/** Bytes resolve LATE, inside `open()`, so a long run never holds fifty
- *  originals open at once. */
+/** Bytes resolve inside `open()` so a long run never holds originals open. */
 function photoEntry(
   asset: PhotoAsset,
   localId: string,
@@ -90,13 +81,11 @@ function photoEntry(
       try {
         original = await openDeviceOriginal(localId);
       } catch (error) {
-        // A fact about the entry, not a failure of the run.
         if (error instanceof InCloudOriginalError)
           throw new TransferSourceUnavailableError(IN_CLOUD_MESSAGE);
         throw error;
       }
-      // The paired MOV is a distinct durable upload, resolved first because the
-      // still's capture group depends on it.
+      // Paired MOV is its own durable upload; resolve first — the still's capture group depends on it.
       const companion = await liveVideoUri(original.asset);
       const sends: Array<TransferSend<PhotoRecord>> = [
         {
@@ -108,10 +97,8 @@ function photoEntry(
           },
           record: {
             kind: asset.kind,
-            // OMITTED, never `undefined`: absence carries "no capture time".
             ...(asset.capturedAt ? { capturedAt: asset.capturedAt } : {}),
-            // MediaLibrary carries no true UTC offset, so none is recorded
-            // rather than the device's being fabricated.
+            // MediaLibrary has no true UTC offset — do not fabricate the device's.
             ...(companion ? { captureGroupId: `live:${localId}` } : {}),
             ...(asset.width === undefined ? {} : { width: asset.width }),
             ...(asset.height === undefined ? {} : { height: asset.height }),
@@ -126,8 +113,6 @@ function photoEntry(
         sends.push({
           bytes: {
             localUri: companion,
-            // The Next API hands back an extracted file, not a paired asset, so
-            // dimensions and duration are simply not on offer.
             filename: companionFile.name,
             mediaType: "video/quicktime",
             plaintextSize: companionFile.size,
@@ -144,7 +129,6 @@ function photoEntry(
   };
 }
 
-/** No device copy means nothing to send: not deferred, just not in this run. */
 function photoEntries(
   assets: readonly PhotoAsset[],
   targetVaultId?: string
@@ -154,7 +138,6 @@ function photoEntries(
   );
 }
 
-/** The MANUAL override (§S4): a member picked these and asked for them now. */
 export async function runBackup(
   selected: readonly PhotoAsset[],
   deps: BackupRunDeps
@@ -170,19 +153,15 @@ export async function runBackup(
   });
   return {
     inCloud: outcome.deferred,
-    // Photos owns the sentence; the engine owns the reason.
     ...(outcome.pausedReason
       ? { paused: `Backup paused: ${outcome.pausedReason}` }
       : {}),
   };
 }
 
-// ── The automatic path (S4) ────────────────────────────────────────────────
-
 /**
- * THE CONSENT GATE, stated once and only once. `local-only` is exactly the set
- * the sweep exists for; everything else is safe, mid-flight, or unopenable.
- * Pure, so an unanswered or declined latch provably returns nothing.
+ * Consent gate, once. `local-only` is the sweep's set. Pure: unanswered or
+ * declined latch returns nothing.
  */
 export function automaticBackupCandidates(
   consent: BackupConsentRecord | undefined,
@@ -191,21 +170,16 @@ export function automaticBackupCandidates(
   return automaticTransferPlan(
     consent,
     assets,
-    // A row that cannot be opened is not a candidate, however it got here.
     (asset) => asset.backupState === "local-only" && Boolean(asset.localId)
   );
 }
 
 export interface AutomaticBackupState {
-  /** On this device and nowhere else, right now. */
   remaining: number;
-  /** Determinate: an exact number is the whole readout, there is no spinner. */
   sent: number;
-  /** iCloud-optimised originals. COUNTED AND SHOWN, never silent — otherwise a
-   *  member is told everything is backed up while originals sit in the cloud. */
+  /** iCloud originals — counted and shown, or the member is told everything is backed up. */
   deferred: number;
   running: boolean;
-  /** Stated, never silent. */
   blocked?: string;
 }
 
@@ -219,8 +193,7 @@ interface SweepScope {
   vaultId?: string;
 }
 
-/** Outside any component, and not stylistically: an async walk reporting
- *  through a callback is an EXTERNAL SYSTEM the hook synchronises with. */
+/** Async walk reporting through a callback — an external system the hook syncs with. */
 async function sweepOnce(
   scope: SweepScope,
   pending: readonly PhotoAsset[],
@@ -242,8 +215,6 @@ async function sweepOnce(
     sent: current.sent + outcome.sent,
     deferred: outcome.deferred.size,
     running: false,
-    // The queue keeps every row it accepted; the next timeline change or
-    // foreground resumes it.
     ...(outcome.pausedReason
       ? { blocked: `Backup paused: ${outcome.pausedReason}` }
       : {}),
@@ -251,10 +222,8 @@ async function sweepOnce(
 }
 
 /**
- * Deliberately NOT a background service: the durable queue survives process
- * death and re-drains on foreground, so all that is missing between launches is
- * the ENQUEUE, and the walk that finds those photographs already runs wherever
- * Photos is on screen. One sweep at a time — two would double every count.
+ * Not a background service: the durable queue survives death and re-drains
+ * on foreground. One sweep at a time — two would double every count.
  */
 export function useAutomaticPhotoBackup(
   consent: BackupConsentRecord | undefined
@@ -267,23 +236,18 @@ export function useAutomaticPhotoBackup(
     deferred: 0,
     running: false,
   });
-  // Per-hook, not module-scope: the drain lock serialises the device, and this
-  // only stops one hook re-entering itself mid-walk.
+  // Per-hook: drain lock serialises the device; this only stops re-entry mid-walk.
   const sweeping = useRef(false);
-  // Memoised on the SNAPSHOT, which stays referentially stable until the
-  // timeline changes; without it the effect re-enters the sweep every render.
+  // Memo on the snapshot; without it the effect re-enters the sweep every render.
   const candidates = useMemo(
     () => automaticBackupCandidates(consent, timeline.assets),
     [consent, timeline.assets]
   );
 
   useEffect(() => {
-    // Re-entered whenever the candidate set changes — what "a photograph was
-    // just taken" looks like from here. Idle at zero, so it settles.
     const start = async (): Promise<void> => {
       if (sweeping.current || candidates.length === 0) return;
-      // Asked fresh: a sweep must not start on cellular because it was planned
-      // on Wi-Fi.
+      // Re-check policy: do not start on cellular because it was planned on Wi-Fi.
       if (!(await nativeUploadPolicy().canTransfer())) {
         setState((current) => ({ ...current, blocked: POLICY_BLOCKED }));
         return;
@@ -307,6 +271,5 @@ export function useAutomaticPhotoBackup(
     void start();
   }, [candidates, session, gatewayBase, vaultId]);
 
-  // Derived, never stored, so a photograph that settles stops being counted.
   return { ...state, remaining: candidates.length };
 }

@@ -1,11 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit the staging commands and the broker-credential lifecycle commands (#304) are one sync vocabulary — begin/finish/cursor/status and configure/store share the connection state machine, so splitting scatters the invariants
-// The agent-facing staging commands (#290): an agent with a live harness
-// session parses whatever it pulled and STAGES it through `sync.stage_rows`
-// (risk low — the staging band holds reviewable state, no domain table moves);
-// landing it is `sync.publish_batch` (risk high, above every agent's ceiling,
-// so it PARKS for the owner). The risk asymmetry IS the consent story — agents
-// stage freely, the owner publishes deliberately. Credentials stay
-// harness-ambient; the vault only ever sees parsed rows.
+// Agent staging (#290): `sync.stage_rows` is low-risk; `sync.publish_batch` is high and parks. Credentials stay harness-ambient.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -18,11 +12,7 @@ import {
 import type { StageCandidate } from "../ingest/staging.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
 
-/**
- * Derived-data class per stageable entity type (#310) — the unit the owner
- * consents to when narrowing a connection's auto-publish trust. Plain import
- * types not named here are untouched by class narrowing.
- */
+/** Derived-data class per stageable entity (#310) — the unit auto-publish trust narrows. */
 const ENRICH_CLASS_OF: Readonly<Record<string, string>> = {
   "knowledge.annotation": "caption",
   "core.tag": "tag",

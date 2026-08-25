@@ -1,10 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit one suite over the enrichment spine — staging, attribution injection, owner auto-publish, and the content primitive share the one bootstrapped vault (#299)
-// The enrichment spine, vault side (#299 phases 1–5 plumbing):
-// derived data lands as ontology rows through the staging spine, attribution
-// is injected server-side and owner assertions are terminal, the owner's
-// auto-publish trust is what lets captions land without a review click, and
-// the agent content primitive keeps visual originals unreachable while
-// allowing bounded audio/video sources for self-contained ASR.
+// Enrichment spine, vault side (#299): derived rows through staging;
+// attribution injected server-side; owner assertions terminal; auto-publish
+// trust lets captions land without a review click; visual originals stay
+// unreachable while bounded AV sources serve ASR.
 
 import { DatabaseSync } from "node:sqlite";
 
@@ -153,7 +151,7 @@ describe("enrich", () => {
         .get() as {
         d: number;
       };
-      expect(row.d).toBe(4); // f ^ 0 = 4 bits
+      expect(row.d).toBe(4);
       addPhoto("a1b2c3d4e5f60708");
       const near = db.vault
         .prepare(
@@ -187,7 +185,7 @@ describe("enrich", () => {
       const stagedOut = output<{ connection_id: string; published?: unknown }>(
         staged
       );
-      expect(stagedOut.published).toBeUndefined(); // default trust = staged
+      expect(stagedOut.published).toBeUndefined();
       expect(
         (
           db.vault
@@ -196,21 +194,18 @@ describe("enrich", () => {
         ).n
       ).toBe(0);
 
-      // The agent proposing to widen its own trust PARKS (risk high).
+      // Agent proposing to widen its own trust PARKS (risk high).
       const proposal = invoke(agent, "sync.set_connection_trust", {
         connection_id: stagedOut.connection_id,
         trust: "auto-publish",
       });
       expect(proposal.status).toBe("parked");
-      // The owner flips it directly.
       const flip = invoke(owner, "sync.set_connection_trust", {
         connection_id: stagedOut.connection_id,
         trust: "auto-publish",
       });
       expect(flip.status).toBe("executed");
 
-      // Same rows again: the draft batch dedup skips nothing (nothing landed),
-      // and this time the batch auto-publishes in the same command.
       const again = invoke(agent, "sync.stage_rows", {
         kind: "enrichment.vision",
         label: "photos",
@@ -230,7 +225,6 @@ describe("enrich", () => {
         .get(assetId) as { author_party_id: string; body_text: string };
       expect(annotation.author_party_id).toBe(agentPartyId);
 
-      // FTS: "search photos by what's in them" via the caption.
       const hits = gw.search(owner, {
         entity: "knowledge.annotation",
         query: "sandcastle",
@@ -238,7 +232,6 @@ describe("enrich", () => {
       }) as { rows: unknown[] };
       expect(hits.rows).toHaveLength(1);
 
-      // Idempotency: unchanged caption re-stages as skip (external-id map).
       const third = invoke(agent, "sync.stage_rows", {
         kind: "enrichment.vision",
         label: "photos",
@@ -246,7 +239,6 @@ describe("enrich", () => {
       });
       expect(output<{ staged: { skip: number } }>(third).staged.skip).toBe(1);
 
-      // A model upgrade (changed caption) updates the enricher's OWN row.
       const upgraded = [
         {
           ...rows[0]!,
@@ -422,7 +414,6 @@ describe("enrich", () => {
       });
       expect(confirmed.status).toBe("executed");
 
-      // A re-run proposing a different box no longer touches the region.
       invoke(agent, "sync.stage_rows", {
         kind: "enrichment.vision",
         label: "photos",
@@ -451,9 +442,9 @@ describe("enrich", () => {
         answer: "reject",
       });
       expect(rejected.status).toBe("executed");
-      // A rejection is a STATE, not a deletion (#712): the row survives
-      // so the answer can be remembered, and it drops its proposed party so
-      // no per-person count still sees it.
+      // Rejection is a STATE, not a deletion (#712): the row survives so the
+      // answer can be remembered, and it drops its proposed party so no
+      // per-person count still sees it.
       const afterReject = db.vault
         .prepare(
           "SELECT review_state, party_id, confirmed_by_party_id FROM media_face_region WHERE region_id = ?"
@@ -469,10 +460,8 @@ describe("enrich", () => {
     });
 
     test("an answered face is never re-proposed by a later enricher run", () => {
-      // THE SABOTAGE (#712): the enricher runs again, with the same
-      // external id AND with a fresh one, after the owner has dismissed the
-      // face. Neither may put the region back in a review queue — a member
-      // who deliberately left a stranger unnamed must not meet them again.
+      // Sabotage (#712): after dismiss, same external id AND a fresh one must
+      // not put the region back in a review queue.
       const { assetId } = addPhoto();
       const propose = (externalId: string, x: number) =>
         invoke(agent, "sync.stage_rows", {
@@ -509,8 +498,7 @@ describe("enrich", () => {
       });
       expect(dismissed.status).toBe("executed");
 
-      // Same external id → the publisher's update path, which may only touch
-      // a still-`proposed` region.
+      // Same external id → update path, which may only touch a still-`proposed` region.
       propose(`${assetId}:face:0`, 0.9);
       const rows = db.vault
         .prepare(
@@ -524,7 +512,6 @@ describe("enrich", () => {
       expect(rows).toHaveLength(1);
       expect(rows[0]!.review_state).toBe("dismissed");
       expect(JSON.parse(rows[0]!.bbox_json).x).toBeCloseTo(0.1);
-      // …and nothing the queue would show is left on this photograph.
       expect(
         (
           db.vault
@@ -589,7 +576,6 @@ describe("enrich", () => {
           party_id: boot.ownerPartyId,
         }).status
       ).toBe("failed");
-      // The refusals left the proposal exactly where it was.
       expect(
         (
           db.vault
@@ -640,14 +626,13 @@ describe("enrich", () => {
           WHERE c.name = 'Goa, June 2026'`
         )
         .get() as { n: number };
-      expect(entries.n).toBe(1); // deduped photo = one distinct asset
+      expect(entries.n).toBe(1);
     });
 
     test("filing a WRAPPED content item retargets title + folder tag onto its core_document", () => {
-      // #352: core_document wraps content items, so a filing proposal
-      // against a content id that's already a document's current head must
-      // land on the document, not the (no-longer-read) content item — else
-      // the tag is silently invisible to every document-scoped read path.
+      // #352: filing a content id that is already a document's current head
+      // must land on the document, not the content item — else the tag is
+      // invisible to every document-scoped read.
       const staged = gw.stageBlob(owner, {
         bytes: Buffer.from("scan scan scan"),
         filename: "scan_001.txt",
@@ -685,8 +670,7 @@ describe("enrich", () => {
         failed: number;
       }>(invoke(owner, "sync.publish_batch", { batch_id: batchId }));
       expect(published.updated).toBe(1);
-      expect(published.failed).toBe(1); // the missing content item refused to create
-      // never mints a document: the wrapper row count doesn't grow
+      expect(published.failed).toBe(1);
       const docCount = db.vault
         .prepare("SELECT count(*) AS n FROM core_document")
         .get() as {
@@ -696,7 +680,7 @@ describe("enrich", () => {
       const contentTitleUnchanged = db.vault
         .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
         .get(doc.content_id) as { title: string | null };
-      expect(contentTitleUnchanged.title).toBe("scan_001"); // untouched — the content item isn't the document's identity
+      expect(contentTitleUnchanged.title).toBe("scan_001");
       const document = db.vault
         .prepare("SELECT title FROM core_document WHERE document_id = ?")
         .get(doc.document_id) as { title: string };
@@ -712,9 +696,8 @@ describe("enrich", () => {
     });
 
     test("filing an UNWRAPPED content item still tags the content item directly", () => {
-      // A content item that no core_document wraps yet (e.g. a media asset,
-      // or ingest that hasn't gone through core.add_document) keeps the
-      // original content-item-scoped filing behavior.
+      // Unwrapped content (media asset, or ingest not through core.add_document)
+      // keeps content-item-scoped filing.
       const staged = gw.stageBlob(owner, {
         bytes: PNG_BYTES,
         filename: "loose.png",
@@ -750,7 +733,7 @@ describe("enrich", () => {
         .get() as {
         n: number;
       };
-      expect(docCount.n).toBe(0); // still never mints a document
+      expect(docCount.n).toBe(0);
       const item = db.vault
         .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
         .get(asset.content_id) as { title: string };
@@ -789,7 +772,6 @@ describe("enrich", () => {
         purpose: "dpv:ServiceProvision",
       }) as { rows: unknown[] };
       expect(hits.rows).toHaveLength(1);
-      // Re-extraction replaces in place (re-derivable).
       invoke(agent, "core.set_extracted_text", {
         content_id: doc.content_id,
         text: "better OCR text",
@@ -803,10 +785,8 @@ describe("enrich", () => {
     });
 
     test("re-extraction gets a fresh derivative_id so a bounded embed cursor can catch the rewrite (issue #731)", () => {
-      // embed-text's cursor walks `derivative_id > cursor`. An in-place
-      // UPDATE would leave the rewritten row's id behind an already-advanced
-      // cursor, so the corrected text would never be re-embedded and
-      // semantic search would keep serving a stale vector.
+      // embed-text walks `derivative_id > cursor`. An in-place UPDATE would
+      // leave the rewritten id behind an advanced cursor — stale vectors.
       const staged = gw.stageBlob(owner, {
         bytes: PNG_BYTES,
         filename: "scan2.png",
@@ -836,10 +816,9 @@ describe("enrich", () => {
         )
         .get(doc.content_id) as { derivative_id: string };
       expect(after.derivative_id).not.toBe(before.derivative_id);
-      // uuidv7 ids are lexicographically time-ordered. Prove it the way
-      // embed-text's bounded cursor actually queries — `derivative_id >
-      // cursor` — rather than asserting string order directly: a cursor
-      // parked at the pre-rewrite id must find the rewritten row.
+      // uuidv7 is lexicographically time-ordered. Prove it the way embed-text
+      // queries (`derivative_id > cursor`), not string order: a cursor parked
+      // at the pre-rewrite id must find the rewritten row.
       const rescanned = db.vault
         .prepare(
           `SELECT count(*) AS n FROM core_content_derivative
@@ -847,7 +826,6 @@ describe("enrich", () => {
         )
         .get(doc.content_id, before.derivative_id) as { n: number };
       expect(rescanned.n).toBe(1);
-      // Still exactly one live row — a rewrite replaces, it doesn't append.
       const derivatives = db.vault
         .prepare(
           `SELECT count(*) AS n FROM core_content_derivative WHERE content_id = ? AND variant = 'text'`
@@ -876,7 +854,7 @@ describe("enrich", () => {
         model: "ocr@1",
         regions: [
           { text: "Total", box: [10, 10, 20, 20] },
-          // x + w = 90 + 20 = 110 > width 100 — out of bounds.
+          // x + w = 110 > width 100 — out of bounds.
           { text: "Out of bounds", box: [90, 70, 20, 20], confidence: 0.5 },
         ],
       });
@@ -891,8 +869,7 @@ describe("enrich", () => {
       };
       expect(payload.regions).toStrictEqual([
         { text: "Total", box: [10, 10, 20, 20] },
-        // The box is dropped, not clamped or replaced — and its confidence
-        // is preserved exactly as given, never invented or zeroed.
+        // Box dropped, not clamped; confidence preserved, never invented.
         { text: "Out of bounds", confidence: 0.5 },
       ]);
     });
@@ -925,8 +902,8 @@ describe("enrich", () => {
       );
       expect(thumb.mediaType).toBe("image/jpeg");
 
-      // The spelling exists for ASR, but a visual source is still structurally
-      // unreachable so EXIF/GPS-bearing bytes never cross this rail.
+      // `original` exists for ASR, but a visual source stays unreachable so
+      // EXIF/GPS-bearing bytes never cross this rail.
       await expect(
         gw.contentForAgent(agent, {
           contentId: asset.content_id,
@@ -958,7 +935,6 @@ describe("enrich", () => {
       );
       expect(originalAudio.mediaType).toBe("audio/wav");
 
-      // The text variant reads the derivative row.
       invoke(agent, "core.set_extracted_text", {
         content_id: asset.content_id,
         text: "hello text",
@@ -971,14 +947,12 @@ describe("enrich", () => {
       assert(text.status === "ok" && text.kind === "text");
       expect(text.text).toBe("hello text");
 
-      // A missing variant is a clean miss.
       const preview = await gw.contentForAgent(agent, {
         contentId: asset.content_id,
         variant: "preview",
       });
       expect(preview.status).toBe("no-variant");
 
-      // The size cap refuses oversized variants.
       const tooSmallCap = await gw.contentForAgent(agent, {
         contentId: asset.content_id,
         variant: "thumb",
@@ -986,7 +960,6 @@ describe("enrich", () => {
       });
       expect(tooSmallCap.status).toBe("too-large");
 
-      // Every fetch (allow AND deny) wrote an agent-content receipt.
       const receipts = db.journal
         .prepare(
           `SELECT count(*) AS n FROM consent_receipt WHERE detail_json LIKE '%agent-content%'`
@@ -1018,7 +991,7 @@ describe("enrich", () => {
             .prepare("SELECT count(*) AS n FROM enrich_embedding")
             .get() as { n: number }
         ).n
-      ).toBe(1); // upsert, not append
+      ).toBe(1);
       const hits = scanEmbeddings(db.vault, "stub-embedder-v1", [1, 0, 0], {
         limit: 5,
       });
@@ -1047,9 +1020,8 @@ describe("enrich", () => {
     });
 
     test("upsert_embedding stamps an optional source_version alongside the model (issue #731)", () => {
-      // `source_version` lets embed-text distinguish "this target's
-      // embedding is current" from "the model is current but the source
-      // derivative was rewritten since" — a model-only stamp comparison
+      // `source_version` distinguishes "embedding is current" from "model is
+      // current but the source derivative was rewritten" — a model-only stamp
       // cannot see a same-model text rewrite.
       const { assetId } = addPhoto();
       invoke(agent, "enrich.upsert_embedding", {
@@ -1069,7 +1041,6 @@ describe("enrich", () => {
         source_version: "deriv-1",
       });
 
-      // A later upsert with a fresh source_version REPLACES the stamp.
       invoke(agent, "enrich.upsert_embedding", {
         entity_type: "media.asset",
         entity_id: assetId,
@@ -1096,7 +1067,7 @@ describe("enrich", () => {
           purpose: "dpv:ServiceProvision",
         }) as { rows: unknown[] };
       expect(miss().rows).toHaveLength(0);
-      expect(miss().rows).toHaveLength(0); // repeat search — deduped
+      expect(miss().rows).toHaveLength(0);
       const open = db.vault
         .prepare(
           `SELECT request_id, detail FROM enrich_request WHERE drained_at IS NULL`
@@ -1188,16 +1159,14 @@ describe("enrich", () => {
       ).toThrow(/must be one of/u);
     });
 
-    // #352 phase 3/4: the settings bag itself is owner-only (GET/PATCH
-    // /centraid/_vault/enrich); `enrich_policy` mirrors the one column of it —
-    // "how far may this domain's enrichment run: off | device | gateway" —
-    // apps can actually reach through the normal consent-checked read path.
+    // Settings bag is owner-only (GET/PATCH /centraid/_vault/enrich);
+    // `enrich_policy` mirrors the one column apps can reach via consent-checked read.
     test("enrich_policy mirrors the settings bag, seeded gateway at bootstrap and readable via gw.read", () => {
       const seeded = db.vault
         .prepare("SELECT domain, tier FROM enrich_policy ORDER BY domain")
         .all() as { domain: string; tier: string }[];
-      // node:sqlite hands back null-prototype rows; spreading compares the column
-      // data (which is the contract) without asserting the driver's prototype.
+      // node:sqlite returns null-prototype rows; spreading compares columns
+      // without asserting the driver's prototype.
       expect(seeded.map((row) => ({ ...row }))).toStrictEqual([
         { domain: "docs", tier: "gateway" },
         { domain: "photos", tier: "gateway" },
@@ -1208,7 +1177,6 @@ describe("enrich", () => {
         .get("photos") as { tier: string };
       expect(afterUpdate.tier).toBe("device");
 
-      // The exact surface an app reaches: ctx.vault.read({ entity: 'enrich.policy', ... }).
       const read = gw.read(owner, {
         entity: "enrich.policy",
         where: [{ column: "domain", op: "eq", value: "photos" }],
@@ -1219,25 +1187,20 @@ describe("enrich", () => {
       ]);
     });
 
-    // The ENFORCEABLE read: the fire path asks this, off the owner plane,
-    // before it lets an enrichment automation run. It must never answer
-    // "allowed" by accident, so anything that is not a legible tier reads as
-    // `undefined` — which the gate treats as a refusal.
+    // Enforceable read: fire path asks this off the owner plane. Anything
+    // that is not a legible tier reads as `undefined` — the gate refuses.
     test("readEnrichPolicyTier answers the owner's tier and fails closed on anything else", () => {
       expect(readEnrichPolicyTier(db.vault, "photos")).toBe("gateway");
       updateEnrichSettings(db, { photos: "device" });
       expect(readEnrichPolicyTier(db.vault, "photos")).toBe("device");
 
-      // A vault with no row for the domain states nothing, so nothing is allowed.
       db.vault
         .prepare("DELETE FROM enrich_policy WHERE domain = ?")
         .run("docs");
       expect(readEnrichPolicyTier(db.vault, "docs")).toBeUndefined();
 
-      // A tier this build cannot honour is not a tier. The live table's CHECK
-      // stops the normal writers, so the guard is exercised against a file
-      // whose enrich_policy is shaped by another build — restored, migrated
-      // from ahead, or hand-edited.
+      // A tier this build cannot honour is not a tier. CHECK stops live
+      // writers; the guard is for a file shaped by another build.
       const foreign = new DatabaseSync(":memory:");
       foreign.exec(
         "CREATE TABLE enrich_policy (domain TEXT PRIMARY KEY, tier TEXT NOT NULL, updated_at TEXT NOT NULL)"
@@ -1249,9 +1212,8 @@ describe("enrich", () => {
       foreign.close();
     });
 
-    // ONE READ PATH for the one gate (#807): the tier and the cascade's
-    // rules come back together, off the same host plane, and this read still
-    // resolves nothing — it hands the gate its material.
+    // One read path for the one gate (#807): tier + cascade rules together;
+    // this read resolves nothing — it hands the gate its material.
     test("readEnrichPolicyResolutionInput reads tier + the chain's rules, and resolves nothing", () => {
       putEnrichPolicyRule(db.vault, {
         scope: { type: "vault", ref: "" },
@@ -1263,8 +1225,6 @@ describe("enrich", () => {
         capability: "ocr",
         enabled: false,
       });
-      // A rule for another capability, and one on a scope not in the chain:
-      // neither may show up in this capability's chain.
       putEnrichPolicyRule(db.vault, {
         scope: { type: "domain", ref: "photos" },
         capability: "faces",
@@ -1278,15 +1238,14 @@ describe("enrich", () => {
 
       const read = readEnrichPolicyResolutionInput(db.vault, "photos", "ocr");
       expect(read.tier).toBe("gateway");
-      // Least-specific first — the order a resolver folds.
       expect(read.rules.map((rule) => rule.scope)).toStrictEqual([
         { type: "vault", ref: "" },
         { type: "domain", ref: "photos" },
       ]);
       expect(read.rules[1]?.enabled).toBe(false);
 
-      // A caller with an item in hand passes the longer chain itself; this
-      // module never guesses which collection an item is in.
+      // Caller with an item passes the longer chain; this module never guesses
+      // which collection an item is in.
       const deep = readEnrichPolicyResolutionInput(db.vault, "photos", "ocr", [
         { type: "vault", ref: "" },
         { type: "domain", ref: "photos" },
@@ -1296,9 +1255,8 @@ describe("enrich", () => {
       expect(deep.rules[2]?.enabled).toBe(true);
     });
 
-    // Fail-closed, cascade included: an unreadable tier stays unreadable no
-    // matter how many rules sit beside it. The refusal is the GATE's to make,
-    // and it needs to see `undefined` to make it.
+    // Fail-closed, cascade included: unreadable tier stays unreadable no
+    // matter how many rules sit beside it. The gate needs `undefined`.
     test("readEnrichPolicyResolutionInput still fails closed on an unreadable tier", () => {
       db.vault
         .prepare("DELETE FROM enrich_policy WHERE domain = ?")
@@ -1318,48 +1276,30 @@ describe("enrich", () => {
       expect(read.rules).toHaveLength(1);
     });
 
-    // [C5 SABOTAGE TEST, migration half] a vault upgraded from the pre-#712
-    // tier vocabulary must not gain gateway-lane (model-turn) enrichment it
-    // never consented to. `local` meant "no model turn" — mapping it up to
-    // `gateway` would have been an unconsented widening, because no
-    // per-capability consent gate sits on the automated-fire execution path
-    // today (only the tier gate does; decision S9's per-capability read is
-    // not wired past the manual `enrich_request` queue — see this suite's
-    // own "a manual enrichment request must name the capability" test
-    // above, which is the whole surface that exists). So the rename ships
-    // WITHOUT migrating `local` up: it reads as the conservative `device`
-    // instead. The gate half of this law (that `device` actually keeps
-    // refusing gateway-lane fires, and that raising the tier is what
-    // unblocks them) is pinned end-to-end in
-    // `packages/server/src/serve/enrich-tier-control.test.ts`, the one
-    // package that depends on both this read and `decideEnrichmentGate`.
+    // [C5 sabotage, migration half] Pre-#712 `local` meant "no model turn".
+    // Mapping it to `gateway` would be an unconsented widening: automated
+    // fire has only the tier gate (S9 per-capability is not wired past the
+    // manual `enrich_request` queue). Rename ships WITHOUT migrating `local`
+    // up — it reads as conservative `device`. Gate half:
+    // `packages/server/src/serve/enrich-tier-control.test.ts`.
     test("[C5 sabotage] a legacy 'local' row reads as device, not gateway", () => {
-      // Simulate a vault that was already running before the rename: its
-      // mirror row still says 'local', written by a build that no longer
-      // exists. The CHECK stays permissive of the legacy token for exactly
-      // this reason (schema/enrich.ts's header) — writing it directly here
-      // is standing in for "a physical file that predates this PR".
+      // CHECK stays permissive of the legacy token (schema/enrich.ts header).
       db.vault
         .prepare(
           "UPDATE enrich_policy SET tier = 'local' WHERE domain = 'photos'"
         )
         .run();
 
-      // THE MIGRATION: the stored legacy value is read as the conservative
-      // tier, never silently promoted to the one that would unlock model
-      // turns.
       expect(readEnrichPolicyTier(db.vault, "photos")).toBe("device");
 
-      // The owner's own act — raising the tier through the same
-      // authoritative writer Settings uses — is what actually reaches the
-      // wider lane; this migration never does it for them.
+      // Owner raising the tier through Settings is what reaches the wider
+      // lane; this migration never does it for them.
       updateEnrichSettings(db, { photos: "gateway" });
       expect(readEnrichPolicyTier(db.vault, "photos")).toBe("gateway");
     });
 
-    // A legacy 'model' row, by contrast, already meant the owner explicitly
-    // chose the wider tier — mapping it to 'gateway' preserves exactly the
-    // access it already had, no more and no less.
+    // Legacy `model` already meant the wider tier — map to `gateway`, no
+    // narrowing of a prior explicit choice.
     test("[C5] a legacy 'model' row reads as gateway — no narrowing of a prior explicit choice", () => {
       db.vault
         .prepare(
@@ -1369,10 +1309,10 @@ describe("enrich", () => {
       expect(readEnrichPolicyTier(db.vault, "photos")).toBe("gateway");
     });
 
-    // CONSENT SCOPE (see schema/enrich.ts `capability`): an owner's on-demand
-    // ask names the enricher it is asking for, so a face-detection consent
-    // cannot be drained by the captioner. The system signals stay untagged
-    // and broadcast — they are not consent.
+    // Consent scope (schema/enrich.ts `capability`): an on-demand ask names
+    // the enricher, so face-detection consent cannot be drained by the
+    // captioner. System signals stay untagged and broadcast — they are not
+    // consent.
     test("a manual enrichment request must name the capability it consents to", () => {
       const asked = invoke(owner, "enrich.request_enrichment", {
         entity_type: "media.asset",
@@ -1387,8 +1327,8 @@ describe("enrich", () => {
       };
       expect(tagged.capability).toBe("faces");
 
-      // An untagged owner ask is refused: it would read as consent for every
-      // enabled enricher, which is not the question the member answered.
+      // Untagged owner ask refused: it would read as consent for every
+      // enabled enricher.
       const refused = invoke(owner, "enrich.request_enrichment", {
         entity_type: "media.asset",
         reason: "manual",
@@ -1396,13 +1336,11 @@ describe("enrich", () => {
       expect(refused.status).toBe("failed");
       assert(refused.status === "failed");
       expect(refused.reason).toMatch(/must name the .capability./u);
-      // And nothing landed: the refusal is not a row someone could drain.
       const manualRows = db.vault
         .prepare("SELECT count(*) AS n FROM enrich_request WHERE reason = ?")
         .get("manual") as { n: number };
       expect(manualRows.n).toBe(1);
 
-      // A system signal is not consent, so it stays broadcast (capability NULL).
       const signal = invoke(owner, "enrich.request_enrichment", {
         entity_type: "media.asset",
         reason: "on-view",
@@ -1416,10 +1354,8 @@ describe("enrich", () => {
       expect(broadcast.capability).toBeNull();
     });
 
-    // EGRESS CONSENT, RE-KEYED (#807). The photos consent panel
-    // has exactly one write, and it is this verb — so the answer it carries
-    // becomes a row in the egress-consent ledger too, keyed capability ×
-    // egress class, where Privacy reads it back and the fire gate consults it.
+    // Egress consent, re-keyed (#807): the photos panel's one write becomes
+    // a ledger row keyed capability × egress class.
     test("a manual request re-keys the member's answer into the egress ledger", () => {
       expect(
         invoke(owner, "enrich.request_enrichment", {
@@ -1434,9 +1370,7 @@ describe("enrich", () => {
         egress: "on-device",
       });
       expect(answer?.decision).toBe("granted");
-      // The panel's answer is the ON-DEVICE one. Nothing about it agrees to a
-      // gateway or provider engine, which stay unasked — and unasked is not a
-      // grant.
+      // Panel answer is ON-DEVICE. Unasked gateway/provider is not a grant.
       expect(
         readEnrichConsent(db.vault, { capability: "faces", egress: "gateway" })
       ).toBeNull();
@@ -1444,7 +1378,6 @@ describe("enrich", () => {
         readEnrichConsent(db.vault, { capability: "faces", egress: "provider" })
       ).toBeNull();
 
-      // A system signal is not an answer, so it re-keys nothing.
       invoke(owner, "enrich.request_enrichment", {
         entity_type: "media.asset",
         reason: "on-view",
@@ -1453,7 +1386,7 @@ describe("enrich", () => {
     });
   });
 
-  // ── the egress-consent ledger's one writer (issue #807, Wave 3) ──────────
+  // ─── egress-consent ledger's one writer (#807) ─────
   describe("enrich.record_consent", () => {
     test("records an answer, and a re-answer replaces it rather than piling up", () => {
       const first = invoke(owner, "enrich.record_consent", {
@@ -1475,9 +1408,8 @@ describe("enrich", () => {
       expect(again.status).toBe("executed");
       const rows = listEnrichConsent(db.vault);
       expect(rows).toHaveLength(1);
-      // A mind changed is a new DECISION, not a second row — and the decline
-      // is kept, because "asked and told no" must stay distinguishable from
-      // "never asked".
+      // A mind changed is a new DECISION, not a second row. Decline stays:
+      // "asked and told no" ≠ "never asked".
       expect(rows[0]?.decision).toBe("declined");
     });
 
@@ -1495,7 +1427,6 @@ describe("enrich", () => {
           scopeRef: "album-7",
         })?.decision
       ).toBe("granted");
-      // The vault-wide question stays unasked: a narrow yes is not a broad one.
       expect(
         readEnrichConsent(db.vault, { capability: "faces", egress: "gateway" })
       ).toBeNull();
@@ -1515,7 +1446,6 @@ describe("enrich", () => {
   describe("per-class standing consent (issue #310 C3)", () => {
     test("classes outside the narrowed trust stage for review instead of auto-publishing", () => {
       const { assetId } = addPhoto();
-      // Owner consents to captions only on this enrichment connection.
       const first = invoke(agent, "sync.stage_rows", {
         kind: "enrichment.vision",
         label: "narrow",
@@ -1573,7 +1503,6 @@ describe("enrich", () => {
         held?: number;
         held_batch_id?: string;
       }>(mixed);
-      // The caption landed; the vision tag did NOT land silently…
       expect(out.published.created).toBe(1);
       expect(out.held).toBe(1);
       expect(out.held_batch_id).toBeTruthy();
@@ -1584,7 +1513,6 @@ describe("enrich", () => {
         )
         .get(VISION_SCHEME_URI) as { n: number };
       expect(tagCount.n).toBe(0);
-      // …and it was not dropped either: it waits as a draft batch for review.
       const heldBatch = db.vault
         .prepare("SELECT status FROM sync_import_batch WHERE batch_id = ?")
         .get(out.held_batch_id ?? "") as { status: string };

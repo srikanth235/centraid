@@ -1,31 +1,18 @@
 /*
- * Steward-absence detection and local Commons sync instrumentation (#731).
+ * Steward-absence detection (#731). Status is derived from ELAPSED TIME since
+ * last proven contact, never from a failure count (a laptop closed overnight
+ * fails a lot and is not absent).
  *
- * A commons grant has exactly ONE steward vault. Today its loss is silent and
- * terminal: members keep pulling into the void and nothing ever says so. This
- * module is the noticing half — the member's pull path records every attempt
- * against `share_commons_steward_contact`, and an escalating, NAMED status is
- * derived from ELAPSED TIME since the last proven contact, never from a raw
- * failure count (a laptop closed overnight fails a lot and is not absent).
- *
- * The cry-wolf guard: absence is never inferred while THIS device has no
- * working link. `share_commons_device_reach` records the last moment any
- * peer-plane request completed a round trip at all — whatever it answered. A
- * grant escalates past "reachable" only when the device can show it was
- * reaching something while that grant's steward stayed silent; otherwise the
- * status is `link-down`, which never escalates.
- *
- * This is NOT a telemetry system. There is no network egress, no sampling, no
- * background timer, and no new store: three tables in the device's own
- * vault.db, written on paths that were already running, read back as a plain
- * object for the existing diagnostics/logs surface (docs/logs.md).
+ * Cry-wolf: absence is never inferred while THIS device has no working link.
+ * Escalate past "reachable" only when the device was reaching something while
+ * that grant's steward stayed silent; otherwise `link-down`, which never
+ * escalates. Not telemetry: no egress, no sampling, no background timer.
  */
 
 import type { DatabaseSync } from "node:sqlite";
 
 import type { CommonsHistoryFaultTag, VaultDb } from "@centraid/vault";
 
-/** How a pull ended, from the member's point of view. */
 export type CommonsPullOutcome =
   | "noop"
   | "tail"
@@ -35,19 +22,14 @@ export type CommonsPullOutcome =
   | "unreachable";
 
 /**
- * The escalating, named steward status a member surface renders.
- *
- * - `unknown` — never attempted (a fresh grant, or one that has never synced).
+ * - `unknown` — never attempted.
  * - `reachable` — contacted recently, or failing for less than the degraded
  *   threshold. A closed laptop lives here.
- * - `degraded` — silent past `COMMONS_STEWARD_DEGRADED_AFTER_MS`, while this
- *   device demonstrably had a working link.
- * - `absent` — silent past `COMMONS_STEWARD_ABSENT_AFTER_MS`. This is the
- *   state that should offer replica-export recovery.
+ * - `degraded` / `absent` — silent past the named threshold, with a working
+ *   local link. `absent` should offer replica-export recovery.
  * - `link-down` — silent, but this device cannot show it reached anything
- *   either. We do not know, and we must not claim the steward died.
- * - `parked` — not an absence at all: a named history/digest fault. The seat
- *   stopped on purpose and needs an answer, not a re-found.
+ *   either. Do not claim the steward died.
+ * - `parked` — named history/digest fault, not an absence.
  */
 export type CommonsStewardPresence =
   | "unknown"
@@ -57,9 +39,7 @@ export type CommonsStewardPresence =
   | "link-down"
   | "parked";
 
-/** Silent for a day, with a working local link, is "degraded". */
 export const COMMONS_STEWARD_DEGRADED_AFTER_MS = 24 * 60 * 60 * 1000;
-/** Silent for a week, with a working local link, is "absent". */
 export const COMMONS_STEWARD_ABSENT_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * The op window documented in `docs/decisions.md#commons` proposes as K. Lag
@@ -74,13 +54,11 @@ export interface CommonsStewardStatus {
   stewardVaultId?: string;
   lastContactAt?: string;
   lastAttemptAt?: string;
-  /** Milliseconds since the last PROVEN contact; absent while reachable. */
   silentForMs?: number;
   consecutiveFailures: number;
   lastOutcome: CommonsPullOutcome | "unknown";
   lastError?: string;
   fault?: CommonsHistoryFaultTag;
-  /** Last time this device completed any peer round trip (the cry-wolf guard). */
   deviceLinkAt?: string;
 }
 
@@ -119,11 +97,7 @@ function ms(value: string | null | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-/**
- * Record that this device completed a peer-plane round trip. Call it whenever
- * a dial RESOLVES, whatever the status: a 404 from the steward still proves
- * the local network works, which is exactly what the absence guard needs.
- */
+/** Call whenever a dial RESOLVES: a 404 still proves the local network works. */
 export function recordCommonsDeviceReach(db: DatabaseSync, now: string): void {
   db.prepare(
     `INSERT INTO share_commons_device_reach
@@ -229,7 +203,6 @@ function contactRow(
   return row ?? emptyRow(grantId);
 }
 
-/** Read-only: the current steward status for one (grant, member vault). */
 export function readCommonsStewardStatus(input: {
   db: DatabaseSync;
   grantId: string;
@@ -254,10 +227,8 @@ const OUTCOME_COLUMN: Record<CommonsPullOutcome, string> = {
 };
 
 /**
- * Fold one pull attempt into the member's durable contact state and return the
- * status the caller should carry back to the sweep/UI. A `parked` outcome is
- * NOT an absence: the steward answered, its history just did not verify, so
- * the absence episode closes and a named fault is pinned instead.
+ * A `parked` outcome is NOT an absence: the steward answered, history did not
+ * verify — close the episode and pin a named fault.
  */
 export function recordCommonsPull(input: {
   db: DatabaseSync;
@@ -365,33 +336,27 @@ function percentile(sorted: readonly number[], fraction: number): number {
 export interface CommonsGrantObservability {
   grantId: string;
   containerType: string;
-  /** Present only on a member seat that has attempted a pull. */
   steward: CommonsStewardStatus;
-  /** contacts / attempts, or null when this seat has never attempted. */
   reachableRatio: number | null;
   absence: {
     episodes: number;
     totalMs: number;
     longestMs: number;
-    /** The open episode's duration, when one is running. */
     openMs: number | null;
   };
   pullOutcomes: Record<CommonsPullOutcome, number>;
-  /** The fixed-window-sync plan's first go/no-go number. */
   opLog: {
     rows: number;
     lastSequence: number;
     checkpointSequence: number;
     beyondCheckpoint: number;
   };
-  /** The fixed-window-sync plan's second go/no-go number. */
   memberLag: {
     members: number;
     maxOps: number;
     p50Ops: number;
     beyondWindow: number;
   };
-  /** Parked-intent dwell: submitted → executed/denied, in milliseconds. */
   intentDwellMs: {
     settled: number;
     open: number;
@@ -519,11 +484,6 @@ function grantObservability(
   };
 }
 
-/**
- * Read-only, cheap (a handful of indexed counts per grant) summary of one
- * vault's Commons planes. Nothing here leaves the device unless the owner
- * exports a diagnostics bundle themselves.
- */
 export function commonsObservabilityForVault(input: {
   db: VaultDb;
   vaultId: string;
@@ -558,12 +518,7 @@ export function commonsObservabilityForVault(input: {
   };
 }
 
-/**
- * Diagnostics-bundle section. The bundle takes an opaque, caller-assembled
- * `config` object and walks it through `scrubUnknown` — this slots straight in
- * there (or into a `_gateway/logs` line) without inventing a second surface.
- * Assembled in `build-gateway.ts`'s `buildDiagnostics` closure.
- */
+/** Diagnostics-bundle section — slots into `scrubUnknown`, no second surface. */
 export function commonsObservabilitySection(input: {
   vaults: readonly { vaultId: string; db?: VaultDb }[];
   now?: string;
@@ -581,8 +536,7 @@ export function commonsObservabilitySection(input: {
         })
       );
     } catch {
-      // A stats read must never turn a working diagnostics bundle into a
-      // failed one — the same posture `tableStatsFor` already takes.
+      // A stats read must never fail a working diagnostics bundle.
     }
   }
   return { commons };

@@ -1,15 +1,6 @@
-// The Home screen — the Binding Layer's two-tier, three-state springboard.
-//
-// GRADED, NOT BINARY. A vault fills gradually, so Home has three states decided
-// per TILE, not per screen: every readable tile settled and empty is a day-one
-// page; a mix is the grid plus a band of first moves; all content is the grid
-// alone.
-//
-// This file owns ONLY the grading and the navigation wiring — every visual
-// block is its own component, so it stays a readable assembly.
-//
-// Tiles read the local replica per app and fill OFFLINE. The only
-// gateway-shaped read left is reachability, which the vault lockup states.
+// Home — graded per TILE, not per screen. This file owns grading and
+// navigation only. Tiles fill OFFLINE; the only gateway-shaped read is
+// reachability on the vault lockup.
 
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -57,8 +48,7 @@ import { useSpringboardTiles } from "./home/useSpringboardTiles";
 import VaultHeader from "./home/VaultHeader";
 import VaultsSwitcher from "./home/VaultsSwitcher";
 
-// Lowered from the token, never re-typed, so every screen agrees on where the
-// page starts (R.margin.m, handoff :3356).
+// From the token, never re-typed (R.margin.m).
 const H_PADDING = pageMargin;
 
 type HomeState =
@@ -67,22 +57,18 @@ type HomeState =
   | { kind: "ready" }
   | { kind: "error" };
 
-/** Mount, focus, vault-link events and doorbells would otherwise cost three
- *  round trips per tab-away for an unchanged answer. Anything that genuinely
- *  invalidates the screen forces past this window. */
 const HOME_STALE_MS = 30_000;
 
 let homeLoadedAt = 0;
 let homeInFlight: Promise<void> | undefined;
 
-// Outside the component: it closes over nothing but the stable setter, so it
-// needs no `useCallback` identity dance.
+// Module-scope: closes over the setter only, no `useCallback` identity.
 async function loadHome(
   setState: (next: HomeState) => void,
   options: { force?: boolean } = {}
 ): Promise<void> {
   if (!options.force && Date.now() - homeLoadedAt < HOME_STALE_MS) return;
-  // One screen owns this setter, so a mid-load caller wants the running load.
+  // One setter: a mid-load caller joins the running load.
   if (homeInFlight) return homeInFlight;
   homeInFlight = runHomeLoad(setState).finally(() => {
     homeInFlight = undefined;
@@ -96,13 +82,11 @@ async function runHomeLoad(setState: (next: HomeState) => void): Promise<void> {
     setState(base ? { kind: "ready" } : { kind: "no-gateway" });
     if (base) homeLoadedAt = Date.now();
   } catch {
-    // The status line is where gateway facts go — never a banner, never a
-    // thrown-away grid.
+    // Gateway facts go on the status line — never a banner, never a thrown-away grid.
     setState({ kind: "error" });
   }
 }
 
-/** The vault + gateway lockup, re-read whenever the active link changes. */
 function useActiveVault(): {
   vaultName: string | undefined;
   gatewayName: string | undefined;
@@ -136,12 +120,11 @@ export default function HomeScreen({
   useEffect(() => {
     void loadHome(setState);
   }, []);
-  // The grid order is user data — hydrated once at mount, like the appearance
-  // prefs in App.tsx.
+  // Grid order is user data — hydrate once at mount.
   useEffect(() => {
     void hydratePins();
   }, []);
-  // A vault switch re-points the whole app, so the grid must reload.
+  // Vault switch re-points the app; the grid must reload.
   useEffect(
     () => subscribeVaultLinks(() => void loadHome(setState, { force: true })),
     []
@@ -159,15 +142,13 @@ export default function HomeScreen({
   }, []);
 
   const items = useMemo(
-    // Springboard order first, THEN pins: reversing the two lets the default
-    // re-sort a pinned app back down the grid.
+    // Springboard order first, then pins — reverse lets the default un-pin downward.
     () => orderByPins(orderForSpringboard(buildLauncherItems()), pins),
     [pins]
   );
   const tiles = useSpringboardTiles();
 
-  // The grading. An app with NO tile at all keeps its place on the grid: Home
-  // has no read that could call it empty, so demoting it would be a guess.
+  // No tile → keep on the grid. Home has no read that could call it empty.
   const { earned, idleIds } = useMemo(() => {
     const kept: LauncherItem[] = [];
     const idle: string[] = [];
@@ -190,7 +171,6 @@ export default function HomeScreen({
   const openItem = useCallback(
     (item: LauncherItem): void => {
       const { route } = item;
-      // The root stack fires the launch haptic on transitionStart (App.tsx).
       switch (route.kind) {
         case "photos":
           navigation.navigate("Photos", { screen: "PhotosHome" });
@@ -234,9 +214,7 @@ export default function HomeScreen({
     [openItem]
   );
 
-  /** A first move must land somewhere that can TAKE content. `connectors` has
-   *  no mobile screen — connecting an account is a desktop act — so it routes
-   *  to Settings; app moves open the app, where its own add control lives. */
+  /** `connectors` has no mobile screen — route to Settings. */
   const pickMove = useCallback(
     (move: FirstMove): void => {
       if (move.id === "connectors") {
@@ -249,8 +227,7 @@ export default function HomeScreen({
     [items, openItem, openSettings]
   );
 
-  /** Found by app id, NOT through the top-3-limited `moves` list: day one's two
-   *  buttons are fixed regardless of which apps `firstMoves()` ranks first. */
+  /** By app id, not the top-3 `moves` list — day-one buttons are fixed. */
   const openPhotos = useCallback((): void => {
     const item = items.find((candidate) => candidate.meta.id === "photos");
     if (item) openItem(item);
@@ -261,17 +238,9 @@ export default function HomeScreen({
   }, [items, openItem]);
 
   /**
-   * "Fill it with sample content" (#290): status, one seed POST per seedable
-   * app, then a replica pull so the tiles catch up.
-   *
-   * Speaks the `/centraid/_vault/demo` wire contract by hand rather than
-   * importing `vaultDemoLoad`: that lives behind `packages/client`'s bare
-   * barrel, which is NOT a mobile-reachable subpath and drags `pdfjs-dist` and
-   * `@sqlite.org/sqlite-wasm` into the phone bundle.
-   *
-   * Fail-soft throughout, as desktop's `homeSample.ts` is: a partial or failed
-   * fill leaves the offer live, never a crash on the screen every route
-   * returns to.
+   * Demo seed (#290) by hand — do not import `vaultDemoLoad` (client barrel
+   * pulls pdfjs + sqlite-wasm into the phone). Fail-soft: a partial fill
+   * leaves the offer live.
    */
   const fillSample = useCallback(async (): Promise<void> => {
     try {
@@ -284,37 +253,26 @@ export default function HomeScreen({
         .map((app) => app.appId);
       for (const appId of seedable) {
         try {
-          // Sequential and per-app-caught: one generator throwing is not the
-          // others' problem.
           // oxlint-disable-next-line no-await-in-loop -- ordered by contract
           await fetchJson(
             `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
             { headers: apiHeaders(), method: "POST" }
           );
         } catch {
-          // Per-app failure is survivable — see the function comment.
+          // Per-app failure is survivable.
         }
       }
-      // Must precede the tiles' re-read, or they rebuild from the pre-seed
-      // replica and day one appears to have done nothing.
+      // Before the tiles re-read, or they rebuild from the pre-seed replica.
       await replica.refresh?.();
     } catch {
-      // A gateway that will not answer costs this offer, never the screen.
+      // A dead gateway costs this offer, never the screen.
     }
     await loadHome(setState, { force: true });
   }, [replica]);
 
   /**
-   * Every place resolved to the nearest REAL mobile screen, shared by the band
-   * and the All-apps sheet so the two cannot name different destinations for
-   * one place.
-   *
-   * `starred` has NO mobile screen and stays a STATED no-op: routing a labelled
-   * row to a page that does not hold what it promised is the bug class this
-   * whole switch exists to avoid. A place with nowhere to go fails loudly.
-   *
-   * The `default` arm asserts `never`, so a new place with no case here is a
-   * typecheck failure rather than a silent fall-through.
+   * Band and All-apps share this map. `starred` is a stated no-op — no mobile
+   * screen. `default` is `never` so a new place is a typecheck failure.
    */
   const goToPlace = useCallback(
     (id: PlaceId): void => {
@@ -349,7 +307,7 @@ export default function HomeScreen({
           navigation.navigate("Devices");
           break;
         case "starred":
-          // No mobile screen for this place yet — see the function comment.
+          // No mobile screen — stated no-op.
           break;
         default: {
           const exhaustive: never = id;
@@ -377,9 +335,7 @@ export default function HomeScreen({
   );
 
   return (
-    // Explicit `paddingTop`, never SafeAreaView edges: edges intermittently
-    // resolves to zero inside this app's cover stacks, landing the vault lockup
-    // under the status bar.
+    // Explicit paddingTop — SafeAreaView edges can resolve to zero in cover stacks.
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <VaultHeader
         vaultName={vault.vaultName}
@@ -391,9 +347,7 @@ export default function HomeScreen({
         onNewChat={() => navigation.navigate("Assistant")}
       />
 
-      {/* Fixed chrome, NOT scroll content: the lockup and app bar are
-          `flex:none` siblings above the scroll region, so the scrollbar starts
-          below the app bar's own hairline rule (:5532–5533). */}
+      {/* Fixed chrome, not scroll content — scrollbar starts below the app-bar rule. */}
       <HomeTitleRow />
       <HomeStatusLine
         signal={healthSignal}
@@ -428,12 +382,9 @@ export default function HomeScreen({
           />
         }
       >
-        {/* NO offline banner: the status line covers it in one neutral clause,
-            and an offline-first product does not present its premise as an
-            incident. */}
+        {/* No offline banner — the status line covers it; offline is not an incident. */}
         {springboard === "first-run" ? (
           <DayOne
-            // Real counts, zero included: the foot is honest about the zero.
             foot={homeDayOneFoot(items.length, things.total)}
             onSeedSample={() => void fillSample()}
             onBringPhotos={openPhotos}
@@ -479,7 +430,7 @@ export default function HomeScreen({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // Clears the flush band, so the grid's last row stays tappable.
+    // Clears the flush band so the last row stays tappable.
     content: {
       paddingBottom: 24,
       paddingHorizontal: H_PADDING,

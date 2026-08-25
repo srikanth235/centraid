@@ -1,12 +1,7 @@
 /*
- * Renderer-side *automation* lifecycle over direct HTTP. Split out of
- * `gateway-client-editing.ts` (repo file-size limit); the barrel re-exports
- * these so call sites still `import … from './gateway-client.js'`.
- *
- * Automations remain a scaffold-and-clone surface: unlike bundled apps —
- * which install in place from the shipped release (#434) — an automation's
- * code is *generated* (the hidden builder is its compiler), so it is authored
- * into a session worktree and published into the vault's git code store.
+ * Automation lifecycle over HTTP. Scaffold-and-clone, not install-in-place:
+ * generated code is authored into a session worktree and published into the
+ * vault's git code store (#434).
  */
 
 import {
@@ -18,12 +13,7 @@ import {
 } from "./gateway-client-core.js";
 import { dropAppSession, ensureAppSession } from "./gateway-client-editing.js";
 
-/**
- * A create-time trigger spec. `condition`/`data` are validated gateway-side
- * against the real manifest schema (#141 follow-up) and require a
- * paired `vault` block on the request — the consented read they gate on has to run under
- * some requested grant, or there is nothing for the trigger to evaluate.
- */
+/** `condition`/`data` require a paired `vault` grant on the request. */
 export type CentraidCreateTrigger =
   | { kind: "cron"; expr: string; tz?: string }
   | { kind: "webhook" }
@@ -37,15 +27,13 @@ export type CentraidCreateTrigger =
       every?: string;
     };
 
-/** Scaffold a new automation app; mints a webhook secret when requested. */
-/** Soft connection binding (harness-backed automations) — ids only, no secrets. */
+/** Soft connection binding — ids only, no secrets. */
 export type CentraidConnectionBinding = {
   connectionId: string;
   kind: string;
   label: string;
 };
 
-/** Published connector block — may include durable connectionId. */
 export type CentraidConnectorSpec = {
   kind: string;
   label: string;
@@ -59,7 +47,7 @@ export async function createAutomation(input: {
   description?: string;
   prompt?: string;
   triggers?: CentraidCreateTrigger[];
-  /** Requested vault access — required when `triggers` has a condition/data entry. */
+  /** Required when `triggers` has a condition/data entry. */
   vault?: {
     purpose: string;
     why?: string;
@@ -71,9 +59,7 @@ export async function createAutomation(input: {
       fieldMask?: string[];
     }>;
   };
-  /** Soft credential bindings from the editor connectors picker. */
   connections?: CentraidConnectionBinding[];
-  /** Published connector declaration (pull/send automations). */
   connector?: CentraidConnectorSpec;
   apps?: string[];
   harness?: string;
@@ -103,17 +89,9 @@ export async function createAutomation(input: {
 }
 
 /**
- * Patch an automation's `name` / `prompt` (manifest `prompt` — the
- * instructions the builder compiles into `handler.js`) / `triggers` in its
- * draft, then publish. Every field is optional; only a present one is
- * changed — the instructions-first editor's save path, an alternative to
- * routing an edit through the builder chat. Triggers follow the same wire
- * shape `createAutomation` takes; a `{kind:'webhook'}` entry mints a fresh
- * secret (returned once, like create) only when the automation had no
- * webhook trigger before — an edit that keeps an existing one leaves its
- * secret untouched (`rotateAutomationWebhookSecret` is the dedicated way to
- * rotate it). 404s when `automationId` doesn't exist, 400s on an invalid
- * patch (bad trigger kind/shape).
+ * `{kind:'webhook'}` mints a secret only when none existed; keeping an
+ * existing webhook leaves the secret untouched — rotate via
+ * `rotateAutomationWebhookSecret`.
  */
 export async function updateAutomation(input: {
   automationId: string;
@@ -133,11 +111,10 @@ export async function updateAutomation(input: {
   };
   connections?: CentraidConnectionBinding[];
   connector?: CentraidConnectorSpec | null;
-  /** `null` clears the manifest pin and restores the subsystem default. */
+  /** `null` clears the pin and restores the subsystem default. */
   harness?: string | null;
-  /** `null` clears the manifest pin and restores the selected harness's default. */
+  /** `null` clears the pin and restores the harness default. */
   model?: string | null;
-  /** Persisted recognition path used by both scheduled and manual fires. */
   recognitionStep?: "deterministic" | "delegate";
 }): Promise<{
   row: CentraidAutomationRow | null;
@@ -183,7 +160,6 @@ export async function updateAutomation(input: {
   };
 }
 
-/** Toggle an automation's `enabled` flag in its draft, then publish. */
 export async function setAutomationEnabled(input: {
   automationId: string;
   enabled: boolean;
@@ -208,15 +184,7 @@ export async function setAutomationEnabled(input: {
   return { ok: true };
 }
 
-/**
- * Rotate a webhook-triggered automation's shared secret and publish. The
- * original secret is shown once at mint time (create/clone); an owner who
- * missed that one-time reveal has no other way to recover it — this mints
- * a fresh one over the SAME route id (any already-configured caller URL
- * keeps working) and returns it once, exactly like `createAutomation`'s
- * `webhook` field. 404s when `automationId` doesn't exist, 400s when it has
- * no webhook trigger to rotate.
- */
+/** Mint a new secret over the SAME route id; the old secret is unrecoverable. */
 export async function rotateAutomationWebhookSecret(input: {
   automationId: string;
 }): Promise<{ webhook: { id: string; secret: string; url: string } }> {
@@ -238,7 +206,6 @@ export async function rotateAutomationWebhookSecret(input: {
   return { webhook: out.webhook };
 }
 
-/** Remove an automation (whole app or in-app subdir), then publish. */
 export async function deleteAutomation(input: {
   automationId: string;
 }): Promise<{ ok: true }> {
@@ -254,7 +221,6 @@ export async function deleteAutomation(input: {
     res,
     "delete automation"
   );
-  // A whole-automation-app delete drops the app; forget its session too.
   if (out.deletedApp) await dropAppSession(appId);
   return { ok: true };
 }

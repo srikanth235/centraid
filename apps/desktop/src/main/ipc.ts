@@ -58,11 +58,7 @@ import {
   relaunchToUpdate,
 } from "./update-watcher.js";
 
-/**
- * There is no publish queue — publishes are synchronous — so this always
- * reports "not in flight". Kept as a stable `CentraidApi` surface the web host
- * also declares; `PUBLISH_EVENT` is never fired.
- */
+/** No publish queue — always "not in flight". */
 type PublishStatus = {
   inFlight: boolean;
   lastError?: string;
@@ -84,18 +80,14 @@ export function registerIpcHandlers(): void {
     }
   };
 
-  // Every bearer cache (auth injector, prefs, chat history) must drop together
-  // on a gateway swap or token rotation.
   const invalidateGatewayCaches = async (): Promise<void> => {
     resetAppsStoreAuthCache();
-    // Editing sessions are per-gateway — their worktrees live in the previous
-    // gateway's git store.
+    // Editing sessions are per-gateway — worktrees live in the previous git store.
     resetAppSessions();
     await refreshAuthInjector();
   };
 
-  // Lighter than a gateway swap (#289): only the addressed vault changes, so
-  // auth caches drop but app-editing sessions — keyed by gateway — must NOT.
+  // Vault pointer only (#289): drop auth caches, NOT app-editing sessions.
   const invalidateVaultCaches = async (): Promise<void> => {
     resetAppsStoreAuthCache();
     await refreshAuthInjector();
@@ -108,9 +100,7 @@ export function registerIpcHandlers(): void {
     }
   };
 
-  // ─── Settings ───────
-  // `getGatewayAuth()` is the token's single bridge crossing: this payload must
-  // never carry `gatewayToken`.
+  // Token's single bridge crossing: this payload must never carry `gatewayToken`.
   ipcMain.handle(Channel.SETTINGS_GET, async () => {
     const { gatewayToken: _gatewayToken, ...rest } = await loadSettings();
     return rest;
@@ -119,26 +109,19 @@ export function registerIpcHandlers(): void {
     Channel.SETTINGS_SAVE,
     async (_e, patch: Partial<DesktopSettings>) => {
       const next = await saveSettings(patch);
-      // The active-gateway pointer can change through here.
       await invalidateGatewayCaches();
-      // Alert threshold/toggle changes ride this surface: rebroadcast now so
-      // the Gateway page reflects them without waiting out a tick.
       nudgeGatewayMonitor();
-      // Applied to the OS now rather than at next launch.
       if ("launchAtLogin" in patch) applyLaunchAtLogin(next.launchAtLogin);
       return next;
     }
   );
-  // ─── Gateways (issue #109) ───────
-  // The local gateway is always present and not removable. Tokens never cross
-  // the bridge: plaintext is persisted straight to keychain.
+  // Local gateway is not removable. Tokens never cross the bridge (#109).
   ipcMain.handle(
     Channel.GATEWAYS_LIST,
     async (): Promise<GatewayProfile[]> => listGateways()
   );
 
-  // No manual "add gateway by URL + token" IPC (#505): every gateway arrives
-  // through the pairing ceremony, which calls `addGateway` in-process.
+  // No "add gateway by URL + token" IPC (#505) — pairing calls `addGateway` in-process.
 
   ipcMain.handle(
     Channel.GATEWAYS_UPDATE_METADATA,
@@ -174,8 +157,6 @@ export function registerIpcHandlers(): void {
         }
         throw error;
       }
-      // Caches drop either way, so the renderer re-resolves through the
-      // (possibly new) active gateway.
       const current = await loadSettings();
       let next: DesktopSettings = current;
       if (current.activeGatewayId === input.id) {
@@ -204,14 +185,12 @@ export function registerIpcHandlers(): void {
     Channel.GATEWAYS_SET_ACTIVE,
     async (_e, input: { id: string }): Promise<DesktopSettings> => {
       const next = await setActiveGatewayId(input.id);
-      // At most one local HTTP server stays alive. OS-scheduled automations
-      // are unaffected — they shell the CLI against per-gateway DB paths.
       const { shutdownAllLocalGatewaysExcept } =
         await import("./local-gateway.js");
       await shutdownAllLocalGatewaysExcept(
         next.activeGatewayKind === "local" ? next.activeGatewayId : undefined
       );
-      // Otherwise a dormant QUIC dialer accumulates per switch (#289).
+      // Else a dormant QUIC dialer accumulates per switch (#289).
       const { closeAllIrohDialersExcept } = await import("./iroh-dialer.js");
       await closeAllIrohDialersExcept(
         next.activeGatewayKind === "remote" ? next.activeGatewayId : undefined
@@ -223,9 +202,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // A pairing ticket enrolls into exactly one vault, so success flips BOTH
-  // pointers and repeats `GATEWAYS_SET_ACTIVE`'s teardown sequence here —
-  // `gateway-pairing.ts` stays free of `BrowserWindow` to stay unit-testable.
+  // Pairing enrolls one vault: flip BOTH pointers; repeat SET_ACTIVE teardown.
   ipcMain.handle(
     Channel.GATEWAY_PAIR_REDEEM,
     async (
@@ -258,8 +235,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // Reads a gateway's vaults WITHOUT switching to it (#376): pure read, so no
-  // invalidation or broadcast.
+  // List vaults WITHOUT switching (#376) — no invalidation or broadcast.
   ipcMain.handle(
     Channel.GATEWAYS_LIST_VAULTS,
     async (
@@ -275,8 +251,7 @@ export function registerIpcHandlers(): void {
       testGatewayConnection(input)
   );
 
-  // A client-side pointer flip (#289): no server call, no re-root, no session
-  // teardown — the renderer keeps its per-(gateway,vault) state buckets.
+  // Client-side pointer flip (#289): no server call, no session teardown.
   ipcMain.handle(
     Channel.VAULTS_SET_ACTIVE,
     async (_e, input: { vaultId?: string }): Promise<DesktopSettings> => {
@@ -287,8 +262,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // Vault create/delete is LOCAL only: on a remote gateway it is a host-side
-  // admin act.
+  // Create/delete is LOCAL only — remote is a host-side admin act.
   const assertLocalAdmin = async (): Promise<string> => {
     const settings = await loadSettings();
     if (settings.activeGatewayKind !== "local") {
@@ -317,7 +291,7 @@ export function registerIpcHandlers(): void {
     ): Promise<{ deleted: true }> => {
       const gatewayId = await assertLocalAdmin();
       const settings = await loadSettings();
-      // Never delete the vault currently addressed: clear the pointer first.
+      // Never delete the currently addressed vault — clear the pointer first.
       let next: DesktopSettings | undefined;
       if (settings.activeVaultId === input.vaultId) {
         next = await setActiveVaultId(undefined);
@@ -325,16 +299,13 @@ export function registerIpcHandlers(): void {
       }
       const { deleteLocalVault } = await import("./local-gateway.js");
       await deleteLocalVault(gatewayId, input.vaultId, input.name);
-      // Without the broadcast the shell keeps showing the deleted vault's
-      // name until some unrelated event refreshes it (#382).
+      // Else the shell keeps showing the deleted vault's name (#382).
       if (next) broadcastVaultChanged(next);
       return { deleted: true };
     }
   );
 
-  // Notify-only, after a metadata-only `updateVault()`. Must stay on
-  // VAULT_METADATA_PUSH, not VAULT_CHANGED: no addressing changed, so it must
-  // not trigger `reScope`'s navigate-Home.
+  // Metadata-only: VAULT_METADATA_PUSH, not VAULT_CHANGED (would reScope Home).
   ipcMain.handle(Channel.VAULT_METADATA_CHANGED, (): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) continue;
@@ -342,19 +313,13 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  // Harness detection and the OpenAI-compatible endpoint config belong to the
-  // gateway, colocated with the harness — never add a desktop-side probe.
+  // Harness detection belongs on the gateway — never add a desktop-side probe.
 
-  // ─── Apps (#137 git-store backend; #141 thin client) ───────
-  // App lifecycle is the renderer's direct HTTP client, not IPC. APPS_OPEN
-  // stays here as a deliberately LOCAL-ONLY reveal-in-Finder.
+  // App lifecycle is HTTP, not IPC. APPS_OPEN stays LOCAL-ONLY (#141).
 
   ipcMain.handle(Channel.APPS_OPEN, async (_e, input: { id: string }) => {
-    // LOCAL-ONLY (#141): a remote gateway exposes no worktree. The renderer
-    // hides this for remote and `resolveAppRevealDir` is the backstop.
     const dir = await resolveAppRevealDir(input.id);
-    // `shell.openPath` RESOLVES with an error string instead of rejecting, so
-    // a bare `await` would swallow every failure and claim success.
+    // `shell.openPath` RESOLVES with an error string — a bare await swallows failure.
     const openErr = await shell.openPath(dir);
     if (openErr) throw new Error(`Could not open ${dir}: ${openErr}`);
     return { ok: true };
@@ -370,9 +335,7 @@ export function registerIpcHandlers(): void {
     getGatewayRuntimeSnapshot()
   );
 
-  // LOCAL only. `restartLocalGateway` mints a fresh per-launch bearer, so
-  // success must invalidate auth caches and re-broadcast — a gateway switch
-  // without the id change.
+  // LOCAL only. Fresh per-launch bearer — invalidate caches and re-broadcast.
   ipcMain.handle(
     Channel.GATEWAY_RESTART,
     async (): Promise<{ ok: boolean; error?: string }> => {
@@ -381,7 +344,6 @@ export function registerIpcHandlers(): void {
         return { ok: false, error: "remote gateways restart server-side" };
       }
       try {
-        // An explicit user act lifts the first-run keychain deferral.
         requestLocalGatewayStart();
         const { restartLocalGateway } = await import("./local-gateway.js");
         await restartLocalGateway(settings.activeGatewayId);
@@ -399,9 +361,8 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // GATEWAY_RESTART cannot serve this: it opens with `loadSettings()`, which
-  // is the failing call (it boots the local runtime). This handler must read
-  // PERSISTED settings only and go straight at the supervisor's give-up latch.
+  // Cannot use GATEWAY_RESTART: `loadSettings()` is the failing call. Read
+  // persisted settings only.
   ipcMain.handle(
     Channel.GATEWAY_START_RETRY,
     async (): Promise<{ ok: boolean; error?: string }> => {
@@ -413,7 +374,6 @@ export function registerIpcHandlers(): void {
         if (profile && profile.kind !== "local") {
           return { ok: false, error: "remote gateways restart server-side" };
         }
-        // An explicit user act lifts the first-run keychain deferral.
         requestLocalGatewayStart();
         const { retryLocalGatewayStart } = await import("./local-gateway.js");
         await retryLocalGatewayStart(persisted.activeGatewayId);
@@ -423,7 +383,6 @@ export function registerIpcHandlers(): void {
           error: error instanceof Error ? error.message : String(error),
         };
       }
-      // Non-fatal: the caller's next read decides whether the retry recovered.
       await invalidateGatewayCaches().catch((error: unknown) => {
         console.warn(
           "[gateway] cache refresh after a start retry failed",
@@ -466,7 +425,7 @@ export function registerIpcHandlers(): void {
         gatewayId: profile?.id ?? settings.activeGatewayId,
         token: settings.gatewayToken || undefined,
         rememberDevice: profile?.rememberDevice === true,
-        // Sent as `x-centraid-vault`; undefined lets the gateway pick (#289).
+        // `x-centraid-vault`; undefined lets the gateway pick (#289).
         ...(settings.activeVaultId === undefined
           ? {}
           : { vaultId: settings.activeVaultId }),
@@ -474,9 +433,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // Pairing defaults offline-copy ON, so this answers it after the fact.
-  // Turning it OFF must reuse the redeem path's purge signal or the replica is
-  // orphaned; the gateway-side enrollment is untouched either way.
+  // Pairing defaults offline-copy ON. OFF must reuse redeem's purge or the replica is orphaned.
   ipcMain.handle(
     Channel.GATEWAY_REMEMBER_DEVICE_SET,
     async (
@@ -498,9 +455,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // ─── Phone link (issue #263) ───────
-  // The tunnel endpoint and device allowlist live in main: they hold the
-  // persistent endpoint key and must outlive renderer reloads.
+  // Phone link (#263): tunnel + allowlist live in main.
   ipcMain.handle(Channel.PHONE_STATUS, async () => phoneLinkStatus());
   ipcMain.handle(Channel.PHONE_BEGIN_PAIRING, async () => beginPhonePairing());
   ipcMain.handle(Channel.PHONE_CANCEL_PAIRING, async () => {
@@ -515,7 +470,6 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // ─── Relaunch to update ───────
   ipcMain.handle(Channel.UPDATE_STATUS, async () => getUpdateStatus());
   ipcMain.handle(Channel.UPDATE_CHECK, async () => checkForUpdatesManual());
   ipcMain.handle(
@@ -531,9 +485,7 @@ export function registerIpcHandlers(): void {
     return { ok: true as const };
   });
 
-  // ─── Keychain pre-write note (issue #603) ───────
-  // Lets the first-run chooser warn BEFORE the OS credential dialog appears.
-  // Policy stays in the pure `keychainPromptExpected`; this reads the host.
+  // Warn BEFORE the OS credential dialog (#603).
   ipcMain.handle(Channel.KEYCHAIN_PROMPT_EXPECTED, (): boolean =>
     keychainPromptExpected({
       platform: process.platform,
@@ -542,10 +494,7 @@ export function registerIpcHandlers(): void {
     })
   );
 
-  // ─── "What's new" changelog ───────
   ipcMain.handle(Channel.CHANGELOG_GET, async () => getChangelog());
 
-  // Templates, automations, and the insights/run-feed reads are the gateway's
-  // (scaffold, webhook mint, stage, publish, ledgers, analytics DB) and reach
-  // it through the renderer's HTTP client — never add IPC handlers for them.
+  // Templates/automations/insights are HTTP — never add IPC.
 }

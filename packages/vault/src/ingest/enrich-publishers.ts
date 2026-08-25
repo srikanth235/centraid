@@ -1,19 +1,8 @@
-// Publishers for the enrichment spine (#299): how model-derived
-// candidates become vault rows. Enrichment invents no tables — captions land
-// as knowledge.annotation, scene tags as core.tag under the machine schemes,
-// face proposals as media.face_region, trip albums as core.collection, and
-// filing/rename proposals as core.content_item updates.
-//
-// The derived-data contract (#299) is enforced here, structurally:
-//   - ATTRIBUTED: an annotation names its author party (the enricher's
-//     enrolled agent party, injected server-side by `sync.stage_rows`);
-//     machine tags carry confidence and no `tagged_by_party_id` — an owner
-//     tag is the exact inverse (party, no confidence).
-//   - NEVER OVERWRITES THE OWNER: an owner-asserted tag on the same concept,
-//     a confirmed face region, an owner's own annotation — all terminal;
-//     the publisher no-ops rather than replace.
-//   - RE-DERIVABLE: updates replace the enricher's own prior output in
-//     place; wiping derived rows and re-running is always safe.
+// Enrichment spine publishers (#299). Invents no tables. Contract:
+// ATTRIBUTED (author via `sync.stage_rows`; machine tags have confidence,
+// no party — owner tags are the inverse); NEVER OVERWRITES THE OWNER
+// (terminal: owner tag, answered face, owner annotation — no-op);
+// RE-DERIVABLE (replace own prior output; wipe-and-rerun is always safe).
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -26,7 +15,6 @@ import { VISION_SCHEME_URI } from "../schema/enrich.js";
 import { assertPayload } from "./payload-schemas.js";
 import type { Publisher, PublishedWrite } from "./staging.js";
 
-/** Resolve a scheme by uri, creating it when absent (machine schemes). */
 function ensureScheme(vault: DatabaseSync, uri: string, title: string): string {
   const existing = vault
     .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
@@ -42,7 +30,6 @@ function ensureScheme(vault: DatabaseSync, uri: string, title: string): string {
   return schemeId;
 }
 
-/** Resolve a concept by notation within a scheme, creating it when absent. */
 function ensureConcept(
   vault: DatabaseSync,
   schemeId: string,
@@ -65,7 +52,6 @@ function ensureConcept(
   return conceptId;
 }
 
-/** Lowercase-slug notation for a machine tag label. */
 export function tagNotation(label: string): string {
   return (
     label
@@ -82,19 +68,17 @@ export interface AnnotationPayload {
   target_type: string;
   target_id: string;
   body: string;
-  /** The enricher's agent party — injected by `sync.stage_rows`, never trusted from source data. */
+  /** Injected by `sync.stage_rows`, never trusted from source. */
   author_party_id: string;
 }
 
 const annotationPublisher: Publisher = {
   entityType: "knowledge.annotation",
   probe(vault, payload) {
-    // Read-only lookup — the runtime schema gate covers WRITE paths
-    // (create/update, #374 Tier 3); probe never touches SQLite with
-    // payload-derived values beyond a domain-native key lookup.
+    // Read-only lookup — schema gate covers writes (#374); probe is a key lookup.
     const p = payload as unknown as AnnotationPayload;
     if (!p.author_party_id) return null;
-    // One running caption per (author, target) — the replaceMemo semantic.
+    // One caption per (author, target) — replaceMemo.
     const existing = vault
       .prepare(
         `SELECT annotation_id FROM knowledge_annotation
@@ -139,8 +123,7 @@ const annotationPublisher: Publisher = {
   },
   update(vault, entityId, payload) {
     const p = assertPayload<AnnotationPayload>("AnnotationPayload", payload);
-    // The enricher replaces only its OWN prior output — anyone else's
-    // annotation on the same target (the owner's memo) is terminal.
+    // Replaces only its own prior output; anyone else's annotation is terminal.
     vault
       .prepare(
         "UPDATE knowledge_annotation SET body_text = ? WHERE annotation_id = ? AND author_party_id = ?"
@@ -155,7 +138,6 @@ const annotationPublisher: Publisher = {
 export interface TagPayload {
   target_type: string;
   target_id: string;
-  /** Scheme uri — defaults to the vision scheme. */
   scheme_uri?: string;
   label: string;
   confidence: number;
@@ -164,7 +146,7 @@ export interface TagPayload {
 const tagPublisher: Publisher = {
   entityType: "core.tag",
   probe(vault, payload) {
-    // Read-only lookup — see AnnotationPayload.probe's comment above.
+    // Read-only lookup.
     const p = payload as unknown as TagPayload;
     const row = vault
       .prepare(
@@ -180,8 +162,7 @@ const tagPublisher: Publisher = {
         tagNotation(p.label)
       ) as { tag_id: string; tagged_by_party_id: string | null } | undefined;
     if (!row) return null;
-    // An owner-asserted tag (carries a party) is terminal; a machine tag
-    // updates its confidence in place.
+    // Owner-asserted tag (has a party) is terminal; machine tag refreshes confidence.
     return row.tagged_by_party_id
       ? {
           entityId: row.tag_id,
@@ -229,17 +210,14 @@ const tagPublisher: Publisher = {
 
 export interface FaceRegionPayload {
   asset_id: string;
-  /** Normalised 0..1 box: { x, y, w, h }. */
   bbox: Record<string, number>;
-  /** Candidate person from the People match, when the model offered one. */
   party_id?: string;
   confidence: number;
 }
 
 const faceRegionPublisher: Publisher = {
   entityType: "media.face_region",
-  // No domain-native key: idempotency rides the external-id map — enrichers
-  // key regions as `<asset_id>:face:<n>` so a re-run diffs, never duplicates.
+  // No domain-native key: idempotency is `<asset_id>:face:<n>` on the external-id map.
   probe() {
     return null;
   },
@@ -267,17 +245,9 @@ const faceRegionPublisher: Publisher = {
   },
   update(vault, entityId, payload) {
     const p = assertPayload<FaceRegionPayload>("FaceRegionPayload", payload);
-    // AN ANSWERED REGION IS TERMINAL (#712). The guard reads
-    // `review_state = 'proposed'`, not `confirmed_by_party_id IS NULL`: a
-    // null-check on the confirm protects only a confirm, and a rejection kept
-    // as a DELETE lets the next run re-create the same face as a brand-new
-    // proposal for the member to answer for ever. Every
-    // answer — confirmed, rejected, dismissed — leaves the row in place with
-    // a non-`proposed` state, and the enricher may only refresh a region the
-    // owner has not yet answered. This one WHERE clause is the whole
-    // re-propose suppression: the external-id map still resolves
-    // `<asset>:face:<n>` to this row, so a re-run lands here and no-ops
-    // instead of inserting a duplicate.
+    // Answered region is terminal (#712). Guard `review_state = 'proposed'`,
+    // not `confirmed_by_party_id IS NULL`: a reject-as-DELETE would let the
+    // next run re-propose forever. Every answer leaves a non-`proposed` row.
     vault
       .prepare(
         `UPDATE media_face_region SET bbox_json = ?, party_id = ?, confidence = ?
@@ -298,7 +268,7 @@ export interface CollectionPayload {
 const collectionPublisher: Publisher = {
   entityType: "core.collection",
   probe(vault, payload) {
-    // Read-only lookup — see AnnotationPayload.probe's comment above.
+    // Read-only lookup.
     const p = payload as unknown as CollectionPayload;
     const existing = vault
       .prepare("SELECT collection_id FROM core_collection WHERE name = ?")
@@ -325,8 +295,7 @@ const collectionPublisher: Publisher = {
   },
   update(vault, entityId, payload, now) {
     const p = assertPayload<CollectionPayload>("CollectionPayload", payload);
-    // Top-up only: the proposal adds what is missing and never removes —
-    // the owner may have curated the album since.
+    // Top-up only — never remove; the owner may have curated since.
     return { wrote: addEntries(vault, entityId, p.members, now) };
   },
 };
@@ -376,14 +345,11 @@ function addEntries(
 
 export interface FilingPayload {
   content_id: string;
-  /** Proposed human-readable title, when the current one is a scan artifact. */
   title?: string;
-  /** Proposed folder label — an existing folder matches by label, else a new one is created. */
   folder?: string;
 }
 
 export interface RemoteContentPayload {
-  /** Provider-qualified stable identity, e.g. `gdrive:<file-id>`. */
   sourceId: string;
   title: string;
   mediaType: string;
@@ -400,8 +366,7 @@ function isFilingPayload(
 }
 
 function remoteContentSha(sourceId: string): string {
-  // Remote connectors do not download bytes. A provider-qualified source id
-  // is the stable identity material; content_uri retains the canonical URL.
+  // Remote connectors do not download bytes; source id is the identity.
   return sha256Hex(`remote-content\n${sourceId}`);
 }
 
@@ -441,8 +406,7 @@ const contentItemPublisher: Publisher = {
   },
   create(vault, _owner, payload, now) {
     if (isFilingPayload(payload)) {
-      // Filing never mints documents — a proposal for a missing content item
-      // fails per-row, honestly.
+      // Filing never mints documents — missing content item fails per-row.
       throw new Error(
         "a filing proposal for a missing core.content_item cannot create it"
       );
@@ -486,12 +450,8 @@ const contentItemPublisher: Publisher = {
     }
     const p = assertPayload<FilingPayload>("FilingPayload", payload);
     const wrote: PublishedWrite[] = [];
-    // A wrapped content item's display title and folder tag live on its
-    // core_document (#352) — the content item is the HEAD revision,
-    // not the document's identity. Only the exact current head resolves;
-    // filing never mints a document (create() above still throws), so a
-    // proposal against a superseded revision or a still-unwrapped content
-    // item falls back to tagging/renaming the content item directly.
+    // Title/folder live on core_document (#352); content item is HEAD, not
+    // identity. Only the current head resolves; else tag/rename the item.
     const doc = vault
       .prepare(
         "SELECT document_id FROM core_document WHERE current_content_id = ?"

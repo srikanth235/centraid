@@ -1,33 +1,11 @@
 /*
- * Enricher-automation health — the `enrichment` component (#351
- * wave 4).
- *
- * Enrichers are ordinary automations (#299 phases 1-2): each bundled
- * template (`packages/blueprints/automations/<id>`) ships as its own
- * single-automation app, `enabled: false` by default — enabling one IS the
- * owner's opt-in. That means the generic `automations`/`automation-runs`
- * components already cover their fire-time failures, the same way
- * `connections` already covers every dead credential. This probe is
- * narrower, the same way `broker` narrows `connections`: how many enrichers
- * are actually turned on, and — per enricher — is its OWN recent run history
- * healthy, not just "did automations run at all".
- *
- * Run history is not fabricated: it's the SAME ledger `ctx.runs` and any
- * "recent runs" view already read (`ConversationStore.listAutomationTurns`,
- * `packages/server/src/engine`), keyed by automation ref. An enricher that has
- * never fired yet reports `ok` — a quiet, freshly-enabled enricher is not a
- * failure, it just hasn't had a trigger yet; that is the "unknown, not
- * faked" case the task called for.
+ * Per-enricher recent-run health. Never-fired is `ok` (unknown, not a
+ * failure) — do not fabricate run history from other automations' ledgers.
  */
 
 import type { HealthProbe } from "./health-registry.js";
 
-/** The bundled enricher automation ids (`packages/blueprints/automations/*`)
- *  — mirrors `packages/server/src/automation/manifest/enricher-templates.test.ts`'s
- *  `ENRICHERS` fixture. Each ships as its own single-automation app
- *  (`ownerApp === id`), so this id set alone identifies them among any
- *  vault's installed automations without needing to read blueprints' own
- *  package layout at runtime. */
+/** Bundled enricher ids (`ownerApp === id`); do not read blueprints at runtime. */
 export const ENRICHER_AUTOMATION_IDS = [
   "photo-ocr",
   "transcript",
@@ -41,15 +19,12 @@ export const ENRICHER_AUTOMATION_IDS = [
   "renewal-reminders",
 ] as const;
 
-/** An installed automation row, narrowed to what this probe needs (`automation.list`'s `Row`). */
 export interface EnrichmentAutomationRow {
   readonly id: string;
   readonly enabled: boolean;
-  /** Globally-unique handle (`<ownerApp>/<id>`) — `ConversationStore.listAutomationTurns`'s key. */
   readonly ref: string;
 }
 
-/** One run's outcome, narrowed from `ConversationStore`'s `Turn`. */
 export interface EnrichmentRunOutcome {
   readonly ok: boolean;
   readonly endedAt?: number;
@@ -57,9 +32,7 @@ export interface EnrichmentRunOutcome {
 
 export interface EnrichmentHealthVaultEntry {
   readonly vaultId: string;
-  /** Installed automation apps — the same read the scheduler reconcile uses (`automation.list`). */
   readonly listAutomations: () => Promise<readonly EnrichmentAutomationRow[]>;
-  /** Newest-first run history for one automation ref, bounded by `limit` (`ConversationStore.listAutomationTurns`). */
   readonly recentRuns: (
     automationRef: string,
     limit: number
@@ -68,18 +41,14 @@ export interface EnrichmentHealthVaultEntry {
 
 export interface EnrichmentHealthOptions {
   readonly vaults: () => readonly EnrichmentHealthVaultEntry[];
-  /** How many of an enricher's most recent runs must ALL fail before it counts "persistently" failing. Defaults to 3. */
   readonly persistentFailureStreak?: number;
-  /** How long since the last SUCCESSFUL run before an enabled-but-quiet enricher counts stale. Defaults to 48h. */
   readonly staleAfterMs?: number;
-  /** Clock override (tests). */
   readonly now?: () => number;
 }
 
 const DEFAULT_STREAK = 3;
 const DEFAULT_STALE_MS = 48 * 60 * 60 * 1000;
 
-/** Builds the `enrichment` component's `HealthProbe` (registered in `build-gateway.ts`). */
 export function createEnrichmentHealthProbe(
   options: EnrichmentHealthOptions
 ): HealthProbe {
@@ -100,9 +69,7 @@ export function createEnrichmentHealthProbe(
         try {
           return { vault, rows: await vault.listAutomations() };
         } catch {
-          // Vault workspace not settled/mounted yet (fresh boot, or a plane
-          // nothing has touched) — nothing to probe here; the `vaults`
-          // component already flags a failed mount.
+          // Unsettled/unmounted vault — `vaults` already flags a failed mount.
           return undefined;
         }
       })

@@ -1,22 +1,7 @@
-// THE STAGE'S CHROME. `PhotoLightbox` owns all viewer STATE; everything here is
-// a pure view over values it has already decided.
-//
-// THERE IS NO TOP BAR — a full-width strip is a second ground charging the stage
-// its own height on every screen. The head carries three FLOATING elements the
-// stage runs under: a back chevron (`chevron-left`, not `✕`: this viewer is
-// pushed on a stack and returns to its grid), the centred capture stamp (not a
-// control, which is why it sits where nobody scans for one), and the trailing
-// `···` or the slideshow's one labelled way out.
-//
-// NO TAP-TO-TOGGLE: a tap that hides every control hides its own way back, so
-// the gesture would be the only route to the state it made (§15).
-//
-// EVERY ELEMENT IS ON THE STAGE, AND THAT IS A TOKEN RULE, NOT A LOOK: ink from
-// `--on-stage`/`--on-stage-soft`, hairlines from `--stage-line`, plates on
-// `--stage-sunken` — a page token lands at 2.85:1 in light mode. Plates are
-// OPAQUE, never glass: a translucent plate makes contrast a property of what the
-// member photographed, which is why this app carries no blur. That shared
-// constraint is why these pieces live in one module.
+// Stage chrome — `PhotoLightbox` owns viewer STATE; this is a pure view.
+// NO TOP BAR: a full-width strip is a second ground. Head is three FLOATING elements (`chevron-left`, not `✕` — this viewer is stacked).
+// NO TAP-TO-TOGGLE: hiding every control hides the way back (§15).
+// Token rule, not a look: `--on-stage` / `--stage-line` / `--stage-sunken`. Plates are OPAQUE — glass makes contrast a property of the photograph.
 
 import React from "react";
 import { Pressable, View } from "react-native";
@@ -29,11 +14,7 @@ import type { ThemeColors } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import { SLIDESHOW_ACTION, VIEWER_CHROME_INSET } from "./viewer-model";
 
-/**
- * ONE shape for chip and capsule alike: two styles would be two chances for the
- * edge, ground or radius to drift. `forwardRef`'d because `useMenuAnchor`'s
- * `measureInWindow` needs the native node of the `···` plate.
- */
+/** One plate shape for chip and capsule. `forwardRef` so `useMenuAnchor.measureInWindow` can see the `···` node. */
 export const ViewerChromePlate = React.forwardRef<
   RNView,
   { colors: ThemeColors; children: React.ReactNode }
@@ -50,11 +31,7 @@ export const ViewerChromePlate = React.forwardRef<
 ));
 ViewerChromePlate.displayName = "ViewerChromePlate";
 
-/**
- * Icon-only is allowed ONLY because `label` is still the accessible name, read
- * from the same field a visible label would be (WCAG 4.1.2). A label carrying a
- * REASON rather than a name stays on screen instead.
- */
+/** Icon-only only because `label` is still the accessible name (WCAG 4.1.2). A label carrying a REASON stays on screen. */
 export function ViewerChromeTarget({
   colors,
   icon,
@@ -63,8 +40,7 @@ export function ViewerChromeTarget({
   hint,
   selected,
   tone,
-  /** 56 inside a capsule — neighbours at 44 is where mis-taps start. A lone
-   *  chip IS its plate, so it takes the 44 floor. */
+  /** 56 inside a capsule (neighbours at 44 mis-tap). A lone chip IS its plate — 44 floor. */
   wide,
   onPress,
 }: {
@@ -78,9 +54,7 @@ export function ViewerChromeTarget({
   wide?: boolean;
   onPress: () => void;
 }): React.JSX.Element {
-  // `--on-stage-soft`, NOT `--text-disabled`: the page ramp's disabled ink is
-  // mixed against paper and vanishes here, so the control would read as absent
-  // rather than refused.
+  // `--on-stage-soft`, NOT `--text-disabled`: page-ramp disabled ink vanishes on the stage, so the control would read as absent.
   const ink = disabled
     ? colors.onStageSoft
     : tone === "net" || selected === true
@@ -101,18 +75,13 @@ export function ViewerChromeTarget({
   );
 }
 
-/** `box-none`, so the photograph keeps every touch that misses a plate: a
- *  transparent row swallowing the swipe costs the pager a strip of screen. */
+/** `box-none` so the photograph keeps every touch that misses a plate. */
 export function ViewerTopChrome({
   colors,
   insets,
-  /** The capture date, the photograph's name when there is no capture time, or
-   *  the mode's title. */
   title,
-  /** The clock and place, the editor's live sentence, or the show's position. */
   meta,
-  /** Never drawn: the stamp's accessible name, so a screen reader still hears
-   *  the caption the eye now reads as a date. */
+  /** Never drawn: stamp's accessible name so a reader still hears the caption the eye now reads as a date. */
   name,
   editing,
   slideshow,
@@ -131,7 +100,6 @@ export function ViewerTopChrome({
   onClose: () => void;
   onLeaveSlideshow: () => void;
   onOverflow: () => void;
-  /** Measured on the press that opens the anchored menu (`useMenuAnchor`). */
   overflowRef?: React.RefObject<RNView | null>;
 }): React.JSX.Element {
   return (
@@ -163,7 +131,7 @@ export function ViewerTopChrome({
           >
             {title}
           </Text>
-          {/* `--on-stage-soft`, never `--text-soft` — see the header. */}
+          {/* `--on-stage-soft`, never `--text-soft`. */}
           {meta ? (
             <Text
               numberOfLines={1}
@@ -175,10 +143,7 @@ export function ViewerTopChrome({
         </View>
       </ViewerChromePlate>
 
-      {/* LABELLED, never a pause glyph over a press that exits: label and
-          effect both read from `SLIDESHOW_ACTION` so they cannot drift. The
-          editor suppresses this slot but keeps its width, or the stamp slides
-          off centre between modes. */}
+      {/* LABELLED, never a pause glyph. Label and effect both from `SLIDESHOW_ACTION`. Editor keeps the slot's width or the stamp slides off centre. */}
       {editing ? (
         <View style={styles.chromeSpacer} />
       ) : slideshow ? (
@@ -210,14 +175,11 @@ export function ViewerTopChrome({
   );
 }
 
-/** The name is dropped when it IS the first line: a screen reader saying it
- *  twice is a stutter, not emphasis. */
+/** Drop the name when it IS the first line — a reader saying it twice is a stutter. */
 function stampName(name: string, title: string, meta: string): string {
   return [name, title === name ? "" : title, meta].filter(Boolean).join(" · ");
 }
 
-/** One status line inside the stage — no toast, no spinner. While the editor is
- *  open it carries that mode's live promise instead. */
 export function ViewerStatusLine({
   colors,
   text,
@@ -226,8 +188,7 @@ export function ViewerStatusLine({
 }: {
   colors: ThemeColors;
   text: string;
-  /** The ONE offer to spend the bytes, or null: two controls for one fetch is
-   *  two states to keep in step. */
+  /** The one offer to spend the bytes, or null — two controls for one fetch is two states to keep in step. */
   actionLabel: string | null;
   onAction: () => void;
 }): React.JSX.Element {

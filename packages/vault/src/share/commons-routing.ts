@@ -1,39 +1,20 @@
-// The DECLARED command→container routing table for the Commons plane
-// (#750). This file is the single source of truth `commonsGrantForCommand`
-// consults; routing is decided by DECLARATION here, never by the shape of a
-// command name (`command.includes("folder")`) or of its input keys.
+// DECLARED command→container routing for the Commons plane (#750). Routing is
+// decided by DECLARATION here, never by the shape of a command name or input
+// keys. A command that writes a shared container but misses the rail lands as
+// a PRIVATE local mutation that the next compile reverts.
 //
-// Why data and not code: a command that writes into a shared container but
-// does not reach the commons rail lands as a PRIVATE local mutation, and the
-// next compile reverts it — silent member data loss. A heuristic breaks that
-// way whenever an input key is renamed. Here the routing is a table, and
-// `commons-routing.test.ts` walks the real registered command schemas and
-// fails when a declared key is not in the command's `inputSchema`, or when a
-// command in a declared owner schema grows a container key with no route.
-//
-// Two independent facts live on each row:
-//
-//   * ROUTABLE — the command's input can address this container type, so it
-//     must reach the rail. Every routable command is refused or sequenced by
-//     the commons authorization path; none of them falls through to a private
-//     write.
-//   * ACTABLE — the container type DECLARES this command as part of its
-//     shared write surface. A routable-but-not-actable command is refused at
-//     the steward with a named reason ("… is not declared for …"). UI
-//     filtering is never the security boundary.
+// ROUTABLE — input can address this container type, so it must reach the rail.
+// ACTABLE — the container type DECLARES this command as its shared write
+// surface. Routable-but-not-actable is refused by name. UI filtering is never
+// the security boundary.
 
 import type { ShareableItemType } from "./closure.js";
 
 /**
  * How a declared input key names the grant's container.
- *
- * - `container` — the key holds the container's own id.
- * - `folder-descendant` — the key holds a folder id at, or under, the
- *   granted `docs.folder` root.
- * - `folder-document` — the key holds a document id filed anywhere under the
- *   granted `docs.folder` root.
- * - `tally-expense` — the key holds an expense id whose group is the
- *   granted `tally.group`.
+ * `container` — the key holds the container's own id.
+ * `folder-descendant` / `folder-document` — under the granted `docs.folder`.
+ * `tally-expense` — expense whose group is the granted `tally.group`.
  */
 export type CommonsRouteResolution =
   | "container"
@@ -41,25 +22,19 @@ export type CommonsRouteResolution =
   | "folder-document"
   | "tally-expense";
 
-/** One declared (command, input key) → container-type route. */
 export interface CommonsCommandRoute {
   command: string;
-  /** The command pack that owns the key (`agent_command.owner_schema`). */
   ownerSchema: string;
   inputKey: string;
   containerType: ShareableItemType;
   resolution: CommonsRouteResolution;
-  /** Declared member/steward write surface for that container type. */
   actable: boolean;
 }
 
 /**
- * The key VOCABULARY: which (owner schema, input key) pairs address a
- * shareable container at all, and how. The conformance test uses this to
- * decide which registered commands are REQUIRED to carry a route, so a new
- * command that grows a `group_id` cannot quietly skip the rail. Scoping by
- * owner schema is deliberate: `home.update_item` and `outbox.decide` also
- * carry an `item_id`, and they address rows in another domain entirely.
+ * Key vocabulary for the conformance test: a new command that grows a
+ * `group_id` cannot quietly skip the rail. Scoped by owner schema on purpose:
+ * `home.update_item` and `outbox.decide` also carry `item_id`.
  */
 export interface CommonsContainerKey {
   ownerSchema: string;
@@ -143,7 +118,6 @@ export const COMMONS_CONTAINER_KEYS: readonly CommonsContainerKey[] = [
   },
 ];
 
-/** Terse row builder — the table below is long and reads as data, not code. */
 function route(
   command: string,
   ownerSchema: string,
@@ -209,7 +183,7 @@ const onLockerItem = (command: string): CommonsCommandRoute =>
  * before its own, which is what keeps a shared subtree one commons.
  */
 export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
-  // Tally — the one container type with a full declared write surface.
+  // Tally — full declared write surface.
   tallyGroup("tally.add_expense", true),
   tallyGroup("tally.add_group_member", true),
   tallyGroup("tally.remove_group_member", true),
@@ -227,8 +201,7 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   tallyExpense("tally.set_expense_memo"),
   tallyExpense("tally.undo_expense"),
 
-  // Documents and folders. Every document command resolves against an
-  // enclosing shared folder first, then against the document's own grant.
+  // Documents/folders: enclosing shared folder first, then the document's own grant.
   onFolder("core.add_document", "folder_id", true),
   onFolder("core.create_folder", "parent_folder_id", true),
   onFolder("core.rename_folder", "folder_id", true),
@@ -257,8 +230,7 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   onContent("core.set_extracted_text"),
   onContent("knowledge.restore_note_version", "knowledge"),
 
-  // Albums and photos. No declared write surface yet: a command that
-  // addresses a shared album or asset is refused, never applied privately.
+  // Albums/photos: no declared write surface — refused, never applied privately.
   onAlbum("media.add_to_album"),
   onAsset("media.add_to_album"),
   onAlbum("media.remove_from_album"),
@@ -277,7 +249,6 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   onAsset("media.update_asset"),
   onAsset("enrich.upsert_faces", "enrich"),
 
-  // Locker items.
   onLockerItem("locker.edit_item"),
   onLockerItem("locker.purge_item"),
   onLockerItem("locker.restore_item"),
@@ -295,17 +266,13 @@ for (const declared of COMMONS_COMMAND_ROUTES) {
   else ROUTES_BY_COMMAND.set(declared.command, [declared]);
 }
 
-/** The declared routes for one command, in resolution order. */
 export function commonsRoutesForCommand(
   command: string
 ): readonly CommonsCommandRoute[] {
   return ROUTES_BY_COMMAND.get(command) ?? [];
 }
 
-/**
- * Is this command part of the container type's DECLARED write surface? The
- * commons rail refuses everything else, including commands it routed here.
- */
+/** Declared write surface? The rail refuses everything else, including routed commands. */
 export function isCommonsCommandActable(
   containerType: ShareableItemType,
   command: string

@@ -1,20 +1,7 @@
-// Mobile insights + gateway-metrics client. Two read-only surfaces the phone
-// mirrors from the gateway, both over the same base (paired tunnel / manual dev
-// URL) the rest of the app uses:
-//
-//   • gateway health — GET /centraid/_gateway/health → HealthSnapshot: per-
-//     subsystem status, a warn/error tail, and coarse numeric metrics (rss,
-//     outbox depth, event-loop lag, fsync). Gateway-WIDE, so it carries only the
-//     host bearer (authHeader), never a vault header.
-//   • usage insights — GET /centraid/_insights/summary?windowDays= →
-//     InsightsSummary: token/cost KPIs, a daily series, per-model usage, and a
-//     recent-activity tail. Vault-SCOPED, so it uses apiHeaders (auth + the
-//     active vault) and follows the Vaults switcher's selection.
-//
-// Mobile doesn't depend on the gateway package, so the wire shapes are mirrored
-// here as lean local interfaces (exactly as lib/gateway + lib/automations do).
-// Source of truth: packages/server/src/serve/health-registry.ts (HealthSnapshot)
-// and packages/client/src/react/screen-contracts.ts (InsightsSummary).
+// Two read-only mirrors over the same gateway base. Health is gateway-wide
+// (host bearer only, never a vault header). Insights are vault-scoped
+// (`apiHeaders`). Shapes live here because mobile does not depend on the
+// gateway package — source: health-registry.ts / screen-contracts.ts.
 
 import {
   formatBytes as sharedFormatBytes,
@@ -27,8 +14,6 @@ import {
   fetchJson,
   requireGatewayBase,
 } from "./gateway";
-
-// --- Gateway health (mirrors HealthSnapshot / ComponentHealth / HealthMetrics) ---
 
 export type ComponentStatus = "ok" | "degraded" | "error";
 
@@ -70,39 +55,27 @@ export interface GatewayHealth {
   metrics: HealthMetrics;
 }
 
-// --- Usage insights (mirrors InsightsSummary & friends) ---
-
 export interface InsightsKpis {
   totalTokens: number;
   hydrationTokens: number;
-  /** Sum of KNOWN costs — a floor while `unpricedRuns` is above zero. */
+  /** Floor while `unpricedRuns` > 0. */
   totalCostUsd: number;
-  /** USD the harness itself reported (live runs). */
   harnessReportedCostUsd: number;
-  /** USD from catalog estimates. */
   estimatedCostUsd: number;
   forecastCostUsd: number;
   generations: number;
   retries: number;
-  /** Runs in the window that finished badly. Window-wide only: the daily
-   *  rollup carries no per-day outcome split (see `InsightsDailyPoint`). */
+  /** Window-wide only — the daily rollup has no per-day outcome split. */
   failedRuns: number;
-  /** What the failed runs cost. Money spent on work that did not land is the
-   *  one spend figure a member can act on directly. */
   failedCostUsd: number;
   appsTouched: number;
-  /** NOT served by the current gateway rollup (`InsightsKpis` in
-   *  `packages/server/src/engine/insights/insights-types.ts` has no quota at
-   *  all). Left in the mirror because removing a field is not this screen's
-   *  call; nothing reads it, and nothing should until a gateway sends one. */
+  /** Not on the gateway rollup. Do not read until a gateway sends one. */
   quotaTokens: number;
   unpricedRuns: number;
-  /** Finished runs that reported no token usage at all. */
   unreportedRuns: number;
 }
 
-/** One day of the rollup. It counts RUNS and nothing about their outcome —
- *  there is no per-day failure split to draw, on any surface. */
+/** Counts runs, not outcomes — no per-day failure split exists. */
 export interface InsightsDailyPoint {
   date: string;
   tokens: number;
@@ -110,8 +83,6 @@ export interface InsightsDailyPoint {
   runs: number;
 }
 
-/** One bucket of "where the work came from" — an automation handle, or the
- *  `chat` / `build` buckets. */
 export interface InsightsSourceRow {
   key: string;
   label: string;
@@ -122,7 +93,6 @@ export interface InsightsSourceRow {
   automationName?: string;
 }
 
-/** The one source that took most of the window's spend, when there is one. */
 export interface InsightsAttention {
   kind: "top_source";
   key: string;
@@ -146,7 +116,6 @@ export interface InsightsModelRow {
   costUsd: number;
 }
 
-/** The window's most expensive day, and what most of it went on. */
 export interface InsightsPeakDay {
   date: string;
   tokens: number;
@@ -171,7 +140,6 @@ export interface InsightsActivityRow {
   runId: string;
   kind: string;
   label: string;
-  /** The automation this run belongs to, when it belongs to one. */
   automationRef?: string;
   automationName?: string;
   ok: boolean;
@@ -198,7 +166,6 @@ export interface InsightsSummary {
   attention?: InsightsAttention;
 }
 
-/** Gateway-wide component health + coarse metrics. Host-bearer only, no vault. */
 export async function fetchGatewayHealth(): Promise<GatewayHealth> {
   const base = await requireGatewayBase();
   return fetchJson<GatewayHealth>(`${base}/centraid/_gateway/health`, {
@@ -207,7 +174,6 @@ export async function fetchGatewayHealth(): Promise<GatewayHealth> {
   });
 }
 
-/** Usage analytics for the active vault over the last `windowDays` (default 30). */
 export async function fetchInsightsSummary(
   windowDays = 30
 ): Promise<InsightsSummary> {
@@ -218,9 +184,6 @@ export async function fetchInsightsSummary(
   );
 }
 
-// --- Formatting (lean ports of packages/client/src/react/format.ts) ---
-
-/** Compact token/count: 1.2k, 3.4M, 987. */
 export function formatCount(n: number): string {
   if (!Number.isFinite(n)) return "0";
   const abs = Math.abs(n);
@@ -229,19 +192,16 @@ export function formatCount(n: number): string {
   return String(Math.round(n));
 }
 
-/** USD to at most cents, with a leading $. Sub-cent nonzero shows "<$0.01". */
 export function formatUsd(n: number): string {
   if (!Number.isFinite(n) || n === 0) return "$0.00";
   if (n > 0 && n < 0.01) return "<$0.01";
   return `$${n.toFixed(2)}`;
 }
 
-/** RSS/byte size in the largest sensible unit. */
 export function formatBytes(n: number): string {
   return sharedFormatBytes(n);
 }
 
-/** Coarse uptime: "3d 4h", "5h 12m", or "12m". */
 export function formatUptime(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return "—";
   const mins = Math.floor(ms / 60_000);
@@ -253,19 +213,16 @@ export function formatUptime(ms: number): string {
   return `${rem}m`;
 }
 
-/** Milliseconds rounded for display: "0.8 ms" / "42 ms". */
 export function formatMs(ms: number): string {
   if (!Number.isFinite(ms)) return "—";
   return ms < 10 ? `${ms.toFixed(1)} ms` : `${Math.round(ms)} ms`;
 }
 
-/** "just now" / "5m ago" / "3h ago" / "2d ago" from an epoch-ms or ISO time. */
 export function relativeTime(when: number | string): string {
   const then = typeof when === "number" ? when : Date.parse(when);
   return formatRelativeTime(Number.isFinite(then) ? then : undefined);
 }
 
 function trim(n: number): string {
-  // One decimal, but drop a trailing ".0" so 3.0k reads as 3k.
   return n.toFixed(1).replace(/\.0$/u, "");
 }

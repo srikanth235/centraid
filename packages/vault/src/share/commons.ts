@@ -1,9 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#731) the grant compiler, signed command rail, and scrub transaction form one Commons integrity boundary; splitting their shared control projections would make authorization and cleanup drift independently
-// Circle-backed commons (#731): vault-resident consent compiled onto the
-// existing projection primitive — NOT a scheduler and not a second replication
-// engine. Callers append one ordered command, execute it through the ordinary
-// invoke path at the steward, then reconcile the declared closure into each
-// member vault.
+// Circle-backed commons (#731): compile consent onto the projection primitive. Not a scheduler. Append → invoke at steward → reconcile into each member.
 
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 
@@ -1497,23 +1493,11 @@ function staleContextTargets(
   return { rows, parties };
 }
 
-/** Stale-context conflict scoping (#731 goal 1). A member composes against the
- * grant sequence they last observed (`basedOnSequence`); by the time it reaches
- * the steward the group may have moved on. Validation elsewhere asks whether the
- * command is still VALID; this asks whether the member's model has diverged.
- *
- * Do NOT refuse merely because something executed in between — an active commons
- * moves constantly and that would refuse almost everything (the explicit
- * anti-goal). Refuse only when an intervening EXECUTED op plausibly interacts
- * with what this command names: the same row id (by value, excluding the
- * container's own), or a roster/capability change to a party it references.
- *
- * Ops past compaction survive only as a coarse receipt (kind + outcome, no
- * input). A compacted ROSTER change conflicts conservatively — its partyId is
- * unrecoverable — while a compacted ordinary command does not, or the scoping
- * above would be defeated. The gap is narrow: compaction discards only ops every
- * current member's cursor has passed, and goal 2's expiry settles intents parked
- * long enough to fall behind the retention floor. */
+/**
+ * Stale-context (#731 goal 1). Do not refuse merely because something executed in between.
+ * Refuse only when an intervening executed op names the same row or a referenced party.
+ * Compacted roster changes conflict conservatively (partyId unrecoverable); compacted ordinary commands do not.
+ */
 function staleContextConflict(input: {
   steward: DatabaseSync;
   grant: CommonsGrantRecord;
@@ -1564,16 +1548,7 @@ function staleContextConflict(input: {
   return undefined;
 }
 
-/**
- * The NAMED fault a re-minted member identity produces (#750). A member vault
- * that lost its seed and was re-created presents a different `vault_public_key`
- * than `share_party_vault_binding` pinned, so every command it signs fails
- * verification — and "invalid vault signature" is exactly the wrong story:
- * nothing is malformed and nobody is forging. The seat is a DIFFERENT vault
- * wearing a known id, and the only cure is re-invitation (rotation is deferred
- * — docs/decisions.md). Refusals carry this prefix so logs and receipts name the
- * real condition.
- */
+/** Named fault for a re-minted member identity (#750) — not "invalid vault signature". Cure is re-invitation. */
 export const COMMONS_MEMBER_IDENTITY_CHANGED =
   "commons_member_identity_changed";
 

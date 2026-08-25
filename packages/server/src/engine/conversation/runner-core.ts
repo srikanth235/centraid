@@ -1,30 +1,6 @@
 /*
- * Chat-runner core — the one place the per-turn chat loop lives.
- *
- * It sits next to the `ConversationRunner` interface and the harness-turn
- * contract it wires together, both of which live here in app-engine. The
- * actual model turn is injected as a `RunTurnFn` (`runTurn`) —
- * `@centraid/server/acp` passes its ACP `runTurn`; tests pass a stub. Every
- * `ConversationRunner` the gateway's `/_turn` route can inject does the same
- * thing around that turn: load prefs, resolve a cwd, build the system prompt,
- * thread the `centraid_*` dispatcher into a `ToolContext`, resume when the
- * prior turn used the same harness kind, drive the turn, and (optionally) run a
- * post-turn side effect. That spine is shared by
- * `makeConversationRunner` (agent-runtime, data-only chat) and the gateway's
- * `makeUnifiedConversationRunner` (code+data builder chat); they differ
- * only by the four injected seams below (#147, Concern 1):
- *
- *   - `resolveCwd`            — data chat returns `input.dataDir`; builder
- *                              chat opens the app's draft worktree.
- *   - `buildExtraSystemPrompt` — defaults to passing the route's preamble
- *                              through unchanged; builder chat folds in the
- *                              authoring grounding (owned by the gateway's `src/skills/`).
- *   - `onTurnComplete`        — builder chat mints webhook secrets here.
- *   - `extraPath`             — builder chat puts the bundled `centraid` CLI
- *                              on the harness's PATH; data chat doesn't.
- *
- * Harness-agnostic by construction: the model turn (`runTurn`) is injected, so
- * this spine never imports a concrete ACP implementation.
+ * Per-turn chat loop. Hosts differ by four seams (#147): `resolveCwd`,
+ * `buildExtraSystemPrompt`, `onTurnComplete`, `extraPath`.
  */
 
 import { randomUUID } from "node:crypto";
@@ -54,7 +30,6 @@ export type {
   TurnContext,
 } from "./runner-core-types.js";
 
-/** Build a `ConversationRunner` from injected host seams. */
 export function makeConversationRunnerCore(
   opts: ConversationRunnerCoreOptions
 ): ConversationRunner {
@@ -80,9 +55,8 @@ export function makeConversationRunnerCore(
         throw new Error("no harness configured");
       }
       // A host that predates the harnessKind loader argument may still return
-      // another harness's launch settings. Keep the requested kind but discard
-      // that mismatched binary/args; registry defaults are safer than launching
-      // harness A through harness B's executable.
+      // another harness's launch settings. Keep the requested kind; discard the
+      // mismatched binary/args.
       const primaryPrefs: HarnessPrefs =
         input.harnessKind && loadedPrefs.kind !== input.harnessKind
           ? { kind: input.harnessKind }
@@ -118,9 +92,8 @@ export function makeConversationRunnerCore(
       let consumedHydrationTokens: number | undefined;
       const activeHarnessKind =
         input.activeHarnessKind ?? input.prevHarnessKind;
-      // Kinds this turn actually consulted, and why the last one was refused —
-      // so an all-rungs-unavailable turn can name them instead of blaming
-      // "every configured harness" with an anonymous 'unknown' failure class.
+      // Consulted kinds + last refusal class: an all-rungs-unavailable turn
+      // must name them, not blame "every configured harness" as 'unknown'.
       const consulted: HarnessKind[] = [];
       let lastBreakerClass: HarnessFailureClass | undefined;
       const consented: readonly HarnessKind[] =
@@ -130,8 +103,7 @@ export function makeConversationRunnerCore(
             ? [input.providerConsent]
             : input.providerConsent;
 
-      // Ladder rungs are turn boundaries, not parallel retries: each can
-      // authorize egress, resume a distinct session, and emit ledger events.
+      // Ladder rungs are turn boundaries, not parallel retries.
       const attemptRung = async (
         rung: number
       ): Promise<ConversationTurnResult | undefined> => {
@@ -153,8 +125,8 @@ export function makeConversationRunnerCore(
             consented.includes(kind)
           ) {
             // Initial use is implicit in choosing the surface. A ladder rung
-            // is authorized by its explicit Settings membership (D13).
-            // Only an attended cross-provider switch needs the one-time gate.
+            // is authorized by Settings membership (D13). Only an attended
+            // cross-provider switch needs the one-time gate.
             opts.providerEgressConsent.grant(
               input.conversationId,
               kind,
@@ -222,11 +194,8 @@ export function makeConversationRunnerCore(
           ? await opts.buildExtraSystemPrompt(turnCtx)
           : input.extraSystemPrompt;
 
-        // Resume and hydration are PER RUNG. This rung may be a failover the
-        // route never planned for: it has its own (possibly cold) binding and
-        // its own watermark, so the primary target's plan is both the wrong
-        // session id and the wrong delta. Ask the driver for THIS kind's plan;
-        // hosts without a conversation store keep the precomputed fields.
+        // Resume and hydration are PER RUNG — a failover has its own binding
+        // and watermark. Ask the driver for THIS kind's plan.
         const plan = input.resumeForKind?.(kind);
         // Resume only against the harness that minted the opaque session id.
         const resumeId = plan
@@ -253,14 +222,12 @@ export function makeConversationRunnerCore(
         const recoveryHydrationAttachments = plan
           ? plan.recoveryHydrationAttachments
           : input.recoveryHydrationAttachments;
-        // The ledger may carry a delta even when this harness resumes its own
-        // ACP session (A → B → A). A supplied hydration plan is therefore an
-        // explicit instruction, not merely a harness-kind mismatch heuristic.
+        // A supplied hydration plan is an explicit instruction, not a
+        // harness-kind mismatch heuristic (A → B → A still carries a delta).
         const forceHydration = hydrationContext !== undefined;
 
-        // Explicit model/config pins belong to the selected provider. A
-        // failover rung gets only its own persisted defaults; carrying a Codex
-        // model or thought level into Claude is both meaningless and unsafe.
+        // Failover rungs get only their own persisted defaults — do not carry
+        // a Codex model or thought level into Claude.
         const configPins: Record<string, string> = {
           ...prefs.configPins,
           ...(rung === 0 ? input.configPins : {}),
@@ -339,8 +306,7 @@ export function makeConversationRunnerCore(
         if (!failure) {
           opts.harnessHealth?.reportOk(healthContext, kind);
           completedCtx = turnCtx;
-          // Bill the hydration THIS rung was handed, not the route's original
-          // plan — a failover rung carries a different prompt and cost.
+          // Bill the hydration THIS rung was handed, not the route's original plan.
           if (lastResult?.hydrated) {
             consumedHydrationTokens =
               lastResult.hydrationKind === "recovery"
@@ -359,19 +325,16 @@ export function makeConversationRunnerCore(
           failure.message
         );
         lastError = failure;
-        // A failed turn is never silently replayed through another stateful
-        // session. The breaker affects the next turn boundary, where the next
-        // ladder rung is selected before any prompt is sent.
+        // Never silently replay a failed turn through another stateful session.
+        // The breaker affects the next turn boundary, before any prompt is sent.
         input.onEvent(failure);
       };
       const consentResult = await attemptRung(0);
       if (consentResult) return consentResult;
 
       if (!completedCtx && !lastResult) {
-        // Name the harnesses actually consulted and carry the breaker's own
-        // failure class. "Every configured harness" reads as a fleet-wide
-        // outage when the ladder was one rung, and 'unknown' hides the
-        // auth/quota reason the breaker already knows.
+        // Name the harnesses consulted and carry the breaker's failure class.
+        // "Every configured harness" + 'unknown' hides a one-rung auth/quota.
         const unavailable: Extract<TurnStreamEvent, { type: "error" }> =
           lastError ?? {
             type: "error",
@@ -402,8 +365,7 @@ export function makeConversationRunnerCore(
           ? { harnessUsageSnapshot: result.usageSnapshot }
           : {}),
         ...(result.hydrated ? { hydrated: true } : {}),
-        // Surfaced so the driver can retire a binding whose resume handle the
-        // harness had to abandon (`'recovery'`).
+        // So the driver can retire a binding whose resume handle was abandoned.
         ...(result.hydrationKind
           ? { hydrationKind: result.hydrationKind }
           : {}),

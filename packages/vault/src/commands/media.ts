@@ -1,13 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); media owns the whole library loop (9 commands with their contracts), so it is large by design.
-// Media domain commands (§08): the command pack behind the Photos projection.
-// An asset is MEANING OVER BYTES — `media_asset` decorates a canonical
-// `core_content_item` (sha256-deduped, same custody as attachments) with
-// capture time and dimensions; an album is a surface view over
-// `core_collection`, the one owner-curation mechanism (#274), so a collection
-// may also hold documents and notes. Deleting an asset removes the meaning rows
-// and soft-deletes the bytes only when nothing else still rents them: content
-// items are canonical and shared, so the LAST reference decides, not the first
-// delete. Purging (#711) ends that grace window early — see PURGE_ASSET.
+// Media commands (§08). Asset = meaning over bytes (`media_asset` on `core_content_item`). Last remaining renter decides byte soft-delete (#274). Purge (#711) ends grace early.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -27,11 +19,7 @@ import {
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 
-// The starred flag rides the CANONICAL content item, not the asset row (#274
-// kink 1 / #441 A2.1): favoriting a photo must surface in every "what I
-// starred" query. `media_asset.favorite` is the Photos replica read model and a
-// MIRROR with a single writer — the tag is the truth, the column a derived
-// cache, and a postcondition asserts they agree after every toggle.
+// Star rides the canonical content item, not the asset (#274 / #441 A2.1). `media_asset.favorite` is a single-writer mirror; postcondition asserts they agree.
 const CONTENT_ITEM_TARGET_TYPE = "core.content_item";
 
 /** Mirror the favorite bit onto the content item's starred flags tag. */
@@ -59,12 +47,7 @@ function actorPartyId(ctx: HandlerCtx): string {
   return owner.owner_party_id;
 }
 
-/**
- * What a media write needs when it runs OUTSIDE the command pipeline (#721).
- * The import spine's publishers hold a raw `DatabaseSync` and a provenance
- * collector instead of a `HandlerCtx`, but a photograph from a Takeout archive
- * must become the SAME row, by the same rules, as one from `media.add_asset`.
- */
+/** Deps for media writes outside the command pipeline (#721). Same row/rules as `media.add_asset`. */
 export interface MediaWriteDeps {
   vault: DatabaseSync;
   now: string;
@@ -96,43 +79,20 @@ function purgeAt(now: string): string {
   ).toISOString();
 }
 
-/**
- * ~11m precision for find-or-create IDENTITY, so photos taken metres apart
- * share one core_place row instead of minting one per shutter click. The row
- * keeps the PRECISE coordinates of whichever asset created it (#352).
- */
+/** ~11m identity precision so burst photos share one `core_place`. Row keeps precise coords (#352). */
 function roundCoord(v: number): number {
   return Math.round(v * 10_000) / 10_000;
 }
 
-/**
- * How close a photograph must be to a place the member ALREADY NAMED to count
- * as taken there, in degrees of latitude (~170m). Wide enough for a house and
- * its garden, narrow enough that the next building is a different place.
- * Deliberately far looser than the ~11m identity rung: that asks "is this the
- * same coordinate", this asks "is this that place".
- */
+/** ~170m: named-place adoption, looser than the ~11m identity rung. */
 const NAMED_PLACE_RADIUS_DEG = 0.0015;
 
-/**
- * A place row whose name is just its own coordinates. These must NOT be treated
- * as names — adopting one spreads a meaningless string across a neighbourhood —
- * and the UI reads this shape as an unnamed placeholder.
- */
+/** Coordinate-as-name is not a name — do not adopt it. */
 export function isCoordinateLabel(name: string | null | undefined): boolean {
   return /^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/u.test((name ?? "").trim());
 }
 
-/**
- * Find-or-create the core_place an asset's GPS names, in falling order of what
- * the vault actually knows: (1) a place the member NAMED within ~170m, which is
- * what makes Places readable with no geocoding at all; (2) the exact rounded
- * coordinate (~11m), the identity rung that stops a burst minting a row per
- * frame; (3) a new row labelled with its own coordinates. Coordinate-to-
- * settlement naming is deliberately deferred, and the UI hides the placeholder
- * until a member names it. `geo_lat`/`geo_lng` stay PRECISE — only identity
- * rounds.
- */
+/** Find-or-create place: named within ~170m, else rounded identity (~11m), else a coordinate-labelled row. Coords stay precise. */
 export function findOrCreatePlaceTx(
   deps: MediaWriteDeps,
   lat: number,
@@ -140,10 +100,7 @@ export function findOrCreatePlaceTx(
 ): string {
   const rLat = roundCoord(lat);
   const rLng = roundCoord(lng);
-  // A bounding box, not a great-circle distance: SQLite has no trigonometry
-  // without an extension, the box is indexable, and at this radius the
-  // difference is metres. Longitude divides by cos(latitude) so the box stays
-  // roughly square on the ground rather than stretching east-west.
+  // Bounding box (SQLite has no trig); divide lng by cos(lat) so the box stays square.
   const lngRadius =
     NAMED_PLACE_RADIUS_DEG / Math.max(0.05, Math.cos((lat * Math.PI) / 180));
   const named = deps.vault
@@ -189,10 +146,6 @@ export function findOrCreatePlaceTx(
   return placeId;
 }
 
-/**
- * The columns the spool learned from the bytes, minus the raw text feed — the
- * camera's testimony. Shared so an import and an upload record it identically.
- */
 export function exifJsonForMeta(meta: Record<string, unknown>): string | null {
   const exif = Object.fromEntries(
     Object.entries(meta).filter(([k, v]) => k !== "text" && v !== undefined)
@@ -215,11 +168,7 @@ export interface MediaAssetRow {
   exifJson: string | null;
 }
 
-/**
- * The ONE insert into `media_asset`. Both doors — `media.add_asset` and the
- * import spine's publisher — write through here, so a new column can never land
- * on one path and not the other.
- */
+/** The one `media_asset` insert — `media.add_asset` and the import publisher share it. */
 export function insertMediaAssetTx(
   vault: DatabaseSync,
   row: MediaAssetRow
@@ -245,17 +194,7 @@ export function insertMediaAssetTx(
     );
 }
 
-/**
- * `media_asset.content_id` is UNIQUE — the same bytes are one asset. An
- * existing asset over this content item is ADOPTED, not duplicated: a trashed
- * one comes back to life (re-upload = restore) and a capture group learned
- * later COALESCE-merges onto it, completing a Live Photo whose video half
- * arrives in a second import.
- *
- * Deliberately does NOT stamp `source_asset_id` (#711): these bytes already ARE
- * that asset, so nothing was created to have a lineage, and overwriting
- * provenance from a later arrival would rewrite history.
- */
+/** UNIQUE `content_id`: adopt, do not duplicate. Do not stamp `source_asset_id` (#711) — these bytes already are that asset. */
 export function adoptAssetForContentTx(
   deps: MediaWriteDeps,
   contentId: string,
@@ -343,13 +282,7 @@ export function contentUnreferenced(
   return true;
 }
 
-/**
- * Collapse a content item's grace window to NOW when nothing rents it, so the
- * next lifecycle sweep purges the row, its derivatives and its CAS blobs. This
- * is how an owner-driven purge frees bytes: a command handler has no CAS
- * delete, and deleting the row here would strand the blob with nothing left to
- * drive its reclamation. Bytes still rented elsewhere are untouched.
- */
+/** Collapse grace to now when unrented — handler has no CAS delete; sweep reclaims. */
 function releaseContentNow(ctx: HandlerCtx, contentId: string): boolean {
   if (!contentUnreferenced(ctx, contentId)) return false;
   ctx.db
@@ -402,14 +335,7 @@ const ADD_ASSET: CommandDefinition = {
       width: { type: "integer", minimum: 1 },
       height: { type: "integer", minimum: 1 },
       duration_s: { type: "number", minimum: 0 },
-      // WHERE THIS WAS TAKEN, ASSERTED by the caller rather than read out of
-      // the bytes — the one spool-derived field that had no explicit override,
-      // which left the inline `data_uri` door unable to produce a place at all.
-      //
-      // Assertion, not extraction, and that distinction is why accepting it is
-      // safe: the media.location gate drops GPS the owner chose not to keep
-      // when it is read OUT of a file, whereas a caller typing a coordinate is
-      // stating a fact it already holds. Explicit input still wins, as above.
+      // Caller-asserted location, not extraction — media.location strips GPS read from a file.
       latitude: { type: "number", minimum: -90, maximum: 90 },
       longitude: { type: "number", minimum: -180, maximum: 180 },
       // Perceptual hash (#299 §2, Tier 0) — hex, producer-agnostic.
@@ -816,24 +742,12 @@ function setAssetPlace(ctx: HandlerCtx): Record<string, unknown> {
   return { asset_id: input.asset_id, place_id: placeId };
 }
 
-/**
- * The kinds a member may declare a place to be. The column's CHECK also permits
- * `'virtual'` (core.ts), deliberately not offered: a member naming where a
- * photograph was taken is never naming a video call.
- */
+/** Place kinds a member may declare. CHECK also permits `'virtual'` — not offered (not a photo location). */
 const PLACE_KINDS = ["home", "work", "venue", "city", "region", "other"];
 
 /**
- * A member names a place (#816) — THE ONE WRITE THAT MAKES A COORDINATE INTO A
- * LOCATION. `findOrCreatePlaceTx` mints coordinate-labelled rows, and the
- * phrase ladder's top rung (place-phrase.ts) answers everywhere at once from
- * this row at render time.
- *
- * MEMBER AUTHORITY, AND ONLY THE NAME: writes `name` (and `kind` when
- * declared) and NOTHING else. `address_json`, `geohash` and `tz` are derived
- * gazetteer facts with their own writers — clearing them would destroy a
- * machine's finding on the strength of a human's label, and the two claims are
- * not in competition. The name outranks the derived name for DISPLAY only.
+ * Name a place (#816) — the write that turns a coordinate into a location. Writes `name`/`kind` only;
+ * do not clear `address_json`/`geohash`/`tz` (gazetteer has its own writers). Name outranks derived name for display only.
  */
 const NAME_PLACE: CommandDefinition = {
   name: "media.name_place",
@@ -1089,35 +1003,11 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /**
- * `media.purge_asset` — destroy one ALREADY-TRASHED asset now instead of
- * waiting out its 30-day grace (#711). The only owner-driven hard delete in
- * this pack, and its whole shape follows from that.
- *
- * ONLY TRASH: `asset_is_trashed` demands `deleted_at IS NOT NULL`, so a live
- * asset or an unknown id is REFUSED by name. There is no "purge anything" door.
- *
- * WHAT GOES: face regions, the phash sidecar (ON DELETE CASCADE), and every
- * polymorphic pointer at the asset via the A1 registry (`cleanupPolyRefs`) —
- * the same complete sweep the lifecycle purge runs. An album whose cover this
- * was hands off first, as `delete_asset` does.
- *
- * WHAT DOES NOT GO — THE BYTES, HERE. A handler has no CAS delete, and deleting
- * `core_content_item` from here would strand the blob with no row left to drive
- * `purgeContentItem`. So the content item's grace window collapses to NOW when
- * nothing else rents it and the sweep that owns the bytes reclaims them. Bytes
- * still rented elsewhere are left alone: asset meaning and byte custody have
- * independent lifecycles (#274).
- *
- * EDIT LINEAGE: `source_asset_id` is a self-FK, and breaking it would forge or
- * destroy a fact. NULLing the child forges "camera original"; cascading
- * destroys a photograph the member never trashed. So `no_derived_assets`
- * REFUSES while any other asset names this one as its source, live or trashed.
- * Both clients' `emptyTrashOrder` puts derived copies ahead of their sources so
- * a trash holding both empties in one pass.
- *
- * NOT `confirm: true`: parking would turn "Empty trash" into a queue of
- * decisions. The confirmation for an owner-initiated destruction belongs in
- * front of the owner before the command fires, as both clients do it.
+ * `media.purge_asset` — hard-delete an already-trashed asset (#711). No live-asset door.
+ * Goes: faces, phash CASCADE, poly-refs (`cleanupPolyRefs`), cover hand-off. Bytes do NOT go here:
+ * collapse content grace to now if unrented; sweep owns CAS. Independent lifecycles (#274).
+ * `source_asset_id` self-FK: `no_derived_assets` refuses while any child names this source.
+ * Not `confirm: true` — owner confirmation is in front of the command.
  */
 const PURGE_ASSET: CommandDefinition = {
   name: "media.purge_asset",
@@ -1881,30 +1771,9 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /**
- * THE FACE-DELETE GATE (#724 W5; SECURITY.md, "Derived data and sensitive
- * enrichments"). Face data is the most sensitive derived class here, and the
- * condition for shipping face detection at all was that "delete this person"
- * PROVABLY cascades through every derived row keyed to that identity — no soft
- * deletes, no hides, no vector left for a later search to resurface.
- *
- * Four mechanisms, each enough on its own to reconstruct the destroyed fact:
- * `media_face_region` (BOTH party columns — a confirmed row also carries the
- * identity in `confirmed_by_party_id`, and clearing one leaves the other saying
- * the person is in the photograph); `enrich_embedding` for `media.face_region`
- * targets, the worst leftover, since an orphan vector matches a NEW photograph
- * back to a forgotten person; `enrich_derivation`, whose stamps would tell the
- * next sweep those regions are current so faces are never re-derived; and
- * `media_face_cluster`, rebuildable but naming deleted regions.
- *
- * It does NOT delete the `core_party`: forgetting who is in your photographs
- * and deleting someone from your address book are different acts, and
- * conflating them makes the destructive one a side effect of the reversible
- * one. `people.trash_person` owns the other.
- *
- * `high`, with a `once`-shaped postcondition, because there is no undo. The
- * postcondition asserts ZERO rows across all four tables — the same shape
- * `media.purge_asset` uses — so a FIFTH mechanism added later without a clause
- * here fails at the gate rather than in a member's library.
+ * Face-delete gate (#724 W5). Must cascade through every derived row keyed to that identity — no soft delete, no leftover vector.
+ * Four mechanisms: `media_face_region` (both party columns), `enrich_embedding` (face_region), `enrich_derivation`, `media_face_cluster`.
+ * Does NOT delete `core_party` — that is `people.trash_person`. `high` + `once` postcondition: zero rows across all four; a fifth mechanism without a clause fails the gate.
  */
 const FORGET_PERSON: CommandDefinition = {
   name: "media.forget_person",

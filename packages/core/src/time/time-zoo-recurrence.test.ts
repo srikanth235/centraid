@@ -1,29 +1,11 @@
 /*
- * The RECURRENCE time zoo (#839, gap G12).
+ * Recurrence time zoo (#839 G12): DST, leap day, ISO week-53 — adversarial
+ * zones. Doctrine (docs/cron-timezone.md): nonexistent wall SKIP; overlap
+ * ONCE at the earlier instant.
  *
- * `recurrence.test.ts` and `recurrence-properties.test.ts` state the civil-time
- * laws over ordinary calendars. This file states the same laws over the three
- * calendars that are not ordinary — the DST transition, the leap day, and the
- * ISO year with fifty-three weeks in it — across a zoo of adversarial zones
- * rather than one representative one.
- *
- * The doctrine being tested is shared with cron, and is stated once in
- * docs/cron-timezone.md:
- *
- *   § intro: "The shared DST policy is the cron policy below: a nonexistent
- *   wall time is skipped and an overlapping wall time occurs once at the
- *   earlier instant."
- *
- *   § "DST policy", Gap row     → SKIP.
- *   § "DST policy", Overlap row → ONCE.
- *
- * The zone table below is deliberately a duplicate of the one in
- * `packages/server/src/automation/fire/time-zoo-cron.test.ts`: `@centraid/core`
- * is the dependency-free contracts package and must not reach into a server
- * test helper, and a shared fixture would let one edit weaken both suites at
- * once. The two copies are checked against the runtime's own tzdata by the
- * tests that read them, so a drift shows up as a failure rather than as a
- * silent disagreement.
+ * Zone table is a deliberate duplicate of time-zoo-cron.test.ts: core must
+ * not import a server helper, and a shared fixture would let one edit weaken
+ * both. Tests check tzdata, so drift fails rather than silently disagrees.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -35,13 +17,12 @@ import { expandRecurrence } from "./recurrence.js";
 import { resolveWallTime, zonedParts } from "./timezone.js";
 import type { WallTime } from "./timezone.js";
 
-/** A civil day plus the half-open wall band a transition breaks on it. */
 type Band = {
   readonly transitionUtc: string;
   readonly year: number;
   readonly month: number;
   readonly day: number;
-  /** Half-open [from, to) minute-of-day range of the affected wall clock. */
+  /** Half-open [from, to) minute-of-day of the affected wall clock. */
   readonly fromMinute: number;
   readonly toMinute: number;
 };
@@ -116,7 +97,7 @@ const ZOO: readonly ZooZone[] = [
   },
 ];
 
-/** The fixed-offset control: it must never produce a gap or an overlap. */
+/** Fixed-offset control: must never produce a gap or an overlap. */
 const FIXED_ZONE = "Asia/Kolkata";
 
 const ZOO_SEED = 839_012;
@@ -138,7 +119,6 @@ function pad(value: number, length = 2): string {
   return String(value).padStart(length, "0");
 }
 
-/** Civil day `dayOffset` days from the band's date, as `YYYY-MM-DD`. */
 function civilDay(band: Band, dayOffset: number): string {
   const shifted = new Date(
     Date.UTC(band.year, band.month - 1, band.day + dayOffset)
@@ -146,7 +126,6 @@ function civilDay(band: Band, dayOffset: number): string {
   return `${pad(shifted.getUTCFullYear(), 4)}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`;
 }
 
-/** The `wallStart` a zoned instance on that civil day and minute must carry. */
 function wallStartOn(
   band: Band,
   dayOffset: number,
@@ -158,10 +137,9 @@ function wallStartOn(
 }
 
 /**
- * Every absolute instant within ±20h of the naive UTC reading whose wall clock
- * in `zone` is exactly the requested civil minute. Built from `zonedParts`
- * (Intl) rather than from `resolveWallTime`, so the fixtures the resolver's own
- * laws are asserted against are not produced by the resolver.
+ * Instants within ±20h of naive UTC whose wall clock is that civil minute.
+ * Built from `zonedParts` (Intl), never `resolveWallTime` — don't feed the
+ * resolver its own output.
  */
 function instantsWithWall(
   zone: string,
@@ -209,7 +187,6 @@ function wallOf(isoDay: string, minuteOfDay: number): WallTime {
   };
 }
 
-/** A daily zoned series anchored two civil days before the band. */
 function dailyAcrossBand(
   zone: string,
   band: Band,
@@ -217,10 +194,7 @@ function dailyAcrossBand(
 ): { starts: string[]; walls: string[]; overlaps: string[] } {
   const anchor = instantsWithWall(zone, civilDay(band, -2), minuteOfDay)[0];
   if (!anchor) throw new Error(`no anchor instant for ${zone} ${minuteOfDay}`);
-  // The exclusive bound is the INSTANT of the civil day after the last one the
-  // window wants, not `anchor + 5 days`: an offset change moves the absolute
-  // length of those five civil days, and a millisecond bound would then let a
-  // sixth day in on one side of the transition and not the other.
+  // Bound is the INSTANT of the civil day after the window — not `anchor + 5d`.
   const bound = instantsWithWall(zone, civilDay(band, 3), minuteOfDay)[0];
   if (!bound) throw new Error(`no bounding instant for ${zone} ${minuteOfDay}`);
   const instances = expandRecurrence({
@@ -245,9 +219,7 @@ const ZOO_ROWS = ZOO.map((entry) => [entry.zone, entry] as const);
 
 describe("recurrence DST zoo", () => {
   beforeEach(() => {
-    // Every law here is a pure function of its inputs; the pinned clock keeps
-    // it that way, so a `Date.now()` creeping into the expansion path fails on
-    // every run rather than on one day a year.
+    // Pinned clock: a `Date.now()` in the expansion path fails every run.
     useFakeClock("2026-06-15T12:00:00.000Z");
   });
 
@@ -255,17 +227,12 @@ describe("recurrence DST zoo", () => {
     it.each(ZOO_ROWS)(
       "%s resolves every sampled minute of its spring-forward band to null",
       (zone, entry) => {
-        // docs/cron-timezone.md § intro: "a nonexistent wall time is skipped".
-        // `resolveWallTime` expresses "skipped" as `null` — there is no
-        // instant to fall back to, and inventing the shifted one is exactly
-        // the defect this law forbids.
+        // docs/cron-timezone.md: nonexistent wall is skipped = `null`.
         const minutes = sampleMinutes(entry.gap);
         const resolved = minutes.map((minute) =>
           resolveWallTime(wallOf(civilDay(entry.gap, 0), minute), zone)
         );
         expect(resolved).toStrictEqual(minutes.map(() => null));
-        // Cross-check against Intl directly: no absolute instant carries that
-        // wall clock, so `null` is the truth and not merely the convention.
         const witnessCounts = minutes.map(
           (minute) =>
             instantsWithWall(zone, civilDay(entry.gap, 0), minute).length
@@ -279,9 +246,6 @@ describe("recurrence DST zoo", () => {
       (zone, entry) => {
         const minute = sampleMinutes(entry.gap)[0] as number;
         const series = dailyAcrossBand(zone, entry.gap, minute);
-        // The civil day itself is absent; every other day of the window keeps
-        // the SAME wall clock through the offset change, which is what makes
-        // this civil-time arithmetic rather than a fixed millisecond step.
         expect(series.walls).toStrictEqual([
           wallStartOn(entry.gap, -2, minute),
           wallStartOn(entry.gap, -1, minute),
@@ -289,8 +253,7 @@ describe("recurrence DST zoo", () => {
           wallStartOn(entry.gap, 2, minute),
         ]);
         expect(series.overlaps).toStrictEqual([]);
-        // The absolute step across the skipped day is NOT 48h: the offset
-        // moved, which is the whole reason a UTC loop gets this wrong.
+        // Step across the skipped day is NOT 48h — offset moved.
         const beforeGap = series.starts[1] as string;
         const afterGap = series.starts[2] as string;
         expect(Date.parse(afterGap) - Date.parse(beforeGap)).not.toBe(
@@ -304,9 +267,7 @@ describe("recurrence DST zoo", () => {
     it.each(ZOO_ROWS)(
       "%s resolves every sampled minute of its fall-back band to the EARLIER of its two instants",
       (zone, entry) => {
-        // docs/cron-timezone.md § intro: "an overlapping wall time occurs once
-        // at the earlier instant." Earlier, not later: the member set an alarm
-        // for 01:30 and the first 01:30 is the one they meant.
+        // docs/cron-timezone.md: overlap occurs once, at the EARLIER instant.
         const minutes = sampleMinutes(entry.overlap);
         const witnessed = minutes.map((minute) =>
           instantsWithWall(zone, civilDay(entry.overlap, 0), minute)
@@ -338,8 +299,6 @@ describe("recurrence DST zoo", () => {
           wallStartOn(entry.overlap, 1, minute),
           wallStartOn(entry.overlap, 2, minute),
         ]);
-        // Only the transition day is ambiguous, and it says so — the flag is
-        // what lets a surface explain the repeat instead of hiding it.
         expect(series.overlaps).toStrictEqual([
           wallStartOn(entry.overlap, 0, minute),
         ]);
@@ -355,9 +314,6 @@ describe("recurrence DST zoo", () => {
 
   describe("fixed-offset control", () => {
     it("Asia/Kolkata resolves every sampled civil minute of 2026 exactly once", () => {
-      // The control that keeps the two laws above about TRANSITIONS: a zone
-      // that never shifts must produce neither a null nor an overlap flag,
-      // whatever minute is drawn.
       const rng = seededRandom(ZOO_SEED);
       const probes = Array.from({ length: 10 }, () => ({
         day: `2026-${pad(rng.int(1, 12))}-${pad(rng.int(1, 28))}`,
@@ -384,8 +340,7 @@ describe("recurrence across the leap day", () => {
   });
 
   it("keeps a February 29 yearly series anchored on the 29th, clamping only in common years", () => {
-    // The anchor is never re-based on the clamped value: a series that drifted
-    // to the 28th after 2029 would silently stop being a leap-day series.
+    // Never re-base the anchor on the clamp — else the series silently leaves the 29th.
     const instances = expandRecurrence({
       rrule: "FREQ=YEARLY",
       start: "2028-02-29T12:00:00.000Z",
@@ -406,8 +361,6 @@ describe("recurrence across the leap day", () => {
   });
 
   it("clamps a month-end monthly series into February, leap year included", () => {
-    // The 31st does not exist in every month; the series lands on the last day
-    // that does, and February 2028 supplies the 29th rather than the 28th.
     const instances = expandRecurrence({
       rrule: "FREQ=MONTHLY",
       start: "2028-01-31T12:00:00.000Z",
@@ -428,8 +381,6 @@ describe("recurrence across the leap day", () => {
   });
 
   it("counts the leap day as a day in a daily series", () => {
-    // A daily series must gain a day in February of a leap year. The naive
-    // failure — 28 days always — shifts every later occurrence by one.
     const instances = expandRecurrence({
       rrule: "FREQ=DAILY",
       start: "2028-02-27T12:00:00.000Z",
@@ -448,8 +399,7 @@ describe("recurrence across the leap day", () => {
   });
 
   it("honours the Gregorian century rule when clamping February", () => {
-    // 2100 is divisible by 4 and is NOT a leap year; 2000 is. A `% 4` shortcut
-    // in the clamp would put a series on 2100-02-29.
+    // 2100 is divisible by 4 and is NOT a leap year. `% 4` would emit 2100-02-29.
     const instances = expandRecurrence({
       rrule: "FREQ=YEARLY;INTERVAL=100",
       start: "2000-02-29T12:00:00.000Z",
@@ -473,9 +423,7 @@ describe("recurrence across an ISO week-53 year", () => {
   });
 
   it("expands 53 Mondays over ISO year 2026", () => {
-    // ISO year 2026 begins Monday 2025-12-29 and ends Sunday 2027-01-03; it is
-    // a 53-week year because 2026-01-01 is a Thursday. A weekly series that
-    // assumed 52 would drop a member-visible week.
+    // 2026-01-01 is a Thursday → 53-week ISO year. Assuming 52 drops a week.
     const instances = expandRecurrence({
       rrule: "FREQ=WEEKLY;BYDAY=MO",
       start: "2025-12-29T09:00:00.000Z",
@@ -500,8 +448,7 @@ describe("recurrence across an ISO week-53 year", () => {
   });
 
   it("carries the 53rd week across the ISO year boundary without a re-anchor", () => {
-    // The boundary itself. A series that re-derived its anchor from the
-    // calendar year would emit a 6- or 8-day step exactly here.
+    // Re-deriving the anchor from the calendar year would emit a 6- or 8-day step.
     const instances = expandRecurrence({
       rrule: "FREQ=WEEKLY;BYDAY=MO",
       start: "2026-12-14T09:00:00.000Z",

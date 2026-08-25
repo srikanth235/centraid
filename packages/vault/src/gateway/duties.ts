@@ -1,9 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit standing duties are one cohesive sweep pipeline (revocation, lifecycle purge incl. the document-chain purge, retention, ingest); splitting mid-sweep would scatter one transaction's worth of reasoning across files.
-// Standing duties (§10) — the work between requests: revocation cascade,
-// lifecycle sweeps (expiry, purge_at, retention), ingest customs. Not
-// request-shaped, but each duty still writes receipts and provenance like any
-// caller. Confirmation routing is Gateway state; views.ts, custody.ts and
-// portability.ts own the other planes.
+// Standing duties (§10): revocation, lifecycle, ingest. Not request-shaped; still writes receipts.
 
 import { liveBlobShas } from "../blob/read.js";
 import { sweepBlobStaging } from "../blob/staging.js";
@@ -30,12 +26,7 @@ export interface RevocationResult {
   receiptId: string;
 }
 
-/**
- * Revoking is instant and total, but the app's ext band is RETAINED once its
- * last grant dies: the data is the owner's, access is gone, and only an
- * explicit owner purge removes it (#286 phase 2). Model, history and receipts
- * always survive (the §11 success test).
- */
+/** Revoke is instant; ext band is RETAINED when the last grant dies (#286). Model/history/receipts always survive. */
 export function revokeGrantCascade(
   db: VaultDb,
   owner: Identity,
@@ -158,23 +149,15 @@ export interface SweepResult {
   grantsExpired: number;
   contentPurged: number;
   assetsPurged: number;
-  /** Trashed notes whose grace window lapsed (#308). */
   notesPurged: number;
-  /** Trashed documents whose grace window lapsed (#352). */
   documentsPurged: number;
-  /** Table-driven purge of the uniform soft-delete tables (#441 A4). */
   domainRowsPurged: number;
   retentionDeleted: number;
-  /** Refusals land here rather than in a silent skip (#712). */
+  /** Recorded refusals, never a silent skip (#712). */
   retentionRefused: RetentionRefusal[];
-  /**
-   * Declined over edit lineage (#711 S8): they keep their lapsed `purge_at`
-   * and are retried next sweep.
-   */
+  /** Lineage-blocked (#711 S8): keep lapsed `purge_at`, retry next sweep. */
   contentBlockedByLineage: string[];
-  /** Same, for assets a not-yet-lapsed derived copy still names as source. */
   assetsBlockedByLineage: string[];
-  /** CAS bytes reclaimed with their purged content items (#296). */
   blobsReclaimed: number;
   /** Unclaimed blob_staging rows past the TTL, dropped with their bytes. */
   stagingExpired: number;
@@ -186,12 +169,7 @@ export interface RetentionRefusal {
   reason: string;
 }
 
-/**
- * A decision, not a gap (#712): `media.asset` has no `created_at` to measure
- * against and is lineage-bound by FKs without `ON DELETE`, so a blanket
- * DELETE would violate them or silently retain nothing. Adding `created_at`
- * is a deliberate platform decision that removes this entry in the same change.
- */
+/** Recorded refusals (#712): `media.asset` has no `created_at` and lineage FKs without ON DELETE. */
 const RETENTION_REFUSALS: ReadonlyMap<string, string> = new Map([
   [
     "media.asset",
@@ -199,12 +177,7 @@ const RETENTION_REFUSALS: ReadonlyMap<string, string> = new Map([
   ],
 ]);
 
-/**
- * The timestamp column comes from `rule_json.timestamp_column` (default
- * `created_at`) and must exist. A policy this pass does not serve is a
- * RECORDED refusal, never a silent `continue` — a duty that runs and retains
- * nothing silently is the failure this shape prevents (#712).
- */
+/** Timestamp from `rule_json.timestamp_column`. Unserved policy is a recorded refusal, never a silent continue (#712). */
 function enforceRetention(
   db: VaultDb,
   now: string
@@ -272,12 +245,7 @@ function revisesConceptId(db: VaultDb): string | null {
   return row?.concept_id ?? null;
 }
 
-/**
- * A full BFS over live `revises` edges (new → old), not a single path: restore
- * IS a revision (rule R3), so a node can gain several outgoing edges and the
- * graph CAN cycle. The seen-set is load-bearing — without it this never
- * terminates.
- */
+/** Full BFS over live `revises` (R3 restore can cycle). Seen-set is load-bearing. */
 function documentChain(
   db: VaultDb,
   headContentId: string,
@@ -304,10 +272,7 @@ function documentChain(
   return [...seen];
 }
 
-/**
- * The serve-side twin of media.ts CONTENT_REFERENCES, minus core_document —
- * the document purge already knows the answer for its own row.
- */
+/** Serve-side twin of media CONTENT_REFERENCES, minus `core_document`. */
 function contentRentedElsewhere(db: VaultDb, contentId: string): boolean {
   const row = db.vault
     .prepare(
@@ -337,10 +302,7 @@ function contentRentedElsewhere(db: VaultDb, contentId: string): boolean {
   return row.n > 0;
 }
 
-/**
- * sha256 dedup means a superseded revision of the document being purged can
- * coincide with a live page of another one.
- */
+/** sha256 dedup: a superseded revision can coincide with another live page. */
 function ownedByAnotherLiveDocument(
   db: VaultDb,
   contentId: string,
@@ -357,11 +319,7 @@ function ownedByAnotherLiveDocument(
   );
 }
 
-/**
- * The editor's edit-lineage self-FK (#711 S8). Trashed derived copies count
- * exactly as much as live ones: the FK has no `ON DELETE` and foreign_keys is
- * ON, so SQLite refuses the parent's delete either way.
- */
+/** Edit-lineage self-FK (#711 S8). Trashed children count — FK has no ON DELETE. */
 function isLineageSource(db: VaultDb, assetId: string): boolean {
   const row = db.vault
     .prepare(
@@ -371,12 +329,7 @@ function isLineageSource(db: VaultDb, assetId: string): boolean {
   return row !== undefined;
 }
 
-/**
- * Face regions have no `ON DELETE CASCADE` (the phash sidecar does), so they
- * go by hand before the A1 registry cleans every polymorphic pointer. Callers
- * MUST have established that nothing names this asset as its lineage source —
- * this does not re-check.
- */
+/** Face regions have no CASCADE — delete by hand before poly-refs. Caller must already know this is not a lineage source. */
 function deleteAssetRow(
   db: VaultDb,
   owner: Identity,
@@ -406,11 +359,7 @@ interface ContentPurgeResult {
   blockedByAssetId: string | null;
 }
 
-/**
- * Derivative registry rows and their CAS bytes go first (the FK), then the row,
- * then everything that pointed at it (#296, #272, #274). Shared by the generic
- * and document-chain purges so both delete identically.
- */
+/** Derivatives + CAS first (FK), then the row, then poly-refs (#296/#272/#274). */
 function purgeContentItem(
   db: VaultDb,
   owner: Identity,
@@ -486,12 +435,7 @@ function purgeContentItem(
   return { reclaimed, blockedByAssetId: null };
 }
 
-/**
- * Soft-delete tables with no bespoke purge pass (#441 A4). The next
- * soft-deletable domain row is ONE ENTRY HERE, not a remembered purge clause.
- * `entity` is the LOGICAL name stored in polymorphic type columns. FK children
- * with ON DELETE CASCADE go automatically — foreign_keys is ON.
- */
+/** Soft-delete tables with no bespoke purge (#441 A4). Next domain is one entry here. `entity` is the logical poly-ref name. */
 const DOMAIN_TRASH_TABLES: readonly {
   physical: string;
   idCol: string;
@@ -520,10 +464,7 @@ const DOMAIN_TRASH_TABLES: readonly {
   },
 ];
 
-/**
- * Each purged row gets a `sweep.purge` stamp and a full `cleanupPolyRefs`
- * pass, so nothing points at a row that no longer exists (#441).
- */
+/** `sweep.purge` stamp + `cleanupPolyRefs` so nothing points at a gone row (#441). */
 function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
   let purged = 0;
   for (const t of DOMAIN_TRASH_TABLES) {
@@ -544,16 +485,7 @@ function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
   return purged;
 }
 
-/**
- * DERIVED COPIES FIRST (#711). `source_asset_id` is a self-FK, so this pass
- * must never hand SQLite a delete it knows will be refused: inside a sweep one
- * FOREIGN KEY error aborts every later duty (retention, staging TTL, the
- * receipt). The loop re-asks the table rather than sorting once, because each
- * delete frees the next generation; it repeats only while it progresses, so it
- * terminates even on a lineage cycle. A lapsed asset whose derived copy is NOT
- * lapsed is SKIPPED, keeping its `purge_at` for the next sweep and returning
- * its id so the receipt shows the skip.
- */
+/** Derived copies first (#711). Self-FK: never hand SQLite a delete it will refuse. Skip a lapsed source whose child is not lapsed. */
 function purgeLapsedAssets(
   db: VaultDb,
   owner: Identity,
@@ -731,10 +663,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   };
 }
 
-/**
- * Ingest customs: import batches dedupe on external_id and stamp per-row
- * provenance. Null means the external id was already imported.
- */
+/** Import-batch dedupe on external_id. Null = already imported. */
 export function admitImportedRow(
   db: VaultDb,
   importer: Identity,

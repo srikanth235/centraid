@@ -1,15 +1,5 @@
-// Photos' home layout.
-//
-// THE SEAM. `PhotosHome.tsx`'s own header calls the screen "the wiring: state,
-// data and routing" and lists the seven modules already pulled out of it on
-// exactly that principle. The sheet was the one piece still in the file that
-// is neither state, data nor a route — so it follows the same rule, into the
-// `*.styles.ts` sibling this directory keeps for PhotoLightbox, PhotosLibrary,
-// PhotoEditor, FaceReview and AlbumDetail.
-//
-// Colour-taking (a factory over `ThemeColors`, memoised at the call site)
-// rather than colourless, because the head's hairline and the scroll region's
-// ground are colour decisions, not geometry.
+// Photos' home layout. Colour-taking (a factory over `ThemeColors`) because
+// the head's hairline and the scroll region's ground are colour decisions.
 
 import { StyleSheet } from "react-native";
 
@@ -24,15 +14,11 @@ import { family, pageMargin, t, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { BAND_CAPSULE_SIZE } from "./photos-band";
 
-/** The gap between the selection bar's plates — the same value the band's own
- *  two plates sit apart by (`PhotosBand.tsx`'s `PLATE_GAP`), so the bar this
- *  replaces and the bar it becomes read as the same piece of furniture. */
+/** Same gap as the band's own two plates (`PhotosBand.tsx`'s `PLATE_GAP`). */
 const SELECTION_PLATE_GAP = 8;
 
 export const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // The scroll region takes what is left after the head and the band; the
-    // band takes its own height. No absolute slot, and so nothing to reserve.
     body: { flex: 1 },
     bodyText: {
       ...t("body"),
@@ -52,7 +38,7 @@ export const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       flexDirection: "row",
       justifyContent: "space-between",
-      // 56px (handoff `appBarStyle` :5533's `min-height:56px`).
+      // 56px (handoff `appBarStyle` min-height).
       minHeight: 56,
       paddingHorizontal: pageMargin,
     },
@@ -64,16 +50,8 @@ export const makeStyles = (colors: ThemeColors) =>
       width: 44,
     },
     safe: { flex: 1 },
-    // SELECTION BAR (iOS Photos parity, #712). Ground it takes over from
-    // the band while a selection is live — same plate anatomy as
-    // `PhotosBand.tsx`'s own two plates (opaque `bgElev`, `lineStrong` edge,
-    // `BAND_RADIUS` corners, held BAND_INSET off the stage edges) rather than
-    // a new kind of bar, because the thing the member sees replacing the band
-    // has to read as the SAME piece of furniture wearing different labels.
-    // Unlike the band, this row is not `flex:none` below the scroll region
-    // itself — PhotosHome's `<View style={styles.body}>` is already the sole
-    // `flex:1` sibling above whichever foot renders, band or bar, so no
-    // second reservation is needed here.
+    // Selection bar (#712): same plate anatomy as `PhotosBand.tsx` so the
+    // thing that replaces the band reads as the same furniture.
     selectionBarRow: {
       alignItems: "stretch",
       backgroundColor: "transparent",
@@ -83,9 +61,6 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: BAND_INSET,
       paddingTop: BAND_TOP_GAP,
     },
-    // The left/right round-ish chips — Add to album and Trash. Square footed
-    // at the capsule's own 52pt so the two rows (band, bar) line up exactly
-    // when a member's thumb moves from one to the other between taps.
     selectionChip: {
       alignItems: "center",
       backgroundColor: colors.bgElev,
@@ -95,9 +70,6 @@ export const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: BAND_CAPSULE_SIZE,
     },
-    // The centre plate: the count, and only the count. `flex:1` the same way
-    // the band's own tab-group plate is, so the three plates share the row
-    // exactly as the band's two do.
     selectionCountPlate: {
       alignItems: "center",
       backgroundColor: colors.bgElev,
@@ -107,17 +79,13 @@ export const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       justifyContent: "center",
     },
-    // Bold is the heaviest weight the ramp carries (`sansMedium`, see
-    // `kit/theme/index.ts`) — there is no bolder rung to reach for.
     selectionCountText: {
       ...t("control"),
       color: colors.text,
       fontFamily: family.sansMedium,
     },
-    // The title starts at the page margin: no ☰ occupies the leading slot, and
-    // `header`'s own `paddingHorizontal: pageMargin` is that margin, so the
-    // title needs no margin of its own — `header` carries the real token, and
-    // adding `spacing[2]` on top of it would push the title past the margin.
+    // `header`'s `paddingHorizontal: pageMargin` is the margin; do not add
+    // another token on the title.
     title: { ...t("title"), color: colors.text },
     uploadFill: { borderRadius: radii.pill, height: "100%" },
     uploadProgress: { gap: 5, paddingHorizontal: 16, paddingVertical: 8 },

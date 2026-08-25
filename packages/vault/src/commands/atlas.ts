@@ -1,29 +1,10 @@
-// The Vault Atlas — Browse write side (#441 Part B, B3; THE hard
-// requirement). Row CRUD for the owner's generic table editor, registered as
-// three commands — `atlas.insert_row` / `atlas.update_row` / `atlas.delete_row`
-// — through the ordinary §10 command pipeline.
-//
-// Why commands, not raw SQL: the pipeline (`runContractAndExecute`) is the one
-// journalled write path apps use, and routing Browse edits through it buys,
-// wholesale, everything that makes a hand-edit safe on a replicated vault:
-//   - the database-level `trg_replica_*` change triggers fire on the handler's
-//     writes inside the same transaction, so a replica pulled after a Browse
-//     edit sees it (this is the acceptance criterion "a replica pulled after an
-//     edit sees the change"; a raw side-channel UPDATE would bypass the change
-//     log and corrupt replica sync — deletions leak, PITR loses writes);
-//   - `consent_provenance` is stamped for every `ctx.wrote`, and because the
-//     owner-device credential carries `provAgentKind='owner'`, a Browse edit is
-//     recorded as an OPERATOR act (agent_kind='owner', prov_activity
-//     `command.atlas.insert_row|update_row|delete_row`) — distinguishable from
-//     app/agent writes;
-//   - the seal sweep, polymorphic-write validation, and dangling-link sweep all
-//     run; STRICT NOT NULL / CHECK violations surface as a rolled-back failure.
-//
-// The handlers add the Browse-specific policy the pipeline does not know about:
-// unknown tables are refused, sealed columns refuse writes, machinery bands are
-// read-only unless explicitly unlocked, and a delete refuses when engine-FK
-// dependents exist (returning the dependent payload so the confirmation dialog
-// can show it), while polymorphic pointers are swept exactly as a purge would.
+// Vault Atlas Browse writes (#441 B3): three commands through the §10
+// pipeline (`runContractAndExecute`). Not raw SQL: a side-channel UPDATE
+// bypasses `trg_replica_*` and corrupts replica sync. Pipeline also stamps
+// operator provenance and runs seal / poly / dangling-link sweeps.
+// Extra policy: unknown tables refused, sealed columns refuse writes,
+// machinery read-only unless `unlockMachinery`, delete refuses engine-FK
+// dependents (structured payload), poly pointers swept as a purge.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -38,13 +19,12 @@ import { packKindOf } from "../schema/atlas.js";
 import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
 
-/** The owner schema all three Browse-edit commands sit under. */
 export const ATLAS_OWNER_SCHEMA = "atlas";
 
 type Bindable = string | number | null;
 
-/** A value a Browse edit may bind — JSON scalars only; the STRICT table CHECKs
- * the rest. Booleans map to 0/1; anything richer is a clean 4xx, not a crash. */
+/** JSON scalars only; STRICT table CHECKs the rest. Booleans map to 0/1;
+ *  anything richer is a clean 4xx, not a crash. */
 function bindable(table: string, column: string, value: unknown): Bindable {
   if (value === null || typeof value === "string" || typeof value === "number")
     return value;
@@ -55,9 +35,8 @@ function bindable(table: string, column: string, value: unknown): Bindable {
 }
 
 /**
- * Guard a write target: resolve the logical name (reject unknown), refuse
- * sealed-column writes, and refuse machinery bands unless the request carries
- * an explicit `unlockMachinery: true`. Returns the physical name + pk columns.
+ * Resolve the logical name (reject unknown), refuse sealed-column writes, and
+ * refuse machinery bands unless `unlockMachinery: true`.
  */
 function guardWriteTarget(
   vault: DatabaseSync,
@@ -88,7 +67,7 @@ function guardWriteTarget(
   };
 }
 
-/** The engine-FK-dependents refusal shape — the route turns it into a 409. */
+/** Engine-FK-dependents refusal — the route turns it into a 409. */
 export interface AtlasDependentsRefusal {
   code: "has_dependents";
   dependents: ReturnType<typeof browseDependents>["dependents"];
@@ -140,8 +119,8 @@ function insertRow(): CommandDefinition {
         Object.keys(values),
         input.unlockMachinery === true
       );
-      // Auto-mint a single TEXT pk when absent — the same courtesy the ext
-      // trio extends; composite pks must be supplied in full (STRICT enforces).
+      // Auto-mint a single TEXT pk when absent — same courtesy as the ext
+      // trio; composite pks must be supplied in full (STRICT enforces).
       if (target.pks.length === 1) {
         const pk = target.pks[0]!;
         if (
@@ -246,10 +225,9 @@ function deleteRow(): CommandDefinition {
         [],
         input.unlockMachinery === true
       );
-      // Engine-FK dependents BLOCK the delete — with the full dependent payload
-      // (engine + polymorphic) so the confirmation dialog is honest. SQLite's
-      // own FK enforcement would also reject, but a structured refusal beats a
-      // raw constraint string.
+      // Engine-FK dependents BLOCK the delete — full payload so the
+      // confirmation dialog is honest. SQLite FK would also reject, but a
+      // structured refusal beats a raw constraint string.
       const deps = browseDependents(ctx.db, target.logical, input.id);
       if (deps.hasEngineDependents) {
         throw new AtlasDeleteBlockedError({
@@ -264,11 +242,10 @@ function deleteRow(): CommandDefinition {
         .run(...bind);
       if (Number(result.changes) === 0)
         throw new Error(`${input.table}: no row ${input.id}`);
-      // Sweep the polymorphic pointers at the just-deleted row exactly as a
-      // purge would (#441) — tags/curation/annotations/attachments
-      // delete, shares revoke, links end-date — so a Browse delete never
-      // leaves the orphans A1 exists to prevent. (The pipeline's own sweep
-      // covers core_link; cleanupPolyRefs is idempotent over it.)
+      // Sweep polymorphic pointers at the just-deleted row as a purge would
+      // (#441) so a Browse delete never leaves the orphans A1 exists to
+      // prevent. (Pipeline sweep covers core_link; cleanupPolyRefs is
+      // idempotent over it.)
       cleanupPolyRefs(ctx.db, ctx.now, target.logical, input.id);
       ctx.wrote(target.logical, input.id);
       return { id: input.id, sweptDependents: deps.dependents };
@@ -276,15 +253,14 @@ function deleteRow(): CommandDefinition {
   };
 }
 
-/** The row id a `ctx.wrote` provenance record uses: the single pk, or a JSON
- * array of composite pk values (matching the replica trigger's rowId shape). */
+/** `ctx.wrote` row id: the single pk, or a JSON array of composite pk values
+ *  (matching the replica trigger's rowId shape). */
 function rowIdOf(pks: string[], values: Record<string, unknown>): string {
   if (pks.length === 1) return String(values[pks[0]!]);
   if (pks.length === 0) return String(values["rowid"] ?? "");
   return JSON.stringify(pks.map((p) => values[p]));
 }
 
-/** Build the pk WHERE clause + bound params from a Browse id (single or JSON). */
 function pkWhere(
   table: string,
   pks: string[],
@@ -313,7 +289,6 @@ function pkWhere(
   };
 }
 
-/** Register the three Browse-edit commands (#441). */
 export function registerAtlasCommands(gateway: Gateway): void {
   gateway.registerCommand(insertRow());
   gateway.registerCommand(updateRow());

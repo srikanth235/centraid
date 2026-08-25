@@ -1,32 +1,12 @@
 /*
- * The automated restore drill, end to end (umbrella #842, slice W1.3).
+ * Restore drill (#842 W1.3): same `runRestoreVerify` the scheduler calls
+ * (#408 G9) over real vault + provider + `core.attach`.
  *
- * A backup you never restore is not a backup. The gateway already restores one
- * for real on the vault's `verifyEveryDays` clock (`BackupService.tick` →
- * `runRestoreVerify`, #408 G9); this lane proves the drill that clock
- * runs is worth running — that it takes a REAL backup through the REAL product
- * path, restores it, and judges the restored vault USABLE rather than merely
- * present.
+ * WHAT CI COVERS THAT THE PRODUCT CANNOT. Product only meets a healthy store.
+ * Only CI can sabotage and demand the alarm. Comment out `doRunRestoreVerify`
+ * and both red lanes go green while the vault is broken.
  *
- * Every test here drives the shipped objects: a real `VaultRegistry` vault, a
- * real `BackupService` against a real provider server, real `core.attach`
- * ingest through the blob pipeline, and the same `runRestoreVerify` the
- * scheduler calls. Nothing is stubbed, so a green here is a green for the
- * owner's own machine.
- *
- * WHAT THIS CI LANE COVERS THAT THE IN-PRODUCT DRILL CANNOT. The in-product
- * drill only ever meets a healthy store: it can prove a backup restores, but
- * it can never prove it would NOTICE a backup that did not. Only CI can
- * sabotage a real vault and a real provider and demand the alarm — which is
- * why the two red lanes below (a claimed blob whose bytes were never captured,
- * and an empty-shell restore) live here and only here. They are also the
- * demonstrated-red for the whole slice: comment out the drill call in
- * `backup-service.ts#doRunRestoreVerify` and both go green while the vault is
- * provably broken.
- *
- * Determinism: no clock reads, no `Math.random`. The drill's CAS sample is
- * seeded from `<vaultId>:<seq>`, so a failure here replays over the identical
- * sample.
+ * Determinism: no clock, no `Math.random`. CAS sample is `<vaultId>:<seq>`.
  */
 
 import { promises as fs } from "node:fs";
@@ -49,7 +29,6 @@ const silentLogger = {
   error: () => undefined,
 };
 
-/** A 1x1 PNG — real bytes through the real attach/blob pipeline. */
 const PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
@@ -80,7 +59,6 @@ describe("restore-drill", () => {
     return (out as { output: Record<string, unknown> }).output;
   }
 
-  /** A real vault wired to a real BackupService over a real provider server. */
   async function makeMachine(
     server: Awaited<ReturnType<typeof startFakeProviderServer>>,
     label: string
@@ -115,7 +93,6 @@ describe("restore-drill", () => {
     return { service, plane, vaultId, health };
   }
 
-  /** Attach a PNG to a real task and return the blob sha the model now claims. */
   function attachPhoto(plane: VaultPlane): string {
     const taskId = invoke(plane, "schedule.add_task", {
       title: "Frame the print",
@@ -136,13 +113,8 @@ describe("restore-drill", () => {
   }
 
   /**
-   * Wipe the party rows and everything that pointed at them, leaving a vault
-   * that is still FK-clean. The shell has to be STRUCTURALLY PERFECT or the
-   * test proves nothing: a pair that also carried fk violations would be
-   * caught by `verifyRestoredPair` and the drill's contribution would be
-   * indistinguishable from the checks that already existed. The cascade is
-   * discovered from `foreign_key_check` rather than hard-coded, so a new
-   * table referencing `core_party` cannot silently make this sabotage partial.
+   * Wipe parties, leave FK-clean — else `verifyRestoredPair` catches it first.
+   * Cascade from `foreign_key_check`, not a hardcoded table list.
    */
   function emptyOutParties(plane: VaultPlane): void {
     const db = plane.db.vault;
@@ -164,7 +136,6 @@ describe("restore-drill", () => {
     db.exec("PRAGMA foreign_keys = ON");
   }
 
-  /** The `backups` component's status in a real health snapshot. */
   async function backupsHealth(m: Machine): Promise<string | undefined> {
     const snapshot = await m.health.snapshot();
     return snapshot.components.find((c) => c.component === "backups")?.status;
@@ -184,27 +155,21 @@ describe("restore-drill", () => {
     expect((await fs.stat(casPathFor(m.plane, sha))).size).toBeGreaterThan(0);
 
     await m.service.runBackup(m.vaultId);
-    // The whole drill — structural half plus depth half — on the product path.
     await expect(
       m.service.runRestoreVerify(m.vaultId)
     ).resolves.toBeUndefined();
 
     const target = (await m.service.status())[m.vaultId];
     expect(target?.lastRestoreVerifyError).toBeUndefined();
-    // A real ISO instant, not merely a non-empty string: the health probe and
-    // the 14-day staleness window in backup-health.ts both parse this.
+    // Real ISO instant — health probe and 14-day staleness parse this.
     expect(
       Number.isFinite(Date.parse(target?.lastRestoreVerifiedAt ?? ""))
     ).toBe(true);
-    // A drilled backup reports its own health, and it is not merely 'not red'.
     await expect(backupsHealth(m)).resolves.toBe("ok");
   }, 60_000);
 
   test("a claimed blob whose bytes were never captured FAILS the drill", async () => {
-    // The failure the structural half is blind to: the vault.db row survives
-    // the restore in perfect health and its bytes are simply gone. Before this
-    // drill the run went green and the owner learned about the broken photo on
-    // the day they needed it.
+    // Structural half is blind: the row survives; bytes are gone.
     const m = await makeMachine(await providerServer(), "drill-blob");
     const sha = attachPhoto(m.plane);
     await fs.rm(casPathFor(m.plane, sha));
@@ -214,9 +179,7 @@ describe("restore-drill", () => {
       /unrecoverable from this restore/u
     );
 
-    // Persisted, not merely pushed: the health probe recomputes from backup
-    // state, so a failure that lived only in a pushed report would go green at
-    // the next tick and the owner would never learn.
+    // Persisted: a push-only failure would go green at the next tick.
     const target = (await m.service.status())[m.vaultId];
     expect(target?.lastRestoreVerifyError).toMatch(/restore-verify failed/u);
     expect(target?.lastRestoreVerifyError).toMatch(/claimed blob/u);
@@ -224,10 +187,8 @@ describe("restore-drill", () => {
   }, 60_000);
 
   test("an empty-shell restore FAILS the drill though every structural check passes", async () => {
-    // Two structurally perfect databases with nobody in them. `integrity_check`,
-    // `foreign_key_check`, the G8 receipt cross-check and the seal-key verdict
-    // are all clean on this pair — the thrown message naming ONLY the empty
-    // shell is the proof that the drill, and nothing above it, caught this.
+    // Structurally perfect, empty. Message naming ONLY the empty shell proves
+    // the drill (not integrity/fk/G8/seal) caught this.
     const m = await makeMachine(await providerServer(), "drill-shell");
     emptyOutParties(m.plane);
 

@@ -1,10 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit the one-door pipeline (§10) — identity → consent → contract → execution → evidence must stay one auditable unit
-// The gateway (§10): one door, every request, no exceptions. Sole holder of
-// connections; every read and typed command walks identity → consent →
-// contract → execution → evidence. A thin, mostly declarative interpreter over
-// the consent and capability tables — no domain logic, no reasoning, no
-// rendering. Byte custody (#296) rides the same door: staging is pre-model,
-// egress is consent-checked resolution, and bytes live behind db.blobs.
+// Gateway (§10): one door. Identity → consent → contract → execution → evidence. No domain logic. Byte custody (#296) rides the same door.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -161,15 +156,7 @@ import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
 import { queryAppView, registerAppView } from "./views.js";
 import type { ViewDefinition, ViewResult } from "./views.js";
 
-/**
- * Structural guard for reading `consent.provenance` (#352). A table-scoped
- * grant alone is NOT enough: it is a table-level yes/no, so a caller holding
- * read here could pass any `entity_type` in `where` and browse another app's
- * or domain's whole activity history. A non-owner read is therefore held to
- * two extra rules — scope to exactly one (entity_type, entity_id) pair, and
- * independently hold read consent on that entity's own table. Returns a
- * failure reason, or null. Owner devices bypass it, as everywhere else.
- */
+/** Non-owner provenance reads (#352) must scope to one (entity_type, entity_id) and hold read on that entity's table. */
 function provenanceScopeFailure(
   vault: DatabaseSync,
   identity: Identity,
@@ -1063,24 +1050,8 @@ export class Gateway {
   }
 
   /**
-   * THE GRANT PLANE'S ONE SEAM into ordinary writes (#825, ruling G-edit), or
-   * `undefined` when the grant plane has nothing to say.
-   *
-   * ACTOR-AWARENESS IS THE WHOLE POINT. `routeShareGrantEdit` answers about the
-   * CONTAINER and returns refusals whenever ANY grant covers it, because a
-   * router that asked who was writing would be authorizing. So the seam asks. A
-   * grant constrains the AUDIENCE it names and never the issuing vault: an
-   * owner editing inside a folder they shared for view is exercising ownership,
-   * not the grant, so their write goes through untouched. An `app` credential
-   * carries no party — an installed app is the owner's own foreground door — and
-   * a party no grant NAMED is left to the consent layer.
-   *
-   * ASKING WHO IS WRITING IS NOT ENOUGH: the refusal must be RE-DERIVED from
-   * that actor's own grants. The route's `refusal` folds the whole container's
-   * grant set together, so a container shared to A for edit and B for view
-   * reports no view-only refusal and B's write would sail past a seam that only
-   * checked B was named. The seam therefore narrows to the grants whose audience
-   * resolves to this actor and re-asks `shareGrantEditRefusal`.
+   * Grant plane's one seam into ordinary writes (#825 G-edit). Grant constrains the named audience, never the issuing vault.
+   * Re-derive refusal from THIS actor's grants — a mixed edit+view container's folded refusal would miss a view-only member.
    */
   private shareGrantRefusal(
     identity: Identity,

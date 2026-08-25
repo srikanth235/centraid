@@ -1,31 +1,9 @@
-// The two renderings of "this app has nothing in it yet" (the Binding Layer,
-// Home — graded, not binary).
-//
-// Two weights, and the difference between them is the whole grading idea:
-//
-//  · `DayOne` — nothing anywhere. A THEMED PAGE: display title, one paragraph
-//    in the reading register, a wrap row of three buttons (one filled — the
-//    vault's own sample offer — flanked by two outlined "bring in your own"
-//    moves), a mono foot carrying real counts. It is allowed to be a page
-//    because there is nothing else on the screen.
-//  · `FirstMovesBand` — at least one app has content, drawn from the shared
-//    first-moves catalog (./first-moves). A hairline rule, a micro-caps
-//    label, up to three 44px rows with a trailing arrow. No serif, no
-//    paragraph: the page above it is already working, and a nudge as loud as
-//    the thing it is nudging you away from stops being a nudge.
-//
-// Day one's three buttons are their OWN fixed trio (handoff :979–990), not a
-// slice of the catalog `FirstMovesBand` draws from: the band's rows are a
-// general nudge across up to nine apps and their labels come from
-// `HOME_FIRST_MOVE_COPY`, but day one is a themed page with exactly three
-// offers whose copy is the page's own (`HOME_DAY_ONE_*` in
-// @centraid/client/home-copy).
-//
-// What is NOT here, deliberately: dashed placeholder cards. A dashed rectangle
-// per empty app has two faults the brief names — it scales to eight identical
-// apologies as the vault fills, and each one opens the empty app it is named
-// after, which is a dead end wearing an invitation. Every move below lands
-// somewhere that can TAKE content.
+// Two renderings of empty Home (Binding Layer — graded, not binary).
+// `DayOne` — nothing anywhere: themed page, three buttons of its own (not a
+// catalog slice), real-count foot. `FirstMovesBand` — at least one app has
+// content: micro-caps strip, up to three 44px rows. Deliberately absent:
+// dashed placeholder cards (they scale to identical apologies and open empty
+// apps). Every move lands somewhere that can TAKE content.
 
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
@@ -54,13 +32,6 @@ export interface FirstMovesProps {
   onPick: (move: FirstMove) => void;
 }
 
-/**
- * The quiet band under a populated grid.
- *
- * `HOME_START_TITLE` is set in the micro-caps role, which is the system's label
- * register — it is a heading for a strip, not a heading for a page, and the
- * ramp has exactly one way to say that.
- */
 export default function FirstMovesBand({
   moves,
   onPick,
@@ -85,23 +56,18 @@ export default function FirstMovesBand({
 }
 
 export interface DayOneProps {
-  /** The mono foot. Real counts only — see `HomeStatusLine` for the same rule. */
+  /** Real counts only — same rule as `HomeStatusLine`. */
   foot: string;
-  /** The one filled offer — the vault's own sample week. */
   onSeedSample: () => void;
-  /** The two outlined "bring in your own" moves the body paragraph promises. */
   onBringPhotos: () => void;
   onBringDocuments: () => void;
 }
 
 /**
- * Day one: the vault holds nothing anywhere.
- *
- * Reached only when every readable tile has SETTLED and is empty
- * (./tile-model#springboardState). A vault that is merely still loading, or
- * whose replica is unreachable, gets the ordinary grid instead — this page is a
- * claim about the vault, and an unanswered read has not earned the right to
- * make it.
+ * Vault holds nothing anywhere. Reached only when every readable tile has
+ * SETTLED and is empty (`./tile-model` `springboardState`). A still-loading
+ * vault, or an unreachable replica, gets the ordinary grid — this page is a
+ * claim about the vault, and an unanswered read has not earned it.
  */
 export function DayOne({
   foot,
@@ -114,14 +80,9 @@ export function DayOne({
   return (
     <View accessibilityLabel={`Your apps, ${HOME_FIRST_RUN_TITLE}`}>
       <Text style={styles.dayOneTitle}>{HOME_FIRST_RUN_TITLE}</Text>
-      {/* The reading register, serif. This is the one paragraph of prose on
-          Home, and the second register exists so prose does not look like UI
-          text — least of all on the screen where a member is deciding whether
-          any of this is worth their archive. */}
+      {/* Reading register: the only paragraph of prose on Home. */}
       <Text style={styles.dayOneBody}>{HOME_FIRST_RUN_BODY}</Text>
-      {/* handoff :978–991, `frRowStyle` — a WRAP row, not a stack of full-width
-          rows: three buttons at their own content width read as three
-          choices; three rows the width of the page would read as a form. */}
+      {/* Wrap row: three content-width choices, not a full-width form. */}
       <View style={styles.dayOneRow}>
         <Pressable
           accessibilityRole="button"
@@ -190,18 +151,13 @@ function MoveRow({
         muted={!move.color}
         size={MARK}
       />
-      {/* handoff :1211–1237 — one 44px row is chip + label + arrow, no second
-          line. `move.hint` still carries the accessibility label above; a
-          sighted member gets the label alone, the same information a
-          screen-reader user gets read in full. */}
+      {/* One 44px row; `move.hint` is a11y-only. */}
       <View style={styles.moveText}>
         <Text numberOfLines={1} style={styles.moveLabel}>
           {move.label}
         </Text>
       </View>
-      {/* Where a control must read as an action without a hover state to lean
-          on, it carries a trailing arrow. Decorative — the row's own label
-          already says what it does. */}
+      {/* Decorative; the row label already names the action. */}
       <Text style={styles.arrow} accessibilityElementsHidden>
         →
       </Text>
@@ -213,18 +169,12 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     arrow: { ...t("small"), color: colors.textFaint },
     band: {
-      // `movesWrapStyle`, :5706 — `t.line`, the stronger rung (`lineStrong`
-      // here), not the hairline `t.lineS` each row below draws.
       borderTopColor: colors.lineStrong,
       borderTopWidth: borders.hairline,
-      // `movesWrapStyle`, :5706 — `R.gap.xl` (24).
       marginTop: 24,
       paddingTop: 16,
     },
-    // `movesLabelStyle`, :5707 — margin-bottom 8.
     bandLabel: { ...t("eyebrow"), color: colors.textFaint, marginBottom: 8 },
-    // btnBase, handoff :5103 — height `metrics.control` (34, R.ctl), radius
-    // `radii.md` (7, R.rad.ctl), the `control` type role (500 13px sans).
     btnPressed: { backgroundColor: colors.bgPress },
     btnPrimary: {
       alignItems: "center",
@@ -234,7 +184,6 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: metrics.control,
       paddingHorizontal: 16,
     },
-    // The solved inverse foreground on the theme's ink fill.
     btnPrimaryLabel: { ...t("control"), color: colors.textInv },
     btnSecondary: {
       alignItems: "center",
@@ -247,23 +196,18 @@ const makeStyles = (colors: ThemeColors) =>
     },
     btnSecondaryLabel: { ...t("control"), color: colors.textSoft },
     dayOneBody: { ...t("reading"), color: colors.textSoft, marginBottom: 24 },
-    // frRowStyle, handoff :5704 — a WRAP row of the three buttons above.
     dayOneRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    // frTitleStyle margin-bottom, handoff :5699 — R.gap.m (12).
     dayOneTitle: { ...t("display"), color: colors.text, marginBottom: 12 },
     foot: {
       ...t("mono"),
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
       color: colors.textFaint,
-      // Day-one foot, handoff :5734 area — `R.gap.xl` (24).
       marginTop: 24,
       paddingTop: 12,
     },
     move: {
       alignItems: "center",
-      // Each move row draws its own rule, :5719-5720 — `t.lineS` (the
-      // hairline `line` rung, not the band's own stronger one above).
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
       flexDirection: "row",

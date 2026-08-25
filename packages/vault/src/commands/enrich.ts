@@ -1,14 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#731) the typed enrichment command pack keeps OCR, transcript, embedding, face, and provenance validation in one derivative-write boundary.
-// The enrichment command pack (#299): the typed verbs the spine's non-staged
-// writes ride. Staged output (captions, tags, faces, albums, filing) lands
-// through `sync.stage_rows` + the enrich publishers; these commands cover what
-// staging cannot express — `core.set_extracted_text` turns an OCR result into
-// the content item's inline `text` derivative so the FTS triggers index the
-// PARENT in-transaction (#296); `media.answer_face_proposal` is the owner's
-// half of the face loop as ONE verb with three answers (#712);
-// `sync.set_connection_trust` is the standing-consent lever, risk `high` so an
-// agent widening its own trust parks; `enrich.request_enrichment` /
-// `enrich.upsert_embedding` are the on-demand queue and the vector index.
+// Enrichment commands (#299): verbs staging cannot express. OCR → inline `text` derivative (FTS on parent, #296). Face loop is one verb with three answers (#712).
 
 import { stampDerivation } from "../enrich/derivation.js";
 import { recordEnrichConsent } from "../enrich/egress-consent.js";
@@ -144,14 +135,7 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
   return result;
 }
 
-/**
- * OCR boxes are declared against ONE asset's pixel dimensions, and validation
- * belongs at the gateway-side write boundary rather than scattered across
- * callers (#731) — `enrich.upsert_faces` already rejects an out-of-bounds face
- * box. Unlike a face, which IS its box, a text region's box annotates real
- * text, so an out-of-bounds box is DROPPED rather than failing the write: the
- * text survives, and an absent box is never invented as `[0,0,0,0]`.
- */
+/** Drop out-of-bounds OCR boxes (#731); never fail the write or invent `[0,0,0,0]`. */
 function dropOutOfBoundsRegions(
   ctx: HandlerCtx,
   contentId: string,
@@ -177,17 +161,7 @@ function dropOutOfBoundsRegions(
   });
 }
 
-/**
- * Shared canonical derivative writer for reviewed local OCR and enrichers.
- *
- * A REWRITE gets a FRESH `derivative_id`, never an in-place UPDATE:
- * `embed-text`'s bounded cursor walks `derivative_id > cursor`, so an in-place
- * update leaves the row behind an already-advanced cursor and semantic search
- * serves vectors of the stale text forever (#731). Derivative ids are UUIDv7,
- * so a fresh id is strictly later and re-enters the sweep exactly once. The
- * row's logical identity is `(content_id, variant)`, enforced by the table's
- * UNIQUE constraint; nothing outside this module keys off `derivative_id`.
- */
+/** Canonical derivative writer. Rewrite = fresh `derivative_id` (never in-place UPDATE) so `embed-text`'s cursor still sees it (#731). Identity is `(content_id, variant)`. */
 export function writeExtractedText(
   ctx: HandlerCtx,
   contentId: string,
@@ -222,22 +196,8 @@ export function writeExtractedText(
 }
 
 /**
- * THE TRIAGE VERB (#712). One answer to one proposal, discriminated on
- * `answer` — not three commands each writing a different corner of one row.
- *
- * The `confirm_face`/`reject_face` pair is GONE rather than kept beside this,
- * because between them they expressed only two of the three answers a member
- * gives, and a review queue needs all three to be finishable. `confirm`
- * REQUIRED a party_id, so "I looked at this stranger and am deliberately not
- * naming it" had nowhere to land, and Skip writes nothing — every skipped face
- * came back forever. `reject` DELETED the row, and a deletion is not a state:
- * nothing counted it, and nothing stopped the enricher re-proposing.
- * `media_face_region.review_state` is the state; this is its only writer.
- *
- * THE UNION IS ENFORCED, NOT DOCUMENTED. `confirm` carries a `party_id`;
- * `reject` and `dismiss` must not. gateway/json-schema.ts is a deliberate
- * JSON-Schema SUBSET with no `oneOf`, so the pairing rides a precondition —
- * declarative, journaled as a check row, and the member gets the sentence.
+ * Triage verb (#712): one answer, discriminated on `answer`. Only writer of `media_face_region.review_state`.
+ * `confirm` carries `party_id`; `reject`/`dismiss` must not (precondition — json-schema has no `oneOf`).
  */
 const ANSWER_FACE_PROPOSAL: CommandDefinition = {
   name: "media.answer_face_proposal",
@@ -546,28 +506,8 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
 };
 
 /**
- * THE ONE WRITER of `enrich_consent` (#807).
- *
- * Egress consent is capability × egress class × scope, asked once, answered
- * once, receipted. It is data-owner property, so it lives in the vault and
- * travels with the data; the gateway only READS it
- * (`server/src/enrich/egress-consent-lookup.ts`), and the fire gate refuses
- * when the answer it needs is absent or declined.
- *
- * A command rather than a route-level write, so there is exactly ONE journalled
- * path: answer, decline and re-answer are all `act enrich.record_consent`
- * receipts in the same chain, and no surface can quietly write a grant the
- * ledger never saw. `confirm: true` makes an app or agent reaching for this
- * verb PARK instead of recording an answer on the owner's behalf.
- *
- * A DECLINE IS A RECORD: `decision: 'declined'` writes a row, because "asked
- * and told no" must stay distinguishable from "never asked".
- *
- * `receipt_id` stays NULL here — a command's receipt id is minted AFTER its
- * transaction commits, so a handler cannot know it, and a second writer
- * stamping it later would break the one-writer rule. The durable receipt is the
- * invocation's own; the column stays for an imported answer that arrives with
- * one already minted.
+ * One writer of `enrich_consent` (#807). Gateway only reads it. Decline is a record (`declined` ≠ never asked).
+ * `confirm: true` so an app/agent parks. `receipt_id` stays NULL here — minted after commit.
  */
 const RECORD_CONSENT: CommandDefinition = {
   name: "enrich.record_consent",

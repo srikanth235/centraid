@@ -1,21 +1,14 @@
 /**
- * The bounded joins drive.ts and search.ts both make over the same windowed
- * document/content ids (#352): free-form labels, the blob custody projection,
- * and who a document is shared with (#821, scoped to the windowed documents and
- * their folder ancestors). Favorite star and place stay inline in the callers —
- * they already ride the same concept reads, so factoring them here would add a
- * round trip.
- *
- * NOT a query: the dispatcher resolves a name straight to `queries/<name>.ts`
- * and never scans the directory, so a helper module beside the handlers is
- * invisible to it and to build-manifest.mjs's install-copy walk.
+ * Bounded joins over the same windowed document/content ids (#352, #821).
+ * NOT a query: the dispatcher resolves `queries/<name>.ts` and never scans
+ * the directory, so a helper beside the handlers is invisible to it and to
+ * build-manifest.mjs's install-copy walk.
  */
 
 const TAGS_SCHEME_URI = "centraid:tags:v1";
 const DOCUMENT_TARGET_TYPE = "core.document";
 const FOLDER_CONTAINER_TYPE = "docs.folder";
 
-/** A concept row (the SKOS vocabulary). */
 export interface ConceptRow {
   concept_id: string;
   scheme_id: string;
@@ -24,13 +17,11 @@ export interface ConceptRow {
   broader_concept_id?: string | null;
 }
 
-/** Keyed by its stable URI. */
 export interface SchemeRow {
   scheme_id: string;
   uri: string;
 }
 
-/** A core.tag edge row. */
 export interface TagRow {
   tag_id: string;
   concept_id: string;
@@ -39,7 +30,6 @@ export interface TagRow {
   tagged_at?: string;
 }
 
-/** One free-form label on a document. */
 export interface LabelEntry {
   tag_id: string;
   label: string;
@@ -55,8 +45,8 @@ interface LabelArgs {
 
 /**
  * `schemes`/`concepts` are the SAME reads the caller already made, passed in
- * rather than re-read. Each entry carries its tag_id because untag.ts removes by
- * tag_id, never by label.
+ * rather than re-read. Each entry carries its tag_id because untag.ts removes
+ * by tag_id, never by label.
  */
 export async function readLabelsByDocument({
   ctx,
@@ -96,9 +86,9 @@ interface CustodyRow {
 }
 
 /**
- * An absent content id means either inline bytes custody cannot track or a sweep
- * that has not run; callers render nothing rather than claim a state the vault
- * never asserted.
+ * An absent content id means inline bytes custody cannot track, or a sweep
+ * that has not run; callers render nothing rather than claim a state the
+ * vault never asserted.
  */
 export async function readCustodyByContent({
   ctx,
@@ -124,13 +114,11 @@ export async function readCustodyByContent({
 }
 
 // ─── Who a document is shared with (#821) ─────
-// GRACEFUL DENIAL is why this is a seam of its own: on an existing vault a newly
-// declared scope parks for the owner to approve, and a denial must never take
-// the drive down. This catches its own denial and returns `null`, which callers
-// ship as `shared_with: null` — "we cannot see", a different sentence from
-// "shared with nobody" (`[]`) and worded differently on screen.
+// GRACEFUL DENIAL: on an existing vault a newly declared scope parks for the
+// owner to approve, and a denial must never take the drive down. This catches
+// its own denial and returns `null`, which callers ship as `shared_with: null`
+// — "we cannot see", not "shared with nobody" (`[]`).
 
-/** A live commons grant over one container. */
 interface GrantRow {
   grant_id: string;
   circle_id: string;
@@ -161,32 +149,26 @@ interface PartyRow {
   display_name?: string | null;
 }
 
-/** One person a document reaches through a grant. */
 export interface SharedMember {
   party_id: string;
   label: string;
   capability: "read" | "read+write";
-  /** `invited` until their vault accepts. A member who REFUSED is not listed:
-   *  naming them would assert a reach that was declined. */
+  /** `invited` until their vault accepts. REFUSED is not listed: naming them
+   *  would assert a reach that was declined. */
   status: "invited" | "current";
 }
 
-/** One live share a document sits inside, as the app renders it. */
 export interface SharedWithEntry {
   grant_id: string;
   circle_id: string;
-  /** The circle's own name, or the recipients' names for an implicit circle,
-   *  whose stored name is a machine string. */
+  /** Circle name, or recipients for an implicit circle (stored name is machine). */
   label: string;
-  /** THIS document or a folder above it. The rail says "through <folder>" for
-   *  the second, so a member is never told the document itself was shared. */
+  /** THIS document or a folder above it — never tell a member the document
+   *  itself was shared when it only sits in a shared folder. */
   via: "document" | "folder";
-  /** The folder whose name the rail prints under `via: folder`, else the
-   *  document's own id. */
   container_id: string;
   members: SharedMember[];
   member_count: number;
-  /** How many of `members` have not accepted yet. */
   pending_count: number;
 }
 
@@ -195,9 +177,8 @@ const shareLimit = (ids: number): number =>
   Math.min(Math.max(ids, 1) * 4, 2000);
 
 /**
- * The concept chain above a document, root included, walked off concepts already
- * in hand. A grant on any of them reaches the document, so this chain is what
- * bounds the folder-side grant read.
+ * Concept chain above a document, root included. A grant on any of them
+ * reaches the document, so this chain bounds the folder-side grant read.
  */
 function folderChain(
   conceptId: string | undefined,
@@ -215,9 +196,9 @@ function folderChain(
 }
 
 /**
- * A named circle carries the owner's own word for the audience. An
- * `implicit_circle` has a machine-generated name nobody chose, so printing it
- * would show a member an internal string — the honest label is who is in it.
+ * A named circle carries the owner's word for the audience. An
+ * `implicit_circle` has a machine-generated name nobody chose — the honest
+ * label is who is in it.
  */
 function shareLabel(
   grant: GrantRow,
@@ -236,7 +217,7 @@ function shareLabel(
  * `null` when any share read is denied.
  *
  * SHARES DECORATE THE WINDOW, THEY NEVER WIDEN IT: every read below is bounded
- * by ids the caller already holds, so nothing here can pull a whole table.
+ * by ids the caller already holds.
  */
 export async function readSharesByDocument({
   ctx,
@@ -248,9 +229,7 @@ export async function readSharesByDocument({
   ctx: HandlerCtx;
   purpose: string;
   documentIds: string[];
-  /** Each windowed document's own concept id (root included). */
   folderByDoc: Map<string, string>;
-  /** The parent chain is walked off these. */
   folderConcepts: ConceptRow[];
 }): Promise<Map<string, SharedWithEntry[]> | null> {
   if (documentIds.length === 0) return new Map();
@@ -392,7 +371,6 @@ export async function readSharesByDocument({
         )
         .map((g) => entryByGrant.get(g.grant_id))
         .filter((e): e is SharedWithEntry => e !== undefined)
-        // The document's own grant leads: the fact the member acted on.
         .toSorted(
           (a, b) =>
             (a.via === "document" ? 0 : 1) - (b.via === "document" ? 0 : 1) ||

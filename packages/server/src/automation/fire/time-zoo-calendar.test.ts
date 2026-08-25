@@ -1,20 +1,9 @@
 /*
- * The CALENDAR half of the time zoo (#839, gap G12): the two civil-clock
- * irregularities that are not DST — the leap day, and the ISO year that has
- * fifty-three weeks in it.
+ * CALENDAR half of the time zoo (#839, G12): leap day, and the ISO year of
+ * 53 weeks. 2026 is such a year (2026-01-01 is a Thursday).
  *
- * Neither is covered by cron-match.test.ts or cron-cursor.test.ts, and both
- * are the classic shape of a scheduler defect that surfaces once every few
- * years: February 29 exists in one year in four (minus the century rule), and
- * an ISO year of 53 weeks breaks any "a year is 52 weeks" arithmetic exactly
- * once per cycle. 2026 is such a year — 2026-01-01 is a Thursday — which makes
- * it the adversarial case sitting immediately under the doctrine's own pinned
- * transition dates (docs/cron-timezone.md § "DST policy").
- *
- * Everything here runs in an explicit IANA zone, never host-local: per
- * docs/cron-timezone.md § "Matching", `cronMatches(expr, date, timeZone?)`
- * reads wall-clock fields in the resolved zone, and pinning the zone is what
- * keeps the assertions about the calendar rather than about the runner's TZ.
+ * Explicit IANA zone, never host-local: `cronMatches` reads wall-clock fields
+ * in the resolved zone (docs/cron-timezone.md).
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -26,7 +15,6 @@ import { wallClockFields } from "../cron-timezone.js";
 import { dueInstants, readCronCursor } from "./cron-cursor.js";
 import { cronMatches } from "./cron-match.js";
 
-/** The zone every assertion below is stated in. */
 const ZONE = "Etc/UTC";
 
 /**
@@ -90,9 +78,7 @@ describe("cron across the leap day", () => {
 
   it("fires a February 29 expression in a leap year and never in a common year", () => {
     const expr = "0 9 29 2 *";
-    // 2028 is a leap year; 2027 is not. A `29 2` expression is not invalid —
-    // it is simply unsatisfiable in a common year, which is the same shape as
-    // the DST gap: no absolute instant carries that wall clock.
+    // `29 2` is not invalid — it is unsatisfiable in a common year.
     const leap = tileDueInstants(
       expr,
       "2028-02-20T00:00:00.000Z",
@@ -111,9 +97,7 @@ describe("cron across the leap day", () => {
   });
 
   it("honours the Gregorian century rule for 1900, 2000, and 2100", () => {
-    // Divisible by 4 but not 400 → not a leap year. A `% 4` shortcut anywhere
-    // in the field expansion would fire on 2100-02-29, a date that does not
-    // exist. 2000 is the counter-case that keeps the rule from being read as
+    // `% 4` would fire on 2100-02-29. 2000 is the counter-case against
     // "no century year is a leap year".
     const expr = "0 9 29 2 *";
     const counts = [1900, 2000, 2100].map(
@@ -128,9 +112,7 @@ describe("cron across the leap day", () => {
   });
 
   it("keeps the weekday sequence unbroken across February 29", () => {
-    // 2028-02-28 is a Monday, so the leap day is a Tuesday and March 1 a
-    // Wednesday. A weekday derivation that skipped the inserted day would slip
-    // every `* * * <dow>` automation by one for the rest of the year.
+    // Skipping the inserted day would slip every `* * * <dow>` by one.
     const days = [
       "2028-02-28T09:00:00.000Z",
       "2028-02-29T09:00:00.000Z",
@@ -147,9 +129,7 @@ describe("cron across the leap day", () => {
   });
 
   it("advances the cursor over February 29 as a real missed run", () => {
-    // A gateway down from the 28th to March 1st missed ONE run in a leap year
-    // and NONE in a common year. The count is what the member is shown, so the
-    // leap day has to be counted as a day, not merely stepped over.
+    // Leap day is a missed run, not a day to step over.
     const leap = readCronCursor(
       [{ expr: "0 9 * * *", timeZone: ZONE }],
       cursorAt(Date.parse("2028-02-28T09:00:00.000Z")),
@@ -187,8 +167,7 @@ describe("cron across an ISO week-53 year", () => {
   });
 
   it("agrees with the ISO oracle that 2026 carries a week 53", () => {
-    // The premise every assertion below rests on, stated separately so a
-    // failure distinguishes "our fixture year is wrong" from "cron is wrong".
+    // Premise, stated separately so a fixture-year failure is not "cron is wrong".
     expect(isoWeek(new Date("2026-12-28T00:00:00.000Z"))).toStrictEqual({
       year: 2026,
       week: 53,
@@ -197,8 +176,7 @@ describe("cron across an ISO week-53 year", () => {
       year: 2027,
       week: 1,
     });
-    // 2025 is an ordinary 52-week ISO year — the contrast that makes 53 mean
-    // something.
+    // 2025 is an ordinary 52-week ISO year.
     expect(isoWeek(new Date("2025-12-29T00:00:00.000Z"))).toStrictEqual({
       year: 2026,
       week: 1,
@@ -206,10 +184,7 @@ describe("cron across an ISO week-53 year", () => {
   });
 
   it("delivers 53 Monday fires across ISO year 2026, one per ISO week", () => {
-    // ISO year 2026 runs Monday 2025-12-29 (W01) through Sunday 2027-01-03,
-    // and its last Monday is 2026-12-28 (W53). A weekly automation must fire
-    // on every one of them: 52 would silently drop a week from the member's
-    // year.
+    // ISO 2026 last Monday is 2026-12-28 (W53). 52 fires would silently drop a week.
     const mondays = tileDueInstants(
       "0 9 * * 1",
       "2025-12-29T08:59:00.000Z",
@@ -219,7 +194,7 @@ describe("cron across an ISO week-53 year", () => {
     expect(mondays).toHaveLength(53);
     expect(mondays[0]?.toISOString()).toBe("2025-12-29T09:00:00.000Z");
     expect(mondays.at(-1)?.toISOString()).toBe("2026-12-28T09:00:00.000Z");
-    // Every one of them is a Monday of ISO year 2026, week 1..53 in order.
+    // Week 1..53 in order, all ISO year 2026.
     expect(mondays.map((day) => isoWeek(day).week)).toStrictEqual(
       Array.from({ length: 53 }, (_unused, index) => index + 1)
     );
@@ -229,8 +204,7 @@ describe("cron across an ISO week-53 year", () => {
   });
 
   it("keeps a uniform seven-day step across the week-53 boundary", () => {
-    // The boundary itself: W52 → W53 → next ISO year's W01. A re-anchoring bug
-    // shows up as a 6- or 8-day step here and nowhere else in the year.
+    // Re-anchoring shows up as a 6- or 8-day step at W52 → W53 → W01.
     const boundary = tileDueInstants(
       "0 9 * * 1",
       "2026-12-14T08:59:00.000Z",
@@ -254,9 +228,7 @@ describe("cron across an ISO week-53 year", () => {
   });
 
   it("does not let the 53rd week disturb a day-of-month schedule", () => {
-    // Vixie semantics: `dom` and `dow` are independent fields. A schedule
-    // pinned to the 1st must land on the 1st of January 2027 regardless of
-    // which ISO week that day belongs to.
+    // Vixie: `dom` and `dow` are independent — the 1st is the 1st regardless of ISO week.
     const firsts = tileDueInstants(
       "0 9 1 * *",
       "2026-11-30T00:00:00.000Z",

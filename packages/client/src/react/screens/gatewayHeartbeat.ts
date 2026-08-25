@@ -1,32 +1,11 @@
 import { formatClock, formatDuration } from "../shell/routes/gatewayData.js";
 import type { BarDatum } from "../ui/BarsBlock.js";
 
-// The heartbeat strip on System — availability as a SHAPE rather than as a
-// percentage (binding layer v11).
-//
-// The hero already states "99.98%", and a percentage is the one reading that
-// cannot answer the question people actually bring here: *when* did it stop.
-// Two gateways both read 99.9% when one dropped a single probe a fortnight ago
-// and the other dropped nine in a row this morning; only the picture separates
-// them.
-//
-// WHAT THE WINDOW IS, said out loud. The prototype draws thirty days, one mark
-// per day. The runtime wire carries no such thing: `samples` is a per-launch
-// ring (`SAMPLE_CAP` probes, oldest first) that starts empty at every app
-// launch and every gateway switch. Drawing it under a "30 days" axis would be
-// a fabrication, so the axis, the note and the aria sentence all name THIS
-// SESSION and the span it really covers. A durable daily series has to reach
-// the gateway contract before the handoff's month can be drawn honestly.
-//
-// COLUMNS ARE PROBES, NOT MINUTES. Above `HEARTBEAT_COLUMNS` the ring folds
-// into equal-sized groups of consecutive probes rather than equal stretches of
-// time, because the poll is suspended while the window is hidden (#659)
-// and a time axis would then draw a long flat nothing where the app was simply
-// closed. Grouping by probe keeps every column carrying the same weight of
-// evidence; the axis states the elapsed span beside it so neither reading is
-// mistaken for the other.
+// Heartbeat strip: availability as a shape, this session only. `samples` is a
+// per-launch ring — a "30 days" axis would fabricate a window the wire does
+// not carry. Columns are probes, not minutes: the poll is suspended while
+// hidden (#659), so a time axis would draw a flat nothing while closed.
 
-/** One probe in the runtime sample ring — the wire's `CentraidGatewaySample`. */
 export interface HeartbeatSample {
   at: number;
   ok: boolean;
@@ -39,26 +18,16 @@ export interface HeartbeatStrip {
   ariaLabel: string;
   note: string;
   legend: { ok: string; fail: string };
-  /** Fewer probes than the strip has room for — the plot packs the marks
-   *  against the newest end instead of stretching them across it. */
+  /** Pack marks against the newest end; do not stretch a short ring. */
   partial: boolean;
 }
 
-/**
- * Below this the strip is not a shape, it is two rectangles — and the hero's
- * availability fact already says everything two probes can say. A freshly
- * launched app therefore shows no chart at all rather than a chart that has
- * nothing to show.
- */
+/** A chart of two probes is not a shape; hide it rather than draw nothing. */
 export const MIN_HEARTBEAT_SAMPLES = 3;
 
-/** Matches the prototype's mark count. `BarsBlock` tightens its own gutter
- *  past this, so the ceiling is about legibility, not about capacity. */
 export const HEARTBEAT_COLUMNS = 30;
 
-/** Bucket `[start, end)` for column `index` of `columns` over `length` probes.
- *  Always at least one probe wide, so a short ring cannot produce an empty
- *  column that would draw as an unanswered heartbeat. */
+/** Always at least one probe wide — a short ring must not draw an empty column. */
 function bucketRange(
   index: number,
   columns: number,
@@ -84,9 +53,6 @@ export function buildHeartbeatStrip(
     const [start, end] = bucketRange(index, width, samples.length);
     const bucket = samples.slice(start, end);
     const failed = bucket.filter((sample) => !sample.ok).length;
-    // The whole column is one bucket's worth of evidence, so the two segments
-    // always sum to the plot: the FAILED SHARE is the reading, and the height
-    // of the column carries no second meaning that could be misread.
     const fail = (failed / bucket.length) * 100;
     const at = bucket[0]?.at ?? first.at;
     bars.push({

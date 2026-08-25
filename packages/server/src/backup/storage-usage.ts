@@ -1,25 +1,8 @@
 /*
- * Provider usage polling (#367) — the gateway-side cache in front
- * of `centraid-storage-provider/1`'s optional Layer-1 `usage` capability
- * (`GET /v1/storage/vaults/:id/usage`, packages/backup/PROTOCOL.md § Usage;
- * `RemoteBackupProvider.usageReport()`).
- *
- * Every storage connection is a provider connection (#436); a provider
- * that doesn't offer the `usage` capability reports `providerReported: null`
- * and `GET storage/usage` (storage-routes.ts) falls back to locally-computed
- * custody byte counts.
- *
- * The provider's usage endpoint is a real network call against an account
- * that bills for, or at least logs, API traffic — this deliberately never
- * polls on its own timer. Instead: cache-with-TTL + stale-while-refresh,
- * driven by whoever calls `usageFor()` (the `storage/usage` route, and the
- * `storage-quota` health probe). The FIRST read for a connection has
- * nothing cached yet and awaits the fetch inline; every read after that
- * returns the cached report immediately and — only once the cache is older
- * than `pollIntervalMs` (default 30 min) — kicks a background refresh that
- * the NEXT read picks up. A failed refresh keeps serving the last-known-good
- * report (with an `error` note attached) rather than blanking a number that
- * was true a moment ago.
+ * Provider usage cache (#367). Never poll on its own timer — network against
+ * a billed account. Stale-while-refresh from `usageFor()`: first read awaits
+ * inline; later reads return cache and background-refresh after
+ * `pollIntervalMs`. A failed refresh keeps last-known-good plus `error`.
  */
 
 import { openRemoteBackupProvider } from "@centraid/backup";
@@ -27,19 +10,11 @@ import type { UsageByStore } from "@centraid/backup";
 
 import type { StorageConnectionStore } from "./storage-connections.js";
 
-/** Refresh a cached report once it's older than this. Real network traffic
- *  against the provider's account, so this stays coarse by design. */
 const DEFAULT_POLL_MS = 30 * 60 * 1000;
 
 export interface ProviderUsageResult {
-  /** `null` for a provider connection with no CAS target minted yet, or a
-   *  provider that doesn't offer the `usage` capability (its `/usage` route
-   *  404s/refuses — see `error` below). */
   providerReported: UsageByStore | null;
-  /** ISO timestamp of the last successful poll, or `null` before the first one. */
   fetchedAt: string | null;
-  /** Set when the most recent refresh attempt failed — `providerReported`/
-   *  `fetchedAt` still carry the last-known-good report, if any. */
   error?: string;
 }
 
@@ -51,11 +26,8 @@ interface CacheEntry {
 
 export interface StorageUsagePollerOptions {
   storageConnections: StorageConnectionStore;
-  /** Cache staleness before a background refresh fires. Default 30 min. */
   pollIntervalMs?: number;
-  /** Clock override (tests). */
   now?: () => number;
-  /** Injectable `fetch` (tests point this at an in-process fake provider). */
   fetchImpl?: typeof fetch;
 }
 
@@ -73,9 +45,6 @@ export class StorageUsagePoller {
     this.fetchImpl = options.fetchImpl;
   }
 
-  /** Cached report for one connection — see the module header for the
-   *  stale-while-refresh contract. Resolves to `{providerReported: null,
-   *  fetchedAt: null}` (no network) for a connection with no target minted yet. */
   async usageFor(connectionId: string): Promise<ProviderUsageResult> {
     const cached = this.cache.get(connectionId);
     if (!cached) return this.refresh(connectionId);
@@ -87,8 +56,7 @@ export class StorageUsagePoller {
     return cached.result;
   }
 
-  /** Drop a connection's cache entry — called when a connection is deleted
-   *  or its credentials rotate, so a stale report never outlives it. */
+  /** Drop the cache when a connection is deleted or credentials rotate. */
   invalidate(connectionId: string): void {
     this.cache.delete(connectionId);
   }
@@ -118,8 +86,6 @@ export class StorageUsagePoller {
     if (!connection || connection.kind !== "provider") {
       return { providerReported: null, fetchedAt: null };
     }
-    // No CAS target minted yet (the connection has never been attached to a
-    // vault's blob_store) — nothing to ask the provider about.
     if (!connection.targetId || !connection.baseUrl) {
       return { providerReported: null, fetchedAt: null };
     }

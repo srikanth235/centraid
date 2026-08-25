@@ -1,24 +1,6 @@
 // @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
-// The People shelf's own conformance fixes (#711, v4 handoff §5, proto
-// :4432-:4433):
-//
-//   1. SIX COLUMNS DESKTOP, THREE PHONE (proto :4432) — a fixed column
-//      count, not `auto-fill`'s floor (checked on the CSS module itself: a
-//      grid's column count is a layout fact `getComputedStyle` cannot see
-//      under jsdom, so this reads the authored rule directly, the same way
-//      photos-vocabulary.test.ts reads sources rather than a live DOM).
-//   2. THE PENDING NOTE CARRIES THE LIVE COUNT (proto :4433) — `54 faces are
-//      not matched to anyone…` with the vault-wide `unmatchedTotal` fact
-//      `queries/people.ts` now derives itself (same computation
-//      `queries/face-queue.ts` uses for the same fact) and passes down as a
-//      prop, not a fixed prototype number and not a second read of a
-//      different query.
-//   3. UNCONFIRMED PROPOSALS RENDER, NEVER NAMED (#711 review, proto
-//      :3760 `PPEOPLE` — named cards next to "Unnamed" ones, each with its
-//      own count) — distinguishable from a confirmed person's card and
-//      routing into Face Review, never asserting a name nobody confirmed.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -33,9 +15,7 @@ const PEOPLE_MODULE_CSS = path.resolve(
   "../apps/photos/components/People.module.css"
 );
 
-// A `relativePath` PARAMETER, not an inlined literal — see
-// photos-face-review.test.ts's own note (TS6059 if the specifier is a
-// literal tsc can resolve at compile time).
+// `relativePath` PARAMETER, not an inlined literal — TS6059 if tsc can resolve the specifier at compile time.
 const PEOPLE_PATH = "../apps/photos/components/People.tsx";
 const importPeople = (relativePath: string) => import(relativePath);
 
@@ -90,11 +70,7 @@ describe("People is six columns desktop, three phone (proto :4432)", () => {
   const css = fs.readFileSync(PEOPLE_MODULE_CSS, "utf8");
 
   it("fixes the desktop grid at six columns, not auto-fill's floor", () => {
-    // `auto-fill` with a 104px floor lands near nine columns on a wide pane,
-    // so its absence from the RULE (not from the file's prose, which explains
-    // the hazard) is asserted too.
-    // The desktop rule is the first `.grid { … }` block — the phone override
-    // lives inside the `@media` block asserted separately below.
+    // `auto-fill` with a 104px floor lands near nine columns — absence from the RULE (first `.grid { … }`; phone override is the `@media` block below).
     const gridRule = css.match(/\.grid\s*\{(?<body>[^}]*)\}/u);
     expect(gridRule?.groups?.body).toMatch(/repeat\(6,\s*1fr\)/u);
     expect(gridRule?.groups?.body).not.toMatch(/auto-fill/u);
@@ -125,10 +101,7 @@ describe("the pending note carries the live unmatched count (proto :4433)", () =
   });
 
   it("omits the number rather than claiming a zero before the count is known", async () => {
-    // A static-markup render with no `unmatchedCount` prop is the "not yet
-    // answered" moment every other lazy shelf count respects (app-root.tsx's
-    // `countFor`, `duplicates.count()`) — `undefined`/`null` must read as
-    // unread, never as a zero the caller never actually checked.
+    // No `unmatchedCount` is unread, never a zero the caller never checked.
     const { PeopleShelf } = await importPeople(PEOPLE_PATH);
     const html = renderToStaticMarkup(
       createElement(PeopleShelf, { people: [], assets: [], onOpen: () => {} })
@@ -140,12 +113,7 @@ describe("the pending note carries the live unmatched count (proto :4433)", () =
 
 describe("a confirmed person with no display name is never invented", () => {
   it("prints nothing rather than a placeholder string for a name-less row", async () => {
-    // `queries/people.ts` types `name` as nullable defensively, but the one
-    // command that can mint a person (`people.create`) requires
-    // `display_name` with `minLength: 1` — this case cannot occur from a
-    // real read. A fallback string ("Someone with no name yet") would pretend
-    // to handle a case the query never produces; this asserts the shelf
-    // invents no prose for it.
+    // `people.create` requires `display_name` minLength 1 — do not invent fallback prose for a name-less row the query never produces.
     const { container } = await mount({
       people: [{ party_id: "p1", name: null, count: 3, asset_ids: [] }],
       unmatchedCount: 0,
@@ -173,10 +141,6 @@ describe("unconfirmed proposals render distinct from confirmed people (issue #71
       unmatchedCount: 3,
       onNameProposal: () => {},
     });
-    // The confirmed person's own name is fine; what must never appear is a
-    // name attributed to the proposal. There is no name to leak here since
-    // FaceProposal carries none, but the card's own copy must say so instead
-    // of a name.
     expect(container.textContent).toContain("Ana");
     expect(container.textContent).toContain("Not yet named");
   });
@@ -211,9 +175,7 @@ describe("unconfirmed proposals render distinct from confirmed people (issue #71
   });
 
   it("renders no proposal cards when the caller has not wired onNameProposal", async () => {
-    // A control with no working handler must never ship (hard rule) — if the
-    // caller has not passed the routing callback yet, the shelf omits the
-    // proposal cards entirely rather than rendering dead buttons.
+    // No `onNameProposal` → omit proposal cards rather than dead buttons.
     const { container } = await mount({
       people: [],
       proposals: [proposal()],

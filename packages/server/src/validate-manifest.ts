@@ -1,7 +1,7 @@
-// Gateway-side app-manifest validation (#137).
-// The publish gate (`publishAndReconcile`) and the apps-store publish route both
-// call `validateManifestAt` before a draft goes live, so a structurally-broken
-// or replay-unsafe app is rejected at publish time rather than at run/fire time.
+// Gateway-side app-manifest validation (#137). `publishAndReconcile` and the
+// apps-store publish route both call `validateManifestAt` before a draft goes
+// live, so a structurally-broken or replay-unsafe app is rejected at publish
+// rather than at run/fire time.
 
 import { promises as fs } from "node:fs";
 import type * as TypeImport_g9tn66 from "node:fs";
@@ -25,13 +25,7 @@ function findFirstInOrder<T, R>(
   return visit(0);
 }
 
-/**
- * Validate an app dir's `app.json` and the files it declares. Returns a
- * human-readable error string on the first problem, or `undefined` when the app
- * is publishable. Covers: parseable manifest, every declared action/query has
- * its `.js`, and — for automation apps — every `automations/<id>/automation.json`
- * parses against the automation manifest schema and every handler is replay-safe.
- */
+/** First human-readable error, or `undefined` when publishable. */
 export async function validateManifestAt(
   appDir: string,
   options: { releaseManagedModelBundle?: boolean } = {}
@@ -65,20 +59,11 @@ export async function validateManifestAt(
       : `app.json declares query "${query.name}" but queries/${query.name}.js does not exist`
   );
   if (queryError) return queryError;
-  // Automation apps carry handlers under `automations/<id>/handler.js` that run
-  // under the #166 journal/replay runtime — they must be deterministic between
-  // ctx.* calls. Lint each for replay-unsafe patterns (#167) so a bad
-  // handler is rejected at publish time, not silently mis-resumed at fire time.
+  // Handlers run under #166 replay — lint for unsafe patterns (#167) at
+  // publish, not silently mis-resumed at fire.
   if (manifest.kind === "automation") {
-    // Every `automations/<id>/automation.json` must itself parse against
-    // @centraid/server/automation's manifest schema (trigger shapes, vault scopes,
-    // cron exprs, webhook slugs, …). The dedicated POST /centraid/_automations
-    // create route already validates this on the way in, but the generic
-    // draft file-write route (PUT /centraid/_apps/<id>/files/<path>) — how the
-    // builder's trigger editor applies changes — does not, so a malformed
-    // edit could otherwise ride straight through publish and only fail later
-    // at fire/schedule time. Check before linting handlers so a manifest
-    // error surfaces first.
+    // PUT /centraid/_apps/<id>/files/<path> (builder trigger editor) does not
+    // validate automation.json — check here before linting handlers.
     const manifestError = await validateAutomationManifestsAt(appDir);
     if (manifestError) return manifestError;
     // Generated recognition handlers include audited third-party model/PDF
@@ -90,20 +75,12 @@ export async function validateManifestAt(
       : await lintAutomationHandlersAt(appDir);
     if (handlerError) return handlerError;
   }
-  // No design-token contract check runs here (#799): a code-store app
-  // ships no stylesheet for a gateway to serve, and the eight bundled apps'
-  // CSS is checked in this repo by the design gates instead.
+  // No design-token contract check here (#799): a code-store app ships no
+  // stylesheet for a gateway to serve; bundled-app CSS is the design gates'.
   return undefined;
 }
 
-/**
- * Parse-validate every `automations/<id>/automation.json` in an automation
- * app dir against `@centraid/server/automation`'s `parseManifest`. Mirrors
- * {@link lintAutomationHandlersAt}'s directory walk. Returns the first
- * manifest's formatted error, or `undefined` when all are valid (or none
- * exist — structural gaps like a missing manifest are a builder concern,
- * not this validator's).
- */
+/** Missing manifests are a builder concern, not this validator's. */
 async function validateAutomationManifestsAt(
   appDir: string
 ): Promise<string | undefined> {
@@ -137,11 +114,6 @@ async function validateAutomationManifestsAt(
   );
 }
 
-/**
- * Run the replay-safety lint over every `automations/<id>/handler.js` in an
- * automation app dir. Returns the first handler's formatted authoring error,
- * or `undefined` when all handlers are clean (or none exist).
- */
 async function lintAutomationHandlersAt(
   appDir: string
 ): Promise<string | undefined> {
