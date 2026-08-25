@@ -1,103 +1,49 @@
-// Face grouping (#724): the pass that turns a pile of detected face
-// regions into two useful things — "this looks like Ana, is it?" and "here are
-// eleven photographs of somebody you have not named".
+// Face grouping (#724). PARTY-ANCHORED: identity is a `core_party` row the
+// owner asserts via `media.answer_face_proposal`; this module never creates or
+// confirms one. It only writes candidate `party_id`s onto PROPOSED regions and
+// groups the rest into `media_face_cluster`, a rebuildable projection.
 //
-// PARTY-ANCHORED, WHICH IS THE WHOLE DESIGN. Identity in this vault is a
-// `core_party` row, asserted by the owner through `media.answer_face_proposal`
-// and recorded on `media_face_region.party_id` / `.confirmed_by_party_id`.
-// This module never creates an identity and never confirms one. It does two
-// strictly weaker things:
+// ANSWERED REGIONS ARE READ FOR NOTHING — `rejected`/`dismissed` are never
+// centroid material, candidates, or targets: a queue whose answers the next
+// sweep can undo can never be finished (#712).
 //
-//   1. CENTROID MATCH. For every party the owner has already confirmed a face
-//      for, average that party's confirmed face vectors. An unassigned
-//      PROPOSED region close to exactly one such centroid gets that party
-//      written onto it — still `review_state = 'proposed'`, so it lands in the
-//      review queue the app already has, as the question "is this Ana?" rather
-//      than as an answer. The owner's `confirmed` rows are never touched, and
-//      the shape of the row is exactly what `media_face_region`'s CHECKs
-//      already call an enricher's candidate.
-//   2. STRANGER GROUPING. Whatever is left — proposed, unnamed, unmatched —
-//      is grouped against itself and the groups are written to
-//      `media_face_cluster`, a rebuildable projection (schema/enrich.ts). A
-//      group is a naming affordance, not a person: it exists so a People shelf
-//      can offer "name this one" over eleven faces instead of eleven times.
+// EVERY COMPARISON HAPPENS WITHIN ONE MODEL: cosine distance across embedders
+// is meaningless, so the pass partitions by `enrich_embedding.model` and a
+// model upgrade re-proposes rather than inheriting dead centroids.
 //
-// WHAT IS NEVER RE-PROPOSED. A `rejected` or `dismissed` region has been
-// answered. The DDL already refuses it a party (`review_state IN
-// ('proposed','confirmed') OR party_id IS NULL`), and this pass honours the
-// same fact one level up: answered regions are read for NOTHING — not as
-// centroid material, not as clustering candidates, not as assignment targets.
-// A queue whose answers can be undone by the next sweep is a queue that can
-// never be finished (#712).
+// THE THRESHOLDS ARE STRICTER THAN THE LITERATURE, ON PURPOSE: a false merge
+// is found late and destroys trust; a false split costs one gesture.
 //
-// EVERY COMPARISON HAPPENS WITHIN ONE MODEL. Cosine distance between vectors
-// from two different embedders is a number with no meaning. So the pass
-// partitions regions by `enrich_embedding.model` and runs independently per
-// model. The visible consequence of a model upgrade is therefore that faces
-// re-propose rather than silently inheriting centroids computed in a vector
-// space that no longer exists — slower, and the only honest option.
-//
-// THE THRESHOLDS ARE STRICTER THAN THE LITERATURE, ON PURPOSE. Published face
-// embedders are usually tuned at a cosine distance around 0.4, which balances
-// false merges against false splits as if the two cost the same. They do not.
-// A false merge tells a member their library contains a photograph of their
-// sister that is actually a stranger, and it is discovered — if it ever is —
-// long after they trusted the grouping; a false split costs one gesture to
-// merge two shelves. So both constants below sit well inside the published
-// operating point, and the stranger-grouping one is stricter still, because a
-// stranger group is named in ONE act: a bad merge there mislabels every face
-// in it at once.
-//
-// NO CHAINING. Stranger grouping is greedy agglomerative on CENTROID linkage,
-// not the single-link union-find `clusters.ts` uses for phashes. Single-link
-// is right for near-duplicate images (A~B~C really is one burst) and wrong for
-// faces: a chain of pairwise-similar faces walks from one person to another
-// through the people who look a bit like both. Candidate pairs are visited in
-// ascending-distance order with ids as the tiebreak, and a merge is refused
-// when the two groups' centroids are farther apart than the threshold — so the
-// result depends on the data alone and a rebuild is byte-stable.
-
+// NO CHAINING: greedy agglomerative on CENTROID linkage, never the single-link
+// union-find of `clusters.ts`, which would walk from one person to another
+// through faces resembling both. Ascending distance, id tiebreak, so a rebuild
+// is byte-stable.
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso } from "../ids.js";
 import { cosine, decodeVector } from "./similarity.js";
 
-/** The logical entity a face embedding is keyed by (`schema/tables.ts`). */
 export const FACE_REGION_TARGET_TYPE = "media.face_region";
 
-/**
- * Cosine distance within which an unnamed proposed face may be offered to the
- * member as a named party's. Conservative — see the header. Asking "is this
- * Ana?" about a stranger costs one tap; the alternative failure, quietly
- * filing a stranger under a name, is the one that destroys trust in the shelf.
- */
+/** Offer-as-party ceiling; see the header before relaxing it. */
 export const FACE_PARTY_MAX_DISTANCE = 0.3;
 
-/**
- * Cosine distance within which two UNNAMED faces may be grouped together.
- * Stricter than the party threshold because a stranger group is named in one
- * gesture: every false member of it is mislabelled by that single act, whereas
- * a party proposal is reviewed face by face.
- */
+/** Stricter still: a stranger group is named in ONE gesture. */
 export const FACE_CLUSTER_MAX_DISTANCE = 0.22;
 
 /**
- * How many faces make a group worth offering. A lone unmatched face is not a
- * person to name from a shelf — it is one face on one photograph, named from
- * that photograph's own review. Grouping it alone would fill the People shelf
- * with strangers seen once, which is the shelf's own version of the fake
- * "Categories" grid the mobile Collections page deleted.
+ * A lone face is named from its own photograph's review; grouping singletons
+ * would fill the People shelf with strangers seen once.
  */
 export const FACE_MIN_CLUSTER_SIZE = 2;
 
 export interface FaceClusterResult {
   /** Proposed regions this pass wrote a candidate party onto. */
   matched: number;
-  /** Distinct unnamed groups of `FACE_MIN_CLUSTER_SIZE`+ regions. */
   clusters: number;
-  /** Regions that landed in some group (excludes ungrouped singletons). */
+  /** Excludes ungrouped singletons. */
   clustered: number;
-  /** `media_face_cluster` rows actually inserted, updated or deleted. */
+  /** Rows actually inserted, updated or deleted. */
   updated: number;
 }
 
@@ -116,9 +62,8 @@ interface Candidate {
 }
 
 /**
- * L2-normalise once so every later comparison is a dot product and a centroid
- * is a plain mean. A zero vector cannot be normalised and cannot be compared;
- * it is dropped rather than given an arbitrary direction.
+ * L2-normalise once, so comparisons are dot products and centroids plain
+ * means. A zero vector is dropped, never given an arbitrary direction.
  */
 function unitOf(blob: Uint8Array): Float32Array | null {
   const values = decodeVector(Buffer.from(blob));
@@ -131,7 +76,6 @@ function unitOf(blob: Uint8Array): Float32Array | null {
   return unit;
 }
 
-/** Mean of unit vectors, itself re-normalised. `null` for an empty set. */
 function centroidOf(members: readonly Float32Array[]): Float32Array | null {
   const first = members[0];
   if (!first) return null;
@@ -145,23 +89,21 @@ function centroidOf(members: readonly Float32Array[]): Float32Array | null {
   return Float32Array.from(sum, (value) => value * scale);
 }
 
-/** 1 - cosine similarity. Incomparable widths are "as far apart as possible". */
+/** Incomparable widths are "as far apart as possible". */
 function distance(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) return 2;
   return 1 - cosine(a, b);
 }
 
 interface Group {
-  /** Member region ids, kept sorted so the lowest is the group's identity. */
+  /** Kept sorted: the lowest id is the group's identity. */
   members: string[];
   centroid: Float32Array;
 }
 
 /**
- * Greedy centroid-linkage agglomerative clustering over unit vectors. Pairs
- * are considered in ascending distance, ties broken by region id, so the
- * output is a pure function of the input — no `Math.random`, no wall clock,
- * no map-iteration order leaking into the answer.
+ * Ascending distance, ties broken by region id: the output must stay a pure
+ * function of the input — no clock, no map-iteration order.
  */
 function agglomerate(
   candidates: readonly Candidate[],
@@ -174,10 +116,8 @@ function agglomerate(
       centroid: candidate.unit,
     });
   }
-  // Every pair once, cheapest first. A personal library's face count is in the
-  // thousands, so the quadratic pass is milliseconds and buys an exact answer;
-  // the phash sidecar's band index exists because ITS input is the whole
-  // library of photographs, which is an order of magnitude larger.
+  // Quadratic is fine here: face counts run to thousands, unlike the phash
+  // sidecar whose input is the whole library.
   const pairs: { a: string; b: string; d: number }[] = [];
   for (let i = 0; i < candidates.length; i += 1)
     for (let j = i + 1; j < candidates.length; j += 1) {
@@ -195,9 +135,8 @@ function agglomerate(
     return x.b < y.b ? -1 : 1;
   });
 
-  // Every region maps to its group's key; a merge rewrites the absorbed
-  // group's members rather than leaving a chain to follow, so lookup is one
-  // hop and the map is always the whole truth.
+  // A merge rewrites the absorbed group's members rather than leaving a chain,
+  // so lookup stays one hop.
   const rootOf = new Map<string, string>();
   for (const candidate of candidates)
     rootOf.set(candidate.regionId, candidate.regionId);
@@ -210,9 +149,8 @@ function agglomerate(
     const ga = groups.get(ra);
     const gb = groups.get(rb);
     if (!ga || !gb) continue;
-    // THE NO-CHAINING RULE (see the header): two groups merge only when their
-    // centroids are themselves within the threshold, so similarity cannot walk
-    // from one person to another through a face that resembles both.
+    // THE NO-CHAINING RULE (header): merge only when the two CENTROIDS are
+    // themselves within the threshold.
     if (distance(ga.centroid, gb.centroid) > threshold) continue;
     const members = [...ga.members, ...gb.members].sort();
     const centroid = centroidOf(
@@ -221,9 +159,8 @@ function agglomerate(
         .filter((u): u is Float32Array => u !== undefined)
     );
     if (!centroid) continue;
-    // The lowest region id is the group's identity, here and in the projection
-    // — the same rule `clusters.ts` and `memories.ts` use, so an unchanged
-    // group never renames itself between passes.
+    // Lowest region id is the identity here and in the projection, so an
+    // unchanged group never renames itself between passes.
     const survivor = members[0] as string;
     groups.delete(ra);
     groups.delete(rb);
@@ -236,15 +173,9 @@ function agglomerate(
 }
 
 /**
- * Recompute face grouping over LIVE (non-trashed) photographs: match unnamed
- * proposals to already-confirmed parties, then group whatever is left with
- * itself into `media_face_cluster`.
- *
- * Safe to call on any cadence and from a cold start — it holds nothing between
- * calls and reads every fact it uses from the vault. Idempotent: a second run
- * over unchanged data writes nothing (compare-then-write, the same rule
- * `clusters.ts` follows, so a steady-state sweep dirties no WAL pages and
- * wakes no replica).
+ * Holds nothing between calls, so it is safe on any cadence and from cold.
+ * Idempotent by compare-then-write: unchanged data writes nothing, dirties no
+ * WAL pages, wakes no replica.
  */
 export function rebuildFaceClusters(
   vault: DatabaseSync,
@@ -284,8 +215,7 @@ export function rebuildFaceClusters(
   }
 
   const assign = vault.prepare(
-    // `review_state` is deliberately NOT touched: this writes the enricher's
-    // candidate, and a candidate is a question. Only the owner's own verb
+    // `review_state` is deliberately NOT touched — only the owner's own verb
     // (`media.answer_face_proposal`) moves a region out of 'proposed'.
     "UPDATE media_face_region SET party_id = ? WHERE region_id = ? AND review_state = 'proposed'"
   );
@@ -294,9 +224,8 @@ export function rebuildFaceClusters(
   for (const model of [...byModel.keys()].sort()) {
     const group = byModel.get(model) as RegionRow[];
 
-    // (a) Centroids from the owner's own confirmations. `party_id` is WHO the
-    // face is; `confirmed_by_party_id` is who said so — a different axis, and
-    // grouping on it would fold "confirmed by Sam" into a person called Sam.
+    // Centroids come from the owner's confirmations. `party_id` is WHO the
+    // face is; `confirmed_by_party_id` is who said so — never group on it.
     const confirmedByParty = new Map<string, Float32Array[]>();
     for (const row of group) {
       if (row.review_state !== "confirmed" || !row.party_id) continue;
@@ -314,10 +243,8 @@ export function rebuildFaceClusters(
       if (centroid) centroids.push({ partyId, centroid });
     }
 
-    // (b) Unassigned proposals → the party they are near, when exactly one
-    // party is near at all. Two candidates is not a close call to break with a
-    // tiebreak; it is the case where the enricher does not know, and saying so
-    // by leaving the region unnamed is the honest answer.
+    // Assign only when EXACTLY one party is near: two near parties means the
+    // enricher does not know, and leaving the region unnamed says so.
     const leftovers: Candidate[] = [];
     for (const row of group) {
       if (row.review_state !== "proposed") continue;
@@ -335,7 +262,6 @@ export function rebuildFaceClusters(
       leftovers.push({ regionId: row.region_id, unit });
     }
 
-    // (c) Everything still unnamed groups with itself.
     for (const cluster of agglomerate(leftovers, FACE_CLUSTER_MAX_DISTANCE)) {
       const clusterId = cluster.members[0] as string;
       result.clusters += 1;
@@ -344,11 +270,8 @@ export function rebuildFaceClusters(
   }
   result.clustered = clusterOf.size;
 
-  // Compare-then-write. The projection is conceptually recomputed wholesale —
-  // nothing here reads its own previous output — but only the rows whose
-  // membership actually moved are written, so an unchanged library costs one
-  // read and zero WAL pages, and an offline phone is not woken to be told
-  // nothing changed.
+  // Compare-then-write: the projection is recomputed wholesale (nothing reads
+  // its own previous output) but only moved rows are written.
   const existing = new Map(
     (
       vault

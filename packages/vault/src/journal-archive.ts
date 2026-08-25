@@ -1,42 +1,32 @@
 // governance: allow-repo-hygiene file-size-limit (#367) one coherent archival engine — the eligibility closure, segment builder, hash-chained manifest writer, and its verifier are one integrity unit; splitting the chain-hash writer from its verifier invites drift
-// Journal segment archival (#367 §E2 — the growth-runway work that
-// keeps "defer remote DB hosting to v2" a safe call). journal.db is
-// append-only and grows without bound; this module seals rows past an
-// active window into a content-addressed segment in the vault's blob CAS
-// and keeps only a manifest row (`journal_archive_manifest`, schema/journal.ts)
-// behind — audit-chain verifiability without keeping every row forever.
+// Journal segment archival (#367 §E2). journal.db is append-only and grows
+// without bound; this seals rows past an active window into a content-addressed
+// segment in the vault's blob CAS and keeps only a manifest row
+// (`journal_archive_manifest`) behind — audit-chain verifiability without
+// keeping every row forever.
 //
-// Two archival streams, chosen to match the table's FK topology exactly
-// (journal.db runs `PRAGMA foreign_keys = ON`, so deleting a row a live row
-// still references throws):
+// Two archival streams, matched to the table's FK topology exactly (journal.db
+// runs `PRAGMA foreign_keys = ON`, so deleting a row a live row references
+// throws):
 //
-//   - `provenance` — consent_provenance rows, which self-reference via
-//     `prev_prov_id` and are pointed at by `agent_evidence.prov_id`. A row
-//     archives only when no LIVE row (still-in-window provenance, or
-//     evidence tied to a not-yet-archived invocation) points back at it.
-//
-//   - `invocation_cluster` — agent_command_invocation and consent_receipt
-//     hold MUTUAL foreign keys (`invocation.receipt_id` →
-//     `receipt.receipt_id`, `receipt.invocation_id` → `invocation.invocation_id`),
-//     so neither can be deleted alone under immediate FK checking; both
-//     directions are computed as one linked set with a small fixed-point
-//     closure (`computeEligibleCluster`), and the actual delete runs under
-//     `PRAGMA defer_foreign_keys = ON` (checked at COMMIT, not per-statement)
-//     so the pair can go in either order. `agent_invocation_check`,
-//     `agent_evidence` and `agent_explanation` are true leaves (nothing
-//     references them) and archive with their invocation unconditionally.
+//   - `provenance` — `consent_provenance` self-references via `prev_prov_id`
+//     and is pointed at by `agent_evidence.prov_id`, so a row archives only
+//     when no LIVE row still points back at it.
+//   - `invocation_cluster` — `agent_command_invocation` and `consent_receipt`
+//     hold MUTUAL foreign keys, so neither can be deleted alone under immediate
+//     checking. Both directions are computed as one linked set by a fixed-point
+//     closure (`computeEligibleCluster`) and deleted under
+//     `PRAGMA defer_foreign_keys = ON`, so order does not matter.
+//     `agent_invocation_check`, `agent_evidence` and `agent_explanation` are
+//     true leaves and archive with their invocation unconditionally.
 //
 // Segments are gzip(JSON) written through `db.blobs.ingestSync` — the SAME
 // local CAS every other blob uses (#296) — so `readArchivedSegment` /
 // `verifyArchivedSegment` are the round-trip and integrity proof.
 //
-// NEEDS-WIRING (see #367 report): nothing calls `runJournalArchival`
-// automatically. `VaultPlane.runSweep` (packages/server/src/serve/vault-plane.ts)
-// is the natural home, alongside its existing sweep cadence — that file is
-// owned by a concurrent change in this worktree, so this module ships as a
-// standalone, fully-tested engine the host wires in a later pass. A vault
-// that never calls this never archives (window-gated AND call-gated), so
-// fresh dev vaults are unaffected either way.
+// NEEDS-WIRING (#367): nothing calls `runJournalArchival` automatically.
+// `VaultPlane.runSweep` is the natural home. Archival is window-gated AND
+// call-gated, so a vault that never calls this never archives.
 
 import type { DatabaseSync } from "node:sqlite";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -49,13 +39,11 @@ import { nowIso, sha256Hex, uuidv7 } from "./ids.js";
 export const DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS = 90;
 
 /**
- * Invocations (and, separately, provenance rows) one run may seal (issue
- * #659 L2). Before this cap the engine read EVERY eligible row of five
- * tables into JS, closed over them, and gzipped the lot in one shot — a
- * first archival on a vault with a year of history was an unbounded memory
- * spike and a multi-second stall. The cap mirrors the ledger prune's
- * `maxSegments` (#438): a pass does bounded work and reports `capped`
- * so the host can simply come back.
+ * Invocations (and, separately, provenance rows) one run may seal (#659 L2).
+ * Without a cap the engine reads EVERY eligible row of five tables into JS and
+ * gzips the lot, so a first archival over a year of history is an unbounded
+ * memory spike and a multi-second stall. Mirrors the ledger prune's
+ * `maxSegments` (#438): bounded work, and `capped` tells the host to return.
  */
 export const DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS = 5_000;
 
@@ -81,12 +69,8 @@ export interface JournalArchiveManifestRow {
 export interface JournalArchivalOptions {
   /** Rows fully older than this many days from `now` are eligible. Default 90. */
   windowDays?: number;
-  /** Override "now" — tests only. */
   now?: string;
-  /**
-   * Cap on the invocations, and separately the provenance rows, one run may
-   * seal. Default `DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS`.
-   */
+  /** Default `DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS`. */
   maxRowsPerRun?: number;
 }
 
@@ -96,8 +80,8 @@ export interface JournalArchivalResult {
   rowsArchived: number;
   reclaim: { mode: "incremental" | "none"; ranVacuum: boolean };
   /**
-   * `true` when a stream hit `maxRowsPerRun` — there is more to archive and
-   * the host should run again rather than wait for the next daily gate.
+   * A stream hit `maxRowsPerRun`: there is more to archive and the host should
+   * run again rather than wait for the next daily gate.
    */
   capped: boolean;
 }
@@ -105,19 +89,16 @@ export interface JournalArchivalResult {
 export interface ArchivedSegmentRows {
   version: number;
   stream: JournalArchiveStream;
-  /** Physical table name → the exact rows deleted from it (`SELECT *` shape). */
+  /** Physical table name → the exact rows deleted (`SELECT *` shape). */
   rows: Record<string, Record<string, unknown>[]>;
 }
 
 export interface ArchiveVerification {
   manifestId: string;
-  /** The blob CAS still has the segment locally. */
   segmentPresent: boolean;
-  /** sha256(segment bytes) matches `manifest.segmentSha256`. */
   segmentHashOk: boolean;
-  /** Recomputed chain_hash (folding the prior manifest's) matches the stored one. */
+  /** Recomputed chain_hash (folding the prior manifest's) matches. */
   chainHashOk: boolean;
-  /** The segment's total row count matches `manifest.rowCount`. */
   rowCountOk: boolean;
   ok: boolean;
 }
@@ -188,20 +169,17 @@ function selectColumnsByIds<T>(
 
 /**
  * The invocation⇄receipt mutual-FK closure: start from the OLDEST `maxRows`
- * invocations old enough by their own clock, then drop any invocation whose
- * linked receipt (either FK direction) is too young, missing, or shared with
- * an invocation that isn't eligible.
+ * invocations old enough by their own clock, then drop any whose linked receipt
+ * (either FK direction) is too young, missing, or shared with an ineligible
+ * invocation.
  *
- * Two shapes changed in #659 L2, both behaviour-preserving:
- *
- *   - the link and receipt-time maps are built from id-scoped queries over the candidate
- *     set and the receipts it touches, not from two FULL scans of
- *     `consent_receipt` and `agent_command_invocation`;
- *   - the fixed point is reached by a WORKLIST rather than by rescanning the
- *     whole eligible set after every removal. Removing an invocation can only
- *     make its receipts' OTHER referrers ineligible, so those are exactly the
- *     invocations that need re-examining. Same least/greatest fixed point,
- *     linear in edges instead of quadratic in candidates.
+ * Two shapes are load-bearing for cost (#659 L2). The link and receipt-time
+ * maps are built from id-scoped queries over the candidate set, never from full
+ * scans of `consent_receipt` and `agent_command_invocation`. And the fixed
+ * point uses a WORKLIST rather than rescanning the eligible set after every
+ * removal: removing an invocation can only make its receipts' OTHER referrers
+ * ineligible, so those are exactly what needs re-examining — same fixed point,
+ * linear in edges instead of quadratic in candidates.
  */
 function computeEligibleCluster(
   journal: DatabaseSync,
@@ -254,8 +232,8 @@ function computeEligibleCluster(
   for (const r of receiptsOfCandidates) touchedReceiptIds.add(r.receipt_id);
   const receiptIdList = [...touchedReceiptIds];
 
-  // …and every invocation that touches one of THOSE receipts, candidate or
-  // not: an outside referrer is exactly what blocks a shared receipt.
+  // …and every invocation touching one of THOSE receipts, candidate or not: an
+  // outside referrer is exactly what blocks a shared receipt.
   const receiptRows = selectColumnsByIds<{
     receipt_id: string;
     invocation_id: string | null;
@@ -334,8 +312,7 @@ function computeEligibleCluster(
 
 /**
  * prov_id values a LIVE (not-being-archived) agent_evidence row still points
- * at, restricted to the candidates in hand (#659 L2 — this used to
- * scan all of `agent_evidence` regardless of how few rows were in play).
+ * at, restricted to the candidates in hand — never a full scan (#659 L2).
  */
 function liveEvidenceProvRefs(
   journal: DatabaseSync,
@@ -385,17 +362,14 @@ interface SegmentBuild {
 }
 
 /**
- * Serialize a segment row-by-row instead of `JSON.stringify`-ing the whole
- * payload (#659). One `stringify` over every archived row builds a
- * single string as large as the segment — on top of the row objects it is
- * built from — and only then copies it into a Buffer, so peak memory was
- * roughly three times the segment. Encoding per row keeps the peak at one
- * row plus the accumulated chunks, and the run cap
- * (`DEFAULT_JOURNAL_ARCHIVE_MAX_ROWS`) is what bounds the accumulation.
+ * Serialize row-by-row instead of `JSON.stringify`-ing the whole payload
+ * (#659): one stringify builds a string as large as the segment on top of the
+ * row objects, then copies it into a Buffer, so peak memory was ~3x the
+ * segment. Per-row encoding keeps the peak at one row plus the accumulated
+ * chunks, bounded by the run cap.
  *
- * The output is byte-identical to `JSON.stringify(payload)` for the payload
- * shape declared by `ArchivedSegmentRows`, so a segment written before this
- * change and one written after decode the same way.
+ * The output is byte-identical to `JSON.stringify(payload)` for the
+ * `ArchivedSegmentRows` shape, so segments written either way decode the same.
  */
 function gzipJson(payload: ArchivedSegmentRows): Buffer {
   const chunks: Buffer[] = [];
@@ -569,12 +543,10 @@ function reclaimModeOf(journal: DatabaseSync): "incremental" | "none" {
 }
 
 /**
- * Reclaim pages the deletes above freed. `journal.db` is opened with
- * `PRAGMA auto_vacuum = INCREMENTAL` (db.ts openFile + app-engine's openJournalDb,
- * #438), so `incremental_vacuum` returns the freelist to the OS without
- * rewriting the whole file. Open-time database setup converts any pre-#438
- * file before this path runs; archival never falls back to a whole-file
- * `VACUUM`.
+ * Reclaim the pages the deletes freed. `journal.db` is opened with
+ * `PRAGMA auto_vacuum = INCREMENTAL` (#438), so `incremental_vacuum` returns
+ * the freelist to the OS without rewriting the file. Open-time setup converts
+ * any pre-#438 file first; archival never falls back to a whole-file `VACUUM`.
  */
 function reclaimSpace(journal: DatabaseSync): {
   mode: "incremental" | "none";
@@ -593,10 +565,10 @@ function reclaimSpace(journal: DatabaseSync): {
 }
 
 /**
- * Every archive segment the manifest chain still references. These blobs
- * are CLAIMED — they must join `liveBlobShas()`'s set wherever custody
- * reconciliation or purge runs, or the remote reconcile sweep would read
- * them as orphans and delete the only durable copy of archived journal rows.
+ * Every archive segment the manifest chain still references. These blobs are
+ * CLAIMED and MUST join `liveBlobShas()`'s set wherever custody reconciliation
+ * or purge runs, or the remote sweep reads them as orphans and deletes the only
+ * durable copy of archived journal rows.
  */
 export function archivedSegmentShas(journal: DatabaseSync): Set<string> {
   const shas = new Set<string>();
@@ -610,10 +582,9 @@ export function archivedSegmentShas(journal: DatabaseSync): Set<string> {
 }
 
 /**
- * Seal journal rows past the active window into CAS segments, recording a
- * manifest for each stream that produced one, then delete the archived rows
- * and reclaim pages. A no-op (empty result, no CAS writes) when nothing in
- * either stream is old enough — always true for a fresh vault.
+ * Seal journal rows past the active window into CAS segments, record a manifest
+ * per stream, then delete the archived rows and reclaim pages. A no-op with no
+ * CAS writes when nothing is old enough — always true for a fresh vault.
  */
 export function runJournalArchival(
   db: VaultDb,
@@ -631,7 +602,7 @@ export function runJournalArchival(
   const cutoff = daysBeforeIso(now, windowDays);
   const journal = db.journal;
 
-  // Phase 1 — compute eligibility. Reads only; no lock held past each query.
+  // Phase 1 — eligibility. Reads only; no lock held past each query.
   const cluster = computeEligibleCluster(journal, cutoff, maxRows);
   const clusterTables: ClusterTables | null =
     cluster.invocationIds.size > 0
@@ -692,9 +663,9 @@ export function runJournalArchival(
     };
   }
 
-  // Phase 2 — write segments to the local CAS (idempotent by content
-  // address) BEFORE opening the SQL write transaction, so the write lock's
-  // held window is just the manifest insert + deletes.
+  // Phase 2 — write segments to the local CAS (idempotent by content address)
+  // BEFORE opening the write transaction, so the lock's held window is just the
+  // manifest insert plus the deletes.
   const provIngest = provSeg ? db.blobs.ingestSync(provSeg.bytes) : null;
   const clusterIngest = clusterSeg
     ? db.blobs.ingestSync(clusterSeg.bytes)
@@ -705,9 +676,8 @@ export function runJournalArchival(
 
   journal.exec("BEGIN");
   try {
-    // Deferred FK checking (checked at COMMIT, not per-statement) is what
-    // makes the invocation⇄receipt mutual reference deletable at all — see
-    // the module header.
+    // Deferred FK checking is what makes the invocation⇄receipt mutual
+    // reference deletable at all — see the module header.
     journal.exec("PRAGMA defer_foreign_keys = ON");
 
     if (provSeg && provIngest) {
@@ -757,7 +727,7 @@ export function runJournalArchival(
         "explanation_id",
         clusterTables.agent_explanation.map((r) => r.explanation_id as string)
       );
-      // The mutual pair — order doesn't matter under defer_foreign_keys.
+      // The mutual pair — order is free under defer_foreign_keys.
       deleteByIds(
         journal,
         "consent_receipt",
@@ -800,7 +770,6 @@ function rowToManifest(row: Row): JournalArchiveManifestRow {
   };
 }
 
-/** One manifest by id, or undefined. */
 export function findArchiveManifest(
   journal: DatabaseSync,
   manifestId: string
@@ -811,7 +780,7 @@ export function findArchiveManifest(
   return row ? rowToManifest(row) : undefined;
 }
 
-/** Every archive manifest, oldest first — the audit trail of what got sealed away. */
+/** Oldest first — the audit trail of what got sealed away. */
 export function listArchiveManifests(
   journal: DatabaseSync,
   stream?: JournalArchiveStream
@@ -830,7 +799,6 @@ export function listArchiveManifests(
   return rows.map(rowToManifest);
 }
 
-/** Decode one archived segment back into its rows — the round-trip read. */
 export function readArchivedSegment(
   db: VaultDb,
   manifest: JournalArchiveManifestRow
@@ -845,10 +813,9 @@ export function readArchivedSegment(
 }
 
 /**
- * Prove one manifest's segment is intact and its position in the chain is
- * genuine: the CAS still has the bytes, their sha256 matches the manifest,
- * the decoded row count matches, and the manifest's own chain_hash
- * recomputes correctly from its predecessor. Never mutates anything.
+ * Prove one manifest's segment is intact and its chain position genuine: the
+ * CAS still has the bytes, their sha256 matches, the decoded row count matches,
+ * and `chain_hash` recomputes from its predecessor. Never mutates anything.
  */
 export function verifyArchivedSegment(
   db: VaultDb,

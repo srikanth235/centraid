@@ -1,43 +1,10 @@
 /**
- * Worker entry that executes a user handler (queries / actions).
- *
- * Trust model: app code is **trusted local code** authored by the same user
- * running the gateway (see plugin README). The worker boundary here gives us
- *  - crash isolation (handler exception doesn't take down the plugin)
- *  - timeout enforcement (parent terminates worker on overrun)
- *  - a controlled API surface (ctx.vault is just message passing)
- *
- * That is narrowed (#842): before the handler graph is imported, this
- * worker installs the app-handler sandbox (`../sandbox/install.ts`), which
- * refuses every node builtin outside a computational allowlist (no `fs`, no
- * `net`, no `child_process`, no `module`), revokes ambient network globals,
- * and empties `process.env`. Network reach survives only as the governed
- * `ctx.fetch` capability, which holds the pre-revocation `fetch` privately.
- *
- * It is still NOT an OS sandbox: handler code shares this process's address
- * space, descriptors and uid, and a native addon would escape every check.
- * The full, per-mechanism limits are in `../sandbox/install.ts` — read them
- * before describing this boundary in a threat model.
- *
- * The handler's only data door is `ctx.vault` (#286 phase 2: apps are
- * projections over the owner's vault; there is no per-app data.sqlite).
- * Every call is async message passing to the parent, which holds the
- * credential and enforces consent.
- *
- * Warm-spare pooling (#404): a worker runs EXACTLY ONE handler and is
- * then discarded — the parent never reuses a worker across handler runs, so a
- * handler always executes in a thread whose module registry has imported no
- * other handler (isolation identical to the spawn-per-run model). Two boot
- * shapes:
- *  - **inline** — `workerData` carries `{ handlerFile, handlerKind, args }`;
- *    the worker imports and runs immediately (legacy path, still used by any
- *    direct caller / test).
- *  - **pooled** — `workerData` is `{ pooled: true }`; the worker finishes
- *    booting (thread start + this module's evaluation — the cost the pool
- *    pays ahead of time), posts `{ type: 'ready' }`, then waits for a single
- *    `{ type: 'run', request }` message carrying the handler to execute. The
- *    warmth win is that the expensive boot happens on a spare thread while a
- *    previous request runs, off the acquiring request's critical path.
+ * Worker entry that executes one user handler. The app-handler sandbox is
+ * installed before the handler graph is imported (#842), so network reach
+ * survives only as `ctx.fetch` and the only data door is `ctx.vault`. It is
+ * still NOT an OS sandbox — read `../sandbox/install.ts`'s limits before
+ * describing this boundary in a threat model. A worker runs EXACTLY ONE
+ * handler and is discarded (#404), so no thread ever imports two.
  */
 
 import { existsSync } from "node:fs";
@@ -46,12 +13,6 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parentPort, workerData } from "node:worker_threads";
 
-/**
- * Load the sandbox bootstrap by absolute path. A plain `../sandbox/boot.js`
- * specifier does not resolve when this worker runs from `src/` under native
- * type stripping (see the header of `sandbox/boot.ts`), so the `.js`/`.ts`
- * choice is made here the same way `ensureTsLoader` makes it below.
- */
 async function loadSandboxBoot(): Promise<typeof import("../sandbox/boot.js")> {
   const dir = path.join(import.meta.dirname, "..", "sandbox");
   const js = path.join(dir, "boot.js");
@@ -61,22 +22,9 @@ async function loadSandboxBoot(): Promise<typeof import("../sandbox/boot.js")> {
   )) as typeof import("../sandbox/boot.js");
 }
 
-/**
- * The real `fetch`, captured at module evaluation — before the sandbox revokes
- * the global. `ctx.fetch` closes over this binding, so the handler's only
- * network reach is the capability the host hands it, never ambient authority.
- */
+/** Captured BEFORE the sandbox revokes the global. */
 const hostFetch = globalThis.fetch;
 
-/**
- * Install the `.ts`/`.tsx` module-customization hooks (worker/ts-loader-hooks)
- * exactly once, lazily — only when this worker is about to run a TypeScript
- * handler. A `.js`-only dispatch never registers them, so the native import
- * path is byte-for-byte unchanged. The hooks module is a `.ts` source compiled
- * to `dist/worker/ts-loader-hooks.js`; resolve the `.js` under compiled dist
- * and fall back to the `.ts` under the tsx test loader, mirroring
- * handler-runner's `resolveWorkerFile`.
- */
 let tsLoaderRegistered = false;
 function ensureTsLoader(): void {
   if (tsLoaderRegistered) return;
@@ -96,7 +44,6 @@ interface WorkerRequest {
   timeModuleUrl?: string;
 }
 
-/** Parent → pooled-worker kickoff carrying the handler to run. */
 interface RunMessage {
   type: "run";
   request: WorkerRequest;
@@ -163,17 +110,12 @@ port.on("message", (msg: VaultReplyMessage | RunMessage) => {
       pending.reject(err);
     }
   } else if (msg.type === "run") {
-    // Pooled kickoff — exactly one per worker (single-use, see header).
     execute(msg.request);
   }
 });
 
-// ---- ctx.vault — a second RPC channel beside `db`, aimed at the owner's
-// personal vault. Same round-trip mechanism, separate id space and message
-// type. The parent resolves the running app to its vault credential and
-// enforces consent before touching anything; a refusal rejects with the
-// receipt id in the message and a machine `code` ('VAULT_CONSENT',
-// 'VAULT_UNAVAILABLE', …). No key or file handle ever enters this thread.
+// The parent enforces consent; a refusal rejects with the receipt id and a
+// machine `code`. No key or file handle ever enters this thread.
 
 let nextVaultCallId = 1;
 const pendingVaultCalls = new Map<
@@ -194,58 +136,35 @@ function vaultCall(
 }
 
 const vault = {
-  /** Consent-checked read of a canonical entity: `{entity, where?, limit?, purpose}`. */
   read(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("read", request);
   },
-  /**
-   * Full-text search over a text-indexed entity:
-   * `{entity, query, where?, limit?, purpose}` → ranked `{rows, receiptId}`,
-   * each row carrying `_snippet` (matched fragment, hits marked `⟦…⟧`).
-   * Matching runs inside the vault's FTS5 index — never read a whole
-   * entity to grep it in memory.
-   */
   search(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("search", request);
   },
-  /** Typed-command invocation: `{command, input, purpose}` → outcome `{status, output, …}`. */
   invoke(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("invoke", request);
   },
-  /** Query a registered app view, clamped to this app's grants. */
   query(view: string, purpose: string): Promise<unknown> {
     return vaultCall("query", { view, purpose });
   },
-  /** Commands discoverable by this app (name, schema, risk, confirmation). */
   describe(): Promise<unknown> {
     return vaultCall("describe", {});
   },
-  /**
-   * This app's own invocations awaiting owner confirmation — the "my
-   * pending approvals" surface (#260), so a parked request-booking or
-   * send can render as durable state instead of a session-local guess.
-   */
   parked(): Promise<unknown> {
     return vaultCall("parked", {});
   },
-  /**
-   * The card resolver (#272): `{refs: [{type, id}], purpose}` →
-   * `{cards, receiptId}` — minimal renderable cards for cross-domain
-   * references, resolvable when a live core.link connects them to something
-   * this caller reads. Denials arrive as per-ref `status: 'denied'` cards.
-   */
+  /** Resolvable only when a live `core.link` connects the ref to something
+   *  this caller reads (#272). */
   resolve(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("resolve", request);
   },
-  /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (#293). */
   reveal(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("reveal", request);
   },
-  /** Locker-only, memory-session user-presence authentication (#630). */
   authenticate(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("authenticate", request);
   },
-  /** Size-bounded derivative content fetch. */
   content(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("content", request);
   },
@@ -296,17 +215,12 @@ function execute(req: WorkerRequest): void {
         expandRecurrence: timeModule.expandRecurrence,
         shiftTemporal: timeModule.shiftTemporal,
       });
-      // A TS handler graph needs the esbuild loader hook before it can import
-      // under plain Node; a JS handler skips this entirely.
       if (/\.tsx?$/u.test(req.handlerFile)) ensureTsLoader();
-      // Containment goes on LAST — after every trusted import above, and
-      // immediately before the untrusted graph is reachable. The handler file
-      // is the taint root; everything it pulls in inherits the confinement.
+      // Containment goes on LAST, immediately before the untrusted graph is
+      // reachable. The handler file is the taint root.
       const { loadSandbox } = await loadSandboxBoot();
       const sandboxApi = await loadSandbox();
-      // A seed reads the sample assets shipped beside it; a query or an action
-      // reads nothing. Choosing the lane from the handler file — rather than
-      // giving every handler the seed's grant — keeps the floor where it is.
+      // Lane chosen per file, so no handler inherits the seed's `fs` grant.
       const isSeed = /(?:^|[\\/])seed\.(?:m?js|tsx?)$/u.test(req.handlerFile);
       const sandbox = sandboxApi.installWorkerSandbox(
         isSeed
@@ -347,10 +261,7 @@ function execute(req: WorkerRequest): void {
 }
 
 if (boot.pooled) {
-  // Warm spare: booted and idle. Announce readiness (the parent ignores this
-  // until it hands over a run), then wait for the single `run` kickoff above.
   port.postMessage({ type: "ready" });
 } else {
-  // Inline boot: the request rode in on workerData — run it now.
   execute(boot as WorkerRequest);
 }

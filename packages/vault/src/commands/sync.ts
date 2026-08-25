@@ -1,13 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit the staging commands and the broker-credential lifecycle commands (#304) are one sync vocabulary — begin/finish/cursor/status and configure/store share the connection state machine, so splitting scatters the invariants
-// The agent-facing staging commands (#290) — how interactive
-// one-shot pulls write. An agent with a live harness session (MCP reach)
-// parses whatever it pulled and STAGES it through `sync.stage_rows` (risk
-// low: the staging band holds reviewable state, no domain table moves);
-// landing it is `sync.publish_batch` (risk high: above every agent's
-// ceiling, so it PARKS for the owner in the existing approval surface).
-// The risk asymmetry IS the consent story — agents stage freely, the owner
-// publishes deliberately. Credentials stay harness-ambient; the vault only
-// ever sees parsed rows.
+// The agent-facing staging commands (#290): an agent with a live harness
+// session parses whatever it pulled and STAGES it through `sync.stage_rows`
+// (risk low — the staging band holds reviewable state, no domain table moves);
+// landing it is `sync.publish_batch` (risk high, above every agent's ceiling,
+// so it PARKS for the owner). The risk asymmetry IS the consent story — agents
+// stage freely, the owner publishes deliberately. Credentials stay
+// harness-ambient; the vault only ever sees parsed rows.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -21,10 +19,9 @@ import type { StageCandidate } from "../ingest/staging.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
 
 /**
- * Derived-data class per stageable entity type (#310) — the unit
- * the owner consents to when narrowing a connection's auto-publish trust.
- * Entity types not named here (plain import types: events, transactions,
- * contacts…) are untouched by class narrowing.
+ * Derived-data class per stageable entity type (#310) — the unit the owner
+ * consents to when narrowing a connection's auto-publish trust. Plain import
+ * types not named here are untouched by class narrowing.
  */
 const ENRICH_CLASS_OF: Readonly<Record<string, string>> = {
   "knowledge.annotation": "caption",
@@ -80,8 +77,8 @@ const STAGE_ROWS: CommandDefinition = {
   preconditions: [],
   postconditions: [
     {
-      // Draft for review, or already applied under the connection's
-      // owner-set `auto-publish` trust (#299) — never discarded.
+      // Draft for review, or already applied under the connection's owner-set
+      // `auto-publish` trust (#299) — never discarded.
       name: "batch_staged_or_auto_published",
       sql: `SELECT count(*) AS n FROM sync_import_batch WHERE batch_id = :batch_id AND status IN ('draft','published')`,
       column: "n",
@@ -105,8 +102,8 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
       payload: Record<string, unknown>;
     }[];
   };
-  // Only entity types with a publisher can ever land — refuse at staging
-  // time, not at the owner's publish click.
+  // Only entity types with a publisher can ever land: refuse at STAGING time,
+  // not at the owner's publish click.
   for (const row of input.rows) {
     if (!PUBLISHERS.has(row.entity_type)) {
       throw new Error(
@@ -124,9 +121,8 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
   const connection = resolveConnectionIdentity(ctx, input);
   const connectionId = connection.connectionId;
   // Attribution is injected server-side, never trusted from source data
-  // (#299): an annotation candidate is stamped with the CALLER's
-  // party — the enricher's enrolled agent party, or the owner running an
-  // import by hand. Masquerade is structurally impossible.
+  // (#299): a candidate is stamped with the CALLER's party, so masquerade is
+  // structurally impossible.
   const authorPartyId = ctx.identity.partyId ?? ownerPartyIdOf(ctx);
   const candidates: StageCandidate[] = input.rows.map((r) => ({
     entityType: r.entity_type,
@@ -136,16 +132,13 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
         ? { ...r.payload, author_party_id: authorPartyId }
         : r.payload,
   }));
-  // The owner's standing consent (#299): a connection the owner set
-  // to `auto-publish` applies its batch in the same command — captions and
-  // machine tags land without a review click, still receipted, still
-  // provenance-stamped per row. `staged` trust keeps today's behavior.
+  // The owner's standing consent (#299): a connection set to `auto-publish`
+  // applies its batch in the same command — still receipted, still
+  // provenance-stamped per row. `staged` trust keeps the review click.
   //
-  // Per-class narrowing (#310): the owner may have consented to
-  // captions but not face suggestions. Candidates in classes OUTSIDE the
-  // connection's enrich_classes_json auto-publish nothing — they stage as a
-  // separate draft batch for review, never silently dropped and never
-  // silently landed.
+  // Per-class narrowing (#310): candidates in classes OUTSIDE the connection's
+  // `enrich_classes_json` auto-publish nothing and stage as a separate draft
+  // batch — never silently dropped, never silently landed.
   const conn = ctx.db
     .prepare(
       "SELECT trust, enrich_classes_json FROM sync_connection WHERE connection_id = ?"
@@ -232,7 +225,6 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
   return { batch_id: batchId, connection_id: connectionId, staged: counts };
 }
 
-/** The vault owner's party id — the publish actor for auto-publish trust. */
 function ownerPartyIdOf(ctx: HandlerCtx): string {
   const owner = ctx.db
     .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
@@ -280,9 +272,9 @@ const PUBLISH_BATCH: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // An agent-proposed publish PARKS for the owner (#306 Tier 4): a
-  // whole batch landing in domain tables bypasses the staged-trust review,
-  // so the pause between draft and land stays the consent gesture.
+  // An agent-proposed publish PARKS for the owner (#306 Tier 4): a whole batch
+  // landing in domain tables bypasses the staged-trust review, so the pause
+  // between draft and land stays the consent gesture.
   risk: "high",
   confirm: true,
   handler: publishStagedBatch,
@@ -301,8 +293,8 @@ function publishStagedBatch(ctx: HandlerCtx): Record<string, unknown> {
     owner.owner_party_id,
     ctx.now
   );
-  // Published rows ride the command pipeline's evidence: provenance names
-  // this invocation (data triggers see real imports and may react).
+  // Published rows ride the command pipeline's evidence: provenance names this
+  // invocation, so data triggers see real imports and may react.
   for (const write of applied.provenanced) ctx.wrote(write.type, write.id);
   ctx.wrote("sync.import_batch", input.batch_id);
   ctx.cite({
@@ -319,13 +311,12 @@ function publishStagedBatch(ctx: HandlerCtx): Record<string, unknown> {
   };
 }
 
-// ── Connection lifecycle (issue #290 phase 4) ───────────────────────────
-// A connector's run brackets: `sync.begin_run` is the principal-pinning
-// hard gate (invariant 2 — the vault-side half of "verify the account
-// before writing a row"), `sync.finish_run` closes the run log and flips
-// health states, `sync.set_cursor` persists incremental position as
-// receipted vault rows. Health is READABLE state (`sync.connection`,
-// `sync.connection_run`) — sync never dies silently.
+// ── Connection lifecycle (#290 phase 4) ─────────────────────────────────
+// `sync.begin_run` is the principal-pinning hard gate (invariant 2 — the
+// vault-side half of "verify the account before writing a row"),
+// `sync.finish_run` closes the run log and flips health, `sync.set_cursor`
+// persists incremental position as receipted rows. Health is READABLE state,
+// so sync never dies silently.
 
 const BEGIN_RUN: CommandDefinition = {
   name: "sync.begin_run",
@@ -349,8 +340,8 @@ const BEGIN_RUN: CommandDefinition = {
       connection_id: { type: "string" },
       run_id: { type: "string" },
       cursors: { type: "object" },
-      // A refusal is an OUTPUT, not a thrown rollback — the needs-auth
-      // flip must survive the invocation (a throw would undo it).
+      // A refusal is an OUTPUT, never a thrown rollback — the needs-auth flip
+      // must survive the invocation, and a throw would undo it.
       refused: {
         type: "string",
         enum: ["paused", "principal-required", "principal-mismatch"],
@@ -422,10 +413,10 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
       reason: `connection "${identity.label}" is paused by the owner`,
     };
   }
-  // Principal pinning: the first observed principal pins; every later run
-  // must match or the connection flips to needs-auth and the run refuses —
-  // a work vault must never silently sync from a personal account. The
-  // refusal is an output, not a throw: the health flip must COMMIT.
+  // Principal pinning: the first observed principal pins, and every later run
+  // must match or the connection flips to needs-auth and refuses — a work vault
+  // must never silently sync from a personal account. The refusal is an output,
+  // not a throw: the health flip must COMMIT.
   if (connection.principal === null && input.principal) {
     ctx.db
       .prepare(
@@ -472,7 +463,7 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
       };
     }
   }
-  // A matching (or first) principal proves reach — the connection is live
+  // A matching (or first) principal proves reach, so the connection is live
   // again even if a previous run left it failing/needs-auth.
   ctx.db
     .prepare(
@@ -573,8 +564,8 @@ function finishRun(ctx: HandlerCtx): Record<string, unknown> {
       input.error ?? null,
       input.run_id
     );
-  // A failed run flips health to failing (visible, never silent); a good
-  // one records freshness. needs-auth set by a mismatch stays sticky.
+  // A failed run flips health to failing (visible, never silent); a good one
+  // records freshness. needs-auth set by a mismatch stays sticky.
   const status = input.ok ? "active" : "failing";
   ctx.db
     .prepare(
@@ -673,14 +664,13 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
     additionalProperties: false,
     properties: {
       connection_id: { type: "string", minLength: 1 },
-      // The owner's two levers: pause a connector, or resume one (a resumed
-      // needs-auth connection re-proves itself on the next begin_run).
-      // `needs-auth` is the fire path's flip when a declared secret item is
-      // missing or trashed (#293) — same honest-liveness state a
-      // principal mismatch shows.
+      // The owner's two levers: pause, or resume (a resumed needs-auth
+      // connection re-proves itself on the next begin_run). `needs-auth` is
+      // also the fire path's flip when a declared secret item is missing or
+      // trashed (#293).
       status: { type: "string", enum: ["paused", "active", "needs-auth"] },
-      // WHY the connection left active (#304): "refresh refused",
-      // "scope withdrawn"… — what the reconnect surface shows the owner.
+      // WHY the connection left active (#304) — what the reconnect surface
+      // shows the owner.
       note: { type: "string", minLength: 1 },
     },
   },
@@ -711,10 +701,9 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
     },
   ],
   idempotency: "idempotent",
-  // Deliberately NOT confirm-gated (#308 A2 sweep): the fire path's
-  // needs-auth honesty flip rides the agent plane and must land unparked,
-  // and no status value moves credentials or hosts. Risk medium keeps the
-  // act salient in the review feed.
+  // Deliberately NOT confirm-gated (#308 A2): the fire path's needs-auth
+  // honesty flip rides the agent plane and must land unparked, and no status
+  // value moves credentials or hosts. Risk medium keeps it salient.
   risk: "medium",
   handler: setConnectionStatus,
 };
@@ -731,8 +720,8 @@ function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare("UPDATE sync_connection SET status = ? WHERE connection_id = ?")
     .run(input.status, input.connection_id);
-  // A connection back in `active` carries no stale complaint; a flip away
-  // from it records why, so the reconnect surface is actionable. A note-less
+  // A connection back in `active` carries no stale complaint; a flip away from
+  // it records why, so the reconnect surface is actionable. A note-less
   // non-active flip keeps whatever complaint is already there.
   if (input.status === "active") {
     setAuthNote(ctx, input.connection_id, null);
@@ -746,20 +735,17 @@ function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
   return { connection_id: input.connection_id, status: input.status };
 }
 
-// ── Broker-owned credentials (issue #304) ───────────────────────────────
+// ── Broker-owned credentials (#304) ─────────────────────────────────────
 // A connection may carry its own credential — `oauth2` (BYO client) or
-// `api_key` (a static PAT) — instead of borrowing the harness's ambient
-// auth. The secret cells are sealed columns; the ONLY consumer is the
-// gateway broker, which injects them into `ctx.fetch` toward the
-// connection's `allowed_hosts` and never hands them to connector code.
-// Both commands here are CONFIRM-GATED (#308 A1/A2): risk stopped
-// parking anything when #306 made confirmation a command property, and
-// these two touch exactly what must never move on a model's say-so —
-// `configure_credential` can rewrite `allowed_hosts` (the #304 structural
-// pin) and `client_secret`; `store_tokens` can substitute the token pair
-// the drains ride. Every legitimate non-owner path is unaffected: the
-// broker's ceremony/refresh and the connections routes all invoke on the
-// owner plane, which never parks.
+// `api_key` — instead of borrowing harness-ambient auth. The secret cells are
+// sealed columns whose ONLY consumer is the gateway broker, which injects them
+// into `ctx.fetch` toward `allowed_hosts` and never hands them to connector
+// code. Both commands here are CONFIRM-GATED (#308 A1/A2) because they touch
+// exactly what must never move on a model's say-so: `configure_credential` can
+// rewrite `allowed_hosts` (the #304 structural pin) and `client_secret`, and
+// `store_tokens` can substitute the token pair the drains ride. Legitimate
+// non-owner paths are unaffected — the broker's ceremony/refresh and the
+// connections routes invoke on the owner plane, which never parks.
 
 const CONFIGURE_CREDENTIAL: CommandDefinition = {
   name: "sync.configure_credential",
@@ -771,14 +757,13 @@ const CONFIGURE_CREDENTIAL: CommandDefinition = {
     properties: {
       kind: { type: "string", minLength: 1 },
       label: { type: "string", minLength: 1 },
-      // `none` detaches: every credential cell nulls, the connection falls
+      // `none` DETACHES: every credential cell nulls and the connection falls
       // back to the harness-ambient lane.
       cred_kind: { type: "string", enum: ["oauth2", "api_key", "none"] },
-      // `assist` uses Centraid's confidential Worker client; no client
-      // secret is accepted or stored on the gateway.
+      // `assist` uses Centraid's confidential Worker client; no client secret
+      // is accepted or stored on the gateway.
       oauth_mode: { type: "string", enum: ["byo", "assist"] },
-      // Wizard/docs key, e.g. `google`, `github` — names which BYO-client
-      // walkthrough applies. Free-form.
+      // Wizard/docs key naming which BYO-client walkthrough applies. Free-form.
       provider: { type: "string", minLength: 1 },
       auth_url: { type: "string", minLength: 1 },
       token_url: { type: "string", minLength: 1 },
@@ -806,9 +791,9 @@ const CONFIGURE_CREDENTIAL: CommandDefinition = {
   postconditions: [],
   sealedInput: ["client_secret", "api_key"],
   idempotency: "idempotent",
-  // Attaching a credential decides where secrets may flow: `allowed_hosts`
-  // IS the #304 anti-exfiltration pin, so a non-owner proposing this parks
-  // (#308 A1 — `confirm`, not risk, is what parks post-#306).
+  // Attaching a credential decides where secrets may flow: `allowed_hosts` IS
+  // the #304 anti-exfiltration pin, so a non-owner proposing this parks (#308
+  // A1 — `confirm`, not risk, is what parks post-#306).
   risk: "medium",
   confirm: true,
   handler: configureCredential,
@@ -834,8 +819,8 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
     label: input.label,
   });
   if (input.cred_kind === "none") {
-    // Detach = DELETE the sidecar row: no half-shredded credentials, and
-    // the connection is back on the harness-ambient lane.
+    // Detach = DELETE the sidecar row: no half-shredded credentials, and the
+    // connection is back on the harness-ambient lane.
     ctx.db
       .prepare("DELETE FROM sync_connection_credential WHERE connection_id = ?")
       .run(connectionId);
@@ -850,9 +835,9 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
     });
     return { connection_id: connectionId, cred_kind: "none", status: "active" };
   }
-  // The host pin is the anti-exfiltration invariant (#304 decision 2):
-  // a credential without a host list would be injectable anywhere connector
-  // code points ctx.fetch, so both kinds refuse to configure without one.
+  // The host pin is the anti-exfiltration invariant (#304 decision 2): a
+  // credential without a host list would be injectable anywhere connector code
+  // points ctx.fetch, so both kinds refuse to configure without one.
   if (!input.allowed_hosts || input.allowed_hosts.length === 0) {
     throw new Error(
       `cred_kind "${input.cred_kind}" requires allowed_hosts — the hosts this credential may be injected toward (issue #304)`
@@ -874,10 +859,9 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
   } else if (!input.api_key) {
     throw new Error('cred_kind "api_key" requires api_key');
   }
-  // Switching kinds never leaks the previous credential's cells: the whole
-  // sidecar row is replaced, unset optionals to NULL. oauth2 starts life in
-  // needs-auth — the consent ceremony (authorize + store_tokens) is what
-  // proves reach; an api_key is complete as configured.
+  // Switching kinds must never leak the previous credential's cells: the whole
+  // sidecar row is replaced, unset optionals to NULL. oauth2 starts in
+  // needs-auth — the consent ceremony proves reach; an api_key is complete.
   const status = input.cred_kind === "oauth2" ? "needs-auth" : "active";
   ctx.db
     .prepare(
@@ -958,8 +942,8 @@ const STORE_TOKENS: CommandDefinition = {
     properties: {
       connection_id: { type: "string", minLength: 1 },
       access_token: { type: "string", minLength: 1 },
-      // Absent on refresh responses that do not rotate — the stored one
-      // stays. Rotating providers MUST land the new one in the same act.
+      // Absent on refresh responses that do not rotate — the stored one stays.
+      // Rotating providers MUST land the new one in the same act.
       refresh_token: { type: "string", minLength: 1 },
       expires_at: { type: "string", minLength: 1 },
     },
@@ -984,9 +968,8 @@ const STORE_TOKENS: CommandDefinition = {
   postconditions: [],
   sealedInput: ["access_token", "refresh_token"],
   idempotency: "idempotent",
-  // Low salience but confirm-gated (#308): swapping the stored
-  // token pair re-principals every future drain, and only the broker's
-  // owner-plane ceremony/refresh has business landing tokens.
+  // Low salience but confirm-gated (#308): swapping the stored token pair
+  // re-principals every future drain.
   risk: "low",
   confirm: true,
   handler: storeTokens,
@@ -1029,40 +1012,27 @@ function storeTokens(ctx: HandlerCtx): Record<string, unknown> {
   return { connection_id: input.connection_id, status: "active" };
 }
 
-// ── Removal (issue #304 UI's missing delete) ────────────────────────────
-// `sync.remove_connection` is the owner's actual delete — as opposed to
-// `configure_credential({cred_kind:'none'})`'s detach, which only forgets
-// the secret and leaves the connection row, its cursors and its sync
-// history untouched. Removal is destructive and irreversible: Tier 4 (risk
-// high, confirm-gated), the same ceremony `core.merge_party` uses.
+// ── Removal (#304) ──────────────────────────────────────────────────────
+// `sync.remove_connection` is the owner's actual DELETE, as opposed to
+// `configure_credential({cred_kind:'none'})`'s detach, which forgets the secret
+// and leaves the connection row, cursors and history. Destructive and
+// irreversible: Tier 4 (risk high, confirm-gated), like `core.merge_party`.
 //
-// What may be deleted vs what blocks deletion is discovered LIVE off the
-// schema — `PRAGMA foreign_key_list` over every table, the same technique
-// `core.merge_party` uses to find every FK into `core_party` ("no hand-kept
-// table list to rot"):
-//   - `sync_connection_credential` / `sync_connection_health` already carry
-//     `ON DELETE CASCADE` (the #304 sidecars) — SQLite drops them with
-//     the parent row. Deleted explicitly here too so the receipt's write
-//     list stays complete even if a future migration drops the cascade.
-//   - `sync_connection_cursor` is pure incremental-sync POSITION — no audit
-//     value, so it is deleted outright alongside the connection.
-//   - `locker_item.connection_id` is a nullable "which service is this
-//     login for" anchor (#310) — cleared (`SET NULL`), never a
-//     reason to block removal; the login itself is untouched.
+// What may be deleted and what BLOCKS deletion is discovered LIVE off the
+// schema (`PRAGMA foreign_key_list` over every table), so there is no hand-kept
+// table list to rot:
+//   - the `#304` sidecars already carry ON DELETE CASCADE; deleted explicitly
+//     anyway so the receipt's write list stays complete if that ever changes.
+//   - `sync_connection_cursor` is pure incremental POSITION, no audit value —
+//     deleted outright.
+//   - `locker_item.connection_id` is a nullable service anchor (#310) —
+//     cleared, never a reason to block; the login itself is untouched.
 //   - `outbox_item`, `sync_import_batch`, `sync_external_entity` and
-//     `sync_connection_run` are NOT NULL, un-cascaded FKs carrying
-//     RECEIPTED history (drained sends, staged/published import batches,
-//     dedup mappings, connector run logs) — issues #290/#306's audit trail
-//     must never be shredded by a connection cleanup, so ANY row here
-//     blocks the delete. `outbox_item` gets its own earlier, more
-//     actionable refusal when the blocking rows are merely undecided
-//     (`pending`/`approved`) — those the owner can still approve, discard,
-//     or let drain, so that message names the fix. Once every item is
-//     terminal (`sent`/`discarded`/`failed`) it IS history, and joins the
-//     general "this connection has sync history" refusal alongside the
-//     other tables — the owner's remedy there is `sync.set_connection_status`
-//     (pause) or `configure_credential({cred_kind:'none'})` (detach), never
-//     removal. Deleting receipted history is not on offer.
+//     `sync_connection_run` carry RECEIPTED history, so ANY row BLOCKS the
+//     delete: a connection cleanup must never shred #290/#306's audit trail.
+//     Undecided outbox items get their own, more actionable refusal, since the
+//     owner can still approve, discard, or let them drain. Once terminal they
+//     ARE history, and the remedy is pause or detach, never removal.
 
 interface ConnectionFkRef {
   table: string;
@@ -1071,8 +1041,8 @@ interface ConnectionFkRef {
 }
 
 /**
- * Every live FK column referencing `sync_connection(connection_id)`,
- * excluding the two sidecars SQLite already cascades on delete.
+ * Every live FK column referencing `sync_connection(connection_id)`, minus the
+ * two sidecars SQLite already cascades.
  */
 function connectionFkRefs(ctx: HandlerCtx): ConnectionFkRef[] {
   const tables = ctx.db
@@ -1138,8 +1108,7 @@ const REMOVE_CONNECTION: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Tier 4 (#306): irreversible, so it stays loud on purpose — same
-  // stance as core.merge_party.
+  // Tier 4 (#306): irreversible, so it stays loud — the core.merge_party stance.
   risk: "high",
   confirm: true,
   handler: removeConnection,
@@ -1153,9 +1122,8 @@ function removeConnection(ctx: HandlerCtx): Record<string, unknown> {
     .get(connectionId) as { kind: string; label: string };
   const name = `${connection.kind} "${connection.label}"`;
 
-  // Undecided outbox items get first say — the owner has a real lever
-  // (approve/discard/let it drain) that clears the block without losing
-  // anything, so name that fix specifically before the general history one.
+  // Undecided outbox items get first say: the owner has a real lever that
+  // clears the block without losing anything, so name that fix specifically.
   const undecided = ctx.db
     .prepare(
       `SELECT count(*) AS n FROM outbox_item WHERE connection_id = ? AND status IN ('pending','approved')`
@@ -1186,9 +1154,8 @@ function removeConnection(ctx: HandlerCtx): Record<string, unknown> {
     );
   }
 
-  // Nullable service anchors (a locker login's "which connection is this
-  // for" tag) are convenience metadata, not audit — cleared, never a reason
-  // to keep the connection around.
+  // Nullable service anchors are convenience metadata, not audit — cleared,
+  // never a reason to keep the connection around.
   for (const ref of refs) {
     if (ref.notNull) continue;
     ctx.db
@@ -1202,8 +1169,8 @@ function removeConnection(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare("DELETE FROM sync_connection_cursor WHERE connection_id = ?")
     .run(connectionId);
-  // Cascades automatically (ON DELETE CASCADE) but deleted explicitly too
-  // so the write list stays honest even if the cascade is ever dropped.
+  // Cascades automatically, but deleted explicitly so the write list stays
+  // honest even if the cascade is ever dropped.
   ctx.db
     .prepare("DELETE FROM sync_connection_credential WHERE connection_id = ?")
     .run(connectionId);

@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#408) the detector suite shares real SQLite race hooks, restore helpers, and restart fixtures whose correctness depends on one common lifecycle harness
-// WAL shipper detectors + lifecycle (#408): G5 foreign-actor
-// detection (in-process stand-ins — the real second-process test lives in
-// the gateway e2e rig), G7 crash-ordering/restart, generation lifecycle
-// (first-run, cadence, explicit rolls, base registration, clean close +
-// reopen), and the local disk budget. Real vaults, real sqlite, no mocks;
-// capture-correctness tests live in wal-shipper.test.ts.
+// WAL shipper detectors + lifecycle (#408): G5 foreign-actor detection
+// (in-process stand-ins — the real second-process test lives in the gateway e2e
+// rig), G7 crash-ordering/restart, generation lifecycle, and the local disk
+// budget. Real vaults, real sqlite, no mocks; capture correctness lives in
+// wal-shipper.test.ts.
 import {
   closeSync,
   copyFileSync,
@@ -100,7 +99,6 @@ describe("wal-shipper-detectors", () => {
     return existsSync(walPath(name)) ? statSync(walPath(name)).size : 0;
   }
 
-  /** The current WAL header's salts — the shipper's reset fingerprint. */
   function readWalSalts(name: WalDbName): { salt1: number; salt2: number } {
     const fd = openSync(walPath(name), "r");
     try {
@@ -123,7 +121,7 @@ describe("wal-shipper-detectors", () => {
       );
   }
 
-  /** A well-behaved second connection to journal.db (out-of-process writer stand-in). */
+  /** A well-behaved out-of-process writer stand-in for journal.db. */
   function openSecondJournal(): DatabaseSync {
     const c = new DatabaseSync(path.join(vaultDir, "journal.db"));
     c.exec("PRAGMA busy_timeout = 5000");
@@ -132,18 +130,14 @@ describe("wal-shipper-detectors", () => {
   }
 
   /**
-   * Commit a row from `writer` (a FOREIGN connection) at a chosen point INSIDE
-   * the shipper's synchronous checkpoint path, by hooking the `prepare()` of the
-   * pragma that runs there. `when` picks the window:
-   *
-   *  - `'wal_checkpoint(TRUNCATE)'` — after the pre-truncate stat has proven the
-   *    WAL holds nothing past the captured offset, and before the checkpoint
-   *    takes its writer lock. THE race: the frames are appended, then folded into
-   *    the main database and zeroed from the WAL by the checkpoint that follows.
-   *  - `'data_version'` — between the capture and that stat, where the frames are
-   *    still in the WAL and can simply be CAPTURED (the cheap path).
-   *
-   * Fires exactly once. Returns the hook's fire count plus its undo.
+   * Commit a row from a FOREIGN connection at a chosen point INSIDE the
+   * shipper's synchronous checkpoint path, by hooking the `prepare()` of the
+   * pragma that runs there. `'wal_checkpoint(TRUNCATE)'` fires after the
+   * pre-truncate stat has proven the WAL holds nothing past the captured offset
+   * and before the checkpoint takes its writer lock — THE race, where frames are
+   * folded into the main database and zeroed from the WAL. `'data_version'`
+   * fires between capture and that stat, where frames are still capturable.
+   * Fires exactly once; returns the fire count plus its undo.
    */
   function raceJournalCommitAt(
     writer: DatabaseSync,
@@ -165,7 +159,6 @@ describe("wal-shipper-detectors", () => {
   /**
    * Seal every uploadable and replay it over the shipper's CURRENT bases into a
    * fresh directory — the restore a real recovery performs, minus the provider.
-   * Returns the destination dir.
    */
   async function restoreCurrent(
     shipper: WalShipper,
@@ -206,7 +199,6 @@ describe("wal-shipper-detectors", () => {
     return destDir;
   }
 
-  /** Rows of `_walship_jprobe` in a restored journal.db. */
   function restoredJournalRows(destDir: string): string[] {
     const conn = new DatabaseSync(path.join(destDir, "journal.db"), {
       readOnly: true,
@@ -232,7 +224,7 @@ describe("wal-shipper-detectors", () => {
     shipper.tick();
     const before = shipper.status().dbs.journal!;
 
-    // Leave unshipped committed frames, then let a foreign actor checkpoint —
+    // Leave unshipped committed frames, then let a foreign actor checkpoint:
     // the frames get folded into journal.db behind the shipper's back.
     insertJournal(2, 200, "folded");
     const c2 = new DatabaseSync(path.join(vaultDir, "journal.db"));
@@ -297,8 +289,8 @@ describe("wal-shipper-detectors", () => {
     expect(r.breaks.find((b) => b.db === "journal")).toBeDefined();
 
     const status = shipper.status();
-    // Counted exactly once: journal carried the foreign reason, vault re-based in
-    // lockstep under a `coordinated:*` reason that must NOT be counted.
+    // Counted exactly once: journal carried the foreign reason, vault re-based
+    // in lockstep under a `coordinated:*` reason that must NOT be counted.
     expect(status.foreignCheckpointCount).toBe(1);
     expect(status.lastForeignCheckpoint).toMatchObject({
       atMs: clock,
@@ -308,8 +300,8 @@ describe("wal-shipper-detectors", () => {
       /main-db|salt|shrank/u
     );
 
-    // Persisted on top-level state (not per-stream, which mintBase replaced): a
-    // fresh shipper over the same dir reads the tally straight back.
+    // Persisted on top-level state, not per-stream (mintBase replaces those):
+    // a fresh shipper over the same dir reads the tally straight back.
     const shipper2 = makeShipper();
     expect(shipper2.status().foreignCheckpointCount).toBe(1);
     expect(shipper2.status().lastForeignCheckpoint).toStrictEqual(
@@ -331,8 +323,8 @@ describe("wal-shipper-detectors", () => {
     clock += 1000;
     shipper.tick();
 
-    // An explicit, requested generation roll (the key-epoch-rotation hook's path)
-    // re-bases both databases — deliberate, so it is not a foreign checkpoint.
+    // An explicit requested roll re-bases both databases — deliberate, so it is
+    // not a foreign checkpoint.
     clock += 1000;
     const rolled = shipper.rollGeneration("vault", "key-epoch-rotation");
     expect(rolled.breaks.length).toBeGreaterThan(0);
@@ -400,16 +392,15 @@ describe("wal-shipper-detectors", () => {
   // ────────────────────────────────────── G5: the capture → TRUNCATE race (P0)
 
   test("[G5] a writer that races the TRUNCATE is DETECTED, and its row survives the restore", async () => {
-    // The hole this whole feature exists to forbid. A foreign connection commits
-    // after the shipper has captured the WAL and before the checkpoint takes its
-    // writer lock. The checkpoint folds those frames into journal.db and ZEROES
-    // them from the WAL: they are in no segment, and the generation's base
-    // predates them. Undetected, they are gone from the backup stream forever.
+    // The hole this feature exists to forbid: a foreign connection commits after
+    // the shipper captured the WAL and before the checkpoint takes its writer
+    // lock, so the checkpoint folds those frames into journal.db and ZEROES them
+    // from the WAL — in no segment, and the base predates them.
     //
-    // The old detector compared SQLite's `checkpointed` frame count against what
-    // we had shipped — but a SUCCESSFUL TRUNCATE returns {busy:0, log:0,
-    // checkpointed:0} (it resets both counters), so it could never fire and this
-    // restore came back SILENTLY missing the row.
+    // Comparing SQLite's `checkpointed` frame count against what was shipped can
+    // never fire: a SUCCESSFUL TRUNCATE returns {busy:0, log:0, checkpointed:0}
+    // because it resets both counters, so this restore came back silently
+    // missing the row.
     const shipper = makeShipper();
     shipper.tick();
     insertJournal(2, 200, "shipped-before-the-race");
@@ -434,9 +425,9 @@ describe("wal-shipper-detectors", () => {
     }
     expect(hook.fired()).toBe(1); // the racer really committed inside the window
     expect(report.errors).toStrictEqual([]);
-    // The row IS in the live database — the checkpoint folded it in there.
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
+    // The row IS in the live database — the checkpoint folded it there. Spreading
+    // compares column data (the contract) without asserting node:sqlite's
+    // null-prototype rows.
     expect({
       ...db.journal
         .prepare(
@@ -445,11 +436,10 @@ describe("wal-shipper-detectors", () => {
         .get(),
     }).toStrictEqual({ n: 1 });
 
-    // THE assertion: a restore of the resulting stream must carry it. It does —
-    // not because the frames were shipped (they cannot be; they were zeroed) but
-    // because the race is DETECTED and healed with a fresh base cloned from the
-    // main file the checkpoint just folded them into. Detection is the entire
-    // fix; without it this list is missing the row.
+    // THE assertion: a restore of the resulting stream carries it — not because
+    // the frames were shipped (they were zeroed) but because the race is DETECTED
+    // and healed with a fresh base cloned from the main file. Detection is the
+    // entire fix.
     const restored = restoredJournalRows(
       await restoreCurrent(shipper, "raced")
     );
@@ -468,8 +458,7 @@ describe("wal-shipper-detectors", () => {
     expect(after.basePending).toBe(true);
     expect(shipper.basesCoordinated()).toBe(true);
     // A condemned stream gets NO group closer: one would assert "group N ends at
-    // exactly `offset`" over frames that were folded away — a forgery a restore
-    // trusts absolutely.
+    // exactly `offset`" over folded-away frames — a forgery a restore trusts.
     expect(
       shipper
         .listUploadable()
@@ -481,12 +470,11 @@ describe("wal-shipper-detectors", () => {
   });
 
   test("[G5] a commit landing BEFORE the pre-truncate stat is CAPTURED — the cheap path, no break", async () => {
-    // The commoner race by far: a writer commits while the shipper is between its
-    // capture and its checkpoint. Those frames are still IN the WAL — nothing has
-    // truncated yet — so the right answer is to capture them, not to pay for a
-    // whole fresh base. The `data_version` reading is taken BEFORE the stat that
-    // proves the WAL is at the captured end, precisely so this commit is visible
-    // to the stat rather than silently baked into the reading.
+    // The commoner race: a writer commits between capture and checkpoint, so the
+    // frames are still IN the WAL and the right answer is to capture them rather
+    // than pay for a fresh base. The `data_version` reading is taken BEFORE the
+    // stat proving the WAL is at the captured end, precisely so this commit is
+    // visible to the stat rather than baked into the reading.
     const shipper = makeShipper();
     shipper.tick();
     insertJournal(2, 200, "before");
@@ -563,11 +551,11 @@ describe("wal-shipper-detectors", () => {
   });
 
   test("[G5] the quiet path does NOT break: our own TRUNCATE and our own writes never look like a race", () => {
-    // The guard on the detector itself. `data_version` is only usable because it
-    // is stable across OUR checkpoint and OUR connection's writes — if either
-    // ever started bumping it, every rollover would look like a race and the
-    // shipper would re-base (a whole-database clone) on every single group. That
-    // failure would otherwise be silent and expensive; here it is loud.
+    // The guard on the detector itself. `data_version` is usable only because it
+    // is stable across OUR checkpoint and OUR connection's writes; if either ever
+    // started bumping it, every rollover would look like a race and the shipper
+    // would clone the whole database per group. That failure would be silent and
+    // expensive — here it is loud.
     const shipper = makeShipper({ walSizeThresholdBytes: 8192 });
     shipper.tick();
     const before = {
@@ -575,7 +563,7 @@ describe("wal-shipper-detectors", () => {
       journal: shipper.status().dbs.journal!.generation,
     };
 
-    // A foreign connection is OPEN throughout, reading (reads must not count) —
+    // A foreign connection is OPEN throughout, READING (reads must not count),
     // while every WRITE goes through the shipper's own handles.
     const reader = openSecondJournal();
     let rolled = 0;
@@ -601,14 +589,12 @@ describe("wal-shipper-detectors", () => {
   // ──────────────────────────────── I2: the capture micro read-lock (issue #411)
 
   test("[I2] the capture read-mark pins the WAL: a foreign TRUNCATE/RESTART busys, no reset", () => {
-    // Action 2 of #411, belt-and-suspenders to the after-the-fact detection.
-    // capture() holds a short read snapshot over the byte copy — the SAME
-    // acquisition the shipper uses: a read-only connection, BEGIN, then a read
-    // that materializes the snapshot and grabs the WAL read mark. While that mark
-    // is held, NO checkpointer in ANY process may reset or truncate the WAL past
-    // it. This proves the mechanism the shipper leans on, on this exact
-    // node:sqlite runtime, with real files (the real cross-process case lives in
-    // the gateway e2e rig).
+    // Action 2 of #411, belt-and-suspenders to after-the-fact detection.
+    // `capture()` holds a short read snapshot over the byte copy — read-only
+    // connection, BEGIN, then a read that materializes the snapshot and grabs the
+    // WAL read mark. While that mark is held NO checkpointer in ANY process may
+    // reset or truncate the WAL past it. Proves the mechanism on this exact
+    // node:sqlite runtime with real files.
     insertJournal(6, 200, "pinned"); // WAL now carries a header + committed frames
     expect(walSize("journal")).toBeGreaterThan(WAL_HEADER_BYTES);
     const saltsBefore = readWalSalts("journal");
@@ -637,8 +623,8 @@ describe("wal-shipper-detectors", () => {
       lock.close();
     }
 
-    // Once the mark is released the SAME TRUNCATE succeeds and resets the WAL —
-    // proving the read mark, not some unrelated lock, was what held it.
+    // Once released the SAME TRUNCATE succeeds and resets the WAL, proving the
+    // read mark — not some unrelated lock — was what held it.
     foreign.exec("PRAGMA busy_timeout = 5000");
     const after = foreign.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as {
       busy: number;
@@ -649,9 +635,8 @@ describe("wal-shipper-detectors", () => {
   });
 
   test("[I2] capture ships correct committed bytes with the read-lock in place", async () => {
-    // The lock wraps every real capture now; the copy it protects must still be
-    // byte-correct end to end. Insert, tick, and prove a full seal→replay
-    // round-trip carries exactly the committed rows.
+    // The lock wraps every real capture, so the copy it protects must still be
+    // byte-correct end to end.
     const shipper = makeShipper();
     shipper.tick();
     insertJournal(3, 200, "locked-capture");
@@ -666,11 +651,9 @@ describe("wal-shipper-detectors", () => {
   });
 
   test("[I2] the read-lock never blocks the shipper OWN truncate — a rollover still cuts", () => {
-    // The one scoping invariant the lock must honor: it is released BEFORE the
-    // shipper's own TRUNCATE. capture() and truncate() are separate calls, and
-    // capture()'s finally releases first — so a rollover checkpoint is NOT busy
-    // against our own reader. Widening the lock to span the truncate would turn
-    // this rollover busy and red.
+    // The one scoping invariant the lock must honor: released BEFORE the
+    // shipper's own TRUNCATE, so a rollover checkpoint is not busy against our
+    // own reader. Widening the lock to span the truncate turns this rollover red.
     const shipper = makeShipper({ walSizeThresholdBytes: 8192 });
     shipper.tick();
     insertJournal(4, 4000, "roll-under-lock");
@@ -726,17 +709,17 @@ describe("wal-shipper-detectors", () => {
     );
     expect(stray).toBeDefined();
 
-    // "Crash" after the segment fsync but before the state fsync: the durable
-    // state still says offX while the segment file for [offX, offY) exists.
+    // "Crash" after the segment fsync but before the state fsync: durable state
+    // still says offX while the segment file for [offX, offY) exists.
     writeFileSync(stateFile, savedState);
     const shipper2 = makeShipper();
     // Startup hygiene deleted the unacknowledged segment (end > persisted offset)...
     expect(existsSync(stray!.file)).toBe(false);
     expect(shipper2.status().dbs.vault!.offset).toBe(offX);
 
-    // ...and the next tick re-ships from the old offset. The re-captured range
-    // is a prefix-extension: same start, end >= the old end (byte-identity of
-    // retried SEALED objects is covered in @centraid/backup's wal-format tests).
+    // ...and the next tick re-ships from the old offset. The re-captured range is
+    // a prefix-extension: same start, end >= the old end (byte-identity of
+    // retried SEALED objects lives in @centraid/backup's wal-format tests).
     clock += 1000;
     const r = shipper2.tick();
     expect(r.breaks).toStrictEqual([]);
@@ -802,10 +785,9 @@ describe("wal-shipper-detectors", () => {
     expect(
       r.shipped.some((k) => k.startsWith(`wal/vault/${genBefore.vault}/`))
     ).toBe(true);
-    // ...and the break took BOTH databases with it, journal first. A roll that
-    // re-based only the named database would leave two bases from two ticks —
-    // a pair with no coordinated restore point between them, which the producer
-    // then refuses to register at all.
+    // ...and the break took BOTH databases, journal first. A roll that re-based
+    // only the named database would leave two bases from two ticks — a pair with
+    // no coordinated restore point, which the producer refuses to register.
     expect(r.breaks).toStrictEqual([
       { db: "journal", reason: "coordinated:test-reason" },
       { db: "vault", reason: "test-reason" },
@@ -866,14 +848,12 @@ describe("wal-shipper-detectors", () => {
   });
 
   test("[G8] the coordinated break TRUNCATES the journal before the vault — observed, not inferred", () => {
-    // The crux of the whole ordering argument, and the one that looks right when
-    // it is wrong. A base's effective instant is its TRUNCATE instant, NOT its
+    // The crux of the ordering argument, and the one that looks right when it is
+    // wrong. A base's effective instant is its TRUNCATE instant, NOT its
     // copyFileSync instant: the clone reads the MAIN file, and everything
-    // committed after the truncate lands in the new generation's WAL. So code
-    // that carefully clones the journal first while truncating the vault first is
-    // ordered BACKWARDS — and produces a journal base older than its vault base,
-    // which is the SAFE direction only by accident. Watch the checkpoints
-    // themselves.
+    // committed after the truncate lands in the new generation's WAL. Cloning the
+    // journal first while truncating the vault first is ordered BACKWARDS and is
+    // safe only by accident. Watch the checkpoints themselves.
     const order: string[] = [];
     const spy = (conn: DatabaseSync, name: string): void => {
       const real = conn.prepare.bind(conn);
@@ -889,8 +869,8 @@ describe("wal-shipper-detectors", () => {
     shipper.tick(); // first-run: the coordinated break that mints both generations
     expect(order).toStrictEqual(["journal", "vault"]);
 
-    // …and the two bases it cloned carry the SAME tick, which is the property the
-    // manifest records and every restore asserts.
+    // …and the two bases carry the SAME tick — the property the manifest records
+    // and every restore asserts.
     const bases = shipper.currentBases();
     expect(bases[0]!.createdAtMs).toBe(bases[1]!.createdAtMs);
   });
@@ -908,9 +888,8 @@ describe("wal-shipper-detectors", () => {
     shipper.tick();
 
     // Hold vault.db's checkpoint open so its TRUNCATE comes back busy. The
-    // journal is cut FIRST, so by then its WAL is already truncated — and the
-    // whole point of doing both truncates before either CLONE is that nothing
-    // irreversible has happened yet.
+    // journal is cut FIRST, so its WAL is already truncated — and doing both
+    // truncates before either CLONE is what keeps that reversible.
     const reader = new DatabaseSync(path.join(vaultDir, "vault.db"));
     try {
       reader.exec("PRAGMA busy_timeout = 5000");
@@ -964,9 +943,9 @@ describe("wal-shipper-detectors", () => {
       reader.close();
     }
 
-    // A fresh shipper over the same dir reads `breakPending` off the state file:
-    // without it, the next boot would resume a stream whose sibling is mid-break,
-    // and the pair of bases that eventually registered would be two instants.
+    // A fresh shipper over the same dir reads `breakPending` off the state file;
+    // without it the next boot resumes a stream whose sibling is mid-break, and
+    // the pair that eventually registered would be two instants.
     const shipper2 = makeShipper();
     expect(shipper2.basesCoordinated()).toBe(false);
     insertJournal(2, 200, "must-not-ship-under-the-old-generation");
@@ -990,8 +969,8 @@ describe("wal-shipper-detectors", () => {
     const vaultAt = shipper.status().dbs.vault!;
 
     // The vault goes idle; only the journal moves. The marker MUST still record
-    // the vault's (unchanged) position — that is precisely how a restore later
-    // tells "the vault was idle" from "the vault's segments are gone".
+    // the vault's unchanged position — that is how a restore tells "the vault was
+    // idle" from "the vault's segments are gone".
     insertJournal(2, 200, "j");
     clock += 1000;
     const r = shipper.tick();
@@ -1062,8 +1041,8 @@ describe("wal-shipper-detectors", () => {
       firstMarker
     );
     // An orphan marker is merely unsatisfiable (a safe walk-back), so this is not
-    // a correctness rule — but the reverse order costs a tick of RPO on every
-    // interrupted drain.
+    // correctness — but the reverse order costs a tick of RPO per interrupted
+    // drain.
   });
 
   test("noteBaseRegistered clears pendingBases but keeps currentBases", () => {
@@ -1160,8 +1139,8 @@ describe("wal-shipper-detectors", () => {
     expect(shipper.status().dbs.vault!.generation).not.toBe(genBefore);
     expect(shipper.status().dbs.vault!.basePending).toBe(true);
 
-    // The old generation was never registered (basePending) ⇒ its local
-    // segments are gone; nothing uploadable remains from it.
+    // The old generation was never registered (basePending), so its local
+    // segments are gone and nothing uploadable remains from it.
     expect(
       existsSync(path.join(shipDir(), "segments", "vault", genBefore))
     ).toBe(false);

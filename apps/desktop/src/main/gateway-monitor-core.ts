@@ -1,31 +1,9 @@
 /*
- * Pure gateway-runtime tracking core. Keep it free of `electron` imports so it
- * stays unit-testable — the monitor shell needs Notification/BrowserWindow at
- * module load.
- *
- * The model: the main process probes `GET /centraid/_gateway/health` on a
- * fixed cadence and feeds each result through `applyProbe`, which maintains a
- * rolling sample strip, transition-derived outage log, and counters — all in
- * memory, scoped to the app launch and the active gateway (a gateway switch
- * resets tracking). `evaluateAlert` then decides whether the user should be
- * notified: once per outage, after the gateway has been continuously
- * unreachable past the configured threshold, plus a paired "back online"
- * notice when an alerted outage ends.
- *
- * Two signals sit on top of plain up/down (#351):
- *   - `healthStatus` reconciles the health probe's aggregate component
- *     status with a sustained-high-latency check ({@link applyProbe}) — a
- *     "listening but hung" gateway reads as `degraded`, not `up`.
- *   - `applyComponentAlerts` tracks how long each subsystem has sat at
- *     `error` and fires a de-duped OS notification once it crosses
- *     {@link DEFAULT_COMPONENT_ALERT_SECONDS} — mirroring `evaluateAlert`'s
- *     shape but keyed per-component instead of per-gateway.
- *
- * Skew is judged on the **protocol** floor, not product version (#512), and
- * only for a REMOTE gateway: a local gateway is built from the same tree as
- * the app, so it is never judged and `versionSkew` stays undefined for it.
- * Skew here is v0's "surface loudly" posture; hard refuse stays with full
- * `judgeGatewayInfo` / client connect.
+ * Pure gateway-runtime tracking; must stay free of `electron` imports to remain
+ * unit-testable. State is in-memory, scoped to this launch and the active
+ * gateway. Skew is judged on the protocol floor, not product version (#512),
+ * and only for REMOTE gateways — a local one ships from this same tree. Hard
+ * refuse stays with `judgeGatewayInfo`; here skew only surfaces loudly.
  */
 
 import {
@@ -35,49 +13,35 @@ import {
   protocolsCompatible,
 } from "./version-handshake.js";
 
-/** Result of one heartbeat probe (`/centraid/_gateway/health`). */
 export interface GatewayProbe {
-  /** Probe completion time (epoch ms, desktop clock). */
+  /** Epoch ms on the desktop clock. */
   at: number;
   ok: boolean;
   latencyMs?: number;
-  /** Server-reported process start (epoch ms, gateway clock). */
+  /** Epoch ms on the gateway clock. */
   gatewayStartedAt?: number;
-  /** Server-reported uptime — clock-skew-safe companion to `gatewayStartedAt`. */
+  /** Clock-skew-safe companion to `gatewayStartedAt`. */
   gatewayUptimeMs?: number;
   version?: string;
   protocolVersion?: number;
-  /** Failure reason when `!ok` (fetch error / HTTP status). */
   detail?: string;
   /**
-   * Marks a SYNTHESIZED boot-phase failure — no HTTP request was made because
-   * the desktop doesn't know where to send one yet (settings unreadable, or
-   * the local gateway's URL not resolved). See {@link isPendingBootProbe}:
-   * these are "not started yet", not "unreachable". A crash-looped local
-   * gateway is deliberately NOT flagged — that IS a real failure.
+   * A SYNTHESIZED failure: no request was made because the desktop has no URL
+   * yet. "Not started yet", not "unreachable" — see {@link isPendingBootProbe}.
+   * A crash-looped local gateway is deliberately NOT flagged; that is real.
    */
   bootPhase?: boolean;
-  /**
-   * Aggregate status from `/centraid/_gateway/health`'s payload. Undefined
-   * when the gateway omits the aggregate status.
-   */
   healthStatus?: "ok" | "degraded" | "error";
-  /** Non-'ok' components from the health snapshot, when `healthStatus` is set. */
   componentIssues?: GatewayComponentIssue[];
 }
 
-/** One subsystem sitting at `degraded` or `error` in the health snapshot. */
 export interface GatewayComponentIssue {
   component: string;
   status: "degraded" | "error";
   message?: string;
 }
 
-/**
- * Protocol-handshake verdict for the active (REMOTE only, see file header)
- * gateway. Product `version` strings are informational; `skewed` means the
- * protocol support window failed (#512).
- */
+/** `skewed` means the protocol support window failed (#512). */
 export interface GatewayVersionSkew {
   skewed: boolean;
   gatewayVersion: string;
@@ -86,20 +50,17 @@ export interface GatewayVersionSkew {
   clientProtocolVersion: number;
 }
 
-/** Action returned by {@link applyVersionSkewAlert} when a skew notification is due. */
 export type GatewayVersionSkewAction = {
   gatewayVersion: string;
   gatewayProtocolVersion: number;
 };
 
-/** Per-component alert bookkeeping — mirrors `GatewayOutage`'s de-dupe shape. */
 export interface GatewayComponentAlertRecord {
   component: string;
-  /** When this component was first seen at 'error' in the current stretch. */
+  /** First seen at 'error' in the current stretch. */
   sinceAt: number;
-  /** Set once the OS notification fires — cleared by dropping the record on recovery. */
+  /** Set once the notification fires; cleared by dropping the record. */
   alertedAt?: number;
-  /** Latest message for this component, carried for the notification body. */
   message?: string;
 }
 
@@ -115,25 +76,22 @@ export interface GatewaySample {
   latencyMs?: number;
 }
 
-/** One continuous stretch of failed probes. Open-ended while ongoing. */
+/** One continuous stretch of failed probes; open-ended while ongoing. */
 export interface GatewayOutage {
   startedAt: number;
   endedAt?: number;
-  /** Set when the down alert fired for this outage (once, ever). */
+  /** Fires once, ever, per outage. */
   alertedAt?: number;
-  /** Set when the paired "back online" notice fired. */
   recoveredNoticeAt?: number;
 }
 
 export interface GatewayRuntimeState {
-  /** Which gateway this history belongs to — a switch resets tracking. */
+  /** A switch to another gateway resets tracking. */
   gatewayId: string;
   gatewayLabel: string;
   gatewayKind: "local" | "remote";
-  /** When this state was created (app launch or gateway switch). */
   trackingSince: number;
   status: "unknown" | "up" | "down";
-  /** When the current status began (first probe that established it). */
   statusSince?: number;
   lastCheckAt?: number;
   latencyMs?: number;
@@ -141,36 +99,20 @@ export interface GatewayRuntimeState {
   gatewayUptimeMs?: number;
   version?: string;
   protocolVersion?: number;
-  /** Failure detail from the most recent failed probe. */
   lastError?: string;
   checksTotal: number;
   checksFailed: number;
-  /** Rolling probe strip, oldest first, capped at {@link SAMPLE_CAP}. */
+  /** Oldest first. */
   samples: GatewaySample[];
-  /** Outage log, oldest first, capped at {@link OUTAGE_CAP}. */
   outages: GatewayOutage[];
-  /**
-   * Reconciled health signal (#351): the health probe's aggregate
-   * component status, upgraded to `'degraded'` on sustained high latency
-   * even when every component reports `ok` (see {@link DEGRADED_LATENCY_MS}).
-   * Undefined until the first successful probe reaches `/health`; persists
-   * at its last value while the gateway is unreachable.
-   */
+  /** Persists at its last value while the gateway is unreachable. */
   healthStatus?: "ok" | "degraded" | "error";
-  /** Non-'ok' components from the most recent `/health` snapshot. */
   componentIssues?: GatewayComponentIssue[];
-  /** True when recent probe latency has sustained above {@link DEGRADED_LATENCY_MS}. */
   latencyDegraded: boolean;
-  /** Per-component alert bookkeeping, capped small — internal to the monitor. */
   componentAlerts: GatewayComponentAlertRecord[];
-  /**
-   * Version-handshake verdict, REMOTE gateways only (see file header) —
-   * undefined for a local gateway (always in lockstep) and while no probe
-   * carrying `version`/`protocolVersion` has landed yet. Persists at its last
-   * value across a failed probe, same posture as the identity fields.
-   */
+  /** REMOTE gateways only (see file header); persists across a failed probe. */
   versionSkew?: GatewayVersionSkew;
-  /** De-dupe marker for the skew OS notification — internal, not on the wire snapshot. */
+  /** Internal de-dupe marker, not on the wire snapshot. */
   versionSkewAlertedAt?: number;
 }
 
@@ -183,34 +125,22 @@ export type GatewayAlertAction =
   | { kind: "down"; downForMs: number }
   | { kind: "recovered"; outageMs: number };
 
-/** Sane default: alert after the gateway has been down for 2 minutes. */
 export const DEFAULT_ALERT_SECONDS = 120;
 export const MIN_ALERT_SECONDS = 15;
 export const MAX_ALERT_SECONDS = 3600;
 /** 240 probes at the 5s cadence ≈ the last 20 minutes. */
 export const SAMPLE_CAP = 240;
 export const OUTAGE_CAP = 50;
-/**
- * A "listening but hung" gateway (touches no subsystem, just answers HTTP)
- * needs a signal the plain up/down status doesn't carry — sustained probe
- * latency above this folds into `healthStatus: 'degraded'` even when every
- * component reports `ok`.
- */
+/** Sustained latency above this reads as `degraded` even when every component
+ *  is `ok` — catching a "listening but hung" gateway. */
 export const DEGRADED_LATENCY_MS = 2000;
-/** Consecutive successful, over-threshold samples before latency counts as "sustained". */
 export const SUSTAINED_LATENCY_SAMPLE_COUNT = 3;
-/**
- * Component-level alert default (#351): longer than the gateway-down
- * threshold ({@link DEFAULT_ALERT_SECONDS}) because a single subsystem
- * erroring is noisier and more often self-healing than the whole gateway
- * being unreachable.
- */
+/** Deliberately longer than {@link DEFAULT_ALERT_SECONDS}: one erroring
+ *  subsystem is noisier and more often self-healing than a dead gateway. */
 export const DEFAULT_COMPONENT_ALERT_SECONDS = 300;
-/** Bound on tracked component-alert records — a runaway health payload can't grow this forever. */
 export const COMPONENT_ALERT_CAP = 50;
 
-/** Clamp a raw settings value into the valid alert-threshold range.
- *  Returns `undefined` for non-numeric garbage (field is then dropped). */
+/** `undefined` for non-numeric garbage, so the field is dropped. */
 export function clampAlertSeconds(raw: unknown): number | undefined {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
   return Math.min(
@@ -238,7 +168,6 @@ export function initialRuntimeState(
   };
 }
 
-/** True when the last {@link SUSTAINED_LATENCY_SAMPLE_COUNT} samples are all successful and over the degraded threshold. */
 function sustainedHighLatency(samples: GatewaySample[]): boolean {
   if (samples.length < SUSTAINED_LATENCY_SAMPLE_COUNT) return false;
   const tail = samples.slice(-SUSTAINED_LATENCY_SAMPLE_COUNT);
@@ -249,25 +178,10 @@ function sustainedHighLatency(samples: GatewaySample[]): boolean {
 }
 
 /**
- * True when this tick's failure is boot-phase noise that must NOT be folded
- * into tracking at all (#647).
- *
- * A synthesized failure raised while the embedded gateway's URL is still
- * resolving would read as `unknown → down`, open an outage, and make
- * `deriveOutageEvents` emit a severity-high durable `down` plus its paired
- * `recovered`. Leaving the state untouched keeps `status: 'unknown'`, so no
- * outage opens and the eventual first success is an `unknown → up`
- * transition, which derives no `recovered` either — the pair disappears
- * together by construction. Do not swap this for a "was suppressed" flag.
- *
- * Deliberately narrow, so genuine "remote gateway unreachable at launch"
- * alerting is untouched:
- *   - only SYNTHESIZED failures ({@link GatewayProbe.bootPhase}) qualify — an
- *     actual HTTP probe that failed is a real `down` from the very first tick,
- *     local or remote;
- *   - only while `status === 'unknown'`, i.e. this launch has never resolved
- *     the gateway either way. Once tracking has established up or down, a
- *     later settings failure folds through normally.
+ * Boot-phase noise that must NOT be folded into tracking at all (#647): folding
+ * it opens an outage and emits a durable `down`/`recovered` pair. Leaving the
+ * state untouched makes that pair vanish by construction — do not swap this for
+ * a "was suppressed" flag.
  */
 export function isPendingBootProbe(
   state: GatewayRuntimeState,
@@ -327,8 +241,8 @@ export function applyProbe(
     ...(probe.ok && probe.componentIssues !== undefined
       ? { componentIssues: probe.componentIssues }
       : {}),
-    // Identity/runtime fields refresh on success and persist across
-    // failures (the page still shows the last-known version while down).
+    // Identity fields persist across failures: the page keeps showing the
+    // last-known version while down.
     ...(probe.ok
       ? {
           ...(probe.latencyMs === undefined
@@ -344,9 +258,7 @@ export function applyProbe(
           ...(probe.protocolVersion === undefined
             ? {}
             : { protocolVersion: probe.protocolVersion }),
-          // REMOTE gateways only — a local gateway is built from this same
-          // tree and can never skew. Probes without version/protocol fields
-          // leave the last-known verdict in place, same as `version` above.
+          // REMOTE only: a local gateway ships from this tree and cannot skew.
           ...(state.gatewayKind === "remote" &&
           probe.version !== undefined &&
           probe.protocolVersion !== undefined
@@ -373,10 +285,8 @@ export function applyProbe(
 }
 
 /**
- * Decide whether a notification is due, marking the outage so it never
- * re-fires. The down alert requires alerts to be enabled at evaluation
- * time; the recovery notice pairs with an already-fired down alert and is
- * delivered even if the user toggled alerts off mid-outage.
+ * Marks the outage so it never re-fires. The recovery notice pairs with an
+ * already-fired down alert and lands even if alerts were toggled off mid-outage.
  */
 export function evaluateAlert(
   state: GatewayRuntimeState,
@@ -421,14 +331,8 @@ export function evaluateAlert(
 }
 
 /**
- * Fold the latest component issues (from `state.componentIssues`) into
- * per-component alert bookkeeping and decide which, if any, have been
- * sitting at `error` long enough to fire a de-duped OS notification.
- * Mirrors `evaluateAlert`'s shape: a component only fires once
- * (`alertedAt` set) and its record is dropped entirely once it recovers
- * (leaves the error set), so a later re-error starts a fresh window and
- * can alert again. `degraded` components are tracked in `componentIssues`
- * for display but don't drive an OS alert — only `error` does.
+ * A component fires once; its record is dropped on recovery so a re-error
+ * starts a fresh window. Only `error` alerts — `degraded` is display-only.
  */
 export function applyComponentAlerts(
   state: GatewayRuntimeState,
@@ -485,14 +389,9 @@ export function applyComponentAlerts(
 }
 
 /**
- * Decide whether the version-skew OS notification is due. Unlike
- * {@link applyComponentAlerts}, there's no "sustained past a threshold"
- * wait: a version/schema mismatch is a static build fact, not a transient
- * blip that might self-heal within a few probes, so it fires as soon as
- * it's observed. It still de-dupes like the component-alert pattern —
- * `versionSkewAlertedAt` marks an already-notified skew so it doesn't refire
- * every 5s tick, and clears the moment the gateway stops reporting skew
- * (e.g. both sides get upgraded to match), re-arming for a later mismatch.
+ * No threshold wait, unlike {@link applyComponentAlerts}: a version mismatch is
+ * a static build fact, not a self-healing blip. `versionSkewAlertedAt` de-dupes
+ * and clears once skew stops, re-arming for a later mismatch.
  */
 export function applyVersionSkewAlert(
   state: GatewayRuntimeState,

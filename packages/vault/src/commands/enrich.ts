@@ -1,23 +1,14 @@
 // governance: allow-repo-hygiene file-size-limit (#731) the typed enrichment command pack keeps OCR, transcript, embedding, face, and provenance validation in one derivative-write boundary.
-// The enrichment command pack (#299): the typed verbs the spine's
-// non-staged writes ride. Staged output (captions, tags, faces, albums,
-// filing) lands through `sync.stage_rows` + the enrich publishers; these
-// commands cover what staging cannot express —
-//
-//   - `core.set_extracted_text`: the OCR/extraction result becomes the
-//     content item's inline `text` derivative, so the existing FTS triggers
-//     index the PARENT document in-transaction (#296's rule). This is
-//     how a scanned PDF becomes searchable.
-//   - `media.answer_face_proposal`: the owner's half of the face proposal
-//     loop, as ONE verb with three answers. It replaces the `confirm_face` /
-//     `reject_face` pair outright (#712) — see that command's own
-//     header for why two verbs could not finish a review queue.
-//   - `sync.set_connection_trust`: the owner's standing-consent lever — an
-//     `auto-publish` enrichment connection is what lets captions land
-//     without a review click. Risk `high`: an agent proposing to widen its
-//     own trust parks for the owner, structurally.
-//   - `enrich.request_enrichment` / `enrich.upsert_embedding`: the
-//     on-demand queue and the additive vector index (#299).
+// The enrichment command pack (#299): the typed verbs the spine's non-staged
+// writes ride. Staged output (captions, tags, faces, albums, filing) lands
+// through `sync.stage_rows` + the enrich publishers; these commands cover what
+// staging cannot express — `core.set_extracted_text` turns an OCR result into
+// the content item's inline `text` derivative so the FTS triggers index the
+// PARENT in-transaction (#296); `media.answer_face_proposal` is the owner's
+// half of the face loop as ONE verb with three answers (#712);
+// `sync.set_connection_trust` is the standing-consent lever, risk `high` so an
+// agent widening its own trust parks; `enrich.request_enrichment` /
+// `enrich.upsert_embedding` are the on-demand queue and the vector index.
 
 import { stampDerivation } from "../enrich/derivation.js";
 import { recordEnrichConsent } from "../enrich/egress-consent.js";
@@ -46,9 +37,8 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
       variant: { type: "string", enum: ["text", "transcript"] },
       capability: { type: "string", minLength: 1 },
       model: { type: "string", minLength: 1 },
-      // Which engine profile produced this text (#807). Absent
-      // means the bundled engine, which is what every stamp written before
-      // profiles existed carries — see `BUILT_IN_PROFILE`.
+      // Which engine profile produced this text (#807). Absent means the
+      // bundled engine — see `BUILT_IN_PROFILE`.
       profile: { type: "string", minLength: 1 },
       prompt_rev: { type: "string", minLength: 1 },
       confidence: { type: "number", minimum: 0, maximum: 1 },
@@ -155,17 +145,12 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /**
- * OCR boxes are declared against ONE asset's pixel dimensions, but until now
- * nothing gateway-side checked them — the bundled `photo-ocr` handler's
- * `canonicalRegions` drops an out-of-bounds box before it ever calls this
- * command, but that check lives in a read-only bundled file, not at the
- * write boundary. `enrich.upsert_faces` already rejects a face box outside
- * its asset; this mirrors that so validation lives at the one gateway-side
- * staged write, not scattered across every caller (#731). Unlike a
- * face — which IS its box — a text region's box is an annotation on top of
- * real text, so an out-of-bounds box is dropped rather than failing the
- * whole write: the text survives, and an absent box (like an absent
- * confidence) is never invented as `[0,0,0,0]`.
+ * OCR boxes are declared against ONE asset's pixel dimensions, and validation
+ * belongs at the gateway-side write boundary rather than scattered across
+ * callers (#731) — `enrich.upsert_faces` already rejects an out-of-bounds face
+ * box. Unlike a face, which IS its box, a text region's box annotates real
+ * text, so an out-of-bounds box is DROPPED rather than failing the write: the
+ * text survives, and an absent box is never invented as `[0,0,0,0]`.
  */
 function dropOutOfBoundsRegions(
   ctx: HandlerCtx,
@@ -195,17 +180,13 @@ function dropOutOfBoundsRegions(
 /**
  * Shared canonical derivative writer for reviewed local OCR and enrichers.
  *
- * A REWRITE (an OCR/transcript model bump correcting the same content_id's
- * text) gets a FRESH `derivative_id` rather than an in-place UPDATE.
- * `embed-text`'s bounded cursor walks `derivative_id > cursor`: an in-place
- * update would leave the row's id behind an already-advanced cursor, so the
- * rewritten text would never re-enter the embedding sweep and semantic
- * search would keep serving vectors of the stale text forever (#731).
- * A fresh, strictly-later id (derivative ids are UUIDv7, so lexicographic
- * order is creation order) re-enters that sweep exactly once. The row's
- * logical identity is `(content_id, variant)`, enforced by the table's own
- * UNIQUE constraint — nothing outside this module keys off `derivative_id`
- * surviving a rewrite (it is a bare primary key, never a foreign key).
+ * A REWRITE gets a FRESH `derivative_id`, never an in-place UPDATE:
+ * `embed-text`'s bounded cursor walks `derivative_id > cursor`, so an in-place
+ * update leaves the row behind an already-advanced cursor and semantic search
+ * serves vectors of the stale text forever (#731). Derivative ids are UUIDv7,
+ * so a fresh id is strictly later and re-enters the sweep exactly once. The
+ * row's logical identity is `(content_id, variant)`, enforced by the table's
+ * UNIQUE constraint; nothing outside this module keys off `derivative_id`.
  */
 export function writeExtractedText(
   ctx: HandlerCtx,
@@ -242,32 +223,21 @@ export function writeExtractedText(
 
 /**
  * THE TRIAGE VERB (#712). One answer to one proposal, discriminated on
- * `answer` — not three commands that each write a different corner of the
- * same row.
+ * `answer` — not three commands each writing a different corner of one row.
  *
- * WHY THE `confirm_face` / `reject_face` PAIR IS GONE RATHER THAN KEPT BESIDE
- * THIS. Between them they could express two of the three answers a member
- * actually gives, and a review queue needs all three to ever be finishable:
- *
- *   - `confirm` REQUIRED a party_id, so "yes, I looked at this stranger's
- *     face and I am deliberately not naming it" had nowhere to land. The
- *     member's only exit was Skip, which writes nothing — so every skipped
- *     face came back on the next load, for ever.
- *   - `reject` DELETED the row. A deletion is not a state: nothing was left
- *     to say "the owner said no", nothing to count, and nothing standing in
- *     the enricher's way when it next proposed the same face.
- *
- * Both were also the same act — the owner answering a derived proposal — so
- * keeping a thin delegate for each would have left three registered verbs and
- * three app actions writing one column. `media_face_region.review_state` is
- * the state; this is the only verb that writes it.
+ * The `confirm_face`/`reject_face` pair is GONE rather than kept beside this,
+ * because between them they expressed only two of the three answers a member
+ * gives, and a review queue needs all three to be finishable. `confirm`
+ * REQUIRED a party_id, so "I looked at this stranger and am deliberately not
+ * naming it" had nowhere to land, and Skip writes nothing — every skipped face
+ * came back forever. `reject` DELETED the row, and a deletion is not a state:
+ * nothing counted it, and nothing stopped the enricher re-proposing.
+ * `media_face_region.review_state` is the state; this is its only writer.
  *
  * THE UNION IS ENFORCED, NOT DOCUMENTED. `confirm` carries a `party_id`;
  * `reject` and `dismiss` must not. gateway/json-schema.ts is a deliberate
- * JSON-Schema SUBSET with no `oneOf`, so the pairing rides a precondition
- * (declarative, journaled as a check row, and the member gets the sentence)
- * rather than an undeclarable schema branch — the same choice
- * `enrich.request_enrichment` makes just below for its own conditional field.
+ * JSON-Schema SUBSET with no `oneOf`, so the pairing rides a precondition —
+ * declarative, journaled as a check row, and the member gets the sentence.
  */
 const ANSWER_FACE_PROPOSAL: CommandDefinition = {
   name: "media.answer_face_proposal",
@@ -278,7 +248,7 @@ const ANSWER_FACE_PROPOSAL: CommandDefinition = {
     additionalProperties: false,
     properties: {
       region_id: { type: "string", minLength: 1 },
-      /** The discriminant (protocol.md C3): one clear field, three members. */
+      /** The discriminant (protocol.md C3): one field, three members. */
       answer: { type: "string", enum: ["confirm", "reject", "dismiss"] },
       /** `confirm` only — who the face is. See the precondition below. */
       party_id: { type: "string", minLength: 1 },
@@ -301,10 +271,10 @@ const ANSWER_FACE_PROPOSAL: CommandDefinition = {
       value: 1,
     },
     {
-      // The union rule, in one predicate: `confirm` names a party that exists
-      // in this vault; `reject` and `dismiss` name none at all. An optional
-      // input binds as NULL here (contract.ts), which is what lets one
-      // condition branch on the discriminant instead of two conflicting ones.
+      // The union rule in one predicate: `confirm` names a party that exists
+      // here; `reject`/`dismiss` name none. An optional input binds as NULL
+      // (contract.ts), which is what lets ONE condition branch on the
+      // discriminant instead of two conflicting ones.
       name: "answer_names_a_party_iff_confirm",
       sql: `SELECT CASE
                      WHEN :answer = 'confirm'
@@ -332,20 +302,17 @@ const ANSWER_FACE_PROPOSAL: CommandDefinition = {
       value: 1,
     },
   ],
-  // Retry-safe, and NOT `once`: answering the same region twice is how a
-  // member corrects themself ("that was not Ana after all"), so the second
-  // answer must land rather than be refused as a replay.
+  // Retry-safe, NOT `once`: answering the same region twice is how a member
+  // corrects themself, so the second answer must land, not be refused.
   idempotency: "retry-safe",
-  // Low by design: this curates DERIVED proposals — the same class as
-  // captioning (media.update_asset) — so the in-app loop stays live under the
-  // app ceiling instead of parking every click.
+  // Low by design: this curates DERIVED proposals, the same class as
+  // captioning, so the in-app loop stays live under the app ceiling.
   risk: "low",
   handler: answerFaceProposal,
 };
 
-/** The three answers, keyed by discriminant — a table, not a branch chain
- *  (coding-standards.md), so a fourth answer is one row rather than an edit
- *  to every site that reads the verb. `keepsParty` is the invariant the DDL
+/** A table, not a branch chain (coding-standards.md), so a fourth answer is one
+ *  row rather than an edit at every site. `keepsParty` is the invariant the DDL
  *  also enforces: only proposed and confirmed regions carry a party. */
 const FACE_ANSWERS = {
   confirm: {
@@ -384,8 +351,8 @@ function answerFaceProposal(ctx: HandlerCtx): Record<string, unknown> {
     party_id?: string;
   };
   const answer = FACE_ANSWERS[input.answer];
-  // The confirmer is the acting party — the owner when an app or a device
-  // calls. Only a confirm has one, and the DDL refuses the pair coming apart.
+  // The confirmer is the acting party — the owner when an app or device calls.
+  // Only a confirm has one, and the DDL refuses the pair coming apart.
   const confirmer = answer.keepsParty
     ? (ctx.identity.partyId ?? ownerPartyId(ctx))
     : null;
@@ -416,9 +383,8 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
     properties: {
       connection_id: { type: "string", minLength: 1 },
       trust: { type: "string", enum: ["staged", "auto-publish"] },
-      // Per-class standing consent (#310): which derived-data
-      // classes the trust covers. Omitted = all classes (a full grant);
-      // an array narrows it — everything else stages for review.
+      // Per-class standing consent (#310). Omitted = all classes; an array
+      // narrows it, and everything else stages for review.
       enrich_classes: {
         type: "array",
         items: {
@@ -455,8 +421,8 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
     },
   ],
   idempotency: "retry-safe",
-  // The owner's standing-consent lever (#306 Tier 4): widening a
-  // connection to auto-publish is a consent-state change — a proposal PARKS.
+  // The standing-consent lever (#306 Tier 4): widening a connection to
+  // auto-publish is a consent-state change, so a proposal PARKS.
   risk: "high",
   confirm: true,
   handler: (ctx) => {
@@ -493,16 +459,14 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
     properties: {
       entity_type: { type: "string", minLength: 1 },
       entity_id: { type: "string", minLength: 1 },
-      // `manual` (#352 phase 3/4): an owner-driven on-demand ask from
-      // an app — "detect faces now" — distinct from a passive search-miss
-      // or on-view signal.
+      // `manual` (#352): an owner-driven on-demand ask from an app, distinct
+      // from a passive search-miss or on-view signal.
       reason: { type: "string", enum: ["search-miss", "on-view", "manual"] },
       detail: { type: "string" },
-      // CONSENT SCOPE (see schema/enrich.ts `capability`): which enricher
-      // this ask is for. Required for `manual` — an owner's "detect faces
-      // now" must not read as consent for captioning, screenshot OCR and
-      // every other enabled enricher — which is what an untagged row would
-      // mean.
+      // CONSENT SCOPE (schema/enrich.ts `capability`): which enricher this ask
+      // is for. Required for `manual` — an owner's "detect faces now" must not
+      // read as consent for captioning, OCR and every other enabled enricher,
+      // which is what an untagged row would mean.
       capability: { type: "string", minLength: 1, maxLength: 64 },
     },
   },
@@ -554,17 +518,13 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("enrich.request", requestId);
-    // RE-KEY THE ANSWER (#807). A `manual` request IS the
-    // member's answer to a consent moment — Photos' enrichment panel has
-    // exactly one write, and this is it. The panel's answer is the ON-DEVICE
-    // one ("what leaves the device: nothing"), so the row it re-keys is
-    // capability × `on-device`, vault-wide. Recording it here rather than from
-    // the app keeps blueprints powerless: the app still invokes the one verb
-    // it always invoked, and the consent ledger is written by the vault.
-    //
-    // Nothing about this row widens anything: `on-device` is the narrowest
-    // egress class there is, and the fire gate reads a stored answer only to
-    // refuse, never to permit past the policy cascade's ceiling.
+    // RE-KEY THE ANSWER (#807). A `manual` request IS the member's answer to a
+    // consent moment: Photos' enrichment panel has exactly one write, and its
+    // answer is the ON-DEVICE one, so the row it re-keys is capability ×
+    // `on-device`, vault-wide. Recording it HERE rather than in the app keeps
+    // blueprints powerless — the consent ledger is written by the vault.
+    // Nothing widens: `on-device` is the narrowest egress class, and the fire
+    // gate reads a stored answer only to refuse, never to permit.
     if (input.reason === "manual" && input.capability) {
       recordEnrichConsent(ctx.db, {
         capability: input.capability,
@@ -588,32 +548,26 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
 /**
  * THE ONE WRITER of `enrich_consent` (#807).
  *
- * Egress consent is the member's answer to "may work for THIS capability run
- * on an engine that reaches THIS far" — capability × egress class × scope,
- * asked once, answered once, receipted. It is data-owner property, so it lives
- * in the vault and travels with the data; the gateway only ever reads it
- * (`packages/server/src/enrich/egress-consent-lookup.ts`), and the fire gate
- * refuses when the answer it needs is absent or declined.
+ * Egress consent is capability × egress class × scope, asked once, answered
+ * once, receipted. It is data-owner property, so it lives in the vault and
+ * travels with the data; the gateway only READS it
+ * (`server/src/enrich/egress-consent-lookup.ts`), and the fire gate refuses
+ * when the answer it needs is absent or declined.
  *
- * WHY A COMMAND RATHER THAN A ROUTE-LEVEL WRITE. Every route that records an
- * answer rides this verb, so there is exactly one journalled path: an owner's
- * answer, a decline, and a re-answer are all `act enrich.record_consent`
+ * A command rather than a route-level write, so there is exactly ONE journalled
+ * path: answer, decline and re-answer are all `act enrich.record_consent`
  * receipts in the same chain, and no surface can quietly write a grant the
- * ledger never saw. `confirm: true` is the consent-state marker
- * (`CommandDefinition.confirm`): an app or agent that reaches for this verb
- * PARKS for the owner instead of recording an answer on their behalf.
+ * ledger never saw. `confirm: true` makes an app or agent reaching for this
+ * verb PARK instead of recording an answer on the owner's behalf.
  *
- * A DECLINE IS A RECORD. `decision: 'declined'` writes a row, deliberately —
- * "asked and told no" must stay distinguishable from "never asked", which is
- * the difference between respecting an answer and re-asking it.
+ * A DECLINE IS A RECORD: `decision: 'declined'` writes a row, because "asked
+ * and told no" must stay distinguishable from "never asked".
  *
- * `receipt_id` stays NULL here: a command's own receipt id is minted AFTER its
- * transaction commits (`gateway/execution.ts` → `finalizeOrdinaryInvocation
- * Commit`), so a handler cannot know it, and inventing a second writer to
- * stamp it later would break the one-writer rule this command exists to hold.
- * The durable receipt is the invocation's own, chained in journal.db and
- * discoverable by this command name; the column stays for an imported answer
- * that arrives with a receipt already minted.
+ * `receipt_id` stays NULL here — a command's receipt id is minted AFTER its
+ * transaction commits, so a handler cannot know it, and a second writer
+ * stamping it later would break the one-writer rule. The durable receipt is the
+ * invocation's own; the column stays for an imported answer that arrives with
+ * one already minted.
  */
 const RECORD_CONSENT: CommandDefinition = {
   name: "enrich.record_consent",
@@ -672,9 +626,9 @@ const RECORD_CONSENT: CommandDefinition = {
       decision: input.decision,
       now: ctx.now,
     });
-    // Read the row's own id back rather than mint a synthetic one: an answer
-    // re-given keeps the id it was first recorded under (the writer UPSERTs),
-    // so provenance chains per ANSWER instead of per keystroke.
+    // Read the row's own id back rather than mint one: a re-given answer keeps
+    // the id it was first recorded under (the writer UPSERTs), so provenance
+    // chains per ANSWER instead of per keystroke.
     const stored = ctx.db
       .prepare(
         `SELECT consent_id FROM enrich_consent
@@ -711,13 +665,11 @@ const UPSERT_EMBEDDING: CommandDefinition = {
         items: { type: "number" },
       },
       capability: { type: "string", enum: ["embed-image", "embed-text"] },
-      // Which version of the SOURCE the vector was computed from — e.g.
-      // `embed-text`'s source `core_content_derivative.derivative_id`. Lets a
-      // caller distinguish "this target's embedding is current" from "the
-      // model is current but the source was rewritten since" (#731):
-      // model-only staleness checks miss a same-model text rewrite.
-      // Optional because `embed-image` has no comparable versioned source —
-      // its target IS the asset it reads bytes from.
+      // Which version of the SOURCE the vector was computed from, so a caller
+      // can tell "this target's embedding is current" from "the model is
+      // current but the source was rewritten since" (#731) — a model-only
+      // staleness check misses a same-model text rewrite. Optional because
+      // `embed-image` has no versioned source: its target IS the asset.
       source_version: { type: "string", minLength: 1 },
     },
   },
@@ -1020,7 +972,6 @@ const UPSERT_FACES: CommandDefinition = {
   },
 };
 
-/** The vault owner's party — apps and device callers act as the owner. */
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db
     .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")

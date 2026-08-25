@@ -1,27 +1,10 @@
-// The arithmetic behind Photos' three Places surfaces on the phone — the
-// shelf of cards (`PlacesView`), one place's photographs (`PlaceDetail`), and
-// the map (`PlacesMap`) — with no React, no theme, and no renderer in it.
+// The arithmetic behind Photos' three Places surfaces — shelf, detail and map.
+// One module, so a card, the detail it opens and a pin name a place alike.
 //
-// It is one module rather than three private helpers because the three
-// screens make ONE claim between them: a card, the detail it opens, and a pin
-// must name the same place the same way. That claim is only checkable if the
-// naming is written once; with a copy per screen, "they agree" is a comment
-// rather than a fact, and nothing would notice the day one of the three
-// drifted.
-//
-// The split inside is deliberate and is NOT an accident of the extraction:
-//
-//  - the SHELF (cards, detail) names a place by its coordinates rounded to one
-//    decimal — roughly 11km — because a card is a durable destination a member
-//    navigates to, and a key that moved with the drawing would break the
-//    moment the map was resized;
-//  - the MAP merges by pixel distance instead (`projectPlaces` in
-//    `@centraid/blueprints/apps/photos/place-map`), because whether two pins
-//    collide is a question about the drawing and is therefore asked in the
-//    drawing's units.
-//
-// So `placeCards` and `placePoints` group differently on purpose. What they
-// share is which rows are plottable at all, and the ramp/label a pin carries.
+// `placeCards` and `placePoints` GROUP DIFFERENTLY ON PURPOSE: the shelf keys by
+// coordinates rounded to one decimal (a card is a durable destination, and a key
+// that moved with the drawing would break on resize), the map by pixel distance
+// (`projectPlaces`) — collision is a question asked in the drawing's units.
 
 import type {
   MapPin,
@@ -36,26 +19,20 @@ import {
 
 import type { PhotoAsset } from "./timeline-model";
 
-/** A `core.place` row as the replica hands it over: column names, raw values. */
+/** A `core.place` row as the replica hands it over: RAW column names. */
 export type PlaceRow = Record<string, unknown>;
 
-/** One place's card on the shelf. */
 export interface PlaceCard {
-  /** The shelf's own place key — see `placeCardKey`. */
+  /** A `placeCardKey`, or `NO_LOCATION_KEY`. */
   id: string;
   name: string;
   count: number;
   coverUri?: string;
 }
 
-/**
- * The `core_place` row a surface standing at `placeKey` speaks for: the one the
- * NEWEST photograph taken there points at.
- *
- * The same row `placeCards` takes a card's title from, which is what makes the
- * two agree — a member is asked about, and answers for, the place whose name
- * they are looking at, not a neighbour inside the same 0.1° cell.
- */
+/** The row the NEWEST photograph at `placeKey` points at — the same row
+ *  `placeCards` titles from, so the two cannot name different neighbours inside
+ *  one 0.1° cell. */
 function newestRowAt(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[],
@@ -70,16 +47,10 @@ function newestRowAt(
   return null;
 }
 
-/**
- * The name to PRINT for `placeKey` right now, or null when there is no name a
- * person would recognise (#816).
- *
- * Read from the rows at render, never from a route parameter: a screen opened
- * before the place was named would otherwise keep the fallback in its head
- * while the member's own name sat in the row underneath it. A coordinate-shaped
- * label is not a name (`readableName`), which is the whole reason a caller
- * needs this rather than `row.name`.
- */
+/** The name to PRINT for `placeKey`, or null when there is none a person would
+ *  recognise (#816). Callers read this at render, never a route parameter, or a
+ *  screen opened before the place was named keeps the fallback. A
+ *  coordinate-shaped label is not a name — hence not `row.name`. */
 export function placeNameAt(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[],
@@ -89,15 +60,9 @@ export function placeNameAt(
   return row ? readableName(row.name ? String(row.name) : null) : null;
 }
 
-/**
- * The `core_place` row a surface standing at `placeKey` would NAME, or null when
- * there is nothing to ask (#816).
- *
- * Null when the place already has a name a person would recognise: a member who
- * named somewhere is not asked again. A coordinate-shaped label is NOT such a
- * name (`readableName`) — it is the placeholder `findOrCreatePlaceTx` mints, and
- * it is exactly the case this ask exists for.
- */
+/** The row to ask a name for, or null when there is nothing to ask (#816): a
+ *  member who named somewhere is never asked again. The coordinate-shaped
+ *  placeholder `findOrCreatePlaceTx` mints is not such a name. */
 export function unnamedPlaceAt(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[],
@@ -110,10 +75,7 @@ export function unnamedPlaceAt(
     : null;
 }
 
-/** Matches the web map's pin ramp: AREA tracks the count, so nine photographs
- *  read as three times one rather than nine times it. The floor is a fingertip
- *  and also the smallest a photograph can be and still be recognised — which
- *  is the entire point of drawing one. */
+/** The web map's ramp: AREA tracks the count, and the floor is a fingertip. */
 export const PIN_MIN = 44;
 export const PIN_MAX = 76;
 
@@ -121,28 +83,19 @@ function placeRowsById(rows: readonly PlaceRow[]): Map<string, PlaceRow> {
   return new Map(rows.map((row) => [String(row.place_id), row]));
 }
 
-/**
- * A coordinate is a NUMBER column or it is nothing — the same guard the web
- * handler applies when it renames the columns (`readPlaces` in
- * `queries/_shared.ts`): an explicit `NULL` from the vault, a string, or any
- * other type is dropped by type, never coerced and caught as `NaN` downstream.
- */
+/** A coordinate is a NUMBER column or it is nothing: dropped by type, never
+ *  coerced and caught as `NaN` downstream (the guard `readPlaces` applies). */
 function coordOf(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 /**
- * The key the SHELF names a place by: its coordinates rounded to one decimal.
+ * The shelf's key: coordinates rounded to one decimal, or null when the row has
+ * none — a card standing at a coordinate nobody recorded claims geography.
  *
- * `null` when the row carries no usable coordinates — such a place has no card
- * and no pin, because a card standing at a coordinate nobody recorded would be
- * a claim about geography rather than a read of one.
- *
- * Column contract (#787): `core_place` ships `geo_lat`/`geo_lng`
- * (packages/vault/src/schema/core.ts) and the mobile timeline hands rows RAW —
- * only the web handler renames them (queries/_shared.ts). So the physical
- * columns are read first, with `latitude`/`lat` (and `longitude`/`lng`) kept
- * only as legacy fixture fallbacks, the same chain `placePoints` reads.
+ * Column contract (#787): `core_place` ships `geo_lat`/`geo_lng` and mobile
+ * gets rows RAW, so the physical columns come first; `latitude`/`lat` are
+ * legacy fixture fallbacks only. `placePoints` reads the same chain.
  */
 export function placeCardKey(row: PlaceRow | undefined): string | null {
   if (!row) return null;
@@ -152,12 +105,8 @@ export function placeCardKey(row: PlaceRow | undefined): string | null {
   return `${latitude.toFixed(1)}:${longitude.toFixed(1)}`;
 }
 
-/**
- * The shelf's cards, largest first.
- *
- * Only photographs that carry a place appear: a photograph with no place is
- * not "somewhere unknown", it is one nobody told where it was taken.
- */
+/** The shelf's cards, largest first. Only photographs that carry a place: one
+ *  with none is not "somewhere unknown" (see `noLocationCard`). */
 export function placeCards(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[]
@@ -172,9 +121,8 @@ export function placeCards(
     const row = placeById.get(asset.placeId);
     const key = placeCardKey(row);
     if (!row || key === null) continue;
-    // A coordinate-shaped label is not a name (#816). `readableName` is
-    // the one predicate both surfaces ask; without it this card prints the
-    // digits `findOrCreatePlaceTx` mints as if a person had typed them.
+    // `readableName` is the one predicate both surfaces ask; without it the
+    // card prints `findOrCreatePlaceTx`'s digits as if typed (#816).
     const name =
       readableName(row.name ? String(row.name) : null) ?? PLACE_UNNAMED;
     const current = groups.get(key);
@@ -194,42 +142,23 @@ export function placeCards(
     .sort((a, b) => b.count - a.count);
 }
 
-/**
- * The reserved shelf key of the "no location" card (#816) — the same
- * spelling the web shelf's trailing section carries (`components/Places.tsx`),
- * because a hit and the destination it opens have to agree on it.
- *
- * It cannot collide with a real card key: those are two fixed-point numbers
- * joined by a colon (`placeCardKey`).
- */
+/** Reserved shelf key (#816), spelled as the web shelf spells it so a hit and
+ *  its destination agree. It cannot collide with a `placeCardKey`. */
 export const NO_LOCATION_KEY = "no-location";
 
-/** What that card is called. A different sentence from `PLACE_UNNAMED`: this is
- *  a photograph nobody told where it was taken, not a located place with no
- *  label. */
+/** A different sentence from `PLACE_UNNAMED`: nobody told this photograph where
+ *  it was taken, as against a located place with no label. */
 export const NO_LOCATION_NAME = PLACE_NO_LOCATION;
 
-/**
- * The photographs that carry NO place at all — the ones nobody, and no camera,
- * ever told where they were taken: the scans, the screenshots, the imports a
- * phone stripped the EXIF from.
- *
- * Strictly "no place id", NOT "no card on the shelf". A photograph at a place
- * that happens to carry no coordinate has a place — it is just unplottable —
- * and calling it "no location" would be a false sentence about it.
- *
- * Trash is excluded, exactly as `assetsAtPlace` excludes it: a deleted
- * photograph is not somewhere, it is gone.
- */
+/** Strictly "no place id", NOT "no card on the shelf" — a place carrying no
+ *  coordinate is unplottable, not unlocated. Trash is excluded, as in
+ *  `assetsAtPlace`. */
 export function assetsWithNoPlace(assets: readonly PhotoAsset[]): PhotoAsset[] {
   return assets.filter((asset) => !asset.deleted && !asset.placeId);
 }
 
-/**
- * The shelf's trailing card for that bucket, or null when there is nothing in
- * it (#816). Kept out of `placeCards` on purpose: that function answers
- * "which places are in this library" and the bucket is not a place.
- */
+/** Kept out of `placeCards` on purpose: that answers "which places are in this
+ *  library", and this bucket is not a place (#816). */
 export function noLocationCard(
   assets: readonly PhotoAsset[]
 ): PlaceCard | null {
@@ -240,21 +169,14 @@ export function noLocationCard(
     id: NO_LOCATION_KEY,
     name: NO_LOCATION_NAME,
     count: placeless.length,
-    // The timeline hands assets over newest first, so this is the most recent
-    // place-less photograph rather than an arbitrary one.
+    // Assets arrive newest first, so this is the most recent, not an arbitrary.
     ...(cover ? { coverUri: cover.previewUri ?? cover.uri } : {}),
   };
 }
 
-/**
- * The photographs one card opens: everything taken at that shelf key, minus
- * anything in the trash. Same key `placeCards` mints, so the count on a card
- * and the count in its detail cannot disagree.
- *
- * `NO_LOCATION_KEY` resolves here rather than in `PlaceDetail` (#816) for
- * exactly the reason this module exists: the card's count and the screen's
- * count are one arithmetic, written once.
- */
+/** Over the same key `placeCards` mints, minus trash, so a card's count and its
+ *  detail's cannot disagree. `NO_LOCATION_KEY` resolves here, never in
+ *  `PlaceDetail` (#816): one arithmetic, written once. */
 export function assetsAtPlace(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[],
@@ -268,15 +190,9 @@ export function assetsAtPlace(
   });
 }
 
-/**
- * One `PlacePoint` per place row, counted over the loaded window — what the
- * map projects.
- *
- * Grouping is by place id, not by rounded coordinates: proximity is a question
- * about the drawing and `projectPlaces` answers it in pixels against the box
- * actually being drawn. A fixed degree bucket merged two towns on a
- * country-wide map and split one street on a city one.
- */
+/** Grouped by place id, NEVER by rounded coordinates: `projectPlaces` answers
+ *  proximity in pixels against the box being drawn, and a fixed degree bucket
+ *  merges two towns on a country map while splitting one street on a city one. */
 export function placePoints(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[]
@@ -299,17 +215,13 @@ export function placePoints(
         lng,
         count: 1,
         name: row.name ? String(row.name) : null,
-        // The first asset seen for this place, and the timeline hands them
-        // over newest first — so a pin shows the most recent photograph
-        // taken there rather than an arbitrary one.
+        // First seen, and assets arrive newest first — so, the most recent.
         thumb: asset.uri,
       });
   }
   return [...byPlace.values()];
 }
 
-/** The drawn size of a pin holding `count` photographs, where the busiest pin
- *  on the map holds `largest`. */
 export function pinSize(count: number, largest: number): number {
   if (largest <= 1) return PIN_MIN;
   return Math.round(
@@ -317,9 +229,7 @@ export function pinSize(count: number, largest: number): number {
   );
 }
 
-/** What a pin announces: where it is, how many places merged into it, and how
- *  many photographs stand behind it. A place whose name is still its own
- *  coordinate has no name worth reading out (see `readableName`). */
+/** A place still named by its own coordinate has no name worth reading out. */
 export function pinLabel(pin: MapPin): string {
   const where = readableName(pin.name) ?? "an unnamed place";
   const photographs = `${pin.count} ${pin.count === 1 ? "photograph" : "photographs"}`;

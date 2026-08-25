@@ -1,8 +1,5 @@
-// Upload pipeline: perceptual hash + client thumb staging, then the typed
-// `upload` command per file. `runUpload` takes `refresh` and `setUploading`
-// from app.tsx (the only two things here that touch app-level state); the
-// button/input DOM nodes it mutates for progress text are looked up locally
-// via `$`.
+// Upload pipeline: hash + client thumb staging, then the typed `upload` command
+// per file. `refresh`/`setUploading` are the only app-level state touched here.
 import {
   isPendingOffsite,
   stageDerivative,
@@ -23,15 +20,9 @@ import { thumbHashFromImage } from "./thumbhash.ts";
 const CLIENT_TINY_EDGE = VIDEO_THUMB_EDGE;
 const CLIENT_MEDIUM_EDGE = VIDEO_POSTER_EDGE;
 
-// Client-side ceiling per file. Bytes stream to the blob staging route
-// (#296) — no base64 through command JSON — so a phone video fits;
-// the route itself caps at 512 MB.
+// Matches the blob staging route's own cap; bytes stream there (#296).
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
-// The metadata bundle a stage step derives off its single decode — width/
-// height (photo/video), duration (video/audio), and the two perceptual
-// hashes (photo). Every field is optional: each producer fills only what it
-// knows, and runUpload spreads whatever is present onto the upload command.
 interface MediaMeta {
   width?: number;
   height?: number;
@@ -40,9 +31,7 @@ interface MediaMeta {
   thumbhash?: string;
 }
 
-// 64-bit dHash (#299 Tier 0): 9×8 grayscale, each bit = "left pixel
-// brighter than its right neighbour". The canvas is the client's raster
-// codec, so the phash rides the same decode the thumb already paid for.
+// 64-bit dHash (#299 Tier 0): 9×8 grayscale, bit = "left brighter than right".
 export function dHashFromImage(
   img: HTMLImageElement | ImageBitmap
 ): string | null {
@@ -78,12 +67,7 @@ export function dHashFromImage(
   }
 }
 
-// Downscale a decoded bitmap to `edge` on its long side and POST it as one
-// preview-ladder rung beside the original. No-op (and no upload) when the
-// source is already within `edge` — the client never upscales, and the
-// gateway backstop won't either; a source already small enough IS its own
-// rung. JPEG q0.82 matches the gateway codec's ~0.8 output band (#405
-// §2). One bad rung never fails the upload.
+// Never upscales; q0.82 matches the gateway codec's ~0.8 band (#405 §2).
 async function stageRung(
   bitmap: ImageBitmap,
   parentSha: string,
@@ -91,7 +75,7 @@ async function stageRung(
   variant: string
 ): Promise<void> {
   const long = Math.max(bitmap.width, bitmap.height);
-  if (long <= edge) return; // already within this rung — nothing to downscale
+  if (long <= edge) return;
   const scale = edge / long;
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
@@ -104,28 +88,14 @@ async function stageRung(
   await stageDerivative(parentSha, variant, blob, "image/jpeg");
 }
 
-// SCOPE NOTE (#599): the derivative door (`stageDerivative`) is not
-// scope-addressed on either the served or the inline kit, so these rungs land
-// in the mount's primary scope even when the original was staged into an
-// audience. The consequence is a missing thumb/preview variant for an audience
-// upload (the grid falls back to a placeholder until the gateway backstop fills
-// it), never a wrong or leaked image — the rungs are keyed by the parent sha,
-// which the audience scope does not have.
+// Both preview-ladder rungs (#405) off one decode; the backstop fills the rest.
 //
-// Both preview-ladder rungs (#405), produced at upload time on this
-// device (the canvas is the one raster codec every client has) and staged as
-// the `thumb` (~256 px, the grid) and `preview` (~2048 px, the lightbox)
-// variants beside the original. Dimensions + perceptual hash ride for free
-// off the same single decode. A client that produces these first always wins
-// the hot path (upsert semantics keep the last writer) — the gateway backstop
-// only fills what a client couldn't.
+// SCOPE NOTE (#599): `stageDerivative` is not scope-addressed, so these rungs
+// land in the mount's primary scope even for an audience upload — a missing
+// variant, never a leaked image.
 //
-// Decodes via createImageBitmap(file) — NOT `img.src = URL.createObjectURL()`:
-// the gateway serves apps under `img-src 'self' data:` (no `blob:`), so a
-// blob-URL <img> is CSP-refused and the whole pipeline silently died (no
-// thumb variant, no dims, no phash — and every grid load then 404s on
-// `?variant=thumb` before falling back to the originals). createImageBitmap
-// reads the File directly, no URL fetch for CSP to police.
+// Decode via `createImageBitmap(file)`, NEVER `img.src = createObjectURL()`:
+// apps run under `img-src 'self' data:`, so a blob-URL <img> is CSP-refused.
 async function stageClientPreviews(
   file: File,
   parentSha: string
@@ -136,8 +106,6 @@ async function stageClientPreviews(
       bitmap.width > 0 ? { width: bitmap.width, height: bitmap.height } : null;
     const phash = dHashFromImage(bitmap);
     const thumbhash = thumbHashFromImage(bitmap);
-    // Tiny first (the grid is what paints on return), then medium. Both skip
-    // themselves when the original is already smaller than their edge.
     await Promise.allSettled([
       stageRung(bitmap, parentSha, CLIENT_TINY_EDGE, "thumb"),
       stageRung(bitmap, parentSha, CLIENT_MEDIUM_EDGE, "preview"),
@@ -177,11 +145,7 @@ async function stageClientPreviews(
   }
 }
 
-/**
- * Hardware-decode one representative frame on the uploading device. The
- * poster (lightbox/caption input) and thumb (grid) ride the derivative door;
- * no gateway video decoder exists in v0.
- */
+// Hardware-decode one frame on this device: there is no gateway video decoder.
 export async function stageVideoPoster(
   file: File,
   parentSha: string
@@ -235,7 +199,6 @@ function waitForMedia(
   });
 }
 
-/** Duration metadata for an audio upload; ID3/Vorbis tags parse server-side. */
 export async function probeAudio(file: File): Promise<MediaMeta | null> {
   if (!URL?.createObjectURL) return null;
   const audio = document.createElement("audio");
@@ -273,16 +236,12 @@ export async function runUpload(
   }: {
     refresh: () => Promise<void>;
     setUploading: (v: boolean) => void;
-    /** Was `assetId` in the trash this device had loaded when the run began?
-     *  See `tallyDedupes` for why the answer has to predate the run. */
+    /** Must answer from before the run began — see `tallyDedupes`. */
     wasTrashed: (assetId: string) => boolean;
   }
 ): Promise<ImportResult> {
-  // WHERE the new photos land (#599): whatever the chip selection makes
-  // the write target — the member's own library under "All", or the audience
-  // they are looking at. A read-only audience never gets here (wireUpload
-  // disables the entry points and says why), but the check is repeated because
-  // a drop or paste can race the shell revoking write access.
+  // WHERE the new photos land (#599). Re-checked even though the entry points
+  // are disabled: a drop or paste can race the shell revoking write access.
   const target = writeTarget("new");
   if (target.disabled) {
     notice(target.reason);
@@ -301,16 +260,12 @@ export async function runUpload(
   }
 
   setUploading(true);
-  // The two entry controls go inert for the run. NEITHER becomes a progress
-  // bar (v4 §14): a control says what it does, and what the run is doing is
-  // said once, with exact counts, on the frame's one status line.
+  // Inert, never a progress bar (v4 §14): progress lives on the status line.
   setImportEnabled(false);
 
   let added = 0;
-  // The assets this run's dedupes landed on, in selection order. Kept as ids
-  // rather than a count because "already here" and "restored" are the same
-  // command output (`deduped: 1`) and only the id tells them apart — see
-  // `tallyDedupes`.
+  // Ids, not a count: "already here" and "restored" share one command output
+  // and only the id separates them (`tallyDedupes`).
   const dedupedIds: string[] = [];
   let parked = 0;
   let pendingOffsite = 0;
@@ -319,24 +274,14 @@ export async function runUpload(
   let unreadable = 0;
   let retryable = 0;
   let lastBad: VaultOutcome | undefined = undefined;
-  // Progress text, receipts, and outcome narration are ordered by the user's
-  // selection. Keep that contract explicit instead of weakening the loop rule.
   const uploadNext = async (i: number): Promise<void> => {
     const file = accepted[i];
     if (file === undefined) return;
-    // Determinate, with exact counts, on the ONE status line — never a
-    // spinner and never a control that has turned into a label (§14).
     notice(`Importing ${i + 1} of ${accepted.length}…`);
-    // Stage the bytes (#296), grow a client thumb beside them, then
-    // claim the sha through the typed command — which is where the receipt
-    // mints and the library learns about the asset.
     let staged;
     try {
-      // The bytes go into the SAME scope as the command that claims them:
-      // staging into the member's own CAS and then claiming the sha in an
-      // audience would claim a sha that scope has never seen. (The preview
-      // rungs below still ride the unscoped derivative door — see the note on
-      // stageClientPreviews.)
+      // Bytes go into the SAME scope as the command that claims them, or the
+      // claim names a sha that scope has never seen.
       staged = await stageFileBytes(file, "", {
         hash: true,
         ...(scope ? { scope } : {}),
@@ -379,13 +324,9 @@ export async function runUpload(
       },
       scope
     );
-    // One bad file never sinks the batch — count it and keep going.
     if (outcome?.status === "executed") {
-      // A DEDUPE IS NOT AN ADDITION. Counting it as both makes a run of four
-      // files that are all already here say "Added 4 photographs (4 already in
-      // the library)" — two numbers describing the same four files, one of
-      // them untrue. The branches are exclusive, and the pending-offsite
-      // question does not arise for bytes the library already had.
+      // A DEDUPE IS NOT AN ADDITION. These branches stay exclusive, or a run of
+      // four already-present files reports four added AND four deduped.
       if (outcome.output?.deduped) {
         dedupedIds.push(String(outcome.output.asset_id ?? ""));
       } else if (isPendingOffsite(staged)) pendingOffsite += 1;
@@ -406,8 +347,7 @@ export async function runUpload(
   await uploadNext(0);
 
   setUploading(false);
-  // Re-enable through the target, not blindly: the chip selection may have
-  // moved to a read-only audience while the batch ran.
+  // Through the target: the selection may have moved to a read-only audience.
   applyUploadTarget();
 
   const { deduped, restored } = tallyDedupes(dedupedIds, wasTrashed);
@@ -415,8 +355,6 @@ export async function runUpload(
   if (added > 0) {
     parts.push(`Added ${added} ${added === 1 ? "photograph" : "photographs"}`);
   }
-  // Both outcomes are named on the ONE status line as counts, and explained at
-  // length by the panels the caller draws afterwards (components/Import.tsx).
   if (restored > 0) parts.push(`${restored} restored from the trash`);
   if (deduped > 0) parts.push(`${deduped} already in your library`);
   if (parked > 0) parts.push(`${parked} awaiting approval`);
@@ -439,26 +377,7 @@ function dragHasFiles(e: DragEvent): boolean {
   return [...(e.dataTransfer?.types ?? [])].includes("Files");
 }
 
-// Every DOM entry point that can hand this app files: the sidebar's "Add
-// photos" button (React-owned since the v2 sidebar — wired via its own
-// `onUpload` prop in app.tsx instead of a boot-time listener here, since
-// this module runs before the sidebar's first render ever mounts that
-// node), the empty-state's own button (which prefers the picker when an
-// album is selected), the hidden file input, page-wide drag/drop, and
-// paste. Wired once at boot from app.tsx; `dragDepth` is pure drop-overlay
-// bookkeeping that no component or app.tsx orchestrator ever reads, so it
-// lives here rather than among app.tsx's domain state.
-/**
- * Reflect the current write target onto the two disk-upload buttons (issue
- * #599): looking at an audience this member may only read, "Add media" is
- * disabled and says why, instead of accepting files and narrating a refusal
- * after the upload has already started. Called by app-root.tsx on every
- * toolbar render, so it tracks the chip selection.
- */
-/** The two controls that hand this app files from disk. `uploadBtn` is the
- *  frame's own Import contribution (frame.tsx) and `emptyUpload` the empty
- *  state's, so either can be absent on any given render — unlike the static
- *  ids `$` is otherwise asserted non-null for. */
+// Either can be absent on a render, unlike the static ids `$` asserts non-null.
 const IMPORT_CONTROL_IDS = ["uploadBtn", "emptyUpload"] as const;
 
 function importControls(): HTMLButtonElement[] {
@@ -470,12 +389,11 @@ function importControls(): HTMLButtonElement[] {
   return found;
 }
 
-/** Inert for the duration of a run, and nothing else — no label swap, no
- *  spinner, no count on the control (§14). */
 function setImportEnabled(enabled: boolean): void {
   for (const btn of importControls()) btn.disabled = !enabled;
 }
 
+// Called on every toolbar render (#599): a read-only audience refuses up front.
 export function applyUploadTarget(): void {
   const target = writeTarget("new");
   const reason = target.disabled ? target.reason : "";
@@ -507,7 +425,6 @@ export function wireUpload({
     await uploadFiles(files);
   });
 
-  // Drag a file anywhere onto the page: a full-page "Drop to add" overlay.
   let dragDepth = 0;
 
   window.addEventListener("dragenter", (e) => {
@@ -536,7 +453,6 @@ export function wireUpload({
     if (files.length > 0) void uploadFiles(files);
   });
 
-  // Paste an image (screenshot, copied photo) straight into the library.
   window.addEventListener("paste", (e) => {
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return; // never hijack a text field

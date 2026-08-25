@@ -1,33 +1,7 @@
 /*
- * `recover()` — the recovery VERB (#439). One shell-agnostic
- * service-layer orchestration that turns "a blank machine plus the recovery
- * kit and the provider api-key" into a live vault. Every shell over it stays
- * thin — the CLI (`cli/recover-admin.ts`) is one — never UI wrapping CLI.
- *
- * It composes machinery that already exists, in this order:
- *   1. discovering — parse the kit, reach the provider, list snapshots, and
- *      gate compatibility from the registry row's `appMeta` ALONE (no manifest,
- *      no chunk, no egress byte — a refusal here can never bill a metered home).
- *   2. fetching + replaying — a lazy restore into a staging dir inside the vault
- *      root (same device ⇒ the adopt is an atomic rename), deferring every blob
- *      the provider's ATTESTED cas inventory holds; WAL replay to tip happens
- *      inside `restoreSnapshot`.
- *   3. fencing — seed the recovered gateway's backup state at
- *      `currentGeneration + 1`, so this machine's FIRST post-recovery backup
- *      registers fenced and the superseded machine's next registration 409s
- *      (PROTOCOL.md § Generation fencing). recover() does NOT itself register —
- *      it only seeds the token.
- *   4. adopting — the staging dir becomes `<root>/<vaultId>` (rename). The
- *      `RESTORE_QUARANTINE.json` marker rides along and fires on FIRST mount,
- *      exactly as designed (`vault-quarantine.ts`). The R5 adopt-time inventory
- *      reconcile and the live-gateway mount slot into the `onAdopted` hook
- *      right here.
- *   5. warming — previews-first warm pass when a remote tier is constructible
- *      in-context; otherwise HONESTLY skipped and reported (never faked).
- *
- * The completion report is honest: recovered-as-of T (the coordinated WAL cut),
- * truncated-or-not, how many blobs were deferred, whether previews warmed or
- * why they didn't, and what the quarantine parks on first mount.
+ * `recover()` — the recovery VERB (#439): a blank machine plus the kit and the
+ * api-key becomes a live vault. Shells over it stay thin, never UI wrapping
+ * CLI. Phase order is the `emit()` sequence below.
  */
 
 import { randomBytes } from "node:crypto";
@@ -69,9 +43,6 @@ import {
 import { reconcileAdoptedInventory } from "./recover-reconcile.js";
 import type { ReconcileLogger, ReconcileReport } from "./recover-reconcile.js";
 
-/** The user-facing phases a recovery UI narrates. Machine vocabulary (seq, WAL,
- *  lazy) stays out of it — these map to "fetching your vault → replaying recent
- *  changes → warming previews" in the UI. */
 export type RecoverPhase =
   | "discovering"
   | "fetching"
@@ -81,11 +52,8 @@ export type RecoverPhase =
   | "warming"
   | "done";
 
-/** Everything the post-adopt extension point (#439) needs to act on
- *  the freshly adopted vault. */
 export interface RecoverAdoptContext {
   vaultId: string;
-  /** `<vaultRoot>/<vaultId>` — the adopted live vault directory. */
   vaultDir: string;
   targetId: string;
   provider: BackupProvider;
@@ -93,54 +61,30 @@ export interface RecoverAdoptContext {
 }
 
 export interface RecoverInput {
-  /** The recovery-kit document, already JSON-parsed (validated by `parseRecoveryKit`). */
   kitDocument: unknown;
-  /** Password for the recovery kit. Required — every kit is wrapped (#568 J). */
   password: string;
-  /** The provider api-key — deliberately NOT in the kit (FORMAT.md); supplied out-of-band. */
+  /** Deliberately NOT in the kit (FORMAT.md); supplied out-of-band. */
   apiKey: string;
-  /** Vault registry root (`<dataDir>/vault`) the recovered vault is adopted into. */
   vaultRoot: string;
-  /** Gateway control store receiving the recovered target's fenced state. */
   gatewayDatabase?: GatewayDatabase;
-  /** Gateway key custody receiving the keyring and per-vault sealing key. */
   keyStore?: KeyStore;
-  /** Stable HMAC-derived backup writer identity. */
   sourceInstanceId?: string;
-  /** Gateway data root when it cannot be derived from `vaultRoot`. */
   dataDir?: string;
-  /** Point-in-time recovery (#408): newest snapshot at/before this instant + WAL replay to it. Epoch ms. */
   at?: number;
-  /** Force a FULL restore — materialize every blob (the `--full` override); no inventory skip-set. */
   full?: boolean;
-  /** Which vault to recover when the kit carries more than one target (else the sole target). */
   vaultId?: string;
   now?: () => number;
-  /** Engine-shaped logger, plus an optional `error` sink the R5 reconcile shouts LOST blobs through. */
   log?: ReconcileLogger;
   onPhase?: (phase: RecoverPhase) => void;
-  /** Test / wave-4 seam: a pre-built provider (else one is built from the kit target + apiKey). */
   provider?: BackupProvider;
-  /**
-   * Warm-pass tier resolver (#439): build a `RemoteTier` over the restored
-   * vault's remote CAS, or return undefined to SKIP the warm pass honestly. The
-   * headless CLI passes nothing (no credential wiring pre-mount ⇒ skip, reported);
-   * a live gateway wires the gateway's `s3Credentials` resolver and opens
-   * the restored vault to hand back its own `.remote()` tier.
-   */
+  /** Return undefined to SKIP the warm pass honestly (#439). */
   resolveRemoteTier?: (
     ctx: RecoverAdoptContext
   ) => RemoteTier | undefined | Promise<RemoteTier | undefined>;
-  /**
-   * Post-adopt extension point (#439). Runs immediately AFTER the staging
-   * dir becomes the live vault directory and BEFORE the warm pass. The R5
-   * adopt-time inventory reconcile and a live `VaultRegistry.adopt` +
-   * mount are inserted here — a real, named seam, not a deferred marker.
-   */
+  /** Runs after the adopt rename, before the warm pass (#439). */
   onAdopted?: (ctx: RecoverAdoptContext) => void | Promise<void>;
 }
 
-/** The previews-first warm outcome, or the honest reason it was skipped. */
 export type PreviewsRecoverOutcome =
   | {
       warmed: true;
@@ -151,70 +95,36 @@ export type PreviewsRecoverOutcome =
     }
   | { warmed: false; reason: string };
 
-/** The honest completion report (#439). */
 export interface RecoverReport {
   vaultId: string;
   targetId: string;
-  /** The provider addressing from the kit (base URL, or `local:<dir>`). */
   provider: string;
-  /** `<vaultRoot>/<vaultId>` — the adopted vault directory (quarantine fires on first mount). */
   vaultDir: string;
-  /** The restored snapshot's seq. */
   seq: number;
-  /** The fenced generation seeded for this gateway's first post-recovery backup. */
   generation: number;
-  /** Recovered-as-of (epoch ms): the coordinated WAL cut, or the snapshot's registration time. */
   recoveredAsOf: number;
-  /** True when a db's WAL replay could not reach its newest registered tick (objects gone). */
   truncated: boolean;
-  /** Blobs deferred remote-only (the provider's attested cas inventory held them); served on demand. */
   skippedBlobs: number;
-  /** Whether the provider attested a cas inventory to build the skip-set from (else a full restore). */
   inventoryConsulted: boolean;
-  /** The provider's egress class (PROTOCOL.md `restoreCostClass`), for the honest cost line. */
   restoreCostClass: "free-egress" | "metered-egress" | undefined;
-  /** Warm-pass result or the honest skip reason. */
   previews: PreviewsRecoverOutcome;
-  /** Adopt-time inventory reconcile (#439): what the restored index believed vs. what the
-   *  provider actually holds — `lost.length > 0` is CRITICAL (bytes are gone). */
+  /** `lost.length > 0` is CRITICAL: bytes are gone (#439). */
   reconcile: ReconcileReport;
-  /** What the `RESTORE_QUARANTINE.json` marker parks the first time the vault mounts. */
   quarantine: string[];
 }
 
-/**
- * The pre-restore "found your vault" facts (#439 R1/R6) — the size/asOf/
- * provider/cost the CLI prints and the metered-egress gate consults BEFORE any
- * restore work, WITHOUT downloading a manifest. Mirrors the
- * `RestoreEgressEstimate` shape (`costClass`, `seq`, `fullBytes`, `lazyAvailable`)
- * so the recovery UI (#436) can render the same card later. `provider` rides
- * back so a shell can pass the already-built client into `recover()` rather than
- * dialing the provider twice.
- */
+/** The pre-restore facts (#439 R1/R6), gathered WITHOUT a manifest. */
 export interface RecoveryDiscovery {
   target: RecoveryKitTarget;
   provider: BackupProvider;
   seq: number | undefined;
-  /** Whole-library download for a `--full` restore (the selected row's `totalBytes`). */
   fullBytes: number | undefined;
-  /** Approximate recovered-as-of (the selected row's registration time, epoch ms). */
   recoveredAsOf: number | undefined;
   restoreCostClass: "free-egress" | "metered-egress" | undefined;
-  /** True when the provider attests an inventory ⇒ lazy defers the bulk download. */
   lazyAvailable: boolean;
-  /**
-   * Whether THIS build can read the selected snapshot — the registry-`appMeta`
-   * compatibility gate (the same one `recover()` enforces before a byte is
-   * fetched) run non-throwingly so the "found your vault" card (#439)
-   * can show a typed "update the gateway first"
-   * refusal instead of an opaque failure three phases into a restore. `true`
-   * when there is a snapshot and this build can read it; `false` with
-   * `incompatibleReason` set when a newer-software snapshot is refused. When no
-   * snapshot exists yet (`seq === undefined`) this stays `true` — the refusal is
-   * "nothing to recover", not "incompatible".
-   */
+  /** `recover()`'s `appMeta` gate, run non-throwingly. Stays `true` when no
+   *  snapshot exists — that refusal is "nothing to recover". */
   compatible: boolean;
-  /** The compat-gate refusal message when `compatible` is false (else absent). */
   incompatibleReason?: string;
 }
 
@@ -238,12 +148,8 @@ export async function discoverRecovery(opts: {
       opts.at
     );
   } catch {
-    // Provider unreachable / no snapshot yet: report "unknown" rather than block
-    // the facts card on a byte count.
     row = undefined;
   }
-  // Compatibility from the registry row's appMeta ALONE (no manifest, no byte) —
-  // caught, not thrown, so the facts card renders a refusal rather than an error.
   let compatible = true;
   let incompatibleReason: string | undefined;
   if (row) {
@@ -282,13 +188,10 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
   const log: ReconcileLogger = {
     info: (m) => input.log?.info?.(m),
     warn: (m) => input.log?.warn?.(m),
-    // The engine only ever calls info/warn; error is the R5 reconcile's CRITICAL
-    // sink — routed to a real error logger when one is wired, else warn.
     error: (m) => (input.log?.error ?? input.log?.warn)?.(m),
   };
   const emit = (phase: RecoverPhase): void => input.onPhase?.(phase);
 
-  // ── discovering ──────────────────────────────────────────────────────
   emit("discovering");
   const kit = parseRecoveryKit(input.kitDocument, input.password);
   const target = selectTarget(kit.targets, input.vaultId);
@@ -306,25 +209,18 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
         : `recover: no snapshot at or before ${new Date(input.at).toISOString()} for this vault`
     );
   }
-  // Compatibility gate from the registry row's appMeta ALONE — refuse a
-  // snapshot written by newer software BEFORE a manifest, a chunk, or an egress
-  // byte is touched (a refusal here can never bill a metered home).
+  // From the appMeta ALONE, BEFORE any egress byte: a refusal here can never
+  // bill a metered home.
   assertCompatibleAppMeta(row.appMeta, current);
 
-  // The provider's ATTESTED cas inventory — collected ONCE and used for BOTH
-  // the lazy skip-set AND the R5 adopt-time reconcile (below). Gated only on the
-  // capability, not on lazy-vs-full: a `--full` restore still needs it to prove
-  // the restored `blob_replica` beliefs against live truth. No `inventory`
-  // capability ⇒ nothing to attest (full restore, reconcile skips honestly).
+  // Collected ONCE for BOTH the skip-set and the R5 reconcile, gated on the
+  // capability alone: `--full` still needs it to prove `blob_replica`.
   const lazy = input.full !== true;
   const remoteShas = provider.listInventory
     ? await collectRemoteCasShas(provider, target.targetId)
     : undefined;
-  // `inventoryConsulted` reports the SKIP-SET decision — a full restore builds
-  // no skip-set even when an inventory exists.
   const inventoryConsulted = lazy && remoteShas !== undefined;
 
-  // ── fetching + replaying ─────────────────────────────────────────────
   emit("fetching");
   await fs.mkdir(input.vaultRoot, { recursive: true });
   const finalDir = path.join(input.vaultRoot, target.vaultId);
@@ -333,9 +229,8 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       `recover: "${finalDir}" already exists — refusing to recover over an existing vault directory`
     );
   }
-  // Restore INSIDE the vault root (same filesystem ⇒ the adopt below is an atomic
-  // rename). The dot prefix keeps `VaultRegistry.scan()` from mounting the
-  // half-written dir mid-restore (see vault-registry.ts).
+  // INSIDE the vault root (same filesystem ⇒ the adopt is an atomic rename);
+  // the dot prefix keeps `VaultRegistry.scan()` off the half-written dir.
   const restoreWorkDir = path.join(
     input.vaultRoot,
     `.recover-work-${randomBytes(8).toString("hex")}`
@@ -349,19 +244,14 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       ...(input.at === undefined ? {} : { pointInTimeMs: input.at }),
       destDir: restoreWorkDir,
       current,
-      // Defer any blob the remote CAS attests it holds; a blob the inventory
-      // does NOT name is materialized (the snapshot is its only copy). A `--full`
-      // restore skips nothing even though the inventory is collected (for R5).
       ...(lazy && remoteShas
         ? { skipBlob: ({ sha }) => remoteShas.has(sha) }
         : {}),
       log,
     });
     emit("replaying");
-    // The restored replica index attests capture-time durability, not now.
     invalidateRestoredReplica(restoreWorkDir);
 
-    // ── fencing ────────────────────────────────────────────────────────
     emit("fencing");
     const targetInfo = await provider.getTarget(target.targetId);
     const fencedGeneration = targetInfo.currentGeneration + 1;
@@ -374,19 +264,13 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       lastSeq: restore.seq,
       now,
     });
-    // The recovered gateway must hold the SAME keyring to read these snapshots
-    // and to keep backing up under the same key. Recovery can preserve endpoint
-    // identity, but it may never overwrite an existing backup keyring.
     const existingKeyring = keyStore.export("keyring.key");
     if (existingKeyring) {
       const existing = validateKeyring(
         JSON.parse(existingKeyring.toString("utf8"))
       );
-      // Canonical, not `JSON.stringify`: the custody file preserves the
-      // insertion order it was written with, while a kit's keyring comes back
-      // from `canonicalJson` inside the password wrap with keys sorted. Raw
-      // stringify compares FORMATTING and would refuse an identical keyring —
-      // which is every restore-after-erase (#568, surfaced by item J).
+      // Canonical, not `JSON.stringify`: raw stringify compares FORMATTING and
+      // would refuse an identical keyring on every restore-after-erase (#568).
       if (canonicalJson(existing) !== canonicalJson(kit.keyring)) {
         throw new Error(
           "recover: gateway custody contains a different backup keyring; refusing to overwrite live key material"
@@ -410,9 +294,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       );
     }
     keyStore.import(`${target.vaultId}.sealkey`, sealKey);
-    // The identity keypair rides beside the DEK (#726) — restore it
-    // too, so the recovered vault signs as the SAME vault it was before the
-    // move (proof: it verifies against the public key recorded pre-move).
+    // Restored beside the DEK (#726) so the vault signs as the SAME vault.
     if (
       typeof target.identitySeed !== "string" ||
       target.identitySeed.length === 0
@@ -429,11 +311,9 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
     }
     keyStore.import(`${target.vaultId}.identity`, identitySeed);
 
-    // ── adopting ───────────────────────────────────────────────────────
     emit("adopting");
     await fs.rename(restoreWorkDir, finalDir);
-    // Turn the restored `apps.bundle` back into the live bare code store
-    // (#517) — without this the vault mounts with data but no app code.
+    // Without this (#517) the vault mounts with data but no app code.
     await rehydrateCodeStore(finalDir, log);
     const adoptCtx: RecoverAdoptContext = {
       vaultId: target.vaultId,
@@ -442,10 +322,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       provider,
       keyring: kit.keyring,
     };
-    // R5 (#439): reconcile the restored `blob_replica` beliefs against the
-    // provider's live inventory (reusing `remoteShas`) BEFORE the vault mounts —
-    // a recover()-internal step that ALWAYS runs, not gated on `onAdopted`. It
-    // must write to `vault.db` while nothing else holds it (single-writer).
+    // Runs BEFORE the vault mounts: it must be `vault.db`'s single writer.
     const reconcile = await reconcileAdoptedInventory({
       vaultDir: finalDir,
       remoteShas,
@@ -464,10 +341,8 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       log,
     });
 
-    // Extension point: a live `VaultRegistry.adopt` + mount.
     await input.onAdopted?.(adoptCtx);
 
-    // ── warming ────────────────────────────────────────────────────────
     emit("warming");
     const previews = await warmOrSkip(
       input,
@@ -495,8 +370,6 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       quarantine: ["outbox", "automations", "connections"],
     };
   } catch (error) {
-    // Never leave restore scratch behind (the final dir, if the rename
-    // already ran, is a real vault and is left in place).
     await fs
       .rm(restoreWorkDir, { recursive: true, force: true })
       .catch(() => undefined);

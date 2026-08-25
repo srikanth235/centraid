@@ -1,17 +1,13 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); media owns the whole library loop (9 commands with their contracts), so it is large by design.
-// Media domain commands (§08): the command pack behind the Photos
-// projection. An asset is meaning over bytes — media_asset decorates a
-// canonical core_content_item (sha256-deduped data: URI, same custody as
-// attachments) with capture time and dimensions; an album is a surface view
-// over core_collection, the one owner-curation mechanism (#274) — the
-// album commands keep their contracts while storage unifies, so a
-// collection may also hold documents and notes. Deleting an asset removes
-// the meaning rows and
-// soft-deletes the bytes only when nothing else (an attachment, a note body,
-// an avatar) still rents them — content items are canonical and shared, so
-// the last reference decides, not the first delete. Purging (#711) is
-// the owner's way to end that grace window early — see PURGE_ASSET for what
-// it destroys, what it refuses, and why the bytes go to the sweep.
+// Media domain commands (§08): the command pack behind the Photos projection.
+// An asset is MEANING OVER BYTES — `media_asset` decorates a canonical
+// `core_content_item` (sha256-deduped, same custody as attachments) with
+// capture time and dimensions; an album is a surface view over
+// `core_collection`, the one owner-curation mechanism (#274), so a collection
+// may also hold documents and notes. Deleting an asset removes the meaning rows
+// and soft-deletes the bytes only when nothing else still rents them: content
+// items are canonical and shared, so the LAST reference decides, not the first
+// delete. Purging (#711) ends that grace window early — see PURGE_ASSET.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -31,13 +27,11 @@ import {
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 
-// The starred flag rides the CANONICAL content item, not the asset row (issue
-// #274 kink 1 / #441 A2.1): favoriting a photo must surface it in every "what
-// I starred" query — Docs' Starred section, the agent, the briefing — exactly
-// as Docs/Locker/People/Social already do. media_asset.favorite stays as
-// the Photos replica read model but becomes a mirror with a single writer: the
-// tag is the truth, the column is a derived cache, and a postcondition asserts
-// the two agree after every toggle.
+// The starred flag rides the CANONICAL content item, not the asset row (#274
+// kink 1 / #441 A2.1): favoriting a photo must surface in every "what I
+// starred" query. `media_asset.favorite` is the Photos replica read model and a
+// MIRROR with a single writer — the tag is the truth, the column a derived
+// cache, and a postcondition asserts they agree after every toggle.
 const CONTENT_ITEM_TARGET_TYPE = "core.content_item";
 
 /** Mirror the favorite bit onto the content item's starred flags tag. */
@@ -56,7 +50,6 @@ function mirrorFavoriteToTag(
 /** Soft-deleted bytes linger this long before the lifecycle sweep purges. */
 const PURGE_AFTER_DAYS = 30;
 
-/** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
   const owner = ctx.db
@@ -67,12 +60,10 @@ function actorPartyId(ctx: HandlerCtx): string {
 }
 
 /**
- * What a media write needs when it runs OUTSIDE the command pipeline (issue
- * #721). The import spine's publishers hold a raw `DatabaseSync` and a
- * provenance collector instead of a `HandlerCtx`, but a photograph arriving
- * from a Takeout archive must become the SAME row, by the same rules, as one
- * arriving through `media.add_asset`. So every primitive below takes these
- * four things; the command handlers pass `ctx`, the publisher passes its own.
+ * What a media write needs when it runs OUTSIDE the command pipeline (#721).
+ * The import spine's publishers hold a raw `DatabaseSync` and a provenance
+ * collector instead of a `HandlerCtx`, but a photograph from a Takeout archive
+ * must become the SAME row, by the same rules, as one from `media.add_asset`.
  */
 export interface MediaWriteDeps {
   vault: DatabaseSync;
@@ -106,58 +97,41 @@ function purgeAt(now: string): string {
 }
 
 /**
- * Round to ~11m precision (4 decimal places) for find-or-create IDENTITY —
- * photos taken a few meters apart at "the same place" share one core_place
- * row instead of minting a new one per shutter click. The row itself keeps
- * the PRECISE coordinates of whichever asset created it (#352).
+ * ~11m precision for find-or-create IDENTITY, so photos taken metres apart
+ * share one core_place row instead of minting one per shutter click. The row
+ * keeps the PRECISE coordinates of whichever asset created it (#352).
  */
 function roundCoord(v: number): number {
   return Math.round(v * 10_000) / 10_000;
 }
 
 /**
- * How close a photograph has to be to a place the member ALREADY NAMED before
- * it is treated as having been taken there, in degrees of latitude — about
- * 170 metres.
- *
- * Wide enough to cover a house and its garden, a school and its field, an
- * office and its car park: a photograph taken in the back yard should join
- * "Home", not mint "37.4419, -122.1430" beside it. Narrow enough that the next
- * building along is a different place. It is deliberately far looser than the
- * ~11m identity rung below, because these are two different questions — that
- * one asks "is this the same coordinate", this one asks "is this that place".
+ * How close a photograph must be to a place the member ALREADY NAMED to count
+ * as taken there, in degrees of latitude (~170m). Wide enough for a house and
+ * its garden, narrow enough that the next building is a different place.
+ * Deliberately far looser than the ~11m identity rung: that asks "is this the
+ * same coordinate", this asks "is this that place".
  */
 const NAMED_PLACE_RADIUS_DEG = 0.0015;
 
 /**
- * A place row whose name is just its own coordinates, e.g. "37.4419,
- * -122.1430". These are the labels this function mints when nothing better is
- * known, and they must NOT be treated as names — adopting one would spread a
- * meaningless string across a whole neighbourhood. The UI likewise treats
- * this shape as an unnamed placeholder, never as a readable place name.
+ * A place row whose name is just its own coordinates. These must NOT be treated
+ * as names — adopting one spreads a meaningless string across a neighbourhood —
+ * and the UI reads this shape as an unnamed placeholder.
  */
 export function isCoordinateLabel(name: string | null | undefined): boolean {
   return /^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/u.test((name ?? "").trim());
 }
 
 /**
- * Find-or-create the core_place an asset's GPS names.
- *
- * Three steps, in falling order of how much the vault actually knows:
- *
- *   1. A place the member has NAMED, within ~170m. This is the one that makes
- *      Places readable on day one without any geocoding at all: the vault
- *      already holds named places from the rest of the product — a home, an
- *      office, a venue on an event — and a photograph taken at one of them
- *      belongs to it. Anything else means a member who has carefully named
- *      where they live still gets a shelf of coordinates.
- *   2. The exact rounded coordinate (~11m), which is the identity rung that
- *      keeps a burst of frames from minting a row per shutter click.
- *   3. Failing both, a new row labelled with its own coordinates. Automatic
- *      coordinate-to-settlement naming is intentionally deferred; the UI
- *      hides this placeholder until the member supplies a readable name.
- *
- * `geo_lat`/`geo_lng` on a fresh row stay PRECISE; only identity is rounded.
+ * Find-or-create the core_place an asset's GPS names, in falling order of what
+ * the vault actually knows: (1) a place the member NAMED within ~170m, which is
+ * what makes Places readable with no geocoding at all; (2) the exact rounded
+ * coordinate (~11m), the identity rung that stops a burst minting a row per
+ * frame; (3) a new row labelled with its own coordinates. Coordinate-to-
+ * settlement naming is deliberately deferred, and the UI hides the placeholder
+ * until a member names it. `geo_lat`/`geo_lng` stay PRECISE — only identity
+ * rounds.
  */
 export function findOrCreatePlaceTx(
   deps: MediaWriteDeps,
@@ -166,11 +140,10 @@ export function findOrCreatePlaceTx(
 ): string {
   const rLat = roundCoord(lat);
   const rLng = roundCoord(lng);
-  // Step 1. A bounding box, not a great-circle distance: SQLite has no
-  // trigonometry without an extension, the box is indexable, and at this
-  // radius the difference between a box and a circle is metres. Longitude is
-  // divided by the cosine of the latitude so the box stays roughly square on
-  // the ground instead of stretching east-west as it moves north.
+  // A bounding box, not a great-circle distance: SQLite has no trigonometry
+  // without an extension, the box is indexable, and at this radius the
+  // difference is metres. Longitude divides by cos(latitude) so the box stays
+  // roughly square on the ground rather than stretching east-west.
   const lngRadius =
     NAMED_PLACE_RADIUS_DEG / Math.max(0.05, Math.cos((lat * Math.PI) / 180));
   const named = deps.vault
@@ -217,9 +190,8 @@ export function findOrCreatePlaceTx(
 }
 
 /**
- * The columns the spool learned from the bytes, minus the raw text feed —
- * the camera's testimony, kept whole on the asset row. Shared so an import
- * and an upload record the same testimony in the same shape.
+ * The columns the spool learned from the bytes, minus the raw text feed — the
+ * camera's testimony. Shared so an import and an upload record it identically.
  */
 export function exifJsonForMeta(meta: Record<string, unknown>): string | null {
   const exif = Object.fromEntries(
@@ -228,7 +200,6 @@ export function exifJsonForMeta(meta: Record<string, unknown>): string | null {
   return Object.keys(exif).length > 0 ? JSON.stringify(exif) : null;
 }
 
-/** One row of `media_asset` — the shape both writers fill in. */
 export interface MediaAssetRow {
   assetId: string;
   contentId: string;
@@ -245,9 +216,9 @@ export interface MediaAssetRow {
 }
 
 /**
- * The ONE insert into `media_asset`. Both doors into the library —
- * `media.add_asset` and the import spine's publisher — write through here, so
- * a column added to the table can never land on one path and not the other.
+ * The ONE insert into `media_asset`. Both doors — `media.add_asset` and the
+ * import spine's publisher — write through here, so a new column can never land
+ * on one path and not the other.
  */
 export function insertMediaAssetTx(
   vault: DatabaseSync,
@@ -275,18 +246,15 @@ export function insertMediaAssetTx(
 }
 
 /**
- * `media_asset.content_id` is UNIQUE — the same bytes are one asset. If
- * an asset already owns this content item, adopt it instead of minting a
- * second: a trashed one comes back to life (re-upload = restore), and a
- * capture group learned later COALESCE-merges onto it, which is how a Live
- * Photo whose video half arrives in a second import completes its pair.
+ * `media_asset.content_id` is UNIQUE — the same bytes are one asset. An
+ * existing asset over this content item is ADOPTED, not duplicated: a trashed
+ * one comes back to life (re-upload = restore) and a capture group learned
+ * later COALESCE-merges onto it, completing a Live Photo whose video half
+ * arrives in a second import.
  *
- * Deliberately does NOT stamp `source_asset_id` (#711): these bytes
- * already ARE that asset, so this call created nothing to have a lineage.
- * Overwriting an existing asset's provenance from a later arrival would
- * rewrite history, and the honest record of a dedupe is that it deduped.
- *
- * Returns the adopted asset id, or null when these bytes are new here.
+ * Deliberately does NOT stamp `source_asset_id` (#711): these bytes already ARE
+ * that asset, so nothing was created to have a lineage, and overwriting
+ * provenance from a later arrival would rewrite history.
  */
 export function adoptAssetForContentTx(
   deps: MediaWriteDeps,
@@ -324,8 +292,8 @@ export function adoptAssetForContentTx(
 }
 
 /**
- * Every canonical table that can rent a content item besides the media
- * asset itself. The last reference decides whether bytes soft-delete.
+ * Every canonical table that can rent a content item besides the asset itself.
+ * The LAST reference decides whether bytes soft-delete.
  */
 const CONTENT_REFERENCES: {
   table: string;
@@ -334,8 +302,8 @@ const CONTENT_REFERENCES: {
 }[] = [
   { table: "core_attachment", column: "content_id" },
   { table: "core_party", column: "avatar_content_id" },
-  // A trashed note is not a rental (#308) — its body releases with
-  // it, and knowledge.restore_note un-trashes both.
+  // A trashed note is not a rental (#308): its body releases with it, and
+  // knowledge.restore_note un-trashes both.
   {
     table: "knowledge_note",
     column: "body_content_id",
@@ -352,16 +320,13 @@ const CONTENT_REFERENCES: {
     column: "content_id",
     onlyLive: "deleted_at IS NULL",
   },
-  // A document's CURRENT content is a rental like any other (#352).
-  // Superseded revisions are NOT covered here — they are protected by the
-  // dedicated chain-aware check the document purge pass runs instead
-  // (gateway/duties.ts), because "still part of some live document's
-  // history" cannot be expressed as a single-column FK lookup. A trashed
-  // document still lives (only purge releases it, see documents.ts).
+  // A document's CURRENT content is a rental like any other (#352). Superseded
+  // revisions are NOT — the chain-aware check in gateway/duties.ts covers them,
+  // because "still part of some live document's history" is not a single-column
+  // FK lookup. A trashed document still lives; only purge releases it.
   { table: "core_document", column: "current_content_id" },
 ];
 
-/** True when no canonical row still points at this content item. */
 export function contentUnreferenced(
   ctx: HandlerCtx,
   contentId: string
@@ -379,12 +344,11 @@ export function contentUnreferenced(
 }
 
 /**
- * Collapse a content item's grace window to NOW when nothing rents it any
- * more, so the next lifecycle sweep purges the row, its derivatives and its
- * CAS blobs (`purgeContentItem` in gateway/duties.ts). This is how an
- * owner-driven purge frees bytes: a command handler cannot delete from the
- * CAS itself, and deleting the row here would strand the blob with nothing
- * left to drive its reclamation. Bytes still rented elsewhere are untouched.
+ * Collapse a content item's grace window to NOW when nothing rents it, so the
+ * next lifecycle sweep purges the row, its derivatives and its CAS blobs. This
+ * is how an owner-driven purge frees bytes: a command handler has no CAS
+ * delete, and deleting the row here would strand the blob with nothing left to
+ * drive its reclamation. Bytes still rented elsewhere are untouched.
  */
 function releaseContentNow(ctx: HandlerCtx, contentId: string): boolean {
   if (!contentUnreferenced(ctx, contentId)) return false;
@@ -427,45 +391,36 @@ const ADD_ASSET: CommandDefinition = {
       staged_sha: { type: "string", minLength: 64, maxLength: 64 },
       kind: { type: "string", enum: ["photo", "video", "audio", "scan"] },
       captured_at: { type: "string" },
-      // Capture-local UTC offset in minutes (#419): the client reads it
-      // off the same EXIF the capture time came from.
+      // Capture-local UTC offset (#419), read off the same EXIF as the time.
       tz_offset_min: { type: "integer", minimum: -1080, maximum: 1080 },
       capture_group_id: { type: "string", minLength: 1, maxLength: 200 },
-      // Edit lineage (#711): the asset these bytes were derived FROM.
-      // The photo editor saves an edit as a new asset dated today, and this
-      // is what makes that copy's provenance a fact instead of a promise.
+      // Edit lineage (#711): the asset these bytes were derived FROM. The
+      // editor saves an edit as a new asset dated today, and this is what makes
+      // that copy's provenance a fact rather than a promise.
       source_asset_id: { type: "string", minLength: 1, maxLength: 200 },
       title: { type: "string" },
       width: { type: "integer", minimum: 1 },
       height: { type: "integer", minimum: 1 },
       duration_s: { type: "number", minimum: 0 },
-      // WHERE THIS WAS TAKEN, asserted by the caller rather than read out of
-      // the bytes. Every other spool-derived field on this command already
-      // has an explicit override — capture time, dimensions, duration, the
-      // timezone offset — and the coordinate pair was the one that did not,
-      // which meant the inline door (`data_uri`) could never produce a place
-      // at all: `spoolMeta` is `{}` unless the bytes came through staging, so
-      // Places was unreachable for anything a caller uploaded inline.
+      // WHERE THIS WAS TAKEN, ASSERTED by the caller rather than read out of
+      // the bytes — the one spool-derived field that had no explicit override,
+      // which left the inline `data_uri` door unable to produce a place at all.
       //
-      // This is an ASSERTION, not an extraction, and the distinction is the
-      // whole reason it is safe to accept here. The media.location policy
-      // gate in the staging pipeline exists to drop GPS the owner chose not
-      // to keep when it is read OUT of a file; a caller typing a coordinate
-      // is stating a fact it already holds, exactly as it states a capture
-      // time. Spool metadata still wins nothing it did not win before —
-      // explicit input takes precedence, same as every field above.
+      // Assertion, not extraction, and that distinction is why accepting it is
+      // safe: the media.location gate drops GPS the owner chose not to keep
+      // when it is read OUT of a file, whereas a caller typing a coordinate is
+      // stating a fact it already holds. Explicit input still wins, as above.
       latitude: { type: "number", minimum: -90, maximum: 90 },
       longitude: { type: "number", minimum: -180, maximum: 180 },
-      // Perceptual hash (#299 §2, Tier 0) — hex, producer-agnostic:
-      // the client canvas computes a dHash beside its thumb today.
+      // Perceptual hash (#299 §2, Tier 0) — hex, producer-agnostic.
       phash: {
         type: "string",
         minLength: 4,
         maxLength: 64,
         pattern: "^[0-9a-f]+$",
       },
-      // ThumbHash placeholder (#419) — unpadded base64, produced beside
-      // the client's thumb from the same decode; lands as an inline derivative.
+      // ThumbHash placeholder (#419) — unpadded base64, lands as an inline
+      // derivative beside the client's thumb.
       thumbhash: {
         type: "string",
         minLength: 6,
@@ -492,9 +447,9 @@ const ADD_ASSET: CommandDefinition = {
       value: 1,
     },
     {
-      // A coordinate is a PAIR. Half of one is not a weaker location, it is
-      // no location at all, and silently dropping it would let a caller
-      // believe it had placed a photograph it had not. Refuse instead.
+      // A coordinate is a PAIR. Half of one is no location at all, and
+      // dropping it silently would let a caller believe it placed a photograph
+      // it had not.
       name: "coordinate_pair_complete",
       sql: "SELECT ((:latitude IS NULL) = (:longitude IS NULL)) AS n",
       column: "n",
@@ -509,8 +464,8 @@ const ADD_ASSET: CommandDefinition = {
       value: 1,
     },
     {
-      // The inline door is for SMALL payloads (#296): a 4K video takes
-      // the staging route, never command JSON (the journal records inputs).
+      // The inline door is for SMALL payloads (#296): a 4K video takes the
+      // staging route, never command JSON — the journal records inputs.
       name: "within_size_cap",
       sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
       column: "n",
@@ -527,10 +482,9 @@ const ADD_ASSET: CommandDefinition = {
       value: 1,
     },
     {
-      // A claimed source must be a real asset in THIS vault (#711).
-      // Named here rather than left to the FK so a caller that mistypes a
-      // lineage gets a refusal that says which precondition failed, not a
-      // raw constraint error from the middle of the insert.
+      // A claimed source must be a real asset in THIS vault (#711). Named here
+      // rather than left to the FK, so a mistyped lineage names the failing
+      // precondition instead of a raw constraint error mid-insert.
       name: "source_asset_exists",
       sql: `SELECT CASE WHEN :source_asset_id IS NULL THEN 1 ELSE
               EXISTS(SELECT 1 FROM media_asset WHERE asset_id = :source_asset_id) END AS n`,
@@ -573,9 +527,8 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     latitude?: number;
     longitude?: number;
   };
-  // Staged claims carry spool metadata (#296): the gateway sniffed
-  // the type and read EXIF server-side, so capture time and dimensions no
-  // longer depend on the caller supplying them. Explicit input still wins.
+  // Staged claims carry spool metadata (#296): the gateway sniffed the type and
+  // read EXIF server-side. Explicit input still wins.
   const spoolMeta = input.staged_sha
     ? (ctx.blobs.staged(input.staged_sha)?.meta ?? {})
     : {};
@@ -604,11 +557,9 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     longitude?: number;
   };
   const assetId = ctx.newId();
-  // GPS from the spool already passed the media.location policy gate at
-  // staging time (pipeline.ts) — those coordinates only ride here when the
-  // owner kept them. An explicit pair wins over the spool's, like every other
-  // field on this command; see the schema note for why asserting a coordinate
-  // is a different act from extracting one.
+  // Spool GPS already passed the media.location policy gate at staging time
+  // (pipeline.ts), so it only rides here when the owner kept it. An explicit
+  // pair wins, like every other field on this command.
   const lat = input.latitude ?? meta.latitude;
   const lng = input.longitude ?? meta.longitude;
   const placeId =
@@ -625,9 +576,8 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       (meta as { tz_offset_min?: number }).tz_offset_min ??
       null,
     captureGroupId: input.capture_group_id ?? null,
-    // Edit lineage (#711). Only the caller knows it — nothing in the
-    // bytes or the EXIF says "I was cropped out of that one" — so there is
-    // no spool fallback here on purpose.
+    // Edit lineage (#711). Only the caller knows it — nothing in the bytes says
+    // "I was cropped out of that one" — so there is deliberately no fallback.
     sourceAssetId: input.source_asset_id ?? null,
     placeId,
     width: input.width ?? meta.width ?? null,
@@ -635,8 +585,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     durationS: input.duration_s ?? meta.duration_s ?? null,
     exifJson: exifJsonForMeta(meta),
   });
-  // Perceptual hash (#299 §2, Tier 0): producer-agnostic like thumbs —
-  // the client canvas computes a dHash beside its thumbnail today. Derived
+  // Perceptual hash (#299 §2, Tier 0): producer-agnostic like thumbs. Derived
   // data in a sidecar; near-duplicates are one vault_hamming JOIN away.
   const contributedPhash = ctx.db
     .prepare(
@@ -653,9 +602,9 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       )
       .run(assetId, phash, ctx.now);
   }
-  // Device-contributed ThumbHash (#419): lands ONLY in the inline
-  // derivative row (no sidecar). Canonicalize through the same validator the
-  // staging door uses so a client-supplied value is exactly the stored form.
+  // Device-contributed ThumbHash (#419) lands ONLY in the inline derivative
+  // row. Canonicalize through the staging door's validator so a client-supplied
+  // value is exactly the stored form.
   if (input.thumbhash) {
     const contribution = validateDerivativeContribution({
       variant: "thumbhash",
@@ -700,10 +649,9 @@ const UPDATE_ASSET: CommandDefinition = {
       captured_at: { type: "string" },
       // The caption lives on the canonical content item as its title.
       title: { type: "string" },
-      // First-class asset state (#419): favorite and archive are now
-      // boolean columns on the asset itself so the replica shape is
-      // self-contained — no core_tag reconstruction. set_favorite/set_archived
-      // are the focused toggles; update_asset stays the general editor.
+      // First-class asset state (#419): favorite and archive are boolean
+      // columns so the replica shape is self-contained — no core_tag
+      // reconstruction. update_asset stays the general editor.
       favorite: { type: "integer", enum: [0, 1] },
       archived: { type: "integer", enum: [0, 1] },
     },
@@ -805,17 +753,17 @@ const SET_ASSET_PLACE: CommandDefinition = {
     additionalProperties: false,
     properties: {
       asset_id: { type: "string", minLength: 1 },
-      // Omitted place_id clears the asset's place (#352) — the same
-      // "omit to reset" convention core.move_document uses for folder_id.
+      // Omitted place_id CLEARS the asset's place (#352) — the same "omit to
+      // reset" convention core.move_document uses for folder_id.
       place_id: { type: "string", minLength: 1 },
     },
   },
   outputSchema: {
     type: "object",
     required: ["asset_id"],
-    // place_id is string | null (cleared) — the validator's `type` is a
-    // single string (json-schema.ts), so left unconstrained here; outputSchema
-    // is documentation only (never runtime-validated, unlike inputSchema).
+    // place_id is string | null; the validator's `type` is a single string, so
+    // it is left unconstrained. outputSchema is documentation only — never
+    // runtime-validated, unlike inputSchema.
     properties: { asset_id: { type: "string" }, place_id: {} },
   },
   preconditions: [
@@ -869,34 +817,23 @@ function setAssetPlace(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /**
- * The kinds a member may declare a place to be.
- *
- * The column's own CHECK also permits `'virtual'` (core.ts) — deliberately not
- * offered here: a photograph is taken somewhere, and a member naming the place
- * a photograph was taken is never naming a video call. Everything else in the
- * column's vocabulary is reachable, because the same row is the vault's one
- * place record and Home, Agenda and Photos all read it.
+ * The kinds a member may declare a place to be. The column's CHECK also permits
+ * `'virtual'` (core.ts), deliberately not offered: a member naming where a
+ * photograph was taken is never naming a video call.
  */
 const PLACE_KINDS = ["home", "work", "venue", "city", "region", "other"];
 
 /**
- * A member names a place (#816).
+ * A member names a place (#816) — THE ONE WRITE THAT MAKES A COORDINATE INTO A
+ * LOCATION. `findOrCreatePlaceTx` mints coordinate-labelled rows, and the
+ * phrase ladder's top rung (place-phrase.ts) answers everywhere at once from
+ * this row at render time.
  *
- * THE ONE WRITE THAT MAKES A COORDINATE INTO A LOCATION. `findOrCreatePlaceTx`
- * mints a row labelled with its own coordinates when it knows nothing better,
- * and every surface phrases such a row as "A place with no name yet" rather
- * than printing the digits. This is how that ends: the member says what the
- * place is called, and the phrase ladder's top rung (place-phrase.ts) answers
- * everywhere at once — the shelf heading, the info panel, a relative phrase
- * anchored on it — because they all read this row at render.
- *
- * MEMBER AUTHORITY, AND ONLY THE NAME. The handler writes `name` (and `kind`
- * when the member declared one) and NOTHING else. `address_json`, `geohash`
- * and `tz` are derived gazetteer facts with their own writers; a rename that
- * cleared them would destroy a machine's finding on the strength of a human's
- * label, and the two claims are not in competition — "Grandma's house" and
- * "Truckee, CA" are both true about the same point. The name outranks the
- * derived name for DISPLAY; it does not delete it.
+ * MEMBER AUTHORITY, AND ONLY THE NAME: writes `name` (and `kind` when
+ * declared) and NOTHING else. `address_json`, `geohash` and `tz` are derived
+ * gazetteer facts with their own writers — clearing them would destroy a
+ * machine's finding on the strength of a human's label, and the two claims are
+ * not in competition. The name outranks the derived name for DISPLAY only.
  */
 const NAME_PLACE: CommandDefinition = {
   name: "media.name_place",
@@ -907,9 +844,8 @@ const NAME_PLACE: CommandDefinition = {
     additionalProperties: false,
     properties: {
       place_id: { type: "string", minLength: 1 },
-      // 120 is a signage ceiling, not a storage one: "Grandma's house" and
-      // "The bench at the end of the north pier" both fit, and a heading no
-      // surface can draw is not a name anybody typed on purpose.
+      // 120 is a signage ceiling, not a storage one: a heading no surface can
+      // draw is not a name anybody typed on purpose.
       name: { type: "string", minLength: 1, maxLength: 120 },
       kind: { type: "string", enum: PLACE_KINDS },
     },
@@ -932,9 +868,8 @@ const NAME_PLACE: CommandDefinition = {
       value: 1,
     },
     {
-      // `minLength` in the schema catches `""`; only SQL catches "   ". A place
-      // whose name is whitespace reads as named everywhere and says nothing,
-      // which is strictly worse than the honest fallback it replaced.
+      // `minLength` catches `""`; only SQL catches "   ". A whitespace name
+      // reads as named everywhere and says nothing.
       name: "name_not_blank",
       sql: "SELECT CASE WHEN trim(:name) <> '' THEN 1 ELSE 0 END AS n",
       column: "n",
@@ -961,10 +896,9 @@ const NAME_PLACE: CommandDefinition = {
 function namePlace(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { place_id: string; name: string; kind?: string };
   const name = input.name.trim();
-  // Two statements rather than one with a COALESCE, so an absent `kind` cannot
-  // be confused with a member clearing it: this command has no way to say "no
-  // kind", and silently rewriting the column on every rename would let a
-  // rename undo a "this is home" the member declared a moment earlier.
+  // Two statements rather than one COALESCE, so an absent `kind` cannot be
+  // confused with a member clearing it: this command cannot say "no kind", and
+  // rewriting the column on every rename would undo a declared "this is home".
   ctx.db
     .prepare("UPDATE core_place SET name = ? WHERE place_id = ?")
     .run(name, input.place_id);
@@ -1007,8 +941,8 @@ const DELETE_ASSET: CommandDefinition = {
   },
   preconditions: [
     {
-      // Only a live asset can be trashed — a double-delete fails loudly
-      // instead of silently re-stamping the trash date.
+      // Only a live asset can be trashed — a double-delete must fail loudly
+      // rather than silently re-stamp the trash date.
       name: "asset_exists_live",
       sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id AND deleted_at IS NULL`,
@@ -1019,8 +953,8 @@ const DELETE_ASSET: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The standard soft-delete pair (#274): the asset carries its
-      // own grace window even when its bytes stay rented elsewhere.
+      // The standard soft-delete pair (#274): the asset carries its own grace
+      // window even when its bytes stay rented elsewhere.
       name: "asset_trashed",
       sql: `SELECT count(*) AS n FROM media_asset
              WHERE asset_id = :asset_id AND deleted_at IS NOT NULL AND purge_at IS NOT NULL`,
@@ -1040,8 +974,8 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
     .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(input.asset_id) as { content_id: string } | undefined;
   if (!asset) throw new Error("asset vanished between check and execute");
-  // Collections whose cover this was fall back to their next remaining
-  // media entry (covers are content ids — the asset's canonical bytes).
+  // Collections whose cover this was fall back to their next media entry
+  // (covers are content ids — the asset's canonical bytes).
   const covered = ctx.db
     .prepare(
       "SELECT collection_id FROM core_collection WHERE cover_content_id = ?"
@@ -1065,9 +999,9 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
       .run(collection.collection_id, collection.collection_id);
     ctx.wrote("core.collection", collection.collection_id);
   }
-  // The asset row itself only trashes — restore_asset (or re-uploading the
-  // same bytes) brings it back with its metadata; the lifecycle sweep purges
-  // it alongside its content once the purge date passes.
+  // The asset row only TRASHES here — restore_asset (or re-uploading the same
+  // bytes) brings it back with its metadata, and the lifecycle sweep purges it
+  // alongside its content once the purge date passes.
   ctx.db
     .prepare(
       "UPDATE media_asset SET deleted_at = ?, purge_at = ? WHERE asset_id = ?"
@@ -1137,8 +1071,8 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(input.asset_id);
   ctx.wrote("media.asset", input.asset_id);
-  // Un-soft-delete the bytes too — same path the re-upload restore takes.
-  // Album membership is not restored, matching the benchmark's trash model.
+  // Un-soft-delete the bytes too. Album membership is NOT restored, matching
+  // the benchmark's trash model.
   ctx.db
     .prepare(
       `UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
@@ -1155,51 +1089,35 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /**
- * `media.purge_asset` — destroy one ALREADY-TRASHED asset now, instead of
- * waiting out its 30-day grace window (#711). This is the only
- * owner-driven hard delete in the media pack, and everything about its shape
- * follows from that:
+ * `media.purge_asset` — destroy one ALREADY-TRASHED asset now instead of
+ * waiting out its 30-day grace (#711). The only owner-driven hard delete in
+ * this pack, and its whole shape follows from that.
  *
- *  * ONLY TRASH. `asset_is_trashed` demands `deleted_at IS NOT NULL`, so a
- *    live asset — or an id that names nothing — is REFUSED by name rather
- *    than skipped. There is no "purge anything" door; the trash is the door.
- *  * WHAT GOES. Face regions (derived data about these pixels), the phash
- *    sidecar (`ON DELETE CASCADE`), and every polymorphic pointer at the
- *    asset — album membership, tags, annotations, attachments, embeddings,
- *    sync-map rows, shares — via the A1 registry (`cleanupPolyRefs`), which
- *    is the same complete sweep the lifecycle purge runs. An album whose
- *    cover this was hands off to its next member first, exactly as
- *    `delete_asset` does, so the album goes on having a face.
- *  * WHAT DOES NOT GO: THE BYTES, HERE. A command handler has no CAS delete
- *    (`HandlerCtx.blobs` stages, claims and spills — it never reclaims), and
- *    deleting `core_content_item` from here would strand its blob with no row
- *    left to drive `purgeContentItem`. So the bytes are handed to the sweep
- *    that owns them: the content item's grace window is collapsed to NOW when
- *    nothing else rents it, and the next lifecycle sweep purges the row,
- *    its derivatives and its blobs together. The member's copy says exactly
- *    this — the photograph leaves the library at once, the bytes are
- *    reclaimed by the next storage sweep. Bytes still rented by an
- *    attachment, an avatar or a note body are left alone: asset meaning and
- *    byte custody have independent lifecycles (#274).
- *  * EDIT LINEAGE. `media_asset.source_asset_id` (#711) is a
- *    self-FK, and a purge that broke it would have to either forge or destroy
- *    a fact. NULLing the child's column is a forgery: the schema says NULL
- *    means "camera original or import", so a cropped copy would start
- *    claiming it was shot that way. Cascading the purge into the child
- *    destroys a photograph the member never put in the trash. So the third
- *    option is the honest one — `no_derived_assets` REFUSES while any other
- *    asset still names this one as its source, live or trashed, and says so.
- *    The member purges the edit first; `emptyTrashOrder` on both clients puts
- *    derived copies ahead of their sources so a trash holding both empties in
- *    one pass. (`PRAGMA foreign_keys` is ON, so the DELETE would fail anyway
- *    — a named refusal beats a raw constraint string.)
+ * ONLY TRASH: `asset_is_trashed` demands `deleted_at IS NOT NULL`, so a live
+ * asset or an unknown id is REFUSED by name. There is no "purge anything" door.
  *
- * Not `confirm: true`. Parking would mean a member pressing "Empty trash"
- * got a queue of decisions instead of an empty trash — the confirmation for
- * an owner-initiated destruction belongs in front of the owner, before the
- * command fires, which is where both clients put it. `atlas.delete_row`, the
- * other owner-driven hard delete, is `risk: "high"` without `confirm` for the
- * same reason.
+ * WHAT GOES: face regions, the phash sidecar (ON DELETE CASCADE), and every
+ * polymorphic pointer at the asset via the A1 registry (`cleanupPolyRefs`) —
+ * the same complete sweep the lifecycle purge runs. An album whose cover this
+ * was hands off first, as `delete_asset` does.
+ *
+ * WHAT DOES NOT GO — THE BYTES, HERE. A handler has no CAS delete, and deleting
+ * `core_content_item` from here would strand the blob with no row left to drive
+ * `purgeContentItem`. So the content item's grace window collapses to NOW when
+ * nothing else rents it and the sweep that owns the bytes reclaims them. Bytes
+ * still rented elsewhere are left alone: asset meaning and byte custody have
+ * independent lifecycles (#274).
+ *
+ * EDIT LINEAGE: `source_asset_id` is a self-FK, and breaking it would forge or
+ * destroy a fact. NULLing the child forges "camera original"; cascading
+ * destroys a photograph the member never trashed. So `no_derived_assets`
+ * REFUSES while any other asset names this one as its source, live or trashed.
+ * Both clients' `emptyTrashOrder` puts derived copies ahead of their sources so
+ * a trash holding both empties in one pass.
+ *
+ * NOT `confirm: true`: parking would turn "Empty trash" into a queue of
+ * decisions. The confirmation for an owner-initiated destruction belongs in
+ * front of the owner before the command fires, as both clients do it.
  */
 const PURGE_ASSET: CommandDefinition = {
   name: "media.purge_asset",
@@ -1250,10 +1168,9 @@ const PURGE_ASSET: CommandDefinition = {
       value: 0,
     },
     {
-      // Nothing may still point at the row (#441). Engine FKs, the
-      // self-FK, and every polymorphic mechanism in one predicate: a sweep
-      // clause quietly dropped in a later edit fails here rather than in a
-      // member's library six months on.
+      // Nothing may still point at the row (#441): engine FKs, the self-FK and
+      // every polymorphic mechanism in ONE predicate, so a sweep clause dropped
+      // in a later edit fails here rather than in a member's library.
       name: "nothing_references_the_asset",
       sql: `SELECT (
               (SELECT count(*) FROM media_face_region WHERE asset_id = :asset_id)
@@ -1286,9 +1203,8 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
     .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
     .get(input.asset_id) as { content_id: string } | undefined;
   if (!asset) throw new Error("asset vanished between check and execute");
-  // Album covers hand off BEFORE the entries go, exactly as delete_asset
-  // does: an asset can be filed into an album while it sits in the trash, so
-  // membership is not guaranteed to have been dropped at trash time.
+  // Covers hand off BEFORE the entries go, as delete_asset does: an asset can
+  // be filed into an album while trashed, so membership may still exist.
   const covered = ctx.db
     .prepare(
       "SELECT collection_id FROM core_collection WHERE cover_content_id = ?"
@@ -1313,10 +1229,9 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
       .run(collection.collection_id, collection.collection_id);
     ctx.wrote("core.collection", collection.collection_id);
   }
-  // Face regions have no ON DELETE CASCADE (the phash sidecar does), so they
-  // go by hand — the same pair the lifecycle sweep deletes in duties.ts, with
-  // the same face-region poly sweep (#724) so no orphan face vector
-  // outlives the photograph it was cut from.
+  // Face regions have no ON DELETE CASCADE (the phash sidecar does), so they go
+  // by hand with the same face-region poly sweep (#724) — no orphan face vector
+  // may outlive the photograph it was cut from.
   const faceRegions = ctx.db
     .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
     .all(input.asset_id) as { region_id: string }[];
@@ -1374,8 +1289,8 @@ const SET_FAVORITE: CommandDefinition = {
       value: 1,
     },
     {
-      // The column and the canonical starred tag must never disagree — the
-      // column is a mirror, the tag is the truth (#441).
+      // Column and canonical starred tag must never disagree — the column is a
+      // mirror, the tag is the truth (#441).
       name: "favorite_mirrors_tag",
       sql: `SELECT count(*) AS n FROM media_asset a
              WHERE a.asset_id = :asset_id
@@ -1667,8 +1582,8 @@ const DELETE_ALBUM: CommandDefinition = {
       value: 1,
     },
     {
-      // The album surface only manages flat collections; a nested one came
-      // from the notebook surface and keeps its children until they move.
+      // The album surface manages flat collections only; a nested one came from
+      // the notebook surface and keeps its children until they move.
       name: "album_has_no_children",
       sql: `SELECT count(*) AS n FROM core_collection
              WHERE parent_collection_id = :album_id`,
@@ -1874,8 +1789,8 @@ function addToAlbum(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(entryId, input.album_id, input.asset_id, tail.p, ctx.now);
   ctx.wrote("core.collection_entry", entryId);
-  // The first photo into a coverless collection becomes its cover — the
-  // cover is the asset's canonical content item.
+  // The first photo into a coverless collection becomes its cover — the cover
+  // is the asset's canonical content item.
   ctx.db
     .prepare(
       `UPDATE core_collection SET cover_content_id =
@@ -1966,43 +1881,30 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /**
- * THE FACE-DELETE GATE (#724 W5; SECURITY.md, "Derived data and
- * sensitive enrichments"). Face data is the most sensitive derived class this
- * product holds, and the condition for shipping face detection at all was that
- * "delete this person" provably cascades through every derived row keyed to
- * that identity — not soft-deletes, not hides, not leaves a vector behind that
- * a later search can resurface.
+ * THE FACE-DELETE GATE (#724 W5; SECURITY.md, "Derived data and sensitive
+ * enrichments"). Face data is the most sensitive derived class here, and the
+ * condition for shipping face detection at all was that "delete this person"
+ * PROVABLY cascades through every derived row keyed to that identity — no soft
+ * deletes, no hides, no vector left for a later search to resurface.
  *
- * WHAT IT FORGETS, AND WHY THAT IS FOUR TABLES AND NOT ONE. A person's face
- * data is spread across four mechanisms, each of which is enough on its own to
- * reconstruct the fact this command destroys:
+ * Four mechanisms, each enough on its own to reconstruct the destroyed fact:
+ * `media_face_region` (BOTH party columns — a confirmed row also carries the
+ * identity in `confirmed_by_party_id`, and clearing one leaves the other saying
+ * the person is in the photograph); `enrich_embedding` for `media.face_region`
+ * targets, the worst leftover, since an orphan vector matches a NEW photograph
+ * back to a forgotten person; `enrich_derivation`, whose stamps would tell the
+ * next sweep those regions are current so faces are never re-derived; and
+ * `media_face_cluster`, rebuildable but naming deleted regions.
  *
- *   - `media_face_region` — the boxes. Both party columns are matched, not
- *     just `party_id`: a row the member CONFIRMED carries their identity in
- *     `confirmed_by_party_id` too, and a cascade that cleared one column would
- *     leave the other saying the person is in the photograph.
- *   - `enrich_embedding` (`media.face_region` targets) — the vectors. An
- *     orphan face vector is the worst leftover of the four: it is the thing
- *     that lets a NEW photograph of the same person be matched back to them
- *     after they were forgotten.
- *   - `enrich_derivation` — the stamps. Left behind, they tell the next sweep
- *     those regions are current, so the faces are never re-derived and the
- *     member's own library disagrees with itself about whether it looked.
- *   - `media_face_cluster` — the grouping projection. Rebuildable, but a stale
- *     row names a deleted region as a group member.
+ * It does NOT delete the `core_party`: forgetting who is in your photographs
+ * and deleting someone from your address book are different acts, and
+ * conflating them makes the destructive one a side effect of the reversible
+ * one. `people.trash_person` owns the other.
  *
- * WHAT IT DOES NOT DO. It does not delete the `core_party`. Forgetting who is
- * in your photographs and deleting a person from your address book are two
- * different acts, and conflating them would make the destructive one a side
- * effect of the reversible one. `people.trash_person` owns the other.
- *
- * WHY `high` AND WHY A `once`-SHAPED POSTCONDITION. There is no undo: the
- * vectors are gone and the boxes with them. An agent proposing it parks for
- * the owner, structurally, exactly as `sync.set_connection_trust` does. The
- * postcondition asserts ZERO rows across all four tables — the same
- * "nothing may still point at the row" shape `media.purge_asset` uses, so a
- * fifth mechanism added later without a clause here fails at the gate rather
- * than in a member's library six months on.
+ * `high`, with a `once`-shaped postcondition, because there is no undo. The
+ * postcondition asserts ZERO rows across all four tables — the same shape
+ * `media.purge_asset` uses — so a FIFTH mechanism added later without a clause
+ * here fails at the gate rather than in a member's library.
  */
 const FORGET_PERSON: CommandDefinition = {
   name: "media.forget_person",
@@ -2035,9 +1937,8 @@ const FORGET_PERSON: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The gate, in one predicate. Every table that can name the party
-      // through a face, counted together: a non-zero total is an incomplete
-      // cascade and the command refuses to commit.
+      // The gate, in one predicate: every table that can name the party through
+      // a face, counted together. A non-zero total is an incomplete cascade.
       name: "no_face_data_names_the_party",
       sql: `SELECT (
               (SELECT count(*) FROM media_face_region
@@ -2056,9 +1957,9 @@ const FORGET_PERSON: CommandDefinition = {
       value: 0,
     },
   ],
-  // Retry-safe rather than `once`: a second call finds nothing left and says
-  // so with a zero count. Refusing it as a replay would leave a member who is
-  // unsure whether the first one landed with no way to make sure.
+  // Retry-safe rather than `once`: a second call finds nothing and says so with
+  // a zero count. Refusing it as a replay would leave a member unsure whether
+  // the first landed with no way to make sure.
   idempotency: "retry-safe",
   risk: "high",
   confirm: true,
@@ -2084,10 +1985,9 @@ function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
     embeddings += Number(
       (countVectors.get(region.region_id) as { n: number }).n
     );
-    // The projection first (it FKs the region), then the region, then the
-    // registry sweep for every polymorphic pointer at it — which is what
-    // carries the vectors and the stamps away, through the one registry that
-    // is complete by construction rather than by a remembered clause here.
+    // Projection first (it FKs the region), then the region, then the registry
+    // sweep for every polymorphic pointer — which is what carries the vectors
+    // and stamps away, through the one registry complete by construction.
     ctx.db
       .prepare("DELETE FROM media_face_cluster WHERE region_id = ?")
       .run(region.region_id);
@@ -2095,7 +1995,7 @@ function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
       .prepare("DELETE FROM media_face_region WHERE region_id = ?")
       .run(region.region_id);
     cleanupPolyRefs(ctx.db, ctx.now, "media.face_region", region.region_id);
-    // One provenance entry per forgotten region — the audit trail of a
+    // One provenance entry per forgotten region: the audit trail of a
     // destructive act is the one thing that must survive it.
     ctx.wrote("media.face_region", region.region_id);
   }

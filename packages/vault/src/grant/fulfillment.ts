@@ -1,33 +1,27 @@
 /*
- * The grant plane's FULFILLMENT ENGINE (#825). The store above it holds
- * the MEANING of a share; this holds the act of keeping it true.
+ * The grant plane's FULFILLMENT ENGINE (#825). The store above holds the
+ * MEANING of a share; this holds the act of keeping it true.
  *
- * View is ORIGIN-AUTHORITATIVE RE-PROJECTION, not a merge (ruling G-view).
- * Every pass re-reads the subject's closure from the origin and replaces the
- * audience's copy with it, so:
- *
- *   - an origin edit FOLLOWS. The projector dedupes by content hash and by
- *     row id, which is right for a one-time placement and wrong for a standing
- *     grant, so the prior projection is scrubbed first — the same scrub +
- *     re-project shape `compileCommons` uses, for the same reason.
- *   - CONTAINER GRANTS ARE MEMBERSHIP, NOT SNAPSHOT (ruling G-membership). An
- *     item added to a granted album or folder is inside the closure the next
- *     pass reads, so it reaches the audience with no second grant and no
- *     second act.
+ * View is ORIGIN-AUTHORITATIVE RE-PROJECTION, never a merge (ruling G-view):
+ * every pass re-reads the subject's closure from the origin and REPLACES the
+ * audience's copy. The projector dedupes by content hash and row id, which is
+ * right for a one-time placement and wrong for a standing grant, so the prior
+ * projection is scrubbed first — the same shape `compileCommons` uses. Container
+ * grants are MEMBERSHIP, NOT SNAPSHOT (ruling G-membership): an item added to a
+ * granted album or folder is inside the closure the next pass reads.
  *
  * Scrub and re-project are ONE transaction on the audience vault. A crash
  * between them would leave the audience holding nothing while the grant still
- * stands, which is the one failure this engine must not be able to produce.
+ * stands — the one failure this engine must not be able to produce.
  *
- * Revocation is propagation, not erasure-at-a-distance (ruling G-revoke). A
- * reachable audience vault has the projection HARD-DELETED — no tombstone row
- * survives it — and the fulfillment row moves to `removed`. An unreachable one
- * stops at `remove_sent`, which is the honest end of what a sovereign system
- * can say: the removal was sent, the peer has not acknowledged it, and no
- * amount of waiting turns that into `removed`.
+ * Revocation is PROPAGATION, not erasure-at-a-distance (ruling G-revoke). A
+ * reachable audience has the projection HARD-DELETED, no tombstone, and the
+ * fulfillment row moves to `removed`; an unreachable one stops at
+ * `remove_sent`, the honest end of what a sovereign system can say. No amount
+ * of waiting turns that into `removed`.
  *
- * Nothing here reads a clock. Every timestamp is the caller's, so a fulfilment
- * pass replayed from a queue records when the WORK was decided.
+ * Nothing here reads a clock: every timestamp is the caller's, so a pass
+ * replayed from a queue records when the WORK was decided.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -58,11 +52,9 @@ import {
 } from "./grant-store.js";
 
 /**
- * A grant's subject is bigger than its declared ceiling. Mirrors
- * `CommonsMaxSizeError` deliberately: the grant plane adds no SECOND budget
- * (docs/decisions.md, "Sharing v1"), it carries the same per-grant ceiling the
- * commons grant it descends from carried, and it fails the same way — before
- * anything is placed in the audience vault.
+ * A grant's subject exceeds its declared ceiling. Mirrors `CommonsMaxSizeError`
+ * deliberately: the grant plane adds no SECOND budget (docs/decisions.md,
+ * "Sharing v1") and fails the same way — before anything is placed.
  */
 export class ShareGrantMaxSizeError extends Error {
   constructor(
@@ -77,19 +69,16 @@ export class ShareGrantMaxSizeError extends Error {
   }
 }
 
-/** Where one audience party stands after a pass, in that party's own terms. */
 export interface GrantFulfillmentStep {
   partyId: string;
   state: ShareFulfillmentState;
   /** The audience vault this step addressed, when one is known at all. */
   peerVaultId?: string;
-  /** Why the step stopped where it did. Absent when it simply succeeded. */
+  /** Why the step stopped. Absent when it simply succeeded. */
   detail?: string;
-  /** What landed in the audience vault, when a projection ran. */
   projected?: readonly ProjectedItem[];
-  /** The ask minted or found standing when there was no live channel. */
   invitationId?: string;
-  /** Bearer token, returned once, for a party with no vault to address. */
+  /** Bearer token, returned ONCE, for a party with no vault to address. */
   claimToken?: string;
 }
 
@@ -100,22 +89,20 @@ export interface GrantFulfillmentResult {
 }
 
 export interface FulfillShareGrantInput {
-  /** The vault the subject lives in. Written only for fulfillment state. */
+  /** Written only for fulfillment state. */
   origin: ShareVaultRef;
-  /** Gateway id of the origin vault, carried as provenance and steward id. */
+  /** Carried as provenance and steward id. */
   originVaultId: string;
   grantId: string;
   /**
-   * The audience vault this host can write into right now, or `undefined`
-   * when it cannot. Absence is a fact about reach, never about the grant.
+   * The audience vault this host can write into right now, or `undefined`.
+   * Absence is a fact about REACH, never about the grant.
    */
   seatFor: (vaultId: string) => ShareVaultRef | undefined;
-  /** Human label for the subject, shown on an invitation before acceptance. */
   subjectLabel?: string;
   now: string;
 }
 
-/** The audience-side id of a prior projection of this exact origin subject. */
 function priorProjection(
   audience: DatabaseSync,
   originVaultId: string,
@@ -133,9 +120,9 @@ function priorProjection(
 }
 
 /**
- * Replace the audience's copy of the subject with the origin's current one.
- * Bytes go first (a hardlink is idempotent and independent of the rows), then
- * scrub + project inside ONE audience transaction.
+ * Replace the audience's copy with the origin's current one. Bytes go first (a
+ * hardlink is idempotent and independent of the rows), then scrub + project
+ * inside ONE audience transaction.
  */
 function reproject(input: {
   origin: ShareVaultRef;
@@ -182,9 +169,9 @@ function reproject(input: {
 }
 
 /**
- * Read the subject once for the whole pass and refuse it if it is over the
- * grant's ceiling. Lazy on purpose: a grant whose whole audience is still
- * `awaiting_channel` never walks the closure at all.
+ * Read the subject once for the whole pass and refuse it over the ceiling. Lazy
+ * on purpose: a grant whose whole audience is still `awaiting_channel` never
+ * walks the closure at all.
  */
 function subjectClosure(input: {
   origin: ShareVaultRef;
@@ -206,7 +193,6 @@ function subjectClosure(input: {
   return closure;
 }
 
-/** The ask, for a party with no live channel to deliver over. */
 function park(input: {
   origin: ShareVaultRef;
   originVaultId: string;
@@ -232,8 +218,8 @@ function park(input: {
     now: input.now,
   });
   // A fulfillment row is keyed by peer vault, so a party with no vault id has
-  // no row to write — absence there means "no channel yet", which is exactly
-  // the truth. The invitation is the record that the ask was made.
+  // no row to write: absence there means "no channel yet", which is the truth.
+  // The invitation is the record that the ask was made.
   if (input.peerVaultId !== undefined)
     ensureFulfillment(input.origin.vault, {
       grantId: input.grant.grantId,
@@ -254,13 +240,10 @@ function park(input: {
 
 /**
  * Bring every audience vault of one standing grant up to the origin's current
- * truth. Safe to run again on any change to the subject or to the roster: the
- * pass is a re-projection, so running it twice is running it once.
- *
- * A circle audience recompiles here by construction — the roster is resolved
- * on every pass, so a party added to the circle is delivered to on the next
- * one and a party removed simply stops being visited. Removing what a departed
- * member already holds is a REVOKE, not a roster edit; see
+ * truth. Safe to re-run on any change to the subject or roster: the pass IS a
+ * re-projection, so running it twice is running it once. A circle audience
+ * recompiles by construction — the roster is resolved every pass. Removing what
+ * a departed member already holds is a REVOKE, not a roster edit; see
  * `propagateShareGrantRevocation`.
  */
 export function fulfillShareGrant(
@@ -282,14 +265,13 @@ export function fulfillShareGrant(
     });
     return loaded;
   };
-  // Read (and size-check) the subject before ANY state moves anywhere, so an
-  // over-ceiling grant leaves no fulfillment row at all — whatever mix of
-  // parked, unreachable, and deliverable audiences it has.
+  // Read and size-check the subject before ANY state moves anywhere, so an
+  // over-ceiling grant leaves no fulfillment row at all.
   closure();
   const steps: GrantFulfillmentStep[] = [];
   for (const partyId of resolveAudienceParties(db, grant.audience)) {
-    // The owner is not their own audience: a circle that contains the granter
-    // must not project their own subject back into their own vault.
+    // The owner is not their own audience: a circle containing the granter must
+    // not project their own subject back into their own vault.
     if (partyId === grant.grantedBy) continue;
     const channel = channelForParty(db, partyId);
     if (!channel || channel.state !== "live" || channel.vaultId === undefined) {
@@ -314,9 +296,9 @@ export function fulfillShareGrant(
     const peerVaultId = channel.vaultId;
     const seat = input.seatFor(peerVaultId);
     if (!seat) {
-      // The channel is open and the subject is on its way — this host just
-      // cannot carry it right now. `syncing` is the honest state for that; the
-      // detail says who could not be reached rather than inventing a failure.
+      // The channel is open and the subject is on its way; this host just
+      // cannot carry it now. `syncing` is the honest state, and the detail says
+      // who could not be reached rather than inventing a failure.
       const detail = `peer vault ${peerVaultId} is not reachable from this host`;
       setFulfillmentState(db, {
         grantId: grant.grantId,
@@ -359,12 +341,10 @@ export function fulfillShareGrant(
   return { grantId: grant.grantId, steps };
 }
 
-/** What one audience vault's removal came to. */
 export interface GrantRemovalStep {
   peerVaultId: string;
   state: ShareFulfillmentState;
   detail?: string;
-  /** True when a projection was actually deleted from that vault. */
   removed?: boolean;
 }
 
@@ -384,17 +364,15 @@ export interface PropagateShareGrantRevocationInput {
 }
 
 /**
- * Carry a revocation out to every audience vault that was delivered to. The
- * store already dated the revocation; this is the delivery half of it.
+ * Carry a revocation out to every audience vault that was delivered to; the
+ * store already dated it.
  *
- * `remove_sent` is TERMINAL ENOUGH. A peer that HELD the subject and cannot
- * be reached has been asked and has not answered, and the copy the owner
- * reads says exactly that. Nothing here promotes it to `removed` on a timer
- * or an assumption: a delivered row ends `removed` only by looking inside the
- * audience vault (deleting the projection, or finding it verifiably gone). A
- * row that never got past `awaiting_channel`/`syncing` was never delivered
- * to, so it ends `removed` with a detail saying nothing had been delivered —
- * never a fabricated "removal sent" to a peer that received nothing.
+ * `remove_sent` is TERMINAL ENOUGH: a peer that HELD the subject and cannot be
+ * reached has been asked and has not answered, and the owner's copy says
+ * exactly that. Nothing promotes it to `removed` on a timer — a delivered row
+ * ends `removed` only by looking INSIDE the audience vault. A row that never
+ * got past `awaiting_channel`/`syncing` ends `removed` with a detail saying
+ * nothing had been delivered, never a fabricated "removal sent".
  */
 export function propagateShareGrantRevocation(
   input: PropagateShareGrantRevocationInput
@@ -412,17 +390,15 @@ export function propagateShareGrantRevocation(
       steps.push({ peerVaultId: row.peerVaultId, state: "removed" });
       continue;
     }
-    // A row that never had the subject projected into it: there is nothing to
-    // remove and nothing was ever sent, so the honest terminal state is
-    // `removed` with a detail saying so — never a fabricated "removal sent"
-    // to a peer that received nothing.
+    // Nothing was projected here, so nothing can be removed and nothing was
+    // sent: the honest terminal state is `removed` with a detail saying so.
     //
-    // The question is asked of `delivered_at`, the durable memory, NOT of the
-    // live state (#846). Reading it off the state made a delivered grant
-    // whose peer the host merely lost reach for — `fulfillShareGrant` drops
-    // such a row back to `syncing`, honestly, about freshness — settle
-    // `removed` on the reachable path while the audience vault still held the
-    // whole projection. The owner was told the share was gone and it was not.
+    // The question is asked of `delivered_at`, the DURABLE MEMORY, not of the
+    // live state (#846). Reading it off the state made a delivered grant whose
+    // peer this host had merely lost reach for — `fulfillShareGrant` honestly
+    // drops such a row to `syncing` — settle `removed` while the audience vault
+    // still held the whole projection, telling the owner the share was gone
+    // when it was not.
     if (row.deliveredAt === null) {
       const detail = "nothing had been delivered; there was nothing to remove";
       setFulfillmentState(db, {
@@ -464,11 +440,10 @@ export function propagateShareGrantRevocation(
       updatedAt: input.now,
     });
     const prior = priorProjection(seat.vault, input.originVaultId, grant);
-    // Hard delete, no tombstone (ruling G-revoke). The audience is left with
-    // no row saying something used to be here — the projection simply is not
-    // there any more, and its bytes go to that vault's own orphan sweep. A
-    // delivered row whose projection is already gone (the peer cleaned up on
-    // its own) still ends `removed`: the peer verifiably does not hold it.
+    // Hard delete, no tombstone (ruling G-revoke): the audience keeps no marker
+    // row at all, and the bytes go to that vault's own orphan sweep. A delivered
+    // row whose projection is already gone still ends `removed` — the peer
+    // verifiably does not hold it.
     const removed =
       prior !== undefined &&
       unshareFromVault({

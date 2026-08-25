@@ -207,7 +207,7 @@ test("comment-only-diff separates a comment edit from a code edit", (t) => {
     SOURCE.replace("value = 1", "value = 2")
   );
   assert.deepEqual(commentOnlyDiff({ root: codeEdit, ref: "HEAD" }), [
-    { file: "src/a.ts", commentOnly: false, reason: "printed code differs" },
+    { file: "src/a.ts", commentOnly: false, reason: "code tokens differ" },
   ]);
 });
 

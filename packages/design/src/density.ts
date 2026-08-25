@@ -1,9 +1,6 @@
-// Centraid's fixed spacing scale and the three density tiers.
-//
-// One 4px base, six rungs — 4 / 8 / 12 / 16 / 24 / 32, and the scale STOPS
-// there: the system's largest rhythm step is the 32px desktop content margin,
-// and a seventh rung could only ever be "one more than the biggest one", which
-// is how a scale stops being a scale.
+// One 4px base, six rungs, and the scale STOPS there: the largest rhythm step
+// is the 32px desktop content margin, so a seventh rung could only be "one more
+// than the biggest one".
 
 export interface DensityScale {
   1: number;
@@ -23,18 +20,9 @@ export const spacing = {
   6: 32,
 } as const satisfies DensityScale;
 
-/**
- * The only two values below the 4px base, and the reason they are NAMED.
- *
- * Exactly two sub-base values exist (v7 audit) because they are not spacing
- * at all: they are seams, and a seam is a line rather than a
- * rhythm step. Naming them is what makes the difference enforceable. A loose
- * `gap: 2px` is indistinguishable from someone eyeballing a rung; a
- * `var(--sp-gutter)` says which of the two exceptions is being claimed.
- *
- * Nothing else under 4px is permitted. A third sub-base value is a system
- * change, not a call-site decision.
- */
+/** The only two values below the 4px base, NAMED so the exception is claimed
+ *  rather than eyeballed: these are seams, not rhythm steps. A third sub-base
+ *  value is a system change, never a call-site decision. */
 export const subBase = {
   /** The seam between two images in a mosaic — a cut, not a gap. */
   gutter: 2,
@@ -42,118 +30,46 @@ export const subBase = {
   hair: 1,
 } as const;
 
-/**
- * Component metrics. These are invariants, not preferences: a control below
- * 34px stops being reliably hittable, a row below 44px stops being a tap
- * target, and the stem is the one band whose width may never change.
- */
+/** Invariants, not preferences: below 34px a control stops being hittable,
+ *  below 44px a row stops being a tap target. */
 export const metrics = {
-  /** Every control — button, field, select — is exactly this tall UNDER A
-   *  POINTER. On touch it is `controlTouch`; see below. */
+  /** Every control, UNDER A POINTER; on touch it is `controlTouch`. */
   control: 34,
-  /**
-   * A control on touch, without exception (v7 §C).
-   *
-   * The one axis the system has is pointer-or-touch, and this is the number
-   * that axis exists to carry. Re-deciding the surface by hand at a call site
-   * puts controls at 34 on the phone — under the 44px floor, on the surface
-   * where the floor is not advisory (v7 §C audit). It is a
-   * FLOOR, not a preference: `--target-min` starts here and only a `(pointer:
-   * fine)` query lowers it to `control`, so a surface that never proves it has
-   * a pointer keeps 44.
-   */
+  /** A FLOOR, not a preference (v7 §C): `--target-min` starts here and only a
+   *  `(pointer: fine)` query lowers it, so an unproven surface keeps 44. */
   controlTouch: 44,
-  /** A list/table row at the comfortable tier. */
   row: 44,
-  /** A segmented control, the one control allowed to sit under 34px because
-   *  its segments are not individually the primary target. */
+  /** The one control allowed under 34px: a segment is not the primary target. */
   segmented: 28,
-  /**
-   * The fact-list key column — the fixed inline-start column that holds a
-   * `micro` uppercase key beside its value in a facts panel. 150 under a
-   * pointer, 110 on touch (v9 surface axis `keyCol`): the phone narrows the
-   * column rather than wrapping the key, so the value edge stays aligned
-   * down the whole list.
-   */
+  /** The phone narrows the fact-list key column rather than wrapping the key,
+   *  so the value edge stays aligned down the list. */
   keyCol: 150,
   keyColTouch: 110,
-  /**
-   * The navigation stem. Never themed, never scrolled away, never resized.
-   *
-   * 240, not something chip-narrow like 92: at 92 the launcher is a column of
-   * chips with a caption under each, so the vault you are in and the gateway
-   * holding it have nowhere to live and get pushed into Home's app bar — where
-   * they are only true on one route. The invariant is the RESERVATION (one
-   * band, one width, never themed, mirrors under RTL), not the number; 240
-   * lets identity sit at the head and Settings at the foot, which is where a
-   * member reaches for them.
-   */
+  /** The navigation stem: never themed, never scrolled away, never resized.
+   *  The invariant is the RESERVATION, not the number. */
   stem: 240,
-  /**
-   * The APP navigation rail — an app's own destinations, on the leading edge
-   * of its content area, under a pointer (v16 §3).
-   *
-   * It is not a second stem and it is not the stem's width: the stem answers
-   * WHICH APP at 240 and never moves, while this column answers WHERE IN IT
-   * and is drawn only by an app with more than four destinations of its own.
-   * 232 is the reference's `S.rail`; it is narrower than the stem because it
-   * holds a label and a count rather than an identity block and a launcher.
-   *
-   * Pointer only, so there is no touch rung to pair with it: on touch the same
-   * destinations are the app band or the shelf strip, and an app that hid one
-   * of them behind this width would be hiding a destination.
-   */
+  /** An app's OWN destination rail, pointer only — not a second stem: the stem
+   *  answers which app, this answers where in it. On touch the same
+   *  destinations are the app band or shelf strip, never hidden behind this. */
   appRail: 232,
-  /**
-   * A row in that rail, UNDER A POINTER. On touch the rail is not drawn, and
-   * anywhere it is a target rather than a pointer row it takes `row` — 44 is
-   * the floor and this rung may never be spent on a finger.
-   *
-   * 30 rather than `segmented`'s 28 or `control`'s 34: a rail row is a
-   * destination in a scannable column, not a control, so it sits between the
-   * two — tight enough that eight destinations and a group head fit above the
-   * fold at 1090, tall enough that the label keeps its leading.
-   */
+  /** Pointer rows only: anywhere this is a target it takes `row`, because 44 is
+   *  the floor and this rung may never be spent on a finger. */
   appRailRow: 30,
 } as const;
 
 export type MetricKey = keyof typeof metrics;
 
-/**
- * The PAGE MARGIN — the inset from the viewport edge to page content.
- *
- * A separate scale from `spacing`, exactly as the v4 handoff keeps it
- * separate: its rhythm table carries `gap` (the six rungs above) and
- * `margin:{d:32,m:18}` side by side (`R`, handoff line 3356). The desktop
- * value coincides with `spacing[6]`; the mobile value, 18, does NOT sit on
- * the 4px scale and is not supposed to — a page margin is the distance from
- * the paper's edge to the text block, not a gap between two things, so it is
- * tuned against the phone's own width rather than snapped to a gap rung.
- *
- * Without this token a phone screen has to choose between hard-coding 18 and
- * substituting a rung that is visibly wrong (16 crowds the edge, 24 wastes a
- * quarter-inch of a 390pt viewport), which is how Home and Photos ended up
- * disagreeing about where the page starts.
- *
- * Only the mobile value is lowered to native (`toNativeTheme`), because the
- * desktop margin is a shell/blueprint concern and native never draws it.
- */
+/** A SEPARATE scale from `spacing`: 18 deliberately does not sit on the 4px
+ *  base, because a page margin is the paper's edge to the text block, not a gap
+ *  between two things. Only `mobile` is lowered to native (`toNativeTheme`). */
 export const pageMargin = {
-  /** Desktop and the wide web shell. */
   desktop: 32,
-  /** The phone. Every native screen's horizontal page inset. */
   mobile: 18,
 } as const;
 
-/**
- * Density tiers scale ROW HEIGHT and CONTENT PADDING only — never control
- * size. An app declares its tier; the shell writes it as a `data-density`
- * attribute and every row/padding site reads `--density-row` / `--density-pad`
- * instead of hard-coding a rung. Mobile renders one tier looser than declared.
- *
- * `dense` bottoms out at the 34px control height for the same reason the
- * control does: below it a row is no longer a target.
- */
+/** Tiers scale ROW HEIGHT and CONTENT PADDING only, never control size; mobile
+ *  renders one tier looser than declared. `dense` bottoms out at the control
+ *  height: below it a row is no longer a target. */
 export const DENSITY_TIERS = {
   comfortable: { pad: spacing[4], row: metrics.row },
   compact: { pad: spacing[3], row: 38 },
@@ -162,12 +78,11 @@ export const DENSITY_TIERS = {
 
 export type DensityTier = keyof typeof DENSITY_TIERS;
 
-/** Tier order, loosest first — mobile steps one entry toward `comfortable`. */
+/** Loosest first: mobile steps one entry toward `comfortable`. */
 export const DENSITY_TIER_NAMES = [
   "comfortable",
   "compact",
   "dense",
 ] as const satisfies readonly DensityTier[];
 
-/** The default tier an app inherits when it declares none. */
 export const DEFAULT_DENSITY_TIER: DensityTier = "comfortable";

@@ -1,9 +1,9 @@
-// governance: allow-repo-hygiene file-size-limit (#408) the backup service is one serialized run-chain contract — backup, verify, restore-verify and the wal drain all share its state row, fencing, keyring and health surfaces; splitting them would scatter one lifecycle across files that only ever change together
+// governance: allow-repo-hygiene file-size-limit (#408) one serialized run-chain contract — backup, verify, restore-verify and the wal drain share one state row, fencing and keyring
 /*
- * `BackupService` — the gateway-side owner of the offsite backup engine
- * (`@centraid/backup`, PROTOCOL.md + FORMAT.md). Static CLI configuration
- * or the desktop's live provider connection resolves through one engine;
- * manual runs and the scheduler intentionally share the same code path.
+ * `BackupService` — gateway-side owner of the offsite backup engine
+ * (`@centraid/backup`, PROTOCOL.md + FORMAT.md). Static config and live
+ * connections resolve through one engine; manual runs and the scheduler share
+ * one code path.
  */
 
 import { randomBytes } from "node:crypto";
@@ -113,7 +113,6 @@ export interface WalDrainPolicyDue {
   lastAttemptMs?: number;
 }
 
-/** Delay until the earliest mounted vault actually reaches its policy RPO. */
 export function walDrainDelayMs(
   configured: boolean,
   policies: readonly WalDrainPolicyDue[],
@@ -141,10 +140,7 @@ function newestReconciliation(
     : second;
 }
 
-/**
- * Backup runs share mutable target state and WAL generations, so later vault
- * work must not start until the preceding vault has settled.
- */
+/** Runs share mutable target state and WAL generations. */
 function applyInOrder<T>(
   values: Iterable<T>,
   apply: (value: T, index: number) => void | PromiseLike<void>
@@ -178,9 +174,8 @@ export function buildBackupProvider(
 }
 
 export interface BackupServiceOptions {
-  /** Static daemon/CLI configuration. When omitted, the active provider storage connection is resolved live. */
+  /** Omitted ⇒ the active provider connection resolves live. */
   config?: BackupConfig;
-  /** Disposable backup working/cache directory (bundles and restore scratch). */
   cacheDir: string;
   gatewayDatabase?: GatewayDatabase;
   keyStore?: KeyStore;
@@ -188,98 +183,48 @@ export interface BackupServiceOptions {
   vaults: VaultRegistry;
   health: HealthRegistry;
   logger: RuntimeLogger;
-  /** Clock override (tests). */
   now?: () => number;
-  /** Injectable source assembly seam for deterministic snapshot tests. */
   assembleEntries?: (opts: AssembleOptions) => Promise<SourceEntry[]>;
-  /**
-   * Injectable registration seam (tests). `createSnapshot` returning `null`
-   * ("nothing changed — registered nothing") is the state the base-registration
-   * invariant turns on, and no arrangement of REAL sources can force it while a
-   * base is unanchored — the engine's own no-change test compares the sealed
-   * `walGeneration`, so a live pending generation always differs from the
-   * previous manifest's. The invariant must not DEPEND on that (it is a
-   * predicate in another package, last widened for an unrelated reason), so the
-   * seam exists to hold this service to it directly.
-   */
+  /** Test seam: no REAL source forces `createSnapshot` to return `null` while
+   *  a base is unanchored, so it is the only way to exercise the
+   *  base-registration invariant. */
   snapshot?: typeof createSnapshot;
-  /** Injectable provider (tests) — defaults to `buildBackupProvider(config.provider)`. */
   provider?: BackupProvider;
   storageConnections?: StorageConnectionStore;
-  /** Shared confirmation store; CLI-only callers fall back to backup state. */
   recoveryKit?: RecoveryKitStateStore;
-  /** Injectable target-independent CAS inventory seam (tests). */
   casReconcile?: typeof runCasOnlyReconciliation;
-  /**
-   * Host power-context posture gate (#528). When it returns true, the
-   * hourly retention/reconciliation tick is skipped — the same safe-loop
-   * courtesy as the owner pause. Defaults to "never defer". The WAL drain
-   * (RPO durability) is intentionally NOT gated by this predicate.
-   */
+  /** The WAL drain is RPO durability and is deliberately NOT gated (#528). */
   shouldDeferPosture?: () => boolean;
-  /**
-   * Resource-actuals hook (#528): one WAL drain (per vault, per pass)
-   * completed — `bytesUploaded` is the sealed bytes shipped, `durationMs` the
-   * wall-clock of the drain. Accounting only, never a gate.
-   */
+  /** Accounting only, never a gate (#528). */
   onDrainAccounted?: (info: {
     bytesUploaded: number;
     durationMs: number;
   }) => void;
-  /**
-   * Per-vault owner (#726) — paired with `authorizedOwnerId` to
-   * skip a vault owned by someone OTHER than the person this host's backup
-   * configuration is authorized for. Hosting a vault confers no right to
-   * ship its bytes to YOUR configured destination without its owner's own
-   * say-so. Either omitted ⇒ no filter (single-owner gateways, the common
-   * case, are unaffected).
-   */
+  /** With `authorizedOwnerId` (#726): skip a vault whose owner differs from
+   *  this host's. Either omitted ⇒ no filter. */
   ownerOf?: (vaultId: string) => string | undefined;
-  /** The owner id this host's backup configuration is authorized for (#726). */
   authorizedOwnerId?: () => string | undefined;
 }
 
-/**
- * A `restore()` result, plus — for a lazy/partial restore (#405) — the
- * previews-first warm-pass outcome: `result.skippedBlobs` names the blobs left
- * remote-only, and `previewsWarm` reports how many tinies were pulled and the
- * time-to-usable-grid a new device waited. `previewsWarm` is absent on a full
- * restore (no `lazy` option).
- */
+/** `previewsWarm` is present only for a lazy restore (#405). */
 export type LazyRestoreResult = RestoreResult & {
   previewsWarm?: PreviewsWarmResult;
 };
 
-/**
- * The previews-first lazy restore option (#405 §5 / #439 R2): the remote
- * CAS tier that is both the per-blob skip oracle and the warm-pass source, plus
- * an optional bounded warm fan-out. Explicit callers (tests, the recovery UI)
- * pass it directly; `restore()` also AUTO-resolves one from the vault's own tier
- * when neither `lazy` nor `full` is given.
- */
+/** `restore()` AUTO-resolves one when neither `lazy` nor `full` is given. */
 export interface LazyRestoreOption {
-  /** The vault's remote blob CAS — the skip oracle AND the warm-pass source. */
+  /** Skip oracle AND warm-pass source. */
   remote: RemoteTier;
-  /** Bounded warm-pass read-through fan-out (#405 §5/§7). */
   warmConcurrency?: number;
 }
 
-/** The home bundle's provider-declared promises for the five-metric contract
- *  (#436) — Recovery window and Exit read these two fields. */
 export interface HomeDiscovery {
   retention: Retention;
   restoreCostClass: "free-egress" | "metered-egress";
 }
 
-/**
- * The recovery window N in ms (#439) — the retention DAILY rung, the
- * span over which PITR makes every instant restorable. `undefined` for a
- * non-ladder retention (`kind: 'none'`, e.g. a local provider): no daily window
- * promise, so the orphan-grace gate stays disengaged and orphans delete on
- * observation, as they did pre-R4. A ladder's `dailyDays` is the honest N: it is
- * the promise #436 metric 2 makes, and the grace exists precisely to keep it
- * honest for blobs created and dereferenced within one inter-snapshot interval.
- */
+/** The recovery window N (#439) is the retention DAILY rung. `undefined` ⇒
+ *  the orphan-grace gate disengages. */
 export function recoveryWindowMs(
   retention: Retention | undefined
 ): number | undefined {
@@ -287,37 +232,16 @@ export function recoveryWindowMs(
   return undefined;
 }
 
-/**
- * The pre-start restore cost estimate (#439) the metered-egress confirm
- * gate — and, later, the recovery UI's price card (#436) — render WITHOUT
- * downloading a manifest. `costClass` is the provider-declared egress class
- * (`homeDiscovery`, PROTOCOL.md's `restoreCostClass` MUST finally getting a call
- * site); `undefined` when backup isn't configured. `fullBytes` is the selected
- * snapshot registry row's `totalBytes` — the whole-library download a `--full`
- * restore incurs — or `undefined` when no snapshot/target is resolvable yet. A
- * lazy restore defers every blob the remote CAS already holds, so its upfront
- * download is the DB + git-bundle + any blob the remote LACKS plus the warm
- * pass's tinies; that figure is NOT knowable from the row alone, so it is
- * deliberately not fabricated — `lazyAvailable` only reports whether the vault
- * has a durable remote tier (⇒ lazy is the default and defers the bulk).
- */
+/** A lazy restore's upfront download is unknowable from the registry row and
+ *  deliberately not fabricated (#439). */
 export interface RestoreEgressEstimate {
   costClass: "free-egress" | "metered-egress" | undefined;
-  /** Seq of the snapshot the estimate (and a subsequent restore) would select. */
   seq: number | undefined;
-  /** Whole-library download bytes for a `--full` restore, or undefined if unknown. */
   fullBytes: number | undefined;
-  /** True when a durable remote CAS tier exists ⇒ restore is lazy-by-default. */
   lazyAvailable: boolean;
 }
 
-/**
- * The snapshot a restore (and its egress estimate) selects, from a newest-first
- * `listSnapshots` result (#439): an explicit `seq`, else — for a `--at`
- * point-in-time restore — the newest snapshot AT OR BEFORE that instant (which
- * is exactly the base the WAL replay starts from), else the newest snapshot.
- * `createdAt` is epoch SECONDS on the wire; `pointInTimeMs` is epoch ms.
- */
+/** Requires NEWEST-FIRST rows. `createdAt` is epoch SECONDS. */
 function pickSnapshotRow(
   rows: SnapshotRow[],
   opts: { seq?: number; pointInTimeMs?: number }
@@ -329,8 +253,6 @@ function pickSnapshotRow(
   return rows[0];
 }
 
-/** Discovery is stable per provider; a short TTL keeps the 10s status poll off
- *  the provider's `/v1/storage/provider` endpoint on every tick. */
 const HOME_DISCOVERY_TTL_MS = 5 * 60 * 1000;
 
 export class BackupService {
@@ -366,14 +288,10 @@ export class BackupService {
   private walTimerDueAtMs: number | undefined;
   /** One drain pass at a time; ticks that land mid-pass are skipped. */
   private draining = false;
-  /** Scheduled drain attempts are due independently per vault policy. */
   private readonly lastWalDrainAttemptMs = new Map<string, number>();
-  /** Set by stop(): no new runs/drains may start (shutdown teardown follows). */
   private stopped = false;
-  /** Serializes every run — "one at a time (no concurrent backups)". */
+  /** Serializes every run: no concurrent backups. */
   private chain: Promise<void> = Promise.resolve();
-  /** The vault/kind currently executing inside `chain`, if any — read by
-   *  `isRunning()` (the `_gateway/backup` route's `running` flag). */
   private activeRun:
     | {
         vaultId: string;
@@ -446,14 +364,7 @@ export class BackupService {
       : { configured: false };
   }
 
-  /**
-   * The home bundle's provider-declared promises the five-metric contract
-   * (#436) reads for Recovery window (`retention`) and Exit
-   * (`restoreCostClass`) — sourced from the discovery document
-   * (`GET /v1/storage/provider`, PROTOCOL.md § Layer 2 — backup). Cached for
-   * `HOME_DISCOVERY_TTL_MS` so the 10s status poll doesn't re-hit the provider
-   * each time. `undefined` when backup isn't configured (no provider to ask).
-   */
+  /** PROTOCOL.md § Layer 2 — backup. */
   async homeDiscovery(): Promise<HomeDiscovery | undefined> {
     const backend = await this.backend();
     if (!backend) return undefined;
@@ -590,7 +501,6 @@ export class BackupService {
     }
   }
 
-  /** Serialize `fn` after every run already queued. */
   private enqueue(fn: () => Promise<void>): Promise<void> {
     const run = this.chain.then(fn, fn);
     this.chain = run.catch(() => undefined);
@@ -603,7 +513,6 @@ export class BackupService {
 
   // ── Provider policy ─────────────────────────────────────────────────
 
-  /** Push one vault's desired wire-policy, serialized with every state writer. */
   async syncPolicy(vaultId: string): Promise<ProviderPolicySyncState> {
     this.assertRunning();
     const plane = this.vaults.get(vaultId);
@@ -654,15 +563,9 @@ export class BackupService {
     });
   }
 
-  /**
-   * Wire a vault plane's blob sweep to the retained-snapshot GC roots (issue
-   * #436 §6). The plane's client-owned CAS orphan-delete consults this before
-   * every sweep so it can never evict an object a recovery-to-N still needs.
-   * The closure re-reads the current target each call (target id can change),
-   * and throws on any read/authenticate failure — the sweep translates that
-   * into skipping the delete phase (fail safe, never fail open). Idempotent:
-   * setting it again on an already-wired plane is harmless.
-   */
+  /** Pins the blob sweep to the retained-snapshot GC roots (#436 §6) so
+   *  orphan-delete cannot evict an object a recovery-to-N needs. THROWS on a
+   *  read failure — the sweep then skips deleting (fail safe). */
   private attachSnapshotRoots(plane: VaultPlane): void {
     const vaultId = plane.boot.vaultId;
     plane.snapshotBlobRoots = async (): Promise<ReadonlySet<string>> => {
@@ -673,7 +576,6 @@ export class BackupService {
         this.sourceInstanceId
       );
       const target = state.targets[vaultId];
-      // No target ⇒ no registered snapshots for this vault ⇒ no roots to pin.
       if (!target) return new Set<string>();
       return snapshotReferencedBlobShas({
         provider: backend.provider,
@@ -683,10 +585,7 @@ export class BackupService {
         manifestBlobCache: this.manifestBlobCache,
       });
     };
-    // Orphan-grace window N (#439): the recovery window is the retention
-    // daily rung. Threaded into the sweep so the client-owned CAS orphan delete
-    // waits N past first-observed-orphaned for a blob referenced only between two
-    // snapshots — the byte a recovery-to-N inside that interval would replay.
+    // The CAS orphan delete waits N past first-observed-orphaned (#439).
     plane.orphanGraceWindowMs = async (): Promise<number | undefined> => {
       const discovery = await this.homeDiscovery();
       return recoveryWindowMs(discovery?.retention);
@@ -707,12 +606,6 @@ export class BackupService {
     });
   }
 
-  /**
-   * Manual "run every mounted vault now" — the CLI's `backup run` (no
-   * `--vault`) and the Gateway page's "Back up now" button. Unlike `tick()`,
-   * bypasses the due-ness check: every mounted vault backs up immediately,
-   * one at a time (the same `chain` serialization `runBackup` always uses).
-   */
   async runAll(): Promise<void> {
     this.assertRunning();
     await applyInOrder(this.vaults.planesList(), async (plane) => {
@@ -720,9 +613,6 @@ export class BackupService {
     });
   }
 
-  /** Is a backup/verify run currently executing? Scoped to `vaultId` when
-   *  given, otherwise true if ANY vault is mid-run (`chain` only ever runs
-   *  one at a time). */
   isRunning(vaultId?: string): boolean {
     if (!this.activeRun) return false;
     return vaultId === undefined || this.activeRun.vaultId === vaultId;
@@ -740,9 +630,8 @@ export class BackupService {
       return;
     }
     // Hosting a vault confers no right to ship its bytes to THIS host's
-    // configured destination without its own owner's say-so (#726). Skip
-    // + report, never silent — same shape as the fenced/destination-changed
-    // skips just below.
+    // destination without its owner's say-so (#726). Skip + report, never
+    // silent.
     if (this.ownerOf && this.authorizedOwnerId) {
       const owner = this.ownerOf(vaultId);
       const authorized = this.authorizedOwnerId();
@@ -792,17 +681,15 @@ export class BackupService {
         label,
         generation: 1,
         providerRef: backend.providerRef,
-        // Target persistence precedes the first (possibly long) snapshot.
-        // This timestamp gives health checks an honest fresh-target grace.
+        // Health needs an honest fresh-target grace.
         firstBackupAt: new Date(this.now()).toISOString(),
       };
       createdTarget = true;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
     }
-    // Pin this vault's blob sweep to its retained-snapshot GC roots (issue
-    // #436 §6) the moment a target exists — before the first snapshot lands, so
-    // no orphan-delete can ever race ahead of the reachability set.
+    // Pin the sweep the moment a target exists (#436 §6), before the first
+    // snapshot lands: no orphan-delete may race the reachability set.
     this.attachSnapshotRoots(plane);
     const desiredPolicy = providerPolicyFor(readBackupPolicy(plane.db.vault));
     if (
@@ -820,12 +707,9 @@ export class BackupService {
       await saveBackupState(this.gatewayDatabase, state);
     }
 
-    // Capture NOW: on a fresh vault this mints the first generations (and
-    // their bases); on a running one it ships the newest committed bytes so
-    // the snapshot being registered is as current as one tick allows. This
-    // lives HERE, not inside assembleSourceEntries — the assemble seam is
-    // injectable (tests), and a listing function must not be the only thing
-    // standing between a backup run and a checkpoint.
+    // Lives HERE, not in the injectable `assembleSourceEntries` seam: a
+    // listing function must not be all that stands between a run and a
+    // checkpoint.
     const shipper = plane.walShipper;
     plane.walTick();
     if (!shipper) {
@@ -840,11 +724,9 @@ export class BackupService {
       );
     }
 
-    // Issue #411 action 1: fold the shipper's foreign-checkpoint tally into THIS
-    // in-memory `target`. NOT via `syncWalForeignCheckpoints` (a separate fresh
-    // load+save): the register path re-saves `state` several times below, which
-    // would clobber a separately-written counter. The drain pass uses the helper
-    // because there its save is the last write of the vault's turn.
+    // Fold the tally into THIS in-memory `target`, not via
+    // `syncWalForeignCheckpoints` (#411): the register path re-saves `state`
+    // below and would clobber a separately-written counter.
     const shipStatus = shipper.status();
     if (shipStatus.foreignCheckpointCount > 0) {
       target.walForeignCheckpointCount = shipStatus.foreignCheckpointCount;
@@ -855,19 +737,13 @@ export class BackupService {
       }
     }
 
-    // Issue #408: pin each WAL generation to ONE keyring epoch — AFTER the
-    // tick, so a generation the tick just minted gets pinned before its
-    // manifest registers. A rotation breaks the streams to fresh
-    // generations BEFORE anything else, so a generation's manifest and its
-    // segments always share an epoch — restore derives the segment key
-    // from the manifest's `keyEpoch`.
+    // Pin each generation to ONE keyring epoch (#408), AFTER the tick: restore
+    // derives the segment key from the manifest's `keyEpoch`.
     if (shipper) {
       const pins = (target.walGenerationEpochs ??= {});
       const bases = shipper.currentBases();
-      // ONE roll re-bases BOTH databases now (the two generations break
-      // together — a manifest may never pair bases from two ticks), so this is
-      // deliberately NOT a per-base loop: rolling once per stale base would
-      // mint, and immediately retire, a whole extra generation per rotation.
+      // Deliberately not a per-base loop: ONE roll re-bases BOTH databases (a
+      // manifest may never pair bases from two ticks).
       const stale = bases.find(
         (b) =>
           pins[b.generation] !== undefined &&
@@ -882,10 +758,8 @@ export class BackupService {
           )
         );
         if (unrolled) {
-          // The roll's checkpoint came back busy — an OLD generation is still
-          // live. Re-pinning IT to the new epoch would seal its remaining
-          // segments under a key its manifest doesn't name (undecryptable at
-          // restore). Retry the whole run later.
+          // Busy checkpoint ⇒ an OLD generation is still live; re-pinning it
+          // would seal its segments under a key its manifest doesn't name.
           throw new Error(
             "backup: the key-epoch rotation roll did not complete (busy checkpoint) — retrying later"
           );
@@ -898,18 +772,13 @@ export class BackupService {
       await saveBackupState(this.gatewayDatabase, state);
     }
 
-    // The newest pair marker THIS provider has confirmed accepting for the
-    // shipper's current base pair. Stamped into the manifest, where it becomes
-    // a floor the store is held to at every later verification — which is the
-    // only thing that makes deleting the `wal/tick/` prefix visible at all.
+    // Stamped into the manifest as a floor every later verification holds the
+    // store to — the only thing that makes a deleted `wal/tick/` visible.
     const walTipTickMs = shipper
       ? this.confirmedMarkerTip(shipper, target)
       : undefined;
 
-    // The code-store bundle is the only artifact assembly writes, and it lives
-    // in a PERSISTENT per-vault dir (never wiped) so it survives between ticks
-    // and only re-bundles when the store's refs move. Everything else is read in
-    // place — there is no ephemeral staging dir.
+    // PERSISTENT (never wiped): re-bundles only when the refs move.
     const bundleDir = path.join(this.cacheDir, "code-bundle", vaultId);
     try {
       const entries = await this.assembleEntries({
@@ -942,24 +811,12 @@ export class BackupService {
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
       if (shipper) {
-        // A registered manifest anchors the current bases — the shipper may
-        // now treat those generations as restorable. `basePending` is what
-        // makes the drain pass keep RETRYING registration
-        // (`needsRegistration`), so clearing it for a generation no manifest
-        // names is the quietest data loss in the system: the retries stop, the
-        // generation's segments keep uploading under a generation nothing
-        // references, and the next prune — whose keep-set is built from
-        // authenticated manifests — deletes them. Everything written since the
-        // last real manifest is gone, and every surface still reads green.
-        //
-        // So it is ONLY ever cleared for a generation a manifest demonstrably
-        // names. `row` is such a manifest: `createSnapshot` just sealed it from
-        // exactly these entries. A NULL row registered nothing at all, and the
-        // anchor — if there is one — is the previous manifest, which we go READ
-        // rather than assume. (It is not enough that `createSnapshot`'s
-        // no-change test happens to imply an anchor today: that predicate lives
-        // in another package and was last widened for an unrelated reason. This
-        // invariant must hold on its own.)
+        // WHY `basePending` IS CLEARED ONLY FOR A DEMONSTRABLY ANCHORED
+        // GENERATION. It is what makes the drain keep RETRYING registration;
+        // clearing it for a generation no manifest names stops the retries and
+        // the next prune deletes those segments while every surface reads
+        // green. A NULL `row` registered nothing, so the anchor is the previous
+        // manifest — READ, never assumed from another package's predicate.
         const dbEntries = entries.filter(
           (e): e is SourceEntry & { walGeneration: string } =>
             e.kind === "db" && e.walGeneration !== undefined
@@ -972,11 +829,9 @@ export class BackupService {
               keyring,
               vaultId
             );
-        // Any generation a manifest names is also epoch-pinned NOW (the
-        // manifest sealed under `keyring.active`): a pin deferred to the
-        // next drain could land after an offline keyring rotation and seal
-        // the generation's segments under a different epoch than its
-        // manifest — unreadable at restore.
+        // Pin every manifest-named generation NOW: deferred to the next drain
+        // it could land after an offline rotation and seal its segments under a
+        // different epoch than the manifest — unreadable.
         target.walGenerationEpochs ??= {};
         let pinsDirty = false;
         for (const entry of dbEntries) {
@@ -999,8 +854,6 @@ export class BackupService {
           state.targets[vaultId] = target;
           await saveBackupState(this.gatewayDatabase, state);
         }
-        // Client-side GC of segment objects for generations nothing
-        // references anymore (best-effort — never fails the backup run).
         try {
           const pruned = await pruneWalGenerations({
             plane,
@@ -1018,7 +871,7 @@ export class BackupService {
             }
           }
           if (target.walMarkerTips) {
-            // A pair key names BOTH generations; the tip dies with either of them.
+            // A pair key names BOTH generations; the tip dies with either.
             for (const pair of Object.keys(target.walMarkerTips)) {
               const [vaultGen, journalGen] = [
                 pair.slice(0, 32),
@@ -1053,8 +906,8 @@ export class BackupService {
         error instanceof BackupProviderError &&
         error.code === "conflict_generation"
       ) {
-        // PROTOCOL.md § Generation fencing: never retry with a bumped
-        // generation automatically — surface loudly and stop.
+        // PROTOCOL.md § Generation fencing: never auto-retry with a bumped
+        // generation.
         target.fenced = true;
         target.lastError =
           "another machine has taken over this vault (conflict_generation) — backups stopped";
@@ -1076,17 +929,11 @@ export class BackupService {
       );
       throw error;
     }
-    // No staging teardown: the code bundle lives in a persistent per-vault dir
-    // that is DELIBERATELY kept between ticks (a failed run leaves the standing
-    // bundle for the next tick's ref-digest check to reuse or supersede).
+    // The bundle dir is kept for the next tick's ref-digest check.
   }
 
-  /**
-   * The confirmed marker tip for the shipper's CURRENT base pair, or undefined
-   * when no marker of this pair has drained yet (a freshly broken generation).
-   * Keyed by the pair, so a generation break resets the floor rather than
-   * carrying a stale one into a stream that cannot possibly satisfy it.
-   */
+  /** Keyed by base PAIR: a generation break must reset the floor, not carry a
+   *  stale one into a stream that cannot satisfy it. */
   private confirmedMarkerTip(
     shipper: NonNullable<VaultPlane["walShipper"]>,
     target: BackupTargetState
@@ -1100,33 +947,26 @@ export class BackupService {
     ];
   }
 
-  /**
-   * Issue #411 action 1: copy the shipper's foreign-checkpoint tally into the
-   * persisted target when it has advanced. Mirrors the `lastRestoreVerify*` /
-   * `lastError` pattern — sticky signals live in persisted `BackupTargetState`
-   * so the health probe recomputes them from state rather than a pushed report
-   * the next probe would overwrite. Called after every WAL tick this service
-   * drives (the drain pass at `walTimer` cadence, and a manual backup run), and
-   * idempotent: it reads a FRESH state, no-ops when nothing changed, and merges
-   * only these two fields so concurrent runs cannot clobber each other.
-   */
+  /** Sticky signals live in persisted `BackupTargetState` (#411): the probe
+   *  recomputes from state, not a pushed report it would overwrite. Merges only
+   *  these two fields. */
   private async syncWalForeignCheckpoints(
     vaultId: string,
     shipper: NonNullable<VaultPlane["walShipper"]>
   ): Promise<void> {
     const st = shipper.status();
-    if (st.foreignCheckpointCount === 0) return; // nothing ever detected
+    if (st.foreignCheckpointCount === 0) return;
     const fresh = await loadBackupState(
       this.gatewayDatabase,
       this.sourceInstanceId
     );
     const target = fresh.targets[vaultId];
-    if (!target) return; // no target yet — nothing to hang the signal on
+    if (!target) return;
     if (
       target.walForeignCheckpointCount === st.foreignCheckpointCount &&
       target.walLastForeignCheckpoint?.atMs === st.lastForeignCheckpoint?.atMs
     ) {
-      return; // already persisted — avoid a needless state write per tick
+      return;
     }
     target.walForeignCheckpointCount = st.foreignCheckpointCount;
     if (st.lastForeignCheckpoint) {
@@ -1170,7 +1010,6 @@ export class BackupService {
     return result;
   }
 
-  /** Manual integrity check for every vault that already has a snapshot. */
   async verifyAll(): Promise<void> {
     this.assertRunning();
     const state = await loadBackupState(
@@ -1263,7 +1102,6 @@ export class BackupService {
     return result;
   }
 
-  /** Owner action: independently LIST the bucket and cross-check provider attestation. */
   async verifyAgainstBucket(
     vaultId: string
   ): Promise<BackupReconciliationState | undefined> {
@@ -1365,14 +1203,7 @@ export class BackupService {
 
   // ── Restore verification (issue #408 G9) ────────────────────────────
 
-  /**
-   * A REAL restore from the remote into a scratch directory, then every
-   * check the acceptance criteria name: base sha + chunk integrity + WAL
-   * replay (all inside `restoreSnapshot`), `integrity_check` /
-   * `foreign_key_check`, and the G8 cross-database receipt check. A backup
-   * that has never been restored is a hypothesis — this is what turns it
-   * into a fact, on a clock.
-   */
+  /** A REAL restore into a scratch dir plus every check #408 G9 names. */
   async runRestoreVerify(vaultId: string): Promise<void> {
     this.assertRunning();
     return this.enqueue(async () => {
@@ -1435,9 +1266,8 @@ export class BackupService {
         problems.push(`vault: ${report.vault.integrity}`);
       if (report.journal.integrity !== "ok")
         problems.push(`journal: ${report.journal.integrity}`);
-      // Seal-key custody (#439): a restore whose sealed columns cannot
-      // be opened is "a placebo" (FORMAT.md) — prove the restored key is present
-      // AND matches the vault's stamped fingerprint, or say so loudly.
+      // A restore whose sealed columns cannot be opened is a placebo
+      // (FORMAT.md, #439): the key must match the stamped fingerprint.
       if (report.sealKey.verdict === "missing") {
         problems.push(
           `seal key absent — this vault has sealed secrets (${report.sealKey.expected}) that a ` +
@@ -1459,11 +1289,8 @@ export class BackupService {
           `journal: ${report.journal.foreignKeyViolations} fk violation(s)`
         );
       }
-      // Depth half of the drill (#842). Everything above proves the two
-      // files OPEN; these prove the restored vault is USABLE — no content
-      // spine that restored empty out of a source that holds rows, and no
-      // surviving row pointing at bytes this restore cannot produce. Both are
-      // states every structural check above passes with a clean bill.
+      // Depth half of the drill (#842): every structural check above passes on
+      // an empty spine and on rows pointing at unproducible bytes.
       const drill = runRestoreDrill({
         vaultId,
         destDir,
@@ -1478,14 +1305,10 @@ export class BackupService {
         if (damaged.length > 0)
           problems.push(`${damaged.length} damaged wal object(s) skipped`);
         else if (expectedCutMs >= 0 && coordinatedCutMs < expectedCutMs) {
-          // The restore SUCCEEDED — coherently, at an earlier instant (G6). It
-          // is simply not allowed to be QUIET about it. `expectedCutMs` is the
-          // newest tick this store either proved (a surviving pair marker) or
-          // ACKNOWLEDGED (the tip this snapshot registered after watching the
-          // PUTs land). Falling short of it means objects are gone — and if the
-          // gone objects are the markers themselves, this is the ONLY check
-          // that fires: nothing is missing, nothing is damaged, and the restore
-          // just silently hands back an hours-old vault.
+          // A coherent restore at an earlier instant (G6) may not be quiet:
+          // falling short of the newest proved-or-acknowledged tick means
+          // objects are gone, and when those objects ARE the markers this is
+          // the only check that fires.
           problems.push(
             "wal streams not restorable at their newest registered point (tick " +
               `${expectedCutMs}); the pair could only be cut at ${coordinatedCutMs} — ` +
@@ -1500,12 +1323,8 @@ export class BackupService {
         );
         throw new Error(`restore-verify failed: ${problems.join("; ")}`);
       }
-      // Dangling receipts are a signal, not proof of a bad restore: vault
-      // rows may be legitimately hard-deleted after their receipt (see
-      // verifyRestoredPair) — degraded, human review. PERSISTED, because the
-      // health probe recomputes from backup state and its verdict overrides
-      // pushed reports; a degrade that only ever lived in a pushed report
-      // would go green at the next probe.
+      // A signal, not proof of a bad restore (rows may be hard-deleted after
+      // their receipt). PERSISTED: the probe would flip a pushed-only degrade.
       const dangling = report.danglingReceipts.length;
       target.lastRestoreVerifiedAt = new Date(this.now()).toISOString();
       delete target.lastRestoreVerifyError;
@@ -1513,9 +1332,7 @@ export class BackupService {
       else delete target.lastRestoreVerifyDangling;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
-      // Exactly ONE terminal health report per outcome: an ok pushed after a
-      // degrade erases the degrade, so the run's whole verdict is decided
-      // here and reported once.
+      // Exactly ONE terminal report: an ok pushed after a degrade erases it.
       const ran =
         `vault ${vaultId}: restore-verify (seq ${result.seq}, ` +
         `${report.receiptsChecked} receipts cross-checked` +
@@ -1538,9 +1355,8 @@ export class BackupService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      // Persist the failure: the health probe recomputes from backup STATE
-      // at every snapshot (overriding pushed reports), so an unpersisted
-      // failure would show green health over provably damaged backups.
+      // Persist: the probe recomputes from STATE, so an unpersisted failure
+      // shows green.
       target.lastRestoreVerifyError = message;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state).catch(() => undefined);
@@ -1556,11 +1372,7 @@ export class BackupService {
     }
   }
 
-  /**
-   * The live source pair's content-spine census, for the drill's empty-shell
-   * comparison (#842). `undefined` when the vault's plane is not mounted
-   * — the drill then WARNS that it could not compare rather than passing.
-   */
+  /** `undefined` when unmounted — the drill WARNS, never passes. */
   private liveSpineCensus(vaultId: string): SpineCensus | undefined {
     const plane = this.vaults
       .planesList()
@@ -1571,24 +1383,13 @@ export class BackupService {
 
   // ── WAL segment drain (issue #408) ───────────────────────────────────
 
-  /** In-memory backoff for auto-triggered base registrations. */
   private lastAutoBackupAttemptMs = new Map<string, number>();
-  /** `manifestHash → walGenerations` memo for the prune's keep-set. */
   private readonly manifestGenerationCache = new Map<string, string[]>();
-  /** `manifestHash → blob shas` memo for the retained-snapshot GC roots (#436). */
   private readonly manifestBlobCache = new Map<string, string[]>();
 
-  /**
-   * Every WAL generation an AUTHENTICATED manifest on the provider names —
-   * the same source of truth `pruneWalGenerations` builds its keep-set from,
-   * and the only thing allowed to clear a base's `basePending` flag. Manifests
-   * are immutable and content-addressed, so the memo means only NEW ones are
-   * ever fetched.
-   *
-   * Read failures return what was readable and never throw: this only runs on
-   * a no-change run (the manifest we could not read anchors nothing new), and
-   * the conservative outcome is a base that stays PENDING and gets retried.
-   */
+  /** Every generation an AUTHENTICATED manifest names — the only thing allowed
+   *  to clear a base's `basePending`. Read failures never throw: a base then
+   *  stays PENDING and is retried. */
   private async manifestAnchoredGenerations(
     provider: BackupProvider,
     targetId: string,
@@ -1624,14 +1425,9 @@ export class BackupService {
     return anchored;
   }
 
-  /**
-   * One drain pass over every mounted vault. Public for tests + manual
-   * runs. Runs ON THE CHAIN: every reader-modifier of the backup state file
-   * is serialized (a drain that saved a stale snapshot over a concurrent
-   * restore-verify's persisted failure would flip health green over
-   * provably damaged backups), and `stop()`'s chain await therefore covers
-   * in-flight drains too.
-   */
+  /** Runs ON THE CHAIN: a drain saving a stale snapshot over a
+   *  restore-verify's persisted failure would flip health green over damaged
+   *  backups. */
   async drainWal(vaultIds?: ReadonlySet<string>): Promise<void> {
     if (this.draining || this.stopped) return;
     this.draining = true;
@@ -1642,7 +1438,6 @@ export class BackupService {
     }
   }
 
-  /** Scheduler entry: each vault's WAL drain follows its own declared RPO. */
   private async drainWalDue(): Promise<void> {
     if (this.draining || this.stopped) return;
     const now = this.now();
@@ -1667,20 +1462,15 @@ export class BackupService {
       const vaultId = plane.boot.vaultId;
       if (vaultIds && !vaultIds.has(vaultId)) return;
       if (!backend) {
-        // Capture-then-discard: the shipper must keep ticking (its
-        // rollovers bound the WALs now that autocheckpoint is off), so
-        // without a provider its output is consumed by deletion — and the
-        // stream is marked holed (see discardWalFiles).
+        // Capture-then-discard: the shipper must keep ticking (its rollovers
+        // bound the WALs), so with no provider its output is deleted.
         discardWalFiles(plane);
         return;
       }
       try {
-        // A stream holed by capture-then-discard must break to a fresh
-        // generation BEFORE its stale base could be registered: restoring
-        // a holed stream silently lands on the base — quiet truncation. ONE
-        // roll re-bases BOTH databases (generations break together), and
-        // `rollGeneration` ships nothing out of a discarded stream, so naming
-        // any one of them heals the pair.
+        // A holed stream must break to a fresh generation BEFORE its stale
+        // base could be registered: restoring one lands silently on the base.
+        // ONE roll re-bases BOTH databases, so naming either heals.
         const discarded = shipper.discardedStreams();
         if (discarded.length > 0) {
           const rolled = shipper.rollGeneration(
@@ -1710,10 +1500,7 @@ export class BackupService {
         if (target?.fenced) return;
         const needsRegistration = !target || shipper.pendingBases().length > 0;
         if (needsRegistration) {
-          // A new generation (or a first-ever backup) needs its manifest
-          // registered — a full backup run (already on the chain, so call
-          // the worker directly), backed off so an unreachable provider
-          // doesn't get hammered every drain tick.
+          // Already on the chain: call the worker directly, backed off.
           const last = this.lastAutoBackupAttemptMs.get(vaultId) ?? 0;
           if (this.now() - last >= 5 * 60 * 1000) {
             this.lastAutoBackupAttemptMs.set(vaultId, this.now());
@@ -1750,15 +1537,13 @@ export class BackupService {
           },
           logger: this.logger,
         });
-        // Resource actuals (#528): every drain pass, even a no-op one.
         this.onDrainAccounted?.({
           bytesUploaded: result.bytes,
           durationMs: this.now() - drainStartedAt,
         });
         {
-          // Merge into a FRESH state read: the drain's uploads take long
-          // enough that saving the pass's opening snapshot could clobber
-          // fields other runs persisted meanwhile.
+          // Merge into a FRESH read: saving the opening snapshot could clobber
+          // fields other runs persisted mid-upload.
           const freshState = await loadBackupState(
             this.gatewayDatabase,
             this.sourceInstanceId
@@ -1770,10 +1555,8 @@ export class BackupService {
               ...freshTarget.walGenerationEpochs,
               ...newPins,
             };
-            // MONOTONIC per pair: the tip is a claim about what the provider
-            // holds, and it may only ever grow within one base pair. A
-            // late-landing retry of an older marker must not walk the floor
-            // backwards and re-open the very window this closes.
+            // MONOTONIC per pair: a late-landing retry of an older marker must
+            // not walk the floor backwards and re-open the window this closes.
             const tips = (freshTarget.walMarkerTips ??= {});
             for (const [pair, tickMs] of Object.entries(result.markerTips)) {
               tips[pair] = Math.max(tips[pair] ?? -1, tickMs);
@@ -1786,9 +1569,6 @@ export class BackupService {
             `backup: drained ${result.uploaded} wal object(s), ${result.bytes} sealed byte(s) (${vaultId})`
           );
         }
-        // Issue #411 action 1: the WAL ticks this pass just ran (via the plane's
-        // walTimer, and any this service drove) may have healed foreign
-        // checkpoints — persist the tally so health can surface it.
         await this.syncWalForeignCheckpoints(vaultId, shipper);
       } catch (error) {
         this.logger.warn(
@@ -1809,10 +1589,8 @@ export class BackupService {
       );
     });
     const runScheduled = () => {
-      // Retention/reconciliation is a safe loop: skip under event-loop
-      // pressure, while the owner has paused background work, AND while host
-      // power-context posture defers (#528 Phase B + D). The WAL drain below
-      // stays ungated — it is RPO durability, never paused or posture-gated.
+      // A safe loop (#528). The WAL drain stays ungated — RPO durability is
+      // never paused or posture-gated.
       if (
         this.health.shouldDeferBackgroundWork() ||
         this.health.shouldPauseBackgroundWork() ||
@@ -1832,9 +1610,6 @@ export class BackupService {
       this.timer.unref();
     }, jitterDelayMs(HOUR_MS));
     this.timer.unref();
-    // Resolve live configuration first, then arm one tick for the earliest
-    // actual policy due time; unconfigured gateways arm no WAL-drain clock
-    // (#456).
     void this.refreshWalSchedule().catch((error) => {
       this.logger.warn(
         `backup: wal scheduler setup failed: ${error instanceof Error ? error.message : String(error)}`
@@ -1842,7 +1617,6 @@ export class BackupService {
     });
   }
 
-  /** Re-resolve backend presence and mounted policy RPOs after configuration changes. */
   async refreshWalSchedule(): Promise<void> {
     const configured = (await this.backend()) !== undefined;
     const now = this.now();
@@ -1897,15 +1671,8 @@ export class BackupService {
     this.walTimer.unref();
   }
 
-  /**
-   * Clears the clocks, refuses new work, and waits for whatever
-   * run is mid-flight on the chain — drains included, they run on the same
-   * chain. A run that keeps writing shipper/backup state after the host
-   * thinks it stopped would race vault-dir teardown (and, on a real
-   * shutdown, the plane close that follows this call). Provider calls are
-   * not cancellable, so correctness requires the plane to stay alive until
-   * the serialized run actually finishes.
-   */
+  /** AWAITS the chain: provider calls are not cancellable and a run still
+   *  writing state would race the plane close that follows. */
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.timer) {
@@ -1932,9 +1699,6 @@ export class BackupService {
       );
       let target = state.targets[vaultId];
       if (target?.fenced) return;
-      // Keep the plane's blob sweep pinned to the retained-snapshot GC roots
-      // (#436) for every backup-configured vault — covers planes
-      // mounted lazily after start, before their first scheduled backup.
       if (backupConfigured && target) this.attachSnapshotRoots(plane);
       if (backupConfigured) {
         const backupDue =
@@ -1961,8 +1725,7 @@ export class BackupService {
             );
           });
         }
-        // Issue #408 G9: a real restore-verification on its own (weekly)
-        // clock, baselined at first backup so fresh targets get grace.
+        // Baselined at first backup so fresh targets get grace (#408 G9).
         const restoreBaseline =
           target?.lastRestoreVerifiedAt ??
           target?.firstBackupAt ??
@@ -2013,7 +1776,6 @@ export class BackupService {
     return state.targets;
   }
 
-  /** Latest persisted remote-CAS inventory for vaults without a backup target. */
   async casReconciliationStatus(): Promise<
     Record<string, BackupReconciliationState>
   > {
@@ -2024,12 +1786,7 @@ export class BackupService {
     return state.casReconciliations;
   }
 
-  /**
-   * Recovery-kit confirmation gate (#351 wave 4 / #367): whether the
-   * operator has ever acknowledged exporting + safely storing the
-   * recovery kit. Generic on purpose — #367 reuses this same flag
-   * to gate the S3-storage enable flow, so it isn't backup-card-specific.
-   */
+  /** Generic on purpose: #367 reuses this flag for the S3-storage gate. */
   async recoveryKitStatus(): Promise<RecoveryKitState> {
     const status = await this.recoveryKit.status();
     const backend = await this.backend();
@@ -2041,10 +1798,7 @@ export class BackupService {
       : this.recoveryKit.begin(fingerprint);
   }
 
-  /**
-   * Confirm only a wrapped kit that the operator re-selected and decrypted.
-   * There is deliberately no no-argument acknowledgement path.
-   */
+  /** Deliberately no no-argument acknowledgement path. */
   async verifyRecoveryKit(input: {
     kit: unknown;
     password: string;
@@ -2062,7 +1816,6 @@ export class BackupService {
     return state;
   }
 
-  /** Rotate the backup epoch in KeyStore custody and invalidate the exported kit once. */
   async rotateKeyEpoch(): Promise<Keyring> {
     const current = await this.ensureKeyring();
     const epoch = Math.max(...current.epochs.map((entry) => entry.epoch)) + 1;
@@ -2087,11 +1840,7 @@ export class BackupService {
     return rotated;
   }
 
-  /**
-   * Advance the provider generation before local crypto-erase. Re-registering
-   * the newest authenticated manifest is a zero-egress fencing write: any
-   * superseded writer is rejected before this machine forgets the target.
-   */
+  /** Re-registering the newest manifest is a zero-egress fencing write. */
   async fenceVaultForErase(vaultId: string): Promise<void> {
     const backend = await this.backend();
     if (!backend) return;
@@ -2174,28 +1923,13 @@ export class BackupService {
     vaultId: string;
     destDir: string;
     seq?: number;
-    /** Point-in-time restore (#408): replay WAL segments only up to this instant. */
+    /** Replay WAL segments only up to this instant (#408). */
     pointInTimeMs?: number;
-    /**
-     * Force a FULL restore even when the vault has a durable remote CAS tier
-     * (#439) — materialize every blob byte the snapshot carries. This
-     * is the `--full` flag / operator-forensics override; it is IGNORED when an
-     * explicit `lazy` option is supplied (that caller already resolved its own
-     * tier). Absent ⇒ lazy-by-default: a vault with a durable remote tier
-     * restores previews-first, deferring every remote-held blob.
-     */
+    /** IGNORED when an explicit `lazy` is supplied (#439). */
     full?: boolean;
-    /**
-     * Previews-first, lazy/partial restore (#405). Present ⇒ every
-     * blob the given remote CAS already holds is DEFERRED (never materialized
-     * locally — the vault's custody read-through serves it on demand), so a
-     * library far larger than the local disk restores onto a small gateway;
-     * blobs the remote does NOT hold are still materialized (the snapshot is
-     * their only copy). After the DB is up, a warm pass pulls ALL `thumb`
-     * tinies into the local spool so the grid is usable in minutes. Absent ⇒
-     * lazy is still resolved AUTOMATICALLY from the vault's own remote tier
-     * (#439) unless `full` is set — see the resolution note below.
-     */
+    /** Previews-first (#405): blobs the remote CAS holds are DEFERRED to the
+     *  custody read-through; blobs it LACKS are still materialized (the
+     *  snapshot is their only copy). */
     lazy?: LazyRestoreOption;
   }): Promise<LazyRestoreResult> {
     const backend = await this.backend();
@@ -2206,12 +1940,7 @@ export class BackupService {
     const target = await this.requireTarget(opts.vaultId);
     this.assertTargetBackend(target, backend);
     const keyring = await this.ensureKeyring();
-    // Issue #439 R2 — lazy is the DEFAULT, full is the flag. Resolution order:
-    // an explicit `lazy` option (tests, the recovery UI once it holds its own
-    // tier) wins; else a `--full` caller forces the bulk download; else
-    // auto-resolve the vault's own durable remote CAS tier and prefer lazy
-    // whenever one exists — a metered-egress whole-library download is
-    // exactly what the previews-first path avoids. No remote tier ⇒ the
+    // Lazy is the DEFAULT, full is the flag (#439 R2). No remote tier ⇒ the
     // snapshot is the only copy ⇒ full.
     const lazy =
       opts.lazy ?? (opts.full ? undefined : this.autoLazyTier(opts.vaultId));
@@ -2225,10 +1954,8 @@ export class BackupService {
         ? {}
         : { pointInTimeMs: opts.pointInTimeMs }),
       destDir: opts.destDir,
-      // Lazy mode: defer any blob the remote CAS already holds — a live
-      // `has(sha)` against the remote is the durability evidence a snapshot's
-      // registry row still cannot carry (see backup-sources.ts). A blob the
-      // remote lacks is NOT skipped: the snapshot is its only copy.
+      // A live `has(sha)` is durability evidence the registry row cannot carry.
+      // A blob the remote lacks is NOT skipped: the snapshot is its only copy.
       ...(lazy ? { skipBlob: ({ sha }) => lazy.remote.store.has(sha) } : {}),
       log: {
         info: (m) => this.logger.info(m),
@@ -2236,18 +1963,15 @@ export class BackupService {
       },
       current: {
         gatewayVersion: GATEWAY_VERSION,
-        // The running code's ceiling — a fresh restore has no live plane to
-        // read a PRAGMA off, so "current" is what THIS build understands.
+        // No live plane to read a PRAGMA off: "current" is this build.
         vaultUserVersion: String(VAULT_MIGRATIONS.length),
         ontologyVersion: ONTOLOGY_VERSION,
       },
     });
-    // Exactly once, after the base + selected WAL prefix are materialized
-    // and before the restored directory can be adopted or lazy-warmed.
+    // Exactly once, before the restored dir can be adopted or lazy-warmed.
     invalidateRestoredReplica(opts.destDir);
     if (!lazy) return result;
-    // The DB is restored and WAL-replayed; the grid is only USABLE once its
-    // tinies are local. Measure new-device time-to-usable-grid from here.
+    // The grid is usable only once its tinies are local.
     const restoreCompleteMs = this.now();
     const previewsWarm = await warmPreviewTinies({
       destDir: opts.destDir,
@@ -2265,25 +1989,14 @@ export class BackupService {
     return { ...result, previewsWarm };
   }
 
-  /**
-   * The lazy-by-default skip-oracle + warm-pass source (#439): the
-   * vault's OWN settings-declared remote CAS tier, resolved through the live
-   * plane's cached closure so the gateway never rebuilds S3 config. `undefined`
-   * (⇒ full restore) when the vault isn't mounted or has no durable remote tier
-   * — mirrors the `remoteTier()` null contract in `openVaultDb`.
-   */
+  /** Resolved through the plane's cached closure so the gateway never rebuilds
+   *  S3 config. `undefined` (⇒ full restore) when unmounted or without a
+   *  durable tier. */
   private autoLazyTier(vaultId: string): LazyRestoreOption | undefined {
     const remote = this.vaults.get(vaultId)?.db.remote() ?? null;
     return remote ? { remote } : undefined;
   }
 
-  /**
-   * The metered-egress confirm gate's evidence (#439), computed BEFORE
-   * a restore starts and WITHOUT downloading a manifest. Small and reusable on
-   * purpose: the CLI's gate calls it today, and the recovery UI's price card
-   * (#436) calls the same method later. See `RestoreEgressEstimate` for what
-   * each field means and why the lazy figure is deliberately not fabricated.
-   */
   async restoreEgressEstimate(opts: {
     vaultId: string;
     seq?: number;
@@ -2296,8 +2009,6 @@ export class BackupService {
       const rows = await this.listSnapshots(opts.vaultId);
       row = pickSnapshotRow(rows, opts);
     } catch {
-      // No target/snapshot yet, or the provider is unreachable: report an honest
-      // "size unknown" (undefined) rather than block the gate on a byte count.
       row = undefined;
     }
     return {
@@ -2326,7 +2037,6 @@ export class BackupService {
       await this.recoveryKit.begin(fingerprint);
   }
 
-  /** Recovery-kit document for owner-facing HTTP export. Contains live key material. */
   async recoveryKitDocument(): Promise<RecoveryKitDocument> {
     const backend = await this.backend();
     if (!backend)

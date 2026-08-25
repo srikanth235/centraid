@@ -1,37 +1,27 @@
-// Device-local registry of (gateway, vault) tuples — "Vaults".
+// Device-local registry of (gateway, vault) tuples — "Vaults" (#289).
 //
-// The phone is a client of one-or-more desktop gateways, each holding one-or-
-// more vaults the device is enrolled in (#289). A VaultLink is one (gateway, vault)
-// tuple the phone remembers. Everything about a VaultLink is LOCAL to this device:
-// which gateways it has paired with, which vault within each it points at, and
-// which one is active. Vaults themselves are never created or destroyed from
-// here — that stays an admin act on the gateway host (#289). Add/switch/delete
-// here mean pair-a-gateway / pick-a-tuple / forget-a-tuple, all device-side.
+// Everything here is LOCAL to this device. Vaults are never created or
+// destroyed from the phone; add/switch/delete mean pair-a-gateway /
+// pick-a-tuple / forget-a-tuple.
 //
-// Exactly one VaultLink is ACTIVE at a time. The rest of the app never learns about
-// the registry: the tunnel (phone-link), the replica (ReplicaProvider) and every
-// gateway fetch (gateway.ts) read the "active slot" — the same single-slot keys
-// the app has always used, which this module now PROJECTS from the active VaultLink.
-// So switching a VaultLink is "rewrite the projection + restart the tunnel + re-key
-// the replica"; the readers are unchanged. This module owns those keys; the
-// tunnel/replica restart lives in phone-link/ReplicaProvider, which subscribe.
+// Exactly one VaultLink is ACTIVE, and the rest of the app never learns about
+// the registry: phone-link, ReplicaProvider and gateway.ts all read the
+// single-slot keys this module PROJECTS from the active link. Switching is
+// "rewrite the projection, restart the tunnel, re-key the replica" — the
+// readers are unchanged, and the restart lives in the subscribers.
 //
-// Nothing here is a security boundary: refreshable endpoint hints + the device
-// secret live in secure storage; durable identity is the gateway EndpointId in
-// each row. VaultLink addressing and enrollment are enforced by the gateway.
+// NOT a security boundary: endpoint hints are refreshable address cache, and
+// addressing and enrollment are enforced by the gateway.
 
 import { Store } from "../storage";
 import { hydrateSecure, setSecure } from "./secure-storage";
 
 // --- The active-slot projection keys (owned here; read by phone-link/replica) ---
 //
-// These predate the registry. phone-link (isPaired/getDesktopName/tunnel) and
-// ReplicaProvider (replica identity) read them as "the active connection"; the
-// registry now writes them from whichever VaultLink is active. Kept as the exact
-// same key strings so an already-paired install keeps its tunnel + replica DB.
-// Persisted key names retain "ticket" for migration compatibility, but their
-// value is only an EndpointTicket dial hint. The one-time pairing capabilities
-// (`t` + `s`) are never stored.
+// These key STRINGS are frozen: an already-paired install keeps its tunnel and
+// replica DB only if they never change. "ticket" in a name is migration
+// compatibility — the value is only an EndpointTicket dial hint, and the
+// one-time pairing capabilities (`t` + `s`) are NEVER stored.
 export const LINK_ENDPOINT_HINT_KEY = "phoneLink.ticket"; // secure
 export const LINK_DESKTOP_NAME_KEY = "phoneLink.desktopName";
 export const LINK_DEVICE_ID_KEY = "phoneLink.deviceId";
@@ -46,17 +36,15 @@ const ACTIVE_ID_KEY = "vaults.activeId"; // string
 const endpointHintKeyFor = (id: string): string => `vaults.ticket.${id}`; // secure, per VaultLink
 
 /**
- * One (gateway, vault) tuple the phone remembers. Presentation
- * (`vaultName`/`color`/`icon`) is cached from `listVaults()` so an inactive
- * VaultLink — one on a gateway we're not currently tunnelled to — still renders a
- * real label instead of a bare id. `ticket` is NOT stored here; it lives in
- * secure-storage under `endpointHintKeyFor(id)` (empty for a manual-URL dev
- * VaultLink). It is refreshable address cache, never the gateway's identity.
+ * Presentation is cached from `listVaults()` so an inactive link still renders
+ * a real label instead of a bare id. The endpoint hint is NEVER stored on the
+ * row — it lives in secure storage under `endpointHintKeyFor(id)`.
  */
 export interface VaultLink {
-  /** Stable, minted once. Not derived from vault id, so a vault can be filled in later. */
+  /** Minted once, NOT derived from the vault id, so the vault can fill in
+   *  later without the link (or its hint key) changing. */
   id: string;
-  /** Replica DB namespace for this gateway — the value ReplicaProvider keys on. */
+  /** Replica DB namespace — the value ReplicaProvider keys on. */
   gatewayId: string;
   desktopName: string;
   deviceId: string;
@@ -67,7 +55,7 @@ export interface VaultLink {
   icon?: string;
 }
 
-/** Fields a caller supplies to record/refresh a VaultLink (dial hint kept out of the row). */
+/** The dial hint is passed here but kept out of the stored row. */
 export interface VaultLinkInput {
   gatewayId: string;
   desktopName: string;
@@ -84,8 +72,7 @@ export interface VaultLinkInput {
 let registry: VaultLink[] = [];
 let activeId = "";
 let hydrated = false;
-// The in-flight hydration promise, so concurrent boot callers (ReplicaProvider
-// and phone-link) share ONE run.
+// So concurrent boot callers share ONE hydration run.
 let hydrating: Promise<void> | undefined;
 const listeners = new Set<() => void>();
 
@@ -98,7 +85,7 @@ function persist(): void {
   Store.set<string>(ACTIVE_ID_KEY, activeId);
 }
 
-/** Content identity of a tuple — two Vaults are "the same" iff this matches. */
+/** Content identity: two links are "the same" iff this matches. */
 function sameTuple(
   a: Pick<VaultLink, "gatewayId" | "vaultId">,
   gatewayId: string,
@@ -107,18 +94,14 @@ function sameTuple(
   return a.gatewayId === gatewayId && a.vaultId === vaultId;
 }
 
-// A minted, stable id. Not content-derived, so a provisional VaultLink (vault still
-// resolving) keeps its id — and its ticket key — once the vault fills in.
+// Never content-derived: a provisional link keeps its id, and its hint key,
+// once the vault fills in.
 function mintId(): string {
   return `sp_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`;
 }
 
-/**
- * Copy the active VaultLink into the single-slot keys the tunnel + replica read.
- * Async because a not-yet-hydrated VaultLink's endpoint hint must come off secure-storage
- * first. `LAST_BASE` is deliberately untouched — the tunnel port/base is a live,
- * per-process value resolved by phone-link, not a per-vault fact.
- */
+/** `LAST_BASE` is deliberately untouched: the tunnel port/base is a live,
+ *  per-process value phone-link resolves, not a per-vault fact. */
 async function projectActiveSlot(vault: VaultLink): Promise<void> {
   const endpointHint = await hydrateSecure(endpointHintKeyFor(vault.id), "");
   await setSecure(LINK_ENDPOINT_HINT_KEY, endpointHint);
@@ -128,19 +111,18 @@ async function projectActiveSlot(vault: VaultLink): Promise<void> {
   Store.set<string>(LAST_VAULT, vault.vaultId);
 }
 
-/** Clear the active slot when no VaultLink is active (e.g. the last one is forgotten). */
 async function clearActiveSlot(): Promise<void> {
   await setSecure(LINK_ENDPOINT_HINT_KEY, "");
   Store.set<string>(LINK_DESKTOP_NAME_KEY, "");
   Store.set<string>(LINK_DEVICE_ID_KEY, "");
   Store.set<string>(LAST_VAULT, "");
-  // LAST_GATEWAY/LAST_BASE left as-is: harmless stale hints, overwritten on next activate.
+  // LAST_GATEWAY/LAST_BASE left as-is: harmless stale hints, overwritten on
+  // the next activate.
 }
 
-/** Pull the registry into memory. Idempotent; call once at boot. */
+/** Idempotent; call once at boot. */
 export async function hydrateVaultLinks(): Promise<void> {
   if (hydrated) return;
-  // Coalesce concurrent callers onto a single run (see `hydrating` above).
   if (!hydrating) hydrating = doHydrate();
   return hydrating;
 }
@@ -148,23 +130,20 @@ export async function hydrateVaultLinks(): Promise<void> {
 async function doHydrate(): Promise<void> {
   registry = await Store.hydrate<VaultLink[]>(REGISTRY_KEY, []);
   activeId = await Store.hydrate<string>(ACTIVE_ID_KEY, "");
-  // Repair a dangling active pointer (e.g. its VaultLink was removed out from under it).
+  // Repair a dangling active pointer.
   if (activeId && !registry.some((s) => s.id === activeId)) {
     activeId = registry[0]?.id ?? "";
     persist();
   }
-  // Re-project so the single-slot keys always match the active VaultLink on boot,
-  // even if a prior session left them inconsistent. Cheap; runs once.
+  // Re-project so the single-slot keys match the active link on boot even if a
+  // prior session left them inconsistent.
   const active = getActiveVaultLink();
   if (active) await projectActiveSlot(active);
   hydrated = true;
 
-  // Tell everyone who subscribed BEFORE the registry existed. `getActiveVaultLink`
-  // is a synchronous read of in-memory state that only exists after this async
-  // hydrate, so a screen that mounts first sees an empty registry and then waits
-  // on a change that never comes — every other write path emits, this one did
-  // not. Home rendered "No vault yet · not connected to a gateway" over a fully
-  // populated replica whenever it won that race.
+  // MUST emit: `getActiveVaultLink` reads in-memory state that only exists
+  // after this hydrate, so a screen mounting first sees an empty registry and
+  // otherwise waits on a change that never comes.
   emit();
 }
 
@@ -176,28 +155,24 @@ export function getActiveVaultLink(): VaultLink | undefined {
   return registry.find((s) => s.id === activeId);
 }
 
-/**
- * The vault id every gateway request should address. '' when no VaultLink is active
- * (manual-URL dev with nothing picked yet) — callers then send no vault header
- * and let the gateway pick the device's implied vault, exactly as before.
- */
+/** '' when no link is active — callers then send no vault header and let the
+ *  gateway pick the device's implied vault. */
 export function getActiveVaultId(): string {
   return getActiveVaultLink()?.vaultId ?? "";
 }
 
-/** Subscribe to any registry change (add/switch/forget/vault-resolved). Returns an unsubscribe. */
+/** Returns an unsubscribe. */
 export function subscribeVaultLinks(callback: () => void): () => void {
   listeners.add(callback);
   return () => listeners.delete(callback);
 }
 
 /**
- * Record a tuple and make it active. Upserts by (gateway, vault) content so
- * re-adding the same tuple refreshes it in place rather than duplicating. The
- * endpoint hint is written to secure-storage; the row itself contains only
- * durable identity and presentation.
- * Does NOT restart the tunnel or replica — the caller (phone-link) orchestrates
- * that after this resolves, and subscribers react to the emit.
+ * Upserts by (gateway, vault) content, so re-adding a tuple refreshes it in
+ * place rather than duplicating.
+ *
+ * Does NOT restart the tunnel or replica — phone-link orchestrates that after
+ * this resolves, and subscribers react to the emit.
  */
 export async function addVaultLink(input: VaultLinkInput): Promise<VaultLink> {
   await hydrateVaultLinks();
@@ -227,13 +202,9 @@ export async function addVaultLink(input: VaultLinkInput): Promise<VaultLink> {
   return vault;
 }
 
-/**
- * Add a vault the ACTIVE gateway already exposes as its own VaultLink, and make it
- * active. Reuses the active gateway's identity + refreshable EndpointTicket,
- * so switching to the new VaultLink keeps the same tunnel — only the vault
- * header + replica key change. When there is no active VaultLink (manual-URL dev),
- * it records a ticket-less VaultLink under a 'manual' gateway.
- */
+/** Reuses the active gateway's identity and dial hint, so switching to the new
+ *  link keeps the SAME tunnel — only the vault header and replica key change.
+ *  With no active link, records a hint-less one under a 'manual' gateway. */
 export async function addActiveGatewayVault(vault: {
   vaultId: string;
   vaultName?: string;
@@ -255,11 +226,8 @@ export async function addActiveGatewayVault(vault: {
   });
 }
 
-/**
- * Make an existing VaultLink active and project it into the slot. Returns the VaultLink,
- * or undefined if the id is unknown. Like addVaultLink it does not touch the tunnel/
- * replica — phone-link's switchVaultLink wraps this to restart them when needed.
- */
+/** `undefined` if the id is unknown. Like `addVaultLink`, does not touch the
+ *  tunnel or replica — `switchVaultLink` wraps this to restart them. */
 export async function setActiveVaultLink(
   id: string
 ): Promise<VaultLink | undefined> {
@@ -273,10 +241,7 @@ export async function setActiveVaultLink(
   return vault;
 }
 
-/**
- * Forget a tuple on THIS device — the vault stays on the gateway. Deletes its
- * endpoint hint and row; if it was active, falls back to another VaultLink (or none).
- */
+/** Forgets a tuple on THIS device; the vault stays on the gateway. */
 export async function removeVaultLink(id: string): Promise<void> {
   await hydrateVaultLinks();
   const wasActive = activeId === id;
@@ -297,13 +262,12 @@ export async function removeVaultLink(id: string): Promise<void> {
 }
 
 /**
- * Reconcile the active VaultLink's (gatewayId, vaultId) with what the replica
- * actually opened. ReplicaProvider owns the replica identity, so after it
- * resolves a freshly-paired gateway (which starts here with a best-guess
- * gatewayId and an empty vaultId) it calls this with the authoritative values.
- * No-op when unchanged. Re-projects the slot so LAST_GATEWAY/LAST_VAULT match,
- * and drops any older duplicate the completed tuple now collides with, keeping
- * the list one-row-per-tuple.
+ * ReplicaProvider owns the replica identity and is AUTHORITATIVE here: a
+ * freshly-paired gateway starts with a best-guess `gatewayId` and an empty
+ * `vaultId`, and this reconciles them.
+ *
+ * Re-projects the slot so LAST_GATEWAY/LAST_VAULT match, and drops any older
+ * duplicate the completed tuple now collides with — one row per tuple.
  */
 export async function noteActiveIdentity(identity: {
   gatewayId: string;
@@ -334,12 +298,8 @@ export async function noteActiveIdentity(identity: {
   emit();
 }
 
-/**
- * Refresh the active VaultLink's cached presentation from a `listVaults()` row, so
- * the switcher shows the vault's real name/colour/icon. No-op when nothing
- * changed. Only ever updates the active VaultLink (the only vault we can currently
- * read metadata for).
- */
+/** Only ever the ACTIVE link — the only vault whose metadata this device can
+ *  currently read. No-op when nothing changed. */
 export async function noteActiveVaultMeta(meta: {
   vaultName?: string;
   color?: string;

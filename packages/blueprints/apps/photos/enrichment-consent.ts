@@ -1,44 +1,28 @@
 /**
- * THE ENRICHMENT CONSENT MOMENT — one copy table, both clients (v4 handoff
- * §8, prototype `s==='enrich'`, README §12).
+ * THE ENRICHMENT CONSENT MOMENT — one copy table, both clients (v4 §8).
  *
- * This is the only surface in Photos where the product tells a member that
- * their photographs can LEAVE THE DEVICE. That sentence is the reason the
- * screen exists, so its words are not a component's business: web
- * (`enrichment-gate.ts`, mounted in the People shelf's empty state per issue
- * #712 C2) and native (`apps/mobile/src/apps/photos/EnrichmentConsent.tsx`)
- * both read this module, and a drift between them is impossible by
- * construction rather than by review.
+ * The only surface in Photos that tells a member their photographs can LEAVE
+ * THE DEVICE. Web and native both read this module, so drift between them is
+ * impossible by construction rather than by review.
  *
- * The strings are the handoff's, VERBATIM, smart punctuation included, with
- * one settled amendment (S6, docs/decisions.md): the handoff's storage noun
- * "vault" is replaced with "library" — the scope's human label — because
- * Photos mounts over several scopes and "this vault" stops being unambiguous
- * the moment a household exists (#599 vocabulary gate), and one banned-word
- * repair (#805): the cloud panel's "you can revoke the grant afterwards"
- * reads "the grant is revocable afterwards", DESIGN.md `## Copy` banning "you
- * can" on every surface, consent included. Do not "improve" the strings beyond
- * those two: every fact below is a promise about what the library will and
- * will not do, and a paraphrase is a different promise. This is a consent
- * surface, so full sentences are correct here — the budgets that compress the
- * rest of Photos do not apply to the disclosure.
+ * The strings are the handoff's VERBATIM, smart punctuation included, with two
+ * settled amendments: "vault" → "library" (S6, docs/decisions.md — Photos mounts
+ * over several scopes) and "you can revoke" → "the grant is revocable" (#805,
+ * DESIGN.md bans "you can"). DO NOT "improve" them beyond those two: every fact
+ * below is a promise about what the library will and will not do, and a
+ * paraphrase is a different promise. Full sentences are correct here — the
+ * budgets that compress the rest of Photos do not apply to a disclosure.
  *
- * Deliberately import-free but for the shared gate shape below. Native
- * bundles this file straight out of the blueprints package (the same way
- * `apps/notes/commonmark.ts` is bundled), so it must not reach for the web
- * app's DOM/kit modules or its own tokens.
+ * Import-free but for the shared gate shape: native bundles this file straight
+ * out of blueprints, so it must never reach for the web app's DOM/kit modules.
  *
- * WHAT THIS IS NOT (handoff line 4332): a settings toggle. An enrichment
- * write fired from a single tap on a row/button — no panels, no facts, no
- * choice between the device and a cloud helper — is the defect this module
- * exists to prevent. The consent is asked ONCE, answered
- * ONCE, and receipted; the answer is visible in Privacy afterwards.
+ * WHAT THIS IS NOT: a settings toggle. An enrichment write fired from a single
+ * tap — no panels, no facts, no choice — is the defect this module prevents. The
+ * consent is asked ONCE, answered ONCE, and receipted.
  */
 
-// The gate's shapes are generic across every consent moment in the product
-// (#712) — Docs' capture-time OCR is the second instance — so they
-// live in `apps/_shared/consent-gate.ts` and are re-exported here VERBATIM
-// for every existing importer of this module.
+// Generic across every consent moment (#712), so they live in
+// `apps/_shared/consent-gate.ts` and are re-exported here VERBATIM.
 import type {
   AnswerAvailability as SharedAnswerAvailability,
   ConsentPanelCopy,
@@ -46,20 +30,17 @@ import type {
 
 export type { ConsentFact, ConsentPanelCopy } from "../_shared/consent-gate.ts";
 
-/** The frame's status line while this surface is up (prototype cfg 3968). */
+/** The frame's status line while this surface is up. */
 export const ENRICHMENT_STATUS_LINE =
   "Face detection has never run on this library";
 
-/** What the surface calls itself where a shelf/route needs a name. */
+/** Where a shelf or route needs a name. */
 export const ENRICHMENT_TITLE = "Enrichment";
 
 /**
- * The on-device panel's question, over the live library count.
- *
- * Grouped with an explicit `en-US` separator rather than the ambient locale:
- * the count is part of a sentence whose other words are English, and a CI box
- * running under `LANG=C` would otherwise print `6214` where the handoff — and
- * every screenshot of it — says `6,214`.
+ * Grouped with an explicit `en-US` separator, never the ambient locale: the count
+ * sits in an English sentence, and a CI box under `LANG=C` would print `6214`
+ * where the handoff says `6,214`.
  */
 export function onDeviceTitle(count: number): string {
   const photographs = count === 1 ? "photograph" : "photographs";
@@ -69,8 +50,7 @@ export function onDeviceTitle(count: number): string {
 /** Panel A — the device. Nothing leaves. */
 export const ON_DEVICE_PANEL: ConsentPanelCopy = {
   eyebrow: "Consent",
-  // The live title is `onDeviceTitle(count)`; this is the count-less form for
-  // a surface that has not yet been told how big the library is.
+  // The count-less form, for a surface not yet told the library's size.
   title: "Run face detection over these photographs?",
   body: "Face detection finds faces and groups them. It writes a new column into your library; it never changes a photograph. You will be asked to name each group yourself.",
   facts: [
@@ -89,14 +69,10 @@ export const ON_DEVICE_PANEL: ConsentPanelCopy = {
 };
 
 /**
- * Panel B — the cloud helper. THE DISCLOSURE PANEL.
- *
- * This panel is never conditional on a backend existing. It is the single
- * place the design tells a member that a downscaled copy of every photograph
- * would leave the device, and a build that hides it because the action is not
- * wired has removed the disclosure, not the feature. When the action cannot
- * be taken, its unavailability is stated as a fact (`CLOUD_UNAVAILABLE`) —
- * the panel still says what the option would cost.
+ * Panel B — THE DISCLOSURE PANEL, never conditional on a backend existing. It is
+ * the single place the design says a downscaled copy of every photograph would
+ * leave the device, so a build that hides it because the action is unwired has
+ * removed the disclosure, not the feature. Unavailability is stated as a fact.
  */
 export const CLOUD_PANEL: ConsentPanelCopy = {
   eyebrow: "The other option",
@@ -117,38 +93,29 @@ export const CLOUD_PANEL: ConsentPanelCopy = {
   dangerous: true,
 };
 
-/** The exact egress sentence Panel B exists to say. Exported so both clients'
- *  tests can pin it without re-typing it, and so a future edit that softens it
- *  fails in two suites at once. */
+/** The exact egress sentence Panel B exists to say. Exported so an edit that
+ *  softens it fails in two suites at once. */
 export const CLOUD_EGRESS_DISCLOSURE = "a downscaled copy of every photograph";
 
-/** The note under both panels (handoff line 4332), verbatim. */
+/** The note under both panels, verbatim. */
 export const ENRICHMENT_NOTE =
   "This is not a settings toggle. It is asked once, answered once, and receipted — and the answer is visible in Privacy afterwards.";
 
 /**
- * Why an answer cannot be given right now. Each is a STATED FACT beside a
- * visibly unavailable action, never a hidden control and never a button that
- * fires into nothing:
+ * Why an answer cannot be given now. Each is a STATED FACT beside a visibly
+ * unavailable action — never a hidden control, never a button firing into
+ * nothing:
  *
- *  - `cloudUnavailable` — the honest state of this repo. Choosing a named
- *    cloud helper is not something an app may do: the enrichment tier lives
- *    in the vault's owner-only settings bag (`core_vault.settings_json.enrich`,
- *    PATCH /centraid/_vault/enrich), and no per-batch grant receipt for a
- *    named helper exists yet. The panel still states the egress.
- *  - `offTier` — the owner has enrichment switched off for the photos domain
- *    (`enrich.policy.tier = 'off'`), so a request would sit in the queue
- *    forever. Saying so beats a request that silently never runs.
- *  - `modelTier` — the owner has already pointed this vault's enrichment at a
- *    remote model, which means the on-device promise above ("what leaves the
- *    device: nothing") is NOT true for this vault right now. Rather than
- *    print a false fact beside a live button, the device answer is withheld
- *    and the reason is named.
- *  - `denied` — Photos cannot even read the policy, so it does not know what
- *    it would be consenting to.
+ *  - `cloudUnavailable` — an app may not choose a named cloud helper: the tier
+ *    is owner-only vault settings and no per-batch grant receipt exists yet.
+ *  - `offTier` — enrichment is off, so a request would sit in the queue forever.
+ *  - `modelTier` — the vault's enrichment already points at a remote model, so
+ *    Panel A's "what leaves the device: nothing" is NOT true here. The device
+ *    answer is withheld rather than printed beside a live button.
+ *  - `denied` — Photos cannot read the policy, so it does not know what it
+ *    would be consenting to.
  */
-// Recognition is controlled by the built-in recipes in Automations. The
-// owner-only vault policy remains the execution-time privacy gate, while each
+// The owner-only vault policy is the execution-time privacy gate; each
 // capability's visible on/off control is its automation enabled bit.
 export const ENRICHMENT_UNAVAILABLE = {
   deviceUnavailable:
@@ -157,78 +124,53 @@ export const ENRICHMENT_UNAVAILABLE = {
     "Not available from here: choose the Photo OCR recipe’s delegate step under Automations → Recognition, where its model, latency, and billing consequence are shown before a run.",
   offTier:
     "Not available: the vault’s enrichment policy refuses photograph recognition, so this request cannot run.",
-  // KEY NAME KEPT AS `modelTier` for both clients' sake (EnrichmentConsent.tsx
-  // reads it by this name) even though the tier it now describes is named
-  // `gateway` (#712 C5, renamed from `model`) — the CONTENT below is
-  // what changed. `gateway` does not by itself mean "reaches a provider": it
-  // means the vault's own gateway may do whatever it is already wired to,
-  // which for a capability that needs a model turn is a provider egress
-  // gated separately per call (#567) and per capability (decision S9). This
-  // answer is withheld regardless, because the specific promise Panel A
-  // states — "what leaves the device: nothing" — is not one this module can
-  // vouch for once the vault has widened past `device`.
+  // KEY NAME KEPT AS `modelTier` because EnrichmentConsent.tsx reads it by that
+  // name, though the tier is now `gateway` (#712 C5). `gateway` does not itself
+  // mean "reaches a provider" — that egress is gated per call (#567) and per
+  // capability (S9) — but the answer is withheld regardless: Panel A's "nothing
+  // leaves the device" is not vouchable once the vault widens past `device`.
   modelTier:
     "Not available: this vault permits gateway recognition, so a run from here would not stay on this device the way the on-device answer promises. Review the recipe under Automations → Recognition.",
   denied:
     "Photos cannot read the vault’s enrichment policy, so it cannot tell you what a run would do. Recognition recipes are listed under Automations → Recognition.",
 } as const;
 
-/** What the status line says once the member has answered on this device. */
+/** Once the member has answered on this device. */
 export const ENRICHMENT_REQUESTED_NOTE =
   "Face detection was requested. The request stays queued until the Faces recipe is enabled and the vault permits gateway recognition; queueing it does not mean recognition has run.";
 
-/** What an offline client says when the ask could not reach the gateway yet.
- *  The ANSWER was still given and is still binding — only its delivery is
- *  waiting, which is why this says the ask is held rather than that anything
- *  is already running. */
+/** The ANSWER was given and is binding; only its delivery waits — which is why
+ *  this says the ask is HELD, not that anything is running. */
 export const ENRICHMENT_QUEUED_NOTE =
   "Held on this device: the ask reaches the gateway when it reconnects, and nothing runs before it does.";
 
-/** What the surface says when the member declines. Declining writes nothing —
- *  it closes the question, and the question can be asked again. */
+/** Declining writes nothing: it closes a question that may be asked again. */
 export const ENRICHMENT_DECLINED_NOTE =
   "Nothing was run and nothing was written.";
 
-/** Whether an answer can be given, and — when it cannot — WHY, in words the
- *  member reads beside the control rather than discovering afterwards.
- *  Re-exported from the shared gate module — see the header. */
+/** Why an answer cannot be given, in words read BESIDE the control rather than
+ *  discovered afterwards. Re-exported from the shared gate module. */
 export type AnswerAvailability = SharedAnswerAvailability;
 
 /**
  * Whether the member may answer "run it here", from the vault's standing
- * enrichment tier. Shared by both clients so neither can decide on its own
- * that a run is offerable.
+ * enrichment tier. Shared by both clients so neither decides alone that a run is
+ * offerable. The tier is the OWNER's `off | device | gateway` setting (#712 C5)
+ * — the envelope this consent lives inside, not the consent:
  *
- * The tier is the OWNER's setting, mirrored into `enrich.policy`
- * (packages/vault/src/schema/enrich.ts), on the `off | device | gateway`
- * axis (#712 C5, renamed from `off | local | model`). It is not this
- * consent — it is the envelope this consent lives inside:
- *
- *   * `device` — the policy would permit a device producer, but this build
- *     has no device-side face detector, so the answer is withheld and names
- *     that missing producer;
- *   * `gateway` — this vault's enrichment may reach a harness that takes a
- *     model turn, and every harness shipped today routes that turn to a
- *     third-party provider, so `what leaves the device → nothing` would be
- *     FALSE. The answer is withheld with that reason named, rather than
- *     printed beside a live button;
+ *   * `device` — the policy would permit a device producer, but this build has
+ *     no device-side face detector, so the answer names that missing producer;
+ *   * `gateway` — enrichment may reach a harness that takes a model turn, and
+ *     every shipped harness routes that to a third party, so "nothing leaves the
+ *     device" would be FALSE. Withheld with the reason named;
  *   * `off` — a request would sit in the queue forever;
- *   * denied / not yet read — the client cannot say what it would be
- *     consenting to, so it offers nothing.
+ *   * denied / unread — the client cannot say what it would be consenting to.
  *
- * THE TIER IS ENFORCED, so `device` above states a fact rather than a
- * hope: a tier written by Settings but read by nobody on the execution
- * path would let enrichment automations take model turns whatever it said,
- * and this module could only ever hedge.
- * The gate is server-side, at the one place enrichment automations are
- * fired (`packages/server/src/automation/fire/fire.ts`, deciding through
- * `fire/enrich-gate.ts` on the vault tier read by
- * `packages/vault/src/enrich/policy.ts`): `off` refuses the run, `device`
- * refuses any run that would need the `gateway` lane — and seals `ctx.delegate`
- * shut for the ones it does allow — and an unreadable policy refuses too.
- * Nothing here enforces anything; withholding an answer is still the right
- * UI, but it is no longer the only thing standing between a `device` vault
- * and a provider.
+ * THE TIER IS ENFORCED server-side, at the one place enrichment automations fire
+ * (`automation/fire/fire.ts` via `fire/enrich-gate.ts`), so `device` states a
+ * fact rather than a hope. Nothing HERE enforces anything: withholding an answer
+ * is still the right UI, but it is no longer the only thing between a `device`
+ * vault and a provider.
  */
 export function deviceAnswerFor(
   tier: string | null | undefined,
@@ -237,11 +179,8 @@ export function deviceAnswerFor(
   if (denied)
     return { available: false, reason: ENRICHMENT_UNAVAILABLE.denied };
   // COMPAT(enrich-tier-rename #712): `local`/`model` are the pre-rename tier
-  // strings. `packages/vault/src/enrich/policy.ts`'s own read maps them the
-  // same way, but the raw mirror row can also reach this module directly
-  // (`queries/enrichment-status.ts` reads `enrich.policy` straight, not
-  // through that helper), so this comparison accepts both spellings rather
-  // than assume every caller normalized first.
+  // strings. The raw mirror row can reach this module directly (queries read
+  // `enrich.policy` straight), so both spellings must be accepted here.
   if (tier === "device" || tier === "local")
     return {
       available: false,
@@ -254,15 +193,10 @@ export function deviceAnswerFor(
 }
 
 /**
- * The cloud helper, on this repo's actual backend: THERE IS NONE TO CHOOSE.
- *
- * Nothing in the app plane can name a cloud helper or mint a per-batch
- * receipt for one. The enrichment tier lives in the vault's owner-only
- * settings bag (GET/PATCH `/centraid/_vault/enrich`); apps may only READ its
- * mirror, and the enricher automations decide for themselves where their
- * model call goes. So this answer is permanently unavailable from an app, and
- * that is a STATED FACT — the panel and its egress disclosure still render,
- * because the disclosure is the point.
+ * THERE IS NONE TO CHOOSE: nothing in the app plane can name a cloud helper or
+ * mint a per-batch receipt for one — apps may only READ the tier mirror. The
+ * answer is permanently unavailable, stated as a fact, and the panel with its
+ * egress disclosure still renders, because the disclosure is the point.
  */
 export const CLOUD_ANSWER: AnswerAvailability = {
   available: false,

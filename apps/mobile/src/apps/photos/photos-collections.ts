@@ -1,55 +1,24 @@
-// What Collections is made of — the sections, their covers, and what each one
-// says when it is empty.
+// What Collections is made of — the sections, their covers, and what each says
+// when it is empty. Pure: no react, navigation or theme, so every claim is
+// assertable without a renderer.
 //
-// Pure. No react, no navigation, no theme: every claim this file makes about a
-// member's library is a function of rows that are already loaded, so it can be
-// asserted directly rather than through a renderer.
+// EVERY SECTION IS A SHELF THAT EXISTS: a real filter over the library, with a
+// real count, rendered even when empty — an empty section states what would
+// appear there and why it has not. A section that comes back empty BY
+// CONSTRUCTION is the defect this shape exists to avoid, which is why the old
+// "Categories" grid of shelves the vault could not keep was removed.
 //
-// THE SHAPE, and where it comes from. iOS Photos' Collections page is a stack
-// of named sections, each a horizontal rail of cover tiles, each rendered even
-// when it holds nothing — an empty section states what would appear there and
-// why it has not. That last part is why the shape is worth copying: it is the
-// same argument this product already makes about counts and refusals, which is
-// that a member should be able to learn the shape of their own library from
-// looking at it, including the parts of it that are still empty.
-//
-// WHAT IT IS NOT. Every section here is a shelf that EXISTS — a real filter
-// over the library, reachable, with a real count. The screen this replaces
-// once carried a six-tile "Categories" grid (Documents, Selfies, Food, …)
-// standing for shelves this product does not have; those were removed for
-// promising what the vault could not keep, and nothing here reintroduces one.
-// If a section is empty, that is a fact about the member's library, never a
-// placeholder for a feature.
-//
-// VIDEOS (#721) joined this list because `PhotoAsset.kind ===
-// "video"` is an honest fact this device already carries — no different from
-// Favorites' `asset.favorite`. Screenshots and Panoramas did NOT, and Selfies
-// still has not, and the three are deferred for two different reasons worth
-// keeping straight:
-//
-//   Selfies has no signal at all — front-camera capture is not recorded
-//   anywhere this app reads.
-//
-//   Screenshots and Panoramas DO exist as a real, named iOS concept
-//   (`PHAssetMediaSubtype.screenshot` / `.panorama`, surfaced by
-//   expo-media-library as `Asset#getMediaSubtypes()`), but that getter is
-//   PER-ASSET and iOS-only — there is no bulk field for it on the
-//   `AssetField`/`AssetMetadata` shape the device walk actually queries
-//   (`timeline-engine.ts`'s `Query#exeForMetadata()`). Calling it once per
-//   photograph across a fifty-thousand-photo library is the exact regression
-//   that walk's own header comment already rejected for ordinary EXIF fields
-//   ("350k round-trips instead of ~50"), and Android has no subtype concept
-//   to report even if the round-trip cost were paid. Until the platform
-//   offers a bulk answer (or this product accepts eating that cost for a
-//   bounded slice, e.g. only newly-imported assets), a Screenshots or
-//   Panoramas shelf here would be exactly the "sometimes comes back empty by
-//   construction" shelf this file's own argument above rejects — so, like
-//   Selfies, they stay out rather than ship dishonest.
+// That is the bar Screenshots, Panoramas and Selfies fail. Selfies has no
+// signal at all. Screenshots and Panoramas exist on iOS only, and only through
+// a PER-ASSET getter — no bulk field on the shape `timeline-engine.ts`'s walk
+// queries — so a shelf for them costs one round trip per photograph across the
+// whole library, the regression that walk's header already rejected. Videos
+// (#721) qualifies because `PhotoAsset.kind` is bulk and honest.
 
 import type { PhotoAsset } from "./timeline-model";
 
-/** Closed union so the view's router can switch exhaustively — a section
- *  added here without a destination fails to typecheck at the call site. */
+/** Closed, so a section added without a destination fails to typecheck at the
+ *  call site. */
 export type CollectionSectionKey =
   | "memories"
   | "albums"
@@ -60,15 +29,9 @@ export type CollectionSectionKey =
   | "duplicates"
   | "trash";
 
-/** The fixed, argued order (see the file header) as a value rather than only
- *  a type — `buildCollectionSections` always returns exactly these eight
- *  sections ("AN EMPTY SECTION STILL RENDERS", above), so this is the whole
- *  set Collapse All needs to fold every shelf at once. It lives here, next to
- *  the union it enumerates, rather than in `PhotosHome.tsx` (#712: the
- *  header chip that opens Collapse All moved there, but the replica queries
- *  the actual `sections` array is built from stayed in
- *  `PhotosCollectionsView.tsx` — Home folds the whole known shape, not
- *  whatever a query happened to return). */
+/** The whole set Collapse All folds. A value, not just a type, and kept beside
+ *  the union it enumerates: Home folds the known SHAPE, never whatever a query
+ *  happened to return. */
 export const COLLECTION_SECTION_KEYS: readonly CollectionSectionKey[] = [
   "memories",
   "albums",
@@ -82,61 +45,45 @@ export const COLLECTION_SECTION_KEYS: readonly CollectionSectionKey[] = [
 
 export interface CollectionTile {
   id: string;
-  /** Burned into the tile's lower-left corner, iOS-style, for the sections
-   *  whose members are NAMED things (an album, a person, a place). Absent for
-   *  a rail of bare photographs, where the photograph is the whole label. */
+  /** For sections whose members are NAMED things; absent for a rail of bare
+   *  photographs, where the photograph is the whole label. */
   label?: string;
-  /** The cover's thumb URL, or `undefined` while a shelf has no cover to show
-   *  — the tile then stands on `--skel`, the ground every unloaded tile in
-   *  this app stands on, rather than a decorative tint. */
+  /** `undefined` leaves the tile on `--skel`, never a decorative tint. */
   uri?: string;
-  /** The original, for the derivative-then-original retry ladder
-   *  (kit/media/use-image-fallback.ts). */
+  /** For the derivative-then-original retry ladder. */
   originalUri?: string;
-  /** A person tile is a circle; every other tile is a rounded square. */
+  /** A person tile is a circle; every other is a rounded square. */
   round?: boolean;
 }
 
 export interface CollectionSection {
   key: CollectionSectionKey;
   title: string;
-  /** The shelf's size, stated exactly. `undefined` for a section whose size
-   *  is not a count a member would recognise. */
+  /** `undefined` where the size is not a count a member would recognise. */
   count?: number;
-  /** An inline verb on the heading row (iOS puts Create / Edit / Start
-   *  Sharing there). At most one, and only where the section can actually
-   *  perform it from here. */
+  /** At most one, and only where the section can perform it from here. */
   action?: string;
   tiles: CollectionTile[];
-  /** What this section says when it holds nothing: what would appear here,
-   *  and why it has not yet. Never "nothing here" — that names no cause and
-   *  offers no road. */
+  /** What would appear here and why it has not. Never "nothing here", which
+   *  names no cause and offers no road. */
   empty: string;
 }
 
-/** How many covers a rail carries before it stops. The rail scrolls, so this
- *  is not a cap on the shelf — it is a cap on how much of the shelf is worth
- *  building a tile for before a member has asked to see it. */
+/** Not a cap on the shelf — the rail scrolls — but on how much of it is worth
+ *  building tiles for unasked. */
 export const RAIL_LIMIT = 12;
 
 export interface AlbumRow {
   collectionId: string;
   name: string;
-  /** Members, resolved by the caller from `core.collection_entry`. */
   assetIds: readonly string[];
-  /**
-   * `core.collection.cover_content_id` — the member's own choice of key photo
-   * (#721, `set-album-cover`), resolved by the caller straight off
-   * the collection row. `undefined` when nobody has chosen one, which is NOT
-   * the same as "use the newest" being wrong — it is the fact that no choice
-   * has been made yet, and `chosenCover` below reads it exactly that way.
-   */
+  /** The member's own choice of key photo (#721). `undefined` means no choice
+   *  has been made, which `chosenCover` reads exactly that way. */
   coverContentId?: string;
 }
 
 export interface PlaceRow {
   placeId: string;
-  /** Rounded shelf key shared by the place tile and its detail. */
   key: string;
   name: string;
 }
@@ -148,14 +95,11 @@ export interface PersonRow {
 }
 
 export interface CollectionFacts {
-  /** The live timeline, exactly as the grid has it. */
   assets: readonly PhotoAsset[];
   albums: readonly AlbumRow[];
   places: readonly PlaceRow[];
   people: readonly PersonRow[];
-  /** Every photograph taken on today's date in an earlier year
-   *  (`timeline-model#onThisDay`), ungrouped — this file groups them by the
-   *  year they belong to, which is what a member is actually being offered. */
+  /** Ungrouped: this file groups them by year, which is the actual offer. */
   memories: readonly PhotoAsset[];
 }
 
@@ -174,14 +118,12 @@ function tileFor(
   ];
 }
 
-/** The newest live photograph in a set — a shelf's cover is its most recent
- *  member, the same rule the timeline sorts by. */
+/** A shelf's cover is its newest member, the rule the timeline sorts by. */
 function cover(assets: readonly PhotoAsset[]): PhotoAsset | undefined {
   let newest: PhotoAsset | undefined;
   for (const asset of assets) {
-    // An undated asset has no instant to compare, so it can never win the
-    // "newest" contest — but it can still be the cover of a shelf that holds
-    // nothing else, which is better than a shelf with no cover at all.
+    // An undated asset can never win "newest", but may still cover a shelf
+    // holding nothing else.
     if (asset.capturedAt === undefined) {
       newest ??= asset;
       continue;
@@ -196,17 +138,11 @@ function cover(assets: readonly PhotoAsset[]): PhotoAsset | undefined {
 }
 
 /**
- * An album's cover tile (#721): the member's OWN choice when they
- * have made one, the newest member otherwise — never the reverse. This is
- * load-bearing: a rail tile that calls `cover()` unconditionally leaves a
- * member's "Make cover"/"Make key photo" write honoured by `AlbumDetail`'s own
- * header and silently ignored by every OTHER surface that draws this album,
- * including this one. A chosen
- * cover that is no longer a live member of the album (removed, trashed) is
- * read exactly as "no choice" — `members` here is already the LIVE set
- * (`assetsOf`, in the caller below), so a stale id simply fails to match and
- * falls through to `cover()` honestly, rather than pinning a tile to a
- * photograph the rail cannot show.
+ * The member's OWN choice first, the newest member otherwise — never the
+ * reverse (#721): a rail tile calling `cover()` unconditionally honours "Make
+ * key photo" on `AlbumDetail` and silently ignores it everywhere else. `members`
+ * is already the LIVE set, so a stale chosen id falls through honestly rather
+ * than pinning a tile to a photograph the rail cannot show.
  */
 function chosenCover(
   members: readonly PhotoAsset[],
@@ -218,9 +154,8 @@ function chosenCover(
   return chosen ?? cover(members);
 }
 
-/** Duplicate CLUSTERS: assets grouped by perceptual hash, keeping the groups
- *  with more than one member. The same grouping the More sheet's meta reports,
- *  so the two cannot disagree about how many there are. */
+/** The same grouping the More sheet's meta reports, so the two cannot disagree
+ *  about how many there are. */
 export function duplicateClusters(
   assets: readonly PhotoAsset[]
 ): PhotoAsset[][] {
@@ -234,15 +169,12 @@ export function duplicateClusters(
   return [...byHash.values()].filter((group) => group.length > 1);
 }
 
-/** Today's memories, grouped by the year each belongs to, newest year first. */
 function memoriesByYear(
   memories: readonly PhotoAsset[]
 ): Array<[string, PhotoAsset[]]> {
   const byYear = new Map<string, PhotoAsset[]>();
   for (const asset of memories) {
-    // `onThisDay` already drops undated assets — nothing with no capture time
-    // can be a memory of today — so this guard is belt and braces rather than
-    // a live branch, and it keeps the year off `undefined.slice`.
+    // Belt and braces: `onThisDay` already drops undated assets.
     if (asset.deleted || asset.capturedAt === undefined) continue;
     const year = asset.capturedAt.slice(0, 4);
     const group = byYear.get(year);
@@ -254,23 +186,16 @@ function memoriesByYear(
 
 /**
  * Every section, in order, always — an empty one renders its own sentence.
- *
- * Order is an argument: Memories first because it is the only section that
- * changes on its own and is therefore the only one worth looking at without
- * being asked for; then the member's own filing (Albums, People, Places);
- * then the standing shelves — filters over the same library rather than
- * things the member named (Favorites, Videos); then the two that are
- * housekeeping rather than browsing (Duplicates, Trash), last because a
- * library is for looking at, not for tidying.
+ * The ORDER is an argument: Memories first as the only section that changes on
+ * its own, then the member's own filing, then standing filters, then
+ * housekeeping last, because a library is for looking at, not for tidying.
  */
 export function buildCollectionSections(
   facts: CollectionFacts
 ): CollectionSection[] {
   const live = facts.assets.filter((asset) => !asset.deleted);
-  // Indexed by BOTH ids a photograph answers to: `id` is the timeline row's
-  // own key, `assetId` is the vault's `media_asset.asset_id` — which is
-  // what an album entry and a face region point at. Indexing by one alone
-  // silently resolves half the references to nothing.
+  // BOTH ids a photograph answers to: album entries and face regions point at
+  // `assetId`, so indexing by `id` alone resolves half of them to nothing.
   const byId = new Map<string, PhotoAsset>();
   for (const asset of facts.assets) {
     byId.set(asset.id, asset);
@@ -283,8 +208,7 @@ export function buildCollectionSections(
     });
 
   const favorites = live.filter((asset) => asset.favorite);
-  // Newest-first already, inherited from `live`'s own order
-  // (`mergePhotoAssets`' sort) — the same free ride Favorites takes below.
+  // Newest-first already, inherited from `live`'s own order.
   const videos = live.filter((asset) => asset.kind === "video");
   const trashed = facts.assets.filter((asset) => asset.deleted);
   const clusters = duplicateClusters(facts.assets);
@@ -293,9 +217,7 @@ export function buildCollectionSections(
     {
       key: "memories",
       title: "Memories",
-      // One tile per YEAR, newest first — "this day, four years ago" is the
-      // offer, so four photographs from the same afternoon are one memory and
-      // not four.
+      // One tile per YEAR: four photographs from one afternoon are one memory.
       tiles: memoriesByYear(facts.memories)
         .slice(0, RAIL_LIMIT)
         .flatMap(([year, group]) => tileFor(cover(group), year)),
@@ -365,9 +287,8 @@ export function buildCollectionSections(
       empty: "Photographs you mark with a heart collect here.",
     },
     {
-      // #721. `PhotoAsset.kind === "video"` is the one media-type
-      // fact this device already carries honestly — see the file header for
-      // why Screenshots and Panoramas are not here beside it.
+      // The one media-type fact this device carries in bulk (#721) — see the
+      // header for why Screenshots and Panoramas are not beside it.
       key: "videos",
       title: "Videos",
       count: videos.length,

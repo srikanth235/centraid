@@ -1,25 +1,13 @@
-// What the Analytics place SAYS about the run rollup (#765, spec §5).
+// Every word the Analytics place says about the run rollup (#765, spec §5).
+// Pure — no React, no gateway — so the copy contract is testable unmounted.
 //
-// Pure: no React, no gateway, no renderer. The screen owns the frame, the hook
-// owns the wire, and every word — the chart's columns, the fact keys, the
-// standing sentence, the CSV — is decided here, so the copy contract is under
-// test without mounting anything (the split `connectors-model.ts` and
-// `kit/components/health-line.ts` already make).
-//
-// THREE HONEST GAPS, the same three the desktop leg carries, stated here
-// rather than papered over:
-//
-//  1. The daily rollup counts RUNS per day and does NOT split them by outcome
-//     (`InsightsDailyPoint` has `runs`, `tokens`, `costUsd` and nothing else),
-//     so every column carries ONE segment and the chart has no failed key to
-//     legend. The window's failure count is stated once, on the Runs section's
-//     own count line, instead of being invented per column.
-//  2. No run duration is recorded anywhere in the ledger, so the reference's
-//     `median duration · p95` fact cannot be served and is dropped rather than
-//     estimated. Spend takes that slot — the fact this page can prove.
-//  3. The gateway reports memory, outbox depth, loop lag, fsync and uptime; it
-//     reports no disk figure and no shared-compute roster. The reference's
-//     `disk` and `compute shared` facts are therefore absent, not zeroed.
+// THREE HONEST GAPS bound what may be claimed here:
+//  1. The daily rollup does not split runs by outcome, so every column is ONE
+//     segment and the failure count is stated once, on the Runs count line.
+//  2. No run duration is recorded, so `median duration · p95` is dropped, not
+//     estimated; spend takes that slot.
+//  3. The health snapshot reports no disk figure and no shared-compute roster,
+//     so those facts are absent, not zeroed.
 
 import { INSIGHTS_FORECAST_NOTE } from "@centraid/client/insights-copy";
 import {
@@ -58,17 +46,15 @@ import type {
 
 export type Breakdown = InsightBreakdown;
 
-/** The three windows. This page's one parameter, and its whole state. */
+/** This page's one parameter, and its whole state. */
 export const WINDOW_OPTIONS = [7, 30, 90] as const;
 
-/** The window the page opens on before a stored preference lands. */
 export const DEFAULT_WINDOW_DAYS = 30;
 
 const DAY_MS = 86_400_000;
 
-/** Is this a window this page can actually be in? Guards the stored pref, so
- *  a value written by a future surface cannot put the page in a state its own
- *  chips cannot get it out of. */
+/** Guards the stored pref: a value written by a future surface must not strand
+ *  the page in a state its own chips cannot leave. */
 export function isWindowDays(value: unknown): value is number {
   return (
     typeof value === "number" &&
@@ -76,7 +62,6 @@ export function isWindowDays(value: unknown): value is number {
   );
 }
 
-/** The window picker, in the reference's order, with the live one marked. */
 export function windowChips(
   windowDays: number
 ): { id: string; label: string; on: boolean }[] {
@@ -91,29 +76,17 @@ function runWord(runs: number): string {
   return `${runs.toLocaleString()} ${runs === 1 ? "run" : "runs"}`;
 }
 
-/**
- * Columns the chart draws: ONE PER DAY, up to what the plot can carry (#775).
- *
- * Sampling a window down to ten columns averages a single expensive afternoon
- * across three ordinary days — the one shape a spend chart exists to show.
- * Every window up to a month is one column per day;
- * a ninety-day window folds to `max`, and each column says the span it covers.
- */
+/** ONE COLUMN PER DAY up to `max` (#775): sampling down to ten columns averages
+ *  an expensive afternoon away, which is the shape this chart exists to show. */
 export function columnCount(windowDays: number, max: number): number {
   return Math.max(1, Math.min(windowDays, max));
 }
 
 /**
- * The chart's columns: SPEND per day, scaled against the window's own peak.
- *
- * Spend and not runs, because "what did this cost" is the question the page is
- * answering — twenty cheap chats and one long build are the same column by
- * volume and nothing like it by money. The run count stays in each column's own
- * sentence, which is what a screen reader hears.
- *
- * The fold itself (calendar offset from the window's first day, so a quiet week
- * cannot slide the busy days left) is the shared headless model's, not this
- * screen's. `now` is used only when the rollup did not stamp itself.
+ * SPEND per day, not runs: twenty cheap chats and one long build are the same
+ * column by volume and nothing like it by money. The run count stays in each
+ * column's sentence, which is what a screen reader hears. The calendar fold is
+ * the shared headless model's; `now` applies only to an unstamped rollup.
  */
 export function buildBars(
   summary: InsightsSummary,
@@ -133,8 +106,7 @@ export function buildBars(
         ? dayMark(bucket.date)
         : `${dayMark(bucket.date)} – ${dayMark(bucket.endDate)}`;
     return {
-      // One segment, always: there is no per-day outcome split to stack (gap
-      // 1 in the file header).
+      // Always one segment: no per-day outcome split exists (gap 1).
       failed: 0,
       key: bucket.key,
       label: `${span} · ${formatUsd(bucket.costUsd)} · ${runWord(bucket.runs)}`,
@@ -143,12 +115,8 @@ export function buildBars(
   });
 }
 
-/**
- * The axis marks: real dates, oldest → newest.
- *
- * "30 days ago · halfway · today" told a reader nothing they could check a
- * spike against — a column is a day, and a day has a name.
- */
+/** Real dates, oldest → newest: a column is a day, and a day has a name, so a
+ *  reader can check a spike against something. */
 export function axisLabels(
   summary: InsightsSummary,
   windowDays: number,
@@ -168,10 +136,8 @@ export function axisLabels(
   return marks;
 }
 
-/**
- * The peak day, in words — the only place a column's actual value is stated,
- * because the plot has no value axis. Absent when the rollup found no peak.
- */
+/** The only place a column's actual value is stated — the plot has no value
+ *  axis. Absent when the rollup found no peak. */
 export function peakNote(summary: InsightsSummary): string | undefined {
   const peak = summary.peakDay;
   if (!peak) return undefined;
@@ -183,26 +149,19 @@ export function peakNote(summary: InsightsSummary): string | undefined {
   ].join(" · ");
 }
 
-/** `1,284 runs · 9 failed` — the Runs section's count line, and the only place
- *  the window's failure count is stated (see gap 1). */
+/** The only place the window's failure count is stated (gap 1). */
 export function runsMeta(summary: InsightsSummary): string {
   const { failedRuns, generations } = summary.kpis;
   const runs = `${generations.toLocaleString()} runs`;
   return failedRuns > 0 ? `${runs} · ${String(failedRuns)} failed` : runs;
 }
 
-/** `1,284 runs` — the By-source section's count line. */
 export function sourceMeta(summary: InsightsSummary): string {
   return `${summary.kpis.generations.toLocaleString()} runs`;
 }
 
-/**
- * By-source facts: runs, share of the window, and what they cost.
- *
- * Failures are NOT attributed per source by the rollup, so they are not
- * claimed here — the reference's `6 failed` tail on each bucket has nothing
- * behind it.
- */
+/** No per-source failure count: the rollup does not attribute failures, so
+ *  claiming one here would have nothing behind it. */
 export function sourceFacts(summary: InsightsSummary): PanelFact[] {
   return insightSourceRollups(summary.bySource).map((row) => ({
     key: row.bucket,
@@ -210,14 +169,8 @@ export function sourceFacts(summary: InsightsSummary): PanelFact[] {
   }));
 }
 
-/**
- * The one promoted figure: what the window cost.
- *
- * "Did this month cost $2 or $200" is the question a member opens this page
- * with, and it was being answered by a 13pt string in the middle of a fact
- * list. "At least" is the honest label while runs are unpriced — the figure is
- * a floor, and a floor that calls itself a total is a lie.
- */
+/** "At least" is required while any run is unpriced: the figure is a floor,
+ *  and a floor that calls itself a total is a lie. */
 export function spendFigure(
   summary: InsightsSummary,
   windowDays: number
@@ -231,13 +184,8 @@ export function spendFigure(
   };
 }
 
-/**
- * The facts beside the figure — volume, forecast, and what the failures cost.
- *
- * `retries` and `failedCostUsd` are on the wire and were rendered nowhere: a
- * page about spend that cannot say what was spent on work that failed is
- * missing the number a member would act on.
- */
+/** Volume, forecast, and what the failures cost — the last being the number a
+ *  member acts on. */
 export function spendFacts(summary: InsightsSummary): PanelFact[] {
   const { kpis } = summary;
   const facts: PanelFact[] = [
@@ -264,7 +212,7 @@ export function spendFacts(summary: InsightsSummary): PanelFact[] {
   if (kpis.failedRuns > 0)
     facts.push({
       key: "failed",
-      // The one fact here that is bad news, so the one that takes `net`.
+      // The one fact that is bad news, so the one that takes `net`.
       net: true,
       value: `${String(kpis.failedRuns)} · ${formatUsd(kpis.failedCostUsd)} spent`,
     });
@@ -276,7 +224,6 @@ export function spendFacts(summary: InsightsSummary): PanelFact[] {
   return facts;
 }
 
-/** Spend by harness — which runner the money went to. */
 export function harnessBreakdown(summary: InsightsSummary): Breakdown {
   return insightBreakdown(
     summary.byHarness.map((row) => ({
@@ -292,7 +239,6 @@ export function harnessBreakdown(summary: InsightsSummary): Breakdown {
   );
 }
 
-/** Spend by model — the one breakdown a member can act on by switching. */
 export function modelBreakdown(summary: InsightsSummary): Breakdown {
   return insightBreakdown(
     summary.byModel.map((row) => ({
@@ -308,7 +254,6 @@ export function modelBreakdown(summary: InsightsSummary): Breakdown {
   );
 }
 
-/** Spend by effort — the harness-confirmed thought level, and what it cost. */
 export function effortBreakdown(summary: InsightsSummary): Breakdown {
   return insightBreakdown(
     summary.byEffort.map((row) => ({
@@ -324,7 +269,6 @@ export function effortBreakdown(summary: InsightsSummary): Breakdown {
   );
 }
 
-/** Spend per source — the automation, chat or app the work came from. */
 export function sourceBreakdown(summary: InsightsSummary): Breakdown {
   return insightBreakdown(
     summary.bySource.map((row) => ({
@@ -340,10 +284,7 @@ export function sourceBreakdown(summary: InsightsSummary): Breakdown {
   );
 }
 
-/**
- * Where the money came from, said plainly. Never "free" for what could not be
- * priced — an unpriced run is unknown, not zero.
- */
+/** Never "free" for what could not be priced: an unpriced run is unknown. */
 export function pricingLine(summary: InsightsSummary): string {
   const { kpis } = summary;
   const parts: string[] = [];
@@ -362,7 +303,6 @@ export function pricingLine(summary: InsightsSummary): string {
   return `${parts.join(" · ")}.`;
 }
 
-/** `Chat` / `Build` / `Automation` — the run kind, in a word. */
 function kindLabel(kind: string): string {
   if (kind === "chat") return "Chat";
   if (kind === "build") return "Build";
@@ -370,7 +310,7 @@ function kindLabel(kind: string): string {
   return kind;
 }
 
-/** One recent run, already worded. The screen binds the handler. */
+/** Already worded; the screen binds the handler. */
 export interface RecentRunRow {
   key: string;
   title: string;
@@ -378,19 +318,12 @@ export interface RecentRunRow {
   meta: string;
   /** The run failed — its METADATA takes `net`; the run's name does not. */
   net: boolean;
-  /** Present when this run belongs to an automation the phone can open. */
+  /** Present only when the phone can open this run's automation. */
   automationRef?: string;
 }
 
-/**
- * The recent-runs rows.
- *
- * The verb is offered only for a run that belongs to an automation, because
- * that is the only run this app can open: mobile has no single-run view, and
- * `Automations { automationRef }` lands on that automation's own turn list,
- * which is where the run is. A run from the assistant or an app has nowhere to
- * go here, so it carries no button rather than a dead one.
- */
+/** The verb is offered only for automation-backed runs: mobile has no
+ *  single-run view, so anything else would carry a dead button. */
 export function recentRows(summary: InsightsSummary): RecentRunRow[] {
   return summary.recent.map((run) => recentRow(run));
 }
@@ -414,20 +347,8 @@ function recentRow(run: InsightsActivityRow): RecentRunRow {
   };
 }
 
-/**
- * The gateway's own measured numbers.
- *
- * Every fact is something this gateway actually reports. No disk figure and no
- * shared-compute roster appear, because the health snapshot serves neither
- * (gap 3) — the reference's four-fact panel is three-to-six honest facts here.
- */
-/**
- * WHICH component is unhealthy, named — or `undefined` when they all are well.
- *
- * "3 of 4 healthy" is bad news with no subject: it tells a member something is
- * wrong and nothing about what, so there is nothing to do with it. The names
- * come from the gateway's own component roster.
- */
+/** Names the unhealthy components, or `undefined` when all are well: "3 of 4
+ *  healthy" is bad news with no subject, so there is nothing to do with it. */
 export function unhealthyComponents(health: GatewayHealth): string | undefined {
   const bad = health.components.filter((c) => c.status !== "ok");
   if (bad.length === 0) return undefined;
@@ -449,11 +370,9 @@ export function gatewayFacts(health: GatewayHealth): PanelFact[] {
     },
     {
       key: "components",
-      // The one fact that can be bad news, so it is the one that may take
-      // `net`: a component that is not ok is the gateway telling on itself.
+      // The one fact that can be bad news, so the one that may take `net`.
       net: unwell !== undefined,
-      // …and bad news names its subject rather than leaving the member to
-      // guess which of four things is the broken one.
+      // Bad news names its subject rather than leaving the member guessing.
       ...(unwell ? { note: `Not healthy: ${unwell}.` } : {}),
       value: `${String(healthy)} of ${String(health.components.length)} healthy`,
     },
@@ -475,8 +394,7 @@ export function gatewayFacts(health: GatewayHealth): PanelFact[] {
   return facts;
 }
 
-/** "The gateway has been up for 21 days." — the uptime, said at the coarsest
- *  unit that is still true. */
+/** The coarsest unit that is still true. */
 export function uptimeSentence(uptimeMs: number | undefined): string {
   if (uptimeMs === undefined || !Number.isFinite(uptimeMs) || uptimeMs < 0)
     return "This gateway did not report how long it has been up.";
@@ -487,14 +405,8 @@ export function uptimeSentence(uptimeMs: number | undefined): string {
   return `The gateway has been up for ${String(hours)} ${hours === 1 ? "hour" : "hours"}.`;
 }
 
-/**
- * The standing line's words: how much of the work succeeded, and how long the
- * machine doing it has been up.
- *
- * No median duration — no run duration is recorded (gap 2), so the reference's
- * second clause is replaced by the one the gateway can prove. No inline verb:
- * this page has nothing to act on, only something to read.
- */
+/** No median duration (gap 2) and no inline verb: this page has nothing to act
+ *  on, only something to read. */
 export function insightsHealth(
   summary: InsightsSummary | undefined,
   uptimeMs: number | undefined
@@ -504,9 +416,8 @@ export function insightsHealth(
     errorText: ERROR_HEALTH,
     loadingText: READING_HEALTH,
   };
-  // Nothing read yet, or nothing read successfully: the three generic
-  // sentences are the whole copy, and `healthLineFor` picks the one that
-  // matches the state.
+  // Nothing read: the generic sentences are the whole copy, and
+  // `healthLineFor` picks the one matching the state.
   if (!summary) return { ...generic, detail: "", label: "" };
   const { failedRuns, generations } = summary.kpis;
   const succeeded = Math.max(0, generations - failedRuns);
@@ -519,8 +430,7 @@ export function insightsHealth(
   };
 }
 
-/** Origin Activity has no machine-health clause; its standing line describes
- * only the run rollup presented on this screen. */
+/** No machine-health clause: this line describes only the run rollup. */
 export function originActivityHealth(
   summary: InsightsSummary | undefined
 ): HealthCopy {
@@ -541,16 +451,14 @@ export function originActivityHealth(
   };
 }
 
-/** Has anything happened at all in this window? The one thing that empties
- *  this page — a window with no runs and no recent tail. */
+/** The one thing that empties this page. */
 export function nothingRan(summary: InsightsSummary): boolean {
   return summary.kpis.generations === 0 && summary.recent.length === 0;
 }
 
 const CSV_HEADER = "date,runs,tokens,cost_usd";
 
-/** The daily rollup as CSV — the numbers the chart is drawn from, in the order
- *  the chart draws them. */
+/** The numbers the chart is drawn from, in the order it draws them. */
 export function insightsCsv(summary: InsightsSummary): string {
   const rows = summary.daily.map(
     (day) =>
@@ -559,7 +467,6 @@ export function insightsCsv(summary: InsightsSummary): string {
   return [CSV_HEADER, ...rows].join("\n");
 }
 
-/** `centraid-analytics-30d.csv` — what the share sheet calls the file. */
 export function csvFilename(windowDays: number): string {
   return `centraid-analytics-${String(windowDays)}d.csv`;
 }

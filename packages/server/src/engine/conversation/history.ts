@@ -1,25 +1,11 @@
-// governance: allow-repo-hygiene file-size-limit (#420) cohesive conversation-history facade; the retry-collapsing transcript fold (getSession) belongs beside the record/CRUD API it mirrors — the pure helpers already live in transcript.ts
+// governance: allow-repo-hygiene file-size-limit (#420) the retry-collapsing transcript fold belongs beside the record/CRUD API it mirrors; the pure helpers already live in transcript.ts
 /*
- * Centraid conversation-history facade — the conversation-container API +
- * transcript fold, over the per-vault `ConversationStore` (#98, reshaped
- * by #190, vault-scoped by #280). This is the read/write API the interactive
- * chat surface uses; the store is conversation-first (it spans `kind='chat'`
- * and `'build'`), while the HTTP route it's exposed over stays the
- * `/_centraid-conversations` wire surface.
+ * Conversation-history facade over the per-vault `ConversationStore`. A chat
+ * session IS a `conversations` row, bound to its vault at creation — so a
+ * mid-thread vault switch FAILS CLOSED (#280).
  *
- * A chat session IS a `conversations` row (`kind='chat'` | `'build'`).
- * Conversations + their turns/items/attachments live in the ACTIVE vault's
- * `journal.db` — a conversation binds to its vault at creation, so
- * switching vaults switches the visible history, and a mid-thread switch
- * fails closed (the thread's row isn't in the new vault's file). App scoping
- * is the `app_id` column. Conversations are stamped with the vault owner's
- * party id — the vault owner IS the user (#280).
- *
- * The transcript is NOT its own table. A chat turn is a `turns` row; the
- * turn's inbound message is its ordinal-0 `message_in` item, and the
- * assistant text + tool calls are the remaining `items` (#190 fold).
- * `recordTurn` writes that trace; `getSession` reconstructs the renderer
- * transcript uniformly from items. Exposed over HTTP at `/_centraid-conversations`.
+ * The transcript is NOT its own table: the inbound message is the turn's
+ * ordinal-0 `message_in` item, the rest of the trace is `items` (#190).
  */
 
 import { randomUUID } from "node:crypto";
@@ -52,32 +38,21 @@ export { ASSISTANT_APP_ID } from "../registry/app-paths.js";
 
 export interface ConversationSummary {
   id: string;
-  /** Owner of the session — the gateway-side user UUID from `UserStore`. */
   userId: string;
   title: string;
-  /** Harness kind that owns `harnessSessionId` (codex | claude-code). */
   harnessKind: string | null;
-  /** Opaque per-harness resume handle; `null` until the first turn lands. */
   harnessSessionId: string | null;
-  /** Number of completed turns on this session. */
   turnCount: number;
-  /** Number of canonical-ledger hydrations across harness/session handoffs. */
   hydrationCount: number;
-  /** Most recent hydration boundary. */
   lastHydratedAt?: number;
-  /** Pinned threads sort first in the sidebar (#420). */
   pinned: boolean;
-  /** Archived threads hide behind a collapsed group and drop out of search. */
   archived: boolean;
   createdAt: number;
   updatedAt: number;
-  /** Reconstructed transcript length (user + assistant + tool messages). */
   messageCount: number;
 }
 
-/** A conversation search hit: its summary plus a highlighted match snippet. */
 export interface ConversationSearchResult extends ConversationSummary {
-  /** `snippet()` output with `⟦`/`⟧` around matched terms and `…` elisions. */
   snippet: string;
 }
 
@@ -87,71 +62,39 @@ export interface ConversationMessageRow {
   createdAt: number;
 }
 
-/**
- * A loaded session: its summary, the reconstructed transcript, and — for the
- * archive-aware read (#438) — markers describing rehydrated cold
- * history. `hasArchivedHistory` is set when some turns were fetched back from a
- * pruned segment (they carry `fromArchive: true` in their payload and are
- * read-only); `archiveUnavailable` when a pruned segment blob couldn't be
- * fetched, so the render is the live rows only.
- */
+/** `hasArchivedHistory` ⇒ some turns came from a pruned segment and are
+ *  READ-ONLY; `archiveUnavailable` ⇒ the render is live rows only (#438). */
 export interface SessionTranscript extends ConversationSummary {
   messages: ConversationMessageRow[];
   workspace?: ConversationWorkspaceSelection;
   hasArchivedHistory?: boolean;
   archivedTurnCount?: number;
   archiveUnavailable?: boolean;
-  /**
-   * Older turns exist before this response's oldest one (#659) — the
-   * client shows its "load earlier" control only when this is true.
-   */
+  /** The client shows "load earlier" only when this is true (#659). */
   hasMore: boolean;
-  /**
-   * `seq` of the oldest turn in this response: the cursor to pass back as
-   * `beforeSeq` for the previous page. Absent for an empty transcript.
-   *
-   * A `beforeSeq` request returns ONLY that page's messages, never the page
-   * plus what the caller already has, so the client can PREPEND them to its
-   * existing array. That matters because the transcript projection keys on
-   * message object identity, so rebuilding the array would re-key every
-   * already-rendered row; prepending keeps them referentially identical.
-   */
+  /** A `beforeSeq` request returns ONLY that page, so the client can PREPEND:
+   *  the projection keys on message identity, and rebuilding the array would
+   *  re-key every already-rendered row. */
   oldestSeq?: number;
 }
 
-/** A page request for {@link SessionTranscript} — see `listTurnWindow`. */
 export interface TranscriptWindow {
-  /** Turns to return, newest-first by selection. Defaults to the whole thread. */
   limit?: number;
-  /** Return only turns strictly older than this `seq`. */
   beforeSeq?: number;
 }
 
-/**
- * Attachment metadata exposed on a reconstructed `user` transcript entry
- * (issue: model/attachment prefs plumbing). One entry per `attachments`
- * row FK'd to the turn's `message_in` item — `hash` is the CAS key (see
- * `blobUrl`/`blobPathFor`), `url` a ready-to-fetch download link so both
- * frontends can render an attachment chip without recomputing it.
- */
+/** `hash` is the CAS key; `url` is precomputed so a frontend renders a chip
+ *  without deriving it. */
 export interface ConversationAttachmentPayload {
   hash: string;
   mime: string;
   sizeBytes: number;
   filename?: string;
   source?: string;
-  /** Workspace-backed harness artifact; no CAS URL is emitted. */
   workspacePath?: string;
   url?: string;
 }
 
-/**
- * Per-turn token/cost usage on a reconstructed terminal `ai` transcript entry
- * (#420). Token sums + `costUsd` are the frozen denormalized
- * rollup on the turn (`model-pricing.ts` cost, frozen at write); `model` is the
- * serving model off the terminal step. Every field is optional — a legacy or
- * unpriced turn simply omits what it doesn't have.
- */
 export interface ConversationTurnUsage {
   inputTokens?: number;
   outputTokens?: number;
@@ -160,44 +103,28 @@ export interface ConversationTurnUsage {
   effort?: string;
 }
 
-/**
- * The replayable result of an already-recorded turn, keyed by idempotency key
- * (#420). A duplicate turn POST streams this straight from the ledger.
- */
 export interface RecordedTurnReplay {
   turnId: string;
   ok: boolean;
-  /** The recorded final answer text (absent when the turn errored). */
   finalText?: string;
-  /** The recorded error message (present when `ok` is false). */
   error?: string;
   usage?: ConversationTurnUsage;
 }
 
-/** A file already landed in the blob CAS, to attach to a turn's inbound message. */
 export interface ConversationTurnAttachment {
   hash: string;
   mime: string;
   sizeBytes: number;
   filename?: string;
-  /** Defaults to `'upload'`. */
   source?: string;
-  /** Absolute harness workspace path; when set the bytes are not copied to CAS. */
   workspacePath?: string;
 }
 
-/**
- * One item of a completed chat turn, handed to `recordTurn`. The chat route
- * accumulates these from the harness's `TurnStreamEvent`s.
- */
 export type TurnNode =
   | {
       kind: "step";
-      /** Accumulated assistant text for the turn. */
       text: string;
-      /** True when this step carries a harness/turn error message. */
       isError?: boolean;
-      /** Durable harness/failover/self-heal notice rather than model prose. */
       notice?: { level: "info" | "warn"; code?: string };
       model?: string;
       harness?: string;
@@ -206,7 +133,6 @@ export type TurnNode =
       outputTokens?: number;
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
-      /** Harness/ACP-reported USD when present (#514). */
       costUsd?: number;
       costSource?: "harness" | "estimated";
       startedAt: number;
@@ -228,45 +154,27 @@ export type TurnNode =
 
 export interface RecordTurnInput {
   conversationId: string;
-  /**
-   * The conversation kind. A builder-surface turn is `'build'`; a data chat is
-   * `'chat'` (the default). Set on the conversation the first time it differs
-   * — a thread is single-kind (#190).
-   */
+  /** Set on the CONVERSATION the first time it differs: a thread is
+   *  single-kind (#190). */
   kind?: RunKind;
-  /** The user's prompt for the turn — recorded as the `message_in` item. */
   userMessage: string;
-  /**
-   * When set, this turn is a regenerate of the turn with this id — recorded
-   * as `turns.retry_of` so `getSession` collapses it into the original's
-   * sibling pager (ChatGPT-style "<2/2>", #420).
-   */
   retryOf?: string;
-  /**
-   * Client-supplied idempotency key (#420). Persisted on the turn so a
-   * duplicate POST with the same key replays this recorded turn.
-   */
+  /** A duplicate POST with the same key REPLAYS this turn (#420). */
   idempotencyKey?: string;
-  /** Files that rode in on this turn's inbound message (already in the CAS). */
   attachments?: ConversationTurnAttachment[];
   startedAt: number;
   endedAt: number;
   ok: boolean;
   error?: string;
-  /** The assistant's final reply text (the turn's terminal output). */
   finalText?: string;
-  /** Estimated canonical-ledger prompt tokens injected for this handoff. */
   hydrationTokens?: number;
-  /** The turn's ordered trace (assistant steps + tool calls). */
   nodes: TurnNode[];
-  /** Successful harness binding committed atomically with this turn + watermark. */
   harnessObservation?: {
     kind: string;
     sessionId?: string;
     usageSnapshot?: HarnessUsageSnapshot;
     hydrated?: boolean;
   };
-  /** Failed-turn accounting update that must not switch the active binding. */
   failedHarnessObservation?: {
     kind: string;
     sessionId?: string;
@@ -277,20 +185,12 @@ export interface RecordTurnInput {
 
 export class ConversationHistoryStore {
   private readonly workspace: WorkspaceProvider;
-  /**
-   * ONE ledger store over "the ACTIVE vault's journal.db" — the provider
-   * resolves the workspace per call and the store re-prepares on handle
-   * change, so a vault switch needs no reconstruction here.
-   */
+  /** ONE store over the ACTIVE vault's journal.db: the provider resolves per
+   *  call, so a vault switch needs no reconstruction here. */
   private readonly store: ConversationStore;
-  /** Blob CAS for attachment bytes — rooted at the active workspace (#190/#280). */
   private readonly blobs: BlobStore;
-  /**
-   * Read-back of an archived segment blob from the vault CAS (#438).
-   * Injected by the gateway (`db.blobs.open`); undefined on the standalone host,
-   * where rehydration degrades to an `archiveUnavailable` marker. app-engine must
-   * not import vault, so the reader crosses this seam, not `VaultWorkspace`.
-   */
+  /** app-engine must not import vault, so the reader crosses THIS seam;
+   *  undefined degrades rehydration to `archiveUnavailable` (#438). */
   private readonly archiveBlobReader: ArchiveBlobReader | undefined;
 
   constructor(
@@ -310,16 +210,12 @@ export class ConversationHistoryStore {
     return { store: this.store };
   }
 
-  /** The vault owner's party id — the one user identity that exists (#280). */
   private currentUserId(): string {
     return this.workspace().ownerPartyId;
   }
 
-  /**
-   * Resolve a conversation ONLY when `appId` owns it. The ledger file is
-   * per-vault (#280), so the per-app isolation a per-app file would give is
-   * enforced here: a cross-app id lookup reads as not-found.
-   */
+  /** The ledger file is per-VAULT, so per-app isolation is enforced HERE: a
+   *  cross-app id lookup reads as not-found (#280). */
   private ownedMeta(appId: string, id: string): ConversationMeta | undefined {
     const meta = this.store.getConversationMeta(id, this.currentUserId());
     if (!meta || meta.appId !== appId) return undefined;
@@ -331,7 +227,6 @@ export class ConversationHistoryStore {
     return store.listConversationsMeta(this.currentUserId(), appId).map(toMeta);
   }
 
-  /** Create a fresh chat session in `appId`. */
   createSession(
     appId: string,
     title: string = "",
@@ -347,13 +242,7 @@ export class ConversationHistoryStore {
     return toMeta({ ...conv, messageCount: 0 });
   }
 
-  /**
-   * Load a session with its transcript reconstructed uniformly from the
-   * conversation's items: each turn contributes its ordinal-0 `message_in`
-   * item as a `user` message (with any attachments), then `step` items as
-   * `ai` messages and `tool` items as `tool` messages (#190). Live rows
-   * only — the archive-aware read path is `getSessionRehydrated`.
-   */
+  /** LIVE rows only — the archive-aware path is `getSessionRehydrated`. */
   getSession(
     appId: string,
     id: string,
@@ -363,12 +252,10 @@ export class ConversationHistoryStore {
     const meta = this.ownedMeta(appId, id);
     if (!meta) return undefined;
 
-    // Three queries for the page (#659): turns, then its items, then
-    // its attachments.
     const page = store.listTurnWindow(id, window);
     const turns = page.turns;
-    // Scope the two batched reads to the SAME seq range as the turns, so a
-    // window costs a window's rows and the batching composes with it.
+    // Scope the batched reads to the SAME seq range, so a window costs a
+    // window's rows.
     const range = seqRangeOf(turns);
     const itemsByTurn = store.listItemsByTurn(id, range);
     const attachmentsByItem = store.listAttachmentsByItem(id, range);
@@ -391,16 +278,9 @@ export class ConversationHistoryStore {
     };
   }
 
-  /**
-   * Archive-aware transcript load (#438 decision 9, wave 3). Serves live
-   * rows as `getSession` does, and — when the conversation has custody-gated-
-   * PRUNED archive ranges — fetches each range's sealed segment blob via the
-   * injected reader, decodes it, and merges the archived turns back in by seq,
-   * marked `fromArchive`. READ-ONLY: rehydrated turns are ephemeral (nothing is
-   * re-inserted); mutation paths keyed by turn id no-op on them because the raw
-   * rows are gone. A fetch failure yields the live rows + `archiveUnavailable`
-   * rather than a silently partial thread.
-   */
+  /** Merges PRUNED archive ranges back in, marked `fromArchive` (#438).
+   *  READ-ONLY: the raw rows are gone, so mutation paths no-op. A fetch failure
+   *  yields `archiveUnavailable`, never a silently partial thread. */
   async getSessionRehydrated(
     appId: string,
     id: string,
@@ -411,8 +291,7 @@ export class ConversationHistoryStore {
     if (!meta) return undefined;
 
     const prunedRefs = store.listArchiveSegments(id).filter((r) => r.pruned);
-    // Fast path: no pruned range ⇒ every turn is still a live row (an
-    // archived-but-unpruned range serves from live rows too, no blob fetch).
+    // No pruned range ⇒ every turn is still a live row.
     if (prunedRefs.length === 0) return this.getSession(appId, id, window);
 
     const archived = await collectArchivedRows(
@@ -423,18 +302,15 @@ export class ConversationHistoryStore {
     const liveTurns = store.listTurns(id);
     const itemsByTurn = store.listItemsByTurn(id);
     const attachmentsByItem = store.listAttachmentsByItem(id);
-    // Archived turns can never collide with live ids (pruned rows are gone).
     for (const [turnId, items] of archived.itemsByTurn)
       itemsByTurn.set(turnId, items);
 
     const merged = [...archived.turns, ...liveTurns].sort(
       (a, b) => a.seq - b.seq
     );
-    // Windowing happens AFTER the merge on this path, in memory (#659
-    // G5). The archive segments have to be fetched and decoded whole either
-    // way, so pushing the window into SQL would window only the live half and
-    // report `hasMore` against a partial picture. Cost is unchanged from
-    // before; correctness across the archive boundary is what is bought.
+    // Windowing happens AFTER the merge, in memory (#659 G5): pushing it into
+    // SQL would window only the live half and report `hasMore` against a
+    // partial picture.
     const { turns, hasMore } = windowMerged(merged, window);
 
     const messages = foldTranscript({
@@ -464,7 +340,6 @@ export class ConversationHistoryStore {
     };
   }
 
-  /** Attachment metadata + download URL for a message item's attachments. */
   private attachmentsPayload(
     appId: string,
     itemId: string
@@ -473,17 +348,14 @@ export class ConversationHistoryStore {
     return attachmentPayloads(appId, store.listAttachmentsForItem(itemId));
   }
 
-  /** Persist uploaded bytes to the app's blob CAS (dedup by content hash). */
   uploadBlob(appId: string, bytes: Uint8Array): Promise<PutResult> {
     return this.blobs.put(appId, bytes);
   }
 
-  /** Read attachment bytes back from the CAS (for the download route). */
   readBlob(appId: string, hash: string): Promise<Buffer | undefined> {
     return this.blobs.read(appId, hash);
   }
 
-  /** Absolute on-disk path of a blob — the multimodal harness reads it. */
   blobPathFor(appId: string, hash: string): string {
     return this.blobs.pathFor(appId, hash);
   }
@@ -505,11 +377,6 @@ export class ConversationHistoryStore {
     return this.getSessionMeta(appId, id);
   }
 
-  /**
-   * FTS5 search over this app's chat/build sessions — titles + inbound message
-   * text (#420). Powers the ⌘K palette's "Conversations" category. Each
-   * result carries a highlighted `snippet` for match context.
-   */
   searchSessions(
     appId: string,
     query: string,
@@ -521,7 +388,6 @@ export class ConversationHistoryStore {
       .map((hit) => ({ ...toMeta(hit), snippet: hit.snippet }));
   }
 
-  /** Pin/unpin a session `appId` owns; returns the fresh summary or undefined. */
   setSessionPinned(
     appId: string,
     id: string,
@@ -534,7 +400,6 @@ export class ConversationHistoryStore {
     return this.getSessionMeta(appId, id);
   }
 
-  /** Archive/unarchive a session `appId` owns; returns the fresh summary. */
   setSessionArchived(
     appId: string,
     id: string,
@@ -547,17 +412,8 @@ export class ConversationHistoryStore {
     return this.getSessionMeta(appId, id);
   }
 
-  /**
-   * Set (or clear, with `null`) the reader's 👍/👎 on one turn's answer in a
-   * session `appId` owns (#420). Returns whether it was applied — false
-   * when the session isn't owned or the turn isn't part of it.
-   *
-   * Read-only archived history (#438): a custody-gated-PRUNED turn's
-   * raw row is gone, so this UPDATE matches nothing and returns false — the route
-   * answers 404. Mutating rehydrated (sealed) history is thereby structurally
-   * impossible; an archived-but-unpruned turn still has its row and stays
-   * mutable, as it should.
-   */
+  /** False when unowned, and also when the turn was PRUNED (#438): its row is
+   *  gone, so mutating sealed history is impossible. */
   setTurnFeedback(
     appId: string,
     id: string,
@@ -570,8 +426,8 @@ export class ConversationHistoryStore {
   }
 
   deleteSession(appId: string, id: string): boolean {
-    // Real FK CASCADE drops the conversation's turns, items, and attachment
-    // rows; a follow-up blob GC reclaims now-unreferenced bytes (#190).
+    // FK CASCADE drops turns, items and attachment rows; a follow-up blob GC
+    // reclaims the now-unreferenced bytes.
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, id)) return false;
     const ok = store.deleteConversation(id, this.currentUserId());
@@ -582,14 +438,8 @@ export class ConversationHistoryStore {
     return ok;
   }
 
-  /**
-   * Persist one completed chat turn: a `turns` row, its ordinal-0 `message_in`
-   * item (plus any attachments), and the assistant/tool `items`, in the active
-   * vault's `journal.db`. Returns `undefined` when the conversation doesn't
-   * exist there — including the mid-turn vault-switch case, which thereby fails
-   * closed (#280) — or is owned by another user. The first turn names the
-   * conversation.
-   */
+  /** `undefined` when the conversation is absent from the ACTIVE vault, which
+   *  is how a mid-turn vault switch fails closed (#280). */
   recordTurn(
     appId: string,
     input: RecordTurnInput
@@ -637,7 +487,7 @@ export class ConversationHistoryStore {
             : { workspacePath: att.workspacePath }),
         });
       }
-      // Trace items start at ordinal 1 — the inbound message is ordinal 0.
+      // Ordinal 0 is the inbound message.
       input.nodes.forEach((node, i) => {
         const itemId = recordNode(store, turnId, i + 1, node);
         if (node.kind !== "tool") return;
@@ -690,13 +540,6 @@ export class ConversationHistoryStore {
     return { turnId };
   }
 
-  /**
-   * Look up an already-recorded turn by its client idempotency key (#420).
-   * Returns the replayable answer (final text or error + usage) so the turn
-   * route can stream a duplicate POST's result straight from the ledger instead
-   * of re-running the model. Undefined when no turn with that key exists on the
-   * conversation, or the conversation isn't owned by `appId`.
-   */
   findRecordedTurn(
     appId: string,
     conversationId: string,
@@ -732,7 +575,6 @@ export class ConversationHistoryStore {
     };
   }
 
-  /** Bump turn_count + persist the harness-resume handle. */
   noteTurn(
     appId: string,
     sessionId: string,
@@ -750,7 +592,7 @@ export class ConversationHistoryStore {
     return this.getSessionMeta(appId, sessionId);
   }
 
-  /** Internal ACP resume state; unlike `ConversationSummary`, never crosses the client wire. */
+  /** Never crosses the client wire. */
   getHarnessResumeState(
     appId: string,
     sessionId: string,
@@ -780,11 +622,9 @@ export class ConversationHistoryStore {
         hydratedThroughSeq: binding.hydratedThroughSeq,
       };
     }
-    // A targeted lookup asks only for that harness's resumable binding.
-    // Falling back to the conversation's different active harness would
-    // pair the wrong opaque session id with the requested harness. A miss is
-    // `undefined` — an empty object reads as "state found, all fields absent"
-    // at every call site that only truthiness-tests the result.
+    // Falling back to a different active harness would pair the wrong opaque
+    // session id with the requested one. A miss is `undefined`, never `{}` —
+    // call sites truthiness-test the result.
     if (harnessKind) return undefined;
     return {
       ...(meta.harnessKind ? { kind: meta.harnessKind } : {}),
@@ -805,11 +645,8 @@ export class ConversationHistoryStore {
     store.markHarnessBindingStale(bindingId);
   }
 
-  /**
-   * Live, custody-safe delta for an ACP binding. Pruned/archive-custody rows
-   * never enter this path; only turns still present in the canonical ledger
-   * after the binding's watermark are folded.
-   */
+  /** Custody-safe: pruned rows never enter this path, only turns still in the
+   *  ledger after the binding's watermark. */
   getHydrationDelta(
     appId: string,
     conversationId: string,
@@ -818,8 +655,7 @@ export class ConversationHistoryStore {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, conversationId)) return undefined;
     const all = store.listTurns(conversationId);
-    // `seq` starts at 0, so the empty-ledger watermark is -1 — 0 would claim
-    // the first turn was already hydrated.
+    // `seq` starts at 0, so the empty-ledger watermark is -1.
     const throughSeq = all.at(-1)?.seq ?? -1;
     const turns = all.filter((turn) => turn.seq > afterSeq);
     const itemsByTurn = new Map<string, Item[]>();
@@ -891,33 +727,21 @@ export class ConversationHistoryStore {
   }
 }
 
-/** Inputs to the transcript fold — live-only or live-merged-with-archived. */
 interface TranscriptSources {
-  /** Turns to render, ascending by seq (archived + live merged for rehydration). */
   turns: Turn[];
-  /** Each turn's items (from the ledger for live turns, the segment for archived). */
   itemsByTurn: Map<string, Item[]>;
-  /** Attachment payloads for a `message_in` item (ledger query or segment rows). */
   attachmentsOf: (itemId: string) => ConversationAttachmentPayload[];
-  /** True when a turn was rehydrated from a pruned segment — marks it read-only. */
   isArchived: (turnId: string) => boolean;
 }
 
-/**
- * Reconstruct the renderer transcript from turns + their items (#190),
- * collapsing retry families into one row per family with a sibling pager
- * (#420). A rehydrated turn (#438) marks each of its message
- * payloads `fromArchive: true` so the surface renders a "from the archive"
- * state; nothing else about the row changes. Pure — no store access — so the
- * live path and the archive-merged path share exactly one fold.
- */
+/** PURE — no store access — so the live and archive-merged paths share ONE
+ *  fold, collapsing retry families into a sibling pager (#420). */
 function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
   const { turns, itemsByTurn, attachmentsOf, isArchived } = src;
   const messages: ConversationMessageRow[] = [];
   let idx = 0;
 
-  // The terminal `step` item's parsed answer for a turn — the one attempt text
-  // the retry pager flips between (#420).
+  // The one attempt text the retry pager flips between (#420).
   const answerOf = (turnId: string): { text: string; error: boolean } => {
     const last = (itemsByTurn.get(turnId) ?? []).findLast(
       (it) => it.kind === "step"
@@ -925,9 +749,8 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
     return parseStepOutput(last?.outputJson);
   };
 
-  // Per-turn token/cost usage for the "this turn cost X" line (#420,
-  // Wave 2). Token sums + cost are the frozen denormalized rollup on the turn;
-  // the serving model comes off the terminal step. Absent on unpriced/legacy.
+  // The frozen denormalized rollup on the turn; the serving model comes off
+  // the terminal step.
   const usageOf = (turn: Turn): ConversationTurnUsage | undefined => {
     const step = (itemsByTurn.get(turn.turnId) ?? []).findLast(
       (it) => it.kind === "step"
@@ -948,13 +771,11 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
     return Object.keys(usage).length > 0 ? usage : undefined;
   };
 
-  // Collapse retries linear-with-retry: one row per *family*, showing the
-  // latest attempt inline, with sibling attempts carried for a client pager.
+  // One row per FAMILY: latest attempt inline, siblings for the pager.
   for (const family of groupRetryFamilies(turns)) {
     const root = family[0] as Turn;
     const active = family.at(-1) as Turn;
-    // A family archives/prunes as one contiguous range, so it is homogeneous —
-    // the root's archived state stands for the whole family.
+    // A family archives as one contiguous range, so the root's state stands.
     const arch = isArchived(root.turnId);
     const activeItems = itemsByTurn.get(active.turnId) ?? [];
     const terminalStepId = activeItems.findLast(
@@ -979,8 +800,7 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
           }
         : undefined;
 
-    // The user message rides once, from the root attempt (every retry
-    // re-sends the same prompt).
+    // Once, from the root attempt: every retry re-sends the same prompt.
     const userItem = (itemsByTurn.get(root.turnId) ?? []).find(
       (it) => it.kind === "message_in"
     );
@@ -1015,8 +835,7 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
           });
           continue;
         }
-        // Only the terminal step carries turn identity / feedback / the retry
-        // pager — interim steps stay plain.
+        // Only the terminal step carries identity, feedback and the pager.
         const terminal = item.itemId === terminalStepId;
         messages.push({
           idx: idx++,
@@ -1163,10 +982,6 @@ function recordNode(
   return itemId;
 }
 
-/**
- * Inclusive `seq` bounds of a turn page — scopes the batched item/attachment
- * reads to the same window as the turns (#659).
- */
 function seqRangeOf(turns: readonly Turn[]): {
   fromSeq?: number;
   toSeq?: number;
@@ -1175,12 +990,6 @@ function seqRangeOf(turns: readonly Turn[]): {
   return { fromSeq: turns[0]!.seq, toSeq: turns.at(-1)!.seq };
 }
 
-/**
- * The in-memory equivalent of `listTurnWindow`, for the archive-merged path
- * where the window cannot be expressed in SQL. Same contract: strictly older
- * than `beforeSeq`, newest `limit` of what remains, oldest-first, and
- * `hasMore` iff something was cut from the older end.
- */
 function windowMerged(
   merged: readonly Turn[],
   window: TranscriptWindow
@@ -1199,11 +1008,8 @@ function windowMerged(
   return { turns: eligible.slice(eligible.length - limit), hasMore: true };
 }
 
-/**
- * Attachment rows → the wire payload. One mapper for both sources — live rows
- * and rehydrated archive rows — so the two can never drift over the one
- * batched read per conversation (#659).
- */
+/** ONE mapper for live rows and rehydrated archive rows, so the two cannot
+ *  drift (#659). */
 function attachmentPayloads(
   appId: string,
   attachments:
@@ -1258,6 +1064,3 @@ export function deriveTitle(text: string): string {
   if (cleaned.length <= 60) return cleaned;
   return `${cleaned.slice(0, 57)}…`;
 }
-
-// HTTP route dispatcher lives in conversation-routes.ts to keep this file
-// focused on the facade + fold. Re-exported below from the package index.

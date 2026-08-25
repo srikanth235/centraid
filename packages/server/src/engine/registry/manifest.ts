@@ -1,33 +1,17 @@
-// governance: allow-repo-hygiene file-size-limit the manifest types + their one JSON meta-schema + the validator must move together — the ext block (#286) grew all three in lockstep
+// governance: allow-repo-hygiene file-size-limit the manifest types, their JSON meta-schema and the validator only ever change together
 /**
- * App manifest — the per-app machine-readable contract the dispatcher
- * routes declared handlers against (#107, narrowed by #286 phase 2).
- *
- * The manifest lives on disk as `app.json` inside each app's code dir
- * (alongside `actions/`, `queries/`). It is the single source of truth
- * for "what handlers exist, what input do they accept, what do they
- * return" — handler files themselves are pure function bodies, no
- * JSDoc-driven validation — plus the app's whole data declaration: the
- * `vault` block (requested canonical scopes) and the `ext` block
- * (extension tables the gateway hosts inside vault.db).
- *
- * Schemas in `input` / `output` are arbitrary JSON Schema (draft
- * 2020-12) — that's what Anthropic tool-use, OpenAI functions, MCP and
- * OpenAPI all consume, and what the builder LLM natively knows how to
- * emit. They are validated at call time by Ajv (see `dispatcher.ts`).
- *
- * `manifestVersion: 1` is required at the root — the dispatcher rejects
- * unsupported versions explicitly so future incompatible changes fail
- * loudly. Cheap insurance.
+ * App manifest — the per-app contract on disk as `app.json`, and the single
+ * source of truth for what handlers exist and what they accept (handler files
+ * are pure function bodies) plus the `vault` and `ext` data declarations.
+ * `manifestVersion` is required at the root so a future incompatible change
+ * fails loudly instead of reading as an old manifest.
  */
 
 import type { ValidateFunction } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
 
-/** Current manifest schema version. Bump on any incompatible field change. */
 export const MANIFEST_VERSION = 1;
 
-/** Filename inside an app's code dir. */
 export const APP_MANIFEST_FILE = "app.json";
 
 export type ManifestValidationCode =
@@ -40,12 +24,6 @@ export type ManifestValidationCode =
   | "duplicate_handler"
   | "reserved_handler_name";
 
-/**
- * Names starting with `_` are reserved for plugin internals; no built-in
- * claims one today and the namespace stays reserved regardless.
- * App authors cannot declare an action or query with such a name —
- * `validateManifest` refuses it explicitly at load time.
- */
 export const RESERVED_HANDLER_PREFIX = "_";
 
 export function isReservedHandlerName(name: string): boolean {
@@ -63,7 +41,6 @@ export class ManifestError extends Error {
   }
 }
 
-/** A JSON Schema fragment — kept as an opaque record. Validated by Ajv at use. */
 export type JsonSchema = Record<string, unknown>;
 
 export type HandlerConfirmation = "none" | "required";
@@ -72,16 +49,10 @@ export type AppActionSideEffect = "vault-write";
 export interface ManifestActionEntry {
   readonly name: string;
   readonly description?: string;
-  /**
-   * Chat-side confirmation policy. The dispatcher itself is
-   * permissionless — the conversation/harness surface checks this field before
-   * invoking autonomously and prompts the user when `"required"`.
-   * Multi-caller RBAC is a follow-up; this is the v1 lever.
-   */
+  /** The dispatcher is PERMISSIONLESS; the conversation surface checks this. */
   readonly confirmation: HandlerConfirmation;
   readonly input: JsonSchema;
   readonly output?: JsonSchema;
-  /** Tables this action writes — surfaced for chat permissions / docs. */
   readonly writes?: readonly string[];
 }
 
@@ -93,30 +64,18 @@ export interface ManifestQueryEntry {
   readonly reads?: readonly string[];
 }
 
-/**
- * One per-app aesthetic knob — declared in `app.json#knobs` and surfaced
- * in the desktop's per-app settings popover. The runtime routes any
- * `app*` key dynamically (see `settings-merge.ts`), so adding/removing
- * a knob is purely a manifest edit + matching CSS in `app.css`.
- */
 export interface ManifestKnobOption {
   readonly value: string;
   readonly label: string;
 }
 export interface ManifestKnob {
-  /** Camel-cased `app*` settings key (e.g. `appFont`, `appColor`). */
   readonly key: string;
-  /** Display label shown in the popover row. */
   readonly label: string;
-  /** Control type. `segmented` for discrete values, `swatch` for colour. */
   readonly type: "segmented" | "swatch";
-  /** Value to assume when the per-app table has no row for this knob. */
   readonly default: string;
-  /** Choices the user picks from. */
   readonly options: readonly ManifestKnobOption[];
 }
 
-/** One vault scope an app requests: schema-wide or a single table. */
 export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
@@ -129,34 +88,21 @@ export interface ManifestVaultScope {
   readonly fieldMask?: readonly string[];
 }
 
-/**
- * Declared personal-vault access (duaility §12). The block is a *request*,
- * not a grant: the owner approves it explicitly (deny-by-default until
- * then) and the host records the consent in the vault's own model.
- * `purpose` is a DPV notation, e.g. `dpv:ServiceProvision`.
- */
+/** A REQUEST, never a grant: deny-by-default until the owner approves. */
 export interface ManifestVaultBlock {
   readonly purpose: string;
-  /** Owner-facing rationale shown in the approval UI. */
   readonly why?: string;
   readonly scopes: readonly ManifestVaultScope[];
 }
 
-/**
- * The ext band (#286 phase 2, Lane 2 of the two-lane rule): tables
- * the app declares and the GATEWAY creates inside vault.db as
- * `ext_<appId>_<table>` — for shapes the canonical ontology genuinely
- * doesn't cover. Structurally mirrors the vault package's `ExtTableSpec`
- * (app-engine stays vault-agnostic; the gateway host validates the specs
- * with the vault's own validator before applying).
- */
+/** Declared by the app, created by the GATEWAY inside vault.db (#286).
+ *  Mirrors the vault's `ExtTableSpec`; app-engine stays vault-agnostic. */
 export interface ManifestExtColumn {
   readonly name: string;
   readonly type: "text" | "integer" | "real" | "blob";
   readonly primaryKey?: boolean;
   readonly notNull?: boolean;
   readonly default?: string | number;
-  /** FK into the vault (`core.party`) or a same-app ext table. */
   readonly references?: string;
 }
 
@@ -169,7 +115,6 @@ export interface ManifestExtTable {
   readonly name: string;
   readonly columns: readonly ManifestExtColumn[];
   readonly indexes?: readonly ManifestExtIndex[];
-  /** Text columns to FTS-index (opt-in search). */
   readonly searchable?: readonly string[];
 }
 
@@ -177,48 +122,18 @@ export interface ManifestExtBlock {
   readonly tables: readonly ManifestExtTable[];
 }
 
-/**
- * The seat profile block (docs/blueprint-seats.md, decision S1/S2/S5) —
- * where this app's bytes live and which way they flow, machine-readable so
- * a harness (or the runtime) never has to re-derive the split from
- * prose. `byteBearing: false` marks a record-only app (S2): its payloads
- * are rows, the replica gives every seat full offline for free, and it
- * must not import custody machinery (`local-only` / `remote-only` /
- * `backupState` / the transfer engine) — see
- * `packages/blueprints/src/blueprint-seats.test.ts` for the tripwire.
- * `disabledOn` lists seats the app refuses to mount on (S5: Locker
- * disables `"viewer"`) — `InlineAppRoute` reads this field, generically,
- * off the manifest rather than special-casing an app id.
- */
+/** `byteBearing: false` is a record-only app and must not import custody
+ *  machinery (docs/blueprint-seats.md S2; `blueprint-seats.test.ts` is the
+ *  tripwire). `disabledOn` is read generically, never per app id. */
 export interface ManifestSeatsBlock {
-  /** Whether this app's payloads carry bytes (not just rows) — the S2 class split. */
   readonly byteBearing: boolean;
-  /** Frame-owned origin acts (camera, scanner, voice, autofill…) this app registers targets for. */
   readonly originActs: readonly string[];
-  /** Seats (docs/platform-gating.md `SEAT`) this app refuses to mount on. */
   readonly disabledOn: readonly string[];
-  /** The incumbent product this app's behaviour defaults to when a design question has no handoff answer. */
   readonly northStar: string;
 }
 
-/**
- * The seven canonical designed states every product surface has to be able to
- * be in (#839). They are facts about the vault/replica plane, not
- * per-app inventions:
- *
- *  * `dayone`   — first run: the app holds nothing at all yet.
- *  * `pending`  — a local write is projected but not settled
- *                 (`apps/_shared/pending-overlay.ts`).
- *  * `offline`  — the gateway is out of reach (the reachability contract,
- *                 `libraryReachability` / `data-gateway-status`).
- *  * `stale`    — a replica answered but is behind the vault.
- *  * `conflict` — the edited row changed under an offline intent.
- *  * `parked`   — the write waits on an owner's or steward's approval.
- *  * `denied`   — the vault refused the read or the write.
- *
- * Order is the issue's own; it is the order the manifests declare and the
- * order a report renders, so keep it stable.
- */
+/** Facts about the vault/replica plane, never per-app inventions (#839). The
+ *  ORDER is what manifests declare and reports render in — keep it stable. */
 export const CANONICAL_DESIGNED_STATES = [
   "dayone",
   "pending",
@@ -231,28 +146,16 @@ export const CANONICAL_DESIGNED_STATES = [
 
 export type ManifestDesignedState = (typeof CANONICAL_DESIGNED_STATES)[number];
 
-/**
- * One canonical state this app structurally cannot be in. `reason` says why the
- * case is unrepresentable (not "unbuilt" — an unbuilt designed state is a gap,
- * and a gap belongs in `designed`); `citation` points at the doc anchor that
- * settles it, the same evidence discipline the engine contracts use.
- */
+/** `reason` says why the case is UNREPRESENTABLE; an unbuilt state is a gap
+ *  and belongs in `designed`. */
 export interface ManifestStateExclusion {
   readonly state: ManifestDesignedState;
   readonly reason: string;
   readonly citation: string;
 }
 
-/**
- * The designed-state partition (#839). Machine-readable so a harness
- * never has to re-derive "which states does this app owe a member" from copy
- * tables and component names.
- *
- * The partition is CLOSED: every one of `CANONICAL_DESIGNED_STATES` appears in
- * exactly one of `designed` / `excluded`, so silence about a state is
- * unexpressible — a manifest that simply forgets `conflict` fails validation
- * rather than reading as "conflict does not apply here".
- */
+/** A CLOSED partition (#839): a manifest that forgets a state fails
+ *  validation instead of reading as "it does not apply here". */
 export interface ManifestStatesBlock {
   readonly designed: readonly ManifestDesignedState[];
   readonly excluded: readonly ManifestStateExclusion[];
@@ -263,40 +166,19 @@ export interface Manifest {
   readonly id: string;
   readonly name: string;
   readonly version: string;
-  /**
-   * What surface the app belongs to. `'automation'` marks a UI-less app
-   * that exists only to host automations (it shows on the Automations
-   * page, not "My apps"); `'app'` — the default when omitted — is a normal
-   * UI app. The manifest, not the folder id, is the source of truth for "is
-   * this an automation app".
-   */
   readonly kind?: "app" | "automation";
   readonly description?: string;
-  /** Inherited side-effect class for every action; new classes require a runtime consent seam. */
   readonly actionSideEffect?: AppActionSideEffect;
   readonly actions: readonly ManifestActionEntry[];
   readonly queries: readonly ManifestQueryEntry[];
-  /** Per-app aesthetic knobs (font, width, radius, colour…). Optional. */
   readonly knobs?: readonly ManifestKnob[];
-  /** Requested personal-vault access (duaility §12). Optional. */
   readonly vault?: ManifestVaultBlock;
-  /** Declared extension tables, hosted inside vault.db (#286). Optional. */
   readonly ext?: ManifestExtBlock;
-  /** Seat profile (docs/blueprint-seats.md). Optional for compatibility, but
-   *  every bundled blueprint declares one — see the blueprints package's
-   *  `blueprint-seats.test.ts`. */
   readonly seats?: ManifestSeatsBlock;
-  /** Designed-state partition (#839). Optional at the schema level so
-   *  UI-less automation manifests keep validating without one; every bundled
-   *  blueprint declares one — see `packages/blueprints/src/app-states.test.ts`. */
   readonly states?: ManifestStatesBlock;
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Meta-schema document — the JSON Schema *for the manifest itself*. Exported
-// so builder consumers (and external tooling) can validate `app.json` against
-// it without depending on our runtime module.
-// ────────────────────────────────────────────────────────────────────────────
+// The JSON Schema for the manifest ITSELF, exported for external tooling.
 export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://centraid.dev/schemas/app-manifest/v1.json",
@@ -498,19 +380,9 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
   },
 };
 
-// ────────────────────────────────────────────────────────────────────────────
-// Validators
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Shared Ajv instance for input/output schema validation. Configured for
- * draft 2020-12 (the schema dialect the manifest uses).
- *
- * `coerceTypes` is off — handler inputs come from JSON so the types are
- * already settled. `useDefaults` is off — we don't want a JSON Schema
- * default to mask a missing required field. `removeAdditional` is off —
- * the manifest may set `additionalProperties: true` deliberately.
- */
+/** `coerceTypes` off (JSON inputs are typed), `useDefaults` off (it would mask
+ *  a missing required field), `removeAdditional` off (a manifest may set
+ *  `additionalProperties: true` deliberately). */
 let sharedAjv: Ajv2020 | undefined;
 function getAjv(): Ajv2020 {
   if (!sharedAjv) {
@@ -532,19 +404,10 @@ function getManifestValidator(): ValidateFunction {
   return manifestValidator;
 }
 
-/**
- * Compile a JSON Schema into an Ajv validator. Throws if the schema
- * itself is malformed. Callers cache by reference (typically per
- * codeDir + handler name) to avoid recompiling per call.
- */
 export function compileSchema(schema: JsonSchema): ValidateFunction {
   return getAjv().compile(schema);
 }
 
-/**
- * Parse + validate `app.json` content. Throws `ManifestError` on any
- * shape problem.
- */
 export function parseManifest(json: string): Manifest {
   let raw: unknown;
   try {
@@ -558,16 +421,7 @@ export function parseManifest(json: string): Manifest {
   return validateManifest(raw);
 }
 
-/**
- * Validate a parsed manifest object. Returns the typed manifest on
- * success; throws `ManifestError` on any shape problem.
- *
- * Validation runs in two passes:
- *   1. Ajv against `MANIFEST_JSON_SCHEMA` — catches type / required
- *      field problems with structured error paths.
- *   2. Manual cross-cuts — `manifestVersion` mustmatch, no duplicate
- *      handler names within an app.
- */
+/** Ajv, then the manual cross-cuts a schema cannot state. */
 export function validateManifest(raw: unknown): Manifest {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new ManifestError(
@@ -577,8 +431,6 @@ export function validateManifest(raw: unknown): Manifest {
   }
   const r = raw as Record<string, unknown>;
 
-  // Explicit, friendly check for missing manifestVersion — Ajv's
-  // "required" error is less actionable for the most common drift case.
   if (r.manifestVersion === undefined) {
     throw new ManifestError(
       "unsupported_manifest_version",
@@ -607,10 +459,8 @@ export function validateManifest(raw: unknown): Manifest {
     );
   }
 
-  // Cross-cut: detect duplicate handler names. The same name appearing
-  // in both actions and queries is *allowed* — they're invoked through
-  // different tools — but two actions with the same name would mean the
-  // dispatcher silently picks one, which is a footgun.
+  // One name in BOTH actions and queries is allowed (different tools); two
+  // actions with one name would let the dispatcher silently pick one.
   const actions = (r.actions as ManifestActionEntry[] | undefined) ?? [];
   const queries = (r.queries as ManifestQueryEntry[] | undefined) ?? [];
 
@@ -651,10 +501,8 @@ export function validateManifest(raw: unknown): Manifest {
     seenQueries.add(q.name);
   }
 
-  // Cross-cut: the designed-state partition is CLOSED. Ajv can say each entry
-  // is one of the seven; only this pass can say each of the seven is claimed
-  // exactly once. Without it a manifest could designate `denied` twice and
-  // never mention `conflict`, and the silence would read as a non-goal.
+  // Ajv can say each entry is one of the seven; only this pass can say each of
+  // the seven is claimed exactly once.
   const states = r.states as ManifestStatesBlock | undefined;
   if (states && typeof states === "object") {
     const claimed = new Map<ManifestDesignedState, "designed" | "excluded">();
@@ -714,7 +562,6 @@ export function validateManifest(raw: unknown): Manifest {
   };
 }
 
-/** Look up an action entry by name. */
 export function findAction(
   manifest: Manifest,
   name: string
@@ -722,7 +569,6 @@ export function findAction(
   return manifest.actions.find((a) => a.name === name);
 }
 
-/** Look up a query entry by name. */
 export function findQuery(
   manifest: Manifest,
   name: string

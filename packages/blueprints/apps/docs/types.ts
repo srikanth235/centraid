@@ -1,55 +1,44 @@
 import type { SearchStatus } from "../_shared/search-scaffold.ts";
 import type { DriveFilters } from "./filters.ts";
-// Shared page-side shapes for the docs app. Type-only — no
-// runtime members — so every importer uses `import type`, which esbuild strips
-// at serve time (a value import of this module would 404). Grounded in the
-// query payloads: `DriveDoc` is the decorated document row the `drive`/`search`
-// queries return (the drive projection, one shape row-for-row across browse and
-// search, `snippet` present only on a search hit); `Folder` is the folders-scheme
-// concept projected as a nav row; `VersionEntry`/`ActivityEvent` are what the
-// `history`/`activity` reads hand the History/Activity panels.
+// Type-only — no runtime members — so every importer uses `import type`, which
+// esbuild strips at serve time; a value import of this module would 404. The
+// shapes are grounded in the query payloads: `DriveDoc` is one shape row-for-row
+// across browse and search, `Folder` a folders-scheme concept as a nav row.
 import type { KIND_ICONS } from "./icons.ts";
 import type { ShelfId } from "./shelves.ts";
 
-/** One person a share reaches (queries/_shared.ts `readSharesByDocument`). */
+/** One person a share reaches. */
 export interface SharedMember {
   party_id: string;
   label: string;
   capability: "read" | "read+write";
-  /** `invited` until their own vault accepts. A member who refused is absent. */
+  /** `invited` until their vault accepts; a refuser is absent entirely. */
   status: "invited" | "current";
 }
 
-/**
- * One live share a document sits inside — a commons grant over the document
- * itself or over a folder above it (#821).
- */
+/** A commons grant over the document itself or a folder above it (#821). */
 export interface SharedWith {
   grant_id: string;
   circle_id: string;
-  /** The circle's own name, or — for an implicit circle, whose stored name is
-   *  a machine string — the recipients' names. */
+  /** The circle's name, or the recipients' for an implicit circle. */
   label: string;
   via: "document" | "folder";
-  /** The granted container: the folder whose name the rail prints under
-   *  `via: "folder"`, and the document's own id otherwise. */
+  /** The folder the rail names under `via: "folder"`, else the document. */
   container_id: string;
   members: SharedMember[];
   member_count: number;
   pending_count: number;
 }
 
-/** One free-form label on a document (core.tag_item over the shared Tags scheme). */
+/** One free-form label (core.tag_item over the shared Tags scheme). */
 export interface DocTag {
   tag_id: string;
   label: string;
 }
 
 /**
- * A decorated document row — a `core.document` wrapper joined to its current
- * content item (#352). `document_id` is identity (selection, details,
- * quick-look, folders/star all key off it); `content_id` names the HEAD
- * revision whose bytes render.
+ * `document_id` is identity — selection, details, quick-look and folders/star
+ * all key off it; `content_id` names the HEAD revision whose bytes render.
  */
 export interface DriveDoc {
   document_id: string;
@@ -65,68 +54,56 @@ export interface DriveDoc {
   starred: boolean;
   trashed: boolean;
   purge_at: string | null;
-  /** The vault's FTS hit snippet — present only on a `search` result row. */
+  /** Present only on a `search` result row. */
   snippet?: string;
   tags: DocTag[];
   custody_state: string | null;
   /**
-   * The live shares this document sits inside (#821). `[]` is "shared
-   * with nobody"; `null` is "the share reads were denied", which the details
-   * rail and the People filter axis both treat as UNKNOWN — the fact is absent
-   * rather than negative, so nothing on screen says "not shared".
+   * `[]` is "shared with nobody"; `null` is "the share reads were denied", which
+   * both readers treat as UNKNOWN — absent, not negative, so nothing on screen
+   * says "not shared" (#821).
    */
   shared_with: SharedWith[] | null;
 }
 
 /**
- * What the drive may be ordered by — one key per sortable column in the row
- * set's head (§4.1), because the head IS the sort control and a key with no
- * column would be an order nobody can see or reverse.
- *
- * `changed`, not `added`: the drive's default is last change, newest first,
- * and Recently changed is a shelf over the same fact. Nothing in the product
- * records when a document was OPENED, so that is not offered.
+ * One key per sortable column: the head IS the sort control, so a key with no
+ * column is an order nobody can see or reverse. `changed`, not `added` — and
+ * nothing in the product records when a document was OPENED.
  */
 export type SortKey = "changed" | "kind" | "name" | "owner" | "size";
 
-/**
- * One named order in the sort menu (§4.1's `DSORTS`) — a key AND a direction,
- * because "Date changed" is two orders and a member picking from a list is
- * picking one of them, not a column to press twice.
- */
+/** A key AND a direction: "Date changed" is two orders, and a member picking
+ *  from a list is picking one of them, not a column to press twice. */
 export interface SortOption {
   key: SortKey;
   dir: 1 | -1;
-  /** The property being ordered — "Date changed". */
+  /** e.g. "Date changed". */
   name: string;
-  /** Which way — "newest first". */
+  /** e.g. "newest first". */
   sub: string;
 }
 
 /**
- * One file in the upload queue (§4.4's `bulk`).
- *
- * FOUR STATES, NOT A PERCENTAGE. The handoff draws a determinate bar per file,
- * which is honest where the transport reports bytes sent; this one stages a
- * whole file and then commits it, so the only truthful readings are "not
- * started", "in flight", "landed" and "did not land". A bar creeping to 62% on
- * a number nobody measured is worse than a word that is true.
+ * FOUR STATES, NOT A PERCENTAGE: this transport stages a whole file then commits
+ * it, so the only truthful readings are not-started, in-flight, landed and
+ * did-not-land. A bar creeping to 62% on a number nobody measured is worse.
  */
 export interface UploadItem {
   name: string;
   state: "waiting" | "running" | "landed" | "parked" | "failed";
-  /** Why it did not land, in the member's words. Only on `failed`. */
+  /** In the member's words. Only on `failed`. */
   reason?: string;
 }
 
-/** A folder — a folders-scheme SKOS concept, projected as a nav row. */
+/** A folders-scheme SKOS concept, projected as a nav row. */
 export interface Folder {
   folder_id: string;
   name: string;
   parent_id: string | null;
 }
 
-/** One entry in a document's version chain (the `history` read). */
+/** One entry in a document's version chain. */
 export interface VersionEntry {
   content_id: string;
   media_type: string | null;
@@ -137,109 +114,89 @@ export interface VersionEntry {
   asserted_at: string;
 }
 
-/** One provenance event in a document's activity trail (the `activity` read). */
+/** One provenance event in a document's activity trail. */
 export interface ActivityEvent {
   activity: string;
   agent_kind: string;
   occurred_at: string;
 }
 
-/** The minimal projection the pure media/format helpers read off a doc. */
+/** The minimal projection the pure format helpers read. */
 export interface DocFields {
   media_type?: string | null;
   content_uri?: string | null;
   title?: string | null;
 }
 
-/** The blob custody projection in owner-facing words + the CSS tone it keys. */
+/** Custody in owner-facing words + the CSS tone it keys. */
 export type CustodyTone = "ok" | "warn" | "danger";
 export interface CustodyInfo {
   label: string;
   tone: CustodyTone;
 }
 
-/** The file-type metadata a media_type maps to (label/name/filter cat/tint var). */
+/** What a media_type maps to: label, name, filter cat, tint var. */
 export interface TypeMeta {
   label: string;
   name: string;
   cat: string;
   cv: string;
-  /** Which of `KIND_ICONS` (icons.ts) this kind wears in a row. Derived from
-   *  `cat` at the one place `cat` is decided, so a new kind cannot be added
+  /** Derived from `cat` where `cat` is decided, so a new kind cannot arrive
    *  with a colour and a word but no shape. */
   glyph: keyof typeof KIND_ICONS;
 }
 
-/**
- * The module-level `data` bag app.tsx mutates in place (never reassigned) and
- * logic.ts/nav.ts close over. The secret-free document/folder store.
- */
+/** Mutated in place, NEVER reassigned: logic.ts/nav.ts close over this object. */
 export interface AppData {
   folders: Folder[];
   documents: DriveDoc[];
   root_folder_id: string | null;
 }
 
-/**
- * The module-level `state` bag app.tsx mutates in place (never reassigned).
- * logic.ts/nav.ts close over this exact object at boot.
- */
+/** Mutated in place, NEVER reassigned: logic.ts/nav.ts close over it at boot. */
 export interface AppState {
   view: "grid" | "list";
   /**
-   * The current shelf (shelves.ts). Not a flat
-   * `NavKind = all|recent|starred|folder|trash` bag: a shelf is a value the
-   * strip, the band, the app bar, the breadcrumb and the row set all read, so
-   * expressing it as one id — with `null` for All and `folder:<id>` for one
-   * folder — is what keeps those five surfaces from disagreeing about where
-   * the member is. Nothing persists it.
+   * ONE id (`null` for All, `folder:<id>` for a folder), never a flat NavKind
+   * enum: five surfaces read it, and one value is what stops them disagreeing
+   * about where the member is. Nothing persists it.
    */
   shelf: ShelfId;
   /**
-   * The filter row's selections (§4.2), one per axis. Separate from the older
-   * `type`/`tag` chips because they are a different control with a different
-   * rule: the four axes COMPOSE, and §4.6's fourth empty variant is "a filter
-   * with no matches", which is only answerable if "is anything set" has one
-   * home (`filtersActive`).
+   * One per axis (§4.2). Separate from the older `type`/`tag` chips: the four
+   * axes COMPOSE, and §4.6's "a filter with no matches" is only answerable if
+   * "is anything set" has one home (`filtersActive`).
    */
   filters: DriveFilters;
   sortKey: SortKey;
   sortDir: 1 | -1;
   /**
-   * SELECTION IS A MODE, entered by the app bar's `Select` (§4.1's `showBox`).
-   * A checkbox on every row of every drive, forever, is a control the member
-   * did not ask for occupying the leading edge of the one thing they came to
-   * read. Leaving the mode clears `selected` — a selection nobody can see is a
-   * selection that will surprise the next command.
+   * SELECTION IS A MODE (§4.1): a checkbox on every row forever occupies the
+   * leading edge of the thing the member came to read. Leaving the mode clears
+   * `selected` — a selection nobody can see surprises the next command.
    */
   selecting: boolean;
   /**
-   * The upload queue, per file (§4.4's `bulk`). Empty while nothing is in
-   * flight and nothing has failed — a queue that has finished cleanly clears
-   * itself, and one that has NOT stays on screen until the member dismisses
-   * it, because "three did not land" is the sentence a disappearing toast
-   * loses.
+   * A clean queue clears itself; one with failures STAYS until dismissed,
+   * because "three did not land" is the sentence a disappearing toast loses.
    */
   uploadQueue: UploadItem[];
   tag: string;
   search: string;
   searchResults: DriveDoc[] | null;
   /**
-   * Which of the four honest states the Search shelf is in
-   * (`_shared/search-scaffold.ts`). READ, never inferred: a failed reach and
-   * an empty result set are different sentences, and collapsing them is
-   * exactly what the handoff forbids — "search will not pretend to have
-   * looked". `applySearch` sets this from what the read actually did.
+   * READ, never inferred: a failed reach and an empty result set are different
+   * sentences, and search will not pretend to have looked. `applySearch` sets
+   * this from what the read actually did.
    */
   searchStatus: SearchStatus;
   searchSeq: number;
   selected: Set<string>;
   anchorIndex: number | null;
   detailsId: string | null;
-  /** The document open on the STAGE (§7) — the one viewer, for every kind:
-   *  media on the theater ground, text on paper standing on it. */
+  /** The one viewer, for every kind (§7). */
   quickId: string | null;
-  /** The document whose version history (§6.2) is open, as its own route. */
+  /** Open as its own route (§6.2). */
   versionsId: string | null;
   newMenuOpen: boolean;
   creatingFolder: boolean;

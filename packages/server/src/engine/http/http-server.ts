@@ -21,159 +21,48 @@ import {
 
 export interface RuntimeHttpServerOptions {
   runtime: Runtime;
-  /** Host to bind. Defaults to `127.0.0.1` — loopback only. */
   host?: string;
-  /** Port. `0` (default) asks the OS for an ephemeral port. */
   port?: number;
-  /**
-   * Pre-shared bearer token required on every request.
-   * If omitted, a 32-byte random hex token is generated.
-   */
   token?: string;
-  /**
-   * Extra hostnames accepted in the Host header beyond the built-in
-   * loopback set (localhost / 127.0.0.1 / ::1). The bind `host` is added
-   * automatically. Used when a deployment configures non-loopback names
-   * (#504); defaults leave only loopback forms allowed.
-   */
   allowedHosts?: readonly string[];
-  /**
-   * Origins allowed for credentialed CORS (`Access-Control-Allow-Credentials`).
-   * Typically the PWA shell origins bound on control/app sessions. May be a
-   * getter so the host can reflect live session state without app-engine
-   * knowing about sessions. Bearer-intent requests may also receive
-   * credentialed CORS for their Origin (token is not ambient). See
-   * `decideCors` / SECURITY.md control-plane subsection.
-   */
   credentialedCorsOrigins?: readonly string[] | (() => readonly string[]);
-  /**
-   * Whether to mount `/_centraid-user/*` against `runtime.userStore`.
-   * Defaults to true when `runtime.userStore` is set; explicit `false`
-   * disables the route even if a store is attached (used by hosts that
-   * mount their own equivalent route).
-   */
   exposeUserStoreRoute?: boolean;
-  /**
-   * Backs `GET /_centraid-user/id` with the ACTIVE vault's owner party id —
-   * the one user identity that exists (#280). Without it the sub-route 404s.
-   */
   ownerIdProvider?: () => string;
-  /**
-   * Whether to mount `/_centraid-conversations/*` against `runtime.conversationHistoryStore`.
-   * Defaults to true when `runtime.conversationHistoryStore` is set; same opt-out
-   * pattern as `exposeUserStoreRoute`.
-   */
   exposeConversationRoute?: boolean;
-  /**
-   * Host-supplied route handlers run after auth but before
-   * `runtime.handle` (#137). Each returns `true` when it handled
-   * the request (response already sent), `false` to fall through.
-   * Tried in order. The gateway uses this to mount the apps-store
-   * publish/session surface without baking a git backend into
-   * `app-engine` (which the standalone daemon and desktop share).
-   */
   extraHandlers?: Array<
     (req: IncomingMessage, res: ServerResponse) => Promise<boolean>
   >;
-  /**
-   * Exact pathnames served WITHOUT the bearer check (#304). The one
-   * intended tenant is the OAuth consent callback — a provider redirects
-   * the owner's BROWSER here, which cannot carry the bearer; the request
-   * instead authenticates by its single-use unguessable `state` capability,
-   * minted by an authenticated authorize call and checked by the route
-   * handler. Match is on the exact pathname (query string free), never a
-   * prefix — a public path must never accidentally widen.
-   */
+  /** WITHOUT the bearer check (#304). EXACT match, never a prefix. */
   publicPaths?: readonly string[];
-  /**
-   * Path PREFIXES served WITHOUT the bearer check (#96). The
-   * intended tenant is the webhook-trigger route (`/_centraid-hook/<id>`,
-   * variable per automation) — the shared secret carried in the request
-   * itself IS the auth, checked by the route handler; requiring the
-   * gateway owner's bearer too would defeat the point of a webhook (the
-   * caller is a third-party service, not the owner). Unlike `publicPaths`
-   * this is a `startsWith` match, so a prefix here bypasses auth for its
-   * whole subtree — reserve it for routes whose handler enforces its own
-   * credential on every request.
-   */
+  /** A `startsWith` match (#96): a prefix bypasses auth for its WHOLE subtree,
+   *  so its handler must enforce its own credential on every request. */
   publicPathPrefixes?: readonly string[];
-  /**
-   * Pluggable bearer authorization (#376). When set, it REPLACES the
-   * single-shared-token equality check: called with the raw bearer string
-   * (Authorization header, `Bearer ` prefix stripped), it returns
-   * `{plane:'admin'}` for the landlord token, `{plane:'device',
-   * deviceKey}` for a per-device tenant token, or `undefined` to refuse
-   * the request with 401. On a `'device'` match, the caller's resolved
-   * `deviceKey` is stamped onto `AUTHED_DEVICE_HEADER` for downstream
-   * handlers to read — comparisons should be timing-safe, same
-   * expectation as the default `token` check. Absent → the original
-   * single-shared-token behavior (`opts.token`).
-   */
+  /** REPLACES the shared-token check; comparisons must be timing-safe. */
   authorizeBearer?: (bearer: string) => BearerAuthorization | undefined;
-  /** Optional cookie/request authorizer used by gateway-scoped browser app sessions. */
   authorizeRequest?: (req: IncomingMessage) => BearerAuthorization | undefined;
 }
 
 export interface RuntimeHttpServerHandle {
-  /** `http://<host>:<port>` — the base URL the renderer should target. */
   url: string;
-  /** Bearer token the renderer must send as `Authorization: Bearer <token>`. */
   token: string;
-  /** Stop the server. Resolves once the listener is closed. */
   close: () => Promise<void>;
 }
 
 const CONVERSATIONS_PREFIX = "/_centraid-conversations";
 const USER_STORE_PREFIX = "/_centraid-user";
 
-/**
- * Internal, server-stamped device-identity header (#376). Set ONLY
- * by `route()` below, ONLY after `authorizeBearer` resolves a presented
- * bearer to a device-plane token — never trust a client-supplied value:
- * every request has it deleted first, so a bearer-holder can never forge
- * an identity for a downstream handler (the gateway's `composedHandler`)
- * to trust.
- */
+/** Server-stamped, never client-supplied: deleted from every request before
+ *  auth, so a bearer-holder cannot forge a downstream identity (#376). */
 export const AUTHED_DEVICE_HEADER = "x-centraid-authed-device";
-/**
- * Internal, server-stamped marker naming the plane a presented credential
- * resolved to (#568). Same trust rules as
- * `AUTHED_DEVICE_HEADER`: deleted from every inbound request before auth
- * runs, set only by `route()` on success. Public paths do not REQUIRE a
- * credential, but when one is presented and valid this still records it —
- * that is how a public handshake route can withhold a secret from an
- * anonymous caller while still answering it.
- */
 export const AUTHED_PLANE_HEADER = "x-centraid-authed-plane";
 const WEB_APP_HEADER = "x-centraid-web-app";
 
-/** What a presented bearer resolved to — the shared landlord token, or one tenant's device. */
 export type BearerAuthorization =
   | { plane: "admin" }
   | { plane: "device"; deviceKey: string };
 
-/**
- * CORS for the loopback control plane (#504 batch 0).
- *
- * Bearer-only clients (desktop thin client, device tokens) have no ambient
- * credentials: reflecting their Origin with credentials is fine when the
- * request signals Bearer intent, and `Origin: null` / missing Origin still
- * get `*` for `file://` renderers.
- *
- * Cookie/session clients (PWA) must never receive
- * `Access-Control-Allow-Origin: <attacker>` paired with
- * `Access-Control-Allow-Credentials: true`. Credentialed CORS is limited to
- * `credentialedCorsOrigins` (session-bound shell origins) or Bearer intent.
- * Foreign cookie-only origins get `*` without credentials so the browser
- * cannot expose the body under `credentials: 'include'`.
- *
- * Set on EVERY response (including 401 and SSE): called at the top of
- * `route()` before handlers; Node merges `setHeader` into later `writeHead`.
- *
- * Preflight (OPTIONS) stays before auth: browsers omit Authorization on the
- * preflight itself; we detect Bearer intent via
- * Access-Control-Request-Headers. Auth still gates the real request.
- */
+/** Cookie/session clients must never get `Allow-Origin: <attacker>` with
+ *  `Allow-Credentials: true` (#504). Set on EVERY response. */
 function setCorsHeaders(
   req: IncomingMessage,
   res: ServerResponse,
@@ -227,23 +116,8 @@ function resolveAllowedHosts(
   return extra;
 }
 
-/**
- * The three responses this module writes ITSELF, before or instead of any
- * route handler: `invalid_host` (the Host allowlist, ahead of everything),
- * `unauthorized` (the bearer gate), and `internal_server_error` (the final
- * catch at the transport boundary).
- *
- * They exist precisely because no handler ran, so they cannot reach
- * `http-utils.ts`'s `sendJson`, which is where `X-Content-Type-Options:
- * nosniff` is set for every other JSON response on this server. One writer
- * instead of three hand-rolled `res.end(JSON.stringify(...))` calls, so the
- * next transport-boundary response cannot forget the header either (#846 P10,
- * #844).
- *
- * `close` sets `Connection: close`: right for a refused Host and for a route
- * that already threw, wrong for a 401, which is an ordinary answer on a
- * connection the caller may reasonably retry on.
- */
+/** Written before or instead of any handler, so they cannot reach `sendJson`
+ *  and its `nosniff` (#846 P10). `close` is wrong for a 401. */
 function endTransportJson(
   res: ServerResponse,
   status: number,
@@ -257,22 +131,8 @@ function endTransportJson(
   res.end(JSON.stringify(body));
 }
 
-/**
- * Spawn an HTTP server in front of a `Runtime`, suitable for use as the
- * in-process embedded runtime inside the Electron desktop app.
- *
- * Auth model:
- *   - Loopback bind by default (`127.0.0.1`).
- *   - Host header allowlisted (loopback forms + configured names) — DNS
- *     rebinding is refused before auth/handlers (#504).
- *   - All requests require `Authorization: Bearer <token>` (or a host-supplied
- *     cookie authorizer via `authorizeRequest`).
- *   - The token is randomly minted on `start()` unless one is provided.
- *
- * When `conversationDbPath` is provided, the server also serves the
- * `/_centraid-conversations/*` HTTP surface (same shape the standalone
- * daemon exposes on the remote gateway). The same bearer check applies.
- */
+/** Loopback bind, an allowlisted Host header (DNS rebinding refused before
+ *  auth or handlers, #504), a bearer unless a public path says otherwise. */
 export async function startRuntimeHttpServer(
   opts: RuntimeHttpServerOptions
 ): Promise<RuntimeHttpServerHandle> {
@@ -281,11 +141,6 @@ export async function startRuntimeHttpServer(
   const token = opts.token ?? crypto.randomBytes(32).toString("hex");
   const allowedHosts = resolveAllowedHosts(opts, host);
 
-  // Both stores are owned by the caller (a single shared gateway DB
-  // provider underneath). We mount the routes only if the corresponding
-  // store is attached AND the host hasn't disabled it. The handlers
-  // resolve the stores lazily through getters so a future runtime that
-  // lazy-creates them still works.
   const userStore = opts.runtime.userStore;
   const exposeUserStore =
     opts.exposeUserStoreRoute !== false && userStore !== undefined;
@@ -303,14 +158,8 @@ export async function startRuntimeHttpServer(
 
   const server = http.createServer((req, res) => {
     void route(req, res).catch(() => {
-      // Route handlers normally translate their own domain errors. This is the
-      // final transport boundary: never leave a rejected async handler as an
-      // unhandled rejection, and never try to serialize JSON after bytes have
-      // already been sent.
       if (res.destroyed) return;
       if (res.headersSent) {
-        // Do not pass the handler error to destroy(): that re-emits it on the
-        // response and can turn containment into an uncaught transport error.
         res.destroy();
         return;
       }
@@ -323,7 +172,6 @@ export async function startRuntimeHttpServer(
     req: IncomingMessage,
     res: ServerResponse
   ): Promise<void> {
-    // Host check first — refuse DNS-rebinding before CORS, auth, or handlers.
     if (!isAllowedHostHeader(req.headers.host, allowedHosts)) {
       endTransportJson(
         res,
@@ -335,10 +183,7 @@ export async function startRuntimeHttpServer(
     }
 
     setCorsHeaders(req, res, opts.credentialedCorsOrigins);
-    // Preflight carries no Authorization header — answer it before the
-    // Bearer check, or the browser never sends the real request. CORS
-    // headers above already distinguish credentialed allowlist / Bearer
-    // intent from foreign cookie-only origins (#504).
+    // Preflight carries no Authorization header: answer it before the gate.
     if ((req.method ?? "").toUpperCase() === "OPTIONS") {
       res.statusCode = 204;
       res.end();
@@ -350,9 +195,8 @@ export async function startRuntimeHttpServer(
       (opts.publicPathPrefixes ?? []).some((prefix) =>
         pathname.startsWith(prefix)
       );
-    // Never trust a client-supplied device header — deleted unconditionally
-    // before auth runs; only the `authorizeBearer` branch below re-sets it,
-    // and only after verifying the bearer names a device token (#376).
+    // Deleted UNCONDITIONALLY before auth: only the verified branch below may
+    // re-set these (#376).
     delete req.headers[AUTHED_DEVICE_HEADER];
     delete req.headers[AUTHED_PLANE_HEADER];
     delete req.headers[COMPANION_GRANTS_HEADER];
@@ -380,8 +224,6 @@ export async function startRuntimeHttpServer(
       });
       return;
     }
-    // Stamped on public paths too: a handshake route stays reachable while
-    // still telling an authenticated caller apart from an anonymous one.
     if (authz) {
       req.headers[AUTHED_PLANE_HEADER] = authz.plane;
       if (authz.plane === "device")
@@ -428,12 +270,8 @@ export async function startRuntimeHttpServer(
     token,
     close: () =>
       new Promise<void>((resolve, reject) => {
-        // `server.close()` alone waits for EVERY connection to end. Node drops
-        // idle keep-alive sockets itself, but an open SSE response is an
-        // *active* request that never ends, so a subscribed client would pin
-        // the listener open forever. Stop accepting, hurry the idle sockets
-        // along, then destroy whatever is left after the grace window — see
-        // GATEWAY_SHUTDOWN_GRACE_MS.
+        // `server.close()` waits for EVERY connection and an SSE response
+        // never ends, so idle sockets drop and the rest are forced.
         let force: ReturnType<typeof setTimeout> | undefined = undefined;
         server.close((err) => {
           if (force) clearTimeout(force);

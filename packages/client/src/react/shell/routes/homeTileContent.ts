@@ -1,24 +1,8 @@
-// Real content for the Home springboard tiles (#708, section A).
-//
-// Two sources, both already the shell's own:
-//
-//   1. The daily brief (`getDailyBrief`) — a real, content-minimized gateway
-//      read over core_event / schedule_task / media_asset / tally_expense.
-//      It already backs Home, so agenda, the tally figure and the photo count
-//      cost nothing extra.
-//   2. The replica shell session — the same door `searchPaletteEntities` uses.
-//      `session.read(appId, { entity })` resolves the shape from the app's own
-//      grant, so an app that is not installed, not granted, or not yet
-//      replicated simply fails its read and its tile falls back to the designed
-//      empty body. Every read is settled independently for exactly that reason.
-//
-// No fixtures. A tile with no read path renders the empty body and the seam is
-// recorded here in prose rather than papered over with a plausible number.
+// Home springboard tile content (#708), from the daily brief and the replica
+// shell session. Every read settles independently into the designed empty body;
+// no fixtures — an empty tile beats a plausible number.
 
-// The Tasks app's OWN "when" predicates (#834). `when.ts` is an import-free
-// leaf for exactly this reason: the tile must not grow a second answer to
-// "does this touch Today", and blueprint app sources are not type-checked
-// under the client program.
+// The Tasks app's OWN predicates (#834): no second answer to "touches Today".
 import { dueLabel, landsToday } from "@centraid/blueprints/apps/tasks/when";
 
 import type { DailyBrief } from "../../../gateway-client.js";
@@ -30,8 +14,6 @@ import type {
   HomeTileTaskRow,
 } from "./homeTiles.js";
 
-/** The replica read surface this module needs — narrowed so the loader can be
- *  driven by a stub in tests without standing up a coordinator. */
 export interface HomeTileReader {
   read: (
     appId: string,
@@ -44,22 +26,10 @@ export interface HomeTileReader {
   ) => Promise<{ rows: readonly { values: Record<string, unknown> }[] }>;
 }
 
-// TRAP (#708): `purpose` on a replica read is NOT an audit label — it is
-// a SHAPE SELECTOR. `ReplicaShellSession.resolveShapeId` filters the catalog by
-// `shape.purpose === purpose`, so a value the catalog has never heard of
-// matches no shape and the read throws `No offline shape for <app>/<entity>`.
-// Passing a descriptive value like "home-springboard" makes every one of the
-// seven reads below throw — silently, because each is `.catch()`-ed so one
-// app's missing grant cannot blank the other tiles. The visible result is a
-// Home that stays empty no matter how much content the vault holds: Agenda and
-// the tally figure survive only because they come from the brief instead.
-//
-// Omitting it lets the session apply `DEFAULT_REPLICA_PURPOSE`, which is what
-// the shapes are actually registered under and what the palette (the other
-// shell-side reader, `paletteEntitySearch.ts`) has always relied on.
+// TRAP (#708): `purpose` on a replica read is a SHAPE SELECTOR, not an audit
+// label — an unregistered value matches nothing and every read below throws
+// silently into its `.catch()`. Omit it for `DEFAULT_REPLICA_PURPOSE`.
 
-/** Deliberately small windows: a tile shows a handful of rows, and Home is the
- *  most re-entered route in the shell. */
 const WINDOW = { faces: 24, mosaic: 24, recent: 8, tasks: 24 } as const;
 
 function text(value: unknown): string {
@@ -70,7 +40,6 @@ function isLive(values: Record<string, unknown>): boolean {
   return values.deleted_at == null && values.archived_at == null;
 }
 
-/** Newest-first by whichever timestamp the entity actually carries. */
 function byRecency(field: string) {
   return (
     left: { values: Record<string, unknown> },
@@ -89,21 +58,8 @@ async function rowsOf(
   return result.rows.filter((row) => isLive(row.values));
 }
 
-/**
- * The photo mosaic. `core_content_item.content_uri` starting with `blob:` is
- * the same test the Photos app's own `srcOf` applies before it builds a blob
- * route; the `?variant=thumb` derivative is what the grid renders, so the tile
- * asks for exactly the bytes Photos would.
- *
- * ...and falls back to the ORIGINAL when that derivative does not exist yet
- * (#708). `resolveServableBlob` answers `no-variant` → 404 for a photo
- * whose thumb the preview backstop has not generated, which is the state EVERY
- * photo is in for a while after it is imported. The mosaic rendered blank on a
- * library of ten pictures for exactly this reason. The fallback is the Photos
- * grid's own behaviour for small images (its `THUMB_EDGE` ceiling paints the
- * original directly), and it is the owner reading their own bytes on their own
- * device — not the derivatives-only provider-egress surface.
- */
+/** Falls back to the ORIGINAL when the thumb derivative does not exist yet — the
+ *  state every photo is in for a while after import (#708). */
 async function photoThumbs(
   reader: HomeTileReader
 ): Promise<{ total: number; thumbs: string[] }> {
@@ -124,9 +80,6 @@ async function photoThumbs(
     .sort(byRecency("captured_at"))
     .map((row) => text(row.values.content_id))
     .filter((id) => uriById.get(id)?.startsWith("blob:") === true)
-    // Eight, because the mosaic is 4×2 on the large tile (see `MOSAIC` in
-    // homeTiles.ts). Authorizing more than the grid can show would be paid for
-    // in blob fetches nobody sees.
     .slice(0, 8);
   const urls = await Promise.all(
     newest.map(async (id) => {
@@ -150,11 +103,7 @@ async function peopleFaces(
   const directory = rows
     .filter((row) => text(row.values.kind) === "person")
     .map((row) => ({
-      // The party id, because the face circle's hue is derived from it and a
-      // person has to stay the same colour through a rename — and the same
-      // colour as the phone's Home draws them, which derives from this same
-      // id. A row with no id falls back to the name: a stable-enough key for
-      // one render, and the alternative is dropping the person entirely.
+      // The party id: the face hue derives from it, so a rename keeps a colour.
       id: text(row.values.party_id) || text(row.values.display_name),
       name: text(row.values.display_name),
     }))
@@ -162,17 +111,8 @@ async function peopleFaces(
   return { directory, total: directory.length };
 }
 
-/**
- * The Tasks tile: the rows, plus the glance (#834).
- *
- * WHAT LANDS TODAY AND WHAT IS NEXT ARE NOT DERIVED HERE. `landsToday` is the
- * one predicate in the product that answers "does this touch Today", and
- * `dueLabel` is the one phrase that says when — both are imported from the
- * Tasks app itself, so the tile cannot quietly disagree with the room it is a
- * door into. That is also what keeps the rule an UNDATED TASK NEVER TOUCHES
- * TODAY true on this surface: `landsToday` returns false without a due value,
- * in this code path exactly as in every other.
- */
+/** TODAY AND NEXT ARE NOT DERIVED HERE (#834): `landsToday` and `dueLabel` come
+ *  from the Tasks app, so the tile cannot disagree with it. */
 async function taskBoard(reader: HomeTileReader): Promise<{
   total: number;
   rows: HomeTileTaskRow[];
@@ -196,7 +136,6 @@ async function taskBoard(reader: HomeTileReader): Promise<{
   return { glance: taskGlance(open), rows: model, total: open.length };
 }
 
-/** The tile's own words for today's pile and the next dated row. */
 function taskGlance(
   open: readonly { values: Record<string, unknown> }[]
 ): HomeTileTaskGlance {
@@ -210,8 +149,6 @@ function taskGlance(
     }))
     .filter((task) => task.title !== "");
   const today = dated.filter((task) => landsToday(task, now)).length;
-  // The next thing AHEAD of today — what today already holds is the first
-  // half of the glance, and repeating it as "next" would say it twice.
   const ahead = dated
     .filter((task) => {
       const due = task.next_due ?? task.due_at;
@@ -240,34 +177,18 @@ async function lockerState(
   };
 }
 
-/**
- * How many expenses the ledger actually holds.
- *
- * The brief carries a BALANCE and no count, and a balance of zero is
- * indistinguishable from a ledger that has never been used — which is how an
- * untouched vault grew a live "₹0.00 · All settled" tile. Worse than cosmetic:
- * a live tile made Home stop being day one, so the whole what-to-do treatment
- * disappeared the moment the brief settled, and "All settled" claims a
- * settlement that never happened. The count is the thing that says whether
- * there is a ledger at all, so the tile reads the rows.
- */
+/** The brief carries a balance and no count, and a zero balance cannot be told
+ *  from a ledger never used. Only the count says whether a ledger exists. */
 async function tallyCount(reader: HomeTileReader): Promise<number> {
   return (await rowsOf(reader, "tally", "tally.expense", WINDOW.faces)).length;
 }
 
-/** Longest excerpt the reading-register body can use: the tile clamps at three
- *  lines of serif, and a longer string is paid for in decode work nobody sees. */
 const EXCERPT_MAX = 160;
 
-/** Media types whose bytes decode to prose. `mintContentFromDataUri` keeps
- *  `text/*` INLINE in the row (the FTS feed) and spills everything else to the
- *  CAS, so this test is also the split between the two decode branches below —
- *  except the staged-upload path, which lands even text in the CAS. */
 function isProse(mediaType: string): boolean {
   return mediaType.startsWith("text/") || mediaType === "application/markdown";
 }
 
-/** Decode a `data:` URI's payload to text, or "" for anything unreadable. */
 function dataUriText(uri: string): string {
   const comma = uri.indexOf(",");
   if (comma === -1) return "";
@@ -275,7 +196,7 @@ function dataUriText(uri: string): string {
   const payload = uri.slice(comma + 1);
   try {
     if (!meta.includes(";base64")) return decodeURIComponent(payload);
-    // `atob` yields latin1 code units; the bytes are UTF-8, so re-decode them.
+    // `atob` yields latin1 code units; the bytes are UTF-8.
     const bytes = Uint8Array.from(
       atob(payload),
       (ch) => ch.codePointAt(0) ?? 0
@@ -286,9 +207,6 @@ function dataUriText(uri: string): string {
   }
 }
 
-/** Fetch a CAS-held text body the way `photoThumbs` fetches image bytes: the
- *  owner reading their own bytes through the authed blob route. Any refusal is
- *  "", which degrades the tile to today's title-only body. */
 async function blobText(contentId: string): Promise<string> {
   const url = await authorizeBlobUrl(`${BLOB_PREFIX}/${contentId}`).catch(
     () => null
@@ -303,15 +221,6 @@ async function blobText(contentId: string): Promise<string> {
   }
 }
 
-/**
- * Markdown, reduced to plain prose lines.
- *
- * Not a parser — the tile needs a sentence, not a document model. Fenced code
- * is dropped whole; heading LINES are dropped when asked (the doc tile already
- * shows the title, and the seeded bodies open with a `# <title>` heading that
- * would otherwise repeat it word for word); list, quote, emphasis and link
- * markers are stripped so their text reads as the prose it is.
- */
 function markdownProseLines(
   raw: string,
   options: { dropHeadings: boolean }
@@ -340,7 +249,6 @@ function markdownProseLines(
   return lines;
 }
 
-/** Tile-sized cut, on a word, with an ellipsis only when something was lost. */
 function clipToExcerpt(prose: string): string {
   if (prose.length <= EXCERPT_MAX) return prose;
   const cut = prose.slice(0, EXCERPT_MAX + 1);
@@ -348,12 +256,7 @@ function clipToExcerpt(prose: string): string {
   return `${cut.slice(0, space > 0 ? space : EXCERPT_MAX).trimEnd()}…`;
 }
 
-/**
- * The prose behind ONE content item, as stripped lines — or [] whenever any
- * link in the chain is missing: no row, a non-text media type, an undecodable
- * payload. [] is the seam's designed fallback (title-only body), so a binary
- * PDF and a refused blob fetch land on exactly today's rendering.
- */
+/** [] whenever any link is missing — the designed title-only fallback. */
 async function contentProse(
   reader: HomeTileReader,
   appId: string,
@@ -383,11 +286,6 @@ async function newestDoc(
   const rows = await rowsOf(reader, "docs", "core.document", WINDOW.recent);
   const newest = [...rows].sort(byRecency("updated_at"))[0];
   if (!newest) return { total: rows.length };
-  // The document's prose lives in its content item's bytes
-  // (`current_content_id`), not in a column — this is the read that closes the
-  // seam between a document's title and its prose. Settled independently: a
-  // missing shape, a binary media type or a refused blob fetch must degrade to
-  // the title-only body, never blank the tile.
   const excerpt = clipToExcerpt(
     (
       await contentProse(
@@ -411,13 +309,8 @@ async function newestNote(
   const rows = await rowsOf(reader, "notes", "knowledge.note", WINDOW.recent);
   const newest = [...rows].sort(byRecency("updated_at"))[0];
   if (!newest) return { total: rows.length };
-  // Same seam, same read path as Docs: `knowledge_note.body_content_id` points
-  // at bytes, and the body's true first line is what the tile promises. The
-  // title stays as the fallback — it IS the note's first line in every path
-  // that creates one, so a missing or binary body reads exactly as before.
-  // Headings are KEPT here: a note that opens with `# Groceries` opens with
-  // the word "Groceries", and that heading is not repeated anywhere on the
-  // tile the way the doc title is.
+  // Headings are KEPT here, unlike Docs: a note's opening heading appears
+  // nowhere else on the tile.
   const [first] = await contentProse(
     reader,
     "notes",
@@ -432,11 +325,7 @@ async function newestNote(
   };
 }
 
-/**
- * Everything the springboard can honestly show, gathered concurrently. Every
- * branch is independently settled: one app's missing grant must not blank the
- * other seven tiles.
- */
+/** One app's missing grant must not blank the other seven tiles. */
 export async function loadHomeTileContent(input: {
   reader: HomeTileReader;
   brief?: DailyBrief | undefined;
@@ -453,13 +342,9 @@ export async function loadHomeTileContent(input: {
       tallyCount(input.reader).catch(() => 0),
     ]);
   return {
-    // The brief already expanded recurrences for today's window; re-deriving
-    // them from raw `core.event` rows here would be a second, worse copy.
     ...(brief
       ? { agenda: { events: brief.events, total: brief.events.length } }
       : {}),
-    // The figure comes from the brief; whether there is a figure to show at all
-    // comes from the rows (see `tallyCount`).
     ...(brief && expenses > 0
       ? {
           tally: {
@@ -472,8 +357,7 @@ export async function loadHomeTileContent(input: {
     ...(locker ? { locker } : {}),
     ...(notes ? { notes } : {}),
     ...(people ? { people } : {}),
-    // The brief's photo count is TODAY's imports; the tile's count is the
-    // library, so the mosaic read owns it and the brief only fills the gap.
+    // The brief counts TODAY's imports; the tile counts the library.
     ...(photos
       ? { photos }
       : brief
@@ -483,8 +367,6 @@ export async function loadHomeTileContent(input: {
   };
 }
 
-/** The shell's ambient replica scope, loaded lazily for the same reason the
- *  palette does it: importing this module must not boot the replica. */
 export async function homeTileReader(): Promise<HomeTileReader> {
   const { getReplicaShellSession } =
     await import("../../../replica/shell-session.js");

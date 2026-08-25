@@ -1,33 +1,6 @@
-// HTTP surface for gateway-owned harness detection.
-//
-// Detection runs on the GATEWAY, not in the desktop main process: the
-// harness runs wherever the
-// GATEWAY runs, and Centraid is agnostic to how each harness authenticates —
-// every harness owns its own auth. So detection asks one question only: is
-// the CLI runnable on the gateway host? We run `<bin> --version` for each
-// v0-supported harness and report success.
-//
-//   GET /centraid/_harnesses/status → { harnesses: HarnessStatusEntry[] }
-//
-// The response is a LIST, one entry per supported/offered harness kind, derived
-// from `SUPPORTED_HARNESS_KINDS`. The broader harness registry remains intact
-// so persisted non-roster pins keep resolving, but adding an experimental
-// harness does not silently expand the v0 product surface.
-//
-// `?refresh=1` re-enumerates each harness's models; a plain read returns them
-// from the catalog cache (and, when a surface is cold, kicks a background
-// warm). `modelsStatus` carries the load tri-state so the client shows a
-// loading placeholder and polls.
-//
-// This route carries no per-harness TOOLS listing (no `codexTools`, no
-// `?refreshTools=1`) — Connections is where the user reasons about
-// what a harness can reach. Host-tool enumeration feeds the builder's
-// grounding block (`src/skills/`), read off the same
-// catalog by `makeUnifiedConversationRunner`.
-//
-// Mounted via `startRuntimeHttpServer`'s `extraHandlers` seam, after the
-// bearer check. A remote gateway reports its own host's CLIs, not the
-// desktop's.
+// GET /centraid/_harnesses/status. Detection runs on the GATEWAY host, not the
+// desktop: it asks only whether each CLI is runnable there. The response covers
+// `SUPPORTED_HARNESSES`; the registry stays broader so non-roster pins resolve.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -45,41 +18,20 @@ import type {
 
 import { sendJson } from "./route-helpers.js";
 
-/**
- * A resolved catalog surface: the cached list plus its load tri-state
- * (`loading` while the warmer enumerates, `ready` once cached, `empty` when
- * enumeration found nothing / the CLI is unavailable). The client polls while
- * `loading`.
- */
 export interface ResolvedSurface<T> {
   list: T[];
   status: SurfaceStatus;
 }
 
-/**
- * Resolve the models for a single harness kind from the catalog (a `refresh` —
- * or a cold cache — kicks the warmer fire-and-forget). Supplied by the gateway
- * so this route can report EACH harness's models, not just the active harness's
- * (all `harness-status` knows). Degrades to `{ list: [], status: 'empty' }`.
- */
+/** `refresh` or a cold cache kicks the warmer; degrades to an empty surface. */
 export type ResolveHarnessModels = (
   kind: HarnessKind,
   refresh: boolean
 ) => Promise<ResolvedSurface<HarnessModel>>;
 
-/**
- * The binary this gateway would actually invoke for a kind, when the owner
- * configured an override. Only the custom `acp` kind NEEDS one (it ships no
- * default binary, so it is unavailable until a path is set); for the rest an
- * override just makes the probe hit the same binary a turn would.
- */
+/** Only the custom `acp` kind NEEDS one — it ships no default binary. */
 export type BinPathForKind = (kind: HarnessKind) => string | undefined;
 
-/**
- * Optional ACP capability probe (spawn + initialize). Supplied by the gateway
- * so Settings can show vault/resume/auth honesty without the route owning
- * harness-runtime spawn details.
- */
 export type ResolveHarnessCapabilities = (
   kind: HarnessKind,
   refresh: boolean
@@ -88,20 +40,8 @@ export type ResolveHarnessCapabilities = (
 export type ResolveHarnessHealth = (kind: HarnessKind) => HarnessHealthEntry[];
 
 /**
- * The models a capability probe already saw the harness offer.
- *
- * Model enumeration into the CATALOG is opt-in per kind (`probeModels`, on for
- * codex + claude-code) because the boot warmer would otherwise spawn a process
- * per installed harness. But the capability probe launches those same harnesses
- * anyway and reads the very same `session/new` model config option — so for a
- * native ACP kind like opencode the answer (76 models) is already sitting in
- * `capabilities.configOptions`, while a picker reading only the catalog shows
- * "Built-in model".
- *
- * So an empty catalog falls back to that evidence rather than to nothing. No
- * extra spawn, and nothing is fabricated: this only echoes `{value, name}`
- * pairs the harness itself offered. `currentValue` is what the harness says it
- * would use, which is exactly `default`.
+ * Catalog enumeration is opt-in per kind (else one spawn per harness), so a
+ * kind's models can be absent there yet present in `capabilities.configOptions`.
  */
 export function modelsFromCapabilities(
   capabilities: HarnessAcpCapabilities | undefined
@@ -117,10 +57,6 @@ export function modelsFromCapabilities(
   }));
 }
 
-/**
- * ACP capability strip from a real `initialize` probe (optional; filled when
- * the host probes available harnesses — typically on `?refresh=1`).
- */
 export interface HarnessAcpCapabilities {
   reachable: boolean;
   loadSession: boolean;
@@ -145,58 +81,29 @@ export interface HarnessAcpCapabilities {
   promptAudio?: boolean;
   promptEmbeddedContext?: boolean;
   probedAt?: number;
-  /** Human reason when the probe could not reach the harness. */
   reason?: string;
 }
 
-/** One registered harness kind's state on this gateway host. */
 export interface HarnessStatusEntry {
-  /**
-   * The harness kind (`codex`, `claude-code`, `gemini`, …). Typed as the
-   * gateway's `HarnessKind` here because the gateway only ever emits kinds it
-   * has registered; clients parse it as an open string so a kind added by a
-   * newer gateway still renders (docs/protocol.md C1a).
-   */
+  /** Gateway-typed; clients parse it as an open string (docs/protocol.md C1a). */
   kind: HarnessKind;
-  /** Human label for pickers and cards, from the harness spec. */
   label: string;
-  /** The CLI is runnable on the gateway host (`<bin> --version` succeeded). */
   available: boolean;
-  /** Trimmed `<bin> --version` output, when available. */
   version?: string;
-  /** Minimum CLI version whose protocol we've verified, e.g. `"0.128.0"`. */
   minVersion: string;
-  /** Install/setup hint — present only when the CLI is NOT available. */
   hint?: string;
-  /** Models this harness can serve, from the catalog (#188). */
   models: HarnessModel[];
-  /** Load state of `models` — lets the picker show loading vs empty. */
   modelsStatus: SurfaceStatus;
-  /** The model this harness defaults to, when its catalog names one. */
   defaultModel?: string;
-  /**
-   * Live ACP capabilities (vault HTTP, session resume, model pin, auth).
-   * Absent until the host has probed this kind at least once.
-   */
   capabilities?: HarnessAcpCapabilities;
-  /** Persisted, real-turn breaker state for this harness. */
   health?: HarnessHealthEntry[];
 }
 
 export interface HarnessesStatus {
-  /** One entry per product-supported harness kind, in roster order. */
   harnesses: HarnessStatusEntry[];
 }
 
-/**
- * Probe the gateway host for runnable harness CLIs and — when a model
- * resolver is supplied — each harness's models, so Settings → Agents can offer a
- * per-harness model picker with a loading/empty state independent of which
- * harness is active.
- *
- * Only the intentionally offered v0 roster is probed. Registered-but-hidden
- * kinds remain runnable for persisted preferences.
- */
+/** Only the offered v0 roster is probed; hidden kinds stay runnable. */
 export async function readHarnessesStatus(opts?: {
   resolveModels?: ResolveHarnessModels;
   resolveCapabilities?: ResolveHarnessCapabilities;
@@ -228,9 +135,7 @@ export async function readHarnessesStatus(opts?: {
               () => undefined
             )
           : undefined;
-      // A kind outside the catalog's opt-in probe still gets its models from
-      // the capability snapshot — see `modelsFromCapabilities`. `loading` is
-      // left alone: a warm in flight may still be about to fill the catalog.
+      // `loading` is left alone: a warm in flight may still fill the catalog.
       const probed =
         models.status === "empty" && models.list.length === 0
           ? modelsFromCapabilities(capabilities)
@@ -246,8 +151,6 @@ export async function readHarnessesStatus(opts?: {
         available: availability.available,
         ...(availability.version ? { version: availability.version } : {}),
         minVersion: minVersionString(harness.kind),
-        // The hint is the "what do I do about it" half of an unavailable
-        // harness; on an available one it would just be noise in the payload.
         ...(availability.available ? {} : { hint: harness.installHint }),
         models: resolvedModels,
         modelsStatus,
@@ -261,13 +164,6 @@ export async function readHarnessesStatus(opts?: {
   return { harnesses };
 }
 
-/**
- * Build the harnesses route handler. Returns a function suitable for
- * `startRuntimeHttpServer`'s `extraHandlers`: resolves `true` when it owned the
- * request, `false` otherwise. `?refresh=1` invalidates availability and
- * re-enumerates each harness's models; otherwise the caches answer, with a
- * background model warm kicked when a surface is cold.
- */
 export function makeHarnessesRouteHandler(opts?: {
   resolveModels?: ResolveHarnessModels;
   resolveCapabilities?: ResolveHarnessCapabilities;

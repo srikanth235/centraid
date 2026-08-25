@@ -1,18 +1,13 @@
 // The viewer, on the stage.
 // governance: allow-repo-hygiene file-size-limit The #712 viewer coordinates one gesture/chrome state machine and is tracked as a single handoff surface.
 //
-// The stage is full-bleed `--stage` in BOTH themes with `--on-stage` ink and
-// `--stage-line` hairlines; it covers the entire screen. Focus and selection
-// affordances take their colour from those tokens rather than inheriting, or
-// they vanish here (§7).
+// Full-bleed `--stage` in BOTH themes: focus and selection affordances must
+// take their colour from `--on-stage`/`--stage-line` or they vanish here (§7).
 //
-// The phone's arrangement, not a reduced desktop: THREE FLOATING ELEMENTS at the
-// head of the stage (back chip, capture stamp, overflow chip — the top BAR is
-// gone, see `PhotoLightboxChrome`), the five actions moved to a chip · capsule ·
-// chip row where a thumb is, the filmstrip kept at 58px directly above that row,
-// the info rail turned into a 64% sheet, and one status line inside the stage
-// saying what is true about the bytes. Slideshow is a *different mode* — no
-// filmstrip, no info, determinate position.
+// The phone's arrangement, not a reduced desktop: three floating elements at
+// the stage head (no top bar), the five actions in a chip · capsule · chip row
+// where a thumb is, a 58px filmstrip above it, the info rail as a 64% sheet,
+// and one status line. Slideshow is a different MODE — no filmstrip, no info.
 
 import { useNetworkState } from "expo-network";
 import React, {
@@ -102,12 +97,9 @@ export default function PhotoLightbox({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  // The stage is whatever the chrome leaves — MEASURED, never guessed. It used
-  // to be `height - 200`, a magic number standing in for the top bar, status
-  // line, filmstrip and toolbar; the moment any of those changed height (safe-
-  // area insets, a two-line status) the page was laid out taller than its slot
-  // and the photograph was clipped to a band instead of fitted. Seeded with the
-  // window height so the first frame is never zero-sized.
+  // Whatever the chrome leaves — MEASURED, never guessed: a constant goes stale
+  // the moment any chrome changes height and clips the photograph to a band.
+  // Seeded with the window height so the first frame is never zero-sized.
   const [stageHeight, setStageHeight] = useState(height);
   const { session, scopes = [], gatewayBase } = useReplica();
   // Live: switching from wifi to cellular mid-session must gate the next photo.
@@ -133,40 +125,33 @@ export default function PhotoLightbox({
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
   );
-  // Page by asset identity, never by raw index: this timeline is the shared,
-  // still-loading instance, so device pages land after mount and shift every
-  // index. `assetId` here is the timeline row id (route param).
+  // By asset identity, never raw index: this timeline is still loading, so
+  // device pages land after mount and shift every index.
   const [currentId, setCurrentId] = useState(route.params.assetId);
   const [infoOpen, setInfoOpen] = useState(false);
   const [slideshow, setSlideshow] = useState(false);
-  // "Send a copy" opens the place-precision sheet rather than the OS share
-  // sheet: what a copy says about where it was taken is a decision, and it is
-  // made before any bytes leave (#816).
+  // The place-precision sheet, not the OS share sheet: what a copy says about
+  // where it was taken is decided before any bytes leave (#816).
   const [shareOpen, setShareOpen] = useState(false);
   const [overflowOpen, setOverflowOpen] = useState(false);
-  // The `···` chip's own rectangle, measured on the press that opens the
-  // menu — see `useMenuAnchor` for why `onLayout` cannot answer this instead.
+  // Measured on the press — see `useMenuAnchor` for why `onLayout` cannot.
   const {
     anchor: overflowAnchor,
     anchorRef: overflowAnchorRef,
     measureAnchor: measureOverflowAnchor,
   } = useMenuAnchor();
-  // The editor is a MODE of this screen, never a route: keeping it in local
-  // state is what stops the photograph unmounting mid-edit, and what makes
-  // "nothing is written until Save" a property of one component's lifetime
-  // rather than of navigation (§7.4).
+  // A MODE, never a route: local state is what stops the photograph unmounting
+  // mid-edit and makes "nothing is written until Save" a lifetime property
+  // rather than a navigation one (§7.4).
   const [editing, setEditing] = useState(false);
   const [editorLine, setEditorLine] = useState("");
   const [fullQualityUnlocked, setFullQualityUnlocked] = useState(false);
-  // What the stage is magnified to, reported up by the page that owns the
-  // gesture — the status line has to say `240% · drag to pan · double tap
-  // returns to fit` while it is zoomed, and the number has to be the live one.
+  // Reported up by the page owning the gesture: the status line prints the
+  // live magnification, so it cannot be inferred here.
   const [zoomScale, setZoomScale] = useState(1);
-  // Both of those are facts about ONE photograph, so both start again at the
-  // next one: consent to spend mobile data is per photograph (that is the
-  // whole of the gate's promise), and a magnification carried onto a different
-  // photograph would be a zoom the member never asked for. Derived during
-  // render rather than in an effect so the reset lands before paint.
+  // Both are facts about ONE photograph and must restart at the next: consent
+  // to spend mobile data is per photograph, and a carried-over magnification is
+  // a zoom nobody asked for. Derived in render so the reset lands before paint.
   const [stateAssetId, setStateAssetId] = useState(currentId);
   if (stateAssetId !== currentId) {
     setStateAssetId(currentId);
@@ -177,10 +162,9 @@ export default function PhotoLightbox({
   const list = useRef<FlatList<PhotoAsset>>(null);
   const index = assets.findIndex((asset) => asset.id === currentId);
   const current = index >= 0 ? assets[index] : undefined;
-  // The scroll offset the list must open at, captured the first time the target
-  // row actually exists in the data (so we never open on the wrong photo). Held
-  // in state, not a ref: a ref read during render is not guaranteed to be seen
-  // by the render that consumes it, and this value gates what the list mounts on.
+  // Captured the first time the target row exists, so the list never opens on
+  // the wrong photo. State, not a ref: a ref written during render is not
+  // guaranteed to be seen by the render that consumes it.
   const [initialIndex, setInitialIndex] = useState<number | null>(null);
   if (index >= 0 && initialIndex === null) setInitialIndex(index);
   const albumIds = new Set(
@@ -209,10 +193,8 @@ export default function PhotoLightbox({
   const currentPlace = places.rows.find(
     (row) => row.place_id === current?.placeId
   );
-  // The member's named places, as anchors for the info sheet's relative phrase
-  // ("3.4 km NE of Home"). A place still labelled with its own coordinate is
-  // not an anchor — `readableName` refuses it — and neither is one with no
-  // geography to measure from.
+  // Anchors for the info sheet's relative phrase. A place labelled with its own
+  // coordinate is not an anchor, and neither is one with no geography.
   const namedPlaces = useMemo<NamedPlace[]>(
     () =>
       places.rows.flatMap((row) => {
@@ -234,11 +216,8 @@ export default function PhotoLightbox({
       }),
     [places.rows]
   );
-  // The linked place, in the four fields every place-reading surface here
-  // needs. Read once because two of them ask: the info sheet, which phrases it
-  // for the member's own screen (`context: "private"`), and the share choice,
-  // which phrases it for somebody else's (`context: "shared"`, and never a
-  // relative rung — see `share-place.ts`).
+  // Read once because two surfaces ask: the info sheet phrases it `"private"`,
+  // the share choice `"shared"` — and never a relative rung.
   const placeGazetteer =
     gazetteerNameFrom(
       currentPlace?.address_json == null
@@ -292,8 +271,8 @@ export default function PhotoLightbox({
   }, [current?.assetId, current?.sourceVaultId, gatewayBase]);
   const openInfo = useCallback(() => setInfoOpen(true), []);
   const dismiss = buildDismissGesture(navigation.goBack, openInfo);
-  // Hoisted so paging does not hand the list a fresh renderer — and therefore a
-  // fresh MediaPage identity, which would reset the quality ladder mid-swipe.
+  // Hoisted: a fresh renderer means a fresh MediaPage identity, which resets
+  // the quality ladder mid-swipe.
   const renderPage = useCallback(
     ({ item }: ListRenderItemInfo<PhotoAsset>) => (
       <MediaPage
@@ -339,11 +318,8 @@ export default function PhotoLightbox({
     await writeReason(action, input);
   };
 
-  /**
-   * The same write, but it answers *why* when the vault says no. The info
-   * sheet's rows need the reason to render a refusal beside the text the
-   * member typed; the bottom bar does not, and drops it.
-   */
+  /** Answers *why* when the vault says no: the info sheet renders that refusal
+   *  beside the text the member typed. */
   const writeReason = async (
     action: string,
     input: Record<string, string | number>
@@ -358,10 +334,8 @@ export default function PhotoLightbox({
         action,
         input,
       });
-      // `surfaceWriteOutcome` returns whether the caller may carry on — false
-      // is exactly the set of outcomes the member has to read about (parked or
-      // rejected), which is what the sheet's refusal panel is for. Queued and
-      // in-flight are not refusals: the sentence is on its way, not lost.
+      // `false` is exactly the set the member must read about (parked or
+      // rejected). Queued and in-flight are not refusals.
       const proceed = surfaceWriteOutcome(result, {
         onParked: () =>
           navigation.navigate("Settings", { screen: "Approvals" }),
@@ -416,15 +390,9 @@ export default function PhotoLightbox({
   };
 
   /**
-   * The overflow menu's "Add to Album" — the same write the grid's selection
-   * bar fires (`batchAddToAlbum`, `photos-selection-writes.ts`), aimed at a
-   * selection of exactly this one photograph. The album CHOICE is a plain
-   * `Alert.alert`, the same idiom `PhotosHome.tsx`'s own "Add to album" uses
-   * (see that file for the pattern this parallels — it is not shared code,
-   * since that file belongs to another pass right now, but it is the same
-   * write and the same picker idiom). The menu row itself is disabled before
-   * this ever runs when the grant or the vault row is missing — see
-   * `viewer-menu.ts` — so by the time this fires, both are known to hold.
+   * The same write `batchAddToAlbum` fires, over a selection of one. The row is
+   * disabled by `viewer-menu.ts` when the grant or vault row is missing, so
+   * both hold by the time this runs.
    */
   const addToAlbum = (): void => {
     if (!session || !current || !current.assetId) return;
@@ -439,8 +407,7 @@ export default function PhotoLightbox({
         text: String(album.name ?? "Album"),
         onPress: () => {
           const albumId = String(album.collection_id);
-          // The new entry lands after the album's existing ones, matching
-          // `PhotoPicker.tsx`'s own count-then-append.
+          // Count-then-append, matching `PhotoPicker.tsx`.
           const firstPosition = entries.rows.filter(
             (row) => String(row.collection_id) === albumId
           ).length;
@@ -460,14 +427,9 @@ export default function PhotoLightbox({
   };
 
   /**
-   * The overflow menu's "Make key photo" (#721) — the same
-   * `set-album-cover` write `AlbumDetail.tsx`'s selection-bar "Make cover"
-   * fires, reached here without leaving the viewer. `tags` (built above for
-   * the info sheet's Albums chips) already IS this photograph's album
-   * membership, so it doubles as `viewer-menu.ts`'s `albums` input — the row
-   * only renders when it is non-empty (see that module's header for why).
-   * One album fires directly; more than one asks which, the same `Alert.alert`
-   * idiom `addToAlbum` above already uses for the same kind of choice.
+   * The same `set-album-cover` write `AlbumDetail.tsx` fires (#721). `tags`
+   * already IS this photograph's album membership, so it doubles as
+   * `viewer-menu.ts`'s `albums` input.
    */
   const makeKeyPhoto = (): void => {
     if (!session || !current?.assetId || !current.contentId) return;
@@ -500,18 +462,10 @@ export default function PhotoLightbox({
   };
 
   /**
-   * The overflow menu's Hide / Unhide — the same `update-asset` write the
-   * toolbar's favorite heart fires, aimed at `archived` instead. The row is
-   * disabled before this ever runs when the grant or the vault row is
-   * missing (`viewer-menu.ts`), so both are known to hold by the time this
-   * fires. `archived_at` is what the vault command actually writes
-   * (`media.update_asset`, `packages/vault/src/commands/media.ts`), so the
-   * optimistic upsert mirrors that column rather than a boolean, the same
-   * discipline `PhotoLightboxToolbar.tsx`'s favorite write uses for
-   * `favorite`. The status line says where the photograph went: hiding pulls
-   * it out of `PhotosHome.tsx`'s sectioned grid (`sectionPhotoAssets` filters
-   * `archived` rows) onto the "Open archived photos" shelf
-   * (`PhotosLibrary.tsx`), never off the device.
+   * The favorite heart's `update-asset` write, aimed at `archived`. The
+   * optimistic upsert must mirror `archived_at` — the column `media.update_asset`
+   * actually writes — not a boolean. Hiding moves the photograph to the archived
+   * shelf, never off the device, and the status line says so.
    */
   const hideAsset = (): void => {
     if (!current?.assetId) return;
@@ -529,11 +483,8 @@ export default function PhotoLightbox({
     });
   };
 
-  // The menu's Delete row (issue 712 iOS parity — see `viewer-menu.ts` on why
-  // the verb now sits in the menu as well as on the toolbar's trash chip).
-  // The CONFIRM is where the safety is, and it is the toolbar's own wording
-  // verbatim: two doors onto one destructive act must not describe that act
-  // two different ways.
+  // The CONFIRM is where the safety is, and it is the toolbar's wording
+  // verbatim: two doors onto one destructive act must not describe it twice.
   const trashAsset = (): void => {
     if (!current?.assetId) return;
     const assetId = current.assetId;
@@ -553,13 +504,9 @@ export default function PhotoLightbox({
   };
 
   /**
-   * The editor's ONE write. It runs the render and the enqueue, closes the
-   * editor, and says what happened in the status line — the same sentence the
-   * web editor gives, because it is the same promise.
-   *
-   * Failures are re-thrown rather than swallowed: the editor is still on screen
-   * and states the reason beside its commit, which is where a member who just
-   * pressed Save is looking.
+   * The editor's ONE write, reporting the same sentence the web editor gives.
+   * Failures are re-thrown, not swallowed: the editor is still on screen and
+   * states the reason beside its commit, where the member is looking.
    */
   const saveEdit = async (plan: EditPlan): Promise<void> => {
     if (!current) throw new Error("the photograph left the timeline");
@@ -570,9 +517,8 @@ export default function PhotoLightbox({
     postStatus(PHOTOS_SAVED_AS_NEW);
   };
 
-  // Until the shared timeline has loaded the requested row we hold on the stage
-  // rather than opening index 0 (the wrong photo). Once loaded without a match
-  // the asset is genuinely gone, so the same stage stands in.
+  // Hold on the stage rather than opening index 0 (the wrong photo). Once
+  // loaded without a match the asset is genuinely gone, so this stands in.
   if (!current || initialIndex === null)
     return <View style={[styles.fill, { backgroundColor: colors.stage }]} />;
 
@@ -588,25 +534,18 @@ export default function PhotoLightbox({
     }),
     gatewayName
   );
-  // What the stage's one line says, and in what order it decides — see
-  // `viewerStatus`. The bytes do not automatically win here: a
-  // magnified photograph and a phone whose gestures nothing has taught both
-  // outrank a fact with nothing to do about it.
+  // The bytes do not automatically win: a magnified photograph and an untaught
+  // gesture both outrank a fact with nothing to do about it.
   const status = viewerStatus({
     bytes,
     kind: current.kind,
     scale: zoomScale,
   });
-  // The floating stamp says WHEN the photograph was taken, then at what time and
-  // where (§7.1, proto 4510–4511, restyled for #712). The position index is NOT
-  // here: it is a fact about the list, and it lives only in the slideshow's meta
-  // line, the one mode where "how far through" is the question. The photograph's
-  // NAME is still computed — it is the stamp's accessible name, and its visible
-  // first line for a photograph that carries no capture time to show instead.
-  // The stamp prints a place name only when it is one a person would recognise:
-  // a place still labelled with its own coordinate has nothing to say over a
-  // photograph, and printing the digits there would be the worst place in the
-  // app to do it.
+  // The stamp says WHEN, then at what time and where (§7.1). The position index
+  // is NOT here — it is a fact about the list, and belongs to slideshow's meta
+  // line alone. The NAME is still computed: it is the accessible name, and the
+  // visible first line when there is no capture time. A place prints only when
+  // a person would recognise it, never as coordinates.
   const placeName =
     readableName(currentPlace ? String(currentPlace.name ?? "") : null) ??
     undefined;
@@ -625,8 +564,8 @@ export default function PhotoLightbox({
     : slideshow
       ? slideshowMeta(index, assets.length)
       : stamp.time;
-  // Why the editor's commit cannot fire, if it cannot. Computed here because
-  // the vault grant and the gateway are this screen's facts, not the editor's.
+  // Here, not in the editor: the vault grant and the gateway are this screen's
+  // facts.
   const editRefusal =
     current.canWrite === true
       ? session && gatewayBase
@@ -636,21 +575,14 @@ export default function PhotoLightbox({
 
   return (
     <GestureDetector gesture={dismiss}>
-      {/* A plain View, NOT a SafeAreaView: the stage is full-bleed `--stage` and
-          must run under the status bar and the home indicator, edge to edge. A
-          SafeAreaView would pad the container and letterbox the stage in the
-          system's own background. The CONTROLS carry the insets instead — the
-          bar below and the toolbar at the foot — so nothing lands under the
-          clock while the ground still covers the screen. */}
+      {/* A plain View, NOT a SafeAreaView: the stage is full-bleed and must run
+          edge to edge, which a SafeAreaView would letterbox. The CONTROLS carry
+          the insets instead. */}
       <View style={[styles.fill, { backgroundColor: colors.stage }]}>
-        {/* The editor takes the whole body: no pager arrows, no swipe target,
-            no filmstrip below (proto 4518, 4599, 4606). A member mid-edit is
-            never one gesture away from a different photograph.
-
-            It is also the ONE body that does not run under the floating chrome:
-            the stage is a photograph and a chip standing on it obscures nothing
-            that matters, but the editor's own controls live at the top of its
-            body, so it is pushed clear by exactly the chrome's height. */}
+        {/* The editor takes the whole body — no pager, no swipe target, no
+            filmstrip: a member mid-edit is never one gesture from a different
+            photograph. It is also the ONE body pushed clear of the floating
+            chrome, because its own controls sit at the top of it. */}
         {editing ? (
           <View style={styles.fill}>
             <View style={{ height: viewerChromeHeight(insets.top) }} />
@@ -691,8 +623,7 @@ export default function PhotoLightbox({
               renderItem={renderPage}
               showsHorizontalScrollIndicator={false}
             />
-            {/* Prev / next: the pointer equivalents of the swipe. Start and end,
-              so they mirror under RTL rather than being pinned left/right. */}
+            {/* Start and end, so they mirror under RTL. */}
             <Pressable
               accessibilityLabel="Previous photograph"
               accessibilityRole="button"
@@ -751,10 +682,8 @@ export default function PhotoLightbox({
           onAction={() => setFullQualityUnlocked(true)}
         />
 
-        {/* Slideshow is a different mode: no filmstrip, no info, no bar. The
-            home-indicator inset therefore has to land on whichever control is
-            last in each mode — the toolbar here, the status line in slideshow
-            (below) — or the foot of the stage sits under the indicator. */}
+        {/* The home-indicator inset must land on whichever control is last in
+            each mode, or the foot of the stage sits under the indicator. */}
         {slideshow || editing ? (
           <View style={{ height: insets.bottom }} />
         ) : (
@@ -781,9 +710,8 @@ export default function PhotoLightbox({
           </>
         )}
 
-        {/* LAST in the tree, not first: the three floating elements stand ON
-            the stage, and paint order is what puts them there. `zIndex` alone
-            is not enough on every Android surface. */}
+        {/* LAST in the tree: paint order is what puts these on the stage, and
+            `zIndex` alone is not enough on every Android surface. */}
         <ViewerTopChrome
           colors={colors}
           insets={insets}
@@ -795,8 +723,8 @@ export default function PhotoLightbox({
           onClose={() => navigation.goBack()}
           onLeaveSlideshow={() => setSlideshow(false)}
           onOverflow={() => {
-            // Measured on the press, never cached — a rotation between two
-            // openings would hang the card off a stale rectangle.
+            // Never cached: a rotation between openings would hang the card off
+            // a stale rectangle.
             measureOverflowAnchor();
             setOverflowOpen(true);
           }}
@@ -823,10 +751,8 @@ export default function PhotoLightbox({
           }
           namedPlaces={namedPlaces}
           people={people}
-          // Rung 2 of the phrase ladder, when the opt-in automation has run:
-          // the settlement name it recorded inside this place's own
-          // `address_json`. Absent — and it is absent until a member turns the
-          // automation on — the sheet's phrase falls to the relative rung.
+          // Rung 2 of the phrase ladder, present only once the opt-in
+          // automation has run; absent, the phrase falls to the relative rung.
           placeGazetteer={placeGazetteer}
           placeLat={sharePlace.lat ?? undefined}
           placeLng={sharePlace.lng ?? undefined}
@@ -881,8 +807,7 @@ export default function PhotoLightbox({
           onClose={() => setPlacementKind(undefined)}
         />
 
-        {/* The place-precision choice, asked once per share and BEFORE any
-            bytes leave (`PhotoShareChoice`, `share-place.ts`). */}
+        {/* Asked once per share, BEFORE any bytes leave. */}
         <PhotoShareChoice
           visible={shareOpen}
           place={sharePlace}

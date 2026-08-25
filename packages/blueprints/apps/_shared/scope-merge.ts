@@ -1,120 +1,76 @@
 /**
- * K-way merge of per-scope pages into ONE cross-scope list (#599,
- * #726 D11). Pure: no DOM, no IO — it takes what each scope's own
- * query page returned and decides what the merged view may show.
+ * K-way merge of per-scope pages into ONE cross-scope list (#599, #726 D11).
+ * Pure. Only `sortKey`/`direction` and `dedupeIdentity` vary per app; ordering,
+ * dedupe, the safe horizon and the undated tail bucket are the same algorithm
+ * for every caller — subtle and already correct, so no app gets a copy.
  *
- * WHAT IS AND IS NOT GENERICISED. Two things vary per app and are
- * PARAMETERS: `sortKey` + `direction` (Photos: `taken_at` descending; a
- * record-only app: its own row id, since rows have no separate timestamp the
- * merge can trust across scopes) and `dedupeIdentity` (Photos: sha256-else-
- * content_id; a record-only app: its own row id — there is no separate
- * "same bytes, different row" question for a record). Everything else —
- * ordering, cross-scope dedupe, the shared safe horizon, the undated tail
- * bucket — is the SAME algorithm for every caller: it is subtle and already
- * correct, and no app gets its own copy of it.
+ * ORDERING. Ties break by `dedupeIdentity` so the view is byte-stable across
+ * re-reads (every survivor's identity is unique). A null `sortKey` sorts AFTER
+ * every keyed row in both directions — where SQLite puts it within one scope —
+ * keeping one stable null-keyed tail bucket.
  *
- * ORDERING. `direction` ("desc": highest `sortKey` first, "asc": lowest
- * first) determines display order, matching each page's own order. Two rows
- * tied on `sortKey` tie-break by `dedupeIdentity` ascending so the view is
- * byte-stable across re-reads — safe because, by construction, every row
- * surviving the dedupe pass below already has a UNIQUE identity. A row whose
- * `sortKey` is null (Photos: an undated import) sorts AFTER every non-null
- * row regardless of `direction` — the same place SQLite's `ORDER BY …`
- * puts it inside a single scope, so merging N scopes keeps one stable
- * null-keyed tail bucket instead of interleaving nulls anywhere.
+ * DEDUPE. A shared row exists in both the sharer's and the audience scope; the
+ * OWN copy wins, because that is the one the member can edit, trash and
+ * un-share. Between two audience copies the earlier input page wins.
  *
- * DEDUPE. A row shared into an audience exists in BOTH the sharer's own scope
- * and the audience scope, so the merged list would show it twice. Identity is
- * `dedupeIdentity(row)`. When a duplicate spans scopes the OWN-scope copy
- * wins: it is the copy the member can edit, retitle, trash and un-share, so
- * acting on the surviving row always acts on the thing the member controls.
- * Among two audience copies, the earlier page in the input order wins —
- * deterministic, and the caller controls that order. Each survivor is tagged
- * with `scope_id`: the scope it is shown FROM.
+ * THE SHARED SAFE HORIZON — the subtle part. A truncated scope is COMPLETE at or
+ * before its `tail`, UNKNOWN beyond. Merging windows of different depths is the
+ * danger: with one scope back to March and another only to July, a May row from
+ * the shallower scope would later be INSERTED above rows already on screen. So
+ * the list may only extend to the SHALLOWEST truncated tail. Non-truncated
+ * scopes constrain nothing.
  *
- * THE SHARED SAFE HORIZON — the subtle part. Each page is a bounded window:
- * `truncated` says older/further rows exist beyond it, and `tail` is the
- * `sortKey` value furthest from the shallow end that the window reached. A
- * scope that is truncated is therefore COMPLETE for every `sortKey` at or
- * before its own tail (per `direction`) and UNKNOWN beyond it.
- *
- * Merging windows of different depths is what makes this dangerous: if one
- * scope reached back to March and another only to July, everything the
- * merged list shows before July is the deeper scope's only — a May row from
- * the shallower scope would appear later, INSERTED above rows already on
- * screen, once it pages deeper. So the merged list may only extend as deep as
- * the SHALLOWEST truncated scope, i.e. to the tail closest to the shallow end
- * among truncated scopes. That is the horizon. Every scope — truncated or not
- * — is fully known at or shallower than it, so rows at or before the horizon
- * are safe to show and rows strictly beyond are withheld until the horizon
- * scopes page deeper. Non-truncated scopes constrain nothing: they already
- * returned everything.
- *
- * A truncated scope whose `tail` is null ran out inside the null-keyed
- * bucket: it still knows every keyed row it has, so it must NOT drag the
- * keyed horizon toward itself — such scopes are skipped when picking the
- * horizon. They do constrain the null-keyed bucket, which is why null-keyed
- * rows are withheld while ANY scope is truncated (they sort below every
- * keyed row, hence below any horizon).
- *
- * `horizonScopeIds` names the truncated scopes sitting AT the horizon (plus,
- * when the horizon is null-tailed only, the truncated scopes generally), so
- * "load more" re-queries exactly those scopes and leaves the settled ones
- * alone.
+ * A truncated scope with a null `tail` ran out inside the null bucket: it still
+ * knows every keyed row, so it must NOT drag the keyed horizon toward itself. It
+ * does cap the null bucket — hence null rows are withheld while ANY scope is
+ * truncated.
  */
 
-/** Which of a page's newer-vs-deeper directions is "first" in the merged
- *  view. `desc`: highest `sortKey` first (Photos: newest first). `asc`:
- *  lowest first (a record-only app reading oldest-first). */
+/** Which end is "first": `desc` = highest `sortKey`, `asc` = lowest. */
 export type MergeDirection = "asc" | "desc";
 
 /** One scope's page of already-fetched rows. */
 export interface ScopePage<Row> {
   scopeId: string;
   rows: readonly Row[];
-  /** The page's `sortKey` value closest to the deep/unknown end, or null
-   *  (empty page, or a page that ran out inside the null-keyed tail). */
+  /** Closest to the deep/unknown end; null for an empty page or one that ran
+   *  out inside the null-keyed tail. */
   tail: string | null;
   truncated: boolean;
 }
 
-/** A merged row, tagged with the scope it is shown from. */
+/** Tagged with the scope it is shown FROM. */
 export type MergedRow<Row> = Row & { scope_id: string };
 
 export interface MergeResult<Row> {
   /** In `direction` order, deduped, horizon-safe. */
   rows: MergedRow<Row>[];
-  /** The furthest `sortKey` value safe to show, or null when nothing is
-   *  withheld. */
+  /** Furthest value safe to show; null when nothing is withheld. */
   horizon: string | null;
-  /** Scopes to re-query for "load more" — the ones sitting at the horizon. */
+  /** Re-query exactly these for "load more". */
   horizonScopeIds: string[];
-  /** How many deduped rows the horizon held back. */
+  /** Deduped rows the horizon held back. */
   withheld: number;
-  /** Whether any scope is still truncated (i.e. "load more" is meaningful). */
+  /** Any scope still truncated — i.e. "load more" is meaningful. */
   truncated: boolean;
 }
 
 export interface MergeOptions<Row> {
-  /** The member's own scope id — the dedupe winner. */
+  /** The dedupe winner. */
   ownScopeId: string;
-  /** The field the merge orders and windows on. Returns null for a row with
-   *  nothing to sort by (Photos: an undated import). */
+  /** Orders and windows on this; null for a row with nothing to sort by. */
   sortKey: (row: Row) => string | null | undefined;
   direction: MergeDirection;
-  /** The cross-scope identity a shared row is deduped — and, since every
-   *  surviving row's identity is by then unique, tie-broken — on. */
+  /** Cross-scope dedupe identity; also the tie-break, unique by then. */
   dedupeIdentity: (row: Row) => string;
 }
 
-/** True when `a` sits closer to the shallow (already fully known) end of the
- *  scan than `b` — `desc`: numerically greater; `asc`: numerically smaller. */
+/** `a` closer to the shallow (fully known) end than `b`. */
 function shallower(a: string, b: string, direction: MergeDirection): boolean {
   return direction === "desc" ? a > b : a < b;
 }
 
-/** True when `value` is on the safe side of `horizon` — `desc`: `value >=
- *  horizon`; `asc`: `value <= horizon`. */
+/** `value` is on the safe side of `horizon`. */
 function atOrBeforeHorizon(
   value: string,
   horizon: string,
@@ -123,8 +79,7 @@ function atOrBeforeHorizon(
   return direction === "desc" ? value >= horizon : value <= horizon;
 }
 
-/** Newest/shallowest first per `direction`; null `sortKey` last; ties broken
- *  by `dedupeIdentity` ascending (unique by construction — see header). */
+/** Shallowest first; null `sortKey` last; ties by identity (unique by then). */
 function compareRows<Row>(
   sortKey: (row: Row) => string | null | undefined,
   direction: MergeDirection,
@@ -144,7 +99,7 @@ function compareRows<Row>(
   };
 }
 
-/** The horizon + the scopes sitting at it. See the header for the reasoning. */
+/** The horizon + the scopes sitting at it. Reasoning: module header. */
 function horizonOf<Row>(
   pages: readonly ScopePage<Row>[],
   direction: MergeDirection
@@ -156,9 +111,8 @@ function horizonOf<Row>(
     if (horizon == null || shallower(page.tail!, horizon, direction))
       horizon = page.tail!;
   }
-  // At the horizon: the keyed truncated scopes whose tail IS the horizon,
-  // plus every null-tailed truncated scope (they cap the null-keyed bucket,
-  // and paging them is the only way to lift that cap).
+  // Null-tailed truncated scopes belong here too: they cap the null-keyed
+  // bucket, and paging them is the only way to lift that cap.
   const atHorizon = truncated.filter(
     (page) => page.tail === horizon || page.tail == null
   );
@@ -193,8 +147,8 @@ export function mergeScopePages<Row>(
   const merged = [...byIdentity.values()].sort(
     compareRows(sortKey, direction, dedupeIdentity)
   );
-  // Null-keyed rows sit below every keyed one, so any truncation at all can
-  // still hide one the merge hasn't seen — withhold the whole bucket meanwhile.
+  // Null-keyed rows sit below every keyed one, so any truncation can hide one
+  // the merge has not seen — withhold the whole bucket meanwhile.
   const safe = merged.filter((row) => {
     const value = sortKey(row);
     if (value == null) return !anyTruncated;

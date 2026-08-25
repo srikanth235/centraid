@@ -1,13 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit — this test is the single cross-emitter contrast matrix for shell, blueprint, kit, and native ink pairings; splitting its coupled floors would weaken the shared regression evidence.
-// WCAG floors for every ramp this package ships, measured against the actual
-// EMITTED CSS rather than against literals copied out of it — a test that
-// re-types the values it is guarding stops tracking them the moment someone
-// edits the source.
-//
-// Floors (WCAG 2.1): 4.5:1 for body text (1.4.3), 3:1 for large text and
-// non-text UI such as borders and icons (1.4.11). Each rung is measured on
-// every surface it can land on, because a translucent rung that clears AA on
-// `--bg` can still miss it on the sunken track.
+// WCAG floors for every ramp this package ships, measured against the EMITTED
+// CSS, never literals copied out of it: 4.5:1 body text, 3:1 large text and
+// non-text UI. Every rung is measured on every surface it can land on.
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -34,22 +28,15 @@ import { palette, paletteDark } from "./palette.js";
 const AA_BODY = 4.5;
 const AA_LARGE = 3;
 
-/** The floor each role has to clear, given the job it is assigned. */
 const TEXT_FLOORS = {
   "--text": AA_BODY,
   "--text-soft": AA_BODY,
-  // Captions and metadata rows — still prose, still body-sized.
   "--text-faint": AA_BODY,
-  // Placeholders, disabled glyphs, hairline icons. Never body copy.
+  // Placeholders and hairline icons; never body copy.
   "--text-ghost": AA_LARGE,
 } as const;
 
-/** Parse the `--name: value;` pairs out of one `{ … }` block. */
-
-/** Substitute the knobs the token CSS parameterizes colours by, so an
- *  `hsl(var(--app-hue) 8% 42%)` becomes a measurable colour, then evaluate the
- *  one `calc()` form in use. Native does not need this parser: its direct
- *  lowering already contains concrete values. */
+/** Native needs no parser: it lowers concrete values. */
 function resolve(value: string, scope: Record<string, string>): string {
   return value
     .replace(
@@ -70,7 +57,6 @@ function measurable(value: string): boolean {
   );
 }
 
-/** Ratios of a ramp's rungs against one surface, in declaration order. */
 function ramp(
   tokens: Record<string, string>,
   names: readonly string[],
@@ -87,10 +73,6 @@ describe("shell token contrast floors", () => {
   const light = declarations(css, ":root");
   const dark = { ...light, ...declarations(css, "[data-theme='dark']") };
 
-  // Every opaque surface a foreground can be painted on. There is no per-app
-  // surface tone axis — one page, for the shell and every app in it — so
-  // this is the shell's fixed surface set. Both ramps are literal, so nothing
-  // needs substituting.
   const SURFACE_NAMES = ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"];
 
   describe.each([
@@ -119,8 +101,6 @@ describe("shell token contrast floors", () => {
     });
 
     test(`${name}: the text ramp stays ordered`, () => {
-      // Without this, raising a failing rung until it passes could flatten the
-      // ramp into four indistinguishable greys that all clear their floor.
       const ratios = ramp(
         tokens,
         Object.keys(TEXT_FLOORS),
@@ -136,15 +116,11 @@ describe("shell token contrast floors", () => {
     });
 
     test(`${name}: the filled accent rung carries --text-inv`, () => {
-      // `.kit-btn.primary` in the shell. The two ramps take opposite halves of
-      // the pair — deep fill under near-white ink on light, lifted fill under
-      // near-black ink on dark — so this is measured per theme, not once.
       const fill = resolve(tokens["--accent-deep"] ?? "", scope);
       const ink = resolve(tokens["--text-inv"] ?? "", scope);
       expect(contrastRatio(ink, fill), `${name} fill`).toBeGreaterThanOrEqual(
         AA_BODY
       );
-      // The hover fill steps 12% toward `--text`, away from the ink.
       const hover = evalColorMix(
         `color-mix(in oklab, ${fill} 88%, ${resolve(
           tokens["--text"] ?? "",
@@ -154,36 +130,23 @@ describe("shell token contrast floors", () => {
       expect(contrastRatio(ink, hover), `${name} hover`).toBeGreaterThanOrEqual(
         contrastRatio(ink, fill)
       );
-      // Fills publish their own ink; there is no renderer-side foreground
-      // choice or legacy --text-inv alias.
       expect(tokens["--accent-fill"], `${name} --accent-fill`).toBeDefined();
     });
 
     test(`${name}: accent and status colours are legible as text`, () => {
       const bg = surfaces[0] ?? "";
-      // `--accent-text` exists precisely so the accent can be a `color:`.
       expect(
         contrastRatio(resolve(tokens["--accent-text"] ?? "", scope), bg),
         `${name} --accent-text`
       ).toBeGreaterThanOrEqual(AA_BODY);
-      // The semantic states get their own grid below, against every surface —
-      // this loop only pins that each one is emitted.
       for (const token of SEMANTIC_STATES) {
         expect(tokens[token], `${name} ${token} is emitted`).toBeDefined();
       }
     });
 
     test(`${name}: semantic states clear the BODY floor on every surface`, () => {
-      // Not AA_LARGE. `--danger` / `--success` / `--warning` are documented as
-      // states, but 131 `color:` rules across the client, the kit and the
-      // blueprint apps paint them on 9–13.7px prose — under every large-text
-      // exemption in 1.4.3. So the floor they owe is the body floor, on every
-      // surface they can land on, not just `--bg`:
-      //   `.kit-popover-item.danger` 13.6px on `--bg-elev` (and `--bg-sunken`
-      //   on hover), `.kit-btn.danger` 13px on `--bg-elev`, `.tlError` 12px,
-      //   `.lineLevel[data-level=error]` 9.5px…
-      // The non-text uses (bar fills, hairlines, 1.05rem glyphs) are strictly
-      // easier at 3:1, so pinning the body floor covers them too.
+      // Not AA_LARGE: the states are painted on 9–13.7px prose, under every
+      // large-text exemption in 1.4.3. Non-text uses are easier at 3:1.
       for (const token of SEMANTIC_STATES) {
         const value = resolve(tokens[token] ?? "", scope);
         for (const surface of surfaces) {
@@ -191,11 +154,7 @@ describe("shell token contrast floors", () => {
             contrastRatio(value, surface),
             `${name} ${token} on ${surface}`
           ).toBeGreaterThanOrEqual(AA_BODY);
-          // …and on a 12% wash of ITSELF over that surface, which is the
-          // commonest site of all: `color: var(--danger)` on
-          // `color-mix(in oklab, var(--danger) 12%, transparent)`. The wash
-          // moves the background toward the ink, so it is strictly harder
-          // than the bare surface and a rung can clear one and miss the other.
+          // …and on a wash of ITSELF, which is strictly harder than bare.
           expect(
             contrastRatio(value, selfTint(value, surface)),
             `${name} ${token} on its own ${SELF_TINT * 100}% tint over ${surface}`
@@ -204,28 +163,19 @@ describe("shell token contrast floors", () => {
       }
     });
 
-    // Split from the floor test above: a recognisability failure reported under
-    // the heading "clears the BODY floor" names the wrong cause, and a test that
-    // misnames its own failure is the thing this whole change set is about.
+    // Split from the floor test: it would name the wrong cause.
     test(`${name}: semantic states still read as their role`, () => {
       for (const token of SEMANTIC_STATES) {
         const value = resolve(tokens[token] ?? "", scope);
-        // The counterpart of the accent fills' cap: a state walked past this
-        // has stopped being red/green/amber and become near-black or
-        // near-white, which is the failure mode of "darken until it passes".
         expect(
           Math.max(...surfaces.map((s) => contrastRatio(value, s))),
           `${name} ${token} still reads as its hue`
         ).toBeLessThan(RECOGNISABLE_STATE);
-        // A grey clears every contrast floor and codes nothing; hue band plus
-        // minimum chroma is what stops "legible" from passing for "meaningful".
         expect(
           readsAsRole(value, token),
           `${name} ${token} (${value}) is no longer a ${token.slice(2)} colour`
         ).toBe(true);
       }
-      // A colour code is only a code while its members are tellable apart, and
-      // solving three hues to one floor pulls them together.
       const inks = SEMANTIC_STATES.map((t) => resolve(tokens[t] ?? "", scope));
       for (let i = 0; i < inks.length; i++) {
         for (let j = i + 1; j < inks.length; j++) {
@@ -237,18 +187,7 @@ describe("shell token contrast floors", () => {
       }
     });
 
-    // There is no filled destructive button (`.kit-btn.primary.danger`):
-    // destructive is OUTLINED in `--net`/`--danger`, never a fill, so there
-    // is no danger-under-`--text-inv` fill pairing to pin here. See
-    // "keeps the ink contract for filled states" below for the StatusLine
-    // fill/track pairing that covers filled ink.
-
     test(`${name}: the v9 state and hover rungs clear their floors`, () => {
-      // `--seam`, `--net-hover` and `--accent-hover` are all BORDER-AND-LABEL
-      // rungs: destructive is outlined and never filled, and a seam state is a
-      // chip with a rule around it, so each one is simultaneously the type and
-      // the edge. That means one floor covers both jobs — AA as text, which is
-      // strictly harder than the 3:1 a border owes.
       for (const token of ["--seam", "--net-hover", "--accent-hover"]) {
         const value = resolve(tokens[token] ?? "", scope);
         expect(value, `${name} ${token} is emitted`).toBeTruthy();
@@ -262,10 +201,7 @@ describe("shell token contrast floors", () => {
     });
 
     test(`${name}: --net stays legible ON its own wash`, () => {
-      // The whole permission `--net-wash` is granted under: a tint faint
-      // enough that the ink it belongs to, and the ramp beside it, still read
-      // on top. If this fails the wash has stopped being a wash and become the
-      // large alarming filled surface `--net` forbids.
+      // Faint enough that its ink and the ramp beside it still read on top.
       const washed = resolve(tokens["--net-wash"] ?? "", scope);
       expect(washed, `${name} --net-wash is emitted`).toMatch(/^rgba\(/u);
       for (const surface of surfaces) {
@@ -280,11 +216,8 @@ describe("shell token contrast floors", () => {
     });
 
     test(`${name}: the hover rungs step the way their job requires`, () => {
-      // `--net` is not at the end of its ramp, so its hover moves AWAY from
-      // the paper — a warning that quietens under the pointer is wrong. The
-      // accent IS the end of its ramp, so an outline's ink can only step
-      // toward the paper; nothing rides on top of it, so that costs nothing
-      // the floor above has not already measured.
+      // `--net`'s hover moves AWAY from the paper: a warning that quietens
+      // under the pointer is wrong. The accent is at its ramp's end.
       const page = surfaces[0] ?? "";
       const net = resolve(tokens["--net"] ?? "", scope);
       const netHover = resolve(tokens["--net-hover"] ?? "", scope);
@@ -304,10 +237,6 @@ describe("shell token contrast floors", () => {
     });
 
     test(`${name}: the status line's determinate fill carries its ink`, () => {
-      // `.kit-status-line-fill` paints `--text` — the SAME ink `--text-soft`
-      // (the line's own foreground) is already validated against — on
-      // `--bg-elev` (`.kit-status-line-track`), never a hue: a long local
-      // operation is reported in the ink ramp, not a tone.
       const fill = resolve(tokens["--text"] ?? "", scope);
       const track = resolve(tokens["--bg-elev"] ?? "", scope);
       expect(
@@ -323,11 +252,7 @@ describe("blueprint token contrast floors", () => {
   const light = declarations(css, ":root");
   const dark = { ...light, ...declarations(css, ":root[data-theme='dark']") };
 
-  // `--app-hue` is the app's slot on the identity wheel; hue 0 is the wheel
-  // origin an app inherits when it declares none. Nothing in the surface ramp
-  // reads it any more, which is why the floors below need no hue scope.
   const HUE = "0";
-  // The app layer has no `--text-ghost`; its ramp stops at faint.
   const ROLES = ["--text", "--text-soft", "--text-faint"];
 
   describe.each([
@@ -335,8 +260,6 @@ describe("blueprint token contrast floors", () => {
     ["dark", dark, {}],
   ] as const)("%s", (name, tokens, extra) => {
     const scope = { "--app-hue": HUE, ...extra };
-    // The blueprint layer owns the page, the card and the recessed track; the
-    // card and the track are the two the ink ramp is hardest against.
     const surfaces = ["--bg-elev", "--bg-sunken"]
       .map((key) => resolve(tokens[key] ?? "", scope))
       .filter(measurable);
@@ -354,12 +277,8 @@ describe("blueprint token contrast floors", () => {
     });
 
     test(`${name}: semantic states clear the BODY floor on card and track`, () => {
-      // Same law as the shell grid above, re-measured off the OTHER emitter.
-      // The two emitters now share one surface ramp, which is exactly why this
-      // must keep being measured separately: the moment one of them re-tunes a
-      // surface, a floor held on the other says nothing. Blueprint apps paint
-      // these on 11–13.7px prose — `tasks` `.flag.high` 12px, `agenda`
-      // `.badge[data-tone=warn]` on a `--warning` wash, `docs` `.custodyChip`.
+      // Re-measured off the OTHER emitter: they share one surface ramp, so a
+      // floor held on one says nothing about the other.
       for (const token of SEMANTIC_STATES) {
         const value = resolve(tokens[token] ?? "", scope);
         expect(tokens[token], `blueprint ${name} ${token}`).toBeDefined();
@@ -376,9 +295,6 @@ describe("blueprint token contrast floors", () => {
       }
     });
 
-    // Split for the same reason as the shell pair above: legibility and
-    // recognisability are different properties and must fail under different
-    // headings.
     test(`${name}: app-surface semantic states still read as their role`, () => {
       for (const token of SEMANTIC_STATES) {
         const value = resolve(tokens[token] ?? "", scope);
@@ -402,9 +318,6 @@ describe("blueprint token contrast floors", () => {
       }
     });
 
-    // There is no filled destructive button (see the shell grid above) —
-    // kit.css is shared, so nothing app-surface-specific to pin here either.
-
     test(`${name}: the status line's determinate fill carries its ink on the app surface`, () => {
       const fill = resolve(tokens["--text"] ?? "", scope);
       const track = resolve(tokens["--bg-elev"] ?? "", scope);
@@ -427,10 +340,7 @@ describe("blueprint token contrast floors", () => {
 
   // ── The one filled action, which is INK ────────────────────────────────
   //
-  // There is no per-app accent choice: the accent IS the ink, so this grid
-  // walks one pairing rather than a hue wheel — the fill carries its ink, the
-  // HOVER never walks back toward that ink, and the fill is still findable
-  // against the card behind it.
+  // The accent IS the ink, so this grid walks one pairing rather than a wheel.
   describe("the filled ink action carries its ink", () => {
     test.each([
       ["light", light],
@@ -444,9 +354,7 @@ describe("blueprint token contrast floors", () => {
       const card = evalColorMix(resolve(tokens["--bg-elev"] ?? "", {}));
 
       expect(contrastRatio(ink, fill), "rest").toBeGreaterThanOrEqual(AA_BODY);
-      // Hover moves AWAY from the ink, never toward it. A hover that reduces
-      // the label's contrast is the failure this pins, and with an ink fill it
-      // is the only remaining way to get it wrong.
+      // Hover moves AWAY from the ink; the reverse is the failure this pins.
       expect(contrastRatio(ink, hover), "hover").toBeGreaterThanOrEqual(
         contrastRatio(ink, fill)
       );
@@ -454,30 +362,19 @@ describe("blueprint token contrast floors", () => {
       expect(contrastRatio(fill, card), "fill vs card").toBeGreaterThanOrEqual(
         AA_LARGE
       );
-      // …and the fill is ink, not a hue. If a hue ever creeps back in here,
-      // every app identity colour silently stops meaning anything.
       expect(fill).toBe(evalColorMix(resolve(tokens["--text"] ?? "", {})));
     });
   });
 
   // ── The palette hues as TEXT ────────────────────────────────────────────
   //
-  // `--c-*` are icon FILLS. Painted as `color:` on a near-white surface they
-  // measure 2.2:1 (`--c-amber`) to 4.8:1 (`--c-indigo`) — so a raw fill is
-  // never ink. `--c-<name>-text` is the solved rung that closes the gap for
-  // every surface, and this grid is what stops it drifting back (#686).
+  // `--c-*` are icon FILLS and measure 2.2:1–4.8:1 as `color:`, so a raw fill is
+  // never ink. `--c-<name>-text` is the solved rung (#686).
   describe("every palette hue has a legible TEXT rung", () => {
-    // A kind label sits on a weak tint of its OWN hue, so the surface has
-    // already moved toward the ink. `docs` paints 12%; measuring the rung on a
-    // plain card would miss exactly the case the app ships.
     const TINT = 0.12;
-    // The counterpart of the fills' `RECOGNISABLE` cap: a rung that has been
-    // walked past this has stopped being its hue and become near-black (light)
-    // or near-white (dark), which defeats colour-coding six file kinds.
+    // Past this cap a rung has stopped being its hue.
     const RECOGNISABLE = 12;
 
-    /** `color-mix(in oklab, C p%, transparent)` over `bg` — the alpha
-     *  composite a browser performs for `tintBg()`. */
     const tint = (hue: string, bg: string): string => {
       const fg = parseColor(hue).rgb;
       const back = parseColor(bg).rgb;
@@ -511,8 +408,6 @@ describe("blueprint token contrast floors", () => {
               contrastRatio(ink, surface),
               `${theme} --c-${name}-text on ${surface}`
             ).toBeGreaterThanOrEqual(AA_BODY);
-            // …and on a 12% tint of its own FILL over that surface, which is
-            // the surface `docs` actually paints the label on.
             expect(
               contrastRatio(ink, tint(fillHex, surface)),
               `${theme} --c-${name}-text on its own ${TINT * 100}% tint`
@@ -526,16 +421,10 @@ describe("blueprint token contrast floors", () => {
       );
 
       test(`${theme}: the rung is its fill's hue, moved only in lightness`, () => {
-        // "Darken it until it passes" is only safe while hue and saturation
-        // hold: the moment the solver is allowed to desaturate, eight hues
-        // converge on one muddy grey that clears every floor and codes
-        // nothing. The walk moves lightness ONLY, and in the direction the
-        // theme requires — deeper under a light surface, lifted under a dark
-        // one. (It cannot promise any two hues stay apart: `ochre` is `amber`
-        // at lower chroma, and solving both to one floor converges them by
-        // construction. That is a palette property, so the set that has to be
-        // told apart is gated where it is chosen — see the `docs` app's
-        // `kind-colours.test.ts` in packages/blueprints.)
+        // "Darken until it passes" is safe only while hue and saturation hold:
+        // a desaturating solver converges eight hues on one grey that clears
+        // every floor and codes nothing. It cannot promise two hues stay apart —
+        // that is gated where the set is chosen (`kind-colours.test.ts`).
         for (const [name, fillHex] of Object.entries(ring)) {
           const ink = evalColorMix(
             resolve(tokens[`--c-${name}-text`] ?? "", scope)
@@ -544,8 +433,6 @@ describe("blueprint token contrast floors", () => {
             parseColor(fillHex).rgb
           );
           const [hue, sat, lightness] = rgbToHsl(parseColor(ink).rgb);
-          // Tolerances are 8-bit re-quantisation slack, not licence to drift:
-          // the walk re-rounds `hsl()` to a hex at every step.
           expect(
             Math.abs(hue - fillHue),
             `${theme} --c-${name}-text hue`
@@ -554,8 +441,6 @@ describe("blueprint token contrast floors", () => {
             Math.abs(sat - fillSat),
             `${theme} --c-${name}-text saturation`
           ).toBeLessThan(0.03);
-          // Signed travel, so one assertion covers both directions: the rung
-          // must move AWAY from the theme's surface, never toward it.
           const travel =
             theme === "light" ? fillLight - lightness : lightness - fillLight;
           expect(
@@ -566,13 +451,9 @@ describe("blueprint token contrast floors", () => {
       });
 
       test(`${theme}: the file-kind hues stay apart as text`, () => {
-        // A colour code is only a code while its members are TELLABLE APART,
-        // and solving to a shared contrast floor pulls hues together — the
-        // failure this guards is silent, because every rung still passes AA.
-        // The set is the six the `docs` app colour-codes file kinds with
-        // (`kind-colours.test.ts` in packages/blueprints pins that binding).
-        // `ochre` is deliberately NOT in it: it is `amber` at lower chroma, so
-        // the two converge from 0.125 apart as fills to 0.028 as light text.
+        // Solving to a shared floor pulls hues together, silently, since every
+        // rung still passes AA. `ochre` is deliberately NOT in the set: it is
+        // `amber` at lower chroma.
         const KINDS = [
           "rose",
           "teal",
@@ -599,9 +480,6 @@ describe("blueprint token contrast floors", () => {
   });
 
   test("an app that declares no identity inherits no hue", () => {
-    // `--app-hue` parameterises nothing: the blueprint surface paints the
-    // system's literal paper, and the hue is only the app's slot on the
-    // identity wheel. It never tints an app's greys, ink or shadows.
     expect(light["--app-hue"]).toBe(HUE);
     expect(light["--app-identity"]).toBe("var(--text)");
     expect(light["--app-identity-text"]).toBe("var(--text)");
@@ -612,18 +490,14 @@ describe("blueprint token contrast floors", () => {
 
 // ── The kit rules the grids above assume ───────────────────────────────────
 //
-// The token grids prove the PAIRINGS are legible; they cannot see which
-// pairing a stylesheet actually writes. There is no filled destructive button
-// (destructive is OUTLINED in `--net`/`--danger`, never a fill), so this
-// describe pins that absence plus the StatusLine determinate fill — the model
-// of "report state in the ink ramp, not a hue".
+// The token grids prove the PAIRINGS are legible; they cannot see which pairing
+// a stylesheet writes. This pins the absent destructive fill and the ink one.
 describe("kit.css honours the ink contract for filled states", () => {
   const css = readFileSync(
     path.resolve(import.meta.dirname, "elements/kit.css"),
     "utf8"
   );
 
-  /** The declaration block that follows `selector`, sans nested rules. */
   function ruleBody(selector: string): string {
     const at = css.indexOf(selector);
     expect(at, `${selector} exists in kit.css`).toBeGreaterThanOrEqual(0);

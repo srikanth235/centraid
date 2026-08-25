@@ -1,36 +1,24 @@
 import type * as TypeImport_6gxkc6 from "./object-store.js";
 /*
- * The `centraid-storage-provider/1` seam (PROTOCOL.md): everything a client
- * (the engine in this package) needs from an offsite storage provider, and
- * nothing about how the provider is implemented. Field names below are
- * copied verbatim from PROTOCOL.md's JSON examples — this file IS the wire
- * contract in TypeScript, so drift between prose and types is a bug in one
- * of them.
- *
- * Layering (PROTOCOL.md): Layer 1 is account + grants — generic across
- * store classes. Layer 2 is workload semantics layered on top, one per
- * store class (`backup`, `cas`, growing additively). Types below are
- * grouped the same way.
+ * The `centraid-storage-provider/1` wire contract in TypeScript. Field names are
+ * verbatim from PROTOCOL.md's JSON, so drift between prose and types is a bug in
+ * one of them. Grouped as PROTOCOL.md layers it: Layer 1 is account + grants,
+ * generic across store classes; Layer 2 is per-store-class workload semantics.
  */
 
-// ───────────────────────────────────────────────────────────────────────────
-// Layer 1 — Account & grants
-// ───────────────────────────────────────────────────────────────────────────
+// ─── Layer 1 — Account & grants ─────
 
-/** The store classes this revision defines (PROTOCOL.md § Terminology). */
+/** Store classes this revision defines (PROTOCOL.md § Terminology). */
 export type StoreClass = "backup" | "cas" | "derived";
 
-/** Every store class, as a runtime array — the single source of truth so
- *  guards that must enumerate them (inventory validation, usage loops,
- *  capability checks) can't drift from `StoreClass`. Order is stable. */
+/** Runtime enumeration of `StoreClass`; guards must read it, not relist. Order is stable. */
 export const STORE_CLASSES = [
   "backup",
   "cas",
   "derived",
 ] as const satisfies readonly StoreClass[];
 
-/** Discovery's additive capability flags. A provider declares only the
- *  control-plane surfaces and store classes it actually offers. */
+/** Additive: a provider declares only the surfaces it actually offers. */
 export type ProviderCapabilityFlag =
   | StoreClass
   | "usage"
@@ -38,23 +26,17 @@ export type ProviderCapabilityFlag =
   | "inventory"
   | "audit";
 
-/** Named capability bundles a provider MAY advertise (PROTOCOL.md § Profiles).
- *  Additive and advisory — capability flags, not profiles, are the
- *  protocol-evolution seam. `/1` defines one: `home` (a household's primary
- *  managed offsite home — the "Hosted" product option — which MUST carry all
- *  seven of `backup`, `cas`, `derived`, `usage`, `policy`, `inventory`,
- *  `audit`). */
+/** Advisory bundles (PROTOCOL.md § Profiles). Capability FLAGS, not profiles,
+ *  are the protocol-evolution seam. */
 export type ProviderProfile = "home";
 
-/** Every known profile name, as a runtime array — the single source of truth
- *  for conformance's "only known profiles" and "home ⇒ all members" checks. */
+/** Runtime enumeration; conformance's profile checks read it. */
 export const PROVIDER_PROFILES = [
   "home",
 ] as const satisfies readonly ProviderProfile[];
 
-/** The seven capabilities a `home`-profile provider MUST declare
- *  (PROTOCOL.md § Profiles). `policy` is REQUIRED so the client's five-metric
- *  freshness contract has a declared cadence to anchor staleness against. */
+/** What a `home`-profile provider MUST declare. `policy` is required so the
+ *  client's freshness contract has a declared cadence to anchor against. */
 export const HOME_PROFILE_CAPABILITIES = [
   "backup",
   "cas",
@@ -74,60 +56,52 @@ export type Retention =
       dailyDays: number;
       /** Then newest-per-week; older pruned. */
       weeklyDays: number;
-      /** MUST be `true` (PROTOCOL.md) — the newest snapshot is never pruned. */
+      /** MUST be `true`: the newest snapshot is never pruned. */
       neverPruneNewest: true;
     }
   | { kind: "none" };
 
-/** `backup`-store-scoped fields of the discovery document — present iff
- *  `capabilities` includes `"backup"` (PROTOCOL.md § Layer 2 — backup). */
+/** Discovery's backup-store fields; present iff `capabilities` has `"backup"`. */
 export interface BackupDiscovery {
   softDeleteWindowDays: number;
   retention: Retention;
   restoreCostClass: "free-egress" | "metered-egress";
-  /** Provider can make objects immutable. */
   objectLock: boolean;
   /** Data plane honors If-None-Match. */
   conditionalWrites: boolean;
 }
 
-/** `GET /v1/storage/provider` response — everything a client adapts to. */
+/** `GET /v1/storage/provider` response. */
 export interface ProviderCapabilities {
   protocol: string[];
   dataPlane: "s3";
-  /** Additive capability flags — see `ProviderCapabilityFlag`. */
   capabilities: ProviderCapabilityFlag[];
-  /** OPTIONAL named capability bundles (PROTOCOL.md § Profiles). A declared
-   *  `home` profile MUST carry all of `HOME_PROFILE_CAPABILITIES`. Absent ⇒
-   *  no named profile (still conformant). */
+  /** A declared `home` profile MUST carry all `HOME_PROFILE_CAPABILITIES`;
+   *  absent is still conformant. */
   profiles?: ProviderProfile[];
   maxCredentialTtlSeconds: number;
   purgeAuthTier: "api-key" | "interactive";
   /** Present iff `capabilities` includes `"backup"`. */
   backup?: BackupDiscovery;
-  /** OPTIONAL — the provider-declared list of S3 storage-class values
-   *  (`x-amz-storage-class`) its data plane accepts on object-creating
-   *  requests (PUT / CreateMultipartUpload / CopyObject), e.g. Cloudflare
-   *  R2's `["STANDARD", "STANDARD_IA"]`. Absent ⇒ clients MUST NOT send the
-   *  header at all; declared ⇒ the data plane MUST accept those values. */
+  /** `x-amz-storage-class` values the data plane accepts. Absent ⇒ clients MUST
+   *  NOT send the header; declared ⇒ the data plane MUST accept those values. */
   storageClasses?: string[];
 }
 
-/** `accountStatus` on the target list — surfaced so backups don't stop silently. */
+/** Surfaced on the target list so backups don't stop silently. */
 export type AccountStatus = "ok" | "payment_due" | "suspended";
 
-/** Backup store's per-target usage, embedded in the target list (Layer 2,
- *  unchanged shape from `/1`'s original single-workload design). */
+/** Backup store's per-target usage, embedded in the target list. */
 export interface Usage {
   storedBytes: number;
   objectCount: number;
-  /** Optional — a provider may not cap storage. */
+  /** Absent when a provider does not cap storage. */
   quotaBytes?: number;
-  /** Unix epoch seconds. Optional — a provider may not meter. */
+  /** Unix epoch seconds; absent when a provider does not meter. */
   meteredAt?: number;
 }
 
-/** One row of `GET /v1/storage/vaults` — a storage target. */
+/** One row of `GET /v1/storage/vaults`. */
 export interface TargetInfo {
   id: string;
   name: string;
@@ -136,18 +110,15 @@ export interface TargetInfo {
   usage: Usage;
 }
 
-/** Short-lived, store-and-prefix-scoped S3 credentials for the data plane
- *  (PROTOCOL.md § Credential grant). One target hosts one isolated prefix
- *  per store class it's granted for — `u/{id}/backup/`, `u/{id}/cas/`. */
+/** Short-lived data-plane credentials. One isolated prefix per store class:
+ *  `u/{id}/backup/`, `u/{id}/cas/`. */
 export interface S3Grant {
   endpoint: string;
-  /** REQUIRED — the data plane's real SigV4 region, never a client-side
-   *  hardcode (see `s3-store.ts`). `"auto"` is a valid value (Cloudflare
-   *  R2's profile). */
+  /** The data plane's real SigV4 region, never a client-side hardcode.
+   *  `"auto"` is valid (R2). */
   region: string;
   bucket: string;
   prefix: string;
-  /** Echoes the store class this grant was issued for. */
   store: StoreClass;
   accessKeyId: string;
   secretAccessKey: string;
@@ -156,13 +127,12 @@ export interface S3Grant {
   mode: "read" | "read-write";
 }
 
-/** Layer-1 optional `usage` capability — per-store-class report
- *  (PROTOCOL.md § Usage). Distinct from `Usage` above, which is the
- *  backup-store's own target-list-embedded figure. */
+/** Per-store-class report. Distinct from `Usage`, the backup store's own
+ *  target-list figure. */
 export interface StoreUsageReport {
   bytesStored: number;
   objectCount: number;
-  /** Optional — provider-defined operation counters (e.g. `{"put": 12}`). */
+  /** Provider-defined operation counters, e.g. `{"put": 12}`. */
   opCounts?: Record<string, number>;
   /** `null` = unmetered (no cap). */
   quotaBytes: number | null;
@@ -180,12 +150,11 @@ export interface ProviderPolicyDeclaration {
   casAck: "receipt" | "replicated";
 }
 
-/** Provider echo. `declaredAt` is provider-stamped unix epoch seconds. */
+/** Provider echo; `declaredAt` is provider-stamped epoch seconds. */
 export interface ProviderPolicy extends ProviderPolicyDeclaration {
   declaredAt: number;
 }
 
-/** Query for one store class's provider-attested inventory. */
 export interface ProviderInventoryQuery {
   store: StoreClass;
   cursor?: string;
@@ -217,7 +186,7 @@ export type ProviderEventKind =
   | "credential-issued"
   | "policy-changed";
 
-/** Append-only provider audit row. Rows are returned oldest-first. */
+/** Append-only; rows return oldest-first. */
 export interface ProviderAuditEvent {
   at: number;
   kind: ProviderEventKind;
@@ -236,11 +205,9 @@ export interface ProviderAuditPage {
   nextCursor: string | null;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Layer 2 — backup store semantics
-// ───────────────────────────────────────────────────────────────────────────
+// ─── Layer 2 — backup store semantics ─────
 
-/** One registry row — the response of registration, and of listSnapshots/getSnapshot. */
+/** One registry row: registration, listSnapshots and getSnapshot all return it. */
 export interface SnapshotRow {
   seq: number;
   manifestKey: string;
@@ -251,7 +218,7 @@ export interface SnapshotRow {
   generation: number;
   format: string;
   appMeta: Record<string, string>;
-  /** Unix epoch seconds — all wire timestamps are epoch-second integers (PROTOCOL.md). */
+  /** Unix epoch seconds — every wire timestamp is an epoch-second integer. */
   createdAt: number;
   /** Unix epoch seconds, or null while the row is live. */
   prunedAt: number | null;
@@ -272,11 +239,9 @@ export interface SnapshotRegistration {
   appMeta: Record<string, string>;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Errors (protocol-wide)
-// ───────────────────────────────────────────────────────────────────────────
+// ─── Errors (protocol-wide) ─────
 
-/** Reserved error codes (PROTOCOL.md § Error envelope) — providers MAY add others. */
+/** Reserved codes; providers MAY add others. */
 export type BackupProviderErrorCode =
   | "invalid_request"
   | "auth_expired"
@@ -290,7 +255,7 @@ export type BackupProviderErrorCode =
   | "purge_pending"
   | "provider_error";
 
-/** The HTTP status the reserved codes map to (PROTOCOL.md's table, column 2). */
+/** PROTOCOL.md's status table. */
 export const CODE_STATUS: Readonly<Record<BackupProviderErrorCode, number>> = {
   invalid_request: 400,
   auth_expired: 401,
@@ -310,7 +275,7 @@ export interface BackupProviderErrorDetails {
   [key: string]: unknown;
 }
 
-/** Every provider-surfaced failure — local and remote providers throw the same shape. */
+/** Local and remote providers throw this same shape. */
 export class BackupProviderError extends Error {
   readonly status: number;
   readonly code: BackupProviderErrorCode | string;
@@ -329,7 +294,7 @@ export class BackupProviderError extends Error {
     this.details = opts.details;
   }
 
-  /** Convenience constructor for a reserved code — status comes from `CODE_STATUS`. */
+  /** Reserved code; status comes from `CODE_STATUS`. */
   static of(
     code: BackupProviderErrorCode,
     message: string,
@@ -344,27 +309,20 @@ export class BackupProviderError extends Error {
   }
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// The provider seam
-// ───────────────────────────────────────────────────────────────────────────
+// ─── The provider seam ─────
+// `conformance.ts` grades any implementation of it against the same cases.
 
-/**
- * The provider seam (PROTOCOL.md § Routes). One implementation per provider;
- * `local-provider.ts` and `remote-provider.ts` both implement this, and
- * `conformance.ts` grades any third implementation against the same cases.
- */
 export interface BackupProvider {
   capabilities: () => Promise<ProviderCapabilities>;
 
   createTarget: (opts: { label: string }) => Promise<{ targetId: string }>;
   deleteTarget: (targetId: string) => Promise<void>;
   undeleteTarget: (targetId: string) => Promise<void>;
-  /** Local provider supports it (api-key tier); remote MUST throw `interactive_auth_required`. */
+  /** Local supports it (api-key tier); remote MUST throw `interactive_auth_required`. */
   purgeTarget: (targetId: string) => Promise<void>;
 
-  /** Store-class-scoped data plane handle (PROTOCOL.md § Layer 1 — per-store
-   *  isolated prefixes). Every provider MUST support `"backup"`; `"cas"` and
-   *  `"derived"` MUST each be supported when `capabilities` declares it. */
+  /** Every provider MUST support `"backup"`; `"cas"` and `"derived"` MUST be
+   *  supported when `capabilities` declares them. */
   openDataPlane: (
     targetId: string,
     store: StoreClass,
@@ -372,12 +330,9 @@ export interface BackupProvider {
   ) => Promise<TypeImport_6gxkc6.ObjectStore>;
 
   /**
-   * Layer-1 grant introspection (PROTOCOL.md § Credential grant) — OPTIONAL.
-   * Only providers with a literal wire-grant concept (a real S3-compatible
-   * data plane reached over HTTP, e.g. `RemoteBackupProvider`) implement
-   * this. A provider whose data plane IS the caller's own custody (e.g.
-   * `LocalBackupProvider`'s filesystem) has no grant to hand back and omits
-   * it; conformance skips the grant-shape assertions when absent.
+   * OPTIONAL: only a provider with a literal wire grant implements it. One whose
+   * data plane is the caller's own custody omits it, and conformance then skips
+   * the grant-shape assertions.
    */
   requestGrant?: (
     targetId: string,
@@ -396,30 +351,28 @@ export interface BackupProvider {
   ) => Promise<SnapshotRow[]>;
   getSnapshot: (targetId: string, seq: number) => Promise<SnapshotRow>;
 
-  /** Includes `currentGeneration` and the backup store's `usage`. */
   getTarget: (targetId: string) => Promise<TargetInfo>;
   usage: (
     targetId: string
   ) => Promise<{ usage: Usage; accountStatus: AccountStatus }>;
 
-  /** Layer-1 optional `usage` capability (PROTOCOL.md § Usage) — per-store-class
-   *  report. OPTIONAL; present iff `capabilities` includes `"usage"`. */
+  /** Present iff `capabilities` includes `"usage"`. */
   usageReport?: (targetId: string) => Promise<UsageByStore>;
 
-  /** Optional `policy` capability — declaration and provider-stamped echo. */
+  /** `policy` capability: declaration and provider-stamped echo. */
   putPolicy?: (
     targetId: string,
     policy: ProviderPolicyDeclaration
   ) => Promise<ProviderPolicy>;
   getPolicy?: (targetId: string) => Promise<ProviderPolicy>;
 
-  /** Optional `inventory` capability — provider-attested, per-store pages. */
+  /** `inventory` capability: provider-attested, per-store pages. */
   listInventory?: (
     targetId: string,
     query: ProviderInventoryQuery
   ) => Promise<ProviderInventoryPage>;
 
-  /** Optional `audit` capability — append-only lifecycle and custody events. */
+  /** `audit` capability: append-only lifecycle and custody events. */
   listEvents?: (
     targetId: string,
     query?: ProviderAuditQuery

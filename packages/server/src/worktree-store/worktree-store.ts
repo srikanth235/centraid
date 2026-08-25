@@ -1,26 +1,10 @@
 // governance: allow-repo-hygiene file-size-limit publish/rollback/delete critical sections share private state — keeping them in one file preserves the per-store mutex invariant
-// Gateway-owned git store for centraid editing sessions — a session
-// worktree is the harness's single directory holding the app code it edits.
-// Full design in receipt #137; this header sketches the layout +
-// invariants. (Draft DATA lives in the vault's ext draft band, not in a
-// branched data.sqlite beside the code — #286 phase 2.)
-//
-// Layout: `apps.git/` (bare repo, pushed to GitHub),
-// `worktrees/main/<sha>/` (read-only materialization, swapped on
-// publish), `worktrees/sessions/<id>/` (mutable per-session editing).
-//
-// Refs: `main` (trunk), `sessions/<id>` (ephemeral), tag
-// `<appId>/v<n>` (immutable forward marker, monotonic per app).
-//
-// Sessions branch off main; publish ff-merges back + tags; rollback
-// is a *new* forward commit overlaying an older subtree — never a
-// reset, so `git log main` stays the audit of everything live.
-//
-// A single WorktreeStore serializes publish + rollback through one
-// per-store mutex. Each publish materializes a fresh
-// `worktrees/main/<sha>/`, flips an in-memory pointer, then removes
-// the previous dir — fresh-path-per-publish rotates require() cache
-// lines naturally (the runtime keys its handler cache on path).
+// Gateway-owned git store for editing sessions. Draft DATA lives in the
+// vault's ext draft band, never in a branched data.sqlite beside the code.
+// Rollback is a NEW forward commit overlaying an older subtree, never a reset,
+// so `git log main` stays the audit of everything live. Publish and rollback
+// serialize through one per-store mutex, and fresh-path-per-publish rotates
+// require() cache lines, since the runtime keys its handler cache on path.
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -38,19 +22,11 @@ import type {
   VersionEntry,
 } from "./types.js";
 
-/** Git's canonical empty tree sha. Used to plant the initial main commit. */
 const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-/**
- * Conservative slug check — matches the canonical app id rule
- * (harness): leading alnum, then alnum / `_` / `-`. No dot, so a
- * tree-traversing `..` is impossible by construction. An automation app is
- * marked by its manifest's `kind` field, never by a dotted `auto.` id
- * prefix, so the id grammar is a plain slug.
- */
+/** No dot, so a tree-traversing `..` is impossible by construction. */
 const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/iu;
 
-/** Stable symlink name (under the store root) pointing at the live main worktree. */
 const ACTIVE_MAIN_LINK = "active-main";
 
 export class WorktreeStore {
@@ -73,12 +49,6 @@ export class WorktreeStore {
     this.activeMainLink = path.join(options.root, ACTIVE_MAIN_LINK);
   }
 
-  /**
-   * Bootstrap the store. Idempotent: mkdir → `git init --bare` (skip
-   * if HEAD present) → plant empty initial `main` if ref missing →
-   * `worktree prune` stale entries → materialize `worktrees/main/<sha>/`
-   * → cache `activeMainDir`. Re-runs reuse everything.
-   */
   async init(): Promise<void> {
     await fs.mkdir(this.root, { recursive: true });
     await fs.mkdir(this.worktreesDir, { recursive: true });
@@ -87,17 +57,13 @@ export class WorktreeStore {
 
     if (!(await pathExists(path.join(this.bareDir, "HEAD")))) {
       await fs.mkdir(this.bareDir, { recursive: true });
-      // `-b main` pins HEAD; without it the host's `init.defaultBranch`
-      // (often `master`) wins and downstream calls chase a dynamic name.
+      // `-b main` pins HEAD; otherwise `init.defaultBranch` wins.
       await run(["init", "--bare", "-b", "main", this.bareDir], {
         cwd: this.root,
       });
     }
 
     if (!(await revParse(this.bareDir, "refs/heads/main"))) {
-      // Empty initial commit so sessions have something to branch off.
-      // `commit-tree` against git's canonical empty-tree sha — no
-      // working tree needed.
       const initialSha = await run(
         ["commit-tree", EMPTY_TREE_SHA, "-m", "centraid: init apps repo"],
         { cwd: this.bareDir }
@@ -107,7 +73,6 @@ export class WorktreeStore {
       });
     }
 
-    // Drop worktree metadata pointing at vanished dirs (e.g. host crash).
     await run(["worktree", "prune"], { cwd: this.bareDir });
     const mainSha = (await revParse(this.bareDir, "refs/heads/main")) ?? "";
     this.activeMainDir = await this.ensureMainMaterialization(mainSha);
@@ -115,30 +80,20 @@ export class WorktreeStore {
     this.initialized = true;
   }
 
-  /** Active main worktree path; runtime reads handlers from `<this>/apps/<id>/`. */
   getActiveMainDir(): string | undefined {
     return this.activeMainDir;
   }
 
-  /**
-   * Stable path to the `active-main` symlink (`<root>/active-main`),
-   * repointed atomically at the live main worktree on every publish /
-   * rollback / delete. Unlike `getActiveMainDir()` — which rotates per
-   * sha — this path never changes, so callers that resolve a path once
-   * (e.g. the gateway's cron scheduler + turn-now, which resolve automation
-   * code under `<this>/apps/<id>/`) stay correct across version swaps. The
-   * symlink exists after `init()`.
-   */
+  /** Never rotates, unlike `getActiveMainDir()`, so a caller that resolves it
+   *  once survives a version swap. */
   getActiveMainLink(): string {
     return this.activeMainLink;
   }
 
-  /** Bare repo path — for export/import + tests. */
   get bareRepoDir(): string {
     return this.bareDir;
   }
 
-  /** Every app id with an `apps/<id>/` subtree on main. Replaces `_registry.json`. */
   async listApps(): Promise<string[]> {
     this.assertInitialized();
     const out = await runRaw(
@@ -156,10 +111,6 @@ export class WorktreeStore {
       .sort();
   }
 
-  /**
-   * App ids on main plus their `app.json` metadata, read from the
-   * materialized-main worktree.
-   */
   async listAppsWithMeta(): Promise<
     Array<{
       id: string;
@@ -189,8 +140,7 @@ export class WorktreeStore {
           ...(manifest.kind === "automation" || manifest.kind === "app"
             ? { kind: manifest.kind as "app" | "automation" }
             : {}),
-          // Tile identity (#263) — pass-through strings; the shells
-          // validate against the design-tokens sets before rendering.
+          // Pass-through: the shells validate against the token sets.
           ...(typeof manifest.iconKey === "string"
             ? { iconKey: manifest.iconKey }
             : {}),
@@ -203,22 +153,13 @@ export class WorktreeStore {
     return rows;
   }
 
-  /**
-   * Remove an app from `main` entirely — path-scoped `git rm -r
-   * apps/<appId>` on a detached worktree, commit on main, atomic
-   * `<appId>/v*` tag cleanup, materialize. Forward-only like publish;
-   * the deletion appears as a fresh commit so `git log main` keeps
-   * the audit. Serialized through the same publish mutex.
-   *
-   * Throws `no_changes` when the app wasn't on main.
-   */
+  /** FORWARD-ONLY: the deletion is a fresh commit. */
   deleteApp(
     appId: string
   ): Promise<{ sha: string; materializedMainDir: string }> {
     return this.serialize(() => this.deleteAppCritical(appId));
   }
 
-  /** App's active code dir, or undefined when never published. */
   async resolveActiveAppDir(appId: string): Promise<string | undefined> {
     assertSafeId(appId, "invalid_app_id");
     this.assertInitialized();
@@ -228,15 +169,8 @@ export class WorktreeStore {
     return (await pathExists(appDir)) ? appDir : undefined;
   }
 
-  /**
-   * Absolute path to `<sessionDir>/apps/<appId>/`, mkdir'd if missing.
-   * Refuses with `session_missing` when the session worktree isn't
-   * registered (no `.git` link file). Without this guard a stray
-   * `PUT files` could materialize `worktrees/sessions/<id>/apps/<app>/`
-   * from a typo'd id; `openSession(id)` would then 409 with
-   * `session_exists` and a later `publish()` would `git add` in a
-   * plain dir and fail.
-   */
+  /** Refuses `session_missing` when the worktree is not registered: a typo'd id
+   *  would otherwise materialize a plain directory that fails `git add`. */
   async snapshotSessionAppDir(
     sessionId: string,
     appId: string
@@ -256,7 +190,6 @@ export class WorktreeStore {
     return dir;
   }
 
-  /** Branch `sessions/<id>` off `main` + materialize a mutable worktree the harness edits. */
   async openSession(sessionId: string): Promise<SessionHandle> {
     assertSafeId(sessionId, "invalid_session_id");
     this.assertInitialized();
@@ -277,21 +210,16 @@ export class WorktreeStore {
     return { id: sessionId, branch, worktreePath };
   }
 
-  /** Remove a session's worktree + branch. Idempotent (safe on a vanished session). */
   async closeSession(sessionId: string): Promise<void> {
     assertSafeId(sessionId, "invalid_session_id");
     this.assertInitialized();
     const worktreePath = this.sessionWorktreePath(sessionId);
     if (await pathExists(worktreePath)) {
-      // `--force` tolerates uncommitted edits (the session is
-      // being abandoned by design).
       await runRaw(["worktree", "remove", "--force", worktreePath], {
         cwd: this.bareDir,
         allowNonZero: true,
       });
     }
-    // Prune so the metadata catches up with any directory we just
-    // removed (or that vanished beforehand).
     await run(["worktree", "prune"], { cwd: this.bareDir });
     const branch = sessionBranchName(sessionId);
     await runRaw(["branch", "-D", branch], {
@@ -300,12 +228,6 @@ export class WorktreeStore {
     });
   }
 
-  /**
-   * Return the ids of every active session — every branch under
-   * `refs/heads/sessions/` whose worktree is still registered. The
-   * gateway calls this on bootstrap to reattach to in-flight
-   * sessions (and prune orphans).
-   */
   async listSessions(): Promise<string[]> {
     this.assertInitialized();
     const out = await run(
@@ -322,7 +244,6 @@ export class WorktreeStore {
       .map((line) => line.slice("sessions/".length));
   }
 
-  /** App ids present in an open session's `apps/` dir (empty when closed). */
   async sessionAppIds(sessionId: string): Promise<string[]> {
     assertSafeId(sessionId, "invalid_session_id");
     this.assertInitialized();
@@ -339,43 +260,17 @@ export class WorktreeStore {
     }
   }
 
-  /**
-   * Publish an app from a session: path-scoped commit, immutable
-   * tag `<appId>/v<n>`, ff-merge into `main` (rebase if `main`
-   * advanced under the session), materialize the new main worktree,
-   * swap the active pointer, evict the old materialization.
-   *
-   * Serialized through a per-store mutex so two parallel publishes
-   * — even of different apps — can't race on `main`.
-   */
+  /** Serialized, so two parallel publishes cannot race on `main`. */
   publish(input: PublishInput): Promise<PublishResult> {
     return this.serialize(() => this.publishCritical(input));
   }
 
-  /**
-   * Forward-only rollback: overlay `<appId>'s` subtree from
-   * `<versionTag>` onto current `main` as a *new* commit (NOT
-   * tagged). `git log main` therefore stays a chronological audit
-   * including rollbacks; tag-version numbers stay monotonic.
-   *
-   * CODE-ONLY by design: unlike `publish` (which runs `input.beforeMerge`
-   * against the vault's ext band), rollback has no pre-merge hook — it swaps code
-   * but leaves the app's vault ext band forward. See `RollbackInput`
-   * and `rollbackCritical` for the rationale (#160 / #144).
-   *
-   * Also serialized through the per-store mutex.
-   */
+  /** FORWARD-ONLY and untagged, so the log stays chronological and tag versions
+   *  monotonic. CODE-ONLY: no pre-merge hook (#160/#144). */
   rollback(input: RollbackInput): Promise<RollbackResult> {
     return this.serialize(() => this.rollbackCritical(input));
   }
 
-  /**
-   * Versions of an app, newest-first. Walks `refs/tags/<appId>/v*`,
-   * pairs each with its tagged commit's sha + committer date, and
-   * marks the entry whose `apps/<appId>/` subtree matches main's as
-   * `active`. Forward publish → newest tag is active. Rollback
-   * overlay → the older tag re-laid on main becomes active again.
-   */
   async listVersions(appId: string): Promise<VersionEntry[]> {
     assertSafeId(appId, "invalid_app_id");
     this.assertInitialized();
@@ -409,7 +304,6 @@ export class WorktreeStore {
     return rows;
   }
 
-  /** Resolve `<ref>:<path>` to its tree/blob sha, or undefined if absent. */
   private async treeSha(refPath: string): Promise<string | undefined> {
     const r = await runRaw(["rev-parse", refPath], {
       cwd: this.bareDir,
@@ -434,9 +328,6 @@ export class WorktreeStore {
       );
     }
 
-    // Stage only the per-app subtree so cross-app edits in the same
-    // session don't ride along (the issue's path-scoped-commit
-    // contract).
     const appSubdir = `apps/${appId}`;
     await fs.mkdir(path.join(sessionDir, appSubdir), { recursive: true });
     await run(["add", "--", appSubdir], { cwd: sessionDir });
@@ -458,10 +349,8 @@ export class WorktreeStore {
     const subject = `${appId}: ${message}`;
     await run(["commit", "-m", subject], { cwd: sessionDir });
 
-    // Rebase if main advanced under us. Inside the publish mutex,
-    // the only writer that can have advanced main is a publish that
-    // completed before us — `merge-base` is the exact "did we
-    // diverge" probe.
+    // Inside the mutex the only writer that can have advanced main is a completed
+    // publish, so `merge-base` is the exact divergence probe.
     const mainBeforeSha =
       (await revParse(this.bareDir, "refs/heads/main")) ?? "";
     const sessionBranch = sessionBranchName(sessionId);
@@ -472,33 +361,24 @@ export class WorktreeStore {
       }
     );
     if (mergeBase !== mainBeforeSha) {
-      // Replay the session's commits on top of current main. We do
-      // the rebase in the session worktree (it has the index + HEAD
-      // git needs for a normal rebase).
       await run(["rebase", "refs/heads/main"], { cwd: sessionDir });
     }
 
     const sessionTipSha = await run(["rev-parse", "HEAD"], { cwd: sessionDir });
 
-    // Run the pre-merge hook AFTER the rebase (the worktree now reflects
-    // the exact tree about to go live, with the final merged `app.json`)
-    // and BEFORE the ff-merge, all inside the publish mutex (#144/#286).
-    // A throw here — e.g. an ext-band spec the vault refuses — aborts the
-    // publish before `main` advances or a tag is minted.
+    // AFTER the rebase and BEFORE the ff-merge, inside the mutex: a throw
+    // here aborts before `main` advances or a tag is minted (#144/#286).
     if (input.beforeMerge) {
       await input.beforeMerge(path.join(sessionDir, "apps", appId));
     }
 
-    // Pick the next version number BEFORE writing the tag so a
-    // concurrent caller — though serialized through publishChain on
-    // this store, a fresh WorktreeStore on the same disk would still
-    // honor existing tags — never collides.
+    // BEFORE the tag write: a fresh store on the same disk is off this publish
+    // chain but still honors existing tags.
     const nextN = await this.nextVersionNumber(appId);
     const tag = `${appId}/v${nextN}`;
     await run(["tag", tag, sessionTipSha], { cwd: this.bareDir });
 
-    // Fast-forward main. After the rebase above main is guaranteed
-    // an ancestor of session-tip, so a direct ref update is safe.
+    // After the rebase main is an ancestor of session-tip.
     await run(["update-ref", "refs/heads/main", sessionTipSha, mainBeforeSha], {
       cwd: this.bareDir,
     });
@@ -527,8 +407,6 @@ export class WorktreeStore {
       );
     }
 
-    // Transient worktree off main for the overlay commit. Same
-    // reason as openSession — bare repos can't `checkout` directly.
     const txId = `_rollback-${crypto.randomBytes(6).toString("hex")}`;
     const txDir = path.join(this.worktreesDir, txId);
     await run(["worktree", "add", "--detach", txDir, "refs/heads/main"], {
@@ -555,14 +433,8 @@ export class WorktreeStore {
       }
       const subject = `rollback: ${appId} -> ${versionTag}`;
       await run(["commit", "-m", subject], { cwd: txDir });
-      // No pre-merge hook here, deliberately (the asymmetry with
-      // `publishCritical`'s `input.beforeMerge` is by design — #160 / #144).
-      // Rollback is CODE-ONLY: it relays an older `apps/<appId>/` tree onto
-      // `main` but does NOT touch the app's ext band in the vault. Ext DDL
-      // is forward-only (applied additively on publish); the band stays at
-      // its current shape, ahead of the rolled-back code. The mismatch is
-      // healed by a re-publish. Rollback is the rarer operation, so we
-      // accept the transient code-behind-schema window.
+      // NO pre-merge hook, deliberately (#160/#144): rollback is CODE-ONLY. Ext
+      // DDL is forward-only, so the band stays ahead of the rolled-back code.
       const newSha = await run(["rev-parse", "HEAD"], { cwd: txDir });
       const oldMainSha =
         (await revParse(this.bareDir, "refs/heads/main")) ?? "";
@@ -627,8 +499,6 @@ export class WorktreeStore {
       await run(["update-ref", "refs/heads/main", newSha, oldMainSha], {
         cwd: this.bareDir,
       });
-      // Drop the app's version tags too — listVersions(appId) should
-      // return [] post-delete. Best-effort per tag.
       const versions = await this.listVersions(appId);
       await Promise.all(
         versions.map(async (version) =>
@@ -650,10 +520,6 @@ export class WorktreeStore {
     }
   }
 
-  /**
-   * Compute `<n>` for the next `<appId>/v<n>` tag — one greater
-   * than the highest existing version, starting at 1.
-   */
   private async nextVersionNumber(appId: string): Promise<number> {
     const versions = await this.listVersions(appId);
     if (versions.length === 0) return 1;
@@ -661,32 +527,19 @@ export class WorktreeStore {
     return highest + 1;
   }
 
-  /**
-   * Materialize `worktrees/main/<sha>/` if it isn't already on disk
-   * + registered as a worktree. Idempotent so init can call it
-   * unconditionally on bootstrap.
-   */
   private async ensureMainMaterialization(sha: string): Promise<string> {
     const dir = path.join(this.mainWorktreesDir, sha);
     if (await pathExists(dir)) {
-      // If the directory exists but git doesn't remember it as a
-      // worktree (e.g. host crash), `git worktree prune` cleaned the
-      // metadata and re-adding would refuse on a non-empty path.
-      // Trust the on-disk tree in that case.
+      // If git no longer remembers the directory as a worktree, re-adding refuses
+      // on a non-empty path — trust the on-disk tree.
       return dir;
     }
     await run(["worktree", "add", "--detach", dir, sha], { cwd: this.bareDir });
     return dir;
   }
 
-  /**
-   * Flip the active-main pointer to `newDir`, repoint the stable
-   * `active-main` symlink, then evict the prior materialization. The
-   * symlink is repointed BEFORE the old dir is removed so a reader
-   * resolving the stable path never observes a dangling link. The
-   * eviction is synchronous in v0; refcount / drain semantics belong
-   * in the runtime-wiring slice.
-   */
+  /** Repointed BEFORE the old dir is removed, so a reader resolving the
+   *  stable path never observes a dangling link. */
   private async swapActiveMain(newDir: string): Promise<void> {
     const previous = this.activeMainDir;
     this.activeMainDir = newDir;
@@ -701,13 +554,8 @@ export class WorktreeStore {
     }
   }
 
-  /**
-   * Atomically point `<root>/active-main` at `targetDir`. The target is
-   * stored relative to the store root so the whole store can be moved
-   * wholesale (export/import) without breaking the link. Replacement is
-   * via write-temp-then-rename so concurrent readers see either the old
-   * or the new target, never a half-written link.
-   */
+  /** RELATIVE to the store root, so the store moves wholesale.
+   *  Write-temp-then-rename, so a reader never sees a half-written link. */
   private async updateActiveMainLink(targetDir: string): Promise<void> {
     const rel = path.relative(this.root, targetDir);
     const tmp = `${this.activeMainLink}.tmp-${crypto.randomBytes(6).toString("hex")}`;
@@ -728,12 +576,7 @@ export class WorktreeStore {
     }
   }
 
-  /**
-   * Chain `fn` after the prior publish/rollback so the bare repo's
-   * `main` advances atomically. Rejections from earlier links are
-   * swallowed for chaining purposes — the originator already saw
-   * the rejection at its own `await` site.
-   */
+  /** Earlier rejections are swallowed for chaining: the originator saw it. */
   private serialize<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.publishChain.catch(() => undefined).then(fn);
     this.publishChain = next;

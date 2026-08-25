@@ -1,13 +1,4 @@
-// React entry for the renderer (#325).
-//
-// React owns `#root`: this module mounts the App shell (via the first-run
-// onboarding gate below). A dev-only component gallery renders on the
-// `#ui-preview` hash. Every screen is a React component the shell mounts
-// directly.
-//
-// Bundled by Vite (see vite.config.ts) into dist/renderer/react-boot.js and
-// loaded as a plain <script type="module"> — no dev server, so the strict
-// `script-src 'self'` CSP holds.
+// Loaded as a plain module script — no dev server, so `script-src 'self'` holds.
 
 import "../theme-vars.js";
 import "../icons.js";
@@ -27,39 +18,13 @@ import App from "./shell/App.js";
 import ErrorBoundary from "./shell/ErrorBoundary.js";
 import { Gallery } from "./ui/index.js";
 
-// Install terminal replica cleanup before any app route asks for a local read;
-// inactive gateway removal and vault switches must also reach dormant storage.
 void import("../replica/shell-session.js")
   .then((module) => module.installReplicaStorageLifecycle())
   .catch(() => undefined);
 
-// Opted-in paired devices contribute PDF text and video posters only while
-// charging + unmetered. THE FETCH WAITS, not just the work (#838).
-//
-// Dynamic and immediate are different things, and a dynamic import does NOT by
-// itself keep PDF.js off the shell's startup path: a bare `void import(…)` at
-// module scope sends the request during boot, putting the worker chunk and the
-// `pdf.worker.min` asset it pulls on the cold-load waterfall of every seat —
-// two same-origin requests the shell's own budget pays for work that has not
-// started and, on most seats, never will.
-//
-// A BACKGROUND CONTRIBUTOR DOES NOT TOUCH THE NETWORK IN THE FIRST MINUTE OF A
-// SESSION. That is the rule the delay expresses, and it is the feature's own
-// terms rather than a number tuned to a fence: this runner leases work only
-// while the machine is on mains power and unmetered, then polls every five
-// minutes (`POLL_INTERVAL_MS`) and waits for browser idle before computing
-// anything. Against that cadence a first load one minute in is prompt, and
-// nothing in the shell needs the module's code before then.
-//
-// It also keeps the cost off BOTH ends of a fresh session, not just the first
-// paint: fetched at ten seconds the bytes simply moved from the cold sample to
-// the reload that follows it, which is the same session paying the same price
-// a moment later.
-//
-// The charging/unmetered gate stays where it belongs, inside the runner: it is
-// a live condition to re-check on every attempt, not a fact to sample once at
-// boot (and `navigator.getBattery()` answers `charging: true` on a mains-
-// powered desktop, so it is not the thing keeping this off the waterfall).
+// THE FETCH WAITS, not just the work (#838): a bare `void import(…)` at module
+// scope still requests during boot, putting PDF.js on every cold-load
+// waterfall. A background contributor touches no network in the first minute.
 const DEVICE_WORK_LOAD_DELAY_MS = 60_000;
 window.setTimeout(() => {
   void import("../device-enrichment-worker.js")
@@ -80,7 +45,6 @@ function styleHost(host: HTMLElement): void {
   s.overflow = "auto";
   s.zIndex = "9999";
   s.background = "var(--bg, #0f1115)";
-  // Leave room for the traffic-light inset title bar on macOS.
   s.paddingTop = "28px";
 }
 
@@ -116,19 +80,8 @@ function sync(): void {
 window.addEventListener("hashchange", sync);
 sync();
 
-// ── Reading the settings, and admitting when we couldn't ─────────────────
-// A settings READ that fails is not a fresh install. Treating it as one —
-// `getSettings().catch(() => ({}))` yields an object with no
-// `onboardingCompletedAt` — leaves the gate below unable to tell "this member
-// has never onboarded" from "we have no idea whether they have". On a
-// fully-set-up Mac whose gateway cannot be assessed (device-key custody
-// mismatch; a lock the daemon never answered), that renders the first-run
-// "Start fresh on this Mac" chooser over a real, populated vault — an
-// invitation to start over shown to someone whose data is fine.
-//
-// So the read is three-valued at the call site: it either succeeded (and the
-// stamp decides), or it failed (and we say so). There is no fourth behaviour
-// where a failure quietly wears the shape of a success.
+// A settings READ that fails is not a fresh install: swallowing it would offer
+// "start fresh" over a populated vault. The read stays three-valued.
 type SettingsRead =
   | {
       ok: true;
@@ -136,8 +89,6 @@ type SettingsRead =
     }
   | { ok: false; detail: string | undefined };
 
-/** The host's message, minus Electron's IPC wrapper — a member should not be
- *  reading `Error invoking remote method 'settings:get':` back to anyone. */
 function hostMessage(error: unknown): string | undefined {
   const raw = error instanceof Error ? error.message : String(error ?? "");
   const unwrapped = raw
@@ -151,32 +102,20 @@ async function readSettings(): Promise<SettingsRead> {
   try {
     return { ok: true, settings: await window.CentraidApi.getSettings() };
   } catch (error) {
-    // Logged, not swallowed: the renderer console is the first place anyone
-    // debugging a stuck launch looks (docs/logs.md).
     console.error("[boot] reading settings failed", error);
     return { ok: false, detail: hostMessage(error) };
   }
 }
 
-// ── The shell (#325 flip) ────────────────────────────────────────────────
-// React owns #root: one root on #root renders either the first-run gate or
-// the App shell. First paint does not probe the gateway (#603): the gate
-// decides on platform + the persisted onboarding stamp alone.
 void (async (): Promise<void> => {
   const shell = document.querySelector<HTMLElement>(SHELL_SELECTOR);
   if (!shell) return;
-  // Calling this before render synchronously scrubs the sensitive fragment;
-  // awaiting it later keeps a slow gateway exchange from blanking the PWA.
   const assistHandoffPromise = consumeInitialAssistHandoff();
   installDesktopAssistHandoff();
   const shellRoot = createRoot(shell);
   const wrap = (node: ReactNode) => (
     <ErrorBoundary title="Centraid hit a problem">{node}</ErrorBoundary>
   );
-  // Both throws are deliberate: OnboardingScreen catches whatever
-  // `onOnboardingComplete` rejects with and renders it inline, so a failed
-  // settings save shows up instead of silently stranding the user on a
-  // "completed" first run that never persisted.
   const enterApp = async (options?: {
     seedSampleOnFirstRun?: boolean;
   }): Promise<void> => {
@@ -194,9 +133,6 @@ void (async (): Promise<void> => {
         <FirstRunGate
           host={isWebHost() ? "web" : "desktop"}
           onOnboardingComplete={async () => {
-            // Profile details are deliberately deferred to Settings → You.
-            // The first visit should get straight to the useful surface, with
-            // a removable sample week already being prepared there.
             await enterApp({ seedSampleOnFirstRun: true });
           }}
         />
@@ -204,24 +140,8 @@ void (async (): Promise<void> => {
     );
   };
 
-  // One attempt at deciding what to paint, retried by the startup error
-  // screen: a retry that succeeds lands on exactly the same branches a first
-  // attempt would, so there is no second, drifting boot path.
-  //
-  // "Try again" has to retry the thing that actually failed. The settings read
-  // fails on this desktop because the local gateway would not start, and after
-  // a few failures the host's supervisor gives up: from then on every read
-  // fails INSTANTLY with the same message, whatever the member has since
-  // fixed. So re-reading alone is a button that could never work — verified
-  // by removing the cause completely (killing the process holding gateway.db;
-  // restoring the device credential file) and pressing it.
-  //
-  // The retry therefore asks the host to clear that give-up state and start
-  // the gateway again before reading. Deliberately best-effort: a host with no
-  // local gateway of its own (the web PWA) has nothing to retry and simply
-  // re-reads, and a retry that fails is not reported from here — the read then
-  // fails again with the host's current words, which is the honest, up-to-date
-  // message to put on the screen.
+  // "Try again" must retry what failed: the host's supervisor gives up after a
+  // few, so the retry clears that state and restarts the gateway first.
   const start = async (): Promise<void> => {
     const read = await readSettings();
     if (!read.ok) {
@@ -252,9 +172,7 @@ void (async (): Promise<void> => {
     renderFirstRun();
   };
   await start();
-  // After the first paint, never before it — an assist handoff error opens a
-  // blocking dialog, and a modal over an unpainted window strands people on
-  // the desktop with nothing to look at.
+  // After first paint only: a modal over an unpainted window strands them.
   void assistHandoffPromise.then((assistHandoff) => {
     if (assistHandoff.status === "error") window.alert(assistHandoff.message);
   });

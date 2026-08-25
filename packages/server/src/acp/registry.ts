@@ -1,34 +1,12 @@
 /*
- * Harness spec registry — the single dispatch table for every harness
- * kind the runtime can drive.
+ * governance: allow-repo-hygiene file-size-limit — a per-kind dispatch table
+ * that grows one entry per HarnessKind by design. Split into a data module
+ * before it doubles, not per added kind.
  *
- * governance: allow-repo-hygiene file-size-limit — this is a per-kind
- * dispatch table; it grows one harness entry per HarnessKind by design, so it
- * legitimately exceeds the 500-line file cap. Split into a data module before
- * it doubles, not per added kind.
- *
- * Nothing else branches on the kind: `runTurn`, `preflight` (default binary,
- * minimum version, install hint) and `models/enumerators` all read from
- * `HARNESSES` below, so adding a harness kind is one entry here plus its
- * `HarnessKind` literal in `@centraid/server/engine`.
- *
- * Since #479 there is exactly ONE integration path: the generic ACP
- * client in `./backends/acp/backend.ts`. Every kind is a `makeAcpHarness`
- * entry; kinds differ only in how the ACP-speaking process is launched.
- *
- *   - `gemini` / `qwen` / `opencode` / `grok` / `kimi` / `copilot` / `cursor` /
- *     `kilo` / `cline` / `goose` / `auggie` / `vibe` / `droid` / `pi` / custom
- *     `acp`: the CLI speaks ACP natively, so we spawn it with its ACP flag or
- *     subcommand (or, for `vibe` and `pi`, its dedicated ACP binary).
- *   - `codex` / `claude-code`: neither CLI speaks ACP (Claude Code has no
- *     `--acp`; codex-rs has no ACP surface), so we spawn their official
- *     Apache-2.0 adapters — pinned dependencies of this package, never an
- *     `npx -y` fetch — which drive the same `claude` / `codex app-server`
- *     underneath. `defaultBin` still names the USER-FACING CLI, because
- *     that is what preflight probes and what the install hint is about.
- *
- * Adding a harness is therefore one registry entry plus, if it needs an
- * adapter, an `AcpAdapterSpec` — see docs/harnesses.md.
+ * NOTHING ELSE BRANCHES ON THE KIND: `runTurn`, preflight and model enumeration
+ * all read `HARNESSES`, over one integration path. Kinds differ only in how the
+ * ACP process is launched — natively or through a pinned adapter, never an
+ * `npx -y` fetch (docs/harnesses.md).
  */
 
 import type {
@@ -45,44 +23,24 @@ import type { AcpAdapterSpec, AcpTurnConfig } from "./backends/acp/backend.js";
 import { enumerateAcpModels } from "./backends/acp/enumerate-models.js";
 import { resolveClaudeModel } from "./models/tiers.js";
 
-/** A pinned semantic version — the minimum whose protocol we've verified. */
 export interface HarnessVersion {
   major: number;
   minor: number;
   patch: number;
 }
 
-/** Prefs slice a model enumerator reads (never the whole `HarnessPrefs`). */
 export interface EnumeratePrefs {
   binPath?: string;
   extraArgs?: string[];
 }
 
-/**
- * Everything the runtime needs to know about one harness kind, gathered in
- * one place: how to drive a turn, its default binary, the minimum verified
- * version, the install hint, and how to enumerate its models.
- */
 export interface HarnessSpec {
   readonly kind: HarnessKind;
-  /** Human label for pickers / status surfaces. */
   readonly label: string;
-  /**
-   * The USER-FACING CLI resolved off PATH when the user sets no explicit
-   * `binPath` — `claude`, `codex`, `gemini`, … This is what preflight probes
-   * and version-checks even for adapter-backed kinds, because it is what the
-   * user installs and authenticates; the adapter is our implementation detail.
-   * `undefined` for the custom `acp` kind, which has no canonical binary —
-   * preflight reports it unavailable until `binPath` is configured.
-   */
   readonly defaultBin?: string;
-  /** Minimum CLI version whose event/flag schema we've verified. */
   readonly minVersion: HarnessVersion;
-  /** Caller-facing install/setup hint (shown when the CLI is missing). */
   readonly installHint: string;
-  /** Drive one model turn. Emits `TurnStreamEvent`s; resolves with the resume id. */
   readonly runTurn: RunTurnFn;
-  /** Enumerate the models this harness can serve. Best-effort, never throws. */
   readonly enumerateModels: (prefs: EnumeratePrefs) => Promise<HarnessModel[]>;
 }
 
@@ -95,37 +53,13 @@ interface AcpHarnessSpec {
   acpArgs: string[];
   minVersion: HarnessVersion;
   installHint: string;
-  /**
-   * Static env for the spawned process, whichever flavour this kind is: the
-   * CLI itself for native kinds, the adapter for adapter-backed ones. See
-   * `AcpTurnConfig.env` — deliberately ONE field rather than an adapter-only
-   * one, so a native kind that needs launch env (auggie, droid) doesn't grow
-   * a second path.
-   */
   env?: Readonly<Record<string, string>>;
-  /** Launch through a first-party adapter (kinds whose CLI has no ACP mode). */
   adapter?: AcpAdapterSpec;
-  /** Tier → native-alias mapping applied before matching the harness's model options. */
   resolveModel?: (model: string) => string;
-  /**
-   * Enumerate this kind's models by probing a real ACP session (launch →
-   * initialize → session/new → read the model config option). Off by default:
-   * the probe spawns the harness, and the boot warmer warms EVERY detected
-   * harness, so a universal default would spawn a process per installed native
-   * kind at boot — many of which just answer `AUTH_REQUIRED`. The two
-   * adapter-backed kinds (codex, claude-code) opt in; every native kind stays on "Gateway default" and
-   * still pins a model per-session at turn time. See `./backends/acp/
-   * enumerate-models.ts`.
-   */
+  /** Off by default: the probe SPAWNS the harness at boot. */
   probeModels?: boolean;
 }
 
-/**
- * Fold a registry spec plus the user's prefs into the config the generic ACP
- * client consumes. Pure and exported so the per-kind launch config (adapter
- * package, headless env, which env var `binPath` becomes) is assertable
- * without spawning anything.
- */
 export function buildAcpConfig(
   spec: AcpHarnessSpec,
   prefs: { binPath?: string; extraArgs?: string[] }
@@ -133,8 +67,6 @@ export function buildAcpConfig(
   return {
     kind: spec.kind,
     label: spec.label,
-    // Carried so the ACP client can answer `AUTH_REQUIRED` with the kind's
-    // own sign-in instructions without ever branching on the kind itself.
     installHint: spec.installHint,
     acpArgs: spec.acpArgs,
     ...(spec.defaultBin ? { defaultBin: spec.defaultBin } : {}),
@@ -146,10 +78,8 @@ export function buildAcpConfig(
   };
 }
 
-/** Every registered spec, keyed by kind — the launch-config source of truth. */
 const ACP_SPECS = new Map<HarnessKind, AcpHarnessSpec>();
 
-/** The launch config a kind would use for the given prefs. Test/diagnostic seam. */
 export function acpConfigFor(
   kind: HarnessKind,
   prefs: { binPath?: string; extraArgs?: string[] }
@@ -184,8 +114,6 @@ function makeAcpHarness(spec: AcpHarnessSpec): HarnessSpec {
           ...(input.attachments?.length
             ? { attachments: input.attachments }
             : {}),
-          // The vault runners: the ACP client serves them from a per-turn
-          // loopback MCP endpoint, which is how every kind reaches the vault.
           ...(input.toolContext ? { toolContext: input.toolContext } : {}),
           extraSystemPrompt: input.extraSystemPrompt,
           ...(input.model ? { model: input.model } : {}),
@@ -236,12 +164,6 @@ function makeAcpHarness(spec: AcpHarnessSpec): HarnessSpec {
           : {}),
       };
     },
-    // Models are an ACP *session* concern (the harness advertises its own
-    // `configOptions` at session/new, and the ACP client pins one from there). A
-    // kind that opts into `probeModels` enumerates via the generic ACP probe —
-    // one launch → session/new → read the model option — reusing the exact
-    // launch config a turn would. Everything else returns nothing and the
-    // picker stays on "Gateway default".
     enumerateModels: spec.probeModels
       ? (prefs: EnumeratePrefs): Promise<HarnessModel[]> =>
           enumerateAcpModels(buildAcpConfig(spec, prefs))
@@ -254,24 +176,16 @@ function makeAcpHarness(spec: AcpHarnessSpec): HarnessSpec {
 const codexHarness = makeAcpHarness({
   kind: "codex",
   label: "Codex",
-  // The user-facing CLI: what preflight probes, what the hint installs. The
-  // adapter spawns it (or the path the user pinned) via `CODEX_PATH`.
   defaultBin: "codex",
   acpArgs: [],
   minVersion: { major: 0, minor: 128, patch: 0 },
   installHint:
     "Install Codex CLI (https://platform.openai.com/docs/codex) and run `codex login`.",
-  // Headless full-access mode, set at startup, so the adapter never
-  // round-trips an approval this surface cannot show. Lives on the spec, not
-  // the adapter:
-  // launch env is one field for native and adapter-backed kinds alike.
   env: { INITIAL_AGENT_MODE: "agent-full-access" },
   adapter: {
     packageName: "@agentclientprotocol/codex-acp",
     binPathEnvVar: "CODEX_PATH",
   },
-  // The codex-acp adapter advertises a `model` config option on session/new
-  // (its `createModelConfigOption`), which the generic probe reads.
   probeModels: true,
 });
 
@@ -287,30 +201,19 @@ const claudeHarness = makeAcpHarness({
     "Install Claude Code (https://claude.com/code) and run `claude login`.",
   adapter: {
     packageName: "@agentclientprotocol/claude-agent-acp",
-    // The adapter honours CLAUDE_CONFIG_DIR, so an existing `claude login`
-    // is reused as-is; no env of our own is needed at launch.
     binPathEnvVar: "CLAUDE_CODE_EXECUTABLE",
-    // Headless parity: gateway turns have no approval UI, so the default mode
-    // deadlocks the first file write. Centraid's own consent layer (vault
-    // grants, outbox) is the gate that matters.
+    // Gateway turns have no approval UI: the default mode deadlocks.
     sessionModeId: "bypassPermissions",
     bypassNeedsSandboxWhenRoot: true,
   },
-  // The picker offers capability tiers; map them to the CLI's aliases before
-  // matching against the concrete model ids the adapter advertises.
   resolveModel: resolveClaudeModel,
-  // The claude-agent-acp adapter advertises a `model` config option on
-  // session/new (its `buildConfigOptions`), which the generic probe reads.
   probeModels: true,
 });
 
 const geminiHarness = makeAcpHarness({
   kind: "gemini",
   label: "Gemini CLI",
-  // Natively ACP-speaking: no adapter, just the flag.
   defaultBin: "gemini",
-  // `--experimental-acp` is deprecated upstream and aliases to `--acp`; the
-  // pinned minimum accepts both, so we use the name that outlives the alias.
   acpArgs: ["--acp"],
   minVersion: { major: 0, minor: 50, patch: 0 },
   installHint:
@@ -321,8 +224,6 @@ const qwenHarness = makeAcpHarness({
   kind: "qwen",
   label: "Qwen Code",
   defaultBin: "qwen",
-  // `--experimental-acp` is deprecated upstream and aliases to `--acp`; the
-  // pinned minimum accepts both, so we use the name that outlives the alias.
   acpArgs: ["--acp"],
   minVersion: { major: 0, minor: 20, patch: 0 },
   installHint:
@@ -333,16 +234,10 @@ const opencodeHarness = makeAcpHarness({
   kind: "opencode",
   label: "opencode",
   defaultBin: "opencode",
-  // `opencode acp` is the ACP-native subcommand; there is no deprecated
-  // flag alias to worry about here.
-  //
-  // SAFETY: never add `--mdns` to these args, and be wary of a user who puts
-  // it in `extraArgs`. That flag defaults opencode's listen hostname to
-  // 0.0.0.0, which would publish an unauthenticated code-execution harness to
-  // every host on the LAN. We launch with `acp` and nothing else of our own.
+  // SAFETY: never add `--mdns` to these args, and be wary of a user who puts it
+  // in `extraArgs` — it defaults opencode's listen host to 0.0.0.0, publishing
+  // an unauthenticated code-execution harness to the whole LAN.
   acpArgs: ["acp"],
-  // ACP landed in 0.15.10, but 1.18.4 is the floor after a client-compat
-  // rework (the ACP SDK is still pre-1.0, so older clients drift).
   minVersion: { major: 1, minor: 18, patch: 4 },
   installHint:
     "Install opencode (`npm i -g opencode-ai`) and run `opencode auth login`.",
@@ -352,10 +247,7 @@ const grokHarness = makeAcpHarness({
   kind: "grok",
   label: "Grok",
   defaultBin: "grok",
-  // xAI's Grok Build CLI speaks ACP natively under `grok agent stdio`.
   acpArgs: ["agent", "stdio"],
-  // 0.2.106 — NOT 0.2.11. The latter is an older release that predates ACP
-  // support entirely; the two only look adjacent under a string sort.
   minVersion: { major: 0, minor: 2, patch: 106 },
   installHint:
     "Install Grok CLI (`npm i -g @xai-official/grok`) and sign in. Requires a paid SuperGrok or X Premium+ subscription.",
@@ -365,20 +257,9 @@ const kimiHarness = makeAcpHarness({
   kind: "kimi",
   label: "Kimi",
   defaultBin: "kimi",
-  // The `acp` SUBCOMMAND, not the deprecated `--acp` flag: they are not
-  // synonyms. `--acp` runs a single-session mode with no session list/load,
-  // and we rely on `session/load` to resume a conversation. Do not "simplify"
-  // this back to a flag.
-  //
-  // The project is mid-rename to "Kimi Code" (new repo, license moving
-  // Apache-2.0 → MIT), but the `kimi` binary and `kimi acp` invocation are
-  // preserved across it.
+  // The `acp` SUBCOMMAND, never the flag: the flag has no `session/load`.
   acpArgs: ["acp"],
-  // `kimi acp` landed in 0.63 and model switching over ACP in 0.74, but 1.17
-  // added the AUTH_REQUIRED terminal-auth handshake our ACP client consumes,
-  // so that is the meaningful floor.
   minVersion: { major: 1, minor: 17, patch: 0 },
-  // Not an npm package — Kimi CLI is a Python tool.
   installHint:
     "Install Kimi CLI (`uv tool install kimi-cli`, or `curl -LsSf https://code.kimi.com/install.sh | bash`) and run `kimi login`.",
 });
@@ -386,17 +267,10 @@ const kimiHarness = makeAcpHarness({
 const copilotHarness = makeAcpHarness({
   kind: "copilot",
   label: "GitHub Copilot CLI",
-  // The npm package is `@github/copilot`, but the BINARY it installs is
-  // `copilot` — package name and bin name differ here, unlike every other
-  // kind. Do not "correct" this to the package name.
-  //
-  // There is also a separate `@github/copilot-language-server` package whose
-  // bin is `copilot-language-server`. That is an LSP server for editor
-  // completions, NOT this harness, and it does not speak ACP. Do not add it.
+  // The BINARY is `copilot`, not the package name; the language-server package
+  // is not this harness.
   defaultBin: "copilot",
-  // Stdio ACP. `--acp` also accepts a `--port` for TCP mode; we speak stdio,
-  // so `--port` must never be passed — it would put the harness on a socket the
-  // ACP client isn't reading.
+  // Stdio only: `--port` would sit the harness on an unread socket.
   acpArgs: ["--acp"],
   minVersion: { major: 1, minor: 0, patch: 71 },
   installHint:
@@ -405,16 +279,10 @@ const copilotHarness = makeAcpHarness({
 
 const cursorHarness = makeAcpHarness({
   kind: "cursor",
-  // The installer creates BOTH `agent` and `cursor-agent` symlinks. We
-  // deliberately use `cursor-agent`: a bare `agent` on PATH is a dangerously
-  // generic name that could resolve to anything. Do not switch to `agent`.
   label: "Cursor",
+  // Never `agent`, the installer's other symlink: too generic on PATH.
   defaultBin: "cursor-agent",
   acpArgs: ["acp"],
-  // CalVer, NOT semver: `2026.07.16` is year.month.day. It still compares
-  // numerically and sorts correctly through the same `compareSemver`, so this
-  // needs no special casing — but it is not a semantic version, and
-  // "normalising" it to something small would silently drop the floor.
   minVersion: { major: 2026, minor: 7, patch: 16 },
   installHint:
     "Install Cursor CLI (`curl https://cursor.com/install -fsS | bash`) and sign in with `cursor-agent login`. Requires a paid Cursor plan.",
@@ -441,16 +309,11 @@ const clineHarness = makeAcpHarness({
 const gooseHarness = makeAcpHarness({
   kind: "goose",
   label: "goose",
-  // Homebrew's formula is `block-goose-cli`, but the binary it installs is
-  // `goose` — hence the hint spelling out both.
   defaultBin: "goose",
   acpArgs: ["acp"],
   minVersion: { major: 1, minor: 43, patch: 0 },
-  // goose does NOT answer an unconfigured provider with ACP's `AUTH_REQUIRED`.
-  // It fails `session/new` with an opaque JSON-RPC `-32603 Internal error`,
-  // which our AUTH_REQUIRED handling cannot turn into an actionable message.
-  // Telling the user to configure a provider up front is the only fix
-  // available from here — keep `goose configure` in this hint.
+  // goose answers an unconfigured provider with `-32603`, never
+  // `AUTH_REQUIRED`, so keep `goose configure` in this hint.
   installHint:
     "Install goose (`brew install block-goose-cli`; the binary is `goose`) and run `goose configure` to set a provider before use.",
 });
@@ -460,8 +323,6 @@ const auggieHarness = makeAcpHarness({
   label: "Auggie CLI",
   defaultBin: "auggie",
   acpArgs: ["--acp"],
-  // Suppresses the CLI's own auto-update. Without it Auggie can update itself
-  // mid-session, swapping the binary underneath a running turn.
   env: { AUGMENT_DISABLE_AUTO_UPDATE: "1" },
   minVersion: { major: 0, minor: 33, patch: 0 },
   installHint:
@@ -471,14 +332,9 @@ const auggieHarness = makeAcpHarness({
 const vibeHarness = makeAcpHarness({
   kind: "vibe",
   label: "Mistral Vibe",
-  // `vibe-acp` is a SEPARATE binary from `vibe` — the ACP server is its own
-  // entrypoint, not a mode of the main CLI. That is also why `acpArgs` is
-  // empty: there is no flag or subcommand to add. Do not "fix" this to
-  // `vibe` + `['acp']`; that command does not exist.
   defaultBin: "vibe-acp",
   acpArgs: [],
   minVersion: { major: 2, minor: 21, patch: 0 },
-  // A Python tool (like kimi), not an npm package.
   installHint:
     "Install Mistral Vibe (`uv tool install mistral-vibe`, needs Python 3.12+) and set a Mistral API key.",
 });
@@ -487,11 +343,7 @@ const droidHarness = makeAcpHarness({
   kind: "droid",
   label: "Factory Droid",
   defaultBin: "droid",
-  // A SUBCOMMAND plus a value-bearing flag, not a mode flag: `acp-daemon` is
-  // the value of `--output-format`, so the three tokens are inseparable.
   acpArgs: ["exec", "--output-format", "acp-daemon"],
-  // Both vars suppress the CLI's own auto-update (it honours two names).
-  // Without them droid can update itself mid-session.
   env: {
     DROID_DISABLE_AUTO_UPDATE: "true",
     FACTORY_DROID_AUTO_UPDATE_ENABLED: "false",
@@ -504,10 +356,7 @@ const droidHarness = makeAcpHarness({
 const piHarness = makeAcpHarness({
   kind: "pi",
   label: "pi",
-  // `pi-acp` is a SEPARATE ACP server binary, not a mode of a `pi` CLI — the
-  // same shape as `vibe`/`vibe-acp`. That is why `acpArgs` is empty: there is
-  // no flag or subcommand to add. Do not "fix" this to a `pi` + `['acp']`
-  // invocation; that command does not exist.
+  // A SEPARATE ACP server binary, not a mode: `pi acp` does not exist.
   defaultBin: "pi-acp",
   acpArgs: [],
   minVersion: { major: 0, minor: 0, patch: 31 },
@@ -517,14 +366,12 @@ const piHarness = makeAcpHarness({
 const acpHarness = makeAcpHarness({
   kind: "acp",
   label: "Custom ACP agent",
-  // No default binary — the custom kind is unavailable until a path is set.
   acpArgs: [],
   minVersion: { major: 0, minor: 0, patch: 0 },
   installHint:
     "Set the ACP CLI’s binary path in Settings → Agents, and add its ACP flag (e.g. `--acp`) under extra args.",
 });
 
-/** The dispatch table. Keyed on `HarnessKind` — TS enforces full coverage. */
 export const HARNESSES: Record<HarnessKind, HarnessSpec> = {
   codex: codexHarness,
   "claude-code": claudeHarness,
@@ -545,7 +392,6 @@ export const HARNESSES: Record<HarnessKind, HarnessSpec> = {
   acp: acpHarness,
 };
 
-/** The deliberately small v0 product roster. */
 export const SUPPORTED_HARNESS_KINDS = [
   "codex",
   "claude-code",
@@ -557,11 +403,7 @@ export const SUPPORTED_HARNESS_KINDS = [
 export const SUPPORTED_HARNESSES: readonly HarnessSpec[] =
   SUPPORTED_HARNESS_KINDS.map((kind) => HARNESSES[kind]);
 
-/**
- * Resolve the launch spec for a harness kind. Throws on an unregistered kind —
- * callers that must never throw (best-effort enumeration) index
- * `HARNESSES` directly and guard for `undefined`.
- */
+/** THROWS on an unregistered kind. */
 export function getHarness(kind: HarnessKind): HarnessSpec {
   const harness = HARNESSES[kind];
   if (!harness)

@@ -58,31 +58,12 @@ import type { StoreGroup, StoreHolderDTO } from "./privacyStores.js";
 
 import styles from "./ApprovalsScreen.module.css";
 
-// The Notifications screen (issues #306/#308/#552/#647/#708/#765, evolved to the
-// v11 binding layer in #815) — the desktop UI for the vault's consent surface.
-// Agents stage external writes (outbox), connections lapse, Tier 3/4 acts park,
-// republished manifests ask for wider scopes, and automations file notices.
-// This screen is the one place an owner sees all of it and decides.
-//
-// The v11 shape is TWO REGISTERS. Everything blocking is a decision CARD
-// (`ui/DecideBlock`) — a row cannot hold an actor, an artifact, a
-// standing-grant offer and an irreversible verb without lying about its
-// geometry — and everything already decided is reference material in four
-// collapsible sections underneath: standing grants, who holds which store,
-// what may leave, recent activity.
-//
-// Two rules the shape exists to keep. An irreversible verb confirms IN PLACE,
-// swapping the card's action row for the consequence plus [Do it] / [Keep it],
-// so a member never leaves the sentence they are deciding about. And a
-// background refresh never takes work out of a member's hands: while anything
-// is expanded with an edit, ticked "always allow" or mid-confirm, arrivals wait
-// in a held tray until they say [Add them].
-//
-// Identity (title, count line, the two app-bar verbs) is the FRAME's, published
-// by `ApprovalsRoute` through `routeVitals.ts`; this screen draws no header.
-//
-// Purely presentational: ApprovalsRoute fetches, maps the wire shapes to the
-// DTOs below, and wires the callbacks to `gateway-client-outbox.ts`.
+// The desktop UI for the vault's consent surface (#815 v11). TWO REGISTERS:
+// everything blocking is a decision CARD, everything decided is reference
+// material below. Two rules that shape keeps — an irreversible verb confirms IN
+// PLACE, and a background refresh never takes work out of a member's hands, so
+// arrivals wait in a held tray while anything is mid-edit, ticked or confirming.
+// Identity is the FRAME's; this screen is purely presentational.
 
 export interface ApprovalsOutboxRowDTO {
   itemId: string;
@@ -90,31 +71,18 @@ export interface ApprovalsOutboxRowDTO {
   connectionKind: string;
   verb: string;
   target: string;
-  /** Joined recipient string — `artifact.to` may be a string or a list. */
   recipient: string;
   subject: string | null;
   bodyPreview: string | null;
-  /** Every artifact key/value, readably stringified, for the card's facts. */
   fields: readonly { key: string; label: string; value: string }[];
   stagedAgo: string;
   note: string | null;
-  /**
-   * WHO staged this write — the sibling of the parked-row requester identity.
-   * Never null: falls back to the raw kind string when no display name is
-   * known. The gateway refines the stored `ai_agent` into `'agent' |
-   * 'assistant'` on the wire (VaultPlane.refineActorKind), so the eyebrow can
-   * name an app, an automation and the assistant apart.
-   */
+  /** Never null: falls back to the raw kind string, refined by the gateway. */
   caller: string;
   callerKind: string;
-  /**
-   * Whether the gateway has a request rebuilder for this item's verb (issue
-   * #308 A5) — gates the "Edit and approve" verb. `false` renders it disabled
-   * with the honest fact instead.
-   */
+  /** Gates "Edit and approve"; `false` renders it disabled with the honest fact. */
   canEdit: boolean;
-  /** Raw artifact, keyed exactly as staged — seeds the edit draft and lets
-   *  non-editable fields ride through unchanged. */
+  /** Seeds the edit draft and lets non-editable fields ride through unchanged. */
   artifact: Record<string, unknown>;
 }
 
@@ -129,8 +97,6 @@ export interface ApprovalsParkedRowDTO {
   invocationId: string;
   command: string;
   caller: string;
-  /** Refines a raw 'agent' credential into 'assistant' when it is the vault
-   *  assistant's own identity, not an automation's. */
   callerKind: "app" | "agent" | "assistant" | "owner-device";
   parkedAgo: string;
   inputPreview: string;
@@ -152,56 +118,32 @@ export interface ApprovalsGrantRowDTO {
   createdAgo: string;
 }
 
-/**
- * One Recent activity row (#552). Pure display DTO — mapping and
- * adjacent-duplicate collapse live in `approvalsData.ts`.
- */
 export interface ApprovalsActivityRowDTO {
   receiptId: string;
-  /** Human-readable verb (Locker specials preserved; else sentence-case). */
   label: string;
-  /** Compact detail line — objectType · truncated objectId, or fill origin. */
   detail: string;
-  /** Full object id for the expanded panel (null when absent). */
   objectId: string | null;
   objectType: string;
   occurredAgo: string;
-  /** Absolute ISO timestamp for the expanded detail. */
   occurredAt: string;
-  /** Wire decision: `allow` | `deny` (schema); rendered as Allowed / Denied. */
   decision: string;
-  /** Salience marker; null on pre-#306 receipts — no placeholder. */
   risk: string | null;
-  /** Acting identity display name; falls back to kind when null. */
   actor: string | null;
-  /** Refined kind (`app` / `agent` / `assistant` / `owner`). */
   actorKind: string | null;
-  /** Standing outbox grant when this receipt was auto-allowed. */
   grantId: string | null;
-  /** How the allow decision was made — grant auto-allow vs owner approval.
-   *  Null on denies and rows with no attribution signal. */
   attribution: "grant" | "owner" | null;
-  /** Adjacent-collapse multiplicity (1 when not collapsed). */
   count: number;
-  /** Raw action string for collapse keys / expanded detail. */
   action: string;
 }
 
 /**
- * One row of the EGRESS-CONSENT ledger (#807) — an answer the
- * member gave once about how far work for one capability may travel. Display
- * only: this screen is where an answer is READ BACK, never re-given, so the
- * row carries no action. A declined answer renders exactly as legibly as a
- * granted one; the record of a refusal is the point.
+ * READ back, never re-given: the row carries no action, and a declined answer
+ * renders as legibly as a granted one.
  */
 export interface ApprovalsEnrichConsentRowDTO {
-  /** Stable row id — capability × egress × scope. */
   id: string;
-  /** The capability the answer is about, as the member's words. */
   title: string;
-  /** "Granted · on this device · 3 days ago" — the whole answer, in a line. */
   sub: string;
-  /** The egress class, as the row's compact meta. */
   meta: string;
 }
 
@@ -228,45 +170,20 @@ export interface ApprovalsScreenProps {
   parked: readonly ApprovalsParkedRowDTO[];
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
-  /**
-   * The store-centric ledger (#708) — "who can see my photos?" rather
-   * than "what does this app do?". Every declared store is present, even with
-   * zero holders (rendered as "reachable by nothing").
-   */
+  /** Every declared store is present, even with zero holders. */
   storeGrants: readonly StoreGroup[];
-  /**
-   * The enrichment egress answers on record (#807). Reference
-   * material, like the grants ledger above it: the page shows what was
-   * answered, and answering again happens where the question is asked.
-   */
   enrichConsent?: readonly ApprovalsEnrichConsentRowDTO[];
-  /**
-   * Could the gateway be ASKED for those answers at all? A gateway older than
-   * the consent ledger says so in words (#815) — rendering an empty section
-   * would claim nothing was ever answered, which is a different fact.
-   */
+  /** An empty section would claim nothing was ever answered — a different fact. */
   enrichConsentReadable?: boolean;
   activity: readonly ApprovalsActivityRowDTO[];
   notices?: readonly NoticeRowDTO[];
-  /** Whether the review feed was truncated at the current limit — drives the
-   *  in-place "See all" affordance (#552). */
   activityTruncated?: boolean;
-  /** The itemId/invocationId/requestId/grantId currently mid-flight. */
   busyId: string | null;
-  /**
-   * What discarding a staged write costs, in the words of the route that
-   * performs it. The card states it in place, where the decision is made.
-   */
+  /** In the words of the route that performs it, stated where the decision is made. */
   discardConsequence?: string;
-  /**
-   * A decision the gateway refused after the page had already let it go
-   * (#815). The item comes back exactly as it was, including the member's
-   * edit, carrying the gateway's own words; `nonce` makes a second refusal of
-   * the same item a fresh event.
-   */
+  /** The item returns with the member's edit; `nonce` makes a repeat a fresh event. */
   refusal?: { itemId: string | null; message: string; nonce: number } | null;
-  /** `artifact` is present only for an edit-then-approve (#308) — the
-   *  gateway rebuilds the wire request server-side from it. */
+  /** Present only for an edit-then-approve; the gateway rebuilds the request. */
   onApproveOutbox: (
     itemId: string,
     alwaysAllow: boolean,
@@ -277,47 +194,30 @@ export interface ApprovalsScreenProps {
   onConfirmParked: (invocationId: string, approve: boolean) => void;
   onDecideScopeRequest: (requestId: string, approve: boolean) => void;
   onRevokeGrant: (grantId: string) => void;
-  /** Revoke one store-ledger holder's grant — the row stays, struck through,
-   *  rather than vanishing (#708). */
+  /** The row stays, struck through, rather than vanishing (#708). */
   onRevokeStoreGrant: (holder: StoreHolderDTO) => void;
   onReadNotice?: (noticeId: string) => void;
   onArchiveNotice?: (noticeId: string) => void;
   onOpenNotice?: (notice: NoticeRowDTO) => void;
-  /** Raise the review-feed limit in place when the list is truncated. */
   onSeeAllActivity?: () => void;
-  /** The durable machine-health record, which lives on System — Notifications
-   *  links to it and never restates it. */
   onOpenAlertHistory?: () => void;
   /**
-   * A request to bring one staged write into view — what tapping an `outbox`
-   * notice means (#647). `nonce` makes a repeat tap on the SAME item a new
-   * request; the screen opens that item's card and scrolls to it. A null
-   * itemId — or one that is no longer open — clears any filter and leaves the
-   * queue as it is, rather than pointing at a card that isn't there.
+   * A null or already-closed itemId clears the filter rather than pointing at
+   * nothing; `nonce` makes a repeat tap a new request.
    */
   focusOutbox?: { itemId: string | null; nonce: number } | null;
-  /**
-   * The app bar's "Review all" verb (#765). It is not a navigation: it drops
-   * whatever filter is in force and opens the first staged write, which is what
-   * "review all of it" means on a page whose content is already all here.
-   */
+  /** Not a navigation: it drops the filter and opens the first staged write. */
   reviewAll?: { nonce: number } | null;
 }
 
 // ── Copy that states a rule ────────────────────────────────────────────────
-// Every sentence both surfaces render lives in `../../approvals-copy.js`
-// (#805) — see its header for why the two stopped keeping separate
-// copies. What is left here is desktop's alone.
+// Shared sentences live in `../../approvals-copy.js` (#805); this is desktop's.
 
 const LEDGER_NOTE =
   "Everything an app can reach — revoking takes effect at once.";
 
-/** The enrichment ledger's note (#807). It states the rule the rows
- *  obey: each is an answer, asked once and recorded, not a switch on a page. */
 const ENRICH_CONSENT_NOTE =
   "Asked once, answered once, recorded — including the answers that were no.";
-
-// ── The screen ────────────────────────────────────────────────────────────
 
 export default function ApprovalsScreen(
   props: ApprovalsScreenProps
@@ -372,26 +272,19 @@ export default function ApprovalsScreen(
     const open = pointerDefaultOpen();
     return { activity: open, egress: open, grants: open, ledger: open };
   });
-  // Snapshots of grants the owner has switched off THIS session. The revoke
-  // call deletes the grant row outright, so the next fetch would simply drop it
-  // from `storeGrants` — keeping a copy of the row as it looked at the moment
-  // of revoke is what lets it stay visible, struck through, instead of
-  // vanishing (#708 A2: "the history of the grant stays legible").
+  // Revoke deletes the grant row, so the next fetch would drop it. Keeping the
+  // row as it looked at revoke is what keeps it visible, struck through (#708).
   const [revokedStoreHolders, setRevokedStoreHolders] = useState<
     ReadonlyMap<string, StoreHolderDTO>
   >(new Map());
-  /** The blocking lists as they were when the member started working in them.
-   *  Non-null means a refresh is being held back. */
+  /** Non-null means a refresh is being held back. */
   const [held, setHeld] = useState<Blocking | null>(null);
 
   const focusRef = useRef<HTMLDivElement | null>(null);
   const grantsRef = useRef<HTMLDivElement | null>(null);
 
-  // Honor a deep link from an outbox notice (#647) and the bar's "Review
-  // all" verb (#765). Adjusting state while rendering (React's documented
-  // "derived from props" escape) rather than in an effect: the move must be
-  // part of the same paint as the tap, and a nonce-keyed effect would cascade
-  // an extra render.
+  // State is adjusted while rendering, not in an effect: the move must be part of
+  // the same paint as the tap, and a nonce-keyed effect cascades a render.
   if (focusOutbox && focusOutbox.nonce !== seenFocusNonce) {
     const { itemId } = focusOutbox;
     const stillOpen =
@@ -409,8 +302,7 @@ export default function ApprovalsScreen(
     setConfirming(null);
     setExpandedId(outbox[0]?.itemId ?? null);
   }
-  // A refused write comes BACK — with the member's edit, which never left
-  // component state — so the card reopens on the item the gateway named.
+  // A refused write comes BACK with the member's edit, which never left state.
   if (refusal && refusal.nonce !== seenRefusalNonce) {
     setSeenRefusalNonce(refusal.nonce);
     if (refusal.itemId !== null) {
@@ -421,8 +313,7 @@ export default function ApprovalsScreen(
 
   // ── The held tray ───────────────────────────────────────────────────────
   // "Part-way through" is exactly three things: an edit in progress, a ticked
-  // "always allow", or an open confirm. Anything less — a card merely
-  // expanded — is reading, and reading survives a list changing under it.
+  // "always allow", or an open confirm. A merely expanded card is reading.
   const partWay =
     confirming !== null ||
     editingId !== null ||
@@ -430,10 +321,8 @@ export default function ApprovalsScreen(
     (expandedId !== null && drafts[expandedId] !== undefined);
 
   const incoming: Blocking = { needsAuth, outbox, parked, scopeRequests };
-  // `held` is the queue AS IT WAS when the member started working in it,
-  // snapshotted the moment they became part-way through and released the
-  // moment they finish — so nothing they are holding can be swapped out from
-  // under them, and nothing waits longer than the item they are on.
+  // `held` is the queue as it was when the member started working in it, released
+  // the moment they finish, so nothing is swapped out from under them.
   if (held === null && partWay) setHeld(incoming);
   if (held !== null && !partWay) setHeld(null);
   const shown = held ?? incoming;
@@ -441,8 +330,7 @@ export default function ApprovalsScreen(
 
   useEffect(() => {
     const el = focusRef.current;
-    // `scrollIntoView` is absent under jsdom — opening the card is the
-    // assertable half of the behaviour, the scroll is the browser nicety.
+    // `scrollIntoView` is absent under jsdom; opening the card is the assertable half.
     if (el && typeof el.scrollIntoView === "function") {
       el.scrollIntoView({ block: "nearest" });
     }
@@ -452,9 +340,8 @@ export default function ApprovalsScreen(
   const archivedNotices = notices.filter(
     (notice) => notice.archivedAt !== null
   );
-  // "Waiting" means "requires a decision or an intervention": an info-severity
-  // notice (a gateway recovering, an FYI) is news, not a demand, so it sits in
-  // Notices rather than the queue (#665).
+  // "Waiting" means it requires a decision: an info-severity notice is news, not a
+  // demand, so it sits in Notices rather than the queue (#665).
   const attentionNotices = activeNotices.filter(
     (notice) => notice.severity !== "info"
   );
@@ -513,9 +400,7 @@ export default function ApprovalsScreen(
   // ── One staged write's facts ────────────────────────────────────────────
   const statedFacts = (row: ApprovalsOutboxRowDTO): DecideFact[] => {
     const facts: DecideFact[] = [];
-    // Address facts first, in the order an envelope is read; then anything
-    // else the artifact carries, so nothing staged is hidden from the person
-    // approving it. `body`/`subject` are already the card's quote and title.
+    // Address facts first, so nothing staged is hidden from the approver.
     const addressed = ["to", "cc", "bcc", "from"];
     for (const key of addressed) {
       const field = row.fields.find((f) => f.key === key);
@@ -545,7 +430,6 @@ export default function ApprovalsScreen(
     return facts;
   };
 
-  /** The same artifact, with the fields a member may AUTHOR as inputs. */
   const editableFacts = (row: ApprovalsOutboxRowDTO): DecideFact[] =>
     row.fields.map((field) => {
       const value = draftValue(row, field.key);
@@ -575,9 +459,7 @@ export default function ApprovalsScreen(
     row.target;
 
   // ── The verbs, in the three shapes every kind shares ────────────────────
-  // One outlined Review while a card is closed; a confirm's [Do it] / [Keep
-  // it]; and the kind's own when it is open. An empty row while a decision is
-  // in flight, because a second press is a second send.
+  // An empty row while a decision is in flight: a second press is a second send.
 
   const reviewVerb = (id: string): DecideAction => ({
     commits: false,
@@ -604,7 +486,6 @@ export default function ApprovalsScreen(
     onClick: () => setConfirming({ id, verb }),
   });
 
-  // ── The decision cards ──────────────────────────────────────────────────
   const cards: JSX.Element[] = [];
 
   for (const row of shown.outbox) {
@@ -847,7 +728,6 @@ export default function ApprovalsScreen(
     );
   }
 
-  /** A notice, as a card: the same three verbs wherever it is filed. */
   const noticeCard = (notice: NoticeRowDTO): JSX.Element => {
     const actions: DecideAction[] = [
       {
@@ -896,11 +776,9 @@ export default function ApprovalsScreen(
     shownWaiting < totalWaiting
       ? `showing ${shownWaiting} of ${totalWaiting}`
       : `${totalWaiting} waiting`;
-  // The chip row earns its place only when the queue is long enough that the
-  // owner would otherwise scroll to find the one they care about.
+  // The chip row earns its place only when the queue is long enough to scroll.
   const showChips = totalWaiting > WAITING_CHIPS.length;
 
-  // ── Standing grants ─────────────────────────────────────────────────────
   const grantRows: RowDef[] = grants.map((row) => ({
     action: {
       label: "Revoke",
@@ -914,7 +792,6 @@ export default function ApprovalsScreen(
     title: `${row.actorLabel} may always ${row.verb}`,
   }));
 
-  // ── Recent activity ─────────────────────────────────────────────────────
   const filteredActivity = useMemo(
     () =>
       activityFilter === "denied"
@@ -974,8 +851,7 @@ export default function ApprovalsScreen(
             </div>
           </dl>
           {row.grantId ? (
-            // The rule that decided this, opened where rules are revoked —
-            // one revoke, in one place, rather than a second one down here.
+            // One revoke, in one place, rather than a second one down here.
             <div className={styles.detailActions}>
               <Button
                 commit={false}
@@ -1021,8 +897,10 @@ export default function ApprovalsScreen(
     () =>
       setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  /** The confirm a ROW's verb opens: the consequence, and the two verbs, in a
-   *  panel above the group it belongs to — a row has nowhere to put them. */
+  /**
+   * A row has nowhere to put a consequence and two verbs, so the confirm opens in
+   * a panel above the group.
+   */
   const rowConfirm = (
     title: string,
     body: string,
@@ -1040,10 +918,8 @@ export default function ApprovalsScreen(
   );
 
   // ── The reference tail ──────────────────────────────────────────────────
-  // Standing grants, the store ledger, the network-call list and the history
-  // are not a queue: they are the page's reference material, and they render
-  // in every state, including empty. A consent surface that hides the record
-  // of what it already consented to is not a record.
+  // Reference material, not a queue: these render in every state, including empty.
+  // A consent surface that hides what it consented to is not a record.
   const grantConfirmId =
     confirming?.verb === "revoke-grant" ? confirming.id : null;
   const holderConfirmKey =
@@ -1123,9 +999,7 @@ export default function ApprovalsScreen(
               {storeGrants.map((group) => {
                 const merged = mergeRevokedHolders(group, revokedStoreHolders);
                 const count = merged.holders.length;
-                // The holder this store's confirm is about, if it is this
-                // store's at all — one lookup, so the sentence and the act
-                // can never name two different rows.
+                // One lookup, so the sentence and the act can never name two different rows.
                 const confirmed = merged.holders.find(
                   (holder) =>
                     revokedHolderKey(group.storeId, holder.grantId) ===
@@ -1342,9 +1216,8 @@ export default function ApprovalsScreen(
       {held !== null && arrived > 0 ? (
         <div data-testid="held-tray">
           <PanelBlock
-            // Re-baseline rather than release: the member is still part-way
-            // through their item, so dropping the hold outright would snapshot
-            // again on the very next render.
+            // Re-baseline rather than release: the member is still part-way through, so
+            // dropping the hold would snapshot again on the next render.
             action={{ label: "Add them", onClick: () => setHeld(incoming) }}
             body={APPROVALS_HELD_BODY}
             eyebrow="Live"

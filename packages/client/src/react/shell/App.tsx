@@ -1,8 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#382) the shell root wires
-// every route plus the assistant's conversation actions and the surviving gateway
-// switcher's popover callbacks. A route-wiring extraction remains the right
-// follow-up; #599 shrank this file rather than growing it (the vault switcher's
-// callbacks and the New-vault modal left for Household).
+// every route plus the conversation actions; extracting route wiring is the
+// right follow-up.
 import {
   useCallback,
   useEffect,
@@ -136,14 +134,8 @@ import {
 
 import chrome from "./chrome.module.css";
 
-// Build the ShellActions surface for the current render. Navigation + status +
-// confirm are live; the remaining overlay actions (⌘K palette, the generic app
-// context menu) are wired as their clusters land — until then they route to the
-// builder or no-op so a consumer never crashes.
-//
-// `showToast` keeps its NAME on the actions surface — ~40 screens call it — but
-// the thing it does changed in #707: there is no toast anywhere in this shell,
-// and every message it is handed lands on the one persistent status line.
+// `showToast` keeps its name (~40 callers) but there is no toast in this shell:
+// every message lands on the one persistent status line (#707).
 function makeActions(
   nav: ShellNav,
   openCommandPalette: () => void,
@@ -157,20 +149,13 @@ function makeActions(
     refreshAssistantThreads,
     openCommandPalette,
     openContextMenu: () => {
-      /* the home app-card context menu is wired inside HomeRoute */
+      /* wired inside HomeRoute */
     },
   };
 }
 
-/**
- * The app-bar verbs the SHELL can honour on the six operational routes (#765).
- *
- * These are the ones that are plain navigations or shell overlays, so they work
- * before the route has published anything — the bar is useful on the first
- * frame. Everything else (an export of the window a page is showing, a filter
- * reset, a review queue) needs state only the route has, and the route claims
- * it through `publishRouteVerbs`, which takes precedence over anything here.
- */
+// App-bar verbs the SHELL can honour on the six ops routes (#765): plain
+// navigations only. A route's `publishRouteVerbs` outranks anything here.
 function shellOpsVerbs(
   page: OpsPage,
   nav: ShellNav,
@@ -179,20 +164,13 @@ function shellOpsVerbs(
   switch (page) {
     case "automations":
       return {
-        // An automation is a trigger and a thing to do — the editor is where
-        // both are said, and a draft exists from the moment you open it.
         onCommit: () => nav.navigate({ kind: "automation-editor" }),
         onSecondary: () => nav.navigate({ kind: "templates" }),
       };
     case "household":
-      // Pairing is an act, not a preference, so it opens as its own modal
-      // exactly as it does from the account menu — one door, two handles.
       return { onCommit: openPairDevice };
-    // The remaining four have no verb the shell can honour on the first frame:
-    // every one of theirs (export this window, reset these filters, review this
-    // queue) needs state only the route holds, so they claim the bar through
-    // `publishRouteVerbs` instead. Listed rather than defaulted so a seventh
-    // ops page has to answer this question rather than silently getting none.
+    // Listed rather than defaulted, so a seventh ops page must answer this;
+    // these four claim the bar through `publishRouteVerbs`.
     case "approvals":
     case "atlas":
     case "connectors":
@@ -201,7 +179,6 @@ function shellOpsVerbs(
   }
 }
 
-// Map the current route to the launcher's active-page highlight.
 function activePageFor(route: ShellRoute): ShellPage | undefined {
   switch (route.kind) {
     case "home":
@@ -219,7 +196,6 @@ function activePageFor(route: ShellRoute): ShellPage | undefined {
     case "storage":
       return "gateway";
     case "settings":
-      // Legacy deep link Settings → Connections → promote highlight to Connectors.
       return route.page === "connections" ? "connectors" : "settings";
     case "app":
     case "run-view":
@@ -227,25 +203,18 @@ function activePageFor(route: ShellRoute): ShellPage | undefined {
     case "automation-builder":
     case "automation-editor":
     case "templates":
-      // Detail routes with no launcher destination — nothing to highlight.
       return undefined;
     default:
       return undefined;
   }
 }
 
-/** Compact error-message extractor for status-line copy. */
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/**
- * Settings stopped being a destination and became an overlay, but the route
- * survives: the command palette, Household, Approvals, and the `window.Centraid`
- * shim all still address it as `{kind: 'settings'}`. Rather than rewrite every
- * caller, the route resolves here — open the dialog, and `replace` (not push)
- * home so a dismissed dialog doesn't leave a settings entry in history.
- */
+// Settings is an overlay, but callers still address `{kind: 'settings'}`: open
+// the dialog and `replace` (not push) home, leaving no history entry.
 export function SettingsRouteRedirect({
   nav,
   page,
@@ -262,60 +231,42 @@ export function SettingsRouteRedirect({
   return <PageEmpty message="" />;
 }
 
-// The React shell root — the single component mounted on #root. It owns the
-// real renderer state (appearance prefs, the live app/draft list, starred set)
-// and drives ShellApp, which wires the chrome frame + router. Routes render
-// from the renderRoute switch below.
+// The shell root: owns renderer state, drives ShellApp (chrome frame + router),
+// and renders every route from `renderRoute`.
 export default function App({
   seedSampleOnFirstRun = false,
 }: {
   seedSampleOnFirstRun?: boolean;
 }): JSX.Element {
-  // The flag lives above the route so navigating away during the first sample
-  // fill cannot mount Home again and start a second run.
+  // Above the route: navigating away mid-fill must not start a second run.
   const [autoSeedSample, setAutoSeedSample] = useState(seedSampleOnFirstRun);
   const onAutoSeedStarted = useCallback(() => {
     setAutoSeedSample(false);
   }, []);
   const { prefs, setPrefs } = useAppearance();
-  // `mutateApps` is deliberately NOT taken: its only caller was Home's app
-  // context menu (App info / Rename / Uninstall), which left with the
-  // springboard rewrite. The hook keeps it because the optimistic
-  // rename/uninstall path (#659) is what re-homing those actions will need.
+  // `mutateApps` is deliberately not taken (#659).
   const { userApps, loading: appsLoading, refresh } = useShellApps();
   const assistantConversations = useAssistantConversations();
-  // Conversations mid-undo-window after a delete — optimistically hidden from
-  // the ledger until the grace timer commits or the reader undoes (§3).
+  // Hidden from the ledger for the delete undo window (§3).
   const [pendingConversationDeletes, setPendingConversationDeletes] = useState<
     Set<string>
   >(() => new Set());
   const { isStarred, toggleStar } = useStarred();
-  // Which destinations stand in the stem. User data, persisted (usePins).
   const { pins, togglePin } = usePins();
   const [allAppsOpen, setAllAppsOpen] = useState(false);
   const compact = useCompactLayout();
-  // An installed PWA cannot claim ⌘K — the browser has it — so the hint is
-  // hidden there. The Search CONTROL is never hidden: it is the guarantee, and
-  // the shortcut is the extra (#707, per-surface behaviour).
+  // A PWA cannot claim ⌘K, so the hint hides there — never the control (#707).
   const hasCommandKey = useMemo(() => !isWebHost(), []);
   const ownerScopes = useOwnerScopes();
   const notificationsCounts = useNotificationsCounts();
   const blockingCount = notificationsCounts.decisionCount;
   const updateStatus = useUpdateStatus();
-  // I12 / #501 — What's new re-wired to GitHub release notes (main changelog.ts).
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [whatsNewAutoChecked, setWhatsNewAutoChecked] = useState(false);
-  // Settings is an overlay, not a destination: `null` closed, otherwise the
-  // page id to open on ("" = the default page). Keeping it out of the router
-  // is the point — changing a preference must not cost you your place in the
-  // app, and dismissing returns you exactly where you were.
+  // `null` closed, else the page id ("" = default). Out of the router on
+  // purpose: changing a preference must not cost you your place.
   const [settingsPage, setSettingsPage] = useState<string | null>(null);
-  // Pairing a phone is an act, not a preference, so it opens from the account
-  // menu as its own modal rather than as a Settings page (PairDeviceModal).
   const [pairDeviceOpen, setPairDeviceOpen] = useState(false);
-  // The signed-in person, behind Settings since #707. Re-read whenever the
-  // gateway or vault changes — a different gateway is a different household
-  // and therefore a different roster.
   const [accountNonce, setAccountNonce] = useState(0);
   const accountState = useAsyncData(loadSelfProfile, [accountNonce]);
   const account =
@@ -342,8 +293,6 @@ export default function App({
     })();
   }, [account?.gatewayId]);
 
-  // I12: auto-open What's new once per installed version after a successful
-  // changelog fetch (changelogSeenVersion in desktop settings).
   useEffect(() => {
     if (whatsNewAutoChecked) return;
     let alive = true;
@@ -388,13 +337,11 @@ export default function App({
       }
     })();
   }, []);
-  // Only the reachability verdict, not the whole 5s heartbeat snapshot — the
-  // shell root renders a pill and a banner, and re-rendering the active screen
-  // every five seconds to redraw them was the entire cost (#659).
+  // Reachability verdict only, never the 5s heartbeat snapshot: that re-rendered
+  // the active screen every five seconds (#659).
   const gatewayStatus = useGatewayStatus();
-  // The ONE read of the gateway's capability map (C1, docs/platform-gating.md).
-  // Everything gated below — the launcher, the palette, the ops bar's verbs,
-  // the route wall — reads this value; nothing asks the gateway again.
+  // The ONE read of the capability map (C1, docs/platform-gating.md); everything
+  // gated below reads this value, nothing asks the gateway again.
   const { capabilities, resolved: capabilitiesResolved } =
     useGatewayCapabilities();
   const navRef = useRef<ShellNav | null>(null);
@@ -408,11 +355,6 @@ export default function App({
     []
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // The palette's injected refresh() (#420) — held so the async
-  // conversation-search source can re-run buildPaletteGroups when hits land.
-  // Created once per mount; the palette hands it its `refresh()` on mount via
-  // `setOnResults` (see `onReady` below), so nothing here has to hold that
-  // callback in a ref and reach for it during render.
   const paletteConversationSearch = useMemo(
     () =>
       createPaletteConversationSearch({
@@ -424,15 +366,8 @@ export default function App({
   const paletteEntitySearch = useMemo(() => createPaletteEntitySearch(), []);
   const paletteRecents = useMemo(() => createPaletteRecents(), []);
   const [gatewaySwitcherOpen, setGatewaySwitcherOpen] = useState(false);
-  // The host-plumbing acts (#382) — "Test connection…", "Rename…",
-  // "Remove" (Gateway → Components → Connections since #665) and the switcher's
-  // footer "Add vault…" all open one of these small modals. They live at the
-  // shell root because the Settings dialog is a lower z-index surface they must
-  // sit above, and because the switcher has already closed by the time it
-  // invokes a callback.
+  // At the shell root: these must sit above the Settings dialog (#382).
   const [addGatewayOpen, setAddGatewayOpen] = useState(false);
-  // Bumped whenever a rename/remove commits, so the Connections section
-  // re-reads the registry instead of showing what it listed a moment ago.
   const [gatewaysRefreshKey, setGatewaysRefreshKey] = useState(0);
   const [testConnectionTarget, setTestConnectionTarget] = useState<{
     gatewayId: string;
@@ -442,14 +377,8 @@ export default function App({
     gatewayId: string;
     label: string;
   } | null>(null);
-  /**
-   * Drop a connection — the unguarded primitive behind BOTH surfaces that can
-   * ask for it (#665): the active vault's "On this device → Disconnect",
-   * which confirms in vault words, and Diagnostics' host-framed "Remove". The
-   * host falls back to the local gateway and broadcasts `onGatewayChanged`, so
-   * the reScope effect below is what lands the shell somewhere sane; nothing
-   * here needs to navigate.
-   */
+  // The unguarded primitive behind both drop-a-connection surfaces (#665).
+  // reScope below lands the shell, so nothing here navigates.
   const dropGatewayConnection = useCallback(
     async (gatewayId: string): Promise<boolean> => {
       try {
@@ -464,8 +393,6 @@ export default function App({
     []
   );
 
-  // Diagnostics' destructive act. Host-framed on purpose: the Connections
-  // section is the one surface where a machine is the subject.
   const removeGatewayConnection = useCallback(
     (gatewayId: string, label: string): void => {
       void (async () => {
@@ -483,10 +410,8 @@ export default function App({
     [dropGatewayConnection]
   );
 
-  // Document-level shortcuts + external re-scope. Bound once against the live
-  // nav (navRef, fed by ShellApp). A
-  // gateway (#109) or vault (#289) change invalidates every gateway-scoped piece
-  // of renderer state — drop it by re-listing apps + bouncing to Home.
+  // Bound once against the live nav (navRef, fed by ShellApp). A gateway (#109)
+  // or vault (#289) change invalidates every gateway-scoped bit of state.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const meta = e.metaKey || e.ctrlKey;
@@ -500,8 +425,6 @@ export default function App({
         e.preventDefault();
         setPaletteOpen((open) => !open);
       } else if (meta && e.key === ",") {
-        // The platform-standard Preferences shortcut. Toggles, so the same
-        // keystroke that opened the dialog dismisses it.
         e.preventDefault();
         setSettingsPage((open) => (open === null ? "" : null));
       } else if (meta && e.shiftKey && (e.key === "g" || e.key === "G")) {
@@ -511,9 +434,6 @@ export default function App({
     };
     document.addEventListener("keydown", onKey);
 
-    // The delegated builder (window.openBuilder) reaches back through
-    // window.Centraid for nav actions (optional-chained). React owns routing,
-    // so this publishes a nav-backed shim for it to reach.
     const go = (route: ShellRoute) => (): void =>
       void navRef.current?.navigate(route);
     (window as unknown as { Centraid: unknown }).Centraid = {
@@ -554,8 +474,7 @@ export default function App({
       "message",
       onServiceWorkerMessage
     );
-    // Re-register an already-granted browser after a service-worker or gateway
-    // change; this never prompts at launch.
+    // Re-register an already-granted browser; never prompts at launch.
     if (
       "Notification" in window &&
       window.Notification.permission === "granted"
@@ -563,12 +482,10 @@ export default function App({
       void enableWebPushWake(false);
 
     const reScope = (): void => {
-      // A different gateway or vault is a different world: every cached answer
-      // the shell holds describes the OLD one, and showing a stale row from it
-      // is a correctness bug, not a slow refresh (#659).
+      // Every cached answer describes the OLD gateway/vault; a stale row is a
+      // correctness bug, not a slow refresh (#659). The installed set included:
+      // an offline launch must not paint the previous vault's grid.
       resetQueryCache();
-      // Including the remembered installed set — an offline launch right after
-      // a switch must not paint the previous vault's grid.
       resetInstalledAppsCache();
       void refresh();
       navRef.current?.navigate({ kind: "home" });
@@ -577,9 +494,8 @@ export default function App({
     const offVaultScope = window.CentraidApi.onVaultChanged?.(reScope);
 
     return () => {
-      // These two outlived every remount before (#659): the shell root
-      // subscribed on mount and never unsubscribed, so a re-mounted shell
-      // stacked another pair and one gateway change ran N re-scopes.
+      // Unsubscribe both, or a re-mounted shell stacks pairs and one gateway
+      // change runs N re-scopes (#659).
       offGatewayScope?.();
       offVaultScope?.();
       document.removeEventListener("keydown", onKey);
@@ -589,20 +505,14 @@ export default function App({
         "message",
         onServiceWorkerMessage
       );
-      // The gateway switcher is a body-portalled overlay outside React's tree —
-      // drop it explicitly so it can't outlive the shell root (tests, HMR).
+      // Body-portalled: drop it or it outlives the shell root (tests, HMR).
       closeGatewaySwitcher();
     };
   }, [refresh]);
 
-  // Conversation-row delete. The LEDGER lives in the assistant surface (#707),
-  // but the shell root owns the row ACTIONS, because they reach the router (a
-  // deleted open thread has to bounce) and the shared confirm/prompt overlays.
-  // Bounces off the fresh assistant route if the
-  // conversation being deleted is the one currently open.
-  // Delete with a 6s undo grace window (§3): the row hides immediately and the
-  // open thread bounces to a fresh one, but the FK-CASCADE delete only commits
-  // when the window lapses — an Undo restores the row untouched.
+  // The shell root owns the ledger's row actions: they reach the router (#707).
+  // Delete runs a 6s undo window (§3) — the row hides at once, the FK-CASCADE
+  // delete commits only when the window lapses.
   const deleteAssistantConversation = useCallback(
     (id: string) => {
       const target = assistantConversations.conversations.find(
@@ -644,10 +554,7 @@ export default function App({
     [assistantConversations]
   );
 
-  // The three ledger row edits are optimistic (#659): the row changes on
-  // the click and the PATCH confirms it, instead of the reader waiting a round
-  // trip and then a full list refetch for a name they already typed. A rejected
-  // commit puts the list back exactly as it was and says why.
+  // Optimistic (#659): a rejected commit restores the list and says why.
   const patchConversation = useCallback(
     (
       apply: (
@@ -663,7 +570,6 @@ export default function App({
     [assistantConversations]
   );
 
-  // Inline rename (§3) — the shared text-prompt dialog, then an optimistic PATCH.
   const renameAssistantConversation = useCallback(
     (id: string) => {
       const target = assistantConversations.conversations.find(
@@ -694,8 +600,7 @@ export default function App({
     [assistantConversations, patchConversation]
   );
 
-  // Pin/unpin (§3) — the store sorts pinned threads first, so the local edit
-  // re-sorts too or the row would visibly jump again after the refetch.
+  // The store sorts pinned first, so the local edit re-sorts too.
   const pinAssistantConversation = useCallback(
     (id: string, pinned: boolean) => {
       patchConversation(
@@ -718,8 +623,6 @@ export default function App({
     [patchConversation]
   );
 
-  // Archive/unarchive (§3). Archiving the open thread bounces to a fresh
-  // assistant, mirroring delete (the row leaves the list).
   const archiveAssistantConversation = useCallback(
     (id: string, archived: boolean) => {
       patchConversation(
@@ -743,7 +646,6 @@ export default function App({
     [patchConversation]
   );
 
-  // Export (§3) — fetch the full transcript, then serialize + download.
   const exportAssistantConversation = useCallback(
     (id: string, format: ExportFormat) => {
       void (async () => {
@@ -762,7 +664,6 @@ export default function App({
     []
   );
 
-  // The ledger row ••• / right-click menu: Rename, Export, Pin, Archive, Delete.
   const conversationMenu = useCallback(
     (id: string, anchor: ShellMenuAnchor) => {
       const conv = assistantConversations.conversations.find(
@@ -811,25 +712,12 @@ export default function App({
     ]
   );
 
-  // The vault switcher, wired once. It lists VAULTS ONLY (#608, #665),
-  // flattened across every registered gateway: a gateway is transport, so
-  // picking a vault hosted by another one switches both pointers in a single
-  // click. Explicit creation targets and conversation pins remain stronger
-  // keys.
-  //
-  // It has one trigger, and that trigger is Home's TITLE (#708). The brief's
-  // app bar is a display-face title over a mono meta line, and on Home the
-  // title names the vault — so the name you would press to change is already
-  // standing there at the size the brief gives it. A separate identity row
-  // under the bar would be a second answer to the question the title has
-  // already asked.
+  // Lists VAULTS ONLY (#608, #665), flattened across gateways: a gateway is
+  // transport, so picking a vault elsewhere switches both pointers at once.
   const openVaultSwitcher = useCallback(
     (anchor: DOMRect): void => {
       const activeGatewayId = ownerScopes.gatewayId ?? "";
       setGatewaySwitcherOpen(true);
-      // Paint instantly from whatever a prior open cached, then probe every
-      // registered gateway concurrently and patch rows in place as each
-      // settles (stale-while-revalidate).
       openGatewaySwitcher({
         anchor,
         activeGatewayId,
@@ -842,9 +730,7 @@ export default function App({
         onSelectVault: (gatewayId, vaultId) => {
           void (async () => {
             try {
-              // Atomic from the owner's side: a vault on another gateway
-              // needs the transport moved first, then the vault pointer —
-              // never one without the other.
+              // Transport first, then the vault pointer — never one alone.
               if (gatewayId !== activeGatewayId)
                 await window.CentraidApi.setActiveGateway({ id: gatewayId });
               await window.CentraidApi.setActiveVault({ vaultId });
@@ -863,10 +749,7 @@ export default function App({
     [ownerScopes]
   );
 
-  // ⌘⇧G reaches the same one switcher through its own trigger, so the keyboard
-  // path and the pointer path open the popover anchored to the same control.
-  // A ref callback rather than the ref object itself — see `StemIdentity`.
-  // Stable, so the stem does not detach and re-attach the anchor every render.
+  // Stable, or the stem re-attaches the anchor every render.
   const setSwitcherButton = useCallback((el: HTMLButtonElement | null) => {
     switcherButtonRef.current = el;
   }, []);
@@ -876,26 +759,19 @@ export default function App({
       const button = switcherButtonRef.current;
       if (button) openVaultSwitcher(button.getBoundingClientRect());
     };
-    // This effect OWNS the ref. It runs only when the switcher changes, so it
-    // does not heal itself on every paint the way a re-arm during render
-    // would — nothing else may null it out from a cleanup of its own.
+    // This effect OWNS `switcherActionRef`: nothing else may null it out.
     return () => {
       switcherActionRef.current = null;
     };
   }, [openVaultSwitcher]);
 
-  /** The gateway in the owner's own words — the bar's meta line on Home. */
   const gatewayLabel = ownerScopes.loading
     ? "—"
     : (ownerScopes.gatewayKind === "local"
         ? "This Mac"
         : ownerScopes.gatewayLabel) || "This Mac";
-  // The assistant's conversation ledger. The stem holds the launcher and
-  // nothing else (#707), so the ledger lives in the assistant surface as app
-  // content and this is where its data is shaped. Rows carry their vault only
-  // when it is NOT the owner's own — a
-  // conversation belongs to one vault for life (#599), and saying so on every
-  // row would drown the useful case.
+  // Rows carry a vault label only when it is NOT the owner's own — a
+  // conversation belongs to one vault for life (#599).
   const assistantLedger = useMemo<AssistantConversationEntry[]>(() => {
     const scopeById = conversationScopes();
     const ownScopeId = ownerScopes.primary?.id;
@@ -925,13 +801,9 @@ export default function App({
 
   // ── The one status line (#707, invariant 5) ────────────────────────────
   //
-  // Three affordances the sidebar carried land here, and nowhere else: the
-  // gateway alarm (was a foot row in the danger tone), the update pill (was a
-  // foot button), and the Notifications badge count + unread dot — the
-  // Binding Layer bans badge counts and red dots outright, so the number
-  // becomes a sentence in the numeric register instead of a mark on a nav row.
-  // The sentence itself lives in `ambientStatus.ts` — the shell composes the
-  // line, it does not own the wording rule.
+  // Gateway alarm, update pill and notifications count land here and nowhere
+  // else: badge counts and red dots are banned, so a count becomes a sentence,
+  // worded by `ambientStatus.ts`.
   const ambientStatus = useMemo(
     () =>
       ambientStatusFor({
@@ -942,13 +814,9 @@ export default function App({
     [blockingCount, notificationsCounts.hasUnreadNotices, gatewayStatus]
   );
 
-  // A newer build on disk is news, not a place, so it says so once on the line
-  // and offers the one bounded action that acts on it.
   useEffect(() => {
     if (!updateStatus?.available) return;
     const line = `${updatePillTitle(updateStatus)} · v${updateStatus.version}`;
-    // A download still in flight has nothing to act on yet, so it says so and
-    // offers no control rather than a control that would refuse.
     if (updateStatus.readyToInstall === false) postStatus(line);
     else
       postStatus(line, {
@@ -971,14 +839,8 @@ export default function App({
     [ambientStatus, gatewayStatus]
   );
 
-  // The foot's account menu. Settings, Pair device, What's new and Log out are
-  // each a handful-of-times act, so they live behind the owner's own name
-  // rather than each taking a standing row — the arrangement the sidebar had
-  // before #707. The menu matches the row's width and opens upward, so it reads
-  // as the band opening rather than a popover floating inside it.
   const stemAccount = useMemo(
     () => ({
-      // Empty while the owner still carries the placeholder label.
       name: account?.name?.trim() || "You",
       ...(account?.avatarColor ? { color: account.avatarColor } : {}),
       onMenu: (anchor: DOMRect): void => {
@@ -1013,13 +875,8 @@ export default function App({
     [account, logOut]
   );
 
-  // The stem (#707, invariant 1): the vault switcher, Search, the pinned
-  // launcher, and a foot of All apps + Settings. Every destination the launcher
-  // does not show is still one tap away in the All-apps sheet, which is what
-  // lets the launcher itself stay short.
-  //
-  // The identity head is the switcher's ONLY anchor, so ⌘⇧G aims here too — see
-  // the effect that owns `switcherActionRef`.
+  // The stem (#707, invariant 1). Its identity head is the vault switcher's
+  // ONLY anchor, so ⌘⇧G aims here too.
   const renderStem = useCallback(
     (nav: ShellNav) => (
       <Stem
@@ -1030,8 +887,6 @@ export default function App({
           open: gatewaySwitcherOpen,
           anchorRef: setSwitcherButton,
           vault: ownerScopes.active?.label ?? "Your vault",
-          // The vault's own mark and hue, so two vaults are told apart in the
-          // one place that names which of them you are in.
           ...(ownerScopes.active?.icon
             ? { icon: ownerScopes.active.icon }
             : {}),
@@ -1045,22 +900,13 @@ export default function App({
         capabilities={capabilities}
         hasCommandKey={hasCommandKey}
         onSelect={(destination: LauncherDestination) => {
-          // Settings is an overlay rather than a destination: changing a
-          // preference must not cost you your place in the app.
           if (destination.id === "settings") setSettingsPage("");
           else nav.navigate(destination.route);
         }}
         onSearch={() => setPaletteOpen(true)}
-        // Navigating to the assistant with no conversation id IS "start a new
-        // one" — the same call the ledger's own New chat makes, so the two
-        // entry points cannot drift into two different meanings of new.
         onNewConversation={() => nav.navigate({ kind: "assistant" })}
         onAllApps={() => setAllAppsOpen(true)}
         {...(account ? { account: stemAccount } : {})}
-        // Only while you are IN the assistant. A ledger that stood on every
-        // route would be a third zone in the band; one that appears with the
-        // surface it belongs to is the surface's own navigation, in the one
-        // column this window has for navigation.
         {...(nav.route.kind === "assistant"
           ? {
               ledger: (
@@ -1089,9 +935,8 @@ export default function App({
       hasCommandKey,
       gatewayLabel,
       gatewaySwitcherOpen,
-      // The whole scope, not three fields: react-compiler infers the object
-      // here (three optional reads of one object) and refuses to preserve a
-      // memo whose declared deps are narrower than what it inferred.
+      // The whole scope, not three fields: react-compiler infers the object and
+      // refuses to preserve a memo whose declared deps are narrower.
       ownerScopes.active,
       openVaultSwitcher,
       setSwitcherButton,
@@ -1103,22 +948,9 @@ export default function App({
     ]
   );
 
-  // The app bar (#708, invariant 3). The brief gives every screen a title in
-  // the display face, a meta line in the numeric register, and at most two
-  // actions of which at most one is the filled ink.
-  //
-  // Home's bar names the screen, not the vault: the vault is at the head of the
-  // stem, true on every route, and saying it twice on one screen would make the
-  // reader check whether the two are the same thing. Home has no title-bar
-  // action: the stem's Search control and the keyboard shortcut remain the
-  // global search entry points, while All apps lives in the stem's foot.
-  //
-  // The six operational routes (#765) take the same bar rather than each
-  // drawing its own in-content header: one title, one count line, and the same
-  // two verbs in the same two places on every one of them. What each page SAYS
-  // is static (`opsBar.ts`), so the title is never wrong even for a frame; what
-  // it says about the data it just read arrives on `routeVitals.ts` from the
-  // route's own loader, which is also why the bar is not set from an effect.
+  // The app bar (#708, invariant 3). What a page SAYS is static (`opsBar.ts`);
+  // what it says about data it just read arrives on `routeVitals.ts`, never
+  // from an effect.
   const openPairDevice = useCallback(() => setPairDeviceOpen(true), []);
   const vitals = useSyncExternalStore(
     subscribeVitals,
@@ -1135,19 +967,13 @@ export default function App({
       if (nav.route.kind === "home") return { title: "Home" };
       const page = nav.route.kind;
       if (!isOpsPage(page)) return undefined;
-      // A walled route keeps its title — the bar is the frame, and a blank one
-      // over the wall would read as a broken screen — but it offers no verb.
-      // "New automation" above a page explaining that automations are off is
-      // a control that cannot do the thing it names.
+      // A walled route keeps its title but offers no verb it cannot honour.
       if (!isRouteAvailable(page, capabilities))
         return { title: opsBarDef(page).title };
       const vital = vitals[page];
       const verbs = opsBarVerbs(page, vital?.state);
       // A verb renders only once something can perform it: the route publishes
-      // the handlers only it can honour (an export of the window it is showing,
-      // a filter reset), and the shell resolves the ones that are plain
-      // navigations. A control that would do nothing is worse than a bar with
-      // one control on it.
+      // what only it can honour, the shell resolves plain navigations.
       const published = routeVerbs[page];
       const fallback = shellOpsVerbs(page, nav, openPairDevice);
       const onCommit = published?.onCommit ?? fallback.onCommit;
@@ -1155,9 +981,6 @@ export default function App({
       const commit = verbs.commit && onCommit ? verbs.commit : undefined;
       const secondary =
         verbs.secondary && onSecondary ? verbs.secondary : undefined;
-      // The count line is the first thing a phone bar sheds — it is a second
-      // row of identity in a bar that is already over-subscribed, and every
-      // number in it is stated again in the page beneath.
       const count = compact ? "" : (vital?.count ?? "");
       return {
         title: opsBarDef(page).title,
@@ -1166,8 +989,6 @@ export default function App({
           : {}),
         ...(commit || secondary
           ? {
-              // Quiet first, the one filled commit last — the same order on
-              // every route, so the commit is always under the same thumb.
               actions: (
                 <>
                   {secondary ? (
@@ -1197,18 +1018,14 @@ export default function App({
 
   const renderRoute = useCallback(
     (nav: ShellNav): JSX.Element => {
-      // The capability wall (C1). Deep links, stale history entries and the
-      // `window.Centraid.openAutomations` shim all still ADDRESS these routes
-      // after the launcher stops offering them, and every one of them must be
-      // answered rather than silently dropped. One gate for every gated kind,
-      // read from the one route table — a per-case `if` in the switch below is
-      // how the automation editor ends up walled and the run viewer does not.
+      // The capability wall (C1). Deep links and the `window.Centraid` shim
+      // still ADDRESS gated routes the launcher hides, so one gate reads the
+      // route table here — never a per-case `if` below.
       const gated = routeCapability(nav.route.kind);
       if (gated && !capabilities[gated]) {
-        // Until the handshake answers, the shell believes nothing is enabled
-        // (`CAPABILITIES_OFF`). That belief is right for the launcher — hiding
-        // beats flashing — but it must not accuse a gateway that has not
-        // spoken yet, so the wall waits for a verdict behind a blank frame.
+        // Before the handshake the shell believes nothing is enabled
+        // (`CAPABILITIES_OFF`), so the wall waits behind a blank frame rather
+        // than accuse a gateway that has not spoken.
         if (!capabilitiesResolved) return <PageEmpty message="" />;
         return <CapabilityWall capability={gated} />;
       }
@@ -1223,9 +1040,7 @@ export default function App({
             />
           );
         case "assistant":
-          // The ledger lives in the stem on desktop — one column of navigation
-          // per window. Compact has no stem to put it in (the band is a row of
-          // tabs), so there it stays the route's own disclosure.
+          // Compact has no stem, so there the ledger is the route's own.
           return (
             <AssistantRoute
               conversationId={nav.route.conversationId}
@@ -1263,10 +1078,8 @@ export default function App({
               }}
             />
           );
-        // Data and Copies merged into one Vault custody surface (v11). Both
-        // route kinds resolve to it so old deep links and old pins land; the
-        // kind is passed through because it is also the vitals channel the
-        // bar above this outlet is reading.
+        // Both kinds resolve to the one Vault custody surface so old deep links
+        // land; the kind passes through as the bar's vitals channel.
         case "household":
           return <VaultRoute page="household" />;
         case "storage":
@@ -1274,8 +1087,8 @@ export default function App({
         case "atlas":
           return <VaultRoute page="atlas" />;
         case "automation-view":
-          // Keyed so an in-place automation change remounts: traces, watched
-          // turn ids, and any open SSE all belong to one automation (#541).
+          // Keyed so an in-place change remounts: traces, watched turn ids and
+          // any open SSE belong to one automation (#541).
           return (
             <AutomationViewRoute
               key={nav.route.automationId}
@@ -1300,9 +1113,8 @@ export default function App({
         case "templates":
           return <TemplatesRoute />;
         case "settings":
-          // Legacy deep link: Settings → Connections now lives at Connectors.
-          // It reaches the same surface, so it reaches the same wall — the
-          // route table keys on `kind`, and this one kind renders two places.
+          // This legacy deep link reaches the Connectors surface, so it must
+          // reach the same wall: the route table keys on `kind`.
           if (nav.route.page === "connections")
             return capabilities.connectors ? (
               <ConnectorsRoute />
@@ -1321,10 +1133,8 @@ export default function App({
           const app = userApps.find((a) => a.id === id);
           if (!app) return <PageEmpty message="App not found." />;
           const appId = app.centraidAppId ?? app.id;
-          // Every app is an inline route rendered by this shell (#799):
-          // the served-app plane — the sandboxed iframe host and the builder
-          // that produced apps for it — is retired, so an id with no inline
-          // loader is nothing this client can open.
+          // Every app is an inline route (#799): an id with no inline loader is
+          // nothing this client can open.
           const inlineLoader = inlineAppLoader(appId);
           if (!inlineLoader) return <PageEmpty message="App not found." />;
           return (
@@ -1341,8 +1151,6 @@ export default function App({
           );
         }
         case "automation-builder":
-          // The assistant's automation handoff route. Normal automation
-          // editing lives on `automation-editor`; both render the same editor.
           return (
             <AutomationEditorRoute automationId={nav.route.automationId} />
           );
@@ -1382,9 +1190,8 @@ export default function App({
     ]
   );
 
-  // Stable so ShellApp's memoized outlet has something to compare (issue
-  // #659): an inline arrow here meant every shell-root render — every
-  // heartbeat, every toast — rebuilt the whole route tree.
+  // Stable, so ShellApp's memoized outlet has something to compare: an inline
+  // arrow rebuilds the whole route tree on every shell-root render (#659).
   const refreshAssistantThreads = useCallback(() => {
     void assistantConversations.refresh();
   }, [assistantConversations]);
@@ -1397,8 +1204,7 @@ export default function App({
         value={makeActions(nav, openCommandPalette, refreshAssistantThreads)}
       >
         {renderRoute(nav)}
-        {/* Inside the provider, not beside it: the dialog's pages use
-            `useShellActions` for toasts, confirms, and navigation. */}
+        {/* Inside the provider: these pages use `useShellActions`. */}
         {settingsPage === null ? null : (
           <SettingsRoute
             prefs={prefs}
@@ -1430,7 +1236,6 @@ export default function App({
     paletteConversationSearch.reset();
     paletteEntitySearch.reset();
     paletteRecents.reset();
-    // The refresh() belongs to the palette instance that is going away.
     paletteConversationSearch.setOnResults(null);
     paletteEntitySearch.setOnResults(null);
     paletteRecents.setOnResults(null);
@@ -1464,9 +1269,8 @@ export default function App({
   );
 
   return (
-    // The offline verdict travels once, from here, and the shared commit
-    // control reads it (#708). It wraps the modals and sheets too —
-    // a dialog's Save is as much a commit as a route's is.
+    // The offline verdict travels once, from here, to the shared commit control
+    // (#708) — modals included: a dialog's Save is a commit.
     <CapabilitiesProvider value={capabilities}>
       <CommitAvailabilityProvider value={commitAvailabilityFor(gatewayStatus)}>
         <ShellApp
@@ -1534,9 +1338,7 @@ export default function App({
             onDone={(result) => {
               setAddGatewayOpen(false);
               postStatus(`Connected · ${result.displayLabel}`);
-              // The commit already switched the active gateway+vault, which
-              // fires onGatewayChanged/onVaultChanged — the reScope effect
-              // above picks it up and refreshes the app list + navigates home.
+              // The commit already switched gateway+vault; reScope lands home.
             }}
           />
         ) : null}

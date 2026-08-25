@@ -1,8 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit pre-existing debt (553 lines before issue #352 touched it for enrich-policy mirroring); splitting is a separate cleanup, not bundled into this feature change
-// Host-integration helpers (§12): what an embedding process — the Centraid
-// gateway — needs to run a vault across restarts without keeping credential
-// state of its own. Identity is v0 key-equality, so the host (which owns the
-// database files) recovers credentials by reading the enrolled rows back.
+// Host-integration helpers (§12): what an embedding process needs to run a
+// vault across restarts without keeping credential state of its own. Identity
+// is v0 key-equality, so the host recovers credentials by reading the enrolled
+// rows back.
 
 import { enrollAgent, enrollApp } from "./bootstrap.js";
 import type { BootstrapResult } from "./bootstrap.js";
@@ -18,8 +18,6 @@ export interface HostBootstrap extends BootstrapResult {
 /**
  * Recover an existing vault. An absent `core_vault` row is an explicit
  * uninitialized result — creation belongs to the gateway founding gate.
- * Recovery re-derives the owner credential from the oldest full-trust owner
- * device and rebuilds the seeded-concept map from the model.
  */
 export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
   const vaultRow = db.vault
@@ -62,27 +60,22 @@ export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
   };
 }
 
-/** Rename the vault (owner act on `core_vault.display_name`). */
 export function renameVault(db: VaultDb, displayName: string): void {
   db.vault.prepare("UPDATE core_vault SET display_name = ?").run(displayName);
 }
 
 /**
- * The vault's owner-facing presentation (#280 — profiles are vaults).
- * Lives in `core_vault.settings_json`: the avatar color, icon, and blurb the
- * desktop switcher shows belong to the VAULT, not to any client's
- * localStorage — they travel with an export and survive device changes.
+ * Owner-facing presentation (#280 — profiles are vaults), in
+ * `core_vault.settings_json`: avatar color, icon and blurb belong to the VAULT,
+ * not a client's localStorage, so they survive export and device changes.
  */
 export interface VaultPresentation {
-  /** `#RRGGBB` avatar color. */
   color?: string;
-  /** Icon name from the shell's icon set. */
   icon?: string;
-  /** One-line description shown under the vault name. */
   blurb?: string;
 }
 
-/** Read the vault's settings bag (`core_vault.settings_json`), `{}` when unset. */
+/** `{}` when unset. */
 export function readVaultSettings(db: VaultDb): Record<string, unknown> {
   const row = db.vault
     .prepare("SELECT settings_json FROM core_vault LIMIT 1")
@@ -100,7 +93,6 @@ export function readVaultSettings(db: VaultDb): Record<string, unknown> {
   }
 }
 
-/** The vault's presentation fields out of the settings bag. */
 export function readVaultPresentation(db: VaultDb): VaultPresentation {
   const bag = readVaultSettings(db).presentation;
   if (bag === null || typeof bag !== "object" || Array.isArray(bag)) return {};
@@ -113,21 +105,18 @@ export function readVaultPresentation(db: VaultDb): VaultPresentation {
 }
 
 /**
- * Whether this vault is its owner's PERSONAL vault — the one a gateway
- * defaults to when a caller names none (pair tickets, unscoped requests,
- * post-onboarding landing).
- *
- * The marker lives in the vault's own settings bag, NOT in creation order or
- * in the display name: ids are UUIDv7 so "oldest" is the shared household
- * vault, and the desktop fresh path RENAMES the personal vault to the owner's
- * display name, which kills any name match. A flag written at founding travels
- * with the vault through rename, export, backup and restore.
+ * Whether this is its owner's PERSONAL vault — the one a gateway defaults to
+ * when a caller names none. The marker lives in the settings bag, NOT in
+ * creation order or the display name: ids are UUIDv7, so "oldest" is the shared
+ * household vault, and the desktop fresh path renames the personal vault to the
+ * owner's display name. A flag written at founding travels through rename,
+ * export, backup and restore.
  */
 export function readVaultPersonal(db: VaultDb): boolean {
   return readVaultSettings(db).personal === true;
 }
 
-/** Mark this vault as its owner's personal vault (founding act, see above). */
+/** Founding act — see above. */
 export function markVaultPersonal(db: VaultDb): void {
   const settings = readVaultSettings(db);
   settings.personal = true;
@@ -136,10 +125,7 @@ export function markVaultPersonal(db: VaultDb): void {
     .run(JSON.stringify(settings));
 }
 
-/**
- * Merge a presentation patch into `core_vault.settings_json` (owner act).
- * `null`/empty-string values clear a field.
- */
+/** `null`/empty-string values CLEAR a field. */
 export function updateVaultPresentation(
   db: VaultDb,
   patch: Partial<Record<keyof VaultPresentation, string | null>>
@@ -160,11 +146,10 @@ export function updateVaultPresentation(
 }
 
 /**
- * Merge a byte-custody patch into `core_vault.settings_json` (owner act,
- * #296): the `blob_store` bag (fs | s3 endpoint/bucket/region/prefix/
- * encrypt — credentials NEVER live here, they are harness-ambient) and the
- * `media.location` GPS policy (keep | strip). The custody facade re-reads
- * settings on every use, so a change takes effect without a reopen.
+ * Byte-custody patch into `core_vault.settings_json` (#296): the `blob_store`
+ * bag — credentials NEVER live here, they are harness-ambient — and the
+ * `media.location` GPS policy. The custody facade re-reads settings on every
+ * use, so a change takes effect without a reopen.
  */
 export function updateBlobStoreSettings(
   db: VaultDb,
@@ -196,13 +181,10 @@ export function updateBlobStoreSettings(
 }
 
 /**
- * Enrichment tier per domain (#299 §2, renamed off|local|model →
- * off|device|gateway by #712 C5 — one axis: `off` (nothing runs),
- * `device` (the member's own phone/laptop, plus deterministic gateway
- * work), `gateway` (the member's own gateway may additionally do whatever
- * it is already wired to, including a model turn — see
- * `packages/server/src/automation/fire/enrich-gate.ts` for what that widens and
- * does not). Absent means `gateway`, the seeded bootstrap default.
+ * Enrichment tier per domain (#299 §2, renamed by #712 C5): `off` runs nothing,
+ * `device` is the member's own phone/laptop plus deterministic gateway work,
+ * `gateway` additionally allows whatever that gateway is wired to, model turns
+ * included (`server/src/automation/fire/enrich-gate.ts`). Absent = `gateway`.
  */
 export type EnrichTier = "off" | "device" | "gateway";
 
@@ -213,27 +195,22 @@ export interface EnrichSettings {
 
 const ENRICH_TIERS: readonly EnrichTier[] = ["off", "device", "gateway"];
 
-// COMPAT(enrich-tier-rename #712): a settings bag written before this
-// rename may still hold the old `local`/`model` strings — `settings_json`
-// is a free-form JSON column with no CHECK constraint, so nothing rewrites
-// it on its own. `model` already meant "this domain may take a model
-// turn", which is what `gateway` means now, so it maps up with no
-// widening. `local` meant NO model turn; there is no per-capability
-// consent gate on the execution path yet (decision S9) that would catch a
-// model-lane automation the instant `local` was reinterpreted as the
-// wider `gateway`, so it maps to the conservative `device` — the same "no
-// gateway-lane work" behaviour the vault already had, under the new name.
+// COMPAT(enrich-tier-rename #712): `settings_json` is free-form with no CHECK,
+// so a bag written before the rename may still hold `local`/`model`. `model`
+// already meant "may take a model turn", so it maps up to `gateway` with no
+// widening. `local` meant NO model turn, and no per-capability consent gate
+// exists yet on the execution path (decision S9) to catch a model-lane
+// automation the instant it were reinterpreted, so it maps to `device`.
 const LEGACY_TIER: Readonly<Record<string, EnrichTier>> = {
   local: "device",
   model: "gateway",
 };
 
 /**
- * The owner's enrichment policy out of the settings bag. `gateway` is the
- * default on both domains: Tier-0 derivation (EXIF, thumbs, text
- * extraction, phash) never leaves the member's trust domain, so it needs no
- * opt-in; a THIRD-PARTY PROVIDER seeing bytes is gated separately, per call
- * (#567) and per capability (decision S9), independently of this tier.
+ * `gateway` is the default on both domains: Tier-0 derivation never leaves the
+ * member's trust domain, so it needs no opt-in. A THIRD-PARTY PROVIDER seeing
+ * bytes is gated separately, per call (#567) and per capability, independently
+ * of this tier.
  */
 export function readEnrichSettings(db: VaultDb): EnrichSettings {
   const bag = readVaultSettings(db).enrich;
@@ -254,7 +231,6 @@ export function readEnrichSettings(db: VaultDb): EnrichSettings {
   return { photos: tier(e.photos), docs: tier(e.docs) };
 }
 
-/** Merge an enrichment-policy patch into the settings bag (owner act). */
 export function updateEnrichSettings(
   db: VaultDb,
   patch: Partial<Record<"photos" | "docs", EnrichTier | null>>
@@ -281,9 +257,9 @@ export function updateEnrichSettings(
     .prepare("UPDATE core_vault SET settings_json = ?")
     .run(JSON.stringify(settings));
   const resolved = readEnrichSettings(db);
-  // Mirror into `enrich_policy` (#352 phase 3/4): the JSON settings bag
-  // stays owner-only, but apps read this one column of it through the normal
-  // consent-checked table read — see schema/enrich.ts's header.
+  // Mirror into `enrich_policy` (#352): the JSON settings bag stays owner-only,
+  // but apps read this one column through the normal consent-checked table
+  // read — see schema/enrich.ts's header.
   const now = nowIso();
   for (const domain of ["photos", "docs"] as const) {
     db.vault
@@ -300,12 +276,10 @@ export interface EnrolledApp {
   appId: string;
   signingKey: string;
   /**
-   * The host-side enrollment key (Centraid app id) — NOT the pretty name.
-   * A wide swath of the desktop renderer key-equates this to the app's
-   * slug (folder id, asset paths, grant lookups); the pretty name a
-   * consent surface shows lives on `consent_app.display_name` instead,
-   * surfaced through `ParkedSummary.caller` (`gateway.ts#callerName`),
-   * never through this field.
+   * The host-side enrollment KEY (Centraid app id), never the pretty name: a
+   * wide swath of the desktop renderer key-equates this to the app's slug. The
+   * pretty name lives on `consent_app.display_name`, surfaced through
+   * `ParkedSummary.caller`.
    */
   name: string;
   status: string;
@@ -313,10 +287,9 @@ export interface EnrolledApp {
 }
 
 /**
- * A raw host-side enrollment key ("locker", "e2e-agent-purge-demo") turned
- * into a readable fallback ("Locker", "E2e Agent Purge Demo") — the
- * self-heal target when no caller supplies a real app/automation name.
- * Pure function of the key, so repeated enrollment never oscillates.
+ * A raw enrollment key turned into a readable fallback — the self-heal target
+ * when no caller supplies a real name. A pure function of the key, so repeated
+ * enrollment never oscillates.
  */
 export function humanizeSlug(slug: string): string {
   const words = slug.split(/[-_]+/u).filter((w) => w.length > 0);
@@ -324,7 +297,6 @@ export function humanizeSlug(slug: string): string {
   return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
-/** Find an active enrolled app by its host-side name (the Centraid app id). */
 export function lookupAppByName(
   db: VaultDb,
   name: string
@@ -463,15 +435,11 @@ function grantSummariesBy(
   }));
 }
 
-/** Active grants held by an app, with their scopes — the consent surface a host lists. */
 export function listActiveGrants(db: VaultDb, appId: string): GrantSummary[] {
   return grantSummariesBy(db, "app_id", appId);
 }
 
-/**
- * Active grants held by a party (an enrolled agent's grantee side). Same
- * summary shape as `listActiveGrants` — the owner surface lists both.
- */
+/** Same summary shape as `listActiveGrants` — the owner surface lists both. */
 export function listActiveAgentGrants(
   db: VaultDb,
   partyId: string
@@ -482,17 +450,14 @@ export function listActiveAgentGrants(
 export interface EnrolledAgent {
   agentId: string;
   partyId: string;
-  /** Display name — `core_party.display_name` (pretty, self-healing). */
   name: string;
   status: string;
 }
 
 /**
- * Find an active enrolled agent by its host-side key. Automations enroll
- * under their Centraid app id, the same way `lookupAppByName` keys apps;
- * the assistant enrolls under the literal `_assistant` key. The key lives
- * on `consent_agent.enrollment_key` — decoupled from `core_party.display_name`,
- * which is free to hold a pretty name without breaking this lookup.
+ * Automations enroll under their Centraid app id; the assistant enrolls under
+ * the literal `_assistant` key. The key lives on `consent_agent.enrollment_key`,
+ * decoupled from `core_party.display_name` so a pretty name cannot break this.
  */
 export function lookupAgentByName(
   db: VaultDb,
@@ -523,17 +488,11 @@ export function lookupAgentByName(
 }
 
 /**
- * Enroll an agent under a host-side key, once (duaility §12: "the
- * conversation runner and automation fires act as an enrolled consent.agent").
- * Re-enrolling an active key returns the existing row. Identity only —
- * authority still requires an owner-approved grant on the agent's party.
- *
- * `displayName` (the automation/app's pretty name, when the caller has it)
- * upserts onto `core_party.display_name` when it differs from what is
- * stored — a raw-key display from before this fix (or a since-improved
- * name) self-heals on the next enrollment touch, without minting a new
- * agent identity (the key, and every grant/receipt against the party,
- * survives).
+ * Enroll an agent under a host-side key, once; re-enrolling an active key
+ * returns the existing row. Identity ONLY — authority still requires an
+ * owner-approved grant on the agent's party. `displayName` upserts onto
+ * `core_party.display_name` when it differs, so a raw-key display self-heals
+ * without minting a new identity (the key and every grant/receipt survive).
  */
 export function ensureAgentEnrolled(
   db: VaultDb,
@@ -543,18 +502,13 @@ export function ensureAgentEnrolled(
   const resolvedName = options?.displayName ?? humanizeSlug(name);
   const existing = lookupAgentByName(db, name);
   if (existing) {
-    // Two kinds of touch land here: a caller that KNOWS the real manifest
-    // name (`options.displayName` set — reconcileScheduler, approveAgentGrant)
-    // and a caller that doesn't (name-less touches, e.g. a bare mount).
-    // Only the former may overwrite an existing name — a name-less touch
-    // must never regress an already-set real (or already-humanized) name
-    // back down to a fresh `humanizeSlug(name)` guess just because THIS
-    // particular caller raced ahead of the one that knew better (reconcile
-    // vs. grant-approval can land in either order around a publish). The
-    // ONE case a name-less touch may still self-heal is the literal legacy
-    // raw-slug display (`existing.name === name`, i.e. nobody has ever
-    // enrolled this agent with anything nicer) — that still upgrades to the
-    // humanized fallback, same as day one.
+    // Two kinds of touch land here: a caller that KNOWS the manifest name
+    // (`options.displayName` set) and one that does not. Only the former may
+    // overwrite an existing name — a name-less touch must never regress an
+    // already-set name back to a fresh `humanizeSlug` guess just because it
+    // raced ahead of the caller that knew better. The one case a name-less
+    // touch may still self-heal is the literal legacy raw slug
+    // (`existing.name === name`), which upgrades to the humanized fallback.
     const mayOverwrite =
       options?.displayName !== undefined || existing.name === name;
     if (mayOverwrite && existing.name !== resolvedName) {
@@ -581,9 +535,9 @@ export function ensureAgentEnrolled(
 }
 
 /**
- * Retire an agent's enrollment (uninstall). Grants must be revoked through
- * the gateway first so the cascade runs; this only pauses the identity row.
- * The agent's party — and every receipt it left — remains.
+ * Retire an agent's enrollment (uninstall). Grants MUST be revoked through the
+ * gateway first so the cascade runs; this only pauses the identity row. The
+ * party — and every receipt it left — remains.
  */
 export function markAgentRevoked(db: VaultDb, agentId: string): void {
   db.vault
@@ -591,7 +545,7 @@ export function markAgentRevoked(db: VaultDb, agentId: string): void {
     .run(agentId);
 }
 
-/** Key-free agent summary — safe to serialize onto an owner-facing surface. */
+/** Key-free — safe to serialize onto an owner-facing surface. */
 export interface AgentSummary {
   agentId: string;
   enrollmentKey: string;
@@ -601,7 +555,6 @@ export interface AgentSummary {
   enrolledAt: string;
 }
 
-/** All active enrolled agents. */
 export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   const rows = db.vault
     .prepare(
@@ -627,7 +580,6 @@ export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   }));
 }
 
-/** Resolve a purpose notation (e.g. `dpv:ServiceProvision`) to its concept id. */
 export function purposeConceptId(
   db: VaultDb,
   notation: string
@@ -639,9 +591,9 @@ export function purposeConceptId(
 }
 
 /**
- * Mark an app's enrollment revoked (uninstall). Grants must be revoked
- * through the gateway first so the cascade runs; this only retires the
- * identity row. A reinstall under the same name mints a fresh identity.
+ * Mark an app's enrollment revoked (uninstall). Grants MUST be revoked through
+ * the gateway first so the cascade runs; this only retires the identity row,
+ * and a reinstall under the same name mints a fresh identity.
  */
 export function markAppRevoked(db: VaultDb, appId: string): void {
   db.vault
@@ -649,19 +601,16 @@ export function markAppRevoked(db: VaultDb, appId: string): void {
     .run(appId);
 }
 
-/** One installed bundled app's enrollment key + its per-vault rename. */
 export interface InstalledAppRow {
-  /** Enrollment key (the Centraid app id / blueprint id). */
   name: string;
-  /** Owner's per-vault rename, or null when none (fall back to manifest name). */
+  /** Owner's per-vault rename, or null — fall back to the manifest name. */
   label: string | null;
 }
 
 /**
- * Active apps enrolled with `origin = 'installed'` — the bundled blueprints
- * installed in this vault (#434). Only the new install-in-place path
- * writes that origin, so this is exactly the git-free install registry.
- * Ordered by install time for a stable listing.
+ * Active apps enrolled with `origin = 'installed'` (#434) — only the
+ * install-in-place path writes that origin, so this is exactly the git-free
+ * install registry. Ordered by install time for a stable listing.
  */
 export function listInstalledApps(db: VaultDb): InstalledAppRow[] {
   const rows = db.vault
@@ -674,10 +623,9 @@ export function listInstalledApps(db: VaultDb): InstalledAppRow[] {
 }
 
 /**
- * Set (or clear, with null/blank) an installed app's per-vault rename
- * (#434). Keyed by the active enrollment's name; a no-op when the app
- * isn't enrolled. Trims and coalesces empty strings to NULL so "clear" and
- * "rename to whitespace" both fall back to the manifest name.
+ * Set or clear an installed app's per-vault rename (#434), keyed by the active
+ * enrollment's name; a no-op when the app is not enrolled. Blank coalesces to
+ * NULL so "clear" and "rename to whitespace" both fall back to the manifest.
  */
 export function setAppLabel(
   db: VaultDb,
@@ -692,7 +640,7 @@ export function setAppLabel(
     .run(trimmed.length > 0 ? trimmed : null, appId);
 }
 
-/** Key-free app summary — safe to serialize onto an owner-facing surface. */
+/** Key-free — safe to serialize onto an owner-facing surface. */
 export interface AppSummary {
   appId: string;
   name: string;
@@ -703,9 +651,8 @@ export interface AppSummary {
 }
 
 /**
- * All active enrolled apps, without their signing keys. `name` is the
- * enrollment key (the desktop's own app-settings pane matches on it, e.g.
- * `apps.find(a => a.name === appId)`) — see `EnrolledApp.name`'s note.
+ * All active enrolled apps, without signing keys. `name` is the enrollment key
+ * the desktop matches on — see `EnrolledApp.name`.
  */
 export function listEnrolledApps(db: VaultDb): AppSummary[] {
   const rows = db.vault
