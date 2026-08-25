@@ -14,6 +14,6 @@
 
 _Public HTML report publishes on main (and nightly); this run keeps the artifact + Job Summary only._
 
-Generated: `2026-08-25T05:18:51.240Z`
+Generated: `2026-08-25T11:28:14.964Z`
 
 <!-- centraid-test-health-report -->
