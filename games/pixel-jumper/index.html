@@ -363,7 +363,7 @@
   function makeEnemy(x, y, type) {
     return {
       x, y, w:14, h: type==='shell'?15:14,
-      vx: -0.6, vy:0, dir:-1, type,
+      vx: -WALK_SPD, vy:0, dir:-1, type,
       state:'walk',       // walk | shell | slide | dead
       onGround:false, t:0, alive:true, stompT:0, awake:false,
     };
@@ -394,6 +394,7 @@
   //  PHYSICS
   // =======================================================================
   const GRAV = 0.42, MAXFALL = 8;
+  const WALK_SPD = 0.55; // goomba/walker patrol speed
   const WALK = 1.3, RUN = 2.35, ACC = 0.22, RUNACC = 0.30, FRICTION = 0.18;
   const JUMP_V = 7.4, JUMP_CUT = 0.42;
 
@@ -667,11 +668,15 @@
     // horizontal
     e.x += e.vx;
     let hits = rectVsWorld(w, e);
-    for (const {tx} of hits) {
-      if (e.vx>0) e.x = tx*TILE - e.w; else if (e.vx<0) e.x = tx*TILE+TILE;
-      e.vx = (e.state==='slide') ? -e.vx : -Math.abs(e.vx)*Math.sign(e.vx||1);
+    if (hits.length) {
+      // bumped an obstacle (wall/pipe/block): push back out and turn around
+      for (const {tx} of hits) {
+        if (e.vx > 0) e.x = tx*TILE - e.w;
+        else if (e.vx < 0) e.x = tx*TILE + TILE;
+      }
       e.dir *= -1;
-      if (e.state==='slide') e.vx = e.dir* 3.2;
+      const spd = (e.state === 'slide') ? 3.2 : WALK_SPD;
+      e.vx = e.dir * spd;
     }
     // vertical
     e.y += e.vy;
@@ -681,8 +686,8 @@
       if (e.vy>0){ e.y = ty*TILE - e.h; e.onGround=true; e.vy=0; }
       else { e.y = ty*TILE+TILE; e.vy=0; }
     }
-    // walkers march straight ahead, off ledges and all — only walls turn them
-    if (e.state==='walk' && Math.abs(e.vx)<0.1) e.vx = e.dir*0.6;
+    // walkers keep patrolling; obstacles (handled above) flip their direction
+    if (e.state==='walk' && Math.abs(e.vx)<0.1) e.vx = e.dir*WALK_SPD;
 
     // fell out
     if (e.y > w.pxHeight+40) { e.alive=false; return; }
