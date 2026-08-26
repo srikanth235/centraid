@@ -281,31 +281,36 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
   // terminate its way out of that. No lane grants them; handlers are
   // untrusted, and subprocess lanes shell out through `child_process`, which
   // the allowlist already gates — never through these.
-  proc.kill = () => {
-    throw denied(
-      "process.kill is revoked; worker threads share the gateway's PID, so a signal from an untrusted handler kills the whole gateway"
-    );
+  //
+  // Each assignment is try/caught: Electron (and some Node builds) freeze
+  // these properties. Throwing here would abort sandbox install and take
+  // down the handler worker — a louder failure than leaving a revoked
+  // method in place.
+  const revokeProcessMethod = (name: "kill" | "abort", message: string) => {
+    try {
+      proc[name] = () => {
+        throw denied(message);
+      };
+    } catch {
+      /* already non-writable */
+    }
   };
-  proc.abort = () => {
-    throw denied(
-      "process.abort is revoked; it crashes the shared gateway process, not just this handler's thread"
-    );
-  };
+  revokeProcessMethod(
+    "kill",
+    "process.kill is revoked; worker threads share the gateway's PID, so a signal from an untrusted handler kills the whole gateway"
+  );
+  revokeProcessMethod(
+    "abort",
+    "process.abort is revoked; it crashes the shared gateway process, not just this handler's thread"
+  );
 
   // `process.report.getReport()` reads the REAL OS environ at call time (#865),
   // straight past the frozen-empty `process.env` above, and would hand a
   // handler whatever the gateway process carries — S3 credentials, tunnel
-  // tokens, provider keys. Undefined rather than stubbed so there is nothing
-  // left on the object to reach. Node itself reads this property under
-  // `--report-on-uncaught-exception` / `--report-uncaught-exception`; no
-  // gateway or Electron launch flag currently sets those, so the hole stays
-  // closed. A future report-flagged lane would need a stub, not undefined.
-  Object.defineProperty(process, "report", {
-    value: undefined,
-    writable: false,
-    configurable: false,
-    enumerable: true,
-  });
+  // tokens, provider keys. Prefer undefined so there is nothing left to
+  // reach; if the property is frozen (Electron; `--report-on-uncaught-exception`),
+  // stub getReport instead. Never throw — a failed install is a dead worker.
+  revokeDiagnosticReport(proc);
 
   // argv and execArgv echo how the gateway was launched (#865). Each thread
   // owns its own copy of these properties, so replacing them here cannot touch
@@ -316,13 +321,44 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
   // `automation/worker/runner.ts`) run as worker entries, so every production
   // install takes this branch.
   if (!isMainThread) {
-    for (const name of ["argv", "execArgv"]) {
-      Object.defineProperty(process, name, {
-        value: Object.freeze([] as string[]),
-        writable: false,
-        configurable: false,
-        enumerable: true,
-      });
+    for (const name of ["argv", "execArgv"] as const) {
+      try {
+        Object.defineProperty(process, name, {
+          value: Object.freeze([] as string[]),
+          writable: false,
+          configurable: false,
+          enumerable: true,
+        });
+      } catch {
+        const current = proc[name];
+        if (Array.isArray(current)) current.length = 0;
+      }
+    }
+  }
+}
+
+function revokeDiagnosticReport(proc: Record<string, unknown>): void {
+  try {
+    Object.defineProperty(process, "report", {
+      value: undefined,
+      writable: false,
+      configurable: false,
+      enumerable: true,
+    });
+    return;
+  } catch {
+    /* frozen by the host */
+  }
+  const report = proc.report as { getReport?: () => unknown } | undefined;
+  if (report && typeof report === "object") {
+    try {
+      report.getReport = () => {
+        throw denied(
+          "process.report.getReport is revoked; it reads the real OS environ past the frozen process.env"
+        );
+      };
+    } catch {
+      /* DiagnosticReport methods may themselves be frozen */
     }
   }
 }

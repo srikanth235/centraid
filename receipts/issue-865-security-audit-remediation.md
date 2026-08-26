@@ -361,6 +361,9 @@ takes the new schema hash.
 The hygiene ratchet is down-only: four new `toHaveBeenCalled*` sites
 (F5 DNS lookup, F6 `openPath`, two F3 pre-Google refusals) were rewritten
 to captured arguments / `mock.calls` length so the budget stays 788.
+F4's new `process.kill`/`abort`/`report`/`argv` revocations are each
+try/caught: a frozen property (Electron workers) must not abort sandbox
+install, which takes the handler worker down with it.
 
 ## Session
 
