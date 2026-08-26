@@ -301,6 +301,11 @@ export function Root({
    *  the query behind on the route it belonged to. */
   const go = useCallback(
     (shelf: ShelfId) => {
+      // Leaving the editor must flush the keyed debounce — Library is still
+      // the same app-root, so the unmount flush never runs, and a vault read
+      // of `library` would see "Untitled note" while the card already shows
+      // the typed title from in-memory state (#865 desktop e2e).
+      if (state.shelf === NOTE && shelf !== NOTE) void logic.flushSave();
       if (shelf !== SEARCH && state.search) logic.clearSearch();
       // Reaching Search FROM a notebook is what gives the scope pair its
       // second option; reaching it from anywhere else leaves Everywhere as

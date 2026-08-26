@@ -85,10 +85,13 @@ reconnect note instead of redeeming anonymously.
 `packages/server/src/engine/sandbox/install.ts`. Alongside the existing
 revocations: `process.kill`/`process.abort` throw the lane's `denied(...)` error
 (worker threads share the gateway PID; `worker.terminate()` cannot save a
-SIGKILL'd host), `process.report.getReport`/`writeReport` are stubbed so they cannot leak
-the real OS environ around the frozen `env` (the host object is kept —
-Electron's crash reporter reads `process.report`, and replacing it with
-`undefined` hung handler workers). `argv`/`execArgv` are emptied in place
+SIGKILL'd host), `process.report.getReport`/`writeReport` are replaced with
+functions that return a redacted report (empty `environmentVariables`, no
+disk write) so they cannot leak the real OS environ around the frozen `env`.
+The host object is kept — Electron's crash reporter reads `process.report`
+and *calls* getReport/writeReport; assigning `undefined` hung workers, and
+throwing from those methods also hung them so `window.centraid.write` never
+settled on the desktop e2e lane. `argv`/`execArgv` are emptied in place
 when the worker runner asks (`redactLaunchArgs`), not by importing
 `node:worker_threads` to detect the thread (that cached the real module
 and let a tainted graph import it from cache). `process.kill` still
@@ -326,7 +329,17 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
 - packages/server/src/engine/sandbox/install.ts
 - packages/server/src/engine/sandbox/install.test.ts
 - packages/server/src/engine/sandbox/sandbox-escape.test.ts
+- packages/server/src/engine/sandbox/policy.ts
+- packages/server/src/engine/sandbox/policy.test.ts
+- packages/server/src/engine/sandbox/confined-fs.test.ts
 - packages/server/src/engine/sandbox/boot.ts
+- packages/blueprints/apps/notes/app-root.tsx
+- packages/blueprints/apps/notes/logic.ts
+- packages/blueprints/apps/notes/draft-writes.ts
+- packages/blueprints/apps/notes/draft-writes.test.ts
+- apps/desktop/tests/e2e/fixtures.ts
+- apps/desktop/tests/e2e/notes.spec.ts
+- apps/desktop/tests/e2e/tasks.spec.ts
 - packages/server/src/engine/worker/runner.ts
 - packages/server/src/automation/worker/runner.ts
 - packages/vault/src/ingest/mbox.ts
@@ -378,11 +391,22 @@ to captured arguments / `mock.calls` length so the budget stays 788.
 F4's new `process.kill`/`abort`/`report`/`argv` revocations are each
 try/caught: a frozen property (Electron workers) must not abort sandbox
 install, which takes the handler worker down with it. `process.report` is
-stubbed at `getReport`/`writeReport` rather than replaced with `undefined`.
-`argv`/`execArgv` are emptied only when the worker runner passes
-`redactLaunchArgs` — install.ts must not import `node:worker_threads` to
-detect that, or the real module is cached and a tainted graph can import
-it past the hook. `process.kill` lets signal `0` through.
+kept as the host object; `getReport`/`writeReport` return a redacted
+report (no environ, no file) rather than throwing or being replaced with
+`undefined` — both of those hung Electron handler workers so custodian
+writes never settled. `argv`/`execArgv` are emptied only when the worker
+runner passes `redactLaunchArgs` — install.ts must not import
+`node:worker_threads` to detect that, or the real module is cached and a
+tainted graph can import it past the hook. `process.kill` lets signal `0`
+through.
+Taint marks and granted read roots are realpath-canonicalised so macOS
+`/var/folders` vs `/private/var/folders` aliases cannot drop a handler
+out of confinement (the desktop e2e vault lives in `os.tmpdir()`).
+`process.kill`/`abort` wrappers consult a per-thread `globalThis` flag
+so a shared Electron `process.kill` slot cannot deny the main thread
+(that hung `electronApplication.close` and left replica writes
+`in-flight`). `argv[0]` is kept (the binary); later slots and
+`execArgv` are still emptied.
 - **Rust supply-chain (run 32845713089).** `h2` 0.4.15 is RUSTSEC-2026-0258
   (upgrade to ≥0.4.16) — lockfiles move to 0.4.19. Yanked `spin` and unsound
   `lru` 0.18.1 move with them. First-party crates declare `license = "MIT"`

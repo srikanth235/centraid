@@ -26,7 +26,13 @@
  * here would be worse than the gap.
  */
 
+import { realpathSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { SandboxDeniedError } from "./denied.js";
 import { installWorkerSandbox, resetWorkerSandboxForTests } from "./install.js";
@@ -66,6 +72,22 @@ describe(installWorkerSandbox, () => {
     expect(handle.isTainted("file:///tmp/centraid-untrusted/other.js")).toBe(
       false
     );
+  });
+
+  test("taint identity survives macOS /var vs /private aliases of the same file", () => {
+    // os.tmpdir() on macOS is `/var/folders/...` while Node's loader reports
+    // `file:///private/var/folders/...`. The desktop e2e vault lives there;
+    // a taint mark that does not round-trip through realpath never matches
+    // parentURL and the handler graph runs unsandboxed.
+    const handle = installWorkerSandbox(appHandlerPolicy());
+    const dir = tempDirSync("sandbox-taint-");
+    const file = path.join(dir, "handler.js");
+    writeFileSync(file, "");
+    const logical = pathToFileURL(file).href;
+    const canonical = pathToFileURL(realpathSync(file)).href;
+    handle.taint(logical);
+    expect(handle.isTainted(logical)).toBe(true);
+    expect(handle.isTainted(canonical)).toBe(true);
   });
 
   test("a second install for the SAME lane returns the same handle", () => {
@@ -137,12 +159,15 @@ describe("ambient-authority revocation", () => {
     expect(() => proc.kill(process.pid, 0)).not.toThrow();
     expect(() => proc.abort()).toThrow(SandboxDeniedError);
     expect(() => proc.abort()).toThrow(/crashes the shared gateway process/u);
-    // Stub getReport on the host object rather than wiping `process.report`:
-    // Electron's crash reporter reads the property, and replacing it with
-    // undefined hung handler workers. The real OS environ is still unreachable.
-    const report = proc.report as { getReport: () => unknown };
-    expect(() => report.getReport()).toThrow(SandboxDeniedError);
-    expect(() => report.getReport()).toThrow(/getReport is revoked/u);
+    // getReport stays callable (Electron's crash reporter invokes it) but
+    // must not dump the real OS environ around the frozen process.env.
+    const report = proc.report as {
+      getReport: () => { environmentVariables?: Record<string, string> };
+      writeReport: () => string;
+    };
+    const dumped = report.getReport();
+    expect(Object.keys(dumped.environmentVariables ?? {})).toHaveLength(0);
+    expect(report.writeReport()).toBe("");
   });
 
   test("the environment is replaced with a frozen empty object", () => {

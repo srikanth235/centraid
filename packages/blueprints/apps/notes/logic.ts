@@ -156,7 +156,10 @@ export function createLogic({
   const { run: saveNote, flush: flushSave } = coalesceByKey(
     persistSave,
     (noteId) => noteId,
-    600
+    600,
+    // Title and body arrive as separate patches; replacing the pending
+    // args would drop the title and the vault would keep "Untitled note".
+    (previous, next) => [previous[0], { ...previous[1], ...next[1] }]
   );
 
   /** Write, narrate, and re-read whatever changed shape. */

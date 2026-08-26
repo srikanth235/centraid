@@ -1445,7 +1445,10 @@ export async function openCommandPalette(page: Page): Promise<void> {
  * `postStatus` land here as polite live-region text.
  */
 export function statusLine(page: Page) {
-  return page.locator("output[aria-live='polite']").first();
+  // The frame's one status line (StatusLine.tsx), not an app's leftover
+  // `#noticeBanner` — that output is also aria-live=polite and comes first
+  // in the DOM, so `.first()` was reading an empty hidden banner.
+  return page.locator("output[aria-live='polite']:not(#noticeBanner)").first();
 }
 
 /** Open an installed (or draft) app by its display name via the command palette.

@@ -156,9 +156,9 @@ test("Tasks files and completes a task on the custodian seat, and the Logbook su
     // Check it off through the row's own box. The box's accessible name is the
     // task's title, and its pressed state is the task's status — so this is one
     // control saying one thing, not a checkbox beside a label.
-    const box = page.getByRole("button", { name: TASK_TITLE, exact: true });
-    await expect(box.first()).toHaveAttribute("aria-pressed", "false");
-    await box.first().click();
+    const box = taskRow.locator("button[aria-pressed]").first();
+    await expect(box).toHaveAttribute("aria-pressed", "false");
+    await box.click();
 
     // A completed task leaves the board and appears in the Logbook, pressed.
     await expect(taskRow).toHaveCount(0, { timeout: 30_000 });

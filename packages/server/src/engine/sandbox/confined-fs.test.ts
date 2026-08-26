@@ -18,7 +18,7 @@
  * wrong.
  */
 
-import { promises as fs } from "node:fs";
+import { promises as fs, realpathSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -155,7 +155,7 @@ describe("sandbox filesystem confinement", () => {
       expect(confined.statSync(insideFile)?.isFile()).toBe(true);
       expect(confined.lstatSync(insideFile)?.isFile()).toBe(true);
       expect(confined.readdirSync(root)).toContain("readable.txt");
-      expect(confined.realpathSync(insideFile)).toBe(insideFile);
+      expect(confined.realpathSync(insideFile)).toBe(realpathSync(insideFile));
       const fd = confined.openSync(insideFile, "r") as number;
       expect(fd).toBeGreaterThan(0);
       confined.createReadStream(insideFile).close();
@@ -249,7 +249,7 @@ describe("sandbox filesystem confinement", () => {
         "readable.txt"
       );
       await expect(confinedPromises.realpath(insideFile)).resolves.toBe(
-        insideFile
+        realpathSync(insideFile)
       );
       await expect(
         confinedPromises.access(insideFile)
