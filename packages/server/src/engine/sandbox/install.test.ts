@@ -135,13 +135,12 @@ describe("ambient-authority revocation", () => {
     );
     expect(() => proc.abort()).toThrow(SandboxDeniedError);
     expect(() => proc.abort()).toThrow(/crashes the shared gateway process/u);
-    // Undefined, not stubbed: there is nothing left to call getReport on, so
-    // the real OS environ stays unreachable even if the frozen-empty env above
-    // were bypassed some other way.
-    expect(proc.report).toBeUndefined();
-    expect(
-      Object.getOwnPropertyDescriptor(process, "report")?.configurable
-    ).toBe(false);
+    // Stub getReport on the host object rather than wiping `process.report`:
+    // Electron's crash reporter reads the property, and replacing it with
+    // undefined hung handler workers. The real OS environ is still unreachable.
+    const report = proc.report as { getReport: () => unknown };
+    expect(() => report.getReport()).toThrow(SandboxDeniedError);
+    expect(() => report.getReport()).toThrow(/getReport is revoked/u);
   });
 
   test("the environment is replaced with a frozen empty object", () => {

@@ -313,52 +313,57 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
   revokeDiagnosticReport(proc);
 
   // argv and execArgv echo how the gateway was launched (#865). Each thread
-  // owns its own copy of these properties, so replacing them here cannot touch
-  // the host process — but they are only replaced inside real worker threads:
-  // this file also installs in-process under the test harness (a fork, where
-  // `isMainThread` holds), and there `process.argv` is the harness's own
-  // command line. Both production installers (`engine/worker/runner.ts`,
-  // `automation/worker/runner.ts`) run as worker entries, so every production
-  // install takes this branch.
+  // owns its own copy of these properties, so mutating them here cannot touch
+  // the host process. Empty in place rather than replacing the property:
+  // Electron's worker bootstrap keeps identity-stable argv arrays, and
+  // defineProperty-replacing them hung handler dispatch in desktop e2e
+  // (notes/people/photos/tasks write settlement never returned).
+  // Only inside real worker threads: this file also installs in-process
+  // under the test harness (`isMainThread`), and there argv is the harness.
   if (!isMainThread) {
     for (const name of ["argv", "execArgv"] as const) {
-      try {
-        Object.defineProperty(process, name, {
-          value: Object.freeze([] as string[]),
-          writable: false,
-          configurable: false,
-          enumerable: true,
-        });
-      } catch {
-        const current = proc[name];
-        if (Array.isArray(current)) current.length = 0;
-      }
+      const current = proc[name];
+      if (Array.isArray(current)) current.length = 0;
     }
   }
 }
 
 function revokeDiagnosticReport(proc: Record<string, unknown>): void {
+  const revokeGetReport = (): never => {
+    throw denied(
+      "process.report.getReport is revoked; it reads the real OS environ past the frozen process.env"
+    );
+  };
+  // Keep the host's report object if it has one (Electron's crash reporter
+  // and Node's `--report-on-uncaught-exception` path read the property).
+  // Replacing it with undefined hung handler workers in the desktop e2e
+  // lane. Stub getReport so a handler still cannot dump the real environ.
+  const report = proc.report as { getReport?: () => unknown } | undefined;
+  if (report && typeof report === "object") {
+    for (const name of ["getReport", "writeReport"] as const) {
+      try {
+        (report as Record<string, unknown>)[name] = revokeGetReport;
+      } catch {
+        try {
+          Object.defineProperty(report, name, {
+            value: revokeGetReport,
+            writable: false,
+          });
+        } catch {
+          /* frozen DiagnosticReport method */
+        }
+      }
+    }
+    return;
+  }
   try {
     Object.defineProperty(process, "report", {
-      value: undefined,
+      value: { getReport: revokeGetReport },
       writable: false,
       configurable: false,
       enumerable: true,
     });
-    return;
   } catch {
-    /* frozen by the host */
-  }
-  const report = proc.report as { getReport?: () => unknown } | undefined;
-  if (report && typeof report === "object") {
-    try {
-      report.getReport = () => {
-        throw denied(
-          "process.report.getReport is revoked; it reads the real OS environ past the frozen process.env"
-        );
-      };
-    } catch {
-      /* DiagnosticReport methods may themselves be frozen */
-    }
+    /* host forbids a report slot */
   }
 }

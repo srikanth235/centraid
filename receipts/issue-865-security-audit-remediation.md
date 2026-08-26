@@ -363,7 +363,11 @@ The hygiene ratchet is down-only: four new `toHaveBeenCalled*` sites
 to captured arguments / `mock.calls` length so the budget stays 788.
 F4's new `process.kill`/`abort`/`report`/`argv` revocations are each
 try/caught: a frozen property (Electron workers) must not abort sandbox
-install, which takes the handler worker down with it.
+install, which takes the handler worker down with it. `process.report` is
+stubbed at `getReport` rather than replaced with `undefined` — Electron's
+crash reporter reads the property, and wiping it hung handler settlement
+in the Linux desktop e2e lane (notes/people/photos/tasks). `argv`/`execArgv`
+are emptied in place for the same reason.
 
 ## Session
 
