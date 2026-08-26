@@ -52,7 +52,13 @@ describe("a keyed debounce flushes the previous note immediately", () => {
       },
       (id) => id,
       600,
-      (previous, next) => [previous[0], { ...previous[1], ...next[1] }]
+      (previous, next) => {
+        const merged: [string, { title?: string; body_text?: string }] = [
+          previous[0],
+          { ...previous[1], ...next[1] },
+        ];
+        return merged;
+      }
     );
     run("n1", { title: "Lease terms" });
     run("n1", { body_text: "The deposit clause" });

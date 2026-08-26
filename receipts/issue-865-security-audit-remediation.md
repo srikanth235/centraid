@@ -171,6 +171,11 @@ passive observer of `_gateway/info` learns nothing dialable; a stolen PWA
 cookie dies at 180 days no matter how it is replayed; peers face a tighter,
 symmetric transport contract.
 
+First-run: typing a Notes title then body and returning to Library now
+keeps the typed heading in the vault (the debounce merges both patches and
+flushes on leave). Evidence:
+`artifacts/e2e/ui-impact/desktop-notes-custodian.png`.
+
 ## Out of scope
 
 - Formal third-party audit re-run (the audit predates this wave).
