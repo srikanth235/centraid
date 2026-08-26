@@ -104,7 +104,13 @@ import {
   doneNext,
   inboxMeta,
 } from "./view-copy.ts";
-import { removeTaskWrite, taskWrite } from "./writes.ts";
+import {
+  isPendingTaskId,
+  landedTask,
+  mountedWriteScope,
+  removeTaskWrite,
+  taskWrite,
+} from "./writes.ts";
 
 /** The vault entities this app's queries read — the shell's change-subscription
  *  filter. */
@@ -237,7 +243,14 @@ export function Root({
     ): Promise<void> => {
       try {
         await window.centraid.write(
-          taskWrite({ action, input, scopeId: extra?.scope })
+          taskWrite({
+            action,
+            input,
+            scopeId: mountedWriteScope(
+              extra?.scope,
+              mountedScopes().map((scope) => scope.id)
+            ),
+          })
         );
         if (extra?.outcome) publishOutcome(frame, { text: extra.outcome });
       } catch (error) {
@@ -367,15 +380,42 @@ export function Root({
         task.rrule && task.next_due
           ? doneNext(weekdayName(task.next_due))
           : DONE;
-      void window.centraid
-        .write(
-          taskWrite({
-            action: "set-status",
-            input: { task_id: task.task_id, status: "completed" },
-            scopeId: task.scope_id,
-          })
-        )
-        .then(() => {
+      void (async () => {
+        const rows = () => [
+          ...dataRef.current.open,
+          ...dataRef.current.logbook,
+        ];
+        const pause = (): Promise<void> =>
+          new Promise((resolve) => {
+            window.setTimeout(resolve, 50);
+          });
+        const waitForLanded = async (deadline: number): Promise<Task> => {
+          const current = landedTask(task, rows()) ?? task;
+          if (!isPendingTaskId(current.task_id) || Date.now() >= deadline) {
+            return current;
+          }
+          await refresh();
+          const landed = landedTask(task, rows());
+          if (landed && !isPendingTaskId(landed.task_id)) return landed;
+          await pause();
+          return waitForLanded(deadline);
+        };
+        const target = await waitForLanded(Date.now() + 15_000);
+        if (isPendingTaskId(target.task_id)) {
+          publishOutcome(frame, { text: "This task has not landed yet." });
+          return;
+        }
+        try {
+          await window.centraid.write(
+            taskWrite({
+              action: "set-status",
+              input: { task_id: target.task_id, status: "completed" },
+              scopeId: mountedWriteScope(
+                target.scope_id,
+                mountedScopes().map((scope) => scope.id)
+              ),
+            })
+          );
           publishOutcome(frame, {
             text,
             // Undo IS reopening — the status goes back to needs-action rather
@@ -384,18 +424,18 @@ export function Root({
               void act(
                 "set-status",
                 {
-                  task_id: task.task_id,
+                  task_id: target.task_id,
                   status: "needs-action",
                 },
-                { scope: task.scope_id }
+                { scope: target.scope_id }
               );
             },
           });
-          return refresh();
-        })
-        .catch((error: unknown) => {
+          await refresh();
+        } catch (error: unknown) {
           publishOutcome(frame, { text: String(error) });
-        });
+        }
+      })();
     },
     [act, frame, refresh]
   );

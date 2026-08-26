@@ -5,13 +5,14 @@ import {
   stablePendingRowId,
 } from "../_shared/pending-overlay.js";
 
+// Only columns that live on `media.asset`. Caption `title` is on
+// `core.content_item`; `archived` is the action input that the vault
+// turns into `archived_at`. Projecting either onto the asset shape
+// throws `Unknown column` in `prepareReplicaWrite` and aborts the
+// durable write before the vault ever sees it.
+const ASSET_FIELDS = ["captured_at", "favorite"] as const;
 const asset = (input: Readonly<Record<string, unknown>>) =>
-  pendingPatch("media.asset", input.asset_id, input, [
-    "title",
-    "captured_at",
-    "favorite",
-    "archived",
-  ]);
+  pendingPatch("media.asset", input.asset_id, input, ASSET_FIELDS);
 const album = (input: Readonly<Record<string, unknown>>) =>
   pendingPatch(
     "core.collection",

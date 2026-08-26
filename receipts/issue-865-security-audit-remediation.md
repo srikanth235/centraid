@@ -342,6 +342,12 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
 - packages/blueprints/apps/notes/logic.ts
 - packages/blueprints/apps/notes/draft-writes.ts
 - packages/blueprints/apps/notes/draft-writes.test.ts
+- packages/blueprints/apps/photos/pending-projection.ts
+- packages/blueprints/apps/_shared/pending-overlay.test.ts
+- packages/blueprints/apps/tasks/app-root.tsx
+- packages/blueprints/apps/tasks/writes.ts
+- packages/blueprints/apps/tasks/writes.test.ts
+- deny.toml
 - apps/desktop/tests/e2e/fixtures.ts
 - apps/desktop/tests/e2e/notes.spec.ts
 - apps/desktop/tests/e2e/tasks.spec.ts
@@ -419,7 +425,9 @@ so a shared Electron `process.kill` slot cannot deny the main thread
   `paste` and `atomic-polyfill` are unmaintained iroh transitives with no
   successor iroh has switched to; they are named on `deny.toml`
   `[advisories].ignore` and on `cargo audit --ignore`, not dropped from the
-  gate.
+  gate. `webpki-roots` and `webpki-root-certs` 1.0.9 ship CDLA-Permissive-2.0;
+  they are named `[licenses].exceptions` in `deny.toml` rather than a widened
+  global allow list.
 
 ## Session
 
@@ -538,3 +546,30 @@ AC9↔F9, AC10 (SECURITY.md)↔"Docs moved with the code". Two benign deviations
 1. What changed vs diff: **PASS**
 2. Checklist realized in diff: **PASS**
 3. Receipt checklist mirrors issue: **PASS**
+
+## Follow-up — desktop-e2e Photos/Tasks + rust-supply-chain CDLA
+
+Linux `client-e2e / desktop-e2e` on `eff29a146` (run 32953678602) still
+failed two of the four #864 custodian journeys. Notes and People were
+green; Photos and Tasks were not.
+
+- **Photos** — the write-rail probe
+  (`update-asset` + title on a missing asset) threw for 60s, caught as
+  `replica-not-ready`. Cause: `photosPendingProjection` patched `title`
+  and `archived` onto `media.asset`. That table has `captured_at` /
+  `favorite` / `archived_at`; caption lives on `core.content_item`.
+  `prepareReplicaWrite` → `Unknown column "title" on media.asset` aborted
+  the durable write before the handler. The probe, recaption, and any
+  title-bearing `update-asset` were broken on a replica-backed seat.
+  Projection keys are now only columns that exist on the asset row.
+- **Tasks** — add landed, check-off did not leave the board
+  (`toHaveCount 0` received 1). Two product holes: (1) optimistic add
+  paints `pending:<intent>:task`, and `set-status` against that id is a
+  vault miss; complete now waits for the landed row. (2) a `scope_id` the
+  inline client has not mounted threw `UNKNOWN_SCOPE`; writes now name a
+  HOUSE scope only when it is in `window.centraid.scopes`.
+- **rust-supply-chain** on main SHA `d80829ce` (run 32845713089) still
+  rejected `webpki-roots` / `webpki-root-certs` 1.0.9 for
+  `CDLA-Permissive-2.0`. `deny.toml` names those two crates as licence
+  exceptions (not a widened global allow list). `h2` 0.4.19 and the
+  unmaintained-advisory ignores were already on this branch.

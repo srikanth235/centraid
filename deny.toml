@@ -47,7 +47,18 @@ allow = [
   "Zlib",
 ]
 confidence-threshold = 0.9
-exceptions = []
+# webpki-roots 1.0.9 (and webpki-root-certs, the same CA bundle split)
+# ship CDLA-Permissive-2.0. That is a permissive Linux Foundation
+# licence, not copyleft; name the crates rather than widening the
+# global allow list.
+exceptions = [
+  { name = "webpki-roots", allow = [
+    "CDLA-Permissive-2.0",
+  ] },
+  { name = "webpki-root-certs", allow = [
+    "CDLA-Permissive-2.0",
+  ] },
+]
 
 [bans]
 # Duplicate major versions of one crate are a warning, not a failure: the
