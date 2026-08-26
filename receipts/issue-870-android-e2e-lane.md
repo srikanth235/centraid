@@ -32,6 +32,8 @@ Issue: https://github.com/srikanth235/centraid/issues/870 — `mobile-e2e-androi
 
 - Dispatch-only rather than adding a schedule or push trigger: the nightly already runs this job from `e2e.yml`; a second scheduled copy would double-run a 2-hour lane and race the shared caches for no extra signal.
 - The new workflow carries `step-security/harden-runner` (`egress-policy: audit`) as its first step, per the W6.3 egress ratchet's new-workflow rule (`lint:ci-egress`); `audit` rather than `block` because the emulator/gradle/Maestro/Metro endpoint allowlist is not yet learned.
+- Android root cause (run 32816633882 logcat): the job's Maestro is UNPINNED and drifted to 2.8.0, whose `openLink` starts `DevLauncherActivity` with the component but WITHOUT the link's data URI — the handed bundle URL never reaches the launcher, so every journey sits on the launcher home until its first assert times out. Fix: pin `MAESTRO_VERSION: 2.6.1` on Android (the iOS job was already pinned), applied to both the standalone workflow and the e2e.yml job.
+- Diagnosis aid: `DEBUG=expo:*` on both mobile jobs' Metro start plus a failure-time Metro log dump, so the iOS launcher-fetch failure ("Failed to load app from http://127.0.0.1:8081", ~10s after the deep link — matches expo-dev-launcher's 10s manifest-request timeout) can be attributed device-side vs Metro-side. Local repro of the full CI sequence (CI=1 Metro, fresh install, plain launch, deep link) PASSES against a fresh binary, so the pipeline itself is sound; the e2e.yml diagnostic hunks ride this branch's dispatch ref and are coordinated with the parallel e2e work before any merge.
 
 ## Verification
 

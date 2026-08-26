@@ -402,7 +402,9 @@ jobs:
           xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
       - name: Start Metro
         run: |
-          CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro.log 2>&1 &
+          # #870 — request log for the launcher-fetch failure diagnosis (see
+          # the Android job's identical comment).
+          CI=1 DEBUG=expo:* nohup bunx expo start --dev-client > /tmp/centraid-metro.log 2>&1 &
           for attempt in {1..90}; do
             if curl -fsS http://127.0.0.1:8081/status; then exit 0; fi
             sleep 2
@@ -434,6 +436,10 @@ jobs:
           # Tally has no journey (held under #831).
           node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
           exit "$ec"
+      - name: Dump Metro request log
+        if: failure()
+        run: |
+          tail -100 /tmp/centraid-metro.log || true
       - name: Remove sensitive pairing diagnostics
         if: always()
         run: |
@@ -509,6 +515,14 @@ jobs:
           echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
           echo "Android native fingerprint: fp=$fp jdk=$jdk"
       - name: Install Maestro CLI
+        # #870 — pin on Android too. Unpinned, this job drifted to Maestro
+        # 2.8.0, whose `openLink` starts the dev-launcher activity with the
+        # component but WITHOUT the link's data URI (logcat: START
+        # {cmp=…DevLauncherActivity} with no dat=), so the launcher opens its
+        # home screen instead of the handed bundle URL and every journey
+        # times out on its first assert.
+        env:
+          MAESTRO_VERSION: 2.6.1
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
@@ -530,7 +544,11 @@ jobs:
       - name: Start Metro
         working-directory: apps/mobile
         run: |
-          CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro-android.log 2>&1 &
+          # #870 — DEBUG=expo:* logs every request Metro serves, so a
+          # launcher-side fetch failure (iOS "Failed to load app from …") can
+          # be attributed: request absent = never left the device; present =
+          # Metro's response is the suspect.
+          CI=1 DEBUG=expo:* nohup bunx expo start --dev-client > /tmp/centraid-metro-android.log 2>&1 &
           for attempt in {1..90}; do
             if curl -fsS http://127.0.0.1:8081/status; then exit 0; fi
             sleep 2
@@ -610,6 +628,13 @@ jobs:
           # comments and non-ASCII chars tripped its parser (#535). Keep this a
           # single line that hands off to a committed bash file instead.
           script: bash apps/mobile/scripts/android-emulator-e2e.sh
+      # #870 — Metro's request log. If the launcher's fetch never arrives, the
+      # problem is device-side; if it arrives and errors, the response is the
+      # suspect. Diagnostic while the lane is red; drop when green.
+      - name: Dump Metro request log
+        if: failure()
+        run: |
+          tail -100 /tmp/centraid-metro-android.log || true
       # Mirrors the iOS job's identical step. The harness already rm -rf's this
       # directory in a finally, so this is belt-and-braces against a run that
       # dies before the finally — but it was iOS-only, which meant an Android
