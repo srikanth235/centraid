@@ -1,16 +1,12 @@
 // governance: allow-repo-hygiene file-size-limit the ext band is one lifecycle (apply/diff, draft seed/drop, retain/purge, the write trio) sharing the registry-row and fk-resolver internals — splitting would export private seams
-// The ext band's imperative half (#286): DDL apply + diff,
-// the draft band lifecycle (seed / drop / publish), uninstall semantics
-// (retain by default, purge on demand), and the per-app typed write commands
-// (`ext.<appId>.insert|update|delete`) that keep "typed commands are the
-// only write path" (R04) true for extension tables too.
+// Ext band imperative half (#286): DDL apply/diff, draft lifecycle,
+// retain-by-default uninstall, typed write trio keeping R04 ("typed commands
+// are the only write path") true for ext tables.
 //
-// DDL is a gateway duty: specs come from the app's manifest, the gateway
-// generates and applies the SQL. Diffing is deliberately narrow for v0
-// (pre-release, no compat): add/drop whole tables, add/drop columns, change
-// indexes and searchable columns. Anything else — type changes, primary-key
-// moves, notNull tightening — is refused with an actionable message; declare
-// a new table instead.
+// DDL is gateway-driven from manifest specs. Diffing is deliberately narrow
+// for v0 (no compat): add/drop tables/columns, index + searchable changes.
+// Anything else — type changes, PK moves, notNull tightening — refuses;
+// declare a new table instead.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -90,12 +86,7 @@ function pkColumn(vault: DatabaseSync, physical: string): string {
   return rows.find((r) => r.pk === 1)?.name ?? "rowid";
 }
 
-/**
- * Whether a `references` target is acceptable: canonical tables outside the
- * consent/agent planes (an app never holds an FK into the privacy plumbing),
- * or the same app's own ext tables (validated by the caller against the
- * declared batch).
- */
+/** Referencable: canonical tables outside consent/agent planes, or the same app's own ext tables (caller validates against the batch). */
 function referencable(logical: string): boolean {
   const ref = resolveEntity(logical);
   return (
@@ -141,11 +132,7 @@ function fkResolver(
   };
 }
 
-/**
- * Rows of a dropped table are gone, so classification and curation on them
- * go too, and live links end-date — the same hygiene duties.ts applies to
- * purged content (#272/#274 rules, ext-shaped).
- */
+/** Dropped tables lose classification/curation rows; live links end-date (duties.ts hygiene, #272/#274 ext-shaped). */
 function sweepDroppedType(db: VaultDb, logical: string, now: string): void {
   db.vault
     .prepare(
@@ -189,14 +176,7 @@ function validateBatch(
   });
 }
 
-/**
- * Diff-apply one band to the declared specs, inside one transaction:
- * new tables created (with indexes and, on the live band, FTS artifacts),
- * absent tables dropped (with reference hygiene), changed tables altered
- * additively (ADD/DROP COLUMN, index and searchable rebuild) — anything
- * beyond that refuses. Registry rows always end `active`: re-applying a
- * retained band is exactly how a reinstall revives its data.
- */
+/** Diff-apply one band in one transaction: create, drop, additive alter only; registry rows always end `active` (re-applying a retained band revives it). */
 export function applyExtBand(
   db: VaultDb,
   appId: string,
@@ -261,9 +241,8 @@ export function applyExtBand(
         .run(specJson, now, appId, band, spec.name);
       clearColumnCache(prior.physical);
     }
-    // Live ext tables join the durable vault change log before their DDL
-    // transaction becomes visible. Draft tables are intentionally absent
-    // from listVaultEntities and therefore never replicated.
+    // Live ext tables join the durable change log before COMMIT; draft
+    // tables are absent from listVaultEntities and never replicated.
     refreshReplicaTriggers(db.vault);
     db.vault.exec("COMMIT");
   } catch (error) {
@@ -312,7 +291,7 @@ function alterExtTable(
     }
   }
   const physical = prior.physical;
-  // Indexes rebuild wholesale (names are derived, so this is cheap and exact).
+  // Indexes rebuild wholesale (names are derived).
   for (const idx of oldSpec.indexes ?? []) {
     db.vault.exec(`DROP INDEX IF EXISTS "${extIndexName(physical, idx)}"`);
   }
@@ -337,18 +316,17 @@ function alterExtTable(
   if (band === "live" && (spec.searchable?.length ?? 0) > 0) {
     db.vault.exec(extFtsDdl(physical, extPk(spec), spec.searchable ?? []));
   }
-  // A column newly declared sealed must seal the rows already sitting in it
-  // (#298) — otherwise the declaration would protect future
-  // writes while leaving today's plaintext readable. Fresh writes are sealed
-  // by the command seal sweep; this closes the at-declaration gap.
+  // A column newly declared sealed must seal the plaintext already in it
+  // (#298) — fresh writes are sealed by the command sweep; this closes
+  // the at-declaration gap.
   const oldSealed = new Set(oldSpec.sealed);
   const nowSealed = (spec.sealed ?? []).filter(
     (c) => !oldSealed.has(c) && newCols.has(c)
   );
   if (nowSealed.length > 0)
     sealExistingExtColumns(db, physical, extPk(spec), nowSealed);
-  // The retro-seal UPDATE itself was observed by the old trigger contract,
-  // so scrub after sealing as well as covering earlier retained history.
+  // The retro-seal UPDATE was observed by the old trigger contract; scrub
+  // after sealing to cover earlier retained history too.
   for (const column of newlySealed) {
     db.vault
       .prepare(
@@ -391,12 +369,7 @@ function sealExistingExtColumns(
   if (sealedAny) stampSealKeyFingerprint(db.vault, db.sealKey);
 }
 
-/**
- * ADD COLUMN fragment (PRIMARY KEY is structurally impossible here). Carries
- * the same JS-safe-integer CHECK bound as `columnDdl` in schema/ext.ts — a
- * column added mid-lifecycle must be exactly as poison-proof as one declared
- * at table creation.
- */
+/** ADD COLUMN fragment (PRIMARY KEY structurally impossible here); carries the same JS-safe-integer CHECK bound as `columnDdl` in schema/ext.ts. */
 function columnAddDdl(
   col: ExtTableSpec["columns"][number],
   fk: (logical: string) => { physical: string; pk: string }
@@ -420,14 +393,7 @@ function columnAddDdl(
   return parts.join(" ");
 }
 
-/**
- * Ensure the draft band matches the declared specs — the builder session's
- * scratch copy. FIRST access creates the band and seeds it with the live
- * band's rows (common columns); later accesses diff-apply DDL changes and
- * PRESERVE the draft's rows (a mid-session schema edit must not eat the
- * session's test data — reset is an explicit `dropExtBand` first). FK
- * order inside the copy is satisfied by deferring enforcement to COMMIT.
- */
+/** Draft band = builder scratch copy. FIRST access creates + seeds from live rows; later accesses diff-apply PRESERVING rows (reset = explicit `dropExtBand` first). FK order defers to COMMIT. */
 export function seedExtDraft(
   db: VaultDb,
   appId: string,
@@ -483,11 +449,7 @@ export function dropExtBand(
   return rows.map((r) => r.table_name);
 }
 
-/**
- * Uninstall default: the data stays (status `retained`), the scratch copy
- * goes, app access is already gone with the grants. Returns the retained
- * table names.
- */
+/** Uninstall default: data stays (`retained`), the scratch copy goes, app access is already gone with the grants. Returns retained names. */
 export function retainExtBand(db: VaultDb, appId: string): string[] {
   dropExtBand(db, appId, "draft");
   const rows = registryRows(db.vault, appId, "live");
@@ -537,12 +499,10 @@ export function extSearchable(
   }
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// The per-app typed write trio. Registered under owner schema `ext.<appId>`
-// so one manifest scope ({ schema: "ext.<appId>", verbs: "read+act" }) covers
+// Per-app typed write trio, registered under owner schema `ext.<appId>`:
+// one manifest scope ({ schema: "ext.<appId>", verbs: "read+act" }) covers
 // the whole band; the `band` input routes a builder session's writes at the
 // scratch copy without a second grant.
-// ───────────────────────────────────────────────────────────────────────────
 
 const BAND_PROP = { enum: ["live", "draft"] };
 
@@ -751,13 +711,7 @@ export function assertExtSchemaOwnership(appId: string, schema: string): void {
   }
 }
 
-/**
- * Recreate missing ext physical tables from registry rows — the import path:
- * a fresh vault receives `consent_app_ext` rows from the artifact first,
- * then this plants the tables (both bands; draft arrives empty), then the
- * ext rows load like any other entity. SQLite resolves FK targets at DML
- * time, so creation order within a band doesn't matter.
- */
+/** Recreate missing ext physicals from registry rows (import path): artifact supplies `consent_app_ext` first, then this plants tables (both bands; draft arrives empty), then rows load. FK resolves at DML time — order within a band is irrelevant. */
 export function recreateExtTables(db: VaultDb): string[] {
   const rows = db.vault
     .prepare(

@@ -1,17 +1,8 @@
-// The card resolver (#272): one narrow read that turns (type, id)
-// references into minimal renderable cards, so an app can DISPLAY an entity
-// another domain owns without ever holding a read scope on that domain.
-// Card shapes are registered here, engine-side, next to the entity registry
-// — apps never learn foreign schemas, and dangling-reference handling lives
-// in exactly one place. Cards are live, not frozen snippets: recaption the
-// photo and every referencing app shows the new caption.
-//
-// Consent semantics ("resolvable-if-linked"): a ref resolves when the caller
-// either reads the entity outright under its grant, or a LIVE core.link
-// touches the ref and the caller can read the link's other endpoint — the
-// owner wired that relationship in, so rendering the far end of it is
-// authorized by the link itself. Everything else is a per-ref 'denied' card,
-// and the whole batch is receipted either way.
+// Card resolver (#272): turns (type, id) refs into minimal renderable cards so apps DISPLAY foreign
+// entities without read scope on them; shapes register engine-side next to the entity registry —
+// apps never learn foreign schemas, dangling refs handled in one place, cards are live.
+// Resolvable-if-linked: a LIVE link touching the ref authorizes rendering the far end; else
+// per-ref 'denied'; the batch is receipted either way.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -29,16 +20,11 @@ export interface RefRequest {
 export interface RefCard {
   type: string;
   id: string;
-  /**
-   * `live` renders; `trashed` renders with a soft-deleted treatment;
-   * `missing` is the tombstone (row hard-deleted — its links were end-dated);
-   * `denied` means consent did not cover this ref for this caller;
-   * `unknown` means the type is not in the entity registry.
-   */
+  /** `live` renders; `trashed` soft-deleted; `missing` tombstone; `denied` consent gap; `unknown` type. */
   status: "live" | "trashed" | "missing" | "denied" | "unknown";
   title: string | null;
   subtitle: string | null;
-  /** A core.content_item id renderable as a thumbnail, when the entity has one. */
+  /** A core.content_item id renderable as a thumbnail, if any. */
   thumbnail_content_id: string | null;
 }
 
@@ -47,15 +33,10 @@ export interface ResolveResult {
   receiptId: string;
 }
 
-/** Hard cap per call — references render in lists, not in bulk exports. */
+/** Hard cap per call — refs render in lists, not bulk exports. */
 const MAX_REFS = 100;
 
-/**
- * One SELECT per card-registered entity: `title`, `subtitle`, `thumb`,
- * `trashed` for a single bound id. Entities not listed here still resolve —
- * existence and status only, null card text — so linking stays universal
- * while curated cards grow as projections need them.
- */
+/** One SELECT per carded entity; uncurated entities resolve existence + status only. */
 const CARD_SQL: Record<string, string> = {
   "core.party": `SELECT display_name AS title, kind AS subtitle, avatar_content_id AS thumb, 0 AS trashed
                    FROM core_party WHERE party_id = ?`,
@@ -105,10 +86,7 @@ const CARD_SQL: Record<string, string> = {
 /** Entity types with a curated card — the picker's default kind set. */
 export const CARDED_ENTITIES: readonly string[] = Object.keys(CARD_SQL);
 
-/**
- * PK column per carded entity. PKs are UUIDv7, so `ORDER BY pk DESC` IS
- * recent-first — what a picker's no-term browse wants (#262 rules).
- */
+/** PKs are UUIDv7, so `ORDER BY pk DESC` IS recent-first — picker no-term browse (#262). */
 export const CARD_PK: Readonly<Record<string, string>> = {
   "core.party": "party_id",
   "core.place": "place_id",
@@ -137,12 +115,8 @@ function pkColumn(vault: DatabaseSync, physical: string): string {
   return rows.find((r) => r.pk === 1)?.name ?? "rowid";
 }
 
-/**
- * Resolvable-if-linked: does a LIVE link touch this ref, with the caller
- * able to read the OTHER endpoint's entity? Entity-level in v0 — the far
- * endpoint's row filter is not re-evaluated per row; the receipt records
- * every resolution either way.
- */
+/** LIVE link touches this ref AND the caller reads the other endpoint. Entity-level in v0 —
+ * the far row filter is not re-evaluated per row; resolutions are receipted. */
 function linkedAndVisible(
   vault: DatabaseSync,
   identity: Identity,
@@ -231,11 +205,7 @@ function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
   };
 }
 
-/**
- * Resolve up to MAX_REFS references into cards for one caller, one receipt
- * for the batch. Never throws for a bad ref — a per-ref status is more
- * useful to a renderer than an all-or-nothing deny.
- */
+/** Up to MAX_REFS refs → cards, one receipt per batch; never throws for a bad ref. */
 export function resolveRefCards(
   vault: DatabaseSync,
   journal: DatabaseSync,

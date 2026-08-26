@@ -1,26 +1,9 @@
-/*
- * Blob custody-sweep health — the `blob-sweep` component (#351 wave 4,
- * #367 prep).
- *
- * `db.blobs.reconcile()` (the standing replication/reconciliation sweep,
- * `packages/vault/src/blob/custody.ts`) already runs on a timer per mounted
- * vault (`VaultPlane.runSweep`, detached, one call per lifecycle tick). What
- * this component adds is a readable trace of its outcome — "when did this last
- * succeed, and on what" — which a one-line warn on failure cannot answer.
- * `BlobCustody.sweepStatus()` is the record; this probe reads it, plus a cheap
- * GROUP BY over the `blob_custody_state` mirror
- * (`custodyStateCounts`) for the local-only-vs-replicated backlog — the same
- * counts #367's Storage UI card will want per vault, so the shape is
- * chosen to serve both without a second query.
- *
- * A vault with no `blob_store` configured is not a degraded state — it is
- * the default, local-only topology — so `ok` covers "no s3 configured" the
- * same way `broker`'s probe treats "no broker-carried connections" as ok.
- */
+// blob-sweep health probe (#351, #367): last `reconcile()` outcome per vault
+// + custody-state counts. No s3 configured is ok — local-only is the default
+// topology.
 
 import type { HealthProbe } from "./health-registry.js";
 
-/** One custody-state bucket count, as `custodyStateCounts` returns it. */
 export interface BlobCustodyCounts {
   readonly "pending-offsite"?: number;
   readonly "local-only": number;
@@ -31,11 +14,10 @@ export interface BlobCustodyCounts {
 
 export interface BlobSweepHealthVaultEntry {
   readonly vaultId: string;
-  /** Whether this vault's `blob_store` settings currently declare an s3 tier. */
   readonly s3Configured: () => boolean;
-  /** `custodyStateCounts(db.vault)` — cheap GROUP BY, no tier I/O. */
+  /** `custodyStateCounts(db.vault)` — no tier I/O. */
   readonly counts: () => BlobCustodyCounts;
-  /** `db.blobs.sweepStatus()` — the last `reconcile()` outcome, in-memory. */
+  /** `db.blobs.sweepStatus()`. */
   readonly sweepStatus: () => {
     lastCompletedAt: string | null;
     lastError: string | null;
@@ -45,9 +27,9 @@ export interface BlobSweepHealthVaultEntry {
 
 export interface BlobSweepHealthOptions {
   readonly vaults: () => readonly BlobSweepHealthVaultEntry[];
-  /** How many consecutive sweep failures before a vault counts "persistently" failing. Defaults to 3. */
+  /** Failure streak before "persistently failing". Default 3. */
   readonly persistentFailureStreak?: number;
-  /** How long since the last successful sweep before an s3-configured vault with a backlog counts stale. Defaults to 1h. */
+  /** Max age of last success before an s3 vault with backlog is stale. Default 1h. */
   readonly staleAfterMs?: number;
   /** Clock override (tests). */
   readonly now?: () => number;
@@ -56,7 +38,6 @@ export interface BlobSweepHealthOptions {
 const DEFAULT_STREAK = 3;
 const DEFAULT_STALE_MS = 60 * 60 * 1000;
 
-/** Builds the `blob-sweep` component's `HealthProbe` (registered in `build-gateway.ts`). */
 export function createBlobSweepHealthProbe(
   options: BlobSweepHealthOptions
 ): HealthProbe {
@@ -91,8 +72,7 @@ export function createBlobSweepHealthProbe(
         continue;
       }
       if (!status.lastCompletedAt) {
-        // s3 configured but the sweep has never once completed here — the
-        // honest signal, not a fabricated "ok".
+        // s3 configured, sweep never completed: report it, don't fabricate ok.
         recentlyFailingOrStale.push(`${tag} (sweep never ran)`);
         continue;
       }

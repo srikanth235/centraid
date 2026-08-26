@@ -1,19 +1,6 @@
-// Shared page-side shapes for the locker app. Type-only — no
-// runtime members — so every importer uses `import type`, which esbuild strips
-// at serve time (a value import of this module would 404). Grounded in the
-// query payloads: `LockerRow` is the secret-free decorated row the `items`/
-// `search`/`trash` queries return; `LockerDetail` is the full, secret-bearing
-// shape the single-item `item` query returns (the ONLY payload with secrets).
+// Type-only — value imports 404 at serve time; importers MUST `import type`.
 
-/**
- * The six item-type discriminants Locker's schema recognizes (#712
- * C4) — the source of truth is the CHECK constraint on `locker_item.type`
- * (`packages/vault/src/schema/domains-locker.ts`). Kept in lockstep with it
- * by a source-scan tripwire (`locker-item-type.test.ts`), the same technique
- * `placement-registry.test.ts` uses for vault's `SHAREABLE_ITEM_TYPES`: this
- * file stays type-only (see above), so the union is restated here rather
- * than derived from a runtime array vault could export.
- */
+/** Mirrors the `locker_item.type` CHECK constraint (#712 C4). */
 export type LockerItemType =
   | "login"
   | "card"
@@ -22,7 +9,7 @@ export type LockerItemType =
   | "wifi"
   | "password";
 
-/** Secret-free decorated list row (items/search/trash queries). */
+/** Secret-free decorated row (items/search/trash). */
 export interface LockerRow {
   item_id: string;
   type: LockerItemType;
@@ -38,7 +25,7 @@ export interface LockerRow {
   purge_at?: string | null;
 }
 
-/** Full, secret-bearing item for the detail pane (single-item `item` query). */
+/** Full, secret-bearing detail-pane item. */
 export interface LockerDetail {
   item_id: string;
   type: LockerItemType;
@@ -64,13 +51,12 @@ export interface LockerDetail {
   favorite?: boolean;
   tags?: string[];
   trashed?: boolean;
-  /** Connector alias (#298); not returned by the read today. */
+  /** Connector alias (#298). */
   alias?: string | null;
   purge_at?: string | null;
   updated_at?: string;
 }
 
-/** The current sidebar navigation selection. */
 export type Nav =
   | { kind: "all" }
   | { kind: "fav" }
@@ -79,7 +65,7 @@ export type Nav =
   | { kind: "cat"; type: string }
   | { kind: "tag"; tag: string };
 
-/** Watchtower summary + needs-attention rows (from the `items` query). */
+/** Watchtower summary rows. */
 export interface WatchState {
   compromised: number;
   weak: number;
@@ -87,7 +73,7 @@ export interface WatchState {
   items: LockerRow[];
 }
 
-/** The seed the edit modal opens from (built by openNew/openEdit). */
+/** Seed the edit modal opens from. */
 export interface EditSeed {
   mode: "new" | "edit";
   id?: string;
@@ -99,7 +85,7 @@ export interface EditSeed {
   urlMatchPolicy: "registrable-domain" | "exact-host";
 }
 
-/** The payload the edit modal hands back to `saveItem`. */
+/** Payload the edit modal hands back to `saveItem`. */
 export interface SavePayload {
   mode: "new" | "edit";
   id?: string;
@@ -112,10 +98,7 @@ export interface SavePayload {
   allowedKeys: string[];
 }
 
-/**
- * The module-level `state` bag app.tsx mutates in place (never reassigned) and
- * logic.ts closes over. `data` is the separate secret-free row store.
- */
+/** Mutated in place, NEVER reassigned. */
 export interface AppState {
   nav: Nav;
   selectedId: string | null;

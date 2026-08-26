@@ -6,42 +6,25 @@ import type { RowDef } from "../ui/RowsBlock.js";
 import type { BackupStatusDTO } from "./BackupCard.js";
 
 /**
- * Backups, as the four things anyone actually asks (binding layer v11).
- *
- * WHY ROWS AND NOT MORE METRICS. The section opened with a loss panel and then
- * the five §6 health metrics, and on a gateway with no backup configured that
- * amounted to one sentence and a lot of border: "Not backed up offsite yet."
- * Meanwhile the four questions a member brings — when did it last run, how
- * often does it run, can the copies be opened, and who has one — were spread
- * across a metrics grid, a policy panel behind a Diagnostics disclosure, a
- * recovery-kit gate and a device list. The handoff states them as four rows,
- * which is the shape of the question.
- *
- * The five metrics are still below: they are the diagnosis, and these are the
- * findings. Both read from the SAME `status` the rest of this surface does, so
- * a row and a metric can never disagree about the same clock.
- *
- * NOT CONFIGURED IS AN ANSWER, not an empty state. Each row still states its
- * own "never" rather than the section collapsing to a sentence — "the recovery
- * kit has never been printed" is the fact a member needs most on exactly the
- * gateway that has no backups at all.
+ * Backups as four questions (binding layer v11); rows and metrics read the
+ * SAME `status` so they can never disagree. Not-configured is an answer:
+ * each row states its own "never".
  */
 export interface BackupSummaryRowsProps {
   status: BackupStatusDTO;
-  /** Live clock — drives the humanised ages. */
+  /** Live clock for the humanised ages. */
   now: number;
-  /** Newest backup across every mounted vault, epoch ms; `null` if none ever. */
+  /** Newest backup across mounted vaults, epoch ms; `null` if none ever. */
   lastRunAt: number | null;
-  /** Trigger a run now. Absent on a read-only seat. */
+  /** Trigger a run now; absent on a read-only seat. */
   onRunNow?: () => void;
-  /** True while a run is in flight — the verb says so and locks. */
+  /** Run in flight — the verb says so and locks. */
   running?: boolean;
-  /** Open backup settings (the Policy row's verb). Absent when the host has
-   *  nowhere to send the click. */
+  /** Open backup settings (Policy row's verb). */
   onOpenSettings?: () => void;
 }
 
-/** The declared cadence, in the words the member set it in. */
+/** Cadence in the words the member set. */
 function policyPhrase(status: BackupStatusDTO): string {
   const policies = status.vaults.flatMap((vault) =>
     vault.policy ? [vault.policy] : []
@@ -57,7 +40,7 @@ function policyPhrase(status: BackupStatusDTO): string {
   }`;
 }
 
-/** The head's own word for the cadence — "daily", "hourly". */
+/** Head's word for the cadence: "daily", "hourly". */
 function cadenceWord(status: BackupStatusDTO): string {
   const hours = status.vaults[0]?.policy?.snapshotIntervalHours;
   if (hours === undefined) return "default";
@@ -67,8 +50,7 @@ function cadenceWord(status: BackupStatusDTO): string {
   return `every ${Math.round(hours / 24)}d`;
 }
 
-/** Where the copies go, named. `gateway-local` is this machine, which is the
- *  one destination that does NOT survive this machine — so it says so. */
+/** Where the copies go, named; `gateway-local` does not survive this machine. */
 function holders(status: BackupStatusDTO): { meta: string; sub: string } {
   const names = new Set<string>();
   let localOnly = false;
@@ -112,8 +94,7 @@ export default function BackupSummaryRows({
   const rows: RowDef[] = [
     {
       id: "last-run",
-      // VERIFIED, NOT MERELY RUN. A backup that has never been read back is a
-      // hope; the meta says which of the two this is.
+      // VERIFIED, not merely run — the meta says which of the two this is.
       meta:
         lastRunAt === null
           ? "never"

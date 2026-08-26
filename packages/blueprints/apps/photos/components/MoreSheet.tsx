@@ -1,18 +1,5 @@
-// The compact band's SIXTH SLOT (v4 handoff §3.1, §15) — the app's own
-// overflow sheet, which is what `InlineBandClaim.onMore` is for.
-//
-// The band is capped at five destinations plus More, and Photos has seven
-// shelves. More is where the ones off the band live, plus Storage:
-// Favorites, Places, Duplicates, Trash, Storage (shelves.ts
-// `MORE_DESTINATIONS`). Import is deliberately absent — it is the app bar's
-// filled action on every shelf that can take one, and a second way in would be
-// two controls for one verb.
-//
-// It is a SHEET, not a second band: it opens on a member's tap, it dismisses
-// on Esc or on the scrim, it claims no destinations of its own and it never
-// calls `claimBand`. Opaque paper and a hairline, never blur and never a
-// shadow — the same rule the bands hold, for the same reason (§3.1: the
-// backdrop is unpredictable photographs).
+// Overflow sheet for shelves off the band (§3.1/§15). Import deliberately
+// absent — app bar owns the filled verb.
 import { MORE_DESTINATIONS } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";
 
@@ -24,20 +11,14 @@ export function MoreSheet({
   onSelect,
   onClose,
 }: {
-  /** Which destination is current, so the sheet does not lie about where the
-   *  member already is. */
   shelf: ShelfId;
-  /** Per-shelf counts, by shelf id. A destination with nothing to count omits
-   *  its entry rather than showing a zero it had to invent. */
   counts?: ReadonlyMap<string, number>;
   onSelect: (id: ShelfId) => void;
   onClose: () => void;
 }) {
   return (
-    // A native <dialog> with `open` — never `showModal()`. The sheet sits
-    // inside the app pane (which is one pane inside the shell), and a modal
-    // dialog would take the top layer over the frame's own chrome, which an
-    // app may not do.
+    // <dialog open>, never showModal(): a modal takes the top layer over
+    // the frame chrome.
     <dialog open className={styles.sheet} aria-label="More in Photos">
       <div className={styles.grabber} aria-hidden="true" />
       <nav className={styles.rows}>

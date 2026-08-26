@@ -1,22 +1,8 @@
 /**
- * The Journal PLACE: the People-journal entries, and only those.
- *
- * Journal is a place, never an interleave (#834 R-journal). `library`,
- * `search` and `link-targets` EXCLUDE the journal scheme; this query is the
- * one door that includes it, and it includes nothing else — the same marker
- * set, read the other way round. An owner's journal is written in People and
- * read here; nothing in Notes writes one, so this handler is read-only and
- * the app offers no verb over these rows beyond opening them.
- *
- * Every read is bounded: the marker resolution is three `eq`-narrowed reads
- * (`_shared/journal-scheme.ts`), the notes are `in`-bounded by the marker's
- * own id set and capped by `limit`, and the bodies are `in`-bounded by the
- * note rows that survived. There is no whole-table walk in any branch.
- *
- * A DENIAL IS A VALUE, NOT A THROW: `readJournalNoteIds` throws rather than
- * answering "nothing is a journal entry", and this handler translates that
- * into the empty shape plus `vaultDenied`, which is what the consent gate
- * renders.
+ * The Journal PLACE (#834 R-journal): the only query door including the
+ * journal scheme (`library`/`search` exclude it). Read-only; every read is
+ * bounded, and a DENIAL IS A VALUE: translated into the empty shape plus
+ * `vaultDenied`, not a throw.
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
@@ -36,8 +22,7 @@ interface ContentRow {
   content_uri?: string;
 }
 
-/** Canonical bodies live inline as `data:` URIs; anything else is opaque to
- *  this projection, exactly as it is to `library`. */
+/** Inline `data:` bodies decoded; anything else is opaque, as in library. */
 function decodeBody(uri: unknown): string {
   if (typeof uri !== "string" || !uri.startsWith("data:"))
     return "(external content)";
@@ -57,9 +42,8 @@ function decodeBody(uri: unknown): string {
   }
 }
 
-// The card needs a preview and a checklist tally, never a whole body — the
-// same two derivations `library` ships, inlined for the same reason (a query
-// handler is a standalone module).
+// Preview + checklist tally, never a whole body — the derivations `library`
+// ships, inlined (a query handler is a standalone module).
 const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
 function previewOf(body: string): string {
@@ -116,17 +100,14 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
       entity: "knowledge.note",
       where: [
         { column: "note_id", op: "in", value: ids },
-        // A trashed journal entry is in the trash, which is the library's
-        // shelf — this place shows what is live.
-        { column: "deleted_at", op: "is-null" },
+        { column: "deleted_at", op: "is-null" }, // live rows, not the library's trash shelf
       ],
       orderBy: { column: "updated_at", dir: "desc" },
       limit: window,
       purpose,
     });
-    // Re-narrowed in memory: the read is already `in`-bounded, but INCLUDE-ONLY
-    // is the whole contract of this query, so a read that answered wider than
-    // it was asked must not put a non-journal note into the Journal place.
+    // INCLUDE-ONLY is this query's whole contract: re-narrow in memory so an
+    // over-wide read cannot put a non-journal note in the Journal place.
     const rows = ((notes.rows ?? []) as unknown as NoteRow[]).filter(
       (note) => journalNoteIds.has(note.note_id) && note.deleted_at == null
     );
@@ -165,8 +146,7 @@ export default async function journalHandler({ input, ctx }: HandlerArgs) {
           check: checkOf(body),
         };
       }),
-      // Measured against what the vault returned, the same honesty the
-      // library window keeps: a full slice means there is more behind it.
+      // Full slice means there is more behind it, as in the library window.
       truncated: ((notes.rows ?? []) as unknown[]).length >= window,
       window,
     };

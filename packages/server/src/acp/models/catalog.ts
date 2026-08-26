@@ -1,18 +1,6 @@
-/*
- * Gateway-owned host-capability catalog store.
- *
- * Persists, per harness, the host runtime's self-reported model list (the chat
- * picker) at a host-supplied `<dir>/model-catalog.json`.
- *
- * This module is pure storage: read + merge-write. It NEVER enumerates, so
- * reads are instant (no CLI spawn, no SDK call) — `readHarnessModels` just
- * returns the cached field or `[]`. Enumeration (and the write-back) is owned
- * by the `CatalogWarmer` (./catalog-warmer.ts), which boot and Refresh both
- * drive; there is no hardcoded seed (a cold catalog yields `[]`, and the UI
- * shows a loading/empty state until the warmer fills it in).
- *
- * Everything is best-effort: read/write failures degrade silently so callers
- * never throw.
+/* Gateway-owned pure storage; enumeration belongs to CatalogWarmer
+ * (./catalog-warmer.ts), NEVER this module. I/O best-effort: failures
+ * degrade silently.
  */
 
 import { createHash } from "node:crypto";
@@ -24,10 +12,8 @@ import type { HarnessKind, HarnessModel } from "@centraid/server/engine";
 const CATALOG_VERSION = 2 as const;
 
 interface CatalogEntry {
-  /** Hash of the enumerated model ids — lets a reader spot a stale entry. */
   hash?: string;
   models?: HarnessModel[];
-  /** ISO timestamp the model list was enumerated. */
   enumeratedAt?: string;
 }
 
@@ -36,7 +22,6 @@ interface ModelCatalogFile {
   harnesses: Partial<Record<HarnessKind, CatalogEntry>>;
 }
 
-/** Stable hash of a model set, by id. */
 export function hashModelIds(models: readonly HarnessModel[]): string {
   return createHash("sha256")
     .update(models.map((m) => m.id).join("\n"))
@@ -44,7 +29,6 @@ export function hashModelIds(models: readonly HarnessModel[]): string {
     .slice(0, 16);
 }
 
-/** Read + validate the catalog file. `undefined` on any failure. */
 export async function readCatalog(
   catalogPath: string
 ): Promise<ModelCatalogFile | undefined> {
@@ -60,11 +44,7 @@ export async function readCatalog(
   }
 }
 
-/**
- * Merge a partial patch into a single harness's entry (read-modify-write): the
- * patch writes only its own fields and the merge preserves the rest of the
- * entry. Best-effort.
- */
+/** RMW one harness entry; patch writes only its fields. */
 export async function writeCatalogEntry(
   catalogPath: string,
   kind: HarnessKind,
@@ -84,12 +64,7 @@ export async function writeCatalogEntry(
   }
 }
 
-/**
- * Read a harness's cached models straight from the catalog — no enumeration, no
- * seed. `[]` until the `CatalogWarmer` has populated the entry (boot or
- * Refresh). The chat picker reads this and pairs it with `deriveStatus` to show
- * a loading vs empty state.
- */
+/** Cached models only — no enumeration. */
 export async function readHarnessModels(
   catalogPath: string,
   kind: HarnessKind

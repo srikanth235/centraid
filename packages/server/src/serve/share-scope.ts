@@ -1,28 +1,10 @@
-/*
- * An edge's SCOPE, parsed rather than asserted (#750 abstraction 5).
- *
- * `scope_json` reaches the reconcilers and the receipt writer through this
- * module and never through a `JSON.parse(row.scope_json ?? "[]") as string[]`
- * cast, because a receipt records that column as durable audit: a row whose
- * scope is `null`, `{}`, `[1, 2]` or `[""]` would produce an empty or nonsense
- * receipt SILENTLY, which is precisely the failure a durable access audit
- * exists to prevent.
- *
- * This module is the total parser. Malformed input is
- * refused loudly (a thrown `ShareScopeError`, which the edge plane turns into
- * a parked edge with a reason) rather than degraded into an empty set.
- *
- * The payload is a DISCRIMINATED union on `mode` even though `mode` admits
- * exactly one value today: there is no live lending (#731) and the
- * `share_edges` CHECK constraint is what keeps it structurally absent, so the
- * absence is asserted at the boundary here too. Nothing in this file re-adds
- * a live scope — a snapshot scope is a fixed, non-empty set of item ids, and
- * that is the only shape an edge can carry.
- */
+// Parsed edge SCOPE, never inline casts (#750): scope_json backs durable
+// access receipts, so malformed input must throw rather than degrade into
+// an empty set. No live lending (#731) — snapshot only.
 
 export interface SnapshotScope {
   mode: "snapshot";
-  /** Non-empty, de-duplicated, first-occurrence order — a SET, not a log. */
+  /** De-duplicated, first-occurrence order — a SET, not a log. */
   itemIds: string[];
 }
 
@@ -35,10 +17,6 @@ export class ShareScopeError extends Error {
   }
 }
 
-/**
- * Parse a `share_edges.scope_json` value for a given `mode`. Total: every
- * input either yields a validated scope or throws `ShareScopeError`.
- */
 export function parseEdgeScope(
   mode: string,
   scopeJson: string | null
@@ -54,7 +32,6 @@ export function parseEdgeScope(
   return { mode: "snapshot", itemIds: parseItemIds(scopeJson) };
 }
 
-/** The same validation over an already-decoded value — the wire-input door. */
 export function validateItemIds(value: unknown): string[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new ShareScopeError("itemIds must be a non-empty array");
@@ -82,7 +59,6 @@ function parseItemIds(scopeJson: string): string[] {
   return validateItemIds(decoded);
 }
 
-/** The audience-side item ids an executed edge recorded, same total posture. */
 export function parseTargetItemIds(json: string | null): string[] {
   if (json === null) return [];
   let decoded: unknown;

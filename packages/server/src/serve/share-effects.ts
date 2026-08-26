@@ -1,20 +1,10 @@
-/*
- * The durable half of the sharing plane's ONE effect outbox (#750
- * abstraction 2) — `share_effects` in `gateway.db`. Reads and writes only;
- * what an effect MEANS is `share-coordinator.ts`, and what running one DOES
- * is `share-effect-executor.ts`.
- *
- * Every payload that leaves this module has been parsed, never cast: a row
- * whose JSON drifted (a hand edit, a half-written generation) is refused as
- * `undefined` and skipped by the drainer rather than handed to a transport as
- * if it were well-formed.
- */
+/* Durable half of the share-effect outbox (#750); payloads are parsed,
+   never cast: drifted JSON → undefined and skipped. */
 
 import type { GatewayDatabase } from "./gateway-db.js";
 import { effectIdFor } from "./share-coordinator.js";
 import type { ShareEffect } from "./share-coordinator.js";
 
-/** First retry delay; doubles per attempt up to `MAX_BACKOFF_MS`. */
 const BASE_BACKOFF_MS = 5_000;
 const MAX_BACKOFF_MS = 15 * 60 * 1000;
 
@@ -30,7 +20,6 @@ export interface ShareEffectRow {
   updated_at: string;
 }
 
-/** A queued effect with its attempt count — what the executor is handed. */
 export interface PendingShareEffect {
   effectId: string;
   attempts: number;
@@ -38,15 +27,9 @@ export interface PendingShareEffect {
 }
 
 /**
- * Total parser: a row becomes a typed effect or nothing at all. Deliberately
- * NOT a throw — one unreadable row must not stop the drainer from making
- * progress on every other obligation this gateway holds.
- *
- * A row naming a RETIRED transport parses to nothing (#825): the peer effect
- * kinds and the cross-owner/peer `deliver-give` payload have no handler any
- * more. `retireDeadShareEffects` (`share-effects-retire.ts`) removes such rows
- * on gateway open rather than leaving them to be skipped forever, so reaching
- * one here means a hand edit or a half-written generation, not an upgrade.
+ * Total parser: typed effect or undefined — one bad row must not stall the
+ * drainer. Retired transports (#825) also parse to nothing; those rows are
+ * cleared at open by share-effects-retire.ts, so seeing one is a hand edit.
  */
 export function parseShareEffectRow(
   row: ShareEffectRow
@@ -60,7 +43,6 @@ export function parseShareEffectRow(
   }
   if (payload === null || typeof payload !== "object") return undefined;
   const body = payload as Record<string, unknown>;
-  // A copy-as-share obligation, whatever else its payload says.
   if (body.delivery === "peer" || body.crossOwner === true) return undefined;
   const edgeId =
     typeof row.edge_id === "string" && row.edge_id.length > 0
@@ -70,11 +52,7 @@ export function parseShareEffectRow(
   return { kind: "deliver-give", edgeId };
 }
 
-/**
- * Enqueue an obligation. The primary key is DERIVED from what the effect is
- * about, so re-enqueuing after a crash (or a second identical begin) lands on
- * the same row instead of duplicating work.
- */
+/** Enqueue once: the DERIVED primary key makes crash re-enqueues idempotent. */
 export function enqueueShareEffect(
   db: GatewayDatabase,
   effect: ShareEffect,
@@ -91,8 +69,6 @@ export function enqueueShareEffect(
     effectId,
     effect.edgeId,
     effect.kind,
-    // Nothing beyond the kind and the edge is carried any more: the retired
-    // peer obligations were the only effects with a payload of their own.
     "{}",
     now,
     iso,
@@ -101,7 +77,6 @@ export function enqueueShareEffect(
   return effectId;
 }
 
-/** Every effect due for a machine attempt now, oldest first. */
 export function claimDueShareEffects(
   db: GatewayDatabase,
   options: { limit?: number; now?: number } = {}
@@ -132,7 +107,7 @@ export function claimDueShareEffects(
   });
 }
 
-/** Discharged — forward-only, so the row stays as evidence it happened. */
+/** Discharged — forward-only; the row stays as evidence it happened. */
 export function completeShareEffect(
   db: GatewayDatabase,
   effectId: string
@@ -144,7 +119,6 @@ export function completeShareEffect(
   );
 }
 
-/** Not yet — try again later, down an exponential backoff. */
 export function deferShareEffect(
   db: GatewayDatabase,
   effectId: string,

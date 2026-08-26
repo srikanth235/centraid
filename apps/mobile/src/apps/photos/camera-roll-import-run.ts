@@ -1,11 +1,4 @@
-// The network half of the first-run camera-roll import (#724). The
-// pure batching/resume logic lives in `camera-roll-import.ts` — this file is
-// the one `attempt` that logic is handed: open one device original, stage it
-// on the vault's existing file-drop route, publish the draft it creates, and
-// say which of "imported" / "skipped" / "failed" happened. Not unit-tested on
-// its own — it is a thin adapter over native file I/O and `fetch`, the same
-// division `photo-edit-save.ts` and `photos-backup.ts` already draw between a
-// provable model and the I/O that drives it.
+// Network half of the first-run camera-roll import (#724): the `attempt` for camera-roll-import.ts's pure logic.
 
 import { File } from "expo-file-system";
 
@@ -28,12 +21,8 @@ interface PublishResponse {
   failed: number;
 }
 
-/** One `filename` + full bytes through the SAME staged-import door a dropped
- *  Takeout zip uses (`import-routes.ts`), then an explicit publish — draft,
- *  then landed, exactly as the desktop's own review surface does it. Returns
- *  whether this file's bytes were genuinely NEW (a create) or already in the
- *  vault by content (a dedupe skip/update) — the caller folds that into the
- *  candidate's own outcome. */
+/** One file through the SAME staged-import door as a dropped Takeout zip;
+ *  true = NEW, not a dedupe skip. */
 async function stageAndPublishOne(
   gatewayBase: string,
   filename: string,
@@ -70,15 +59,8 @@ async function stageAndPublishOne(
   return { created: publishedBody.created > 0 };
 }
 
-/**
- * The `attempt` function `runCameraRollImport` drives: open this candidate's
- * device original, stage and publish it, and — for a still that IS a Live
- * Photo — stage and publish its paired video under the SAME `live:<localId>`
- * capture group, exactly the convention `photos-backup.ts`'s own sweep uses
- * (`media_asset.capture_group_id`, `commands/media.ts`). One extra
- * native call (`liveVideoUri`) per photograph actually being imported, never
- * a bulk pre-scan of the roll — see this module's sibling header for why.
- */
+/** Stage+publish the device original; a Live Photo also publishes its paired
+ *  video under `live:<localId>` (`photos-backup.ts`). Never a bulk pre-scan. */
 export async function attemptImportCandidate(
   gatewayBase: string,
   candidate: ImportCandidate

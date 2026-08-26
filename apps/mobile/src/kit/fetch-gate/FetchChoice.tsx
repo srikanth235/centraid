@@ -1,16 +1,5 @@
-// The stated-choice UI contract for a gated fetch (`fetchAccess` in
-// gate.ts): the preview the caller already holds, plus the one tap that
-// spends the bytes. Never a silent fetch on a metered connection when the
-// policy says ask, and never a spinner — the shape is known before the bytes
-// are, so the shape is drawn and the affordance to go get the rest sits on
-// top of it.
-//
-// It is deliberately app-agnostic: a byte-bearing app that isn't Photos —
-// Docs' "available offline" pin fetch is the first one named — gets the same
-// grammar rather than re-deriving it. The geometry matches
-// `PhotoLightbox.styles.ts`'s `mediaCenter`/`zoomPill`/`chipText` exactly
-// (radii.pill, 1px border, 44 minimum target), resolved straight from theme
-// tokens here so this module does not depend on a photos-owned stylesheet.
+// Gated-fetch choice UI (`fetchAccess`): held preview plus the one tap that
+// spends bytes — never a silent fetch, never a spinner. Theme-token geometry.
 
 import React from "react";
 import type { StyleProp, ViewStyle } from "react-native";
@@ -37,11 +26,7 @@ const styles = StyleSheet.create({
   chipText: { ...t("control") },
 });
 
-/**
- * The tap that spends the bytes. A standalone export because some callers
- * (photos' second "load the original" affordance, kept exactly as-is per
- * the extraction brief) need the chip without the centred preview wrapper.
- */
+/** Standalone chip for callers that don't need the centred wrapper. */
 export function FetchChoiceChip({
   label,
   onPress,
@@ -71,11 +56,7 @@ export function FetchChoiceChip({
   );
 }
 
-/**
- * The full placeholder: a centred preview (whatever the caller already has —
- * a thumbnail, a poster frame) with the choice chip layered on top. Renders
- * in place of the gated content whenever `fetchAccess` answers `needs-choice`.
- */
+/** Preview + chip; renders when `fetchAccess` answers `needs-choice`. */
 export function FetchChoicePlaceholder({
   width,
   height,
@@ -89,7 +70,6 @@ export function FetchChoicePlaceholder({
   label: string;
   accessibilityLabel: string;
   onFetch: () => void;
-  /** The already-available preview — an `<Image>`, a poster `<View>`, etc. */
   children: React.ReactNode;
 }): React.JSX.Element {
   return (

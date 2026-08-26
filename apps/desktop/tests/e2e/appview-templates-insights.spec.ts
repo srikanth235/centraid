@@ -48,10 +48,7 @@ async function openApp(
   await page.getByTestId("inline-app-view").waitFor({ state: "visible" });
 }
 
-// ─────────────────────────── §7 the inline app route ───────────────────────────
-//
-// There is no sandboxed app iframe and no per-app copilot panel (#799), so
-// this section has no §7.2–7.4 cases.
+// No sandboxed app iframe, no per-app copilot panel (#799): no §7.2–7.4 cases.
 
 test("7.1 — opening a system app renders inline; back returns home", async () => {
   gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
@@ -62,7 +59,6 @@ test("7.1 — opening a system app renders inline; back returns home", async () 
     await expect(page.locator("iframe[data-centraid-app]")).toHaveCount(0);
     await page.keyboard.press("Meta+[");
     await waitForHome(page);
-    // Home is the content springboard now (#708), not the library apps-grid.
     await expect(
       page.locator(
         '[data-testid="home-springboard"], [data-testid="home-first-run"]'
@@ -73,19 +69,13 @@ test("7.1 — opening a system app renders inline; back returns home", async () 
   }
 });
 
-// ───────────────────────── §10 Automation templates ─────────────────────────
-//
-// There is no Discover page (#708) — every first-party app ships installed, so
-// the only catalogue is the automation gallery, reached from Automations →
-// Browse templates. This section therefore carries no 10.1, 10.3 or 10.4;
-// adoption is covered by 10.2 below.
+// No Discover page (#708): the catalogue is the automation gallery
+// (Automations → Browse templates), so this section carries only 10.2.
 
 test("10.2 — an automation template clone survives a fresh gateway instance and Electron process", async () => {
   gateway.state.templates = [
     {
-      // The gallery intentionally exposes only the v0 curated IDs.
-      // Keep this fixture on that public catalog contract; a made-up id is
-      // correctly filtered out before the card reaches the page.
+      // The gallery exposes only v0 curated IDs; made-up ids are filtered out.
       id: "obligation-extractor",
       name: "Daily Digest",
       desc: "Summarize the day",
@@ -132,14 +122,9 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
       .toBe(true);
     await expect.poll(() => gateway.state.automations).toHaveLength(1);
 
-    // Cloning must NOT consume the source template — it stays adoptable in the
-    // gallery until the user publishes. Adopt navigates to the new thread,
-    // so return to the gallery and assert the Daily Digest card is still listed.
+    // Clone must NOT consume the source template — it stays adoptable.
     await gotoNav(launched.page, "Automations");
-    // The clone left one automation behind, so the page is no longer empty and
-    // its empty-state verb ("Browse templates", used earlier in this test) is
-    // gone. With a populated list the way to the gallery is the app bar's
-    // secondary (#765) — same destination, different door.
+    // Populated list drops the empty-state verb; use the app bar secondary (#765).
     await launched.page
       .getByRole("button", { name: "Templates" })
       .first()
@@ -148,11 +133,8 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
       launched.page.getByRole("button", { name: /Daily Digest/u })
     ).toBeVisible();
 
-    // #765 UI evidence. This is the v9 binding layer on a POPULATED operational
-    // page — app-bar verbs (filled commit + quiet secondary), the status line,
-    // and the block vocabulary drawing real rows rather than an empty state.
-    // An empty page would prove nothing about the blocks, which is why the
-    // capture sits here, after the clone, rather than at first paint.
+    // #765 UI evidence: the v9 binding layer on a POPULATED page (blocks draw
+    // real rows; an empty state would prove nothing).
     const evidenceDir = path.resolve(
       import.meta.dirname,
       "../../../../artifacts/e2e/ui-impact"
@@ -234,10 +216,8 @@ test("11.1 — Analytics renders the runs chart and what it cost", async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, "Analytics");
-    // There is no KPI strip (#765). The page keeps the two figures it cannot
-    // do without (#775) — the promoted spend figure and the categorical
-    // breakdowns the gateway computes. The chart is one image with a
-    // sentence, and it draws SPEND per day.
+    // No KPI strip (#765): only the promoted spend figure and the categorical
+    // breakdowns remain (#775); the chart draws SPEND per day.
     await expect(
       page.getByRole("img", { name: "Spend per day over the last 30 days" })
     ).toBeVisible();
@@ -248,12 +228,10 @@ test("11.1 — Analytics renders the runs chart and what it cost", async () => {
       page.locator("dl[aria-label='Spend by harness']")
     ).toBeVisible();
     await expect(page.locator("body")).toContainText("claude-code");
-    // The spend, promoted: the page HEADLINES the figure again.
+    // The spend, promoted: HEADLINED.
     await expect(page.locator("body")).toContainText("$1.23");
 
-    // #775 UI evidence, captured on a POPULATED page for the same reason the
-    // #765 capture is: an empty Analytics screen would prove nothing about
-    // the figure, the distribution rows, or the dated chart.
+    // #775 UI evidence, captured on a POPULATED page (same reason as #765's).
     const evidenceDir = path.resolve(
       import.meta.dirname,
       "../../../../artifacts/e2e/ui-impact"

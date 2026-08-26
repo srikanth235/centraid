@@ -1,23 +1,12 @@
 /*
- * Exit evidence for #726 P3 gap 1 — "no production peer dial". Every other
- * peer-plane test (`peer-link-ceremony.test.ts`) proves the PROTOCOL against
- * an in-process double that calls the far side's route handler directly. This
- * file proves the TRANSPORT: two gateways that reach each other ONLY through
- * a real `centraid/gw-link/1` QUIC connection — `startGatewayEndpoint`
- * (accept, `@centraid/tunnel`) on one side, `startPeerDial` (dial,
- * `./peer-dial.js`, this package's production implementation of
- * `PeerRequest`/`PeerDial`) on the other — complete a link ceremony, verify a
- * signed route assertion, and see a give frame refused on the wire.
- * No `transportTo`-style handler call anywhere here.
- *
- * `relays: "disabled"` keeps this offline and fast (loopback UDP, no n0
- * network dependency), the same posture `peer-plane.test.ts` and
- * `tunnel.integration.test.ts` already use. Route rediscovery via a relay
- * hint (how a peer reconnects after this process's original dial ticket is
- * gone) is an n0-network concern proved in `packages/tunnel`, not repeated
- * here — this fixture keeps each side's live dial ticket on hand and hands
- * it to `endpointTicketFor` instead, so every request still crosses the
- * real transport; only HOW the ticket is obtained is test-simplified.
+ * Exit evidence for #726 P3 gap 1 — "no production peer dial". Unlike the
+ * protocol double in peer-link-ceremony.test.ts, this proves the TRANSPORT:
+ * two gateways reaching each other ONLY through a real `centraid/gw-link/1`
+ * QUIC connection — `startGatewayEndpoint` (accept) vs this package's
+ * production `startPeerDial` (dial) — completing a link ceremony, a signed
+ * route assertion, and a refused give frame. `relays: "disabled"` keeps it
+ * offline; relay-hint rediscovery is proved in `packages/tunnel`; only HOW
+ * tickets are obtained is test-simplified.
  */
 
 import crypto from "node:crypto";
@@ -78,8 +67,8 @@ interface Side {
 }
 
 /** One real gateway: a loopback HTTP upstream hosting the peer plane, a real
- * iroh endpoint accepting `centraid/gw-link/1` into it, and a real dial
- * client sharing the endpoint's own persistent identity. */
+ * iroh endpoint accepting `centraid/gw-link/1`, and a real dial client sharing
+ * the endpoint's own persistent identity. */
 async function makeSide(name: string): Promise<Side> {
   const root = tempDirSync(`centraid-peer-transport-${name}-`);
   const seed = crypto.randomBytes(32);
@@ -99,11 +88,9 @@ async function makeSide(name: string): Promise<Side> {
   const proof = crypto.randomBytes(32).toString("hex");
   const publicKey = vaultIdentityPublicKey(seed).toString("base64");
 
-  // `localRoute` closes over `endpoint` before it exists: the upstream
-  // server (which needs `localRoute`) must start before `startGatewayEndpoint`
-  // can be called (which needs the upstream's `baseUrl`) — a genuine cycle,
-  // broken by mutating a `const` cell's property rather than reassigning a
-  // `let` binding.
+  // Genuine cycle: the upstream must start before `startGatewayEndpoint`
+  // (it needs the upstream's `baseUrl`) while `localRoute` needs `endpoint` —
+  // broken by mutating a `const` cell's property.
   const endpointCell: { current?: GatewayEndpointHandle } = {};
   const localRoute = (): { endpointId?: string; relayHints: string[] } => ({
     endpointId: endpointCell.current?.endpointId,
@@ -180,11 +167,9 @@ async function closeSide(side: Side): Promise<void> {
 }
 
 /** A `PeerDial` whose `request` is the REAL transport, but whose
- * `endpointTicketFor` returns the CALLEE's live dial ticket rather than
- * reconstructing one from a bare EndpointId (which needs n0 relay discovery
- * to resolve with no direct addresses — a `packages/tunnel` concern, proved
- * there, not re-exercised here). Every byte still crosses the real QUIC
- * connection this test's own `startPeerDial` opens. */
+ * `endpointTicketFor` returns the CALLEE's live dial ticket (reconstructing
+ * one from a bare EndpointId needs n0 relay discovery — `packages/tunnel`'s
+ * concern). Every byte still crosses real QUIC. */
 function dialFrom(caller: Side, callee: Side): PeerDial {
   return {
     request: caller.dial.request,
@@ -304,10 +289,8 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
   }, 30_000);
 
   /*
-   * The peer wire serves no give plane (#825, ruling G-copy). Proved HERE,
-   * over the real QUIC transport, because that has to hold on the wire and
-   * not merely in a handler double: every give frame answers `not_found`,
-   * and the audience adopts nothing.
+   * The peer wire serves no give plane (#825) — proved HERE over the real
+   * transport: every give frame answers `not_found`.
    */
   test("every retired give frame answers not_found over the real transport", async () => {
     const photo = seedPhoto(origin, "retired-give");

@@ -1,14 +1,6 @@
-// What Agenda contributes to the FRAME (the app bar, the compact band).
-//
-// The contribution SHAPE is `_shared/app-frame.tsx`, the same module Docs and
-// Photos fill in; this file is what Agenda puts in it — the range it is
-// showing, how many rows that is, the view switcher on pointer, and the one
-// filled verb.
-//
-// ONE FILLED CONTROL PER VIEW. `New event` is it. Search is an outline and
-// only on pointer, because on compact the band already carries a way in;
-// Today and the two arrows are outlines because moving the window is not the
-// commit.
+// Agenda's FRAME contribution (shape in _shared/app-frame.tsx): ONE FILLED
+// CONTROL PER VIEW — `New event` is it; search, Today and the arrows stay
+// outlines because moving the window is not the commit.
 import type { ReactNode } from "react";
 
 import {
@@ -34,8 +26,6 @@ import {
 } from "./view-copy.ts";
 import { POINTER_VIEWS, TOUCH_VIEWS } from "./views.ts";
 
-/** Supporting glyphs, from the shared registry. An unknown key draws no glyph
- *  rather than a broken one, and the label names the tab either way. */
 const BAND_ICONS: Readonly<Record<ViewKind, string>> = {
   month: "Calendar",
   week: "Calendar",
@@ -44,46 +34,30 @@ const BAND_ICONS: Readonly<Record<ViewKind, string>> = {
   waiting: "Users",
 };
 
-/**
- * The compact band's four destinations plus More — each one a VIEW, because
- * Agenda has one route and its views are its places. The frame keeps its home
- * capsule outside this group and enforces the cap, so the app never has to ask.
- */
+/** Compact band destinations are views; the frame enforces its own cap. */
 export const BAND_DESTINATIONS: readonly BandDestination[] = TOUCH_VIEWS.map(
   (view) => ({ id: view, label: VIEW_LABELS[view], icon: BAND_ICONS[view] })
 );
 
 export interface AppBarState extends AppBarBase {
   view: ViewKind;
-  /** The range the current view is showing, in the member's own locale. */
   range: string;
   onSetView: (view: ViewKind) => void;
   onToday: () => void;
   onStep: (direction: -1 | 1) => void;
   onNew: () => void;
-  /** Why the commit cannot fire, when a denied write scope means it cannot.
-   *  A filled control that cannot be pressed stops being filled. */
+  /** Why the commit cannot fire when a write scope is denied. */
   newDisabledReason?: string;
 }
 
-/** The bar's count, in the words this view uses. */
 export function barCount(state: AppBarState): ReactNode {
   if (state.count === null) return undefined;
   return countLabel(state.count, VIEW_UNITS[state.view]);
 }
 
-/**
- * The app bar contribution: the range as the title, the count beside it, then
- * the quiet controls and the one filled verb last.
- *
- * The VIEW SWITCHER is a pointer-only segmented control (the frame's own §2
- * rule); on compact the band carries the same four destinations, so drawing
- * both would be two answers to one question.
- */
+/** Pointer-only switcher; on compact the band carries the same destinations. */
 export function appBar(state: AppBarState): InlineAppBarContribution {
   const disabled = state.newDisabledReason !== undefined;
-  // Read off the state bag into locals: the bar's handlers are named for what
-  // they DO here, not for the contribution field they arrived in.
   const handleToday = state.onToday;
   const handleNew = state.onNew;
   const handleSearch = state.onSearch;
@@ -139,8 +113,7 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
   return { title: state.range, count: barCount(state), actions };
 }
 
-/** The compact band claim — the frame ignores it on any surface that is not
- *  compact, so the app never has to ask whether it may claim. */
+/** Ignored off compact. */
 export function bandClaim(
   view: ViewKind,
   onSelect: (segment: string) => void,

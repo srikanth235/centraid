@@ -1,20 +1,11 @@
-/**
- * Shared types for centraid app authoring.
- */
-
 export type AppId = string;
 
 /**
- * A registered app's metadata persisted in `<appsDir>/_registry.json`.
- *
- * Every registered app is "uploaded" mode: a wrapper folder under
- * `<appsDir>/<id>/` holding runtime state (logs.jsonl, settings.json,
- * attachment blobs). Code lives in the git store and is resolved through
- * the code-dir override; app data lives in the vault (#286).
+ * Persisted in `<appsDir>/_registry.json`: code in the git store, app data in
+ * the vault (#286).
  */
 export interface RegistryEntry {
   id: AppId;
-  /** Absolute path to the app's root folder: `<appsDir>/<id>/`. */
   path: string;
   registeredAt: string;
 }
@@ -32,28 +23,12 @@ export interface ActionModule {
 export type HandlerFn<Args, Ret = void> = (args: Args) => Promise<Ret>;
 
 /**
- * Public handler type aliases — apps written in TypeScript can use these
- * to type their handler default exports:
- *
- * ```ts
- * import type { QueryHandler } from "@centraid/server/engine";
- * export default (async ({ query, ctx }) => {
- *   const out = await ctx.vault.read({
- *     entity: 'schedule.task',
- *     purpose: 'dpv:ServiceProvision',
- *   });
- *   return out;
- * }) satisfies QueryHandler;
- * ```
- *
- * The `ScopedVault` API is fully async — every call round-trips through
- * the worker boundary to the parent process, which holds the app's vault
- * credential and enforces consent. Always `await` your vault calls.
+ * Public handler type aliases. `ScopedVault` calls round-trip through the
+ * worker boundary to the parent process — always await them.
  */
 export type QueryHandler = HandlerFn<QueryHandlerArgs, unknown>;
 export type ActionHandler = HandlerFn<ActionHandlerArgs, ActionResult>;
 
-/** The handler-side `ctx.vault` surface (see worker/runner.ts). */
 export interface ScopedVault {
   read: (request: Record<string, unknown>) => Promise<unknown>;
   search: (request: Record<string, unknown>) => Promise<unknown>;
@@ -80,7 +55,6 @@ export interface AppRef {
   readonly dir: string;
 }
 
-/** Deterministic civil-time helpers available to every app handler. */
 export interface ScopedRecurrenceInstance {
   readonly originalStart: string;
   readonly start: string;
@@ -111,7 +85,6 @@ export interface ScopedTime {
   ) => ScopedRecurrenceInstance[];
   /** The one member-facing recurrence summary; apps never render a raw rule. */
   describeRecurrence: (rrule: string) => string | null;
-  /** Elapsed unactioned periods, collapsed onto the single live occurrence. */
   collapseMissedOccurrences: (input: {
     rrule: string;
     scheduledStart: string;
@@ -135,9 +108,7 @@ export interface CommonHandlerArgs {
 }
 
 export interface QueryHandlerArgs extends CommonHandlerArgs {
-  /** Query-string params from the URL. */
   query: Record<string, string>;
-  /** Path params (currently empty — reserved for future shape changes). */
   params: Record<string, string>;
 }
 

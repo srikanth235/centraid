@@ -1,26 +1,4 @@
-/*
- * The KeyStore credential an installed OS service carries (#351,
- * hardened in #568 item E).
- *
- * `service install` moves a data directory's key custody from wherever it
- * currently lives to an OS-held credential — the macOS Keychain or a
- * systemd-creds blob. That move is the single most destructive thing the
- * installer does: a credential the daemon cannot decrypt with makes every key
- * in the directory unreadable, and `security add-generic-password -U`
- * overwrites in place.
- *
- * Two rules follow, and they live here so both platform installers share
- * them:
- *
- *   1. ADOPT BEFORE WRITING. `adoptKeyStoreCredential` proves the credential
- *      reads (and rewraps) every key already in `keysDir`. A failure here must
- *      leave custody exactly as it was found, so the installer commits the
- *      credential only after this returns.
- *   2. The credential is per data directory. `keychainAccountFor` (see
- *      `key-store.ts`) keys the Keychain account by a `keysDir` hash the same
- *      way `headlessCredentialFile` does, so one install cannot clobber
- *      another data directory's custody.
- */
+/* KeyStore credential an installed OS service carries (#351, #568 item E). */
 
 import { promises as fs } from "node:fs";
 
@@ -36,14 +14,7 @@ export type ServiceKeyCredential =
       keysDir: string;
     };
 
-/**
- * Prove `credential` can read this data directory's keys, rewrapping any
- * still-unprotected envelope under it on the way through.
- *
- * Throws (via `fail`) when the credential is malformed, and lets the
- * `KeyStore`'s own GCM authentication error escape when it cannot decrypt —
- * both are reasons to abort the install BEFORE anything is committed.
- */
+/** ADOPT BEFORE WRITING: prove every key here reads; aborts BEFORE anything commits. */
 export async function adoptKeyStoreCredential(
   fail: (message: string, code?: number) => never,
   credential: ServiceKeyCredential

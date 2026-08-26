@@ -1,8 +1,4 @@
-// Remote read-through for framed sealed blobs (#405 §1 ranged read, §4
-// single-flight). Kept out of custody.ts so the facade stays under the
-// governance line-cap and the "how do we read a remote frame" logic sits in
-// one place. Everything here is stateless per call EXCEPT the in-flight maps,
-// which `BlobCustody` owns and passes in — coalescing is per mounted vault.
+// Remote read-through for framed sealed blobs (#405 §1, §4); coalescing state in BlobCustody's maps.
 
 import {
   coveringFrames,
@@ -15,13 +11,7 @@ import type { FrameDirectory } from "./seal-frames.js";
 import { resolveRange } from "./store.js";
 import type { BlobRange, BlobStore } from "./store.js";
 
-/**
- * Fetch a whole remote object and return its PLAINTEXT (#405): one
- * provider GET of the entire object, unsealed whole (or passed through when
- * the tier is unsealed). The caller verifies the whole-blob sha and promotes
- * into the local tier — this only does the I/O + unseal so the single-flight
- * wrapper can share exactly one of these across concurrent readers.
- */
+/** Whole-object GET, unsealed; caller verifies + promotes so single-flight shares one. */
 export async function fetchRemoteWhole(
   store: BlobStore,
   key: Buffer | undefined,
@@ -33,12 +23,7 @@ export async function fetchRemoteWhole(
   return key ? unseal(key, sha, raw) : raw;
 }
 
-/**
- * Read a framed sealed object's footer (#405): HEAD for the size, a
- * suffix GET for the fixed trailer, then a GET for exactly the directory. Two
- * small ranged requests — never the whole object. Returns null when the
- * object is absent (a raced delete), so the ranged path can fall back cleanly.
- */
+/** Footer via two ranged requests; null on raced delete. */
 export async function fetchFrameDirectory(
   store: BlobStore,
   key: Buffer,
@@ -61,15 +46,7 @@ export async function fetchFrameDirectory(
   return openDirectory(key, sha, frameCount, dirBytes);
 }
 
-/**
- * Serve a byte range of a framed sealed object by fetching ONLY the covering
- * frames (#405) — never the whole object, and deliberately NOT
- * promoting into the local tier (a partial read can't verify the whole-blob
- * sha, so caching an unverifiable whole would be wrong; per-frame GCM+AAD is
- * the integrity story for the bytes actually served). The directory is passed
- * in already-fetched so the caller can coalesce it across concurrent ranged
- * readers of the same sha.
- */
+/** Range via ONLY covering frames; never promotes (partial read can't verify the whole-blob sha); dir pre-fetched for caller coalescing. */
 export async function fetchRemoteRange(
   store: BlobStore,
   key: Buffer,
@@ -100,8 +77,6 @@ export async function fetchRemoteRange(
     })
   );
   if (plaintextParts.some((part) => part === null)) return null; // raced a delete mid-range
-  // The covering frames start at plaintext offset `first * frameSize`; slice
-  // the requested window out of that contiguous run.
   const covered = Buffer.concat(
     plaintextParts.filter((part): part is Buffer => part !== null)
   );

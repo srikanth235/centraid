@@ -1,7 +1,5 @@
-// Vault bootstrap + enrollment helpers. These are the owner-administrative
-// acts that must exist before the gateway can authenticate anyone (the first
-// device is the chicken-and-egg). In a full system enrollment and granting
-// graduate to typed commands themselves; the rows they write are identical.
+// Vault bootstrap + enrollment: the owner-administrative acts before the
+// gateway can authenticate anyone (first device = chicken-and-egg).
 
 import { randomBytes } from "node:crypto";
 
@@ -12,7 +10,6 @@ import { ONTOLOGY_VERSION } from "./schema/migrate.js";
 
 export interface BootstrapResult {
   vaultId: string;
-  /** The vault's owner-facing name (`core_vault.display_name`). */
   displayName: string;
   ownerPartyId: string;
   deviceId: string;
@@ -27,7 +24,6 @@ interface SeedConcept {
   label: string;
 }
 
-// SKOS seed vocabulary: DPV purposes, PROV/SKOS relations, AS2 activity kinds.
 const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
   purposes: {
     uri: "https://w3id.org/dpv#Purpose",
@@ -43,9 +39,8 @@ const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
     title: "Spend categories",
   },
   flags: { uri: "urn:duaility:flags", title: "Agent flags" },
-  // Machine-tag vocabularies (#299) — concepts arrive on demand from
-  // the enrichment publishers; only the scheme rows seed. Pre-v10 vaults
-  // get these from the guarded v10 backfill instead.
+  // Machine-tag vocabularies (#299): concepts arrive on demand from the
+  // enrichment publishers; pre-v10 vaults use the guarded v10 backfill.
   vision: { uri: "urn:centraid:vision", title: "Vision tags (machine)" },
   doctype: { uri: "urn:centraid:doctype", title: "Document types (machine)" },
 };
@@ -65,13 +60,13 @@ const SEED_CONCEPTS: SeedConcept[] = [
   { scheme: "relations", notation: "about", label: "About" },
   { scheme: "relations", notation: "works-for", label: "Works for" },
   { scheme: "relations", notation: "duplicate-of", label: "Duplicate of" },
-  // Cross-referencing relations (#272) — also seeded into existing
-  // vaults by the v3 migration, which must stay in step with these two.
+  // Cross-referencing relations (#272) — also seeded by the v3 migration;
+  // keep in step.
   { scheme: "relations", notation: "references", label: "References" },
   { scheme: "relations", notation: "attachment-of", label: "Attachment of" },
-  // Version lineage (#352): a newer content item revises an older one —
+  // Version lineage (#352): newer content revises older — asserted by
   // core.edit_document, core.replace_document_content,
-  // core.restore_document_version, and knowledge.edit_note all assert it.
+  // core.restore_document_version, knowledge.edit_note.
   { scheme: "relations", notation: "revises", label: "Revises" },
   { scheme: "activity-kinds", notation: "meeting", label: "Meeting" },
   { scheme: "activity-kinds", notation: "run", label: "Run" },
@@ -88,18 +83,12 @@ export interface BootstrapVaultOptions {
   ownerName: string;
   baseCurrency?: string;
   deviceName?: string;
-  /**
-   * Pre-minted vault id. A multi-vault host names each vault's directory
-   * after its id, so the id must exist before the files do.
-   */
+  /** Pre-minted id: multi-vault hosts name each vault's directory after it. */
   vaultId?: string;
-  /** Owner-facing vault name. Default: `<ownerName>'s vault`. */
   vaultName?: string;
-  /** IANA tz for the minted default "Personal" calendar. Default: UTC. */
   defaultTz?: string;
 }
 
-/** Create the vault row, owner party, seed vocabulary and first device. */
 export function bootstrapVault(
   db: VaultDb,
   options: BootstrapVaultOptions
@@ -144,19 +133,15 @@ export function bootstrapVault(
       vaultId,
       ownerPartyId,
       displayName,
-      // No caller passes baseCurrency today, so this default IS the currency
-      // every real vault displays; every reader (tally, brief, ingest, mobile)
-      // already falls back to USD when the row is missing.
+      // No caller passes baseCurrency today, so this USD default IS the
+      // currency every real vault displays; readers fall back to USD anyway.
       options.baseCurrency ?? "USD",
       now
     );
-  // The enrichment-policy mirror (#352 phase 3/4, host.ts
-  // readEnrichSettings/updateEnrichSettings): `gateway` is the default on
-  // both domains (#712 C5 rename), same as the settings-bag default
-  // this table shadows — the member's own devices and gateway may do
-  // deterministic and device-lease work and whatever the gateway is
-  // already wired to; a THIRD-PARTY PROVIDER seeing bytes is still gated
-  // separately, per call (#567) and per capability (decision S9).
+  // Enrichment-policy mirror (#352 phase 3/4, host.ts read/updateEnrichSettings):
+  // `gateway` is the default on both domains (#712 C5), same as the settings-bag
+  // default this table shadows; a THIRD-PARTY PROVIDER seeing bytes stays gated
+  // separately per call (#567) and capability (decision S9).
   for (const domain of ["photos", "docs"] as const) {
     db.vault
       .prepare(
@@ -164,21 +149,17 @@ export function bootstrapVault(
       )
       .run(domain, now);
   }
-  // Events require a calendar (schedule.propose_event's calendar_exists
-  // precondition) but no vault command creates one — without a minted
-  // default, a fresh vault can never hold a single event and Agenda's
-  // propose flow is a permanent dead end. One private "Personal" calendar
-  // makes the schedule domain usable from first boot, same spirit as the
-  // owner party row above.
+  // Events require a calendar (schedule.propose_event precondition) but no
+  // command mints one — seed a private "Personal" calendar so schedule works
+  // from first boot.
   db.vault
     .prepare(
       `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, color, default_tz, visibility, external_uri)
        VALUES (?, ?, 'Personal', NULL, ?, 'private', NULL)`
     )
     .run(uuidv7(), ownerPartyId, options.defaultTz ?? "UTC");
-  // §03/§07: condition is the highest-sensitivity table — excluded from
-  // default grant scopes. A minimization policy makes schema-wide scopes skip
-  // it; only a scope naming the table explicitly covers it.
+  // §03/§07: condition is highest-sensitivity — only an explicit scope
+  // naming it covers it.
   db.vault
     .prepare(
       `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, residency_region, effective_from, priority)
@@ -293,7 +274,6 @@ export interface ScopeSpec {
   fieldMask?: string[];
 }
 
-/** One consent decision: this grantee, this purpose, until this expiry. */
 export function createGrant(
   db: VaultDb,
   options: {

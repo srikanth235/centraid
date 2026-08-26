@@ -5,22 +5,9 @@ import {
   ENRICHMENT_DECLINED_NOTE,
   ENRICHMENT_REQUESTED_NOTE,
 } from "./enrichment-consent.ts";
-// THE FACE-DETECTION CONSENT GATE'S STATE (#712).
-//
-// THE GATE LIVES IN THE PEOPLE SHELF'S EMPTY STATE (components/People.tsx),
-// never behind a toolbar icon and a `<dialog>`: a member who opens People and
-// sees nothing has exactly the question this gate answers, so the empty shelf
-// IS the gate's body rather than a control reached from elsewhere.
-//
-// Same factory idiom as people.ts/duplicates.tsx — a plain closure
-// app-root.tsx owns and re-renders from (`onData`), not a React hook, so it
-// fits the rest of that file's imperative boot closure.
-//
-// THE LOAD-BEARING RULE: no enrichment write is issued without an explicit
-// answer. Reading the policy
-// and declining both write nothing; `runOnDevice` is reachable from exactly
-// the `Run on this device` answer, and the answer latches so a second click
-// cannot answer twice.
+// Face-detection consent gate (#712): lives in the People shelf's empty
+// state, not behind a toolbar dialog; closure factory as in people.ts.
+// LOAD-BEARING: no enrichment write without an explicit latched answer.
 import { act, narrate, notice } from "./outcomes.ts";
 
 interface EnrichmentStatus {
@@ -29,16 +16,7 @@ interface EnrichmentStatus {
 }
 
 export interface EnrichmentGate {
-  /** Read the vault's enrichment tier once. A no-op while loaded or already
-   *  in flight — the same "load once" contract `people.ts`'s `ensureLoaded`
-   *  holds, called the moment the gate might be shown rather than at boot. */
   ensurePolicyLoaded: () => void;
-  /**
-   * The gate's props for a library of `count` photographs, or `null` once
-   * the question has been answered — the caller falls back to its own plain
-   * empty copy at that point rather than re-asking a question already
-   * answered this session.
-   */
   props: (count: number) => EnrichmentConsentProps | null;
 }
 
@@ -69,8 +47,7 @@ export function createEnrichmentGate({
       });
   }
 
-  // THE ONE WRITE. Reachable from `props(...).onRunOnDevice` and from
-  // nowhere else in this module.
+  // THE ONE WRITE — reachable from onRunOnDevice alone.
   async function runOnDevice(): Promise<void> {
     if (busy || answered) return;
     if (!deviceAnswerFor(status?.tier, !!status?.vaultDenied).available) return;

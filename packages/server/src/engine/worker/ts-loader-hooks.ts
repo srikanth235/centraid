@@ -1,26 +1,6 @@
-/*
- * Module-customization hooks that teach a handler worker to import TypeScript
- * (TS-authored apps ship `.ts` queries/actions).
- *
- * Production runs the COMPILED dist under plain Node (>=22.5) — no tsx, no TS
- * loader — so `await import()` of a `.ts` handler graph would otherwise fail
- * to parse. The worker registers these hooks (via `module.register`, see
- * worker/runner.ts) ONLY when the handler it's about to run is a `.ts`/`.tsx`
- * file, so a `.js` dispatch never installs them and its native import path is
- * untouched.
- *
- * `load` compiles `.ts`/`.tsx` sources to ESM with `esbuild.transform` (loader
- * picked by extension) and short-circuits; every other URL falls through to
- * the default loader. `resolve` fills the two gaps Node's ESM resolver leaves
- * for a TS graph: an extensionless sibling import (`./util`) and the TS
- * convention of importing a sibling by its emitted `.js` name (`./util.js`)
- * while the source on disk carries the `.ts` extension. A plain existing
- * `.js` import resolves natively and never reaches the fallback.
- *
- * This file is a `.ts` source compiled to `dist/worker/ts-loader-hooks.js`;
- * the registration URL in runner.ts resolves the `.js` under dist and the
- * `.ts` under tsx (tests), so both boot shapes find it.
- */
+// Lets a handler worker import TypeScript: production runs compiled dist
+// under plain Node (runner.ts). `load` compiles via esbuild; `resolve` fills
+// extensionless/`.js` siblings.
 
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -61,12 +41,12 @@ type NextLoad = (
 
 const TS_URL_RE = /\.tsx?$/u;
 
-/** Candidate on-disk TS URLs for a relative specifier Node couldn't resolve. */
+/** On-disk TS URLs for an unresolved relative specifier. */
 function tsCandidates(specifier: string, parentURL: string): string[] {
   if (!specifier.startsWith("./") && !specifier.startsWith("../")) return [];
   const bases: string[] = [];
   if (specifier.endsWith(".js")) {
-    // TS ESM convention: source imports the emitted `.js`, file on disk is `.ts`.
+    // Source names the emitted `.js`; disk holds `.ts`.
     bases.push(specifier.slice(0, -3));
   } else if (path.extname(specifier) === "") {
     bases.push(specifier);
@@ -109,8 +89,7 @@ export async function load(
     loader: url.endsWith(".tsx") ? "tsx" : "ts",
     format: "esm",
     sourcefile: file,
-    // TS-authored handlers may use React dialect in a `.tsx` sibling; keep the
-    // same automatic runtime as the browser transform. Inert for plain `.ts`.
+    // Automatic JSX runtime; inert for `.ts`.
     jsx: "automatic",
   });
   return { format: "module", source: code, shortCircuit: true };

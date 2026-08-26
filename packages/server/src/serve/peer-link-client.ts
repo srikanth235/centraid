@@ -1,14 +1,6 @@
 /*
- * The dialing half of the peer plane (#726 P3 decisions 3 and 4).
- *
- * Direction-free by construction: this module is what the side that SCANS a
- * link ticket runs, and the side that SHOWED one runs `routes/peer-plane.ts`.
- * Either gateway may be either. Both end up holding the same shape of row.
- *
- * The transport is injected. The wire is ordinary HTTP-over-the-peer-ALPN, so
- * a caller passes a function that opens a `centraid/gw-link/1` stream; tests
- * pass one that calls the far side's handler directly. Nothing in the protocol
- * below knows about iroh.
+ * Dialing half of the peer plane (#726 P3 d3+d4); transport injected;
+ * nothing below knows about iroh.
  */
 
 import { judgePeerHandshake, peerHello } from "@centraid/core/protocol";
@@ -17,17 +9,15 @@ import { routeAssertionBytes } from "./peer-route-assertion.js";
 import type { LinkedPeer } from "./vault-link-row.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
-/** The pasteable/scannable payload a gateway shows to link (decision 3). */
 export interface LinkTicketPayload {
   v: 1;
   kind: "centraid-link";
   /** The showing side's vault and its CURRENT identity key. */
   vaultId: string;
   vaultPublicKey: string;
-  /** iroh EndpointTicket — address data, never identity. */
-  endpointTicket: string;
+  /** iroh EndpointTicket — address data, never identity. */ endpointTicket: string;
   ticketId: string;
-  /** The one-time secret. Stored only as a hash on the showing side. */
+  /** One-time secret, stored only hashed. */
   secret: string;
 }
 
@@ -44,12 +34,7 @@ export interface PeerDialRoute {
   relayHints: string[];
 }
 
-/**
- * A transport plus the one thing only the caller can mint: an EndpointTicket
- * for a route. Every outbound peer call in this package takes one of these,
- * so nothing below the transport ever learns about iroh. Its home is here
- * because this module IS the dialing half of the peer plane.
- */
+/** Transport plus EndpointTicket minting — nothing below learns iroh. */
 export interface PeerDial {
   request: PeerRequest;
   endpointTicketFor: (endpointId: string, relayHints: string[]) => string;
@@ -57,7 +42,7 @@ export interface PeerDial {
 
 export type LinkCeremonyResult =
   | { state: "linked"; link: LinkedPeer }
-  /** Ticket unknown, expired, or already redeemed — one answer for all three. */
+  /** Unknown, expired, or redeemed — one answer for all three. */
   | { state: "not_found" }
   | { state: "protocol_refused"; detail: string }
   | { state: "bad_request"; detail: string }
@@ -67,7 +52,7 @@ export function encodeLinkTicket(payload: LinkTicketPayload): string {
   return JSON.stringify(payload);
 }
 
-/** Total parse: anything that is not a well-formed ticket is `undefined`. */
+/** Total parse: anything malformed is `undefined`. */
 export function parseLinkTicket(raw: string): LinkTicketPayload | undefined {
   let parsed: unknown;
   try {
@@ -107,7 +92,7 @@ export interface RedeemLinkTicketDeps {
   ticket: LinkTicketPayload;
   links: VaultLinksStore;
   request: PeerRequest;
-  /** This side's vault and its identity key — what the peer will record. */
+  /** What the peer will record about this side. */
   localVault: { vaultId: string; publicKey: string };
   localOwnerPartyId?: string;
   /** This side's dial route, so the peer can reach back. */
@@ -117,9 +102,7 @@ export interface RedeemLinkTicketDeps {
 }
 
 /**
- * Present the ticket, then record the far side from its answer. The local row
- * is written ONLY after the peer confirms the redemption, so a failed ceremony
- * leaves no half-link on either side.
+ * Local row is written ONLY after the peer confirms — no half-link on either side.
  */
 export async function redeemLinkTicket(
   deps: RedeemLinkTicketDeps
@@ -160,8 +143,7 @@ export async function redeemLinkTicket(
   if (body.state === "not_found" || response.status === 404) {
     return { state: "not_found" };
   }
-  // The wall is mutual: the far side judged this gateway, and this gateway
-  // judges it back off the same answer.
+  // The wall is mutual: we judge the far side as it judged us.
   const verdict = judgePeerHandshake(body);
   if (
     verdict.state === "protocol_refused" ||
@@ -184,8 +166,7 @@ export async function redeemLinkTicket(
   if (typeof peerVaultId !== "string" || typeof peerPublicKey !== "string") {
     return { state: "bad_request", detail: "peer answer named no vault" };
   }
-  // The ticket already carried the peer's vault identity. If the answer
-  // disagrees, something in the middle rewrote one of them.
+  // Ticket identity disagreement = middleman rewrite.
   if (
     peerVaultId !== deps.ticket.vaultId ||
     peerPublicKey !== deps.ticket.vaultPublicKey
@@ -233,25 +214,22 @@ export async function redeemLinkTicket(
 export interface PushRouteDeps {
   links: VaultLinksStore;
   request: PeerRequest;
-  /** Sign as the LOCAL vault whose route moved (VaultRegistry.signAsVault). */
+  /** Sign as the LOCAL vault whose route moved. */
   signAsVault: (vaultId: string, bytes: Buffer) => Buffer | undefined;
   route: { vaultId: string; endpointId: string; relayHints: string[] };
   now?: () => number;
-  /** Build a dial ticket for a peer's cached route. */
   endpointTicketFor: (endpointId: string, relayHints: string[]) => string;
 }
 
 export interface RoutePushOutcome {
   peerVaultId: string;
-  /** `offline` peers verify the assertion when it next reaches them. */
+  /** Offline peers verify when they next reach us. */
   state: "accepted" | "stale" | "refused" | "offline";
 }
 
 /**
- * Push a signed route assertion to EVERY live link of `route.vaultId`
- * (decision 4: eager, not lazy). A peer that is unreachable right now is
- * `offline`, not an error: the assertion is idempotent and carries its own
- * timestamp, so re-sending it later is always safe.
+ * Push a signed route assertion to EVERY live link (decision 4, eager);
+ * unreachable now = `offline`, not an error — idempotent and timestamped.
  */
 export async function pushRouteAssertion(
   deps: PushRouteDeps
@@ -267,7 +245,7 @@ export async function pushRouteAssertion(
   if (!signature) return [];
   const body = { ...claim, signature: signature.toString("base64") };
   const targets = deps.links.peersOf(claim.vaultId);
-  // Peers are independent: one unreachable gateway must not delay the rest.
+  // Peers are independent: one unreachable gateway delays no one.
   return Promise.all(
     targets.map(async (link): Promise<RoutePushOutcome> => {
       try {

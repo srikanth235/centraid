@@ -1,15 +1,6 @@
-// Remote-tier blob sealing — the PUBLIC sealers/unsealers (#296 seal,
-// #367 §C8 streaming, #405 §1 framed/rangeable). The wire format and its
-// low-level frame/directory/trailer primitives live in `seal-frames.ts`; this
-// module is the whole-object face of that format: `sealBlob` (buffered),
-// `sealBlobStream` (streaming, never buffers more than one frame), and
-// `unsealBlob` (whole-object unseal). Ranged remote reads use the same
-// primitives directly (custody-read.ts) so a Range never has to unseal the
-// whole object. Kept out of custody.ts purely along the crypto seam so the
-// facade stays a facade.
-//
-// v0 (centraid-v0-status): the pre-#405 whole-blob envelope is NOT readable
-// here — no dual-format reader; stale remotes re-seal on the next sweep.
+// PUBLIC sealers/unsealers (#296, #367 §C8, #405 §1) over the seal-frames.ts
+// wire format; ranged reads use those primitives directly.
+// Pre-#405 envelopes are NOT readable — stale remotes re-seal next sweep.
 
 import { Transform } from "node:stream";
 
@@ -66,16 +57,7 @@ export function sealBlob(
   return Buffer.concat(parts);
 }
 
-/**
- * Streaming twin of `sealBlob` (#367 §C8 + #405 §1): the replication
- * path pipes a blob's plaintext through this so it never holds the whole blob
- * in memory — at most ONE frame's plaintext is buffered at a time. The total
- * plaintext size is required up front (the local tier knows it via `statSync`
- * before it opens the read stream) so the frame COUNT is known before the
- * first frame is sealed — that's what lets each frame's AAD bind the total
- * count while still streaming. Sealed frame lengths accumulate as frames are
- * emitted and the directory + trailer flush at the end.
- */
+/** Streaming `sealBlob` (#367 §C8, #405 §1): buffers ≤ one frame; totalSize up front fixes the AAD-bound frame count. */
 export function sealBlobStream(
   key: Buffer,
   sha: string,
@@ -86,7 +68,6 @@ export function sealBlobStream(
   const sealedLens: number[] = [];
   let index = 0;
   let headerSent = false;
-  // A ring of pending plaintext chunks not yet big enough to fill a frame.
   let pending: Buffer[] = [];
   let pendingLen = 0;
 
@@ -107,7 +88,6 @@ export function sealBlobStream(
       pending.push(chunk);
       pendingLen += chunk.length;
       const out: Buffer[] = [];
-      // Only carve full frames here; the trailing partial waits for flush.
       while (pendingLen >= frameSize) {
         if (index >= frameCount) break;
         const joined = Buffer.concat(pending, pendingLen);
@@ -140,12 +120,7 @@ export function sealBlobStream(
   });
 }
 
-/**
- * Whole-object unseal (#405): parse the trailer, open the directory,
- * then unseal every frame in order and concatenate. Used by the coalesced
- * full read-through (custody-read.ts) which then verifies the whole-blob sha;
- * a RANGED read never comes through here — it fetches only covering frames.
- */
+/** Whole-object unseal (#405); ranged reads never come through here. */
 export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
   if (sealed.length < HEADER_BYTES + TRAILER_BYTES)
     throw new Error("sealed blob truncated");
@@ -170,4 +145,4 @@ export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
   return Buffer.concat(frames);
 }
 
-// Re-exported for the ranged read-through (custody-read.ts) and tests.
+// Re-exported for the custody-read.ts ranged read-through and tests.

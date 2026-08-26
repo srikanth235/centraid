@@ -1,24 +1,5 @@
-// THE PRIVATE SKETCH — the map that asks nobody anything (#816).
-//
-// Every pixel here comes from `place-map.ts`'s arithmetic over coordinates the
-// vault already holds: a graticule, a scale bar, north, and the photographs
-// themselves as pins. There is no basemap, so opening Places in this mode is
-// not a request to anyone. It is the same projection, drawn by the same
-// arithmetic, that the web shelf renders in SVG — which is what makes "the two
-// Places surfaces agree" a fact rather than a resolution.
-//
-// It is the other half of the "Use real maps" switch (`places-map-mode.ts`),
-// and it is a peer of the basemaps rather than a fallback for them: a member
-// who would rather no tile server learned which neighbourhoods they open loses
-// the land under the pins and nothing else. The cost is honest and stated in
-// `place-map.ts`: a pin on a graticule says exactly what the vault knows.
-//
-// THE PIN IS THE PHOTOGRAPH, and the grid carries NO numbers. Degrees are
-// cartographer's vocabulary — "39.0°N" tells a member nothing about a weekend
-// they actually had — so the numbers came off the margins and each pin became
-// a picture taken there. The grid stays as unlabelled rhythm; the scale bar and
-// the tier legend beside it answer "how far apart" and "what is a pin here" in
-// one word each.
+// THE PRIVATE SKETCH (#816): place-map.ts arithmetic over vault coordinates — graticule, scale bar,
+// north, photos as pins. No basemap: opening Places requests nothing of anyone.
 
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
@@ -49,11 +30,7 @@ export default function PlacesSketchMap({
       projectPlaces(points, {
         width,
         height,
-        // The padding has to clear half the largest pin or the northernmost
-        // picture hangs off the plate. Centres closer than the WIDEST pin
-        // cannot both be seen, so that is the merge threshold — two
-        // photographs cannot overlap the way two dots could, and a merged pin
-        // says how many places it stands for where a half-hidden one does not.
+        // Padding clears half the largest pin; merge = widest pin.
         padding: PIN_MAX / 2 + 6,
         mergeDistance: PIN_MAX,
       }),
@@ -67,8 +44,7 @@ export default function PlacesSketchMap({
   return (
     <View style={styles.plate}>
       <Svg width={width} height={height}>
-        {/* Rhythm, not reference. Labelled, the grid starts asking to be read
-            in a vocabulary the reader never signed up for. */}
+        {/* Rhythm, not reference. */}
         <G>
           {projection.parallels.map((line) => (
             <Line
@@ -95,7 +71,7 @@ export default function PlacesSketchMap({
         </G>
         {projection.scale.px > 0 ? (
           <G>
-            {/* Top-left, matching the web shelf. */}
+            {/* Matches the web shelf. */}
             <Line
               x1={8}
               x2={8 + projection.scale.px}
@@ -109,10 +85,7 @@ export default function PlacesSketchMap({
                 ? `${projection.scale.km} km`
                 : `${Math.round(projection.scale.km * 1000)} m`}
             </SvgText>
-            {/* What a pin IS at this distance, off the same ladder that
-                decided the merge — so the legend cannot describe a grouping
-                the drawing did not perform. The web shelf prints the same
-                word from the same function. */}
+            {/* Same ladder/word as the merge. */}
             <SvgText x={8} y={40} fill={colors.textFaint} fontSize={11}>
               {tierNoun(projection.tier)}
             </SvgText>
@@ -128,11 +101,7 @@ export default function PlacesSketchMap({
           N ↑
         </SvgText>
       </Svg>
-      {/* The pins live in real Pressables ABOVE the svg rather than in
-          `onPress` on an SVG shape: they are photographs, RNSVG's press
-          handling gives the accessibility tree no control to land on, and a
-          plain `Image` in a `Pressable` is far less machinery than an SVG
-          image inside a clip path. */}
+      {/* Real Pressables above the svg: RNSVG gives the a11y tree no control to land on. */}
       {projection.pins.map((pin) => {
         const size = pinSize(pin.count, largest);
         return (
@@ -156,9 +125,7 @@ export default function PlacesSketchMap({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // The map is a SUNKEN surface — the page, stepped in — so it reads as
-    // something looked INTO rather than a card lying on the page. Same rung
-    // the web map takes.
+    // Sunken surface — read INTO, not a card lying on the page.
     plate: {
       backgroundColor: colors.bgSunken,
       borderRadius: radii.lg,

@@ -1,10 +1,5 @@
-/*
- * Version handshake (#289 / #468 K10 / #504 / #512).
- *
- * Pure core for desktop, web, CLI, and extension. On connect the client reads
- * `GET /centraid/_gateway/info` and judges **protocol version only**.
- * Product `version` is display metadata — product skew is never a refuse reason.
- */
+// Version handshake (#289 / #468 K10 / #504 / #512): protocol-only judging;
+// product skew is never a refuse reason.
 
 import {
   DEFAULT_GATEWAY_CAPABILITIES,
@@ -19,37 +14,24 @@ import {
 } from "./version.js";
 
 export interface GatewayInfo {
-  /** Product version (display only). */
   version: string;
-  /** Wire protocol version. Always present on gateway info payloads. */
+  /** Wire protocol version. */
   protocolVersion: number;
-  /** Oldest protocol this peer still supports. */
+  /** Oldest protocol this peer supports. */
   minSupportedProtocol: number;
-  /** Per-process diagnostic id. */
   instanceId?: string;
   /** Feature capability map (C1). */
   capabilities: GatewayCapabilities;
-  /** Process start epoch ms — additive runtime clock. */
   startedAt?: number;
-  /** Process uptime ms — additive runtime clock. */
   uptimeMs?: number;
   /**
-   * Did the gateway resolve a credential for THIS request (#603)?
-   *
-   * `/centraid/_gateway/info` is public so a client can read the version
-   * handshake before it holds anything, but the auth-gated fields below
-   * (`endpointTicket`) are then silently absent for an anonymous caller.
-   * Without this flag a bearer mismatch is indistinguishable from "the iroh
-   * endpoint is not ready yet".
+   * Credential accepted for THIS request (#603)? Auth-gated fields are
+   * silently absent otherwise; a bearer mismatch would read like "not ready".
    */
   authenticated?: boolean;
   /** COMPAT(#555): stable gateway transport identity, independent of its address. */
   endpointId?: string;
-  /**
-   * COMPAT(#555): current dial address. Hosts expose it ONLY to a caller that
-   * presented a valid credential (#568 item C — a loopback socket is not an
-   * authentication factor); clients must never persist it as gateway identity.
-   */
+  /** COMPAT(#555): dial address, valid-credential callers only (#568 C); never persist as identity. */
   endpointTicket?: string;
 }
 
@@ -61,9 +43,6 @@ export type HandshakeResult =
       detail: string;
     };
 
-/**
- * Resolve protocol numbers from a gateway info payload.
- */
 export function readProtocolFromInfo(info: Record<string, unknown>): {
   protocolVersion: number | null;
   minSupportedProtocol: number | null;
@@ -81,11 +60,6 @@ export function readProtocolFromInfo(info: Record<string, unknown>): {
   return { protocolVersion, minSupportedProtocol };
 }
 
-/**
- * Mutual support window (CapVer-style):
- * - gateway protocol >= client minSupported
- * - client protocol >= gateway minSupported
- */
 export function protocolsCompatible(opts: {
   localProtocol: number;
   localMin: number;
@@ -97,7 +71,6 @@ export function protocolsCompatible(opts: {
   );
 }
 
-/** Parse + judge a `/centraid/_gateway/info` payload against the local protocol floor. */
 export function judgeGatewayInfo(raw: unknown): HandshakeResult {
   if (raw === null || typeof raw !== "object") {
     return {
@@ -177,12 +150,9 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
 }
 
 /**
- * Fetch + judge a gateway's `/centraid/_gateway/info`. Network failures and
- * non-200s become `unreachable`; a shape/protocol mismatch is surfaced so the
- * switcher can badge the pair. `fetchImpl` is injectable for tests.
- *
- * Network I/O is unit-tested separately; #532 mutation owns the pure judge
- * surface above (protocolsCompatible / judgeGatewayInfo).
+ * Fetch + judge a gateway's `/centraid/_gateway/info`; network failures and
+ * non-200s become `unreachable`; `fetchImpl` injectable (#532 owns the pure
+ * judges).
  */
 // Stryker disable all
 export async function handshakeGateway(
@@ -226,7 +196,6 @@ export function buildGatewayInfoPayload(input: {
   instanceId: string;
   startedAt: number;
   uptimeMs: number;
-  /** Did this request carry a credential the gateway accepted? */
   authenticated: boolean;
   endpointId?: string;
   endpointTicket?: string;

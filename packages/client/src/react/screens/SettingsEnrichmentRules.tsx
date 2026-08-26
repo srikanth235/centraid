@@ -7,26 +7,10 @@ import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
 
-// Settings → Enrichment, EXCEPTIONS (#807).
-//
-// A rule says what ONE scope decides about ONE capability; everything it leaves
-// unset is inherited, and the gateway's single resolver folds the chain. This
-// group lists the rules deeper than the vault default and lets one be dropped.
-// Nothing is folded here — a second fold on this side is exactly the parallel
-// policy the cascade exists to prevent.
-//
-// VAULT-SCOPE RULES ARE NOT LISTED, because they are not exceptions: they are
-// the switches on the capability rows above, and showing them again as rows
-// would be the same decision rendered twice in two vocabularies.
-//
-// NO AUTHORING HERE, deliberately. A form whose scope reference is a free-text
-// `type:ref` field can only be filled by someone reading the vault schema,
-// because no picker enumerates collections. An exception is an in-situ
-// decision ("don't read faces in this album") and belongs on the album; this
-// group is where the ones that exist are reviewed and revoked.
+// EXCEPTIONS (#807): rules deeper than the vault default, listed not folded.
+// Vault-scope rules ARE the switches above, never repeated here. No authoring form.
 // TODO(#814): offer the exception at the collection itself, then link to it here.
 
-/** How a rule's decision reads when it is set, and when it inherits. */
 function ruleSummary(rule: EnrichPolicyRule): string {
   const parts = [
     rule.enabled === null ? "inherits" : rule.enabled ? "on" : "off",
@@ -54,13 +38,9 @@ export default function EnrichmentRules({
   onChanged,
 }: EnrichmentRulesProps): JSX.Element | null {
   const exceptions = rules.filter((rule) => rule.scope.type !== "vault");
-  // No section at all rather than an empty one: a heading over "nothing here"
-  // is a concept the member has to learn before finding out it does not apply.
   if (exceptions.length === 0) return null;
 
-  // THE SCOPE IS THE ROW'S SUBJECT, not the capability: an exception is a
-  // decision taken at an album or a folder, and the member is looking for the
-  // place they took it. The capability and what it decides are the second line.
+  // Scope is the row's subject; capability + decision are the second line.
   const rows: RowDef[] = exceptions.map((rule) => ({
     id: `${rule.scope.type}:${rule.scope.ref}/${rule.capability}`,
     title: rule.scope.ref

@@ -1,21 +1,8 @@
 /*
- * `centraid-gateway status [--json]` — one-shot health summary (#382),
- * combining two things the desktop's SSH-driven ConnectFlow "handshake
- * ladder" needs from a single round trip:
- *
- *   - service-supervision state (reuses `service-admin.ts`'s
- *     `queryServiceStatus` — the same OS probe `service status` runs, just
- *     data instead of printed text)
- *   - a data-dir identity summary: does the directory exist, what stable
- *     EndpointId derives from its custody key, and how many vaults its
- *     registry holds. A current dial ticket comes only from the live daemon.
- *
- * The shared fixed default port makes that live query deterministic; an
- * explicit config remains authoritative for non-default deployments.
- *
- * `--data-dir <path>`/`--config <path>` are optional here (unlike `backup`,
- * where the config is load-bearing) — a caller that only wants "is the
- * service alive" doesn't need to know a data dir at all.
+ * `centraid-gateway status [--json]` — one-shot health summary (#382):
+ * service-supervision state (same OS probe as `service status`) plus a
+ * data-dir identity summary (endpoint id, vault count). Dial tickets come
+ * only from the live daemon.
  */
 
 import fs from "node:fs";
@@ -81,15 +68,15 @@ function parseStatusArgs(args: string[], fail: Fail): StatusArgs {
 interface DataDirSummary {
   dataDir: string;
   exists: boolean;
-  /** Stable iroh identity derived from `keys/endpoint-key.bin`. */
+  /** Stable iroh identity from `keys/endpoint-key.bin`. */
   endpointId?: string;
-  /** Refreshable dial address returned by the running daemon only. */
+  /** Live dial address, from the running daemon only. */
   endpointTicket?: string;
   daemonRunning?: boolean;
   vaultCount?: number;
-  /** Vault directories present on disk that would not open (#603). */
+  /** Vault dirs that would not open (#603). */
   failedMounts?: FailedMount[];
-  /** Why the vault root could not be read at all; `vaultCount` is absent then. */
+  /** Why the vault root was unreadable; `vaultCount` is absent then. */
   vaultReadError?: string;
 }
 
@@ -106,8 +93,7 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
   let vaultReadError: string | undefined;
   try {
     const registry = openVaultRegistry({
-      // Same custody the daemon uses, or every vault fails to mount and
-      // `status` reports a gateway with zero vaults (#568).
+      // Same custody as the daemon, or every vault fails to mount (#568).
       keyStore: daemonKeyStore(layout.keysDir),
       rootDir: layout.vaultDir,
       logger: quietLogger,
@@ -120,9 +106,7 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
       registry.stop();
     }
   } catch (error) {
-    // The vault root may legitimately not exist yet, so this does not fail
-    // the whole status read — but it is REPORTED rather than swallowed: a
-    // status that quietly omits the vault count reads as "no vaults".
+    // A missing root is legal but REPORTED, not swallowed.
     vaultReadError = error instanceof Error ? error.message : String(error);
   }
 
@@ -149,12 +133,10 @@ export async function commandStatus(
   fail: Fail,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
-  // Pre-scan for `--json` so it governs the whole run — including a
-  // `fail()` triggered by argument parsing itself — regardless of flag order.
+  // Pre-scan `--json` so it governs the run even when parsing fails.
   const json = args.includes("--json");
-  // Explicit annotation: TS's never-return control-flow narrowing (used
-  // below on `parsed.dataDir`) only kicks in when the call-derived const is
-  // annotated — inferred-from-call-expression alone doesn't carry it.
+  // Annotated const: TS never-return narrowing (on `parsed.dataDir`) needs
+  // the call-derived const annotated.
   const localFail: Fail = jsonFail(json, fail);
   await runJson(json, fail, async () => {
     const parsed = parseStatusArgs(args, localFail);
@@ -166,9 +148,8 @@ export async function commandStatus(
     );
     const dataDir = buildDataDirSummary(config.dataDir);
     if (config.port !== undefined && config.port !== 0) {
-      // Live dial tickets are auth-gated (#568). Present the host
-      // custody bearer when we have the key so `status` can report them;
-      // without a key, an anonymous handshake still answers "is the daemon up".
+      // Dial tickets are auth-gated (#568): present the custody bearer when
+      // we hold the key; anonymous still answers "is the daemon up".
       const endpointSecret = daemonKeyStore(
         daemonLayoutFor(config.dataDir).keysDir
       ).load("endpoint-key.bin");

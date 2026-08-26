@@ -1,23 +1,12 @@
-// The shell's transport for the GRANT PLANE (#825) —
-// `packages/server/src/routes/grant-routes.ts`, reached the same way
-// `share-wire.ts` reaches the commons routes.
-//
-// Every path comes from `@centraid/core/protocol`; a blueprint kit never sees
-// a URL. The bridge answers the route's parsed JSON body as `unknown` on
-// purpose: the parsing and refusal law lives once in
-// `@centraid/blueprints/apps/_shared/grant-door`, shared with the native seat,
-// so the shell must not pre-digest a payload into a second reading of it.
-//
-// Refusals carry the ROUTE'S OWN message. `subject_not_offerable` names the
-// capabilities that subject does answer, and the revoke sentence is derived
-// from what each delivered copy actually did — a generic transport error in
-// front of either would throw the honest half away.
+// Shell transport for the GRANT PLANE (#825) — server grant-routes.ts; kits
+// never see URLs. Bodies answer as `unknown`: parsing/refusal law lives once
+// in grant-door.
 import { ROUTES, vaultGrantRevokePath } from "@centraid/core/protocol";
 
 import { authHeaders, doFetch } from "../../gateway-client-core.js";
 import type { GatewayAuth } from "../../gateway-client-core.js";
 
-/** One create request, exactly as `POST …/grants` takes it. */
+/** Exactly what `POST …/grants` takes. */
 export interface GrantCreateRequest {
   audienceKind: "party" | "circle";
   audienceId: string;
@@ -27,12 +16,12 @@ export interface GrantCreateRequest {
   subjectLabel?: string;
 }
 
-/** The bridge `window.centraid.grants` exposes to an inline blueprint app. */
+/** The bridge `window.centraid.grants` exposes. */
 export interface GrantBridge {
   subjects: () => Promise<unknown>;
-  /** `undefined` for a person this vault has no record of (404). */
+  /** `undefined` = unknown person (404). */
   forParty: (partyId: string) => Promise<unknown | undefined>;
-  /** `undefined` for an audience this vault has no record of (404). */
+  /** `undefined` = unknown audience (404). */
   forAudience: (
     kind: "party" | "circle",
     id: string
@@ -42,11 +31,7 @@ export interface GrantBridge {
   revoke: (grantId: string) => Promise<unknown>;
 }
 
-/**
- * Read one grant-plane answer. A refused call rejects with the route's own
- * `message` so the sheet can print it verbatim; a body that is not JSON at all
- * rejects with the status, because there is nothing honest to quote.
- */
+/** Refusals reject with route `message`; non-JSON bodies with status. */
 async function grantJson(response: Response, op: string): Promise<unknown> {
   const text = await response.text();
   let parsed: unknown;
@@ -98,18 +83,14 @@ export function grantBridge(auth: () => Promise<GatewayAuth>): GrantBridge {
     async forParty(partyId) {
       const op = "read what this person can reach";
       const response = await get(query({ partyId }));
-      // `audience_not_found` is a real answer — this vault knows no such
-      // person — and letting it throw would make it arrive wearing "shares
-      // could not be read", which is a different sentence entirely.
+      // 404 is an answer, not a read failure.
       if (response.status === 404) return undefined;
       return grantJson(response, op);
     },
     async forAudience(kind, id) {
       const op = "read this audience's shares";
       const response = await get(query({ audienceKind: kind, audienceId: id }));
-      // An audience the vault has no record of is a real, drawable answer —
-      // not the same as an audience with nothing shared — so it comes back as
-      // `undefined` rather than as a thrown transport failure.
+      // Unknown audience is a drawable `undefined`, not a failure.
       if (response.status === 404) return undefined;
       return grantJson(response, op);
     },

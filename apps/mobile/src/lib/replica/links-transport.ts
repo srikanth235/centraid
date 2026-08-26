@@ -1,10 +1,5 @@
-// Renderer-side transport for the gateway's link surface (#726/P3 —
-// `packages/server/src/routes/vault-links-routes.ts`), mirroring
-// `placement-transport.ts`'s shape. Mobile's own People/Sharing screen data
-// source — a link is the channel a grant to another person is delivered over
-// (#825), same-machine or across the world alike (D3). A link carries no
-// per-link "receive gives" preference: nothing arrives unasked for one to
-// govern.
+// Renderer transport for the gateway link surface (#726/P3); a link is the
+// channel a grant to another person is delivered over (#825).
 import { authHeader } from "../gateway";
 
 const LINKS_PATH = "/centraid/_gateway/links";
@@ -13,12 +8,9 @@ export interface GatewayLink {
   linkId: string;
   vaultA: string;
   vaultB: string;
-  /** Each vault's own name/self-declared label (#726 gap 3) — `null` when
-   *  genuinely unknown. Symmetric with `vaultA`/`vaultB`: `labelA` names
-   *  `vaultA`. */
+  /** Self-declared label, `null` when unknown. `labelA` names `vaultA`. */
   labelA: string | null;
   labelB: string | null;
-  /** Party identities exchanged by the approved link ceremony. */
   partyIdA?: string | null;
   partyIdB?: string | null;
   approvedByA: boolean;
@@ -37,11 +29,7 @@ async function getJson<T>(baseUrl: string, path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-/**
- * Total parser for one wire link (#750). The share sheet reads a link's
- * LABEL, not just its ids, so a drifted payload is dropped here rather than
- * surfaced as a half-built destination.
- */
+/** Total parser (#750): drifted payloads are dropped, not half-built. */
 function parseGatewayLink(value: unknown): GatewayLink | undefined {
   if (value === null || typeof value !== "object") return undefined;
   const row = value as Record<string, unknown>;
@@ -94,19 +82,15 @@ export async function approveLink(
   return out.link;
 }
 
-/** A minted, pasteable/scannable ticket for a vault the caller owns
- *  (#726 audit finding 1) — the remote ceremony's owner-facing door. One-time,
- *  15-minute TTL. */
+/** One-time, 15-minute-TTL ticket (#726 audit finding 1). */
 export interface GatewayLinkTicket {
   vaultId: string;
-  /** Opaque — hand it back to `redeemLinkTicket` verbatim. */
+  /** Opaque — hand back to `redeemLinkTicket` verbatim. */
   ticket: string;
   expiresAt: string;
 }
 
-/** Mint a one-time ticket for `vaultId` to show (as a QR, or to paste) to
- *  whoever is redeeming it. Owning `vaultId` IS the authorization — the
- *  gateway refuses `not_found` for a vault the caller does not own. */
+/** Owning `vaultId` IS the authorization; `not_found` otherwise. */
 export async function mintLinkTicket(
   baseUrl: string,
   vaultId: string
@@ -121,21 +105,14 @@ export async function mintLinkTicket(
   return (await response.json()) as GatewayLinkTicket;
 }
 
-/** What redeeming a ticket answers when it does not end in a link — a
- *  reachability or protocol fact, never an exception the caller has to
- *  unwrap. Every other typed refusal still throws, same as this file's other
- *  calls. */
+/** Non-link outcomes are reachability values; other refusals throw. */
 export interface RedeemLinkTicketOutcome {
   state: "linked" | "unreachable";
   link?: GatewayLink;
   detail?: string;
 }
 
-/**
- * Redeem a ticket someone showed you into `vaultId` — the LOCAL vault the
- * caller owns and wants linked. The gateway dials the peer itself; this call
- * simply waits for that ceremony's answer.
- */
+/** Redeem into the LOCAL `vaultId`; the gateway dials the peer itself. */
 export async function redeemLinkTicket(
   baseUrl: string,
   vaultId: string,

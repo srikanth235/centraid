@@ -1,32 +1,18 @@
-// The album picker's "Add" commit (v4 handoff §3, §14).
-//
-// PROGRESS NEVER LANDS ON THE CONTROL — no `btn.textContent = "Adding 3 of
-// 12…"`. A control is not a progress bar: progress is DETERMINATE, carries
-// exact counts, and rides the frame's ONE status line, which is also where the
-// outcome lands when the run finishes. The picker panel keeps its geometry
-// throughout and simply goes busy, so nothing under the pointer moves.
-//
-// The commit also earns an UNDO (§3, the status line's one inline text
-// action): every id that actually landed is remembered, and undoing removes
-// exactly those from the album again. An album refers to a photograph where it
-// lives, so both directions are pure membership — nothing moves and nothing is
-// copied either way.
+// Picker Add commit (v4 handoff §3, §14): progress NEVER lands on the
+// control — determinate counts ride the frame's one status line, and Undo
+// removes exactly the ids that landed.
 import { act, notice, writeTarget } from "./outcomes.ts";
 import type { Album } from "./types.ts";
 
-/** What one pass over the picked ids did, in the four terms a write can end in. */
+/** What one pass over the picked ids did. */
 interface AddTally {
-  /** The ids that actually landed — what Undo takes back. */
+  /** What Undo takes back. */
   added: string[];
   parked: number;
   queued: number;
   skipped: number;
 }
 
-/** Fire `add-to-album` for each id in order, narrating exact counts as it goes.
- *  Recursive rather than a loop with an `await` in it — the same shape the
- *  upload pipeline uses, and for the same reason: the ordering is the user's
- *  selection order and that contract stays explicit. */
 async function addEach(
   ids: readonly string[],
   album: Album,
@@ -50,7 +36,6 @@ async function addEach(
   return addEach(ids, album, scope, tally, i + 1);
 }
 
-/** Take back exactly what landed. Same recursion, same ordering contract. */
 async function removeEach(
   ids: readonly string[],
   album: Album,
@@ -67,7 +52,6 @@ async function removeEach(
   return removeEach(ids, album, scope, i + 1);
 }
 
-/** The status line's sentence for one completed pass. */
 function addOutcomeText(tally: AddTally, title: string): string {
   const parts: string[] = [];
   if (tally.added.length > 0)
@@ -86,9 +70,7 @@ export async function submitPicker(
     closePicker,
   }: { refresh: () => Promise<void>; closePicker: () => void }
 ): Promise<void> {
-  // Album membership lives in the album's own scope, and this app only authors
-  // albums in the member's own (#599) — so does adding to one. A target
-  // that cannot be written says why instead of firing a refused write.
+  // Albums live in the member's own scope (#599); a disabled target says why.
   const target = writeTarget("own");
   if (target.disabled) {
     notice(target.reason);

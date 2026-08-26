@@ -1,14 +1,8 @@
-// One shared timeline instance for the whole Photos stack (#419, finding 5).
-//
-// A `usePhotoTimeline` per Photos screen makes opening the lightbox or the
-// library kick off another full replica read *and* another 50k-row
-// MediaLibrary re-walk, with several concurrent copies of the merged array
-// alive under the native stack. This module is that work, done once: a
-// process-singleton engine that reads the replica, walks the camera roll and
-// folds the upload queue in, then publishes an immutable snapshot every screen
-// subscribes to via `useSyncExternalStore`. It is driven imperatively (the
-// session exposes `read`/`subscribe` directly) so it needs no React tree of its
-// own and survives screen mount/unmount — the hook API is unchanged.
+// One shared timeline instance for the whole Photos stack (#419, finding 5):
+// a process-singleton engine that reads the replica, walks the camera roll,
+// folds the upload queue in, and publishes an immutable snapshot every screen
+// subscribes to via `useSyncExternalStore`. Driven imperatively, so it
+// survives screen mount/unmount; the hook API is unchanged.
 
 import * as MediaLibrary from "expo-media-library";
 import { AppState } from "react-native";
@@ -48,12 +42,7 @@ interface UploadEntry {
 const ACTIVE_UPLOAD_POLL_MS = 4_000;
 const IDLE_UPLOAD_POLL_MS = 30_000;
 
-/**
- * How long the device walk lets pages accumulate before re-deriving the merged
- * timeline. Page one still recomputes immediately so the grid paints; after
- * that, a recompute per 1,000-row page meant merging and re-sectioning the
- * whole library ~50 times on the way to a 50k-photo roll.
- */
+/** Debounce merged-timeline recomputes during the device walk; page one paints immediately. */
 const WALK_RECOMPUTE_DEBOUNCE_MS = 250;
 
 const REPLICA_ENTITIES = [
@@ -113,9 +102,9 @@ class PhotoTimelineEngine {
   };
 
   /**
-   * Register a mounted screen. Ref-counted so the engine only tears down when
-   * the last Photos screen leaves — kept separate from `setSession` so a
-   * gateway-base change never bounces the ref count and re-walks the library.
+   * Ref-counted screen mount; teardown only when the last Photos screen
+   * leaves. Separate from `setSession` so a gateway-base change never bounces
+   * the ref count and re-walks the library.
    */
   acquire(): () => void {
     this.#refs += 1;
@@ -135,15 +124,9 @@ class PhotoTimelineEngine {
   }
 
   /**
-   * Flip queued → backed-up badges without a remount: the upload queue is a
-   * separate SQLite database the drainer mutates, so it has to be observed.
-   *
-   * Two things make that cheap. The handle stays open for as long as any Photos
-   * screen is mounted — opening and closing SQLite every four seconds was most
-   * of the cost — and an idle queue drops to a slow poll, because a queue with
-   * nothing in flight cannot change without the user adding to it. Nothing
-   * polls at all while the app is in the background: there is no badge to
-   * update and no screen to show it on.
+   * Flip queued → backed-up badges without a remount by polling the queue's
+   * own SQLite database. Handle stays open while any screen is mounted, an
+   * idle queue drops to a slow poll, nothing polls in the background.
    */
   private startUploadPoll(): void {
     if (this.#pollTimer || this.#refs === 0) return;
@@ -178,8 +161,7 @@ class PhotoTimelineEngine {
       void this.readReplica();
     }
     if (sessionChanged || baseChanged) this.refreshUploads();
-    // A base change (tunnel port moved) leaves device/replica rows intact but
-    // rewrites every remote URL, so re-derive without re-walking the library.
+    // A base change rewrites every remote URL without touching rows; re-derive, no re-walk.
     if (baseChanged && !sessionChanged) this.recompute();
     if (!this.#deviceStarted) {
       this.#deviceStarted = true;
@@ -203,8 +185,7 @@ class PhotoTimelineEngine {
             ])
         );
       } catch {
-        // The long-lived handle went bad (device storage, a purge). Drop it so
-        // the next tick reopens instead of polling a dead connection forever.
+        // Dead long-lived handle (storage, purge): drop it so next tick reopens.
         this.closeUploadQueue();
         return;
       }
@@ -214,7 +195,7 @@ class PhotoTimelineEngine {
     );
     if (inFlight !== this.#uploadsInFlight) {
       this.#uploadsInFlight = inFlight;
-      // The poll interval is derived from this, so re-arm it at the new rate.
+      // Poll interval derives from this flag; re-arm at the new rate.
       this.stopUploadPoll();
       this.startUploadPoll();
     }
@@ -276,7 +257,7 @@ class PhotoTimelineEngine {
         return;
       }
       const rows: PhotoAsset[] = [];
-      // A small first page paints the grid fast; the rest walk in bigger bites.
+      // Small first page paints the grid fast; bigger bites after.
       const loadPage = async (
         offset: number,
         pageSize: number
@@ -292,18 +273,14 @@ class PhotoTimelineEngine {
           })
           .limit(pageSize)
           .offset(offset)
-          // ONE native round-trip per page, as the legacy paged read was.
-          // `exe()` hands back Asset handles whose every field is a separate
-          // async getter — seven more crossings per photo, which across a
-          // 50k-photo library is 350k round-trips instead of ~50.
+          // ONE native round-trip per page: `exe()`'s per-field getters cost
+          // seven crossings per photo (~350k across a 50k library, not ~50).
           .exeForMetadata();
         if (generation !== this.#generation) return;
         for (const metadata of page) {
-          // The media-store id IS the addressable uri — `ph://…` on iOS,
-          // `content://…` on Android — and both render directly in expo-image,
-          // exactly as the legacy `asset.uri` did. A grid cell therefore still
-          // costs no native call of its own; full-quality bytes are resolved
-          // per asset, on demand, by `openDeviceOriginal`.
+          // The media-store id IS the addressable uri (ph://…, content://…)
+          // and renders directly in expo-image; full bytes resolve per asset
+          // on demand via `openDeviceOriginal`.
           rows.push({
             id: `device:${metadata.id}`,
             localId: metadata.id,
@@ -319,9 +296,7 @@ class PhotoTimelineEngine {
             width: metadata.width ?? undefined,
             height: metadata.height ?? undefined,
             durationS: durationSeconds(metadata.duration),
-            // Byte size is not part of the cheap metadata batch and is not
-            // worth a per-photo round-trip here; the replica row carries it
-            // once an asset is backed up.
+            // Not worth a per-photo round-trip; replica row carries it once backed up.
             fileSize: undefined,
             favorite: metadata.isFavorite,
             archived: false,
@@ -330,14 +305,13 @@ class PhotoTimelineEngine {
             source: "device",
           });
         }
-        // `rows` is the live accumulator, not a snapshot to copy: re-copying it
-        // per page is quadratic across a fifty-page walk.
+        // Live accumulator, not a copy: per-page copying is quadratic over ~50 pages.
         this.#deviceRows = rows;
         if (offset === 0) {
           this.#deviceLoading = false;
           this.recompute();
         } else this.scheduleRecompute();
-        // A short page is the last page: the query has no cursor to run out of.
+        // Short page = last page; the query has no cursor to run out of.
         if (page.length < pageSize) {
           this.recompute();
           return;
@@ -353,7 +327,7 @@ class PhotoTimelineEngine {
     }
   }
 
-  /** One open handle per gateway base for as long as Photos is on screen. */
+  /** One open handle per gateway base while Photos is mounted. */
   private uploadQueue(base: string): UploadQueue | undefined {
     if (this.#queue && this.#queueBase === base) return this.#queue;
     this.closeUploadQueue();
@@ -363,8 +337,7 @@ class PhotoTimelineEngine {
         headers: authHeader,
       });
     } catch {
-      // Opening can fail while storage is unavailable. Skipping this tick and
-      // retrying on the next one is the recovery; the durable queue is intact.
+      // Storage unavailable: skip this tick; the durable queue is intact.
       return undefined;
     }
     this.#queueBase = base;

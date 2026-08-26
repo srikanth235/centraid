@@ -1,19 +1,14 @@
 /*
- * Desktop side of the phone tunnel (#263).
+ * Desktop side of the phone tunnel (#263). One iroh endpoint, two ALPNs:
+ *  - `centraid/tunnel/1`: remote EndpointId must be allowlisted; each
+ *    bi-stream is one HTTP request forwarded to the loopback gateway with
+ *    the bearer attached (gateway keeps 127.0.0.1, zero HTTP changes).
+ *  - `centraid/pair/1`: any endpoint may connect but must present the
+ *    one-time QR pairing code; success stores its EndpointId.
  *
- * Binds one iroh endpoint with two ALPNs:
- *  - `centraid/tunnel/1`: connections are admitted only when the remote
- *    EndpointId is in the device allowlist; every bi-stream is one HTTP
- *    request, forwarded to the loopback gateway with the bearer attached.
- *    The gateway keeps binding 127.0.0.1 and needs zero HTTP changes.
- *  - `centraid/pair/1`: any endpoint may connect, but must present the
- *    one-time pairing code from the "Connect phone" QR; success stores the
- *    phone's EndpointId in the allowlist.
- *
- * This forwarder has no device key to stamp — it authenticates the phone at
- * the QUIC layer and then speaks to the gateway as the HOST, under the host
- * bearer. It therefore strips any client-supplied identity header and marks
- * every hop with `TUNNEL_FORWARDED_HEADER`, so the gateway's host-only
+ * This forwarder holds no device key: the phone authenticates at the QUIC
+ * layer, then we speak to the gateway AS THE HOST — client identity headers
+ * are stripped and every hop marked `TUNNEL_FORWARDED_HEADER`, so host-only
  * capabilities do not mistake 127.0.0.1 for the owner (#568).
  */
 
@@ -51,24 +46,22 @@ import {
 } from "./protocol.js";
 
 export interface TunnelUpstream {
-  /** Loopback gateway base, e.g. `http://127.0.0.1:18789`. */
+  /** Loopback gateway base (`http://127.0.0.1:18789`). */
   baseUrl: string;
-  /** Gateway bearer; attached to every forwarded request. */
   token: string;
 }
 
 export interface DesktopTunnelOptions {
   /** 32-byte endpoint secret; omit to generate a fresh identity. */
   secretKey?: Uint8Array;
-  /** Resolved per request so the tunnel follows gateway restarts/switches. */
+  /** Resolved per request; follows gateway restarts/switches. */
   upstream: () =>
     | TunnelUpstream
     | undefined
     | Promise<TunnelUpstream | undefined>;
   deviceStore: DeviceStore;
-  /** Shown to the phone on successful pairing. */
   desktopName?: string;
-  /** `disabled` keeps tests offline; production uses the n0 relays + discovery. */
+  /** Tests pass `disabled`. */
   relays?: "n0" | "disabled";
   onPaired?: (device: PairedDevice) => void;
 }
@@ -76,20 +69,17 @@ export interface DesktopTunnelOptions {
 export interface ActivePairing {
   code: string;
   expiresAt: number;
-  /** JSON for the QR code: `{v, kind, ticket, code}`. */
   qrPayload: string;
 }
 
 export interface DesktopTunnelHandle {
-  /** This desktop's stable transport identity (base32 EndpointId). */
+  /** Stable transport identity (base32 EndpointId). */
   endpointId: string;
-  /** Current dial ticket (recomputed — the addr can change with the network). */
+  /** Recomputed — the addr can change with the network. */
   ticket: () => string;
-  /** Mint (or replace) the one-time pairing code and QR payload. */
   beginPairing: (ttlMs?: number) => ActivePairing;
   activePairing: () => ActivePairing | undefined;
   cancelPairing: () => void;
-  /** Remove a device from the allowlist and drop its live connections. */
   revokeDevice: (deviceId: string) => PairedDevice | undefined;
   close: () => Promise<void>;
 }
@@ -119,8 +109,7 @@ export async function startDesktopTunnel(
   return tunnel.handle();
 }
 
-/** Prefer the Rust byte pump, but keep phone linking available on any target
- * supported by the upstream iroh binding when our own addon is unavailable. */
+/** Prefer the Rust byte pump; portable relay keeps linking alive if absent. */
 export async function startPreferredDesktopTunnel(
   options: DesktopTunnelOptions
 ): Promise<DesktopTunnelHandle> {
@@ -129,7 +118,7 @@ export async function startPreferredDesktopTunnel(
       const { startNativeDesktopTunnel } = await import("./native-relay.js");
       return await startNativeDesktopTunnel(options);
     } catch {
-      // Fall through to the portable relay below.
+      // Fall through to the portable relay.
     }
   }
   return startDesktopTunnel(options);
@@ -181,7 +170,7 @@ class DesktopTunnel {
         .accept()
         .then((accepting) => this.routeConnection(accepting))
         .catch(() => {
-          // Handshake failures are the remote's problem; keep accepting.
+          // Remote handshake failure; keep accepting.
         });
       return acceptNext();
     };
@@ -197,8 +186,6 @@ class DesktopTunnel {
     }
     await this.handleTunnelConnection(connection);
   }
-
-  // ──── pairing ────
 
   private beginPairing(ttlMs: number): ActivePairing {
     const code = crypto.randomBytes(16).toString("base64url");
@@ -273,8 +260,6 @@ class DesktopTunnel {
     };
   }
 
-  // ──── HTTP forwarding ────
-
   private revokeDevice(deviceId: string): PairedDevice | undefined {
     const removed = this.options.deviceStore.remove(deviceId);
     if (!removed) return undefined;
@@ -298,20 +283,19 @@ class DesktopTunnel {
     try {
       const serveNextStream = async (): Promise<void> => {
         const bi = await connection.acceptBi();
-        // Revocation guard: the allowlist is consulted per stream, so a
-        // revoked device loses access even on a connection that predates it.
+        // Allowlist consulted per stream: revocation applies immediately.
         if (!this.options.deviceStore.findByEndpointId(endpointId)) {
           connection.close(CLOSE_UNAUTHORIZED, alpnBytes("revoked"));
           return;
         }
         void this.serveStream(bi.send, bi.recv).catch(() => {
-          // Per-request failures already answered with a 502 frame when possible.
+          // Per-request failures already answered with a 502 frame.
         });
         return serveNextStream();
       };
       await serveNextStream();
     } catch {
-      // Connection closed (by peer, revocation, or shutdown).
+      // Closed: peer, revocation, or shutdown.
     } finally {
       this.liveConnections.delete(stableId);
     }
@@ -340,12 +324,8 @@ class DesktopTunnel {
     }
     const base = new URL(upstream.baseUrl);
     const headers = sanitizeHeaders(header.headers ?? {});
-    // Loopback is not an identity (#568). This forwarder carries
-    // a paired PHONE to the desktop's loopback gateway under the host bearer,
-    // so it cannot prove a device identity — but it must not let the phone
-    // claim one either. Strip any client copy of the identity headers, then
-    // mark the hop as forwarded so host-only capabilities (founding-ticket
-    // minting) refuse it rather than reading 127.0.0.1 as "the owner".
+    // Loopback is not an identity (#568): strip client identity headers and
+    // mark the hop forwarded so host-only capabilities refuse it.
     delete headers[DEVICE_IDENTITY_HEADER];
     delete headers[DEVICE_PROOF_HEADER];
     headers[TUNNEL_FORWARDED_HEADER] = "1";
@@ -372,8 +352,7 @@ class DesktopTunnel {
               ),
             };
             await send.writeAll(encodeHeaderFrame(responseHeader));
-            // Sequential for-await keeps chunk ordering; SSE stays live
-            // because each chunk is written the moment it arrives.
+            // Sequential writes keep chunk order; SSE stays live.
             for await (const chunk of response) {
               await send.writeAll(Array.from(chunk as Buffer));
             }

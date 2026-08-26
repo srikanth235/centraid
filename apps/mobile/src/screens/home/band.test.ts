@@ -1,22 +1,6 @@
-// The mobile band's contract (the Binding Layer, invariant 1).
-//
-// Two things are worth asserting rather than trusting a comment for: the band
-// carries the FRAME's destinations and never an app, and it never grows past
-// five of them plus More. Both are rules a well-meaning change breaks silently
-// — an app added "just for convenience", or a sixth destination that looks fine
-// on a tablet and puts every tab under 44pt on a phone.
-//
-// `bandTabs` is a function of the member's pinned places rather than a static
-// list (./places), so most of this file feeds it different pin sets —
-// the default (an out-of-box member), an empty set (nobody pinned anything,
-// so only Home shows), and an over-full set (more than four pinned, which has
-// to overflow rather than grow the band).
-//
-// Pure-logic checks only, matching this directory's discipline. `HomeBand.tsx`
-// renders every tab through the SAME `<Tab>` component and the SAME
-// `styles.tab` rule (`minHeight: metrics.row`, `flex: 1`), so proving the tab
-// count here and `metrics.row >= 44` is proving the real on-screen floor rather
-// than a disconnected assumption.
+// Mobile band contract (Binding Layer, invariant 1): FRAME destinations only,
+// never more than five plus More. HomeBand renders every tab through one
+// component, so these pure checks prove the real touch floor.
 
 import { describe, expect, it } from "vitest";
 
@@ -46,10 +30,9 @@ describe("the mobile band", () => {
 
   it("holds at most 5 destinations, Home included", () => {
     expect(bandTabs(DEFAULT_PLACE_PINS)).toHaveLength(4);
-    // HomeBand adds standing More outside this list even with no overflow.
+    // HomeBand adds standing More outside this list.
     expect(bandTabs(DEFAULT_PLACE_PINS).length + 1).toBe(5);
-    // Pinning every place still caps the band at five — the rest overflow to
-    // More, exactly like a sixth pinned app overflows the desktop stem.
+    // Pinning every place still caps at five; rest overflows to More.
     expect(bandTabs(ALL_PLACE_IDS)).toHaveLength(MAX_BAND_TABS);
     expect(bandTabs(ALL_PLACE_IDS).length + 1).toBe(6);
   });
@@ -66,8 +49,7 @@ describe("the mobile band", () => {
   });
 
   it("keeps the table's fixed order, never the pin order", () => {
-    // Pinning Storage before Notifications must not move Storage ahead of it
-    // — order is the table's, never the member's click order (:3470).
+    // Order is the table's, never the member's click order (:3470).
     const tabs = bandTabs(["storage", "notifs"]);
     expect(tabs.map((tab) => tab.id)).toStrictEqual([
       "home",
@@ -95,9 +77,7 @@ describe("the mobile band", () => {
   });
 
   it("keeps the shared row metric at least a 44pt touch target", () => {
-    // `styles.tab` sets `minHeight: metrics.row` for every tab, so sabotaging
-    // `metrics.row` in packages/design is what a regression here looks like —
-    // not a locally-duplicated literal.
+    // Sabotaging metrics.row in design is the regression shape.
     expect(metrics.row).toBeGreaterThanOrEqual(TOUCH_TARGET_FLOOR);
   });
 });

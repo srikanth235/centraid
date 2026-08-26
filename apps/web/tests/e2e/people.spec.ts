@@ -6,12 +6,9 @@ import type { Page } from "@playwright/test";
 
 import { installHarnessControlTransport } from "./control-transport.js";
 
-// People north-star journey (#821): the rebuilt v12 render tree over the real
-// gateway. A person minted through the app's own write rail lands as a roster
-// row, survives a full PWA reload, and opens to the person screen with the
-// cadence line and the Log commit. The harness gateway, vault, and inline
-// People bundle are all real; only the iroh wire is adapted
-// (control-transport.ts). The roster capture is the #821 UI-impact evidence.
+// People north-star journey (#821): a person minted through the app's own
+// write rail lands as a roster row, survives a full PWA reload, and opens to
+// the person screen.
 
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
@@ -23,9 +20,7 @@ const PERSON_NAME = "Ana Whitcombe";
 const PERSON_ROLE = "architect";
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
-  // Re-click until the palette actually opens: right after a reload the Search
-  // button can paint before its React listener attaches, and a click that
-  // lands in that window is silently lost.
+  // Re-click until open: right after a reload a click lands before listeners attach.
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
     .poll(
@@ -128,10 +123,8 @@ test("People renders a person, survives a reload, and opens the person screen", 
   await connectPwa(page);
   await openFirstParty(page, "People");
 
-  // The inline replica session bootstraps asynchronously after the app
-  // mounts; a write issued before that throws ReplicaRebootstrapRequired.
-  // Prove write readiness with the person this journey is about — the intent
-  // id makes retries idempotent, so the poll can never mint two of her.
+  // The replica session bootstraps asynchronously; an earlier write throws.
+  // The intent id keeps retries idempotent.
   await expect
     .poll(
       () =>
@@ -154,10 +147,8 @@ test("People renders a person, survives a reload, and opens the person screen", 
     )
     .toBe("executed");
 
-  // The write lands as a roster row through the app's own change-stream
-  // refresh, with window focus as the sanctioned recovery re-read while the
-  // replica is still bootstrapping (`onFocusRefresh` never gates behind a
-  // consent banner) — the row's accessible name is the shared Row recipe's.
+  // The write lands via the app's change-stream refresh; window focus is the
+  // sanctioned recovery re-read while still bootstrapping.
   const rosterRow = page.getByRole("button", { name: `Open ${PERSON_NAME}` });
   await expect
     .poll(
@@ -171,14 +162,10 @@ test("People renders a person, survives a reload, and opens the person screen", 
     .toBe(true);
   await expect(rosterRow.first()).toBeVisible();
 
-  // THE VAULT LINK, DRAWN. This harness vault is created with the app, so
-  // People's `share.*` scopes are granted at install rather than parked for
-  // approval: the roster's `links_available` is true, and Ana — minted through
-  // `add-person`, holding no binding — carries the DASHED ring rather than the
-  // solid one and rather than none.
+  // THE VAULT LINK, DRAWN: the harness vault grants People's `share.*` scopes
+  // at install, so `links_available` is true; Ana carries the DASHED ring.
   await expect(page.locator('[data-link="unlinked"]').first()).toBeVisible();
-  // The ring and the two link chips are ONE fact: whatever draws one draws the
-  // other, so a roster with rings but no chips is the incoherence this catches.
+  // Ring chips and link chips are ONE fact; rings without chips is incoherent.
   await expect(
     page.getByRole("button", { name: "Linked", exact: true })
   ).toBeVisible();
@@ -186,7 +173,7 @@ test("People renders a person, survives a reload, and opens the person screen", 
     page.getByRole("button", { name: "Unlinked", exact: true })
   ).toBeVisible();
 
-  // The #821 UI-impact evidence: the rebuilt roster, drawn from tokens.
+  // #821 UI-impact evidence: the rebuilt roster, drawn from tokens.
   const evidenceDir = path.join(
     import.meta.dirname,
     "../../../../artifacts/e2e/ui-impact"
@@ -197,17 +184,14 @@ test("People renders a person, survives a reload, and opens the person screen", 
     fullPage: true,
   });
 
-  // A person is a vault row, not browser state: she must come back after a
-  // full reload of the PWA shell.
+  // A person is a vault row, not browser state: she survives a full reload.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
   await openFirstParty(page, "People");
   await expect(rosterRow.first()).toBeVisible({ timeout: 30_000 });
 
-  // Opening the row lands on the person screen: the hero name, the cadence
-  // line in the handoff's own words, and the Log commit. Re-click until the
-  // screen answers — right after a reload the row can paint before its React
-  // listener attaches, and a click in that window is silently lost.
+  // Row opens the person screen: hero name, cadence line, Log commit.
+  // Re-click until it answers — post-reload clicks land before listeners attach.
   const personScreen = page.locator('section[aria-label="Person"]');
   await expect
     .poll(

@@ -4386,6 +4386,206 @@ Files changed (full inventory):
 - `packages/vault/src/wal-shipper-detectors.test.ts`
 - `tests/comment-density-ratchet.json`
 
+
+### Wave 7 — compression sweep, 160 untouched over-cap files (2026-08-26)
+
+Eight worker sub-agents on ownership-disjoint 20-file batches (worklist: the
+1,274 eligible over-cap files, 160 heaviest never touched by waves 1–6). The
+provider connection dropped mid-wave repeatedly; re-dispatched remainders
+completed the sweep, and a six-worker completion pass re-cut every file still
+above cap (85 at pass start) below 15%. Two files the proof caught with real
+code changes — a deleted JSX `{/* */}` container and a deleted prop+button in
+`Details.tsx`/`tasks/frame.tsx` — were restored byte-identical to HEAD, and
+their two pins hand-restored to the HEAD values with this deviation note:
+#861 wave-7 sweep revert — Details.tsx and tasks/frame.tsx were returned to
+their HEAD bytes after a worker deleted JSX containers/code lines, so their
+governed density pins are restored to the same logic at HEAD's exact ratio.
+No other pin rose.
+
+| figure | after Wave 6 | after Wave 7 |
+| --- | --- | --- |
+| global character share | 14.59% | **13.90%** |
+| global line density | 8.20% | **7.75%** |
+| files over 15% cap | 1,359 | 1,227 |
+
+Verification (all green before commit):
+
+```
+node scripts/comment-only-diff.mjs HEAD   # 158 changed file(s) — all comment-only
+bun run format && bun run format:check    # proof re-run green after formatting
+bun run lint                              # clean
+node scripts/check-comment-density-ratchet.mjs   # ok — no pin rose
+```
+
+Allowlist rulings (0 accepted). Nominated but unnecessary/declined:
+update-rollout-core.ts and themes/index.ts (directive-floor tiny files, both
+landed under 15% anyway).
+
+Residues above 13% are honest floors per worker adjudication (prohibitions,
+issue-referenced constraints, protected pragmas).
+
+Files changed (full inventory):
+
+- `apps/desktop/src/main/gateway-ops-core.ts`
+- `apps/desktop/src/main/gateway-outage-log.ts`
+- `apps/desktop/src/main/settings-merge.ts`
+- `apps/desktop/src/main/update-rollout-core.ts`
+- `apps/desktop/tests/e2e/appview-templates-insights.spec.ts`
+- `apps/desktop/tests/e2e/playwright.config.ts`
+- `apps/mobile/app.config.ts`
+- `apps/mobile/src/apps/agenda/agenda-band.ts`
+- `apps/mobile/src/apps/docs/DocsScreen.tsx`
+- `apps/mobile/src/apps/docs/docs-projection.ts`
+- `apps/mobile/src/apps/insights/insights-window-pref.ts`
+- `apps/mobile/src/apps/people/PeopleScreen.tsx`
+- `apps/mobile/src/apps/photos/PhotoAccessPanel.tsx`
+- `apps/mobile/src/apps/photos/PhotosGridSkeleton.tsx`
+- `apps/mobile/src/apps/photos/PhotosPeopleView.test.tsx`
+- `apps/mobile/src/apps/photos/PlaceDetail.tsx`
+- `apps/mobile/src/apps/photos/PlacesSketchMap.tsx`
+- `apps/mobile/src/apps/photos/PlacesView.tsx`
+- `apps/mobile/src/apps/photos/camera-roll-import-run.ts`
+- `apps/mobile/src/apps/photos/exif-location-strip.test.ts`
+- `apps/mobile/src/apps/photos/photo-edit-gestures.ts`
+- `apps/mobile/src/apps/photos/timeline-10k-one-day.test.ts`
+- `apps/mobile/src/apps/photos/timeline-engine.ts`
+- `apps/mobile/src/apps/photos/use-photo-selection-share.ts`
+- `apps/mobile/src/kit/band/band-owner.test.ts`
+- `apps/mobile/src/kit/components/BarsBlock.tsx`
+- `apps/mobile/src/kit/components/DocTable.tsx`
+- `apps/mobile/src/kit/components/icon-resolver.sweep.test.ts`
+- `apps/mobile/src/kit/fetch-gate/FetchChoice.tsx`
+- `apps/mobile/src/kit/perf/FrameProbe.tsx`
+- `apps/mobile/src/kit/transfer/transfer-queue.ts`
+- `apps/mobile/src/lib/decision-detail.ts`
+- `apps/mobile/src/lib/profile.ts`
+- `apps/mobile/src/lib/replica/links-transport.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-compatibility-core.ts`
+- `apps/mobile/src/lib/replica/node-sqlite-driver.jsdom.test.ts`
+- `apps/mobile/src/screens/Approvals.tsx`
+- `apps/mobile/src/screens/connectors/Connectors.test.tsx`
+- `apps/mobile/src/screens/home/AllAppsSheet.tsx`
+- `apps/mobile/src/screens/home/HomeTitleRow.tsx`
+- `apps/mobile/src/screens/home/band.test.ts`
+- `apps/mobile/src/screens/home/useSearchRecents.ts`
+- `apps/mobile/src/test/react-native-stub.tsx`
+- `apps/mobile/test/fixtures/fake-direct-transfer.ts`
+- `apps/web/tests/e2e/people.spec.ts`
+- `packages/backup/src/materialize.ts`
+- `packages/blueprints/apps/_shared/ScopeChips.tsx`
+- `packages/blueprints/apps/_shared/face-crop.ts`
+- `packages/blueprints/apps/agenda/components/Shared.tsx`
+- `packages/blueprints/apps/agenda/frame.tsx`
+- `packages/blueprints/apps/docs/components/EmptyState.tsx`
+- `packages/blueprints/apps/docs/components/InfoToggle.tsx`
+- `packages/blueprints/apps/docs/components/MoreSheet.tsx`
+- `packages/blueprints/apps/docs/components/ShelfStrip.tsx`
+- `packages/blueprints/apps/docs/nav.ts`
+- `packages/blueprints/apps/docs/queries/activity.ts`
+- `packages/blueprints/apps/docs/queries/history.ts`
+- `packages/blueprints/apps/docs/queries/search.ts`
+- `packages/blueprints/apps/docs/uploads.ts`
+- `packages/blueprints/apps/locker/totp.ts`
+- `packages/blueprints/apps/locker/types.ts`
+- `packages/blueprints/apps/notes/queries/journal.ts`
+- `packages/blueprints/apps/people/components/SearchRoute.tsx`
+- `packages/blueprints/apps/people/view-state.ts`
+- `packages/blueprints/apps/photos/actions/answer-face.ts`
+- `packages/blueprints/apps/photos/actions/request-enrichment.ts`
+- `packages/blueprints/apps/photos/components/MoreSheet.tsx`
+- `packages/blueprints/apps/photos/components/OfflineBanner.tsx`
+- `packages/blueprints/apps/photos/components/ScrubRail.tsx`
+- `packages/blueprints/apps/photos/custody-store.ts`
+- `packages/blueprints/apps/photos/duplicates-actions.ts`
+- `packages/blueprints/apps/photos/enrichment-gate.ts`
+- `packages/blueprints/apps/photos/picker-actions.ts`
+- `packages/blueprints/apps/photos/slideshow.tsx`
+- `packages/blueprints/src/photos-viewer.test.ts`
+- `packages/blueprints/src/untrusted-rendering.test.ts`
+- `packages/client/src/automations-copy.ts`
+- `packages/client/src/gateway-client-automations.ts`
+- `packages/client/src/react/blueprints/blob-staging.ts`
+- `packages/client/src/react/blueprints/grant-wire.ts`
+- `packages/client/src/react/screens/BackupSummaryRows.tsx`
+- `packages/client/src/react/screens/SettingsEnrichmentRules.tsx`
+- `packages/client/src/react/screens/SettingsHarnessesSelects.tsx`
+- `packages/client/src/react/screens/StartupErrorScreen.tsx`
+- `packages/client/src/react/screens/StorageScreen.tsx`
+- `packages/client/src/react/screens/atlasOrreryCamera.ts`
+- `packages/client/src/react/screens/device-errors.ts`
+- `packages/client/src/react/shell/ambientStatus.ts`
+- `packages/client/src/react/shell/changelogMarkdown.ts`
+- `packages/client/src/react/shell/optimisticUpdate.ts`
+- `packages/client/src/react/shell/routes/AutomationsRoute.tsx`
+- `packages/client/src/react/shell/routes/GatewayRoute.tsx`
+- `packages/client/src/react/shell/routes/InsightsRoute.tsx`
+- `packages/client/src/react/shell/routes/assistantCatchUp.ts`
+- `packages/client/src/react/shell/routes/assistantRich.ts`
+- `packages/client/src/react/shell/routes/conversationScopes.ts`
+- `packages/client/src/react/shell/routes/gatewayData.ts`
+- `packages/client/src/react/ui/DistributionBlock.tsx`
+- `packages/client/src/replica/coordinator.ts`
+- `packages/core/src/protocol/handshake.ts`
+- `packages/design/src/elements/index.ts`
+- `packages/design/src/eleven-px-floor.test.ts`
+- `packages/design/src/themes/index.ts`
+- `packages/server/src/acp/backends/acp/adapter-bin.ts`
+- `packages/server/src/acp/backends/acp/usage.ts`
+- `packages/server/src/acp/models/catalog.ts`
+- `packages/server/src/acp/runtime.ts`
+- `packages/server/src/automation/cron-timezone.ts`
+- `packages/server/src/automation/fire/cursor-engine.ts`
+- `packages/server/src/automation/handler/audit.ts`
+- `packages/server/src/backup/backup-derived-inventory.ts`
+- `packages/server/src/backup/backup-health.ts`
+- `packages/server/src/backup/restore-lazy.integration.test.ts`
+- `packages/server/src/cli/device-admin.ts`
+- `packages/server/src/cli/service-credential.ts`
+- `packages/server/src/cli/status-admin.ts`
+- `packages/server/src/cli/vault-admin.ts`
+- `packages/server/src/engine/conversation/archive/prune.ts`
+- `packages/server/src/engine/conversation/run-summary-sink.ts`
+- `packages/server/src/engine/conversation/transcript.ts`
+- `packages/server/src/engine/http/turn-limiter.ts`
+- `packages/server/src/engine/http/turn-sse-support.ts`
+- `packages/server/src/engine/pricing/match.ts`
+- `packages/server/src/engine/sandbox/boot.test.ts`
+- `packages/server/src/engine/sandbox/boot.ts`
+- `packages/server/src/engine/sandbox/fs-guard.ts`
+- `packages/server/src/engine/types.ts`
+- `packages/server/src/engine/worker/ts-loader-hooks.ts`
+- `packages/server/src/lifecycle/automation-revision.ts`
+- `packages/server/src/routes/backup-routes.ts`
+- `packages/server/src/routes/peer-commons-route.ts`
+- `packages/server/src/routes/replica-intent-route.ts`
+- `packages/server/src/serve/blob-sweep-health.ts`
+- `packages/server/src/serve/broker-health.ts`
+- `packages/server/src/serve/demo-seed.test.ts`
+- `packages/server/src/serve/experimental-gating.test.ts`
+- `packages/server/src/serve/link-crossing.ts`
+- `packages/server/src/serve/notices.ts`
+- `packages/server/src/serve/peer-link-client.ts`
+- `packages/server/src/serve/peer-transport-remote.test.ts`
+- `packages/server/src/serve/share-effects.ts`
+- `packages/server/src/serve/share-scope.ts`
+- `packages/server/src/serve/vault-picker.ts`
+- `packages/server/src/skills/compose.ts`
+- `packages/tunnel/src/desktop-tunnel.ts`
+- `packages/tunnel/src/response-frames.ts`
+- `packages/vault/src/blob/custody-read.ts`
+- `packages/vault/src/blob/seal.ts`
+- `packages/vault/src/bootstrap.ts`
+- `packages/vault/src/commands/merge.ts`
+- `packages/vault/src/errors.test.ts`
+- `packages/vault/src/gateway/cards.ts`
+- `packages/vault/src/gateway/ext.ts`
+- `packages/vault/src/grant/channel.ts`
+- `packages/vault/src/ingest/payload-schemas.ts`
+- `packages/vault/src/share/commons-chain.ts`
+- `packages/vault/src/share/commons-increment.test.ts`
+- `packages/vault/src/share/read-closure.ts`
+- `tests/comment-density-ratchet.json`
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
@@ -4396,4 +4596,4 @@ Files changed (full inventory):
 | --- | --- | --- |
 | 2026-08-24 | claude-code | 9988c109-6474-5924-b263-ee0ff5fa132d |
 | 2026-08-25 | claude-code | 7e716dba-b403-5671-bd5f-8093c70768bc |
-| 2026-08-25 | opencode | - |
+| 2026-08-26 | opencode | - |

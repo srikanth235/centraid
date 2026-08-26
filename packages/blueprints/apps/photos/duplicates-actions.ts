@@ -1,18 +1,5 @@
-// The duplicates surfaces' one write: trash the redundant copies through the
-// SAME media.delete_asset the grid/lightbox/selection-bar use
-// (selection-actions.ts's runBatchDelete) — a "duplicate" is not a distinct
-// kind of delete, just a different way of arriving at the asset id. Both the
-// shelf (select copies, trash the batch) and the review (keep one copy, trash
-// the rest) land here, so the two cannot mean two different things.
-//
-// NARRATION GOES THROUGH outcomes.ts, NOT the element layer's `statusLine`. The ONE
-// status line is the frame's (`frame.setStatus`, via `notice`) — this module
-// must not write to the kit's own DOM status-line host instead, which would
-// put a second status surface on screen for exactly one of this app's writes,
-// and drop the Undo the same delete offers everywhere else. Trashing IS
-// undoable: `restore` puts the asset back, which is what runBatchRestore
-// fires, so the summary carries Undo rather than implying a finality that is
-// not true.
+// Duplicates' one write: the same media.delete_asset/runBatchDelete path as grid+lightbox+selection.
+// Narration ONLY via outcomes.ts — frame's one status line, with Undo.
 import { assetRefKey } from "./asset-key.ts";
 import { act, narrate, notice } from "./outcomes.ts";
 import { runBatchRestore } from "./selection-actions.ts";
@@ -25,16 +12,13 @@ export async function trashDuplicateAssets(
   let queued = 0;
   let failed = 0;
   let lastBad: VaultOutcome | undefined = undefined;
-  // What actually landed in the trash — Undo's manifest, as composite keys,
-  // because that is what the restore batch is addressed by (asset-key.ts).
+  // Undo's manifest, keyed like the restore batch.
   const trashedKeys: string[] = [];
   const total = ids.length;
   const trashNext = async (index: number): Promise<void> => {
     const id = ids[index];
     if (id === undefined) return;
-    // Determinate progress, exact counts, never a spinner (v4 §14) — the
-    // frame's ONE status line carries `done`/`total` while the batch runs,
-    // and the final tally below replaces it in place.
+    // Never a spinner (v4 §14).
     notice("Trashing duplicates", undefined, { done: index, total });
     const outcome = await act("delete-asset", { asset_id: id }, scope);
     if (outcome?.status === "executed")

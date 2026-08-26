@@ -1,14 +1,5 @@
-// BARS — runs per day, as ten stacked columns (#765, spec §9).
-//
-// The chart says one thing: how much ran, and how much of it failed. So it
-// spends exactly one colour — `net` on the failed cap — and draws the rest in
-// tertiary ink. There is no gradient, no axis grid, no hover tooltip and no
-// vector runtime.
-//
-// A chart is unreadable to a screen reader whatever it draws, so the whole
-// block carries ONE image-role label the caller composes ("Runs per day over
-// the last 30 days"), and each column names itself for anyone exploring by
-// touch.
+// Runs-per-day bars (#765 §9): the chart carries ONE image-role label; each
+// column labels itself for touch. Failed cap wears `net` ink, rest tertiary.
 
 import React, { useMemo } from "react";
 import { View } from "react-native";
@@ -21,26 +12,14 @@ import { Text } from "./NativeText";
 
 export interface BarsBlockProps {
   data: readonly BarDatum[];
-  /**
-   * The marks along the axis, oldest → newest, spread across the plot.
-   *
-   * TWO OR MORE, and the count is the caller's (#775): a fold into real dates
-   * has no use for a fixed triple of relative words.
-   */
+  /** Axis marks, oldest → newest; TWO OR MORE (#775). */
   axis: readonly string[];
-  /**
-   * One line under the chart naming what the eye just found — the peak day and
-   * what it cost. The plot has no value axis, so this is the only place a
-   * column's actual magnitude is ever stated.
-   */
+  /** Peak-day note — the only magnitude ever stated. */
   note?: string;
-  /** The two outcome words. OPTIONAL as a PAIR — a chart that names one
-   *  outcome and not the other has spent the colour without explaining it, so
-   *  either both words are given or the legend row is not drawn (the DOM kit's
-   *  `legend?: { ok, fail }` shape, in this surface's prop grammar). */
+  /** Outcome words — both as a pair, or no legend row. */
   legendSucceeded?: string;
   legendFailed?: string;
-  /** The whole chart, in one sentence. */
+  /** Whole chart in one sentence. */
   accessibilityLabel: string;
 }
 
@@ -53,10 +32,7 @@ export default function BarsBlock({
   accessibilityLabel,
 }: BarsBlockProps): React.JSX.Element {
   const { colors } = useTheme();
-  // MAX_COLUMNS is a guard, not a fold: the caller decides how many days a
-  // column covers (`dayFold`), and at every window this phone can be asked
-  // about that is one column per day up to a month. Sampling inside the block
-  // is what made a spike disappear without the screen ever knowing (#775).
+  // Guard, not fold: caller decides days-per-column; sampling hid spikes (#775).
   const columns = useMemo(() => barColumns(data, MAX_COLUMNS), [data]);
   const gap = useMemo(() => ({ gap: columnGap(columns.length) }), [columns]);
   const ink = useMemo(

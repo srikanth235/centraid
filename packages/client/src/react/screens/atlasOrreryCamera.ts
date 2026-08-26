@@ -12,30 +12,18 @@ import {
 } from "./atlasOrreryGeometry.js";
 import type { ViewTransform } from "./atlasOrreryGeometry.js";
 
-// The orrery's pan/zoom camera (#519), lifted out of AtlasRelationsTab so
-// the tab stays about graph state. `view` is a lens over the chart body, never a
-// layout change — the geometry beneath it is fixed (see ViewTransform / the
-// camera invariant in atlasOrreryGeometry.ts). Drag pan and click re-centre
-// share the svg, so a live drag records `draggedRef`; the tab's node-activation
-// guard calls `consumeDrag()` to swallow the click that a drag would otherwise
-// fire (a pan should not teleport the centre).
+// Pan/zoom camera (#519); `view` is a lens over fixed geometry, never layout.
+// A live drag records `draggedRef`, which consumeDrag() clears to swallow the
+// drag's trailing click.
 
-const DRAG_THRESHOLD = 3; // px — below this a pointer press stays a click
+const DRAG_THRESHOLD = 3; // px — under this a press stays a click
 
 export interface OrreryCamera {
-  /** The current camera transform, applied to the chart's single viewport `<g>`. */
   view: ViewTransform;
-  /** Snap the camera back to identity — used on re-centre and on a fresh graph
-   *  (travelling re-frames) and by the reset control. */
   resetView: () => void;
-  /** Consume a just-finished drag: returns true (and clears the flag) when the
-   *  preceding pointer sequence was a pan, so the trailing click is swallowed. */
   consumeDrag: () => boolean;
-  /** Zoom about the viewBox centre by a multiplicative factor (the +/− controls). */
+  /** Zoom about the viewBox centre (+/− controls). */
   zoomBy: (factor: number) => void;
-  /** Raw pointer/wheel handlers for the svg. `onWheel` is bound natively (with
-   *  `{ passive: false }`) in the chart so preventDefault bites; the rest are
-   *  ordinary React pointer props. */
   handlers: {
     onWheel: (ev: WheelEvent) => void;
     onPointerDown: (ev: PointerEvent<SVGSVGElement>) => void;
@@ -67,9 +55,8 @@ export function useOrreryCamera(): OrreryCamera {
     return false;
   }, []);
 
-  // Wheel zoom about the cursor. Native WheelEvent (bound with passive:false in
-  // the chart) so preventDefault stops the page scrolling. If the rect is
-  // degenerate (jsdom), clientToViewBox is null → zoom about the canvas centre.
+  // Zoom about cursor; native passive:false binding so preventDefault bites;
+  // jsdom rect falls back to centre.
   const onWheel = useCallback((ev: WheelEvent) => {
     ev.preventDefault();
     const factor = Math.exp(-ev.deltaY * 0.0016);
@@ -101,7 +88,6 @@ export function useOrreryCamera(): OrreryCamera {
       lastX: ev.clientX,
       lastY: ev.clientY,
       moved: false,
-      // client px → viewBox units: the square viewBox fills the svg's width.
       scale: rect.width > 0 ? ORRERY.view / rect.width : 1,
     };
     ev.currentTarget.setPointerCapture?.(ev.pointerId);
@@ -111,7 +97,6 @@ export function useOrreryCamera(): OrreryCamera {
     const d = dragRef.current;
     if (!d || ev.pointerId !== d.id) return;
     if (!d.moved) {
-      // Hold as a click until the pointer travels past the threshold.
       if (
         Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) <
         DRAG_THRESHOLD
@@ -132,8 +117,7 @@ export function useOrreryCamera(): OrreryCamera {
     if (!d || ev.pointerId !== d.id) return;
     ev.currentTarget.releasePointerCapture?.(ev.pointerId);
     dragRef.current = null;
-    // draggedRef intentionally left set — the trailing click is swallowed by the
-    // tab's node-activation guard (consumeDrag), and the next pointerdown clears it.
+    // draggedRef left set — the tab's guard consumes it; next pointerdown clears.
   }, []);
 
   const zoomBy = useCallback((factor: number) => {

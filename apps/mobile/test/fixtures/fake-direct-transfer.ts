@@ -1,16 +1,6 @@
-// Test-only model of the server side of the direct-transfer contract
-// (`packages/vault/src/blob/direct-transfers.ts` + the S3 provider behind the
-// presigned URLs), plus a killer that can stop the world at any seam.
-//
-// Modelled faithfully where it matters to the kernel's correctness:
-//   * sessions are keyed by content sha; re-begin RESUMES and replays
-//     `completedParts` rather than opening a second session
-//   * an already-replicated sha returns `alreadyPresent` and no session
-//   * `recordPart` is idempotent and part-range checked
-//   * `complete` verifies the sealed size before committing one CAS object
-//   * a killed PUT stores nothing — an S3 object only appears on success
-//
-// Never imported by app code.
+// Test-only server-side model of direct transfer (`blob/direct-transfers.ts` + S3) plus a killer
+// that stops the world at any seam — sha-keyed resume replays completedParts, replicated shas
+// short-circuit, killed PUT stores nothing. Never imported by app code.
 
 /* oxlint-disable max-classes-per-file -- (#419) the kill switch, the provider
    and the gateway are one test model of a single contract: the killer's step
@@ -31,11 +21,10 @@ import { DirectTransferError } from "../../src/lib/upload/gateway-client";
 export const FAKE_ENDPOINT = "https://s3.example.test";
 export const FAKE_BUCKET = "centraid-blobs";
 export const FAKE_PREFIX = "vault1";
-/** Path root every presigned part URL below must sit under. */
 export const FAKE_UPLOAD_PREFIX = `/${FAKE_BUCKET}/${FAKE_PREFIX}/tmp/blobs/`;
 export const FAKE_GATEWAY = "https://gateway.example.test";
 
-/** Thrown to simulate process death; the drainer must never swallow it. */
+/** Thrown to simulate process death; never swallow it. */
 export class UploadKillSignalError extends Error {
   constructor(readonly at: string) {
     super(`process killed at ${at}`);
@@ -69,13 +58,10 @@ interface FakeSession {
   recorded: Map<number, string>;
 }
 
-/** The provider. Objects appear only on a completed PUT. */
+/** Objects appear only on a completed PUT. */
 export class FakeProvider {
-  /** `${tempId}/${partNumber}` → sealed bytes. */
-  readonly parts = new Map<string, Uint8Array>();
-  /** sha → the committed CAS object. */
-  readonly cas = new Map<string, Uint8Array>();
-  /** Every successful PUT, to detect duplicate or divergent objects. */
+  readonly parts = new Map<string, Uint8Array>(); // `${tempId}/${partNumber}` → sealed bytes
+  readonly cas = new Map<string, Uint8Array>(); // sha → committed CAS object
   readonly putLog: { tempId: string; partNumber: number; etag: string }[] = [];
 
   constructor(private readonly killer: Killer) {}
@@ -84,7 +70,7 @@ export class FakeProvider {
     const target = new URL(url);
     const tempId = target.pathname.split("/").pop()!;
     const partNumber = Number(target.searchParams.get("partNumber") ?? "1");
-    // The connection can die at any byte offset; a partial PUT stores nothing.
+    // Connection may die mid-PUT; a partial PUT stores nothing.
     const stride = Math.max(1, Math.ceil(body.byteLength / 4));
     for (let offset = 0; offset < body.byteLength; offset += stride) {
       this.killer.step(`put:${partNumber}:byte${offset}`);
@@ -92,7 +78,7 @@ export class FakeProvider {
     const etag = `"${sha256Hex(body)}"`;
     this.parts.set(`${tempId}/${partNumber}`, body.slice());
     this.putLog.push({ tempId, partNumber, etag });
-    // Bytes are durable at the provider; the client may never learn the ETag.
+    // Bytes durable at the provider; client may never learn the ETag.
     this.killer.step(`put-stored:${partNumber}`);
     return etag;
   }
@@ -102,7 +88,6 @@ export class FakeGateway implements DirectTransferClient {
   private readonly sessions = new Map<string, FakeSession>();
   private readonly bySha = new Map<string, string>();
   private counter = 0;
-  /** Per-blob content keys, as the gateway's registry would mint them. */
   private readonly keys = new Map<string, Uint8Array>();
   readonly completeLog: string[] = [];
 
@@ -139,8 +124,7 @@ export class FakeGateway implements DirectTransferClient {
         custody: "remote-only",
         keyBase64,
         completedParts: [],
-        // The real gateway derives this from custody; a remote-only object is
-        // genuinely replicated. The client persists it verbatim.
+        // Remote-only is genuinely replicated; client persists it verbatim.
         settlement: {
           alreadyPresent: true,
           sha256: input.sha256,
@@ -205,8 +189,7 @@ export class FakeGateway implements DirectTransferClient {
     partNumber: number,
     etag: string
   ): Promise<void> {
-    // Killing HERE is the interesting crash: the provider holds the bytes and
-    // the queue has persisted the ETag, but the gateway never heard about it.
+    // Killing HERE: provider has bytes, queue has ETag, gateway never heard.
     this.killer.step(`record:${partNumber}`);
     const session = this.require(sessionId);
     if (
@@ -246,8 +229,7 @@ export class FakeGateway implements DirectTransferClient {
           400
         );
       const declared = session.recorded.get(partNumber)!;
-      // The gateway trusts the provider's ETag; a receipt that does not match
-      // the stored bytes means the client recorded a part it never uploaded.
+      // Mismatch = client recorded a part it never uploaded.
       if (declared !== `"${sha256Hex(bytes)}"`) {
         throw new DirectTransferError(
           `part ${partNumber} ETag does not match stored bytes`,
@@ -267,8 +249,7 @@ export class FakeGateway implements DirectTransferClient {
     this.sessions.delete(sessionId);
     this.bySha.delete(session.sha256);
     this.completeLog.push(session.sha256);
-    // Killing HERE models the CAS object committing while the client never
-    // learns the receipt.
+    // Killing HERE: CAS commits, client never learns the receipt.
     this.killer.step("complete-done");
     return {
       sha256: session.sha256,
@@ -289,10 +270,7 @@ export class FakeGateway implements DirectTransferClient {
   }
 }
 
-/**
- * Serves the one endpoint `assertGatewayMintedUploadUrl` resolves the provider
- * allowlist from, so the real transfer-policy code runs in these tests.
- */
+/** Serves what `assertGatewayMintedUploadUrl` allowlists from, so real policy code runs. */
 export function fakeBlobStoreFetch(): typeof fetch {
   return (async (input: RequestInfo | URL) => {
     const href = typeof input === "string" ? input : input.toString();
@@ -302,10 +280,7 @@ export function fakeBlobStoreFetch(): typeof fetch {
           blob_store: {
             kind: "s3",
             endpoint: FAKE_ENDPOINT,
-            // The route spreads the stored settings and then derives the
-            // allowlist root from them (`s3TemporaryUploadPrefix`), so the
-            // wire payload carries both. Mirrored here rather than importing
-            // the vault helper: this app never depends on that package.
+            // Mirrors the route's allowlist-root derivation; not imported.
             bucket: FAKE_BUCKET,
             prefix: FAKE_PREFIX,
             allowedUploadPrefix: FAKE_UPLOAD_PREFIX,

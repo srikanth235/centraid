@@ -1,20 +1,5 @@
-// The screen-side half of the #659 frame-drop hook.
-//
-// `tests/agent-e2e-mobile/flows/scroll-frames.mjs` can drive a fling but cannot
-// see a frame timeline: neither Maestro nor adb exposes one for React Native.
-// This component is the only way that number leaves the app — it arms on a deep
-// link, counts frames for the window the probe asked for, and publishes the
-// result as one copyable line.
-//
-// It is measurement scaffolding, not a feature, and it behaves like it:
-//
-// - `__DEV__` only. A production bundle constant-folds `__DEV__` to `false`, so
-//   the listener is never installed and the module's body never runs.
-// - Nothing polls until a probe asks. No timer, no `requestAnimationFrame` loop,
-//   and no re-render happens between arming and the deep link arriving (D5 —
-//   every poller justified).
-// - The readout renders only after sampling stops, so drawing it cannot be part
-//   of what it measured.
+// Screen-side half of the #659 frame-drop hook: arms on a deep link, counts
+// frames, publishes one copyable line. Measurement scaffolding, __DEV__-only.
 
 import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
@@ -24,19 +9,12 @@ import { formatFrameSample, sampleFrames } from "../../lib/perf/frame-sampler";
 import { Text } from "../components/NativeText";
 import { t, useTheme } from "../theme";
 
-/**
- * `centraid://perf-frames?ms=4000` arms one sample. The probe opens this, does
- * its flings, then reads `perf-frame-report`.
- */
+/** centraid://perf-frames?ms=N arms one sample. */
 const PROBE_PATH = "perf-frames";
 const DEFAULT_WINDOW_MS = 4_000;
 const MAX_WINDOW_MS = 30_000;
 
-/**
- * Machine handles for Maestro `id:` selectors, not user-facing copy. The probe
- * hardcodes these strings, so they are part of the contract with
- * `tests/agent-e2e-mobile/flows/scroll-frames.mjs`.
- */
+/** Hardcoded Maestro testID handles. */
 const FRAME_PROBE_SAMPLING_ID = "perf-frame-sampling";
 const FRAME_PROBE_REPORT_ID = "perf-frame-report";
 
@@ -76,8 +54,7 @@ export default function FrameProbe(): React.JSX.Element | null {
       });
     };
     const subscription = Linking.addEventListener("url", ({ url }) => arm(url));
-    // A probe may open the link while the app is cold, in which case the event
-    // fires before this listener exists.
+    // A cold-start probe opens the link before this listener exists.
     void Linking.getInitialURL().then((url) => {
       if (url && armed) arm(url);
     });
@@ -89,8 +66,7 @@ export default function FrameProbe(): React.JSX.Element | null {
 
   if (!__DEV__) return null;
   if (sampling) {
-    // Present but nearly nothing: the probe needs to know the sample armed, and
-    // whatever this draws is drawn inside the window being measured.
+    // Present but nearly nothing: drawn inside the window being measured.
     return (
       <View
         testID={FRAME_PROBE_SAMPLING_ID}

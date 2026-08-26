@@ -1,16 +1,6 @@
-/**
- * Consent-relevant card body for Notifications decisions (#647).
- *
- * A phone card that renders only "<app> requests access" + purpose, or only
- * "<command> · <caller>" for a parked invocation, lets the owner grant
- * table-level writes or run a destructive command without ever seeing WHAT was
- * asked. Web shows both (#306, #308)
- * (packages/client/src/react/shell/routes/approvalsData.ts: `scopeSummary` and
- * `inputPreview`). These helpers produce the same information in one compact
- * secondary line, which is the native equivalent of web's block.
- */
+/** Consent card body (#647): mirrors web's scopeSummary/inputPreview — show
+ * WHAT was asked before granting. */
 
-/** One requested triple, as the Notifications projection sends it. */
 export interface DecisionScope {
   schema: string;
   table?: string;
@@ -19,11 +9,7 @@ export interface DecisionScope {
   fieldMask?: string[];
 }
 
-/**
- * Mirrors web's `scopeSummary`: `schema.table (verbs · N row rule, N fields)`,
- * comma-joined. Extent counts matter — a `read+act` on a whole table is a very
- * different ask from the same verbs behind a row filter and a field mask.
- */
+/** `schema.table (verbs · extents)`. */
 export function describeScopes(
   scopes: readonly DecisionScope[] | undefined
 ): string {
@@ -42,16 +28,9 @@ export function describeScopes(
     .join(", ");
 }
 
-/** Longest input preview a card shows before eliding; ~4 lines of small text. */
+/** Elide past ~4 lines of small text. */
 const INPUT_PREVIEW_LIMIT = 220;
 
-/**
- * Compact, bounded preview of a parked invocation's input. Web renders the
- * pretty-printed JSON in a scrollable block; a card cannot, so this collapses
- * to one line and elides the tail rather than silently hiding the whole thing.
- * Values that cannot be serialized (cycles) still produce an honest marker
- * instead of an empty card.
- */
 export function describeInvocationInput(
   input: Record<string, unknown> | undefined
 ): string {

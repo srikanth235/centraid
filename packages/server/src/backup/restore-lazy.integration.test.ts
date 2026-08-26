@@ -1,26 +1,14 @@
 import crypto, { randomBytes } from "node:crypto";
 /*
- * Previews-first, lazy/partial restore (#405) — the end-to-end story
- * for restoring a library LARGER than the local disk, scaled down to tiny
- * in-memory buffers. A real seeded vault (image content + `thumb` derivatives)
- * is snapshotted through the REAL BackupService/LocalBackupProvider; a subset
- * of its blobs is replicated to an in-memory remote CAS; then the snapshot is
- * restored in LAZY mode and we assert the §5 contract:
+ * Previews-first lazy restore (#405), scaled to tiny buffers: a seeded vault
+ * goes through the REAL BackupService/LocalBackupProvider, a blob subset
+ * replicates to an in-memory remote CAS, and a LAZY restore asserts the §5
+ * contract — DB intact; remote-held blobs stay remote-only with read-through;
+ * local-only blobs materialize; ALL tinies warm into the spool; deferred
+ * originals read-through on demand; time-to-usable-grid reported.
  *
- *   • the DB restores intact (rows + derivative registry survive);
- *   • blobs the remote CAS already holds are NOT materialized locally — they
- *     stay remote-only and read-through on demand (this is what lets a 500 GB
- *     library land on a 30 GB gateway);
- *   • a blob the remote does NOT hold (local-only at snapshot time) DOES
- *     materialize — the snapshot is its only copy, so lazy must never drop it;
- *   • the warm pass pulls ALL tinies into the local spool (usable grid), and
- *   • an on-demand `open()` of a deferred original read-throughs correctly, and
- *   • the time-to-usable-grid metric is reported.
- *
- * Snapshot-blob-inclusion truth this rests on (backup-sources.ts §b): snapshots
- * carry EVERY local CAS blob — a configured remote is NOT durability evidence
- * there — so the lazy SKIP is what trims the restore, per-blob, keyed on a live
- * remote `has(sha)`.
+ * Snapshots carry EVERY local CAS blob (backup-sources.ts §b); the per-blob
+ * lazy SKIP keyed on live `has(sha)` trims the restore.
  */
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -50,10 +38,8 @@ const silentLogger = {
   error: () => undefined,
 };
 
-/** A minimal async remote CAS — the §5 test's "fake/in-memory store". Stores
- * whatever bytes `put` is handed (custody replicates SEALED bytes), keyed by
- * the plaintext sha, exactly like S3BlobStore. No `putStream`, so the small
- * blobs here all replicate through the buffered `put` path. */
+/** Minimal async remote CAS keyed by plaintext sha, like S3BlobStore; no
+ *  `putStream`, so small blobs ride the buffered `put` path. */
 class MemoryRemoteStore implements BlobStore {
   readonly kind = "memory-remote";
   private readonly objects = new Map<string, Buffer>();
@@ -96,8 +82,7 @@ function invoke(
   return (out as { output: Record<string, unknown> }).output;
 }
 
-/** Stage arbitrary bytes into the vault's local CAS (they ride into the
- * snapshot) — the same ingress `core.attach` and the derivative pipeline use. */
+/** Stage bytes into the vault's local CAS — same ingress `core.attach` uses. */
 function stage(plane: VaultPlane, bytes: Buffer, name: string): string {
   return plane.gateway.stageBlob(plane.ownerCredential, {
     bytes,
@@ -153,17 +138,14 @@ describe("restore-lazy", () => {
       logger: silentLogger,
     });
 
-    // The remote CAS + the seal key its objects are encrypted under. In
-    // production this is the vault's configured blob_store; here it is injected.
+    // The remote CAS + seal key; injected here, configured in production.
     const remoteStore = new MemoryRemoteStore();
     const sealKey = randomBytes(32);
     const remote: RemoteTier = { store: remoteStore, encryptKey: sealKey };
 
     try {
-      // 1. Seed three "image" content items, each with an ORIGINAL blob and a
-      // tiny THUMB derivative. Buffers are bytes, not real images — the lazy
-      // restore is byte-level, and `core_content_derivative` is what the warm
-      // pass reads to find the tinies.
+      // 1. Seed three "image" items, each an ORIGINAL blob plus a tiny THUMB
+      // derivative row — what the warm pass reads.
       const originals: { contentId: string; sha: string; bytes: Buffer }[] = [];
       const thumbs: { sha: string; bytes: Buffer }[] = [];
       for (let i = 0; i < 3; i++) {
@@ -199,9 +181,8 @@ describe("restore-lazy", () => {
         thumbs.push({ sha: thumbSha, bytes: thumbBytes });
       }
 
-      // 2. Replicate to the remote CAS: originals[0] and originals[1] plus ALL
-      // three thumbs. originals[2] is deliberately LEFT local-only (the remote
-      // does NOT hold it) so we can prove lazy still materializes it.
+      // 2. Replicate originals[0..1] plus ALL thumbs; originals[2] stays
+      // local-only so lazy still has to materialize it.
       const seedCustody = new BlobCustody(
         new FsBlobStore(path.join(plane.dir, "blobs")),
         () => remote
@@ -219,7 +200,7 @@ describe("restore-lazy", () => {
       );
       await expect(remoteStore.has(originals[2]!.sha)).resolves.toBe(false);
 
-      // 3. Snapshot the whole vault (snapshots carry EVERY local CAS blob).
+      // 3. Snapshot the whole vault.
       await service.runBackup(vaultId);
       expect((await service.status())[vaultId]?.lastSeq).toBe(1);
 
@@ -257,12 +238,11 @@ describe("restore-lazy", () => {
         restoredDb.close();
       }
 
-      // --- Remote-held blobs were DEFERRED, local-only blob MATERIALIZED ---
+      // --- Remote-held blobs DEFERRED, local-only blob MATERIALIZED ---
       const destBlobs = new FsBlobStore(path.join(destDir, "blobs"));
       expect(destBlobs.hasSync(originals[0]!.sha)).toBe(false); // remote holds it ⇒ skipped
       expect(destBlobs.hasSync(originals[1]!.sha)).toBe(false); // remote holds it ⇒ skipped
       expect(destBlobs.hasSync(originals[2]!.sha)).toBe(true); // local-only ⇒ materialized
-      // The engine reports exactly what it held back.
       expect(result.skippedBlobs).toContain(originals[0]!.sha);
       expect(result.skippedBlobs).toContain(originals[1]!.sha);
       expect(result.skippedBlobs).not.toContain(originals[2]!.sha);
@@ -278,8 +258,7 @@ describe("restore-lazy", () => {
       expect(result.previewsWarm!.timeToUsableGridMs).toBeTypeOf("number");
       expect(result.previewsWarm!.timeToUsableGridMs).toBeGreaterThanOrEqual(0);
 
-      // --- A deferred original read-throughs on demand (mediums/originals stay
-      //     remote-only until something asks for them) ---
+      // --- Deferred originals read-through on demand ---
       const readCustody = new BlobCustody(
         new FsBlobStore(path.join(destDir, "blobs")),
         () => remote
@@ -287,7 +266,6 @@ describe("restore-lazy", () => {
       const readBack = await readCustody.open(originals[0]!.sha);
       expect(readBack).not.toBeNull();
       expect(readBack!.equals(originals[0]!.bytes)).toBe(true);
-      // And the local-only original reads straight from the materialized copy.
       const localOnly = await readCustody.open(originals[2]!.sha);
       expect(localOnly!.equals(originals[2]!.bytes)).toBe(true);
     } finally {
@@ -360,8 +338,8 @@ describe("restore-lazy", () => {
       });
       const restoredLocal = new FsBlobStore(path.join(destDir, "blobs"));
 
-      // Remote-primary originals never enter the snapshot at all; the restored
-      // DB still addresses them by SHA and the configured remote answers later.
+      // Remote-primary originals never enter the snapshot; the restored DB
+      // still addresses them by SHA for later read-through.
       expect(result.entries.some((entry) => entry.endsWith(remoteSha))).toBe(
         false
       );

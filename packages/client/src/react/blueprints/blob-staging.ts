@@ -1,17 +1,6 @@
-// Vault blob staging for inline apps (#505).
-//
-// An app runs in the SHELL document, whose origin is not the gateway (the
-// installable web PWA rides the iroh tunnel; desktop runs from `file://`), so
-// a relative `fetch('/centraid/_vault/blobs')` resolves nowhere and carries no
-// credential. These two functions are the transport half of the element
-// layer's attach flow: `@centraid/design/elements`' `stageFileBytes` /
-// `stageDerivative` call them through the host client (`centraid-inline.ts`
-// installs them as `stageBlob` / `stageDerivative` on `window.centraid`),
-// which is the only direction that works — `packages/design` sits UPSTREAM of
-// this package and cannot import the gateway client.
-//
-// The wire shape is the vault's: query params, sha-preflight HEAD, the
-// `x-content-sha256` header, and the returned staging receipt verbatim.
+// Blob staging for inline apps (#505): the shell document's origin is not
+// the gateway's, so calls ride the authed client centraid-inline.ts installs
+// on window.centraid.
 import type { StagedBlob } from "@centraid/design/elements";
 import { sha256File } from "@centraid/design/elements";
 
@@ -19,14 +8,8 @@ import { auth, authHeaders, doFetch } from "../../gateway-client-core.js";
 import { blobAuthHeaders, BLOB_PREFIX } from "./blob-auth.js";
 
 /**
- * Stream a File to the vault blob-staging route through the authed gateway.
- * Same `sha256`-preflight dedupe (HEAD `…/_sha/<sha>`) the vault's own door
- * offers: when another device already established custody the bytes never
- * leave. The gateway still hashes and verifies every POST authoritatively, so
- * a declared sha is an optimization and never a gate.
- *
- * Bytes land in the scope the caller named, not the focused one (#599):
- * an upload aimed at an audience must be staged into THAT vault's CAS.
+ * Sha-preflight dedupe; the gateway still verifies every POST — a declared
+ * sha is an optimization, NEVER a gate.
  */
 export async function stageBlob(
   file: File,
@@ -43,7 +26,7 @@ export async function stageBlob(
     try {
       declaredSha = await sha256File(file);
     } catch {
-      declaredSha = null; // hashing is an optimization, never an upload gate
+      declaredSha = null;
     }
   }
   if (declaredSha) {
@@ -74,7 +57,7 @@ export async function stageBlob(
         };
       }
     } catch {
-      // Older/offline gateways simply take the authoritative POST below.
+      // Fall through to the POST.
     }
   }
   const res = await doFetch(baseUrl, `${BLOB_PREFIX}?${q}${extra}`, {
@@ -90,11 +73,7 @@ export async function stageBlob(
   return (await res.json()) as StagedBlob;
 }
 
-/**
- * Submit a typed derivative contribution (#299 enrichers) through the
- * authed blob door — a thumbnail, a poster frame, an extracted transcript —
- * addressed to the sha of the parent it was derived from.
- */
+/** Derivative contribution (#299), addressed to the parent sha. */
 export async function stageDerivative(
   parentSha: string,
   variant: string,

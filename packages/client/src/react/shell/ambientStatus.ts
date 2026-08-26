@@ -1,19 +1,7 @@
 import type { ShellRoute } from "../../app-shell-context.js";
-// The standing sentence on the shell's one status line (#707,
-// invariant 5) — extracted from App so the rule can be read, and tested,
-// without mounting the whole shell.
-//
-// The reachability half of it is NOT a two-way ternary. "up" ⇒ "Synced" with
-// EVERYTHING ELSE ⇒ "Ready" makes the line lie in the one state where the shell
-// knows least. "unknown" is not a short blip on the web host — an Iroh dial
-// times out at 15s and is tried three times with backoff, so the window is
-// roughly half a minute — and for all of it a member reading "Ready" is being
-// told an affirmative thing about a gateway we have not reached. Worse, it is
-// the same word the line shows when everything is fine but idle, so the state
-// that most needs to be visible is the state that looks normal.
-//
-// Three statuses, three sentences. Saying "Checking…" costs nothing when the
-// probe comes back in 200ms and is the truth when it does not.
+// The shell's standing status sentence (#707, invariant 5). "unknown" never
+// resolves to "Ready": that is what the line shows when all is fine but idle,
+// and a dial attempt runs ~30s with retries.
 import { OFFLINE_COMMIT_REASON } from "./commitAvailability.js";
 
 export type SignalTone = "quiet" | "attention" | "urgent";
@@ -49,11 +37,8 @@ function ageLabel(at: number | undefined, now: number): string | undefined {
   return `${days} ${days === 1 ? "day" : "days"} ago`;
 }
 
-/**
- * The Home ribbon's seat-first status fold. It accepts facts already read from
- * live gateway surfaces; no prototype fixtures or inferred security policy
- * live here. Missing facts make the sentence shorter, never more certain.
- */
+/** Seat-first fold over pre-read facts; missing facts shorten, never make
+ *  more certain. */
 export function ambientSignalFor(input: AmbientSignalInput): AmbientSignal {
   const { gatewayStatus, now, seat } = input;
   if (gatewayStatus === "unknown" || gatewayStatus === undefined)
@@ -143,14 +128,9 @@ export function ambientSignalFor(input: AmbientSignalInput): AmbientSignal {
 }
 
 /**
- * The reachable sentence, and the stamp that says how fresh it is.
- *
- * "Synced" alone is a claim with no age on it: a line that read the same at
- * the moment of the last probe and ten minutes after the machine went to
- * sleep. The stamp is rendered by `StatusLine` rather than folded in here,
- * because the age changes every second and the shell root deliberately does
- * not re-render on the heartbeat (#659) — but the WORDING stays in this
- * file, which is the one place the line's sentences are written.
+ * Reachable sentence + freshness stamp; `StatusLine` renders the stamp since
+ * the age changes every second and the shell root skips heartbeat re-renders
+ * (#659).
  */
 export const SYNCED = "Synced";
 
@@ -178,21 +158,15 @@ export interface AmbientStatusInput {
   hasUnreadNotices: boolean;
 }
 
-/**
- * What the line says when nothing transient is showing.
- *
- * Work waiting on the member outranks reachability: a decision does not stop
- * being waiting because the gateway is slow to answer, and it is the one of the
- * three a member can act on.
- */
+/** The resting line: work waiting on the member outranks reachability — it is
+ *  the one of the three they can act on. */
 export function ambientStatusFor(input: AmbientStatusInput): string {
   const { blockingCount, gatewayStatus, hasUnreadNotices } = input;
   if (blockingCount > 0)
     return `${blockingCount} ${blockingCount === 1 ? "decision" : "decisions"} waiting on you`;
   if (hasUnreadNotices) return "New notices to read";
   if (gatewayStatus === "up") return SYNCED;
-  // The same sentence the offline banner and a refused commit control carry —
-  // one condition, one explanation.
+  // Same sentence the offline banner and a refused commit carry.
   if (gatewayStatus === "down") return OFFLINE_COMMIT_REASON;
   return "Checking…";
 }

@@ -1,20 +1,7 @@
-// THE FRAME'S VIEW OF THE DURABLE QUEUE (#711).
-//
-// `lib/upload/native-queue.ts` owns the sqlite ledger. This module owns the
-// READOUT of it — the counts a member is shown, in one place, so Photos' backup
-// screen and (next) Docs' and the frame's own settings cannot disagree about
-// how many things are waiting.
-//
-// A one-shot read of an external system: the handle is opened and closed around
-// it so no screen ever holds a sqlite connection across a render. Lives outside
-// any component for exactly that reason.
-//
-// FAILS CLOSED, and says so. If the queue cannot be opened — low disk, a purge
-// mid-read — the counts come back zeroed and `readable: false`, never a
-// fabricated total. docs/mobile-offline.md is explicit that low disk pauses
-// sync and preserves the last readable projection: the ledger is intact, only
-// this view of it is not, and a screen that quietly printed `0 pending` over a
-// full queue would be telling the member their photographs are safe.
+// READOUT of lib/upload/native-queue.ts's sqlite ledger (#711): the
+// member-facing counts, one place so screens cannot disagree. FAILS CLOSED —
+// an unreadable ledger returns zeroed counts + readable:false, never a
+// fabricated total.
 
 import { authHeader } from "../../lib/gateway";
 import { UploadQueue } from "../../lib/upload/native-queue";
@@ -26,16 +13,10 @@ export interface TransferQueueFailure {
 }
 
 export interface TransferQueueCounts {
-  /** Rows the queue has not settled. Exact — never "some", never a spinner. */
   pending: number;
-  /** Pending rows whose recorded MIME type is a video. */
   pendingVideos: number;
-  /** Plaintext bytes those rows represent. */
   bytes: number;
-  /** Rows carrying a last error, so the screen can state each one inline. */
   failures: TransferQueueFailure[];
-  /** False when the ledger could not be read at all; the counts are then zero
-   *  because they are UNKNOWN, and the caller must say so rather than reassure. */
   readable: boolean;
 }
 

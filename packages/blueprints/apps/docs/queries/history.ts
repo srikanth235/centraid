@@ -1,31 +1,15 @@
 /**
- * A document's version chain (#352): never a command, since core.link
- * is already the durable history — this walks it. Starting at the wrapper's
- * current_content_id, each step follows the single live `revises` edge OUT
- * of the current content item (NEW -> OLD, the direction
- * commands/revisions.ts's recordRevision asserts) to the version it once
- * superseded, stopping at whichever content item has no such edge (the
- * original, never-revised upload) or a content id already visited — restoring
- * an old version gives it a NEW outgoing edge (rule R3: history only ever
- * grows forward), which can cycle the graph back through content already
- * walked once a document has been restored more than once, and the guard
- * keeps this walk terminating exactly the way documents.test.ts's own
- * versionChain helper and restore_document_version's target_in_chain
- * precondition (packages/vault/src/commands/documents.ts) both do.
- *
- * Ordering is honest, not naive: each entry's date is the ASSERTION time of
- * the edge that once made it current (or superseded it) — the revises link's
- * valid_from — not the content item's own created_at. A restored old version
- * reads as the newest entry even though its bytes predate everything below
- * it, exactly as the vault itself records it.
+ * Document version chain (#352): core.link is the durable history — follow the live `revises`
+ * edge OUT (NEW -> OLD per recordRevision) until an item has no such edge (the original upload)
+ * or an already-visited id: restores add NEW edges (R3) and cycle, so the seen-guard terminates
+ * like documents.test.ts's helper and target_in_chain. Dates are edge assertion times
+ * (valid_from), never created_at.
  */
 
 // Mirrors packages/vault/src/commands/links.ts's RELATIONS_SCHEME_URI.
 const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 const REVISES_RELATION = "revises";
-// However long a document's real edit history runs, one walk step per
-// version is still a bounded read per step — this just caps runaway growth
-// (a document with more edits than this is not a realistic case today).
+// Caps runaway growth.
 const MAX_CHAIN_STEPS = 500;
 
 interface DocumentRow {
@@ -83,8 +67,6 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
         )?.concept_id
       : undefined;
 
-    // No `revises` concept yet means nothing has ever been edited/replaced/
-    // restored in this vault — every document is its own one-entry history.
     const chainIds = [doc.current_content_id];
     const assertedAtOf = new Map<string, string>(); // content_id -> the outgoing edge's valid_from
     if (revisesConceptId) {
@@ -148,9 +130,7 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
         content_uri: srcOf(c),
         poster_uri: posterOf(c),
         current: i === 0,
-        // The oldest entry (no outgoing edge — it was never a supersession)
-        // dates from its own mint; every other entry dates from the moment
-        // the edge above it was asserted.
+        // Oldest entry dates from its own mint; others from edge assertion.
         asserted_at: assertedAtOf.get(id) ?? c?.created_at ?? doc.created_at,
       };
     });

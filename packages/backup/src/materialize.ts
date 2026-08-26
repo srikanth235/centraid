@@ -1,16 +1,7 @@
 /*
- * `materializeSnapshotBlobs` (#439) — pull SPECIFIC blob shas out of an
- * already-authenticated snapshot and write them into a vault's on-disk blob
- * store, reusing the EXACT chunk-streaming / decrypt / keyed-id-verify path
- * `restoreSnapshot` uses (`engine.ts`). It exists so the adopt-time inventory
- * reconcile (`recover-reconcile.ts`) can re-pin a blob the provider has dropped
- * WITHOUT re-hydrating the whole vault and without hand-rolling the crypto — the
- * one thing FORMAT.md forbids scattering.
- *
- * The reconcile only ever asks for a handful of shas (the divergence between the
- * restored `blob_replica` index's belief and the provider's live inventory), so
- * this re-opens the one manifest and streams just those entries; a sha the
- * snapshot does NOT carry comes back in `absent` (the reconcile records it lost).
+ * materializeSnapshotBlobs (#439): stream specific blob shas from an authenticated snapshot into a
+ * vault's blob store via restoreSnapshot's exact decrypt/keyed-id path — recover-reconcile re-pins
+ * dropped blobs without re-hydrating or hand-rolling crypto (FORMAT.md). Lacking shas → `absent`.
  */
 
 import { createHash } from "node:crypto";
@@ -37,27 +28,18 @@ export interface MaterializeSnapshotBlobsOptions {
   targetId: string;
   keyring: Keyring;
   vaultId: string;
-  /** The already-restored snapshot's seq — the same base the reconcile trusts. */
   seq: number;
-  /** Content shas to materialize (64-hex). Anything the manifest lacks → `absent`. */
   shas: readonly string[];
-  /**
-   * The vault directory. Entries are written at `<destDir>/<entry.path>`, i.e.
-   * `<destDir>/blobs/sha256/<fan>/<sha>` — exactly where `FsBlobStore(<destDir>/blobs)`
-   * looks for them (the same layout `restoreSnapshot` writes).
-   */
+  /** Entries written at `<destDir>/<entry.path>` — where `FsBlobStore(<destDir>/blobs)` looks. */
   destDir: string;
   log?: EngineLogger;
 }
 
 export interface MaterializeSnapshotBlobsResult {
-  /** Shas whose bytes were streamed to disk and verified against the manifest sha. */
   materialized: string[];
-  /** Requested shas the snapshot manifest carries no blob entry for (lost, not re-pinnable). */
   absent: string[];
 }
 
-/** The content sha of a blob entry is its path's final segment (`restoreSnapshot`'s convention). */
 function blobShaOf(entry: ManifestEntry): string | undefined {
   if (entry.kind !== "blob") return undefined;
   const sha = entry.path.split("/").pop();
@@ -100,7 +82,7 @@ export async function materializeSnapshotBlobs(
       absent.push(sha);
       return;
     }
-    // Same defensive re-check `restoreSnapshot` applies at the point it touches disk.
+    // Same re-check restoreSnapshot applies at disk-touch time.
     if (!isSafeEntryPath(entry.path)) {
       throw new Error(
         `materializeSnapshotBlobs: entry path rejected: "${entry.path}"`
@@ -112,8 +94,7 @@ export async function materializeSnapshotBlobs(
     const handle = await fs.open(dest, "w");
     try {
       await applyInOrder(entry.chunks, async (id) => {
-        // Unseal → unframe → recompute the keyed id: decompression happens
-        // BEFORE the integrity check, exactly as in the restore loop.
+        // Decompression precedes the integrity check, as in restore.
         const plain = unframeChunkPayload(
           decrypt(dataKey, await store.get(`chunks/${id}`))
         );

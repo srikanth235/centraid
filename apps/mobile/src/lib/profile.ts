@@ -1,11 +1,4 @@
-// Local profile + first-run state (#263 onboarding).
-//
-// The phone is a client of a desktop gateway, so "who am I" is a light local
-// preference — a display name, an accent color, and whether onboarding has
-// completed. It lives in the same AsyncStorage-backed `Store` the rest of the
-// app uses; nothing here is a security boundary (the vault link lives in
-// secure-storage via phone-link.ts). Callers `hydrateProfile()` once at boot,
-// then read synchronously on the render path.
+// Local profile + first-run state (#263); AsyncStorage-backed, not a security boundary.
 
 import { BRAND, IDENTITY_COLORS, identityInitials } from "@centraid/design";
 
@@ -15,21 +8,12 @@ const PROFILE_NAME_KEY = "profile.name";
 const PROFILE_COLOR_KEY = "profile.color";
 const PROFILE_ONBOARDED_KEY = "profile.onboarded";
 
-// The product mark — ink, per the Binding Layer (the shell spends no hue; see
-// kit/theme/resolve.ts, where `colors.accent` is `colors.text`). `BRAND` is
-// only the DEFAULT profile colour here, for the avatar + greeting highlight;
-// personalising the profile colour re-tints just those two spots, never a
-// control.
+// Ink per the Binding Layer; BRAND is a default colour only, never control tint.
 export { BRAND } from "@centraid/design";
 
-// Swatch options offered in Settings → You for the avatar + greeting tint. Teal
-// (the brand default) leads; the rest are the shared design-tokens palette, so a
-// person and their vault (Settings → Vault uses the same palette) can wear the
-// same colour. The profile colour is stored as a free hex string (see
-// `setProfileColor`), which is exactly what these values are.
+// Settings → You swatches; teal leads.
 export const PROFILE_COLORS: readonly string[] = IDENTITY_COLORS;
 
-/** Pull the profile prefs into the Store cache. Idempotent. */
 export async function hydrateProfile(): Promise<void> {
   await Promise.all([
     Store.hydrate<string>(PROFILE_NAME_KEY, ""),
@@ -62,17 +46,14 @@ export function setOnboarded(value: boolean): void {
   Store.set<boolean>(PROFILE_ONBOARDED_KEY, value);
 }
 
-/** Up-to-two-letter initials for an avatar. Falls back to a person glyph. */
 export function initialsOf(name: string): string {
   return identityInitials(name);
 }
 
-/** First name only, for the greeting line. */
 export function firstNameOf(name: string): string {
   return name.trim().split(/\s+/u).find(Boolean) ?? "";
 }
 
-/** Time-of-day greeting to match the home header. */
 export function greetingFor(date = new Date()): string {
   const hour = date.getHours();
   if (hour < 12) return "Good morning";

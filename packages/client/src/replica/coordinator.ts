@@ -39,7 +39,7 @@ import type {
 export interface ReplicaChangeFeedAdapter {
   /** Pass `subscribeVaultChanges` from the shell-owned singleton feed. */
   subscribe: (listener: (message: VaultChangeMessage) => void) => () => void;
-  /** Attest the exact catalog stored locally before opening/resuming a feed. */
+  /** Attest the locally stored catalog before opening/resuming a feed. */
   setShapeIds: (shapeIds: readonly string[]) => Promise<void>;
   /** Pass `resumeVaultChanges`; called only after an atomic bootstrap commits. */
   resume: (cursor: ReplicaCursor) => Promise<void>;
@@ -53,7 +53,7 @@ export type ReplicaChangePuller = (
 export interface ReplicaCoordinatorOptions extends IntentQueueOptions {
   changeFeed?: ReplicaChangeFeedAdapter;
   pullChanges?: ReplicaChangePuller;
-  /** Bounded retry for a failed pull even when the shared SSE cursor already advanced. */
+  /** Bounded retry for a failed pull even when the SSE cursor already advanced. */
   feedRetryDelayMs?: number;
   onRebootstrapRequired?: (detail: unknown) => void;
   onCursorAdvanced?: (cursor: ReplicaCursor, schemaEpoch: string) => void;
@@ -84,10 +84,8 @@ export class ReplicaCoordinator {
   #feedRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #feedGeneration = 0;
   /**
-   * True between `bootstrapBegin` and `bootstrapCommit`. The walk owns the store
-   * across that span: `replica_bootstrap_progress` is the only proof a bootstrap
-   * is open, and anything that clears it mid-walk makes the next page or the
-   * commit fail with "No replica bootstrap is open".
+   * True between `bootstrapBegin` and `bootstrapCommit`; the only proof a walk
+   * is open, so clearing it mid-walk fails the next page or the commit.
    */
   #bootstrapOpen = false;
   /** A rebootstrap demanded mid-walk, re-raised once the walk seals. */
@@ -140,16 +138,14 @@ export class ReplicaCoordinator {
   }
 
   /**
-   * Windowed bootstrap, page-wise. The feed stays detached and no cursor is
-   * published until {@link bootstrapCommit}, so an interrupted walk leaves the
-   * replica reporting "not bootstrapped" rather than a partial catalog.
+   * Windowed bootstrap, page-wise. No cursor is published until
+   * {@link bootstrapCommit}, so an interrupted walk reports "not
+   * bootstrapped" rather than a partial catalog.
    */
   async bootstrapBegin(header: ReplicaBootstrapHeader): Promise<void> {
     this.resetFeedGeneration();
-    // Claimed BEFORE the call is posted, not after it resolves. Store calls are
-    // ordered by when they are issued (the web store is a worker RPC queue), so
-    // a `requireRebootstrap` that has already posted its wipe posted it ahead of
-    // this begin and is harmless; every later one must be held off instead.
+    // Claim BEFORE the call posts: worker RPC calls order by issue time, so
+    // every later wipe must be held off instead.
     this.#bootstrapOpen = true;
     await this.walkStep(() => this.worker.bootstrapBegin(header));
     this.emitInvalidations([{ shapeId: "*", entity: "*", source: "purge" }]);
@@ -170,9 +166,9 @@ export class ReplicaCoordinator {
   }
 
   /**
-   * Run one step of an open windowed walk. A rejected step ends the walk — the
-   * driver will not reach `bootstrapCommit` — so the claim on the store is
-   * released. The error is rethrown untouched; this is bookkeeping, not rescue.
+   * A rejected step ends the walk — the driver will not reach
+   * {@link bootstrapCommit} — so release the store claim; the error is
+   * rethrown untouched (bookkeeping, not rescue).
    */
   private async walkStep<T>(step: () => Promise<T>): Promise<T> {
     try {
@@ -184,9 +180,9 @@ export class ReplicaCoordinator {
   }
 
   /**
-   * Seal at the page-1 cursor and attach the feed there. The caller must still
-   * replay changes from this cursor — later pages came from later snapshots, and
-   * only the replay repairs what slipped between them (notably deletions).
+   * Seal at the page-1 cursor and attach the feed there. The caller must
+   * still replay changes from this cursor — only the replay repairs what
+   * slipped between snapshots (notably deletions).
    */
   async bootstrapCommit(
     cursor: ReplicaCursor,
@@ -215,8 +211,7 @@ export class ReplicaCoordinator {
 
   async applyChanges(batch: ReplicaChangeBatch): Promise<ReplicaCursor> {
     try {
-      // IDB first: a crash can leave canonical data behind (rebootstrap repairs it),
-      // but must never advance the SQLite cursor while retaining a stale overlay.
+      // IDB first: never advance the SQLite cursor while retaining a stale overlay.
       const resolved = await this.intents.applyOutcomes(batch.outcomes ?? []);
       const applied = await this.worker.applyChanges(batch);
       this.#onCursorAdvanced?.(applied.cursor, batch.schemaEpoch);
@@ -244,7 +239,7 @@ export class ReplicaCoordinator {
     return this.worker.read(request, optimistic, guard);
   }
 
-  /** Clone-safe equivalent used by the shell's MessagePort transport. */
+  /** Clone-safe read used by the shell's MessagePort transport. */
   async readWire(request: ReplicaReadRequest): Promise<ReplicaReadWireResult> {
     const optimistic = await this.intents.overlayMutations(
       request.shapeId,
@@ -284,11 +279,9 @@ export class ReplicaCoordinator {
     return intent;
   }
 
-  /**
-   * Capture concurrency preconditions from canonical rows only. Optimistic
-   * overlays are deliberately bypassed: a queued edit must not become its own
-   * base version, and a retry must observe the row that rejected it.
-   */
+  /** Capture concurrency preconditions from canonical rows only — overlays
+   *  deliberately bypassed: a queued edit must not become its own base
+   *  version, and a retry must observe the row that rejected it. */
   async captureBaseVersions(
     mutations: readonly OptimisticMutation[]
   ): Promise<ReplicaBaseVersion[]> {
@@ -571,26 +564,16 @@ export class ReplicaCoordinator {
   }
 
   /**
-   * Pull the gateway's outstanding changes RIGHT NOW, resolving once the local
-   * cursor has caught up with whatever the gateway holds.
-   *
-   * The feed path above is push-driven: a sync starts when the SSE nudge
-   * lands, which can be moments AFTER the write that caused it resolved to its
-   * caller. A caller that has just finished a gateway-side write and is about
-   * to re-read (Home's sample seed is the case that forced this) needs the
-   * inverse — "the rows I know exist are readable locally" — so this pulls
-   * from the current cursor until a batch reports no further progress. It
-   * borrows the feed's single-flight slot so the two paths never apply
-   * batches concurrently.
-   *
-   * A replica with no cursor has nothing to advance — the bootstrap walk owns
-   * the first fill — and a coordinator without a puller is bootstrap-only;
+   * Pull the gateway's outstanding changes RIGHT NOW, resolving once the
+   * local cursor has caught up; borrows the feed's single-flight slot so the
+   * two paths never apply batches concurrently. A replica with no cursor is
+   * bootstrap-owned and a coordinator without a puller is bootstrap-only;
    * both resolve immediately.
    */
   async syncNow(): Promise<void> {
     if (!this.#pullChanges || this.#closed) return;
-    // Ride out any in-flight feed sync first: the two would otherwise pull
-    // from the same cursor and post the same batch to the store twice.
+    // Ride out any in-flight feed sync: both would otherwise pull the same
+    // cursor and post the batch twice.
     await this.awaitFeedSyncIdle();
     if (this.#closed) return;
     const run = this.pullToHead();
@@ -602,8 +585,8 @@ export class ReplicaCoordinator {
       await run;
     } finally {
       this.#feedSync = undefined;
-      // A feed nudge that arrived while we pulled may point past where this
-      // stopped; hand the slot back to the push path rather than dropping it.
+      // A feed nudge past our stopping point may have arrived mid-pull; hand
+      // the slot back to the push path rather than dropping it.
       if (this.#feedTarget && !this.#feedRetryTimer) this.startFeedSync();
     }
   }
@@ -639,7 +622,7 @@ export class ReplicaCoordinator {
       if (!batch || abort.signal.aborted || generation !== this.#feedGeneration)
         return;
       if (!cursorAfter(batch.to, status.cursor)) {
-        // Already at the head. A stale feed target at or below it is done too.
+        // Already at the head; a stale target at or below it is done too.
         this.clearReachedFeedTarget(status.cursor);
         return;
       }
@@ -686,12 +669,8 @@ export class ReplicaCoordinator {
     }
     this.resetFeedGeneration();
     if (this.#bootstrapOpen) {
-      // A windowed walk already owns the store. Wiping under it would delete
-      // `replica_bootstrap_progress` between two pages — the walk's next page or
-      // its commit would then throw "No replica bootstrap is open", killing a
-      // bootstrap that was about to rebuild the replica anyway. The wipe is also
-      // redundant here: `bootstrapBegin` cleared the store, and no cursor is
-      // published until commit, so nothing stale is readable meanwhile. Hold the
+      // A windowed walk already owns the store: wiping under it would kill
+      // the walk, and nothing stale is readable pre-commit anyway. Hold the
       // demand and re-raise it once the walk seals.
       this.#deferredRebootstrap = { detail };
       return;

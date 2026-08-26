@@ -1,15 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
-// Disk-full classification units (#351). `PRAGMA max_page_count`
-// gives a deterministic, REAL SQLITE_FULL condition — no mocking node:sqlite
-// — so the classifier is verified against what node:sqlite actually throws,
-// and the transaction-atomicity claim (a failed write rolls back cleanly,
-// the connection stays usable) is verified against a real failure, not an
-// assumption. The genuine full-FILESYSTEM path (real ENOSPC from `write(2)`)
-// is covered by the gated e2e in blob/disk-full.e2e.test.ts — this file's
-// blob-cleanup test uses an injected `writeSync` failure only because
-// reliably filling a real filesystem inside the fast unit suite would need
-// the same disk-image dance as that e2e (see its header for why that's
-// gated instead of always-on).
+// Disk-full units (#351): `PRAGMA max_page_count` gives a
+// deterministic REAL SQLITE_FULL condition; genuine ENOSPC is the gated e2e
+// blob/disk-full.e2e.test.ts.
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -26,23 +18,16 @@ import {
   VaultDiskFullError,
 } from "./errors.js";
 
-// ESM's `node:fs` module namespace isn't configurable, so `vi.spyOn` can't
-// stub a single export directly (vitest#limitation) — this mocks the whole
-// module through to the real implementation, with `writeSync` swapped for a
-// toggleable stub, so the one test below can force an ENOSPC-shaped failure
-// deterministically without touching any other call in this file.
+// ESM's `node:fs` namespace isn't configurable for `vi.spyOn` — whole-module
+// mock with a toggleable `writeSync` stub.
 let writeSyncShouldFail = false;
 vi.mock(import("node:fs"), async (importOriginal) => {
-  // No type argument on importOriginal: passing the module as `import(...)`
-  // already types it, and restating `typeof import('node:fs')` here conflicts
-  // with the inferred namespace (which carries a synthetic `default`).
+  // No type argument on importOriginal: `import(...)` already types it.
   const actual = await importOriginal();
   return {
     ...actual,
-    // `Parameters<typeof actual.writeSync>` only captures the last overload
-    // of node:fs's heavily-overloaded `writeSync`, so this replacement isn't
-    // structurally assignable to the real (overloaded) type — assert it on
-    // this one property rather than widen the whole module.
+    // Captures only writeSync's last overload — asserted here rather than
+    // widening the module type.
     writeSync: ((...args: Parameters<typeof actual.writeSync>) => {
       if (writeSyncShouldFail) {
         throw Object.assign(new Error("no space left on device"), {
@@ -79,9 +64,8 @@ describe("errors", () => {
     const { db, err } = triggerSqliteFull();
     cleanups.push(() => db.close());
     expect(err).toBeDefined();
-    // Probe findings (node 22.22.2, node:sqlite): the error is a plain `Error`
-    // with `code: 'ERR_SQLITE_ERROR'`, `errcode: 13` (SQLITE_FULL per
-    // sqlite3.h), `errstr: 'database or disk is full'`.
+    // Probe findings (node 22.22.2): plain `Error`, ERR_SQLITE_ERROR,
+    // errcode 13 = SQLITE_FULL.
     expect((err as { code?: string }).code).toBe("ERR_SQLITE_ERROR");
     expect((err as { errcode?: number }).errcode).toBe(13);
     expect(isDiskFullError(err)).toBe(true);
@@ -108,9 +92,8 @@ describe("errors", () => {
     const { db, err } = triggerSqliteFull();
     cleanups.push(() => db.close());
     expect(isDiskFullError(err)).toBe(true);
-    // Raise the cap back and confirm the SAME connection still accepts writes
-    // and the row count matches only what committed before the failure (no
-    // half-applied insert survived).
+    // Raise the cap back: the SAME connection accepts writes again, and only
+    // pre-failure inserts survived.
     const before = (
       db.prepare("SELECT COUNT(*) c FROM t").get() as { c: number }
     ).c;
