@@ -744,6 +744,7 @@ touches only comments.
 
 ## Decisions
 
+- #861 merge onto main: hand-raise pins that absorbed origin/main's new comments (new product work, not a density regression) and pin newly added files at their merged measurement. Downward re-pins still applied where the merge lowered share. No cap was widened.
 - #861 merge onto main re-pins governed fingerprints: comment-only #861 bytes in packages/server/src/acp/backends/acp/vault-mcp-server.ts, packages/server/src/automation/manifest/manifest.ts, and packages/server/src/serve/health-registry.ts, plus packages/vault/src/schema/sealed.ts carrying both the #861 comment rewrite and #865's refresh_capability sealed-column expansion. No quality lost a gate, no gate lost its evidence, and every other governed fingerprint is unmoved.
 - #861 merge onto main: schema fingerprint moved because comment-only #861 edits across packages/vault/src/schema combine with #865's sync_connection_credential.refresh_capability (migration rung five, a plain ADD COLUMN). Already-walked table; the column MUST be carried — a restore that dropped it would hand back Assist refresh tokens the Worker refuses. exportVault walks SELECT *, so it rides along with no adapter; the audit is pinned by portability.test.ts 'an Assist refresh capability survives export and restore'.
 - The issue's seven "settled recommendations" are executed as ruled: delete

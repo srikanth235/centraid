@@ -1311,7 +1311,8 @@ describe("wal", () => {
     ).toBeUndefined();
 
     // An empty listing is indistinguishable from "never wrote anything" unless
-    // the pair marker vouches for what shipped.
+    // the pair marker vouches for what shipped. Without it (the pair marker)
+    // verify would report OK over hours that cannot restore.
     const state = (await f.service.status())[f.vaultId]!;
     const vaultSegments = (await walObjectFiles(f, state.targetId))
       .filter((file) => /wal[/\\]vault[/\\]/u.test(file))
