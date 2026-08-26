@@ -1,5 +1,5 @@
 /*
- * `centraid-gateway doctor` verb (issue #839 W1.2), end-to-end over a real
+ * `centraid-gateway doctor` verb (#839), end-to-end over a real
  * data dir: it opens the gateway's vaults, runs the scrub, prints findings,
  * and exits nonzero when a real fault is present.
  */

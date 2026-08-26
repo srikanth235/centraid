@@ -443,7 +443,6 @@ export function createSessionUpdateMapper(
     // user_message_chunk / available_commands_update / current_mode_update /
     // config_option_update: product owns slash commands; config updates are
     // consumed by the backend's pin state.
-    // product owns slash commands; harness command lists are ignored for now.
   };
 
   return {

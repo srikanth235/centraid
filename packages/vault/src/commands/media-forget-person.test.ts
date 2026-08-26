@@ -1,4 +1,4 @@
-// `media.forget_person` (issue #724 W5) — THE FACE-DELETE GATE that
+// `media.forget_person` (#724) — THE FACE-DELETE GATE that
 // SECURITY.md's "Derived data and sensitive enrichments" section made a
 // precondition for shipping face detection at all.
 //

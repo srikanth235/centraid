@@ -1,4 +1,4 @@
-// The two empty states (v9 §8, issue #765), behind one flag.
+// The two empty states (v9 §8, #765), behind one flag.
 //
 // FIRST-RUN (`routine` unset) is the whole screen: display rung, reading body,
 // a filled commit, 44ch. ROUTINE (`routine`) is one state of a normally

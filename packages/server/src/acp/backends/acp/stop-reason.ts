@@ -2,8 +2,8 @@
  * `session/prompt` RESULT `stopReason` — how the harness ended the turn.
  *
  * Wire values (ACP v1): end_turn | max_tokens | max_turn_requests | refusal |
- * cancelled. We used to ignore this and always emit `final`, so a refusal or
- * truncated turn looked like success to automations and the ledger. This
+ * cancelled. Ignoring it and always emitting `final` makes a refusal or a
+ * truncated turn look like success to automations and the ledger. This
  * module is the single place that decides what to emit.
  */
 

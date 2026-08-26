@@ -5,20 +5,9 @@
 // that line (`lint-hairline` and `lint-logical-insets` read `StyleSheet`,
 // `lint-design-tokens` and `lint-motion-rule` read `.css`). What is NOT
 // genuinely different is what a block is BEING TOLD. `net` means the same thing
-// on a phone as on a desktop, and when each kit declared that for itself the
-// two drifted — measurably:
-//
-//   * `PanelFact.key` was the DISPLAYED word on the shell and the React list
-//     identity on the phone, with a separate `label` carrying the word. One
-//     field name, two meanings, on the block a member reads facts from.
-//   * A row action carried a stated reason it was unavailable on the shell and
-//     could not carry one at all on the phone.
-//   * A panel could be toned `seam` on the phone and not on the shell; a fact
-//     could be `mono` on the shell and not on the phone; a panel action could be
-//     `dangerous` on the shell and not on the phone.
-//
-// None of that was a decision. It is what happens when the same idea is typed
-// twice, so the ideas are typed here once and each kit extends them with only
+// on a phone as on a desktop, and two independent declarations of a shared
+// meaning drift — #765 catalogues the measured drift that forced this module.
+// So the ideas are typed here once and each kit extends them with only
 // its platform half — `onClick`/`className`/`ariaLabel` against
 // `onPress`/`style`/`accessibilityLabel`. A kit must NOT redeclare a shared
 // field; if it needs a new one, it belongs here, in front of both surfaces.
@@ -29,9 +18,7 @@
 
 import type { IconName } from "../icons";
 
-// ---------------------------------------------------------------------------
-// The semantic flags, stated once
-// ---------------------------------------------------------------------------
+// ─── The semantic flags, stated once ───────────────────────────────────────
 //
 // Every flag below appears on more than one block and means exactly this
 // wherever it appears. Read these before adding a variant to either kit.
@@ -81,9 +68,7 @@ export interface ActionData {
   hint?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Rows
-// ---------------------------------------------------------------------------
+// ─── Rows ───────────────────────────────────────────────────────────────
 
 /** One row of the workhorse list — the block every ops page is mostly made of. */
 export interface RowData {
@@ -100,9 +85,7 @@ export interface RowData {
   struck?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Panel
-// ---------------------------------------------------------------------------
+// ─── Panel ──────────────────────────────────────────────────────────────
 
 /**
  * One fact in a panel's fact list.
@@ -155,9 +138,7 @@ export interface PanelFigureData {
   net?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Distribution
-// ---------------------------------------------------------------------------
+// ─── Distribution ───────────────────────────────────────────────────────
 
 /**
  * One labelled proportional row: a word, an already-worded figure, and the
@@ -197,9 +178,9 @@ export interface PanelActionData extends ActionData {
   dangerous?: boolean;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Chips
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** One chip of a filter group. */
 export interface ChipData {
@@ -211,9 +192,9 @@ export interface ChipData {
   on?: boolean;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Empty
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The copy of an empty state. `body` is REQUIRED: a title alone states that
@@ -226,9 +207,9 @@ export interface EmptyCopy {
   routine?: boolean;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Section
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** A section head: one label over a hairline, with an optional count beside it. */
 export interface SectionCopy {
@@ -263,9 +244,9 @@ export interface SectionActionData extends ActionData {
   off?: boolean;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Grid
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The register a column's values are drawn in.
@@ -317,9 +298,9 @@ export interface GridSortData {
   dir: "asc" | "desc";
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Button
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The data half of the system's oldest shared control.
@@ -336,7 +317,7 @@ export interface GridSortData {
  *    would invite a caller to ask for a 26px titlebar control on a touch
  *    surface.
  *
- *  * `commit` (#708, C7) is the shell's, and this one is NOT an oversight on
+ *  * `commit` (#708) is the shell's, and this one is NOT an oversight on
  *    the phone. On the shell a commit control disables itself while the gateway
  *    is down, because a shell write goes THROUGH the gateway and would simply
  *    fail. A phone write does not: it lands in the local replica and is

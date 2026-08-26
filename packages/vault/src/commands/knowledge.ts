@@ -4,7 +4,7 @@
 // never stores prose itself. Bodies follow the social.draft_message
 // mechanism exactly: sha256-deduped, inlined as data: URIs (rent the bytes,
 // own the reference). A notebook is a surface view over core_collection,
-// the one owner-curation mechanism (issue #274) — these commands keep their
+// the one owner-curation mechanism (#274) — these commands keep their
 // contracts while storage unifies, so a collection may also hold photos and
 // documents. Notebooks stay one-per-note in v1: the entry table allows
 // many-to-many, but move_note keeps a single placement until a real
@@ -44,7 +44,7 @@ export function contentItemFor(
   const mediaType = MEDIA_TYPE[format] ?? "text/plain";
   // Text bodies stay inline forever (the FTS trigger reads content_uri
   // in-transaction, no CAS redirect possible) — refuse rather than let an
-  // unbounded note body bloat vault.db (issue #367 §E4).
+  // unbounded note body bloat vault.db (#367).
   assertTextBodyWithinBudget(bodyText, mediaType);
   const sha = sha256Hex(bodyText);
   const existing = ctx.db
@@ -252,7 +252,7 @@ function editNote(ctx: HandlerCtx): Record<string, unknown> {
   if (input.body_text !== undefined) {
     // A body edit re-resolves the reference: new (or deduped) content item,
     // decoded with the format the note will have after this edit. Heals the
-    // notes/docs divergence (issue #352): a genuine bump gets the same
+    // notes/docs divergence (#352): a genuine bump gets the same
     // `revises` link core.edit_document records, so a note's edit history is
     // walkable through core_link exactly like a document's.
     contentId = contentItemFor(
@@ -585,7 +585,7 @@ function deleteNotebook(ctx: HandlerCtx): Record<string, unknown> {
   return { notebook_id: input.notebook_id, notes_unfiled: filed.n };
 }
 
-// Delete is TRASH (issue #308 A6): Tier 1's consent story is
+// Delete is TRASH (#308): Tier 1's consent story is
 // review-after-the-fact WITH undo, so the destructive verb must be
 // reversible from the review feed. The row soft-deletes with the same
 // 30-day grace window documents and assets carry; edges (placement,
@@ -670,7 +670,7 @@ function deleteNote(ctx: HandlerCtx): Record<string, unknown> {
   };
 }
 
-// The undo half (issue #308 A6): a trashed note comes back whole — row,
+// The undo half (#308): a trashed note comes back whole — row,
 // placement, annotations, attachments (never removed) and its body bytes.
 const RESTORE_NOTE: CommandDefinition = {
   name: "knowledge.restore_note",
@@ -849,7 +849,6 @@ const RESTORE_NOTE_VERSION: CommandDefinition = {
   },
 };
 
-/** Register the knowledge domain's commands on a gateway. */
 export function registerKnowledgeCommands(gateway: Gateway): void {
   gateway.registerCommand(CREATE_NOTE);
   gateway.registerCommand(EDIT_NOTE);

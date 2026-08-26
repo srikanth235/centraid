@@ -1,10 +1,9 @@
 // SECTION — the heading that opens one band of an operational page (#765).
 //
-// Every ops screen hand-rolled its own heading before this (Approvals'
-// `sectionTitle`, Automations' and Insights' panel heads), which is how three
-// surfaces ended up with three different rungs for the same object. The block
-// is deliberately thin: a rule, an uppercase micro label that never wraps, and
-// a numeric count that truncates instead of pushing the label around.
+// No ops screen hand-rolls its own heading: three surfaces with three
+// different rungs for the same object is what this block exists to prevent.
+// It is deliberately thin — a rule, an uppercase micro label that never wraps,
+// and a numeric count that truncates instead of pushing the label around.
 //
 // All copy — the label and the count sentence — comes from the caller. This
 // file owns geometry and ink, never words.

@@ -1,4 +1,4 @@
-// Coming due (handoff Part 2 §4; issue #821) — rendered HONESTLY ABSENT.
+// Coming due (handoff Part 2 §4; #821) — rendered HONESTLY ABSENT.
 //
 // Obligations are dates read out of documents by the `due` capability, staged
 // as tentative appointments each carrying the passage it was read from — "the

@@ -1,9 +1,5 @@
-// Enqueue: address the bytes, then durably record the intent to back them up.
-//
-// The content sha is computed HERE, at enqueue, and persisted — every later
-// step (resume, dedupe, seal AAD) is keyed by it, so it must be settled before
-// the item is considered queued. If the process dies mid-hash the item was
-// never enqueued and nothing is lost; the next pass re-hashes.
+// Sha computed HERE and persisted — resume, dedupe, and seal AAD all key on
+// it. A crash mid-hash left nothing enqueued; the next pass re-hashes.
 
 import { partCountFor, frameCountFor, sealedSizeFor } from "./cbsf";
 import type { FileSourceOpener } from "./file-source";
@@ -14,7 +10,7 @@ import type {
   UploadQueueStore,
 } from "./store";
 
-/** Hash window. Matches the seal frame size, so memory stays flat and bounded. */
+/** Must match the seal frame size. */
 const HASH_CHUNK_BYTES = 4 * 1024 * 1024;
 
 export interface EnqueueInput {
@@ -22,18 +18,12 @@ export interface EnqueueInput {
   targetVaultId?: string;
   mediaType?: string;
   filename?: string;
-  /** Caller-known plaintext size; verified against the opened file. */
+  /** Verified against the opened file. */
   plaintextSize: number;
-  /**
-   * Optional precomputed content digest. A producer that already hashed to
-   * probe the ledger (F11 — deciding whether to run the derivative pipeline)
-   * passes it here so the same 4 GB video is not streamed through SHA-256
-   * twice. Verified against the declared size just like a fresh hash.
-   */
+  /** Precomputed digest avoids hashing a 4 GB file twice (F11 probe); verified like a fresh hash. */
   digest?: { sha256: string; size: number };
 }
 
-/** The streaming-digest shape; `IncrementalSha256` is the portable default. */
 export interface StreamingDigest {
   update: (bytes: Uint8Array) => unknown;
   digestHex: () => string;
@@ -46,16 +36,7 @@ export interface EnqueueDeps {
   createDigest?: () => StreamingDigest;
 }
 
-/**
- * Stream a local file through SHA-256 without ever holding it in memory.
- *
- * The default digest is pure JS and therefore SLOW: ~35 MB/s on V8 and an
- * estimated ~12 MB/s on Hermes, so a 4 GB video costs minutes of hashing
- * before a byte is uploaded. Memory stays flat (one 4 MiB window) at any size,
- * so this is a latency cost, not a stability one. `createDigest` exists so the
- * device can pass a native streaming hash — the WebCrypto polyfill the sealer
- * needs (see crypto.ts) also brings a native `createHash`, ~50x faster.
- */
+/** Flat-memory streaming SHA-256; the JS default is slow (~12 MB/s on Hermes) — inject a native digest. */
 export async function sha256OfFile(
   openFile: FileSourceOpener,
   localUri: string,

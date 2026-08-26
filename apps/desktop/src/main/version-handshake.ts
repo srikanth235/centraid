@@ -1,5 +1,5 @@
 /*
- * Desktop re-export of the shared handshake core (issue #468 K10 / #512).
+ * Desktop re-export of the shared handshake core (#468 K10 / #512).
  * Implementation lives in @centraid/client so web and desktop stay lockstep.
  */
 export {

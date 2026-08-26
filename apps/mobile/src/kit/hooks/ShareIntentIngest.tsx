@@ -18,7 +18,7 @@ export function ShareIntentIngest(): null {
     useShareIntentContext();
   const { session, gatewayBase, vaultId } = useReplica();
   // One gate across renders: a re-render while an ingest is still in flight must
-  // not spawn a second pass over the same files (#431 F9). The memoized gate
+  // not spawn a second pass over the same files (#431). The memoized gate
   // has mount lifetime without a render-time ref read/write.
   const gate = useMemo(() => new ShareIntentGate(), []);
   const reviewing = useRef("");

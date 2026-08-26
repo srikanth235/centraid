@@ -1,47 +1,16 @@
 /*
- * Per-subsystem resource ACTUALS — the honest counterpart to the resolved
- * Resource profile (#528 Phase A/B, which says what the gateway is ALLOWED
- * to spend). This records what each background subsystem actually did:
- * replication passes and bytes, backup drains and bytes, vault + outbox
- * sweep passes, worker-pool tasks, and harness turns — each with the
- * wall-clock it occupied.
- *
- * Design constraints (issue #528 Phase C):
- *   - MEASURED PROXIES ONLY. Never a fabricated watt or a synthesized
- *     energy figure — the fields are counts, byte totals, wall-clock ms,
- *     and the OS-reported process CPU/RSS. `harnessRuns.cpuSeconds` stays
- *     `null`: Node cannot cheaply read a child process's rusage across
- *     platforms, so we do not guess it.
- *   - HARNESS RUNS ARE ACCOUNTED, NEVER THROTTLED. This class only counts;
- *     nothing here gates or defers a run.
- *   - NEGLIGIBLE OVERHEAD. No timers of its own. CPU/RSS are read lazily
- *     inside `snapshot()` (at the health-poll cadence) and at each
- *     subsystem-completion hook — never on a hot path. The rolling-hour
- *     window is a small timestamp array pruned on record/read.
- *
- * Pure and gateway-free: the clock, the CPU reader, and the RSS reader are
- * all injectable, so this is unit-testable with a fake clock and no process
- * state. `build-gateway.ts` constructs one at boot, wires the record* hooks
- * through the vault registry / backup service / worker admission / harness
- * turns, and publishes `snapshot()` on the health metrics source.
+ * Measured resource actuals (#528). Binding: proxies only — counts, bytes,
+ * wall-clock, OS CPU/RSS, never a modeled watt; counts but never throttles;
+ * no timers of its own and no sampling on a hot path.
  */
 
-/** Rolling window for `backgroundTimerFiresLastHour`. */
 const HOUR_MS = 60 * 60 * 1000;
 
-/**
- * Measured per-subsystem resource actuals, published as
- * `metrics.resourceUsage` on the gateway health snapshot (#528 Phase C).
- * Every field is an OS- or code-measured number — no modeled energy.
- */
 export interface ResourceUsageActuals {
-  /** epoch ms when accounting started (gateway boot) */
   sinceMs: number;
   process: {
-    /** process-wide user+system CPU seconds since boot (process.cpuUsage) */
     cpuSecondsTotal: number;
     currentRssBytes: number;
-    /** max rss observed at sample points (snapshot reads + subsystem completions) */
     peakRssBytes: number;
   };
   subsystems: {
@@ -51,29 +20,20 @@ export interface ResourceUsageActuals {
     sweeps: { passes: number; busyMs: number };
     harnessRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
   };
-  /** count of background timer fires (sweep/outbox/backup scheduler ticks) in the last rolling hour, or null before first window */
+  /** Null until the first full rolling hour has elapsed. */
   backgroundTimerFiresLastHour: number | null;
 }
 
-/** Live worker-pool cumulative counters, read at snapshot time (source: `WorkerAdmission`). */
 export interface WorkerPoolActuals {
   tasks: number;
   busyMs: number;
 }
 
 export interface ResourceAccountingOptions {
-  /** Wall clock (ms). Injected in tests; defaults to `Date.now`. */
   now?: () => number;
-  /** Process CPU reader; defaults to `process.cpuUsage` (microseconds since boot). */
   cpuUsage?: () => { user: number; system: number };
-  /** Resident-set-size reader (bytes); defaults to `process.memoryUsage().rss`. */
   rss?: () => number;
-  /**
-   * Live worker-pool counters. The worker pool tracks its own cumulative
-   * `tasks`/`busyMs` (issue #351 admission gate lives in app-engine, which
-   * must not depend on the gateway), so the gateway reads them here at
-   * snapshot time rather than pushing a per-task hook across the boundary.
-   */
+  /** Pulled, not pushed: the #351 admission gate must not depend on the gateway. */
   workerPoolStats?: () => WorkerPoolActuals;
 }
 
@@ -82,12 +42,7 @@ interface SubsystemBusy {
   busyMs: number;
 }
 
-/**
- * Accumulates per-subsystem actuals. All `record*` methods are cheap
- * counter bumps plus one RSS sample; `snapshot()` reads CPU/RSS once and
- * assembles the DTO. Every method tolerates being called from a detached
- * promise — nothing here throws or awaits.
- */
+/** Every method must stay non-throwing: callers invoke them from detached promises. */
 export class ResourceAccounting {
   private readonly now: () => number;
   private readonly cpuUsage: () => { user: number; system: number };
@@ -107,7 +62,6 @@ export class ResourceAccounting {
   private harnessRuns = 0;
   private harnessBusyMs = 0;
 
-  /** Epoch-ms timestamps of background timer fires; pruned to the last hour. */
   private readonly timerFires: number[] = [];
 
   constructor(options: ResourceAccountingOptions = {}) {
@@ -120,7 +74,6 @@ export class ResourceAccounting {
     this.sampleRss();
   }
 
-  /** One blob-replication sweep completed on a vault plane. */
   recordReplicationPass(info: {
     bytesReplicated: number;
     durationMs: number;
@@ -131,7 +84,6 @@ export class ResourceAccounting {
     this.sampleRss();
   }
 
-  /** One backup WAL drain completed (per vault, per pass). */
   recordBackupDrain(info: { bytesUploaded: number; durationMs: number }): void {
     this.backupDrains += 1;
     this.backupBytesUploaded += Math.max(0, info.bytesUploaded);
@@ -139,25 +91,19 @@ export class ResourceAccounting {
     this.sampleRss();
   }
 
-  /** One vault-plane lifecycle sweep OR one outbox sweep pass completed. */
   recordSweepPass(info: { durationMs: number }): void {
     this.sweeps.passes += 1;
     this.sweeps.busyMs += Math.max(0, info.durationMs);
     this.sampleRss();
   }
 
-  /**
-   * One harness run finished (chat/builder/ask/delegate turn). `durationMs` is
-   * wall-clock spawn→exit. Recorded on both success and failure — the host
-   * consumed the wall-clock either way (the honest proxy). Never throttled.
-   */
+  /** Record on failure too: the host spent the wall-clock either way. */
   recordHarnessRun(info: { durationMs: number }): void {
     this.harnessRuns += 1;
     this.harnessBusyMs += Math.max(0, info.durationMs);
     this.sampleRss();
   }
 
-  /** A background scheduler tick fired (vault sweep / outbox / backup clock). */
   recordBackgroundTimerFire(): void {
     this.timerFires.push(this.now());
     this.pruneTimerFires();
@@ -190,7 +136,7 @@ export class ResourceAccounting {
         harnessRuns: {
           runs: this.harnessRuns,
           busyMs: this.harnessBusyMs,
-          // Intentionally null in v1: no cheap cross-platform child rusage.
+          // Stays null: no cheap cross-platform child rusage to measure.
           cpuSeconds: null,
         },
       },
@@ -198,18 +144,12 @@ export class ResourceAccounting {
     };
   }
 
-  /** Sample RSS and advance the peak; returns the current reading. */
   private sampleRss(): number {
     const rss = this.rss();
     if (rss > this.peakRssBytes) this.peakRssBytes = rss;
     return rss;
   }
 
-  /**
-   * Null until a full hour has elapsed since boot — a rolling-hour figure
-   * is not yet meaningful before its first complete window. After that, the
-   * count of fires within the last hour.
-   */
   private backgroundTimerFires(): number | null {
     const now = this.now();
     if (now - this.sinceMs < HOUR_MS) return null;

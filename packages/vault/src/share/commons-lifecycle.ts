@@ -409,7 +409,7 @@ export function commonsSeats(input: {
   grantId: string;
   stewardVaultId: string;
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
-  /** Replica executor for command-tail replay (issue #750). A host that
+  /** Replica executor for command-tail replay (#750). A host that
    * cannot invoke into a mounted seat omits it and that seat re-projects. */
   invokeFor?: (
     vaultId: string,

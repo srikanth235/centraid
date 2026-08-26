@@ -1,8 +1,8 @@
 /*
  * The scope a durable access receipt is written from is PARSED, not cast
- * (#750 abstraction 5). Before this, `JSON.parse(scope_json) as string[]`
- * turned every malformed row into a silently empty audit record — the one
- * failure a receipt exists to prevent.
+ * (#750 abstraction 5). A `JSON.parse(scope_json) as string[]` cast turns
+ * every malformed row into a silently empty audit record — the one failure a
+ * receipt exists to prevent.
  */
 
 import { describe, expect, test } from "vitest";

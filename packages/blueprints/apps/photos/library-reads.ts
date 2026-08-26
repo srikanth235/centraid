@@ -1,23 +1,13 @@
-// The two host adapters the library store needs (issue #599), lifted out of
-// app-root.tsx: how a `library` read reaches N scopes on this host, and how a
-// refetch is deferred. Both are pure plumbing with no app state, which is why
-// they live here rather than inside the mount closure.
 import { subscribeReadUpdates } from "@centraid/design/elements";
 
 import type { ScopeReadResult } from "./library-store.ts";
 import type { LibraryData } from "./types.ts";
 
 /**
- * Fan the `library` query across scopes. `readAll` is the multi-scope door —
- * settled per scope, so one failing audience never sinks the others. A
- * single-scope host that has no `readAll` (the served bridge, the visual
- * harness mock, an older shell) gets the plain `read` it always had, with its
- * answer attributed to the one scope it was asked for — INCLUDING its live-read
- * subscription, when the host's read carries one: such a read pushes a fresh
- * projection straight from the replica with no round trip, and `onLive` is how
- * that push reaches the store. The multi-scope `readAll` door hands back one
- * settled array rather than N live reads, so a fan-out has no push channel and
- * refetches through the change feed instead.
+ * Fan the `library` query across scopes via `readAll`, settled per scope so
+ * one failing audience never sinks the others; hosts without `readAll` fall
+ * back to per-scope `read` + live subscription (`onLive`). `readAll` has no
+ * push channel — refetches go through the change feed.
  */
 export async function readLibraryScopes(
   scopeIds: readonly string[],
@@ -47,8 +37,7 @@ export async function readLibraryScopes(
   if (onLive) {
     reads.forEach((read, index) => {
       const scopeId = scopeIds[index]!;
-      // One subscription per scope at a time: the previous read's is dropped
-      // when its replacement lands, exactly as the pre-#599 single read did.
+      // One live subscription per scope at a time: the new read replaces the old.
       liveSubscriptions.get(scopeId)?.();
       const subscription = subscribeReadUpdates<LibraryData>(read, (value) =>
         onLive(scopeId, value)
@@ -73,22 +62,17 @@ export async function readLibraryScopes(
 /** Live-read teardowns by scope; replaced per read, cleared on unmount. */
 const liveSubscriptions = new Map<string, () => void>();
 
-/** Drop every live-read subscription. Called when the app unmounts. */
+/** Drop every live-read subscription. */
 export function stopLiveReads(): void {
   for (const unsubscribe of liveSubscriptions.values()) unsubscribe();
   liveSubscriptions.clear();
 }
 
-/** Debounce interval for a refetch, matching the pre-#599 change-feed delay. */
+/** Matches the pre-#599 change-feed delay. */
 const REFETCH_MS = 200;
 
-/**
- * A per-KEY debounce. One shared debounce would coalesce two different scopes'
- * bursts into a single refetch of whichever ran last; keying by scope keeps
- * each scope's burst on its own clock, which is the whole point of refetching
- * one scope at a time. `debounce` is injected (the kit's, in the app) so this
- * module stays free of the browser kit.
- */
+/** Per-key debounce: a shared one would coalesce distinct scopes' bursts into
+ *  a refetch of whichever ran last. `debounce` injected — no browser kit here. */
 export function createRefetchScheduler(
   debounce: (fn: () => void, ms: number) => () => void
 ): (key: string, run: () => void) => void {

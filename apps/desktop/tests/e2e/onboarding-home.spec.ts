@@ -39,8 +39,7 @@ test("1.1 — first launch reaches Home without a profile gate", async () => {
   await seedRemoteGateway(env, gateway, { onboarding: true });
   const { app, page } = await launchApp(env);
   try {
-    // Desktop first run is chooser-first (#603). The fresh path should now
-    // connect and hand off to Home without asking for identity details.
+    // First run is chooser-first (#603); no identity gate on the fresh path.
     const onboarding = page.getByTestId("onboarding-view");
     const chooser = page.getByTestId("first-run-choice");
     await chooser.waitFor({ state: "visible" });
@@ -62,19 +61,15 @@ test("1.1 — first launch reaches Home without a profile gate", async () => {
 });
 
 test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home', async () => {
-  // Issue #603 replaced the founding ceremony (create-vault + recovery-kit
-  // download + verify) with a two-option chooser. On a virgin install the
-  // desktop deliberately does NOT start its local gateway until the user picks
-  // "Start fresh on this Mac" — that start is what would otherwise pop an OS
-  // keychain prompt before any UI. The gateway then founds Personal itself;
-  // profile identity stays optional and is edited later from Settings → You.
+  // First run is a two-option chooser, not a founding ceremony (#603). The local
+  // gateway stays unstarted until the user picks, so no keychain prompt precedes
+  // any UI; the gateway founds Personal itself and profile identity is optional.
   const { app, page } = await launchApp(env);
   try {
     const chooser = page.getByTestId("first-run-choice");
     await chooser.waitFor({ state: "visible" });
 
-    // Lazy-start AC: nothing has resolved a local gateway URL yet, so no
-    // keychain write has happened.
+    // No local gateway URL resolved yet, so no keychain write has happened.
     const beforeConnect = (await page.evaluate(() =>
       window.CentraidApi.getSettings()
     )) as {
@@ -89,9 +84,7 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
     const onboarding = page.getByTestId("onboarding-view");
     await onboarding.waitFor({ state: "visible" });
 
-    // The fresh/local path connects on mount and enters Home directly. The
-    // optional profile step is gone; the H5 service tip is also not blocking.
-    // Onboarding view gone, home shell present.
+    // The fresh path enters Home directly; no profile step, and H5 does not block.
     await onboarding.waitFor({ state: "detached" });
     await waitForHome(page);
     const evidenceDir = path.resolve(
@@ -107,9 +100,6 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
       path: path.join(evidenceDir, "issue-686-design-consistency.png"),
       fullPage: true,
     });
-    // #805: first-run Home is where the rewritten shell copy lands — the
-    // one-sentence HOME_FIRST_RUN_BODY and the sample-data offer hint, both
-    // cut to budget by the copy audit.
     await page.screenshot({
       path: path.join(evidenceDir, "issue-805-crisp-ux-copy.png"),
       fullPage: true,
@@ -146,18 +136,11 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
       path: path.join(evidenceDir, "issue-726-vault-as-share-unit.png"),
       fullPage: true,
     });
-    // #750 continues #726 on the same surface. Household — where the sharing
-    // card and its steward-recovery rows live — does not render against this
-    // mock gateway, so a Household frame here would evidence an error state
-    // rather than the change; first-run Home is the frame this file has used
-    // for every sharing-plane issue before it.
+    // Household does not render against the mock gateway; Home is the honest frame.
     await page.screenshot({
       path: path.join(evidenceDir, "issue-750-vault-sharing.png"),
       fullPage: true,
     });
-    // #776's quick-add is a post-onboarding ShareSheet surface; the focused
-    // web/mobile tests exercise that dialog, while this unchanged first-run
-    // frame records the desktop shell evidence required by the UI receipt.
     await page.screenshot({
       path: path.join(evidenceDir, "issue-776-sharesheet-quick-add.png"),
       fullPage: true,
@@ -167,8 +150,7 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
       fullPage: true,
     });
 
-    // Persisted flag means a relaunch would skip onboarding, and the local
-    // gateway is now really running.
+    // A relaunch skips onboarding; the gateway is really running.
     const persisted = (await page.evaluate(() =>
       window.CentraidApi.getSettings()
     )) as {
@@ -178,8 +160,7 @@ test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home',
     expect(persisted.onboardingCompletedAt).toBeTruthy();
     expect(persisted.gatewayUrl ?? "").not.toBe("");
 
-    // The one auto-founded vault remains Personal until an explicit Settings
-    // action changes its name.
+    // The auto-founded vault stays Personal until an explicit rename.
     const listed = (await page.evaluate(() =>
       window.CentraidApi.listGatewayVaults({ gatewayId: "local" })
     )) as { vaults?: Array<{ name: string }> };
@@ -203,14 +184,11 @@ test("1.4 — a returning user (onboarding already complete) boots straight to h
 
 // ─────────────────────────── §2 Home / tiles ───────────────────────────
 //
-// Home is the content springboard (#708), not a library of app cards with
-// draft/new badges. First-party apps paint as content tiles or day-one first
-// moves; custom apps open from the command palette. The tests below track that
-// product surface.
+// Home is the content springboard (#708), not a library of app cards: first-party
+// apps paint as tiles or day-one first-moves, custom apps open from the palette.
 
 test("2.1 — home paints the springboard (or day-one first-moves) for first-party apps", async () => {
-  // Empty listing: Home still has the eight first-party ids from the vault
-  // mount path in real life; the mock has none, so day-one first-moves show.
+  // The mock lists no apps, so day-one first-moves show instead of tiles.
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -220,30 +198,17 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
     const firstRun = page.getByTestId("home-first-run");
     // One of the two graded treatments must be visible.
     await expect(springboard.or(firstRun)).toBeVisible();
-    // No library shelf / composer on Home any more.
+    // No library shelf / composer on Home.
     await expect(page.getByTestId("home-composer")).toHaveCount(0);
     await expect(page.getByTestId("shelf-empty")).toHaveCount(0);
     await expect(
       page.locator('[role="tablist"][aria-label="Filter your library by kind"]')
     ).toHaveCount(0);
     await expect(page.getByTestId("home-health-ribbon")).toBeVisible();
-    // Perceived-latency budget (#785): opening is a local frame-state change,
-    // so the companion must appear within 100ms of the member gesture. Measure
-    // in the renderer to exclude Playwright transport latency.
-    //
-    // MutationObserver, NOT a requestAnimationFrame poll (#842). The rAF loop
-    // this replaced stopped when the RUNNER next scheduled a frame, so on a
-    // shared CI machine the number was dominated by frame cadence rather than
-    // by anything the product does: 180.6 ms and 209.8 ms on macOS against a
-    // ceiling of 100, while the same build passed on Linux. A budget that
-    // reports the runner's contention is not a budget, and one that is red on
-    // every macOS and Windows run stops being read at all.
-    //
-    // The CEILING IS UNCHANGED at 100 ms — this is not a widening. What changed
-    // is that the interval now ends when the dialog enters the DOM, which is
-    // the work the gesture actually causes and the thing #785's claim is about.
-    // The observer is armed BEFORE the click so a synchronous open cannot slip
-    // through between the two.
+    // Perceived-latency budget (#785), measured in the renderer to exclude
+    // Playwright transport. MutationObserver, never an rAF poll (#842): an rAF
+    // loop measures the runner's frame cadence, not the product. Arm the observer
+    // BEFORE the click so a synchronous open cannot slip between the two.
     const assistantOpenMs = await page.evaluate(async () => {
       const button = document.querySelector<HTMLButtonElement>(
         'button[aria-label="Ask Assistant"]'
@@ -262,8 +227,7 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
       });
       started = performance.now();
       button.click();
-      // A synchronous render would already have landed, and fires no mutation
-      // record the observer above could still be waiting for.
+      // A synchronous render lands with no mutation record to observe.
       if (companion()) return performance.now() - started;
       return appeared;
     });
@@ -286,8 +250,7 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
 });
 
 test("2.2 — day-one Home offers first-moves rather than a shelf-empty card", async () => {
-  // First-party empties: day-one first-moves only appear for installed apps
-  // with empty bodies (buildHomeTiles filters to installedIds).
+  // First-moves appear only for installed apps with empty bodies.
   gateway.state.apps = [
     appEntry({ id: "photos", name: "Photos" }),
     appEntry({ id: "notes", name: "Notes" }),
@@ -296,8 +259,7 @@ test("2.2 — day-one Home offers first-moves rather than a shelf-empty card", a
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // With installed apps but no vault content, Home is day-one: first-moves
-    // into apps that can take content, not a "Nothing here yet" library card.
+    // Installed apps, no vault content: first-moves, not a library card.
     await expect(page.getByTestId("home-first-run")).toBeVisible();
     await expect(page.getByTestId("home-first-move").first()).toBeVisible();
     await expect(page.getByTestId("home-composer")).toHaveCount(0);
@@ -312,9 +274,7 @@ test("2.3 — opening a first-party app via the palette lands in the inline app 
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // Home no longer hosts library cards (#708); the palette is the open path
-    // for any installed app. Custom served apps are gone (#799); Tasks is a
-    // bundled inline route.
+    // Home hosts no library cards (#708); the palette opens any installed app.
     await openAppFromPalette(page, "Tasks");
     await expect(page.getByTestId("inline-app-view")).toBeVisible();
   } finally {
@@ -330,9 +290,7 @@ test("2.5 — App settings on an inline app is not in the frame", async () => {
     await waitForHome(page);
     await openAppFromPalette(page, "Tasks");
     await expect(page.getByTestId("inline-app-view")).toBeVisible();
-    // v11 unmounted the frame gear. The door it opened is gone until a
-    // handoff puts one back; pin the absence rather than click a control
-    // the chrome no longer draws.
+    // The frame gear is unmounted; pin its absence rather than click it.
     await expect(
       page.getByRole("button", { name: "App settings" })
     ).toHaveCount(0);
@@ -345,14 +303,13 @@ test("2.5 — App settings on an inline app is not in the frame", async () => {
 });
 
 test("2.6 — opening a first-party app from Home lands in the app view", async () => {
-  // Seed a first-party listing row so notes is installed (not a draft).
+  // A listing row makes notes installed, not a draft.
   gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // Notes is first-party: empty content → first-move; with content → tile.
-    // Either carries data-app-id="notes".
+    // First-move or tile, depending on content.
     await openTile(page, "notes");
     await expect(
       page.locator('[data-testid="app-view"], [data-testid="inline-app-view"]')
@@ -363,13 +320,8 @@ test("2.6 — opening a first-party app from Home lands in the app view", async 
 });
 
 test("2.6b — Photos opens into the app view and yields the #711 UI evidence", async () => {
-  // The ui-receipt gate (scripts/validate-ui-receipt.mjs) wants a screenshot
-  // emitted by a CHANGED harness, and #711 is a Photos rewrite — so the frame
-  // it captures has to be Photos itself. Screenshotting Home under a
-  // `photos` filename would satisfy the regex and lie to the reviewer, which
-  // is the one thing a visual-evidence gate cannot afford.
-  // #801 only remaps package imports; the Photos frame this harness captures
-  // is unchanged.
+  // The ui-receipt gate wants a frame of the CHANGED surface: screenshotting Home
+  // under a `photos` filename passes the regex and lies to the reviewer.
   gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -395,10 +347,6 @@ test("2.6b — Photos opens into the app view and yields the #711 UI evidence", 
 });
 
 test("2.6c — Photos opens into the app view and yields the #712 UI evidence", async () => {
-  // Same contract as 2.6b: the ui-receipt gate wants the evidence frame to be
-  // the surface the change set touched. #712's engine consumers (the sharing
-  // roster, the triage queue, the search scaffold) all live inside Photos'
-  // app view, so Photos-open is the honest frame here too.
   gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -424,12 +372,6 @@ test("2.6c — Photos opens into the app view and yields the #712 UI evidence", 
 });
 
 test("2.6d — Photos opens into the app view and yields the #721 UI evidence", async () => {
-  // Same contract as 2.6b/2.6c: the evidence frame is the surface the change
-  // set touched. #721's structural core lands in Photos — the Takeout import
-  // door, the semantic search hit group, the honored key photo, the Videos
-  // shelf — so Photos-open is the honest frame. The native-only surfaces
-  // (mobile search, shelves) have no e2e harness of their own; this frame
-  // evidences the shared Photos surface those changes feed.
   gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -455,14 +397,6 @@ test("2.6d — Photos opens into the app view and yields the #721 UI evidence", 
 });
 
 test("2.6e — Photos opens into the app view and yields the #724 UI evidence", async () => {
-  // Same contract as 2.6d, one issue on. #724's user-visible surfaces are
-  // native-only (the People roster and its Detect-faces consent gate, the
-  // Memories rails, the camera-roll import offer) and have no e2e harness of
-  // their own; Photos-open is the shared surface every one of them feeds, so
-  // it is the honest frame for this change set too. The gateway-side half of
-  // #724 — recognition automation, OCR and faces flows — has no pixels
-  // by construction: it answers honestly unavailable until local model assets
-  // are installed, which is exactly what this frame shows.
   gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -488,10 +422,6 @@ test("2.6e — Photos opens into the app view and yields the #724 UI evidence", 
 });
 
 test("2.6f — Photos opens into the app view and yields the #739 UI evidence", async () => {
-  // #739 changes Photos' Places map and the surrounding shell, so the honest
-  // evidence frame is the Photos app inside that shell. Geometry and renderer
-  // behavior are pinned by their focused tests; this capture proves the
-  // integrated surface still opens and paints under the desktop host.
   gateway.state.apps = [appEntry({ id: "photos", name: "Photos" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -522,8 +452,7 @@ test("2.7 — the stem nav is present and All apps is reachable", async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // The fixed stem (#707) replaced the collapsible sidebar — it does not
-    // toggle open/closed, and All apps lives in the foot.
+    // The stem is fixed, not a collapsible sidebar (#707); All apps is in the foot.
     await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
     await page.getByRole("button", { name: /All apps/iu }).click();
     await expect(
@@ -554,8 +483,7 @@ test("2.8 — the command palette opens from the stem Search control", async () 
   }
 });
 
-// Extra declared journeys keep desktop-real-journey minimumTests (13) met after
-// the Binding Layer removed the library-card suite from this file.
+// Keeps desktop-real-journey minimumTests (13) met.
 test("2.9 — palette has no Build a new app row after the builder retired", async () => {
   gateway.state.apps = [];
   await seedRemoteGateway(env, gateway);

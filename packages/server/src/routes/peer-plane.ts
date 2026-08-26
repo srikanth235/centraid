@@ -1,24 +1,9 @@
 /*
- * The peer plane (issue #726 P3 decision 6) — `/centraid/_peer/*`.
- *
- * Everything a LINKED gateway may reach lives under this prefix and nothing
- * else does. Three invariants hold here regardless of what the transport did:
- *
- *  1. IDENTITY. A request is a peer request only if it carries the forwarder's
- *     peer proof. A device identity header is never read here, and a request
- *     without the proof is `not_found` — the route layer never infers a peer
- *     from a device, which is the whole point of the separate lane.
- *  2. CONFINEMENT. The handler re-checks `isPeerPlaneTarget` itself. The HTTP
- *     router resolves `..` before dispatch, so this check cannot be the only
- *     one — the forwarders' guards are load-bearing — but it does mean a
- *     future forwarder that forgets is still confined here.
- *  3. TOPOLOGY HIDING. Unknown link, revoked link, unknown vault, and unknown
- *     route all answer the same `not_found` state. A caller learns only about
- *     links it already holds.
- *
- * Refusals are STATES, never exceptions: the caller is another gateway's
- * protocol code, and a thrown error would reach it as a transport fault it
- * cannot act on.
+ * The peer plane (#726 P3 decision 6). IDENTITY: only the forwarder's peer
+ * proof makes a peer request, a device header is NEVER read. CONFINEMENT: the
+ * handler re-checks `isPeerPlaneTarget` itself. TOPOLOGY HIDING: unknown link,
+ * revoked link, unknown vault and unknown route answer alike. Refusals are
+ * STATES, never exceptions — the caller is protocol code.
  */
 
 import crypto from "node:crypto";
@@ -64,20 +49,13 @@ export const PEER_LINK_HELLO_PATH = `${PEER_PLANE_PREFIX}link/hello`;
 export const PEER_ROUTE_ASSERT_PATH = `${PEER_PLANE_PREFIX}route/assert`;
 
 export interface PeerPlaneDeps {
-  /** The one link table — same rows a same-machine edge is judged against. */
   links: VaultLinksStore;
-  /** Per-boot proof only this process's forwarders know. */
   peerProof: string;
-  /** Base64 identity public key of a LOCAL vault (P1). */
   vaultPublicKey: (vaultId: string) => string | undefined;
   ownerPartyFor?: (vaultId: string) => string | undefined;
-  /** This gateway's current dial route, for the mutual half of the ceremony. */
   localRoute: () => { endpointId?: string; relayHints: string[] };
-  /** How this side names itself to the peer. */
   localLabel: () => string;
-  /** Per-link hygiene budget (threat 7). */
   budget?: TokenBucket;
-  /** Commons commands execute once through the steward's ordinary gateway. */
   commonsVaultFor?: (
     vaultId: string
   ) => ExecuteCommonsCommandInput["steward"] | undefined;
@@ -91,37 +69,14 @@ export interface PeerPlaneDeps {
 
 export interface PeerIdentity {
   endpointId: string;
-  /** Coarse admission signal ONLY: does ANY live link route through this
-   *  endpoint at all? A route uses this to refuse a total stranger before it
-   *  bothers validating anything else about the request, so a malformed body
-   *  from someone with no link at all still answers `not_found`, never
-   *  `bad_request`. Never attribution — which SPECIFIC link a request
-   *  concerns is always `linkFor`'s job. */
+  /** Coarse admission ONLY: a stranger's malformed body answers `not_found`,
+   *  never `bad_request`. Attribution is `linkFor`'s job. */
   linked: boolean;
-  /**
-   * Resolve the link this request concerns, given ONLY the vault the peer
-   * claims to act as (audit #726 finding 2). An iroh endpoint is per-GATEWAY,
-   * not per-vault (D1 invariant 2), so two vaults co-hosted on one remote
-   * gateway share an `endpointId` — a route may NOT infer which link a
-   * request means from the endpoint alone. Every caller of this must feed it
-   * a vault id the REQUEST itself claims (a wire field, or this gateway's own
-   * trusted row keyed by an id the request named) — never a guess. Returns
-   * `undefined` for a claim naming a vault with no live, unrevoked link
-   * routed through exactly this endpoint.
-   *
-   * Ambiguous the OTHER way when this gateway itself hosts more than one
-   * local vault linked to the SAME peer vault — there is no wire field here
-   * to pin the local side down. Use `linkForPair` instead whenever a trusted
-   * row already names both vault ids; it is strictly more precise.
-   */
+  /** An endpoint is per-GATEWAY, not per-vault (D1 inv. 2): feed this a vault
+   * id the REQUEST claims, never a guess. Prefer `linkForPair` (#726). */
   linkFor: (peerVaultId: string) => LinkedPeer | undefined;
-  /**
-   * Resolve the link for an EXACT (local vault, peer vault) pair, verified
-   * against the endpoint this request actually proved. Use this whenever the
-   * caller already has BOTH vault ids from its OWN trusted bookkeeping (an
-   * edge/commons row keyed by an id the request named) — it is immune to both
-   * directions of the co-hosting ambiguity `linkFor` alone is not.
-   */
+  /** Exact pair, verified against the proved endpoint: immune to both
+   * directions of the co-hosting ambiguity `linkFor` is not. */
   linkForPair: (
     localVaultId: string,
     peerVaultId: string
@@ -142,7 +97,6 @@ function matchesProof(candidate: unknown, expected: string): boolean {
   );
 }
 
-/** A string field that must be present and non-empty; else the state is bad_request. */
 function readString(
   body: Record<string, unknown>,
   key: string
@@ -173,9 +127,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
         deps.links.peerForEndpointAndVault(endpointId, peerVaultId),
       linkForPair: (localVaultId, peerVaultId) => {
         const view = deps.links.peerForVault(peerVaultId, localVaultId);
-        // The pair lookup is exact by construction; the endpoint check is
-        // what stops a peer at the WRONG endpoint from riding a stale cached
-        // route for a pair it does not currently hold.
         return view && view.route.endpointId === endpointId ? view : undefined;
       },
     };
@@ -192,8 +143,7 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     } catch {
       return sendJson(res, 400, { state: "bad_request" });
     }
-    // The update wall runs BEFORE the ticket is touched: a version-mismatched
-    // peer must not burn a one-time ticket it cannot finish redeeming.
+    // BEFORE the ticket: a mismatched peer must not burn one it cannot redeem.
     const verdict = judgePeerHandshake(body);
     if (verdict.state !== "ok") {
       return sendJson(res, verdict.state === "bad_request" ? 400 : 409, {
@@ -210,17 +160,12 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     if (!ticketId || !secret || !peerVaultId || !peerPublicKey) {
       return sendJson(res, 400, { state: "bad_request" });
     }
-    // The far side of a link is, by definition, not here. A redemption that
-    // names a vault THIS gateway holds is claiming an identity it cannot
-    // have, and accepting it would hand that vault a route row — which is
-    // precisely what "this vault lives elsewhere" means (#750 invariant 2),
-    // so the owner's next give to their own vault would be exported to the
-    // claimant instead of staying local.
+    // A redemption naming a vault THIS gateway holds claims an identity it
+    // cannot have; accepting it exports the owner's own give (#750 inv. 2).
     if (deps.vaultPublicKey(peerVaultId) !== undefined) {
       return sendJson(res, 400, { state: "bad_request" });
     }
-    // The redemption binds to the endpoint the QUIC handshake PROVED. A body
-    // that names a different one is a relay attempt, not a ceremony.
+    // Bind to the PROVED endpoint; a differing body is a relay attempt.
     if (claimedEndpoint !== undefined && claimedEndpoint !== peer.endpointId) {
       return sendJson(res, 400, { state: "bad_request" });
     }
@@ -229,8 +174,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
       secret,
       peerVaultId,
       peerPublicKey,
-      // The route binds to the endpoint the QUIC handshake PROVED, never the
-      // body's claim.
       route: {
         endpointId: peer.endpointId,
         relayHints: readHints(body.relayHints),
@@ -247,8 +190,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
           : {}),
       },
     });
-    // Unknown, expired, already-burned, and wrong-secret are one state: a
-    // scanner learns nothing about tickets it does not hold.
     if (!link) return notFound(res);
     const publicKey = deps.vaultPublicKey(link.localVaultId);
     const ownerPartyId = deps.ownerPartyFor?.(link.localVaultId);
@@ -290,20 +231,14 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     }
     const assertion = parseRouteAssertion(body);
     if (!assertion) return sendJson(res, 400, { state: "bad_request" });
-    /*
-     * A rotated peer dials from a NEW EndpointId, so the caller is very likely
-     * unrecognised here — that is exactly the case this route exists for. The
-     * authority is the vault SIGNATURE, plus the requirement that the asserted
-     * endpoint is the one actually dialing, which stops a third party from
-     * replaying an old assertion to point this gateway somewhere else.
-     */
+    // A rotated peer dials from a NEW EndpointId: authority is the vault
+    // SIGNATURE plus the asserted endpoint being the dialing one.
     if (assertion.endpointId !== peer.endpointId) {
       return sendJson(res, 400, { state: "bad_request" });
     }
     const link = deps.links.peerForVault(assertion.vaultId);
     if (!link) return notFound(res);
     if (!verifyRouteAssertion(assertion, link.peerPublicKey)) {
-      // Signed with the wrong key: the link stays pointed where it was.
       return sendJson(res, 403, { state: "bad_signature" });
     }
     const moved = deps.links.recordRoute({
@@ -313,8 +248,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
       assertedAt: assertion.ts,
       signature: assertion.signature,
     });
-    // A stale assertion verifies but does not move the cache; saying so keeps
-    // the sender from retrying a message that will never win.
     return sendJson(res, 200, { state: moved ? "accepted" : "stale" });
   };
 
@@ -333,7 +266,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     const pathname = target.split(/[?#]/u)[0] ?? "";
     const method = (req.method ?? "GET").toUpperCase();
     if (pathname === PEER_LINK_HELLO_PATH && method === "GET") {
-      // Deliberately says nothing about vaults, links, or owners.
       return sendJson(res, 200, { state: "ready", ...peerHello() });
     }
     if (pathname === PEER_LINK_REDEEM_PATH && method === "POST") {
@@ -342,17 +274,9 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     if (pathname === PEER_ROUTE_ASSERT_PATH && method === "POST") {
       return assertRoute(req, res, peer);
     }
-    /*
-     * COPY-AS-SHARE IS OFF THIS WIRE (#825, ruling G-copy). The remote-give
-     * frames — `/centraid/_peer/edge/give`, `/edge/closure/:id`, `/edge/deny`
-     * — and the ranged byte pull their audience ran, `/centraid/_peer/blob/
-     * chunk`, all answer `not_found` here exactly as an unknown path does.
-     * Closure reading and projection survive BENEATH a grant as internal
-     * fulfillment transport; they are simply not a frame a peer can ask for.
-     * What a linked peer may still reach on this plane is the link ceremony,
-     * the route assertion, and the COMMONS rail below — which carries its own
-     * blob doors (`/centraid/_peer/commons/blob`) and never used this one.
-     */
+    // COPY-AS-SHARE IS OFF THIS WIRE (#825, ruling G-copy): remote-give frames
+    // and the ranged byte pull answer `not_found` like any unknown path.
+    // Closure reading survives only BENEATH a grant, never as a peer frame.
     if (
       deps.commonsVaultFor &&
       deps.commonsGatewayFor &&
@@ -402,8 +326,6 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
       if (pathname === PEER_COMMONS_REFUSE_PATH && method === "POST")
         return handlePeerCommonsRefuse(req, res, peer, commonsDeps);
     }
-    // Every other peer-plane path — including the ones later phases add and
-    // this build does not have — is nothing to this caller.
     return notFound(res);
   };
 }

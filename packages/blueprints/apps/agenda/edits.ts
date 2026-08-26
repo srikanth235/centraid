@@ -1,29 +1,15 @@
-// The two shapes an edit takes on a repeating event, and the one an RSVP
-// takes coming back — pure, so the mapping from what the member pressed to
-// what the vault is asked is testable without a rendered panel.
-//
-// Both exist because the mapping is where this app is easiest to get subtly
-// wrong: `edit-occurrence` carries a scope AND an action, and the pairing is
-// not free — "skip the whole series" is not a thing the product offers, and a
-// panel that could express it would be offering a delete under another name.
+// Edit-scope mapping for a repeating event, and RSVP projection.
+// "Skip the whole series" is not offered.
 
 import type { AgEvent, Attendee, OccurrenceEditPayload } from "./types.ts";
 
-/** The three answers the scope panel offers. */
 export type EditScope = "occurrence" | "future" | "series";
 
-/** What the member is doing to the occurrence they opened the panel over. */
 export type EditIntent = "edit" | "skip";
 
 /**
- * The `edit-occurrence` payload for one press of the scope panel.
- *
- * SKIP IS AN OCCURRENCE-SHAPED VERB. Skipping "this and following" is how a
- * series is ended early and is offered; skipping "the whole series" would be
- * a deletion wearing a skip's clothes, so the panel refuses it and the caller
- * gets `null` — a control that cannot act is never drawn (spec §"Definition
- * of done"), so this returning `null` is what keeps the button off the panel
- * rather than a disabled button standing there.
+ * Skip is occurrence-shaped: skip+series returns `null` so the button is
+ * not drawn (spec: a control that cannot act is never drawn).
  */
 export function occurrenceEdit(input: {
   event: Pick<AgEvent, "event_id" | "dtstart" | "original_start">;
@@ -46,10 +32,7 @@ export function occurrenceEdit(input: {
   if (intent === "skip" && scope === "series") return null;
   return {
     event_id: event.event_id,
-    // The stable instance identity the vault keys an exception by. A
-    // non-recurring row has no `original_start`, and its own start IS the
-    // occurrence, so the fallback is the row's own instant rather than an
-    // invented key.
+    // A non-recurring row has no `original_start`; its own start IS the occurrence.
     original_start: event.original_start ?? event.dtstart,
     scope,
     action: intent === "skip" ? "skip" : "override",
@@ -57,12 +40,10 @@ export function occurrenceEdit(input: {
   };
 }
 
-/** Does this row need the scope panel at all? Only a repeating one does. */
 export function needsScopePanel(ev: AgEvent): boolean {
   return Boolean(ev.rrule) || ev.is_recurrence_instance === true;
 }
 
-/** The PARTSTAT vocabulary, as the three answers a member gives. */
 export type RsvpAnswer = "accepted" | "declined" | "tentative";
 export const RSVP_ANSWERS: readonly RsvpAnswer[] = [
   "accepted",
@@ -71,13 +52,8 @@ export const RSVP_ANSWERS: readonly RsvpAnswer[] = [
 ];
 
 /**
- * The guest list with the owner's own answer already in it.
- *
- * Every write in this product paints immediately, so the answer has to appear
- * in the list the member is looking at before the vault has said anything.
- * This is the projection that does it: same list, one row's `partstat`
- * replaced, nothing else touched — no reordering, no removal, no invented
- * row for an owner who is not on the guest list at all.
+ * Same list, one row's `partstat` replaced — no invented row for an owner
+ * who is not on the guest list.
  */
 export function projectRsvp(
   attendees: readonly Attendee[] | undefined,
@@ -89,9 +65,7 @@ export function projectRsvp(
   );
 }
 
-/** The same projection applied to a whole loaded window, so every view showing
- *  that event shows the answer at once. Recurrence instances share a series
- *  id, so all of them move together — which is what the vault will do too. */
+/** Recurrence instances share a series id, so all of them move. */
 export function projectRsvpInto(
   events: readonly AgEvent[],
   eventId: string,

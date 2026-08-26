@@ -1,8 +1,6 @@
-// Assistant transcript model + codecs (issue #420). The mutable message model
+// Assistant transcript model + codecs (#420). The mutable message model
 // AssistantRoute keeps in a ref, plus the pure hydrate (ledger rows → model)
-// and toDTO (model → screen snapshot) codecs. Split out of AssistantRoute so
-// that cohesive route stays under the file-size cap while gaining the Wave 1
-// transcript affordances (copy, feedback, regenerate/retry pager, timestamps).
+// and toDTO (model → screen snapshot) codecs.
 
 import type { AsstMsgDTO, AsstUsageDTO } from "../../screen-contracts.js";
 import { richAnswerHtml } from "./assistantRich.js";
@@ -60,22 +58,22 @@ export type AsstMsg =
       attachments?: AsstAttachment[];
       createdAt?: number;
     }
-  /** Live-only streaming reasoning row (issue #420, Wave 2). */
+  /** Live-only streaming reasoning row (#420). */
   | { kind: "thinking"; text: string; streaming?: boolean }
-  /** Durable harness notice (issue #420, Wave 6) — e.g. dropped-PDF warning. */
+  /** Durable harness notice (#420) — e.g. dropped-PDF warning. */
   | { kind: "notice"; level: "warn" | "info"; text: string }
   | {
       kind: "ai";
       text: string;
       error?: boolean;
       streaming?: boolean;
-      /** Reconnect catch-up in progress after a mid-turn drop (issue #420). */
+      /** Reconnect catch-up in progress after a mid-turn drop (#420). */
       catchingUp?: boolean;
       createdAt?: number;
       /** Turn id of the shown answer — feedback/regenerate target. */
       turnId?: string;
       feedback?: "up" | "down" | null;
-      /** Token/cost usage for the shown answer's turn (issue #420, Wave 2). */
+      /** Token/cost usage for the shown answer's turn (#420). */
       usage?: AsstUsageDTO;
       /** Retry siblings (oldest→newest); when set, `activeAttempt` selects one. */
       attempts?: Attempt[];
@@ -86,9 +84,9 @@ export type AsstMsg =
       /** Idempotency key of the failed send — REUSED on one-tap resend so the
        *  retry replays a completed turn instead of double-running it (#420). */
       idempotencyKey?: string;
-      /** The failed send happened while the browser was offline (issue #420). */
+      /** The failed send happened while the browser was offline (#420). */
       offline?: boolean;
-      /** Rehydrated from a pruned archive segment (issue #438 wave 3): read-only,
+      /** Rehydrated from a pruned archive segment (#438): read-only,
        *  so its feedback/regenerate controls are suppressed. */
       fromArchive?: boolean;
     }
@@ -103,7 +101,7 @@ export interface PendingAttachment {
   state: "uploading" | "ready" | "error";
   errorText?: string;
   ref?: AsstAttachment;
-  /** Local object-URL preview for an image attachment (issue #420, Wave 2). */
+  /** Local object-URL preview for an image attachment (#420). */
   previewUrl?: string;
 }
 
@@ -122,7 +120,7 @@ export function activeAttemptOf(
 
 /**
  * Rebuild the message model from the ledger transcript rows (GET session).
- * `opts` carries the archive markers (issue #438 wave 3): when history was
+ * `opts` carries the archive markers (#438): when history was
  * rehydrated read-only from the archive, a subtle notice is prepended above the
  * thread, and a warn notice replaces it when a segment blob couldn't be fetched.
  */
@@ -234,7 +232,7 @@ export function hydrateMessages(
   return out;
 }
 
-/** Derive the screen DTO for one model message. `isLastAi` gates regenerate. */
+/** Derive the screen DTO for one model message. `isLastAnswer` gates regenerate. */
 export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
   if (msg.kind === "user") {
     return {
@@ -298,7 +296,7 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
   const active = activeAttemptOf(msg);
   const text = active ? active.text : msg.text;
   const error = active ? Boolean(active.error) : Boolean(msg.error);
-  // Archived (read-only) history (issue #438 wave 3): drop the feedback/
+  // Archived (read-only) history (#438): drop the feedback/
   // regenerate target so the surface renders no control the server would reject
   // — a mutation on a pruned turn no-ops (its raw row is gone).
   const turnId = msg.fromArchive

@@ -1,5 +1,5 @@
 /*
- * Pure core for `GATEWAYS_LIST_VAULTS` (issue #376) — fetch + fold
+ * Pure core for `GATEWAYS_LIST_VAULTS` (#376) — fetch + fold
  * `GET /centraid/_vault/vaults` for a gateway the client is NOT (yet)
  * addressing, powering the flat (gateway, vault) switcher. Same
  * "electron-free pure core + injectable fetchImpl" split as

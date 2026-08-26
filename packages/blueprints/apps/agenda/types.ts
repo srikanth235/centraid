@@ -1,26 +1,14 @@
-// Page-side shapes for Agenda. Type-only — no runtime members — so every
-// importer uses `import type`. Grounded in the `upcoming` / `search` /
-// `parties` payloads and in the mutable `state`/`data` bags `app-root.tsx`
-// holds in refs (mutated in place, never reassigned, so the closures logic.ts
-// took over them at boot stay valid).
+// Type-only Agenda shapes — no runtime members, every importer uses `import type`.
 
-/**
- * The five views, and the view is STATE, not a route (spec §"Views and
- * routes"): one route `agenda` carries all of them.
- *
- * `waiting` is the invitations-and-unanswered-RSVPs list. On a pointer surface
- * it falls back to Schedule; on touch it is one of the band's destinations.
- */
+/** View is STATE on the one `agenda` route, never a route. */
 export type ViewKind = "month" | "week" | "day" | "schedule" | "waiting";
 
-/** A schedule.calendar row, projected for the rail and the editor's picker. */
 export interface Calendar {
   calendar_id: string;
   name?: string;
   color?: string;
 }
 
-/** One guest row joined from schedule.attendee → core.party. */
 export interface Attendee {
   attendee_id?: string;
   party_id: string;
@@ -30,7 +18,6 @@ export interface Attendee {
   is_you?: boolean;
 }
 
-/** A core.attachment edge joined to its core.content_item bytes. */
 export interface AgAttachment {
   attachment_id: string;
   content_id?: string;
@@ -42,15 +29,7 @@ export interface AgAttachment {
   [k: string]: unknown;
 }
 
-/**
- * A canonical core.event enriched by the upcoming/search projection with its
- * calendar edge, guests, attachments and the recurrence-instance markers.
- * Recurrence instances share one `event_id` and carry an `instance_key`.
- *
- * `recurrence_summary` is the ONE member-facing sentence (`ctx.time`'s shared
- * summariser, resolved in the query). `rrule` rides along because the editor
- * has to send one back — it is never rendered.
- */
+/** core.event projection; recurrence instances share `event_id`, carry `instance_key`. */
 export interface AgEvent {
   event_id: string;
   calendar_id?: string | null;
@@ -112,7 +91,6 @@ export interface OccurrenceEditPayload {
   [key: string]: unknown;
 }
 
-/** The payload the composer hands back to `proposeEvent`. */
 export interface CreatePayload {
   summary: string;
   dtstart: string;
@@ -124,51 +102,41 @@ export interface CreatePayload {
   rrule?: string;
   conferencing_uri?: string;
   reminders?: { minutes_before: number }[];
-  // Handed to the vault write path (Record<string, unknown>); the index
-  // signature lets this interface flow there without a cast.
+  // Index signature lets this flow to the vault write path without a cast.
   [k: string]: unknown;
 }
 
-/** A pickable guest from the parties directory. */
 export interface PartyOption {
   party_id: string;
   name: string;
   is_you?: boolean;
 }
 
-/** One event's span clamped to a single local day. */
 export interface DaySegment {
   ev: AgEvent;
   segStart: number;
   segEnd: number;
   startsHere: boolean;
   endsHere: boolean;
-  /** Covers the whole of this day — drawn in the all-day rail, not the grid. */
+  /** Drawn in the all-day rail, not the grid. */
   spansAll: boolean;
-  /**
-   * The event runs past this day's bounds. Each occupied day still gets its
-   * own row; the flag is how that row says the run continues.
-   */
+  /** The event runs past this day's bounds; each occupied day still gets a row. */
   clamped: boolean;
 }
 
-/** A day segment placed into an overlap column. */
 export interface LaidSegment extends DaySegment {
   col: number;
   width: number;
 }
 
-/** The quick-add draft: a slot, a title, nothing else until Edit opens. */
 export interface QuickDraft {
   start: Date;
   end: Date;
   title: string;
 }
 
-/** The mutable state bag `app-root.tsx` holds in a ref. */
 export interface AppState {
   view: ViewKind;
-  /** The day the views are drawn around. */
   anchorDay: Date;
   search: string;
   searchResults: AgEvent[] | null;

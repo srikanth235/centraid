@@ -1,5 +1,5 @@
 /*
- * Per-connection prepared-statement cache (issue #659 G7).
+ * Per-connection prepared-statement cache (#659).
  *
  * `db.prepare()` re-parses and re-plans the SQL every time. That is fine once
  * per process and expensive once per row: the replica projection calls its

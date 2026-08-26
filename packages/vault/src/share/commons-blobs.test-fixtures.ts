@@ -1,4 +1,4 @@
-// Same-machine byte placement for the commons suites (issue #750).
+// Same-machine byte placement for the commons suites (#750).
 //
 // Production never takes this path: a seat that is not on the steward's
 // filesystem pulls the snapshot's and the increment's bytes over the peer

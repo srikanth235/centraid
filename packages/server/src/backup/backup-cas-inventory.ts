@@ -1,7 +1,7 @@
-/* Provider CAS inventory resolution for the gateway audit (issue #414). Every
- * storage connection is a provider connection now (#436 §2), so inventory
- * always comes from the provider's attested `listInventory` capability — the
- * old direct own-S3 bucket listing is gone. */
+/* Provider CAS inventory resolution for the gateway audit (#414). Every
+ * storage connection is a provider connection (#436), so inventory always
+ * comes from the provider's attested `listInventory` capability; there is no
+ * direct own-S3 bucket listing. */
 
 import { openRemoteBackupProvider } from "@centraid/backup";
 import { readBlobStoreSettings, ReplicaIndex } from "@centraid/vault";
@@ -37,7 +37,7 @@ async function authenticatedFailures(
   );
   const index = new ReplicaIndex(db.vault);
   const failures: string[] = [];
-  // Scope the AEAD re-audit to THIS store's rows (issue #425 Wave 2): a cas
+  // Scope the AEAD re-audit to THIS store's rows (#425): a cas
   // listing must never disprove derived evidence, and vice-versa.
   const audits = await Promise.all(
     [...index.all(store)]
@@ -74,7 +74,7 @@ async function verifiedResult(
 }
 
 /**
- * Collect one store class's remote inventory (issue #425 Wave 2). `store`
+ * Collect one store class's remote inventory (#425). `store`
  * defaults to `cas` — the original behavior byte-for-byte. `derived` returns
  * `{configured:false}` when the vault has no `derivedPrefix` (the target never
  * granted the store), so the reconciler simply skips the derived pass.

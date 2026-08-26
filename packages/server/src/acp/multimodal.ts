@@ -1,32 +1,7 @@
 /*
- * Multimodal content-block construction for harness turns (issue #190).
- *
- * A conversation turn can carry attachments (images, PDFs, text/code files)
- * that landed in the per-app blob CAS before the turn. The route resolves
- * each to an on-disk `path`; here we read the bytes and shape them into ACP
- * `ContentBlock`s for `session/prompt` (issue #479).
- *
- * There is one target shape now, not two: the retired Anthropic-block and
- * codex-`localImage` mappings died with their bespoke backends. Field names
- * below are the ACP schema's, verified against
- * `@agentclientprotocol/sdk`'s generated types — `ImageContent { data,
- * mimeType }` (NOT Anthropic's nested `source.media_type`) and
- * `EmbeddedResource { resource: { uri, mimeType, blob } }`.
- *
- * What we may send is gated on what the harness advertised in `initialize`:
- * text is baseline and always allowed, images need
- * `promptCapabilities.image`, audio needs `.audio`, and any other binary
- * (PDFs, archives) rides an embedded resource, which needs
- * `.embeddedContext`. Both first-party adapters advertise
- * `{ image: true, embeddedContext: true }`, so images AND PDFs reach codex
- * and claude-code again.
- *
- * Anything the harness genuinely can't accept is reported by name in
- * `skipped` so the turn can say what it dropped instead of silently losing
- * it. Textual attachments (source, config, notes) are inlined as a
- * delimited text block so the model actually sees their contents. The
- * shaping (`acpBlockFor`) is pure given pre-read base64, so it is
- * unit-testable without touching disk.
+ * ACP `ContentBlock`s (#190, #479). `ImageContent { data, mimeType }` — NOT
+ * Anthropic `source.media_type`. Gated on `initialize`; unaccepted
+ * attachments are named in `skipped`.
  */
 
 import { readFileSync } from "node:fs";
@@ -98,7 +73,6 @@ const TEXT_EXTENSIONS = new Set([
   "graphql",
 ]);
 
-/** ~256KB of decoded text per attachment; beyond this we truncate with a marker. */
 export const TEXT_ATTACHMENT_MAX_BYTES = 256 * 1024;
 
 function extensionOf(filename: string | undefined): string {
@@ -115,7 +89,6 @@ function isTextualAttachment(
   return false;
 }
 
-/** Crude binary heuristic: heavy replacement-char ratio or embedded NULs. */
 function looksBinary(text: string): boolean {
   if (text.length === 0) return false;
   if (text.includes("\u0000")) return true;
@@ -127,12 +100,8 @@ function looksBinary(text: string): boolean {
 }
 
 /**
- * Shape one attachment (pre-read as base64) into an ACP content block, or
- * `undefined` when the harness can't accept it (caller reports it as skipped).
- *
- * Text is baseline ACP and never gated. Everything else is gated on what the
- * harness advertised, because sending an un-advertised block type is a protocol
- * violation, not a graceful degradation.
+ * `undefined` when the harness cannot accept it. Text is never gated. An
+ * un-advertised block type is a protocol violation, not a degradation.
  */
 export function acpBlockFor(
   att: { mime: string; dataBase64: string; filename?: string; path?: string },
@@ -157,7 +126,7 @@ export function acpBlockFor(
     const text = (
       truncated ? buf.subarray(0, TEXT_ATTACHMENT_MAX_BYTES) : buf
     ).toString("utf8");
-    if (looksBinary(text)) return undefined; // mislabeled/binary content — skip like other unreadable blobs
+    if (looksBinary(text)) return undefined; // mislabeled/binary — skip like other unreadable blobs
     const body = truncated
       ? `${text}\n[truncated — showing first ${TEXT_ATTACHMENT_MAX_BYTES} of ${buf.length} bytes]`
       : text;
@@ -167,8 +136,7 @@ export function acpBlockFor(
     };
   }
 
-  // PDFs, archives, anything else binary: an embedded resource is the only
-  // ACP block that can carry arbitrary bytes, and it needs `embeddedContext`.
+  // Arbitrary bytes only fit an embedded resource, which needs `embeddedContext`.
   if (!caps.embeddedContext) return undefined;
   return {
     type: "resource",
@@ -183,19 +151,11 @@ export function acpBlockFor(
 }
 
 export interface AcpAttachmentBlocks {
-  /** Blocks to append after the message text, in attachment order. */
   blocks: ContentBlock[];
-  /** Display names of attachments the harness can't accept (or we can't read). */
   skipped: string[];
 }
 
-/**
- * Read the attachments off disk and map them to ACP prompt content blocks.
- *
- * Never throws: an unreadable blob is reported as skipped rather than failing
- * the turn, which is the same "degrade loudly, not silently" contract the
- * capability gate uses.
- */
+/** Never throws: an unreadable blob is skipped rather than failing the turn. */
 export function acpAttachmentBlocks(
   attachments: readonly TurnAttachment[],
   caps: PromptCapabilities

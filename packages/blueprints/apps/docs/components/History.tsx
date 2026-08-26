@@ -1,4 +1,4 @@
-// The version-history panel inside the details drawer (issue #352): lists a
+// The version-history panel inside the details drawer (#352): lists a
 // document's `revises` chain (queries/history.ts already did the walk and
 // the honest-ordering math — this only renders it), newest-first, each
 // entry previewable inline and — unless read-only (a trashed document) or

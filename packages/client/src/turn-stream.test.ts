@@ -1,4 +1,4 @@
-// Unit tests for the SSE turn-stream parser (issue #420) — the ONE parser
+// Unit tests for the SSE turn-stream parser (#420) — the ONE parser
 // every conversation surface drives its `_turn` streams through.
 import { describe, expect, it } from "vitest";
 

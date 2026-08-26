@@ -205,7 +205,7 @@ describe("worktree-store", () => {
       await store.init();
 
       // App ids are plain slugs again — automation apps are marked by the
-      // manifest `kind` field, not a dotted `auto.` prefix (issue #98). A
+      // manifest `kind` field, not a dotted `auto.` prefix (#98). A
       // slug id must round-trip through sessions, publish, and listing.
       const s = await store.openSession("desktop-brief");
       await seedApp(s.worktreePath, "brief", "one");
@@ -217,7 +217,7 @@ describe("worktree-store", () => {
       expect(r.versionTag).toBe("brief/v1");
       expect((await store.listApps()).sort()).toStrictEqual(["brief"]);
 
-      // Dots are no longer part of the id grammar, so a dotted id is rejected
+      // Dots are not part of the id grammar, so a dotted id is rejected
       // (and a tree-traversing `..` is impossible by construction).
       await expectRejectsWithCode(
         () => store.openSession("auto.brief"),

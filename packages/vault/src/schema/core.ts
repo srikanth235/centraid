@@ -281,7 +281,7 @@ CREATE TABLE core_collection_entry (
 ) STRICT;
 `;
 
-// Standoff anchor for inline references (issue #282). An anchor is a LOCATOR
+// Standoff anchor for inline references (#282). An anchor is a LOCATOR
 // for an existing core.link judgment, not a second judgment (rule 10): it
 // points into the from-endpoint's plain body text with a W3C-style selector
 // {exact, prefix, suffix, start} so the read view can render the edge as an
@@ -301,7 +301,7 @@ CREATE TABLE IF NOT EXISTS core_link_anchor (
 ) STRICT;
 `;
 
-// Share-by-placement provenance (issue #599 decision 11). Sharing is
+// Share-by-placement provenance (#599 decision 11). Sharing is
 // PLACEMENT, not filtering: an item is projected into the audience vault and
 // its bytes are hardlinked into that vault's CAS, so what another member sees
 // is only what was placed where they are. This sidecar is the AUDIENCE vault's
@@ -326,7 +326,7 @@ CREATE TABLE IF NOT EXISTS core_link_anchor (
 // projected row — a re-share by a second member keeps the FIRST placement.
 //
 // `shared_by_member` is the HISTORICAL v1 column name. The member-principal
-// layer is gone in issue #726, but the base rung is immutable because existing
+// layer is gone in #726, but the base rung is immutable because existing
 // vaults already carry `user_version = 1`. SHARE_ORIGIN_ATTRIBUTION_DDL below
 // performs the forward rename to `shared_by`; the stored value needs no rewrite
 // because it was always an attribution (an owner id or `peer:<vaultId>`), not a
@@ -347,7 +347,7 @@ CREATE TABLE IF NOT EXISTS core_share_origin (
 CREATE INDEX IF NOT EXISTS idx_share_origin_vault ON core_share_origin(origin_vault_id);
 `;
 
-/** Forward upgrade for issue #726: preserve every v1 placement attribution. */
+/** Forward upgrade for #726: preserve every v1 placement attribution. */
 export const SHARE_ORIGIN_ATTRIBUTION_DDL = `
 ALTER TABLE core_share_origin RENAME COLUMN shared_by_member TO shared_by;
 `;

@@ -1,7 +1,3 @@
-/**
- * Direct unit tests for startTurnVaultTools (issue #545 B11).
- */
-
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { TurnStreamEvent } from "@centraid/server/engine";

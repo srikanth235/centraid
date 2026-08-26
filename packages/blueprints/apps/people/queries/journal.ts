@@ -1,6 +1,6 @@
 /**
  * The People journal is now a projection over canonical knowledge notes and
- * contact activities (issue #450). Owner-authored entries are knowledge.note
+ * contact activities (#450). Owner-authored entries are knowledge.note
  * rows tagged in the People-journal scheme; automatic entries are
  * core.activity rows linked `about` a party, with optional annotations.
  */

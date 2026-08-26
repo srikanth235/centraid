@@ -1,11 +1,3 @@
-// Pure geometry helpers shared by the ocr and faces capabilities: bounding
-// the detector input to a max side length rounded to a stride multiple
-// (PP-OCR's own "resize_image_type0" preprocessing), and mapping a box
-// detected on a resized image back to original-image pixel coordinates
-// (the wire contract's `box` field is always in the ORIGINAL image's
-// coordinate space, scaled from `originalWidth`/`originalHeight` when the
-// caller supplies them).
-
 import type { Box } from "./nms.js";
 
 export interface ResizeTarget {
@@ -13,12 +5,7 @@ export interface ResizeTarget {
   height: number;
 }
 
-/**
- * Scales so the longer side is at most `maxSide` (never upscales), then
- * rounds both dimensions to the nearest positive multiple of `multiple` —
- * the shape most detector ONNX exports require (their stride/pooling
- * factors need input dims divisible by the network's total stride).
- */
+/** Never upscales; rounds dims to positive multiples of `multiple` (detector ONNX needs stride-divisible inputs). */
 export function computeBoundedMultipleResize(
   width: number,
   height: number,
@@ -34,7 +21,6 @@ export function computeBoundedMultipleResize(
   return { width: roundToMultiple(width), height: roundToMultiple(height) };
 }
 
-/** Maps a box detected on a resized image back to the original image's pixel coordinates. */
 export function scaleBoxToOriginal(
   box: Box,
   resized: ResizeTarget,
@@ -50,7 +36,6 @@ export function scaleBoxToOriginal(
   };
 }
 
-/** Rounds a box to integer pixels for the wire contract's `[x, y, w, h]` int box. */
 export function roundBox(box: Box): [number, number, number, number] {
   return [
     Math.round(box.x),
@@ -61,16 +46,10 @@ export function roundBox(box: Box): [number, number, number, number] {
 }
 
 /**
- * Rounds AND clamps a box into `[0, width] x [0, height]`, guaranteeing
- * `x + resultWidth <= width` and `y + resultHeight <= height` exactly (never
- * "close enough"). The typed vault command rejects any box that overshoots
- * the item's declared `originalWidth`/`originalHeight`, so every box a
- * recognition handler returns MUST go through this —
- * not just `roundBox` — whenever it is expressed against a caller-declared
- * dimension. Independently rounding x/x+width (as plain `Math.round` on each
- * field would) can push `x + width` one pixel past the bound purely from
- * rounding; clamping x2/y2 to the bound directly (then deriving width/height
- * from the clamped pair) cannot.
+ * Rounds AND clamps so `x + w <= width` holds exactly: rounding x/x+w
+ * independently overshoots by a pixel, clamping x2/y2 cannot. The vault
+ * rejects any overshoot, so handler boxes MUST pass through this — not
+ * just `roundBox`.
  */
 export function roundAndClampBox(
   box: Box,

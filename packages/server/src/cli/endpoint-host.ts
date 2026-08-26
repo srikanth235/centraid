@@ -1,34 +1,8 @@
 /*
- * The daemon's iroh endpoint host (issue #289 phase 3).
- *
- * Glues `@centraid/tunnel`'s generic gateway endpoint to the daemon's
- * policy stores:
- *
- *   - identity: a persistent 32-byte secret in the gateway `KeyStore` —
- *     the derived EndpointId is the gateway's permanent identity (mirror
- *     of the desktop's `phone-link/key.bin`).
- *   - admission: the QUIC listener speaks only to EndpointIds enrolled in
- *     `gateway.db`.
- *   - pairing: `centraid/gw-pair/1` redeems one-time tickets minted by
- *     `centraid-gateway pair` through the live loopback daemon and enrolls
- *     the caller.
- *   - identity forwarding: each tunneled request is forwarded to the
- *     loopback HTTP listener with the device's EndpointId + a per-boot
- *     proof header only this process knows, so the gateway's HTTP layer
- *     can trust `x-centraid-device` came from the QUIC handshake and not
- *     from a client header.
- *
- * The proof matters because the HTTP listener also accepts the loopback
- * landlord bearer directly (issue #505 phase 7): without it, a holder could
- * stamp an arbitrary device key and dodge the per-vault ACL. The sole
- * non-iroh identity lane is an explicitly injected desktop EndpointId,
- * accepted only from a kernel-observed loopback peer; it still resolves
- * through persisted per-vault enrollment rows.
- *
- * Loopback is not an identity (issue #568 items A/B). Every forwarder —
- * this one, the Rust byte relay, and the desktop phone tunnel — hands a
- * REMOTE peer to 127.0.0.1, so each also stamps `TUNNEL_FORWARDED_HEADER`
- * and `isHostCustody` refuses anything carrying it.
+ * The daemon's iroh endpoint host (#289). The per-boot proof header exists
+ * because the HTTP listener also accepts the loopback landlord bearer (#505):
+ * without it a holder could stamp any device key and dodge the per-vault ACL.
+ * Loopback is not an identity either (#568 A/B).
  */
 
 import crypto from "node:crypto";
@@ -74,11 +48,6 @@ import {
 } from "../version.js";
 import type { DaemonLayout } from "./paths.js";
 
-/**
- * The transport owns these names (`@centraid/tunnel`'s protocol module) —
- * every forwarder, JS or Rust, strips a client copy before stamping its own.
- * Re-exported here because the HTTP side is where they are consumed.
- */
 export const DEVICE_HEADER = DEVICE_IDENTITY_HEADER;
 export const DEVICE_PROOF_HEADER = TUNNEL_DEVICE_PROOF_HEADER;
 const COMPANION_MODULES = new Set([
@@ -90,11 +59,7 @@ const COMPANION_MODULES = new Set([
   "people",
 ]);
 
-/**
- * Relay hints from a dial ticket. Hints are ADDRESS data that travels with a
- * route assertion; a failure to read them is an empty list, never a throw —
- * a gateway with no relay hint is reachable directly.
- */
+/** A read failure is an empty list: no relay hint ⇒ reachable directly. */
 function relayHintsOf(ticket: string): string[] {
   try {
     const hint = inspectEndpointTicket(ticket).relayHint;
@@ -118,69 +83,37 @@ function companionGrantProfile(value: unknown): string[] | undefined | null {
 }
 
 export interface DaemonDevicePlane {
-  /** Wire into `serve()` so requests resolve their vault by enrollment. */
   deviceAccess: DeviceAccess;
-  /**
-   * Direct authenticated host request: a loopback peer carrying none of the
-   * markings a forwarder stamps. Every forwarder in the product — the iroh
-   * endpoint, the Rust byte relay, and the desktop phone tunnel — delivers a
-   * remote peer to 127.0.0.1, so loopback alone proves nothing (#568 A/B).
-   */
   isHostCustody: (req: IncomingMessage) => boolean;
-  /** Bind the endpoint once the HTTP listener is up. */
   startEndpoint: (upstream: {
     baseUrl: string;
     token: string;
   }) => Promise<GatewayEndpointHandle | undefined>;
-  /** Metadata-only callbacks exposed to the native iroh relay over loopback. */
   dataPlaneControl: DataPlaneControlOptions;
-  /** Enrollment and one-time iroh pairing capability stores. */
   pairing: {
     enrollments: EnrollmentStore;
     tickets: PairingTicketStore;
   };
-  /**
-   * Everything the `/centraid/_peer/*` route layer needs (issue #726 P3).
-   * Deliberately NOT auto-registered: the plane's handler must be mounted
-   * with the peer proof this process minted, and nothing else may read it.
-   */
+  /** NOT auto-registered: the handler needs this process's peer proof (#726). */
   peerPlane: {
     links: VaultLinksStore;
-    /** Per-boot proof the peer forwarder stamps; the route layer verifies it. */
+    /** Per-boot; the route layer verifies it. */
     proof: string;
-    /** This gateway's current dial route, for the ceremony's mutual half. */
     localRoute: () => { endpointId?: string; relayHints: string[] };
-    /** Outbound peer-plane dialing (#726 P3), the real iroh transport. */
     dial: PeerDial;
   };
-  /** Release the peer dial's iroh endpoint on shutdown. */
   closePeerDial: () => Promise<void>;
 }
 
 export function makeDaemonDevicePlane(input: {
   layout: DaemonLayout;
   gatewayDatabase?: GatewayDatabase;
-  /**
-   * Resolved lazily: the device plane is constructed BEFORE `serve()` (its
-   * `deviceAccess` is a build option) but only redeems tickets after the
-   * registry exists.
-   */
   vaults: () => VaultRegistry | undefined;
   logger: RuntimeLogger;
-  /** Shared only with native byte-plane components on the loopback listener. */
   controlSecret?: string;
-  /**
-   * iroh relay mode. Defaults to the production n0 relays + discovery;
-   * `disabled` keeps the endpoint offline (tests bind on loopback only).
-   */
   relays?: "n0" | "disabled";
-  /**
-   * OS-protected identity of the desktop that spawned this daemon. Direct
-   * loopback requests still resolve to a real EndpointId and are authorized
-   * through the same per-vault enrollment rows as iroh requests.
-   */
+  /** Authorized through the same per-vault enrollment rows as iroh. */
   loopbackEndpointId?: string;
-  /** Shared gateway KeyStore so endpoint identity uses the host custody backend. */
   keyStore?: KeyStore;
 }): DaemonDevicePlane {
   const { layout, logger } = input;
@@ -193,16 +126,8 @@ export function makeDaemonDevicePlane(input: {
   const tickets = PairingTicketStore.open(
     input.gatewayDatabase ?? layout.gatewayDbFile
   );
-  /*
-   * Persistent iroh identity (issue #289 phase 3). Loaded here, synchronously
-   * — NOT inside `startEndpoint` where it used to live — because the peer
-   * DIAL capability built from it (below) must exist as soon as this
-   * function returns: `serve()`/`buildGateway()` read `peerPlane.dial`
-   * before `startEndpoint()` ever runs (it needs the HTTP server's own URL,
-   * so it necessarily starts after `serve()`). A corrupt key still aborts
-   * boot exactly as before, just before the HTTP listener starts instead of
-   * after.
-   */
+  // Synchronous, NOT inside `startEndpoint`: `buildGateway()` reads
+  // `peerPlane.dial` — built from this key — before `startEndpoint()` can run.
   const endpointSecretKey = loadEndpointSecret({
     persistence: {
       load: () => keyStore.load("endpoint-key.bin"),
@@ -215,11 +140,7 @@ export function makeDaemonDevicePlane(input: {
   const knownEndpointIds = new Set(
     enrollments.listFresh().map((row) => row.endpointId)
   );
-  // Per-boot proof shared only between the endpoint's forwarder and the
-  // HTTP layer's device resolution — never persisted, never on the wire
-  // outside this process.
   const deviceProof = crypto.randomBytes(32).toString("hex");
-  /** What every forwarder stamps: the proved identity + the forwarded mark. */
   const forwardedIdentityHeaders = (
     endpointId: string
   ): Record<string, string> => ({
@@ -231,42 +152,23 @@ export function makeDaemonDevicePlane(input: {
     input.controlSecret ?? crypto.randomBytes(32).toString("hex");
   let liveEndpointId: string | undefined;
   let liveRelayHints: string[] = [];
-  // An enrollment is the ONLY admission (issue #603 retired the admit-anyone
-  // founding window): a gateway founds itself locally, so no unknown
-  // EndpointId ever needs to reach it before it holds a ticket-issued row.
+  // An enrollment is the ONLY admission (#603): a gateway founds itself
+  // locally, so no unknown EndpointId needs to reach it first.
   const authorizeEndpoint = (endpointId: string): boolean =>
     enrollments.isEnrolled(endpointId);
 
   /*
-   * The PEER lane (issue #726 P3, trap 2). Its own proof and its own headers,
-   * and pointedly NOT `enrollments.isEnrolled`, which answers "is this one of
-   * my owner's devices". A linked gateway must never be able to make that
-   * question answer yes. The LINK table is deliberately the shared one (D3:
-   * locality is routing, not semantics) — this lane reads only the rows that
-   * carry a route, which is precisely the rows that describe a vault
-   * elsewhere.
-   *
-   * Admission is coarse by necessity and narrow by consequence: a peer whose
-   * endpoint keypair rotated arrives unrecognised, so the gate is "does this
-   * gateway have anyone to hear from at all" — a live link or a live ceremony.
-   * With neither, the plane accepts nothing. With either, the only routes an
-   * unrecognised caller can reach are the ticket redemption (needs the
-   * one-time secret) and the route assertion (needs the peer vault's private
-   * key); everything else is `not_found` in the route layer.
+   * The PEER lane (#726 P3, trap 2): its own proof and headers, pointedly NOT
+   * `enrollments.isEnrolled` — a linked gateway must never make "is this one of
+   * my owner's devices" answer yes. Coarse admission stays narrow: an
+   * unrecognised caller reaches only routes demanding their own secret.
    */
   const links = VaultLinksStore.open(
     input.gatewayDatabase ?? layout.gatewayDbFile
   );
   const peerProof = crypto.randomBytes(32).toString("hex");
-  /*
-   * Outbound peer-plane dialing (#726 P3 — "no production peer dial"). The
-   * SAME persistent identity that accepts peer connections (via the native
-   * relay, or `startGatewayEndpoint` below when it is unavailable) dials
-   * out under here — see `peer-dial.ts` for why that identity match is load
-   * bearing, not incidental. Built eagerly (binding itself is lazy) so it is
-   * available to `redeemLinkTicket`/`pushRouteAssertion` callers and to
-   * `buildGateway`'s `peerPlane.dial` from the moment this function returns.
-   */
+  // The SAME identity that ACCEPTS peer connections also dials out (#726 P3);
+  // `startPeerDial` explains why that match is load bearing.
   const peerDial = startPeerDial({
     secretKey: endpointSecretKey,
     ...(input.relays ? { relays: input.relays } : {}),
@@ -275,30 +177,18 @@ export function makeDaemonDevicePlane(input: {
     links.isLinked(endpointId) ||
     links.hasAnyLink() ||
     links.tickets.hasPending();
-  /**
-   * What the peer forwarder stamps. Disjoint from the device names above.
-   * Deliberately does NOT name a vault: `peerForEndpoint` is an endpoint-only,
-   * LIMIT-1 lookup, and an endpoint identifies a machine, not a vault (#726
-   * P3) — a peer can hold links to several of the owner's vaults, so picking
-   * one here would be exactly the ambiguity that lookup was built to avoid.
-   * The route layer resolves the actual (endpoint, vault) pair itself, per
-   * request, from `endpointId` — see `identify()` in `routes/peer-plane.ts`.
-   */
+  /** Does NOT name a vault: an endpoint identifies a machine (#726 P3). */
   const peerForwardedHeaders = (
     endpointId: string
   ): Record<string, string> => ({
     [PEER_ENDPOINT_HEADER]: endpointId,
     [PEER_PROOF_HEADER]: peerProof,
-    // A peer is a forwarded caller like any other: never host custody.
     [TUNNEL_FORWARDED_HEADER]: "1",
   });
 
   const deviceAccess: DeviceAccess = {
     deviceKeyFor: (req: IncomingMessage): string | undefined => {
-      // Trap 2, last line (issue #726 P3). A request that arrived on the peer
-      // lane can never resolve a DEVICE key — not through a forged header, not
-      // through the loopback fallback below, not through a future forwarder
-      // that stamps both. A link's reach is the peer plane or nothing.
+      // Trap 2, last line (#726): a link's reach is the peer plane or nothing.
       if (req.headers[PEER_ENDPOINT_HEADER] !== undefined) return undefined;
       const device = req.headers[DEVICE_HEADER];
       const proof = req.headers[DEVICE_PROOF_HEADER];
@@ -365,8 +255,6 @@ export function makeDaemonDevicePlane(input: {
     const plane = registry.get(primary.vaultId);
     if (!plane) return { ok: false, error: "vault_gone" };
     knownEndpointIds.add(endpointId);
-    // One scan can enrol a device into several vaults, so mirror the device
-    // into EVERY granted vault's capability table — not just the first.
     for (const enrollment of enrolled) {
       const granted = registry.get(enrollment.vaultId);
       if (!granted) continue;
@@ -375,11 +263,8 @@ export function makeDaemonDevicePlane(input: {
         ownerPartyId: granted.boot.ownerPartyId,
         name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
         ...(request.platform ? { platform: request.platform } : {}),
-        // Vocabulary boundary: gateway-plane authority is ownership (#726),
-        // and the vault's capability mirror (`consent_device.trust`) only
-        // asks "may this device act". An enrolled device acts for the vault's
-        // owner, so it lands on `full`; device attenuation is grant_profile,
-        // orthogonal to trust.
+        // `trust` only asks "may this device act" (#726); attenuation is
+        // grant_profile, orthogonal to it.
         trust: "full",
       });
     }
@@ -432,8 +317,6 @@ export function makeDaemonDevicePlane(input: {
     baseUrl: string;
     token: string;
   }): Promise<GatewayEndpointHandle | undefined> => {
-    // Custody corruption is not a transport outage; `endpointSecretKey`
-    // above already resolved (or refused) it before this point.
     let handle: GatewayEndpointHandle;
     try {
       handle = await startGatewayEndpoint({
@@ -457,17 +340,8 @@ export function makeDaemonDevicePlane(input: {
     }
     liveEndpointId = handle.endpointId;
     liveRelayHints = relayHintsOf(handle.ticket());
-    /*
-     * Route re-assertion, eager half (issue #750 invariant 3). The moment
-     * this gateway's EndpointId is (re)known — first start, key rotation, or
-     * recovery onto a new box — every LOCAL vault signs a route claim with
-     * its own identity seed and pushes it to every linked peer, so the peers
-     * re-discover this gateway without re-running a ceremony.
-     * `announceLocalRoutes` no-ops when the endpoint has not changed since
-     * the last fully delivered announcement (`gateway_meta` pin), and
-     * best-effort failures are logged and retried by the peer-plane sweep
-     * tick. Fire-and-forget: endpoint start must not wait on peers.
-     */
+    // Route re-assertion, eager half (#750 invariant 3). Fire-and-forget:
+    // endpoint start must not wait on peers.
     const registry = input.vaults();
     if (registry) {
       void announceLocalRoutes({

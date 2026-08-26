@@ -13,11 +13,7 @@ import {
   waitForHome,
 } from "./fixtures";
 
-// Docs north-star journey on the custodian seat (byte-bearing,
-// docs/apps/docs-scenarios.md, #781): a member uploads a real file through
-// the visible product control against the REAL embedded local gateway, the
-// bytes stage into the CAS, and both the document row and its exact bytes
-// survive an Electron reload. Nothing is mocked on this path.
+// Docs north-star journey (#781): real upload against the REAL embedded gateway; bytes survive an Electron reload. Nothing mocked.
 
 const DOC_TITLE = "lease-notes.txt";
 const DOC_BODY =
@@ -39,10 +35,7 @@ async function foundDesktop(page: Page): Promise<void> {
     .getByTestId("first-run-choice")
     .getByRole("button", { name: /start fresh on this mac/iu })
     .click();
-  // Fresh/local setup now connects and founds Personal directly. Profile
-  // identity is optional and belongs in Settings, so this journey must wait
-  // for the streamlined onboarding hand-off rather than resurrecting the
-  // removed name gate.
+  // Onboarding founds Personal directly; identity lives in Settings — no name gate.
   const onboarding = page.getByTestId("onboarding-view");
   await onboarding.waitFor({ state: "visible" });
   await expect(page.getByRole("textbox", { name: "Your name" })).toHaveCount(0);
@@ -58,10 +51,8 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
     await foundDesktop(page);
     await openFirstParty(page, "Docs");
 
-    // The inline replica session bootstraps asynchronously; prove the write
-    // rail is up with a probe the vault deterministically REFUSES (an
-    // unstaged sha fails add_document's staged_or_owned precondition) before
-    // driving the one-shot UI upload.
+    // Probe the write rail with a vault-refused unstaged sha before the
+    // one-shot UI upload.
     await expect
       .poll(
         () =>
@@ -84,9 +75,7 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
       )
       .not.toBe("replica-not-ready");
 
-    // Upload through the product's own control: the hidden file input the
-    // toolbar Upload button drives. Staging (sha preflight + authed POST to
-    // /_vault/blobs) and core.add_document both run for real.
+    // Upload via the toolbar-driven hidden input; staging runs for real.
     await page.locator('input[aria-label="Upload files"]').setInputFiles({
       name: DOC_TITLE,
       mimeType: "text/plain",
@@ -96,17 +85,14 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
       page.getByRole("button", { name: `Select ${DOC_TITLE}` })
     ).toBeVisible({ timeout: 30_000 });
 
-    // The document is a vault row on the local gateway, not renderer state:
-    // it must come back after a full Electron reload.
+    // Vault row, not renderer state: must survive a full reload.
     await page.reload({ waitUntil: "domcontentloaded" });
     await openFirstParty(page, "Docs");
     await expect(
       page.getByRole("button", { name: `Select ${DOC_TITLE}` })
     ).toBeVisible({ timeout: 30_000 });
 
-    // Byte-bearing proof: the exact uploaded bytes come back on demand
-    // through the app bridge's authed blob door — CAS staging really
-    // deduplicated into the canonical content item this document points at.
+    // Byte proof: exact uploaded bytes return through the authed blob door.
     type DriveDoc = {
       title: string;
       content_uri?: string | null;
@@ -144,8 +130,7 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
     }, contentUri!);
     expect(roundTrip).toBe(DOC_BODY);
 
-    // Opening the document routes to the reading view (text renders on
-    // paper, §1.8) with the document's own title on the paper.
+    // Reading view renders on paper (§1.8) under the document title.
     await page
       .getByRole("button", { name: `Preview ${DOC_TITLE}` })
       .first()

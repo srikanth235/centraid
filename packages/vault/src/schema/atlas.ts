@@ -1,4 +1,4 @@
-// The Vault Atlas mapping (issue #441 Part B, B4 item 1): table → kind → pack
+// The Vault Atlas mapping (#441): table → kind → pack
 // classification for the Operations "ontology at a glance" surface. This is
 // the one small new artifact all three Atlas tabs (Kinds / Relations /
 // Browse) share.
@@ -10,7 +10,7 @@
 // are ONTOLOGY packs (the owner's life data — people, documents, photos…)
 // versus MACHINERY bands (the plumbing — consent, agents, sync, blobs, the
 // journal). Life data vs plumbing is the visual statement the Kinds tab and
-// the machinery shelf make (issue #441 B1).
+// the machinery shelf make (#441).
 
 import { JOURNAL_TABLES, VAULT_TABLES } from "./tables.js";
 
@@ -18,7 +18,7 @@ import { JOURNAL_TABLES, VAULT_TABLES } from "./tables.js";
 export type AtlasPackKind = "ontology" | "machinery";
 
 /**
- * The ontology packs (issue #441 B1): every schema whose tables are the
+ * The ontology packs (#441): every schema whose tables are the
  * owner's actual knowledge. Everything else in the registry is machinery.
  * Kept as an explicit set so a NEW pack schema fails loud (unclassified)
  * rather than silently landing in the wrong shelf — see `atlasTables`.
@@ -39,7 +39,7 @@ export const ONTOLOGY_PACKS: readonly string[] = [
 ];
 
 /**
- * Machinery bands (issue #441 B1 "machinery shelf"): the plumbing schemas.
+ * Machinery bands (#441 B1 "machinery shelf"): the plumbing schemas.
  * `consent` and `agent` name tables in BOTH files — the vault-file consent
  * plane and the journal-file audit stream — and both are machinery, so a
  * schema-keyed classification is correct regardless of file.
@@ -81,7 +81,7 @@ export const ATLAS_PACK_LABELS: Readonly<Record<string, string>> = {
 
 /**
  * Curated, human-friendly display name + one-line plain-English blurb per
- * ONTOLOGY kind (issue #441 Relations page): the vocabulary the client shows
+ * ONTOLOGY kind (#441 Relations page): the vocabulary the client shows
  * so the Relations page can speak human ("People — everyone you know") instead
  * of SQL ("core_party"). Keyed by logical `schema.table`, hand-maintained the
  * same way `ATLAS_PACK_LABELS` is — one entry per ontology kind.

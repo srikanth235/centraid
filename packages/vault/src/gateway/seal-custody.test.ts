@@ -1,5 +1,5 @@
 import { renameSync, rmSync } from "node:fs";
-// Key custody lifecycle (issue #298 items 1, 2, 8): the fingerprint stamped
+// Key custody lifecycle (#298 items 1, 2, 8): the fingerprint stamped
 // at first seal makes a missing or regenerated key a loud open-time error,
 // never a silent re-mint discovered as GCM garbage at reveal; the reseal
 // verb rotates the DEK across the live and draft bands atomically; and the

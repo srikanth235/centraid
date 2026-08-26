@@ -1,37 +1,18 @@
 /*
- * The GRANT PLANE's owner surface (issue #825) — `/centraid/_vault/grants`.
+ * The GRANT PLANE's owner surface (#825) — `/centraid/_vault/grants`.
  *
- * A share is a standing grant, so this route says a sentence and keeps it: who
- * may see or edit which subject, from when, until it is revoked. It replaces
- * the retired give verbs outright — nothing here hands over a copy, and there
- * is no second act after the sentence is said.
+ * A share is a standing grant: who may see or edit which subject, until it is
+ * revoked. Nothing here hands over a copy. Three reads stay distinct —
+ * AUDIENCE-FIRST `?partyId=` (primary, ruling G-audience) unions a party's own
+ * grants with the circle grants she is on the roster of; LITERAL AUDIENCE is
+ * the row-level truth and never merges the two; SUBJECT-FIRST is the object side.
  *
- * Three shapes of question, because three shapes are asked:
- *
- *   - AUDIENCE-FIRST is primary (ruling G-audience). "Everything Priya can
- *     reach" is `?partyId=`, one query, unioning the grants that name her with
- *     the circle grants she is on the roster of — the read People's person
- *     screen is built from.
- *   - LITERAL AUDIENCE (`?audienceKind=&audienceId=`) is the row-level truth
- *     behind it: a party grant and a circle grant that happens to contain that
- *     party are different decisions, and this read never merges them.
- *   - SUBJECT-FIRST (`?subjectType=&subjectId=`) is the object side — the
- *     "who is this shared with" sheet on an album or a document.
- *
- * ABSENT IS NEVER EMPTY, on every read here. A grant nobody can see answers
- * `not_found`; an audience this vault has never heard of answers
- * `audience_not_found` rather than borrowing "nothing is shared with them";
- * a party this vault has never reached carries `channel: null`; a grant with
- * no delivery rows yet carries `fulfillment: []`. "We cannot see", "we do not
- * know them", "never reached", and "reached nobody" are four different
- * sentences and none is allowed to arrive wearing another's clothes. The one
- * question that cannot be split this way is the SUBJECT read — subject ids
- * are app-polymorphic, so no existence check belongs at this layer.
- *
- * Refusals are honest and actionable (#750's rule, kept): a subject type the
- * vault has no fulfillment strategy for is refused at the door with the
- * capabilities it DOES answer named in the copy, rather than recorded as a
- * grant the vault could never keep.
+ * ABSENT IS NEVER EMPTY on every read here: unreadable is `not_found`, an
+ * unknown audience is `audience_not_found`, an unreached party carries
+ * `channel: null`, an undelivered grant carries `fulfillment: []`. Only the
+ * SUBJECT read cannot split this way — subject ids are app-polymorphic, so no
+ * existence check belongs at this layer. A subject type with no fulfillment
+ * strategy is refused at the door, naming what the vault does answer (#750).
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -76,19 +57,16 @@ import { readJson, sendJson } from "./route-helpers.js";
 export const GRANTS_PATH = ROUTES.vaultGrants;
 const SUBJECTS_PATH = ROUTES.vaultGrantSubjects;
 
-/** The vault a request is scoped to, as the grant plane needs it. */
 export interface GrantVault {
   vaultId: string;
   db: VaultDb;
-  /** The owner party, recorded as `granted_by` on everything minted here. */
   ownerPartyId: string;
 }
 
 export interface GrantRouteDeps {
   enrollments: EnrollmentStore;
-  /** The active vault for this request (route security: vaultScope `active`). */
+  /** Route security: vaultScope `active`. */
   currentVault: () => GrantVault | undefined;
-  /** Everything this host has mounted — the fulfillment engine's reach. */
   host: GrantFulfillmentHost;
   now?: () => string;
 }
@@ -99,7 +77,6 @@ function callerDeviceId(req: IncomingMessage): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-/** What one grant looks like on the wire, delivery state included. */
 function grantWire(
   db: VaultDb,
   grant: ShareGrantRecord
@@ -114,8 +91,7 @@ function grantWire(
     revokedAt: grant.revokedAt,
     grantedBy: grant.grantedBy,
     maxSizeBytes: grant.maxSizeBytes,
-    // `[]` is "no audience vault has been addressed yet" — a real state, and
-    // never the same answer as a grant that could not be read at all.
+    // `[]` is "no audience vault addressed yet", never "could not be read".
     fulfillment: listFulfillment(db.vault, grant.grantId),
   };
 }
@@ -135,11 +111,6 @@ function stringField(
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-/**
- * The declared registry, as a surface should read it before drawing Share.
- * Consulting this is what keeps the verb from being offered where no strategy
- * answers it — the refusal below is the backstop, not the plan.
- */
 function subjectsWire(): Record<string, unknown>[] {
   return SHARE_SUBJECT_REGISTRY.map((entry) => ({
     subjectType: entry.subjectType,
@@ -148,7 +119,6 @@ function subjectsWire(): Record<string, unknown>[] {
   }));
 }
 
-/** Why a subject × capability pair cannot be granted, in the owner's terms. */
 function refusalCopy(
   subjectType: string,
   capability: ShareGrantCapability
@@ -163,7 +133,6 @@ function badRequest(res: ServerResponse, error: string, message: string): true {
   return sendJson(res, 400, { error, message });
 }
 
-/** Create a standing grant, then keep it — the two halves of one gesture. */
 async function createGrant(
   req: IncomingMessage,
   res: ServerResponse,
@@ -232,9 +201,8 @@ async function createGrant(
       );
     throw error;
   }
-  // Fulfillment runs on the gesture, not on a later sweep: the owner's answer
-  // says where the share actually got to — delivered, parked for an
-  // invitation, or refused — instead of promising it will be looked at.
+  // Fulfillment runs on the gesture, not a later sweep, so the answer says
+  // where the share got to rather than promising it will be looked at.
   const pass = fulfillGrant({
     host: deps.host,
     originVaultId: vault.vaultId,
@@ -253,11 +221,8 @@ async function createGrant(
   });
 }
 
-/**
- * The one sentence a person reads about a revocation. It is derived from what
- * actually happened, never a constant: an engine that keeps three honest
- * removal answers must not be paraphrased by a route into one optimistic one.
- */
+/** Derived from what happened, never a constant: three honest removal answers
+ *  must not be paraphrased into one optimistic one. */
 function revocationMessage(removal: GrantRemovalReport): string {
   if (removal.outcome === "failed")
     return `the share is revoked, but its removal could not be sent: ${removal.reason}`;
@@ -269,7 +234,6 @@ function revocationMessage(removal: GrantRemovalReport): string {
   return "no longer shared; no delivered copy remains — nothing needed removing";
 }
 
-/** End a grant and send its removal out — one verb, honestly best-effort. */
 function revokeGrant(
   res: ServerResponse,
   vault: GrantVault,
@@ -280,8 +244,7 @@ function revokeGrant(
   const revoked = revokeShareGrant(vault.db.vault, { grantId, revokedAt: now });
   if (revoked.outcome === "absent")
     return sendJson(res, 404, { error: "not_found" });
-  // Already-revoked propagates again on purpose: a removal that never reached
-  // a peer the first time is exactly what the owner is asking to retry.
+  // Already-revoked propagates again on purpose: that is the owner's retry.
   const removal = propagateGrantRemoval({
     host: deps.host,
     originVaultId: vault.vaultId,
@@ -297,16 +260,6 @@ function revokeGrant(
   });
 }
 
-/**
- * The three listing questions, answered from one door.
- *
- * An audience this vault has never heard of is `404 audience_not_found`, not
- * an empty list: `grants: []` means "nothing is shared with them", and a
- * stranger's id must not borrow that sentence. The SUBJECT question cannot be
- * answered the same way — subject ids are app-polymorphic and no table at
- * this layer can be asked whether one exists — so there `[]` genuinely covers
- * both facts, and the docs say so rather than claiming otherwise.
- */
 function listGrants(res: ServerResponse, vault: GrantVault, url: URL): boolean {
   const db = vault.db;
   const partyId = url.searchParams.get("partyId");
@@ -318,8 +271,7 @@ function listGrants(res: ServerResponse, vault: GrantVault, url: URL): boolean {
       });
     return sendJson(res, 200, {
       partyId,
-      // `null` is "this vault has never reached them" — not a severed channel,
-      // and not an audience with nothing shared.
+      // `null` is "never reached them", not a severed channel.
       channel: channelForParty(db.vault, partyId),
       grants: grantsWire(db, listLiveGrantsReachingParty(db.vault, partyId)),
     });
@@ -394,9 +346,8 @@ export function makeGrantRouteHandler(deps: GrantRouteDeps): RouteHandler {
     if (!owner)
       return sendJson(res, 403, { error: "device_identity_required" });
 
-    // The declared registry is the same for every vault this owner holds, and
-    // it discloses nothing about any of them — a surface may read it before a
-    // vault is even chosen.
+    // The registry discloses nothing about any vault, so it answers before one
+    // is chosen.
     if (url.pathname === SUBJECTS_PATH) {
       if (method !== "GET")
         return sendJson(res, 405, { error: "method_not_allowed" });
@@ -409,8 +360,7 @@ export function makeGrantRouteHandler(deps: GrantRouteDeps): RouteHandler {
         error: "vault_unavailable",
         message: "no vault is mounted for this request",
       });
-    // A vault this owner does not hold is not a permissions message, it is
-    // nothing at all — same topology hiding the edge plane uses.
+    // A vault this owner does not hold is nothing at all, not a refusal.
     if (deps.enrollments.owners.ownerOf(vault.vaultId) !== owner.ownerId)
       return sendJson(res, 404, { error: "not_found" });
 

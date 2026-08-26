@@ -1,19 +1,8 @@
 /*
- * Previews-first warm pass (issue #405 §5). After a lazy restore materializes
- * the vault.db + WAL replay and DEFERS every blob the remote CAS already holds
- * (see `backup-service.ts` restore), the grid is only usable once its TINY
- * derivatives — the `thumb` rung — are readable locally. This module pulls ALL
- * of them from the remote tier into the restored spool via the same custody
- * read-through the live vault uses (`BlobCustody.open`), so a fresh device
- * shows a full thumbnail grid in minutes without ever materializing the
- * mediums/originals (those stay remote-only and read-through on demand — the
- * §5 "recents/mediums on demand" contract). Full-library materialization is
- * NOT here: that is the explicit takeout/exportTo path only.
- *
- * The measured cost — time-to-usable-grid (ms from restore-complete to
- * warm-pass-complete) and the count of tinies warmed — rides back in the
- * result so the service/CLI can report how long a new device waits for a
- * usable grid, which is the §5 acceptance metric.
+ * Previews-first warm pass (#405): a lazy restore defers every blob the remote
+ * CAS holds, so the grid is unusable until the `thumb` rung is local. Pull ALL
+ * tinies through `BlobCustody.open` and nothing else — mediums and originals
+ * stay remote-only, and full-library materialization is takeout/exportTo.
  */
 
 import path from "node:path";
@@ -24,35 +13,23 @@ import { BlobCustody, FsBlobStore } from "@centraid/vault";
 import type { RemoteTier } from "@centraid/vault";
 
 export interface PreviewsWarmResult {
-  /** Distinct `thumb` shas the restored vault references (the target set). */
   tiniesTotal: number;
-  /** Tinies now present in the local spool after the read-through pass. */
   tiniesWarmed: number;
-  /** Tinies the remote could not serve (missing/failed) — a degraded grid. */
+  /** The remote could not serve these — a degraded grid. */
   tiniesFailed: number;
-  /**
-   * Time-to-usable-grid (issue #405 §5 acceptance metric): milliseconds from
-   * restore-complete (`startedAtMs`) to the moment every tiny had been pulled.
-   */
+  /** From `startedAtMs` to the last tiny pulled (§5's metric). */
   timeToUsableGridMs: number;
 }
 
 export interface WarmPreviewOptions {
   /** The restored vault directory (`vault.db` + `blobs/` live here). */
   destDir: string;
-  /**
-   * The remote CAS tier to read tinies from — the SAME remote the lazy restore
-   * consulted to decide which blobs to defer, so every deferred tiny is
-   * fetchable here. Its `encryptKey` must match how the objects were sealed.
-   */
+  /** The SAME remote the lazy restore consulted, so every deferred tiny is
+   *  fetchable; its `encryptKey` must match how the objects were sealed. */
   remote: RemoteTier;
-  /**
-   * Restore-complete wall-clock (from `now()`), so the returned metric measures
-   * exactly the new-device wait for a usable grid, not the whole restore.
-   */
+  /** Restore-complete wall clock, so the metric is the new-device wait. */
   startedAtMs: number;
-  /** Bounded read-through fan-out. A handful keeps the uplink busy without
-   * drowning the interactive-read QoS the custody layer enforces. */
+  /** Bounded, or it drowns the interactive-read QoS custody enforces. */
   concurrency?: number;
   now?: () => number;
   log?: EngineLogger;
@@ -60,10 +37,8 @@ export interface WarmPreviewOptions {
 
 const DEFAULT_WARM_CONCURRENCY = 6;
 
-/** Every DISTINCT `thumb` sha the restored vault references — the tinies whose
- * presence makes the grid usable. Read straight off the restored (already
- * WAL-replayed) vault.db, read-only; mediums/originals are deliberately NOT
- * collected here (issue #405 §5 keeps them remote-only). */
+/** Read off the already-WAL-replayed vault.db. Mediums and originals are
+ *  deliberately NOT collected — §5 keeps them remote-only. */
 function collectThumbShas(destDir: string): string[] {
   const db = new DatabaseSync(path.join(destDir, "vault.db"), {
     readOnly: true,
@@ -81,9 +56,6 @@ function collectThumbShas(destDir: string): string[] {
   }
 }
 
-/** Pull the tinies from `remote` into the restored local spool with bounded
- * parallelism, so a fresh device's grid becomes usable without materializing
- * the whole library. Returns the §5 time-to-usable-grid metric. */
 export async function warmPreviewTinies(
   opts: WarmPreviewOptions
 ): Promise<PreviewsWarmResult> {
@@ -91,10 +63,8 @@ export async function warmPreviewTinies(
   const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_WARM_CONCURRENCY);
   const shas = collectThumbShas(opts.destDir);
 
-  // A custody over the restored spool + the injected remote. No BlobCache is
-  // wired: a warm pass is a bulk promote of already-durable bytes, so the
-  // budget precheck (which guards fresh INGEST) is irrelevant, and `open`'s
-  // read-through promotes each tiny into `<destDir>/blobs` on the way through.
+  // No BlobCache: a warm pass bulk-promotes already-durable bytes, so the
+  // budget precheck (which guards fresh INGEST) does not apply.
   const custody = new BlobCustody(
     new FsBlobStore(path.join(opts.destDir, "blobs")),
     () => opts.remote
@@ -108,7 +78,7 @@ export async function warmPreviewTinies(
     if (i >= shas.length) return;
     const sha = shas[i]!;
     try {
-      // Read-through: local hit is a no-op; a miss fetches + promotes locally.
+      // Read-through: a hit is a no-op, a miss fetches and promotes.
       const got = await custody.open(sha);
       if (got) warmed += 1;
       else {

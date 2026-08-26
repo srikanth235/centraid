@@ -1,22 +1,9 @@
 /*
  * governance: allow-repo-hygiene file-size-limit (#567) one browser-safe conversation transport owns the route DTOs and SSE parser together so wire additions cannot drift between request and stream handling
  *
- * Renderer-side unified chat transport over direct HTTP (issue #141,
- * Phase 3). The chat panel used to relay through the desktop main process
- * (`main/chat.ts` + the `centraid:chat:*` IPC); it now talks to the gateway
- * directly:
- *
- *   - `streamTurn` POSTs `/centraid/<appId>/_turn` and parses the SSE stream
- *     into the gateway's native `TurnStreamEvent`s (fetch + ReadableStream
- *     reader, not `EventSource` — we need a POST body + the Bearer header).
- *     The gateway-side harness (Phase 3a `makeUnifiedConversationRunner`) runs the
- *     turn in the app's draft worktree with the union of tools, so one turn
- *     can both tweak the app's code and operate its data.
- *   - the chat-history surface (`/_centraid-conversations/apps/<appId>/sessions…`)
- *     mirrors the old `main/conversation-history-client.ts`: list / create / load /
- *     rename / delete, used to persist + resume conversations.
- *
- * Re-exported from `gateway-client.ts` so call sites import from one barrel.
+ * Renderer-side chat transport over direct HTTP (#141), no desktop relay. SSE
+ * uses fetch + a ReadableStream reader, never `EventSource`: a turn needs a
+ * POST body and the Bearer header.
  */
 
 import {
@@ -38,21 +25,11 @@ import {
   scopedAuthHeaders,
   GatewayClientError,
 } from "./gateway-client-core.js";
-// The ONE SSE parser + the documented TurnStreamEvent union.
 import { consumeSse } from "./turn-stream.js";
 import type { TurnStreamEvent } from "./turn-stream.js";
 
 export { type TurnStreamEvent } from "./turn-stream.js";
 
-// Re-exported so every consumer keeps importing the union from this barrel; the
-// definition now lives in one place (the wire contract, turn-stream.ts).
-
-/**
- * Harness preflight + model catalog from the ACTIVE gateway. Reads the
- * gateway's own `GET /centraid/_turn/harness-status` — so a remote gateway
- * reports its own configured harness and models, and the chat picker
- * can list them.
- */
 export async function getHarnessStatus(
   opts: { refresh?: boolean } = {}
 ): Promise<CentraidHarnessStatus> {
@@ -67,18 +44,10 @@ export async function getHarnessStatus(
   return readJson<CentraidHarnessStatus>(res, "fetch harness status");
 }
 
-/**
- * Which harness credentials are present on the ACTIVE gateway's host.
- * Reads the gateway's `GET /centraid/_harnesses/status` — detection lives
- * beside the harness, so a remote gateway reports its own host's agents
- * rather than whatever is installed on the desktop.
- */
 export async function getHarnessesStatus(
   opts: { refresh?: boolean } = {}
 ): Promise<CentraidHarnessesStatus> {
   const { baseUrl, token } = await auth();
-  // `?refresh=1` re-enumerates each harness's models (issue #188). A plain load
-  // returns the catalog cache.
   const path = opts.refresh
     ? "/centraid/_harnesses/status?refresh=1"
     : "/centraid/_harnesses/status";
@@ -89,7 +58,6 @@ export async function getHarnessesStatus(
   return readJson<CentraidHarnessesStatus>(res, "fetch agents status");
 }
 
-/** An attachment already uploaded to the blob CAS, referenced on the next turn. */
 export interface ConversationAttachmentRef {
   hash: string;
   mime: string;
@@ -97,78 +65,46 @@ export interface ConversationAttachmentRef {
   filename?: string;
 }
 
-/** The gateway's per-file cap on `uploadConversationAttachment` (issue #190). */
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 export interface StreamTurnInput {
-  /** The chat session id the gateway keys the turn on. */
   conversationId: string;
   message: string;
-  /**
-   * Chat register (issue #286 phase 2): 'ask' = the app copilot ("operate/
-   * ask about my data") — the gateway routes vault-backed apps' ask turns
-   * onto the vault register. Absent = builder chat (unchanged).
-   */
+  /** Absent = builder chat; 'ask' takes the vault register (#286). */
   register?: "ask" | "build";
-  /** Per-conversation harness selection; does not mutate the device default. */
+  /** Does not mutate the device default. */
   harnessKind?: string;
   model?: string;
   thinking?: string;
-  /** Files uploaded ahead of the turn (issue #190). */
   attachments?: ConversationAttachmentRef[];
-  /** Regenerate: the turn id this turn re-runs (issue #420). Recorded as
-   *  `turns.retry_of` so the transcript collapses it into a sibling pager. */
+  /** Recorded as `turns.retry_of`, which collapses the pair into a pager. */
   retryOf?: string;
-  /**
-   * Idempotency key (issue #420). A fresh UUID per user send, REUSED on every
-   * automatic/one-tap resend of the same message — so a retry-after-network-blip
-   * replays the already-recorded turn instead of double-running it.
-   */
+  /** A fresh UUID per user send, REUSED on every resend of that message, so a
+   *  retry replays the recorded turn instead of double-running it (#420). */
   idempotencyKey?: string;
-  /**
-   * Explicit owner approval for this conversation × provider egress boundary.
-   * A list when one attempt needed consent for more than one provider (a
-   * consent-gated failover): every provider approved so far must ride each
-   * resend, or the server re-asks for the earlier ones (#567).
-   */
+  /** Every provider approved so far must ride EACH resend (#567). */
   providerConsent?: string | string[];
-  /** Explicit owner-selected extra workspace roots for this conversation turn. */
   additionalDirectories?: string[];
-  /** Centraid-owned primary workspace selector (the host resolves the path). */
   workspaceKind?: "vault-data" | "app" | "draft";
-  /**
-   * The vault this conversation reads and writes (issue #599). A conversation
-   * is pinned to exactly ONE vault for its whole life: the picker records the
-   * choice when the conversation is created, and every later turn/load repeats
-   * it. Omitted degrades to the shell's internal default-scope pointer, which
-   * is what every conversation created before the picker existed relies on.
-   */
+  /** A conversation is pinned to exactly ONE vault for its whole life (#599). */
   scopeId?: string;
 }
 
-/** Result of a driven turn: whether the stream ended cleanly server-side. */
 export interface StreamTurnResult {
-  /** True when the terminal `event: end` arrived; false on a mid-turn drop. */
+  /** True only when the terminal `event: end` arrived. */
   ended: boolean;
 }
 
-/** Bounded auto-retries on a `429` turn-busy before surfacing the error. */
 const TURN_BUSY_MAX_RETRIES = 4;
 
-/** Sleep helper for the bounded 429 backoff. */
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
 
-/**
- * POST a `_turn` body, transparently auto-retrying a `429` turn-busy up to
- * `TURN_BUSY_MAX_RETRIES` times honoring `Retry-After` (issue #420). Because the
- * body carries a stable `idempotencyKey`, a retry can only ever replay — never
- * double-run. Returns the OK streaming `Response`; throws `GatewayClientError`
- * on a non-429 failure or once retries are exhausted.
- */
+// Auto-retries a `429` turn-busy; safe only because a stable `idempotencyKey`
+// makes the retry a replay (#420).
 async function postTurnWithRetry(
   path: string,
   body: string,
@@ -223,11 +159,6 @@ async function postTurnWithRetry(
   return postAttempt(0);
 }
 
-/**
- * Upload one file to the app's blob CAS ahead of a chat turn
- * (`POST /_centraid-conversations/apps/<appId>/blobs`). Returns the dedup-keyed ref the
- * caller threads into `streamTurn({ attachments })` (issue #190).
- */
 export async function uploadConversationAttachment(
   appId: string,
   bytes: Uint8Array,
@@ -236,9 +167,8 @@ export async function uploadConversationAttachment(
   scopeId?: string
 ): Promise<ConversationAttachmentRef> {
   const { baseUrl, token } = await auth();
-  // The blob CAS is vault-partitioned: an attachment staged in the ambient
-  // vault while the turn resolves its hash in the conversation's vault would
-  // silently break — so the conversation's scope rides the upload too (#599).
+  // The blob CAS is vault-partitioned, so the conversation's scope must ride
+  // the upload or the turn resolves the hash in the wrong vault (#599).
   const res = await doFetch(baseUrl, blobsPath(appId), {
     method: "POST",
     headers: scopedAuthHeaders(token, scopeId, mime),
@@ -260,12 +190,6 @@ export async function uploadConversationAttachment(
   };
 }
 
-/**
- * Drive one chat turn against `POST /centraid/<appId>/_turn`, invoking
- * `onEvent` for each parsed `TurnStreamEvent`. Resolves when the stream ends
- * (the gateway's `event: end` frame / connection close). Pass an
- * `AbortSignal` to cancel the in-flight turn (Stop button / panel teardown).
- */
 export async function streamTurn(
   appId: string,
   input: StreamTurnInput,
@@ -296,20 +220,13 @@ export async function streamTurn(
     "chat",
     input.scopeId
   );
-  // `res.body` is guaranteed by postTurnWithRetry.
   return consumeSse(res.body!, onEvent, { signal });
 }
 
 // ───────────────────────── vault assistant ─────────────────────
 
-/**
- * The vault assistant's reserved conversation scope (mirrors app-engine's
- * `ASSISTANT_APP_ID`). Its threads ride the same `/_centraid-conversations`
- * CRUD as app chats — list/create/load/rename/delete all take this id.
- */
 export const ASSISTANT_APP_ID = "_assistant";
 
-/** A minimal renderable entity card resolved from an answer's @-ref. */
 export interface AssistantRefCard {
   type: string;
   id: string;
@@ -318,10 +235,6 @@ export interface AssistantRefCard {
   subtitle: string | null;
 }
 
-/**
- * Drive one vault-assistant turn against the shell-level
- * `POST /centraid/_vault/assistant/_turn` (same SSE grammar as app chat).
- */
 export async function streamAssistantTurn(
   input: StreamTurnInput,
   onEvent: (event: TurnStreamEvent) => void,
@@ -353,11 +266,6 @@ export async function streamAssistantTurn(
   return consumeSse(res.body!, onEvent, { signal });
 }
 
-/**
- * Poll a conversation's turn-settle status (issue #420) — cheap enough to loop
- * during reconnect catch-up. Returns the current `turnCount` so the caller can
- * detect a turn landing server-side after a dropped stream.
- */
 export async function conversationStatus(
   appId: string,
   sessionId: string,
@@ -371,7 +279,6 @@ export async function conversationStatus(
   return readJson(res, "conversation status");
 }
 
-/** Resolve answer refs (`ref:type/id`) to renderable entity cards. */
 export async function resolveAssistantRefs(
   refs: Array<{ type: string; id: string }>
 ): Promise<AssistantRefCard[]> {
@@ -389,7 +296,4 @@ export async function resolveAssistantRefs(
   return out.cards ?? [];
 }
 
-// The chat-history CRUD (list/create/load/rename/search/pin/archive/delete)
-// lives beside this file; re-exported so the conversation surface stays one
-// import for every call site.
 export * from "./gateway-client-conversation-history.js";

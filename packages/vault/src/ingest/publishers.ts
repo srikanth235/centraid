@@ -1,9 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit the per-entity publishers are one closed vocabulary — probe/create/update share the provenance-stamping contract (#290)
-// Per-entity-type publishers for the staging spine (issue #290 phase 2).
-// A publisher is the ONLY code that turns a staged payload into vault rows:
-// `probe` adopts rows the vault already holds (domain-native keys — ical_uid,
-// party identifiers, external_id columns), `create`/`update` write, and both
-// report every touched row so the spine stamps provenance for each.
+// Per-entity publishers (#290): only this code turns a staged payload into
+// vault rows. `probe` adopts; `create`/`update` write and report touched rows.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -39,7 +36,7 @@ export interface EventPayload {
 const eventPublisher: Publisher = {
   entityType: "core.event",
   probe(vault, payload) {
-    // Read-only — the runtime schema gate covers WRITE paths only (#374 T3).
+    // Read-only — schema gate covers WRITE paths only (#374).
     const p = payload as unknown as EventPayload;
     const existing = vault
       .prepare("SELECT event_id FROM core_event WHERE ical_uid = ?")
@@ -109,7 +106,6 @@ export interface PartyPayload {
   identifiers: { scheme: string; value: string; label: string | null }[];
 }
 
-/** Bind identifiers to a party, skipping (scheme,value) pairs any party holds. */
 function bindIdentifiers(
   vault: DatabaseSync,
   partyId: string,
@@ -154,7 +150,6 @@ function bindIdentifiers(
   return wrote;
 }
 
-/** Live-handle lookup, newest primary first — the vCard resolution rule. */
 function partyByIdentifiers(
   vault: DatabaseSync,
   identifiers: PartyPayload["identifiers"]
@@ -240,8 +235,7 @@ const partyPublisher: Publisher = {
   },
   update(vault, entityId, payload, now) {
     const p = assertPayload<PartyPayload>("PartyPayload", payload);
-    // The vault wins: an import never rewrites a person's name or birthday —
-    // it only backfills handles the vault has never seen.
+    // Vault wins: import never rewrites name or birthday — only new handles.
     return {
       wrote: [
         ...bindIdentifiers(vault, entityId, p.identifiers),
@@ -260,9 +254,7 @@ export interface MessagePayload {
   fromEmail: string | null;
   sentAt: string;
   body: string;
-  /** Normalized subject — the thread grouping key. */
   threadKey: string;
-  /** Staged blob shas the parser hashed into the CAS (issue #296). */
   attachments?: {
     stagedSha: string;
     filename: string;
@@ -271,7 +263,6 @@ export interface MessagePayload {
   }[];
 }
 
-/** Dedupe-or-insert a plain-text body as a canonical content item. */
 function textContentItem(
   vault: DatabaseSync,
   text: string,
@@ -320,7 +311,6 @@ const messagePublisher: Publisher = {
     const p = assertPayload<MessagePayload>("MessagePayload", payload);
     const wrote: PublishedWrite[] = [];
 
-    // Sender: resolve by email handle, else mint a person for the address.
     let senderId: string | null = null;
     if (p.fromEmail) {
       const identifiers = [
@@ -344,7 +334,6 @@ const messagePublisher: Publisher = {
       }
     }
 
-    // Thread: one per normalized subject per mailbox import.
     const threadRef = `mbox:${sha256Hex(p.threadKey).slice(0, 24)}`;
     let thread = vault
       .prepare("SELECT thread_id FROM social_thread WHERE external_ref = ?")
@@ -402,9 +391,6 @@ const messagePublisher: Publisher = {
         body.contentId,
         p.messageId
       );
-    // Email attachments (issue #296): the parser staged the bytes; publish
-    // is the claim — content items promote from the staging band and pin to
-    // the message with the same edge core.attach writes.
     for (const att of p.attachments ?? []) {
       const promoted = promoteStagedBlob(
         {
@@ -441,8 +427,7 @@ const messagePublisher: Publisher = {
     return { entityId: messageId, wrote };
   },
   update() {
-    // Mail is immutable — a mapped message never changes upstream; anything
-    // that looks like an update is a re-parse artifact and applies nothing.
+    // Mail is immutable — a mapped update is a re-parse artifact.
     return { wrote: [] };
   },
 };
@@ -459,7 +444,6 @@ export interface TransactionPayload {
   accountName: string;
 }
 
-/** Find-or-create the owner's account by name — file drops name accounts. */
 function accountFor(
   vault: DatabaseSync,
   ownerPartyId: string,
@@ -533,10 +517,7 @@ const transactionPublisher: Publisher = {
 };
 
 // ── locker.item (password-manager CSV, issue #293) ─────────────────────
-// Secret fields ride the payload sealed (the spine seals them at stage time
-// and unseals them just-in-time for this publisher); the spine re-seals the
-// written row's columns before the transaction commits. This publisher only
-// shapes rows — it never sees the vault's key.
+// Secret fields ride sealed; this publisher never sees the vault's key.
 
 export interface LockerItemPayload {
   title: string;
@@ -589,8 +570,7 @@ const lockerItemPublisher: Publisher = {
     return { entityId: itemId, wrote: [] };
   },
   update(vault, entityId, payload, now) {
-    // Source fills gaps, never overwrites: an imported password lands only
-    // where the vault holds none (vault-wins, issue #290 decision 6).
+    // Vault-wins (#290 decision 6): import fills gaps, never overwrites.
     const p = assertPayload<LockerItemPayload>("LockerItemPayload", payload);
     vault
       .prepare(
@@ -609,7 +589,6 @@ const lockerItemPublisher: Publisher = {
 export interface NotePayload {
   title: string;
   body: string;
-  /** Relative file path; parent segments become nested notebooks. */
   path: string;
 }
 
@@ -644,13 +623,7 @@ function noteContent(
   return { id, wrote: [{ type: "core.content_item", id }] };
 }
 
-/**
- * Find-or-create a nested collection path under one owner, returning the
- * deepest collection. Shared by every importer that files what it publishes
- * (issue #721): a Markdown directory becomes nested notebooks, a Takeout
- * album folder becomes one flat album — same mechanism, same find-or-create,
- * so an import never mints a second collection with a name the vault holds.
- */
+// Find-or-create nested collections (#721) — never mint a second name the vault holds.
 function ensureCollectionPath(
   vault: DatabaseSync,
   ownerPartyId: string,
@@ -696,7 +669,6 @@ function ensureCollectionPath(
   return { collectionId: parent, wrote };
 }
 
-/** Append a target to a collection, at most once (the UNIQUE decides). */
 function addCollectionEntry(
   vault: DatabaseSync,
   collectionId: string,
@@ -802,25 +774,15 @@ const notePublisher: Publisher = {
 };
 
 // ── media.asset (photo-library import, issue #721 A1) ─────────────
-// A photograph from a Takeout archive must become the SAME row as one
-// uploaded from a phone, so this publisher writes through `media.add_asset`'s
-// own primitives (commands/media.ts) rather than a second insert of its own:
-// `adoptAssetForContentTx` for the sha-dedupe/restore rule,
-// `insertMediaAssetTx` for the row, `findOrCreatePlaceTx` for the place,
-// `setStarredTx` for the favorite (the column is a mirror, the tag is the
-// truth — issue #441 A2.1). What is genuinely new here is only what the
-// ARCHIVE knows and an upload does not: the sidecar's testimony and the
-// album folder it sat in.
+// Same row as a phone upload: write through media.add_asset primitives, not a
+// second insert. Sidecar + album folder are the archive-only extras.
 
 export interface MediaAssetPayload {
-  /** Bytes already in the CAS (issue #296) — the sha is also their identity. */
   stagedSha: string;
   filename: string;
   mediaType: string;
   byteSize: number;
-  /** Archive-relative path — the stable Takeout identity, and the external id. */
   path: string;
-  /** Sidecar capture time. NULL is a fact: nobody knows when this was taken. */
   capturedAt: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -830,7 +792,6 @@ export interface MediaAssetPayload {
   album: string | null;
 }
 
-/** File a published asset into its reconstructed album. */
 function placeImportedAsset(
   vault: DatabaseSync,
   ownerPartyId: string,
@@ -850,8 +811,6 @@ function placeImportedAsset(
       now
     ),
   ];
-  // The first photo into a coverless album becomes its cover — the same rule
-  // `media.add_to_album` applies, so a reconstructed album has a face too.
   vault
     .prepare(
       `UPDATE core_collection SET cover_content_id =
@@ -865,11 +824,7 @@ function placeImportedAsset(
 const mediaAssetPublisher: Publisher = {
   entityType: "media.asset",
   probe(vault, payload) {
-    // Read-only lookup — see the eventPublisher note above. DEDUPE AGAINST
-    // THE WHOLE VAULT, not just this connection's map: the same photograph
-    // re-exported under a different archive name, or already uploaded from
-    // the phone, is the same bytes and therefore the same asset. Canonical
-    // sha256 is what says so (core_content_item.sha256 is UNIQUE).
+    // Dedupe against the whole vault (sha256 UNIQUE), not this connection's map.
     const p = payload as unknown as MediaAssetPayload;
     if (typeof p.stagedSha !== "string") return null;
     const existing = vault
@@ -899,10 +854,7 @@ const mediaAssetPublisher: Publisher = {
       p.stagedSha,
       p.caption === null ? {} : { title: p.caption }
     );
-    // Two entries of the same bytes inside ONE archive (Takeout's `(1)`
-    // duplicates) both staged as creates, because neither was in the vault
-    // when the batch was dispositioned. The second one adopts the first's
-    // asset here instead of hitting the content_id UNIQUE.
+    // Same-bytes `(1)` duplicates in one archive: second adopts, not UNIQUE-hit.
     const adopted = adoptAssetForContentTx(
       deps,
       promoted.contentId,
@@ -911,13 +863,8 @@ const mediaAssetPublisher: Publisher = {
     const meta = promoted.meta;
     const assetId = adopted ?? uuidv7();
     if (!adopted) {
-      // SIDECAR BEATS EXIF BEATS NOTHING. Google Photos' record of when a
-      // photo was taken survives edits, re-encodes and stripped EXIF, so it
-      // wins where it exists. The file's own mtime is deliberately NOT a
-      // third tier: a zip stores whatever the exporter's machine felt like
-      // stamping, so it dates the EXPORT, not the photograph. When neither
-      // source knows, captured_at stays NULL and the photo lands undated —
-      // an honest gap the timeline can say out loud.
+      // Sidecar beats EXIF beats nothing. File mtime is NOT a third tier —
+      // a zip dates the export, not the photograph.
       const latitude = p.latitude ?? meta.latitude ?? null;
       const longitude = p.longitude ?? meta.longitude ?? null;
       insertMediaAssetTx(vault, {
@@ -925,9 +872,7 @@ const mediaAssetPublisher: Publisher = {
         contentId: promoted.contentId,
         kind: assetKindFor(promoted.mediaType),
         capturedAt: p.capturedAt ?? meta.captured_at ?? null,
-        // Takeout's timestamp is a UTC instant with no zone beside it, and
-        // EXIF's is zoneless local — neither states an offset, so there is
-        // nothing honest to put here.
+        // Neither Takeout UTC nor zoneless EXIF states an offset.
         tzOffsetMin: null,
         captureGroupId: p.captureGroupId,
         sourceAssetId: null,
@@ -956,12 +901,8 @@ const mediaAssetPublisher: Publisher = {
       wrote.push({ type: entityType, id: entityId2 });
     };
     const deps = { vault, now, newId: uuidv7, wrote: collect };
-    // An `update` row is the owner having REVIEWED this diff and pressed
-    // publish, so the sidecar's caption, favorite and capture time apply.
-    // Two exceptions, both about not destroying what the vault knows: a
-    // sidecar with NO capture time may not erase one the vault has (COALESCE
-    // — honest absence upstream is not a correction), and a capture group is
-    // additive, never re-pointed.
+    // COALESCE capture time: sidecar absence is not a correction. Capture
+    // group is additive, never re-pointed.
     vault
       .prepare(
         `UPDATE media_asset
@@ -988,11 +929,7 @@ const mediaAssetPublisher: Publisher = {
   },
 };
 
-/**
- * The favorite bit, mirrored onto the canonical starred tag exactly as the
- * media commands do. Only ever SETS: an import fills gaps, it never clears a
- * star the owner put on a photo here (issue #290 decision 6).
- */
+// Favorite only SETS — import never clears a star the owner put here (#290).
 function applyImportedAssetFlags(
   deps: {
     vault: DatabaseSync;
@@ -1020,7 +957,6 @@ function applyImportedAssetFlags(
   );
 }
 
-/** The publisher registry the spine walks. */
 export const PUBLISHERS: ReadonlyMap<string, Publisher> = new Map(
   [
     eventPublisher,

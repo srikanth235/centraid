@@ -1,27 +1,9 @@
 /**
- * Every fallback-less `var()` in the shell's CSS resolves to something (#686).
- *
- * `packages/blueprints/src/token-purity.test.ts` gained this gate for blueprint
- * apps earlier in #686 — and only for blueprint apps. The shell was never
- * scanned, and carried 13 unresolvable names, among them four `--ink-*`
- * phantoms (`--ink-1`, …) that the `.design-sync/conventions.md` staging notes
- * had explicitly flagged as "never emitted" and that #677's `--ink-*` →
- * `--text-*` rename then carried forward verbatim as `--text-1`. The failure is
- * silent by construction: an unresolvable `var()` with no fallback makes the
- * whole declaration invalid at computed-value time, so the property falls back
- * to inherited/initial with nothing thrown and nothing logged. The builder's
- * three language dots had been painting no background at all.
- *
- * Resolution rules — a reference is fine when the name is:
- *   1. in `SHELL_TOKEN_CONTRACT` (what `toCss()` injects at boot);
- *   2. declared anywhere in the shell's own CSS (a component may declare a
- *      knob its descendants read, and the cascade does not respect file
- *      boundaries); or
- *   3. in `RUNTIME_DECLARED` below — set from TSX via an inline `style` prop or
- *      `setProperty()`, so no stylesheet declares it and none should.
- *
- * A reference WITH a fallback is never reported: the author chose what happens
- * on the miss, so nothing is silent.
+ * Every fallback-less `var()` in the shell's CSS resolves (#686).
+ * Unresolvable `var()` with no fallback invalidates the declaration silently.
+ * Fine when the name is in `SHELL_TOKEN_CONTRACT`, declared in shell CSS, or
+ * in `RUNTIME_DECLARED` (set from TSX). A reference WITH a fallback is never
+ * reported — the author chose the miss.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -40,26 +22,12 @@ const SRC = path.resolve(import.meta.dirname);
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 
 /**
- * Custom properties the shell sets from TypeScript rather than CSS, with the
- * component that sets each one. These are legitimately absent from every
- * stylesheet: the value is per-instance (a chosen swatch, a row's hue, an
- * animation index), which is exactly what an inline `style` prop is for.
- *
- * Adding a name here is a claim that some TSX writes it, and that no
- * stylesheet does. Both halves of that claim are checked below, so neither a
- * stale entry nor a redundant one can quietly widen the gate.
- *
- * Deliberately minimal. The shell sets a dozen other properties inline
- * (`--onb-accent`, `--route-accent`, `--pack-c`, `--tk-hue`, `--depth`,
- * `--stage-i`, …) and every one of them ALSO carries a CSS default on the
- * element that reads it, so they resolve by rule 2 and want no entry here —
- * listing them would mean the gate stops noticing if that default is deleted.
+ * Names TSX sets inline with no stylesheet default. Adding one claims both
+ * halves (checked below). Do not list names that also have a CSS default —
+ * that would hide a later default deletion.
  */
 const RUNTIME_DECLARED: Readonly<Record<string, string>> = {
-  // Settings → You, profile group: the avatar ring, focus state, and save affordance all
-  // take the swatch the user is currently pointing at, before anything is
-  // saved, so the value only exists per render. No CSS default on purpose —
-  // the ring has no meaning until a colour is chosen.
+  // Per-render swatch; no CSS default — the ring is meaningless until a colour is chosen.
   "--profile-accent": "react/screens/SettingsProfileScreen.tsx",
 };
 
@@ -89,8 +57,7 @@ const resolved = new Set<string>([
 
 describe("shell CSS custom-property resolution", () => {
   test("finds the stylesheets it claims to police", () => {
-    // A walker that silently matches nothing is a green suite asserting
-    // nothing — the exact failure this gate exists to prevent.
+    // A walker matching nothing is a green suite asserting nothing.
     expect(cssFiles.length).toBeGreaterThan(80);
     expect(SHELL_TOKEN_CONTRACT.length).toBeGreaterThan(50);
   });

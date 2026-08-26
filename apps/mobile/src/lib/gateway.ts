@@ -1,11 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit single wire-client module (#647 added the notifications/decision endpoints); pending split of the notifications client into a sibling module
-// Mobile gateway client (issue #263). Base-URL resolution order:
-//   (a) the paired tunnel — a localhost proxy that forwards every request
-//       over iroh to the desktop, which attaches the bearer on its side;
-//   (b) the manual gateway URL from Settings → Advanced — a developer
-//       fallback for simulators pointing at a token-less dev gateway. The
-//       token here is used for the RN-side API fetches (approvals, app
-//       queries, notifications) every native cover makes.
+// Mobile gateway client (#263). Base URL: (a) paired tunnel (desktop attaches
+// the bearer); (b) manual Settings → Advanced URL (RN-side token).
 
 import * as Crypto from "expo-crypto";
 import { fetch as expoFetch } from "expo/fetch";
@@ -26,14 +21,11 @@ export const SETTINGS_KEY = "settings.gatewayUrl";
 export const SETTINGS_TOKEN_KEY = "settings.gatewayToken";
 const OAUTH_CLIENT_SESSION_KEY = "oauth.clientSession";
 
-/** One parked vault invocation (VaultPlane listParked → ParkedSummary). */
 export interface ParkedInvocation {
   invocationId: string;
   command: string;
   parkedAt: string;
-  /** Identity kind of the caller, e.g. 'app' | 'agent' | 'owner-device'. */
   callerKind: string;
-  /** Display name of the caller (consent.app.name for apps), or null. */
   caller: string | null;
   input: Record<string, unknown>;
 }
@@ -70,7 +62,7 @@ export interface MobileNotifications {
       appId: string;
       purpose: string;
       requestedAt: string;
-      /** The asked triples — rendered on the card, never approved unseen. */
+      /** Asked triples — rendered on the card, never approved unseen. */
       scopes: DecisionScope[];
     }>;
   };
@@ -100,7 +92,6 @@ export class GatewayError extends Error {
   }
 }
 
-/** Strip a trailing `/` so we can confidently concatenate paths. */
 function normalizeBase(raw: string): string {
   return raw.replace(/\/+$/u, "");
 }
@@ -125,67 +116,31 @@ export function setGatewayToken(value: string): void {
   void setSecure(SETTINGS_TOKEN_KEY, value.trim());
 }
 
-/**
- * Authorization header for RN-side API fetches in manual-URL dev mode.
- * Harmless over the tunnel — the desktop overrides `authorization` before
- * forwarding to its loopback gateway.
- */
+/** Manual-URL dev. Harmless over the tunnel — desktop overrides `authorization`. */
 export function authHeader(): Record<string, string> {
   const token = getGatewayToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/**
- * The `x-centraid-vault` header addressing the active Vault's vault (issue #289
- * addressing model). Every RN-side gateway fetch carries it so the whole app —
- * app grid, Settings → Vault, approvals — follows whichever vault the Vaults
- * switcher has active, instead of floating to the gateway's implied default.
- * '' (no active vault, e.g. fresh manual-URL dev) sends no header, preserving
- * the old "let the gateway pick" behaviour. The replica sends its own copy of
- * this header (ReplicaProvider) keyed on the same active Vault.
- */
+/** `x-centraid-vault` (#289). No active vault → no header; gateway picks. */
 export function vaultHeader(): Record<string, string> {
   const vaultId = getActiveVaultId();
   return vaultId ? { "x-centraid-vault": vaultId } : {};
 }
 
-/** The RN-fetch header set every authed gateway call needs: auth + active vault. */
 export function apiHeaders(
   extra?: Record<string, string>
 ): Record<string, string> {
   return { ...authHeader(), ...vaultHeader(), ...extra };
 }
 
-/**
- * How long a cold start waits for the tunnel to answer before falling
- * through to the manual-URL path / cached base. `startTunnel()` itself has no
- * timeout — dialling a desktop that is asleep or unreachable can hang for the
- * lifetime of the launch — so SOMETHING here has to own a budget, or a cold
- * start with no reachable gateway waits forever and never opens the replica
- * it already has on disk (the defect this constant exists to make impossible;
- * see replica-mount.ts / mount-plan.ts for the phase-A/phase-B split this
- * feeds into).
- */
+/** `startTunnel()` has no timeout — without this, a sleeping desktop hangs launch. */
 const TUNNEL_START_BUDGET_MS = 4_000;
 
 /**
- * Race `work` against a timer of `ms`, resolving `undefined` if the timer
- * wins. This is a BUDGET, not a cancellation: `work` is never aborted, only
- * abandoned. That distinction is the whole safety argument —
- *
- *   - `resolveGatewayBase()` writes nothing itself, so an abandoned start
- *     landing late has nothing of ours to corrupt;
- *   - `ensureTunnelStarted()`'s own `startInFlight` memoization means the
- *     NEXT call (a manual retry, a later reachability pass) joins the same
- *     in-flight start instead of dialling a second time;
- *   - once the abandoned start finishes, the tunnel IS running, and the next
- *     pass through `ensureTunnelStarted()` reads `status.state === "running"`
- *     and takes the port straight off the status call, no new dial needed.
- *
- * `work.catch(() => undefined)` is attached up front — before the race can
- * give up on it — so a late rejection from the abandoned promise can never
- * surface as an unhandled rejection; the caller of `withBudget` never sees
- * it, because by then this function has already settled from the timer side.
+ * A BUDGET, not a cancellation: `work` is abandoned, never aborted.
+ * `work.catch(() => undefined)` is attached UP FRONT so a late rejection
+ * cannot surface unhandled.
  */
 function withBudget<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
   work.catch(() => undefined);
@@ -204,14 +159,8 @@ function withBudget<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
 }
 
 /**
- * Resolve the base URL for every gateway request: paired tunnel first,
- * manual URL second. `undefined` when neither is configured; throws
- * PhoneLinkError when the device is paired but the tunnel fails to start.
- *
- * The tunnel start is budgeted (`withBudget`) for the TIMEOUT dimension only:
- * a start that genuinely fails — bad ticket, module unavailable — still
- * rejects and its PhoneLinkError still reaches the pairing screens verbatim.
- * Only "did not answer within the budget" resolves `undefined` here.
+ * Tunnel first, manual URL second. `undefined` when neither is configured.
+ * Budget covers TIMEOUT only — a genuine start failure still rejects.
  */
 export async function resolveGatewayBase(): Promise<string | undefined> {
   const tunnel = await withBudget(
@@ -221,11 +170,7 @@ export async function resolveGatewayBase(): Promise<string | undefined> {
   if (tunnel) return tunnel.baseUrl;
   const manual = await hydrateGatewayUrl();
   if (!manual) return undefined;
-  // Warm the token cache before the caller builds `authHeader()`. That helper is
-  // sync (cache-only), and the Settings screen is otherwise the ONLY place that
-  // hydrates the token — so on a cold start into manual-URL dev mode every authed
-  // fetch would go out bearer-less and 401 until Settings was opened once. The
-  // tunnel path skips this: the desktop attaches its own auth on forward.
+  // Warm the sync `authHeader()` cache; else a cold manual-URL start 401s.
   await hydrateGatewayToken();
   return normalizeBase(manual);
 }
@@ -241,11 +186,7 @@ export async function requireGatewayBase(): Promise<string> {
   return base;
 }
 
-/**
- * Invoke one online-only app query from a first-class native cover. The
- * request takes the app-scoped RPC path; callers keep passphrases/session
- * tokens out of the replica and durable intent queue.
- */
+/** Keep passphrases out of the replica and intent queue. */
 export async function appQuery<T>(
   appId: string,
   query: string,
@@ -303,13 +244,6 @@ function parseJsonBody<T>(text: string): T {
 
 const conditionalBodies = new ConditionalBodyCache();
 
-/**
- * A GET the screens re-issue on mount, focus and every doorbell.
- *
- * Revalidating with `If-None-Match` means an unchanged answer costs a 304 and
- * no body. Where the gateway sends no `ETag` this is exactly the old
- * unconditional GET, so adding a route here is always safe.
- */
 export async function fetchJsonRevalidated<T>(
   href: string,
   init: RequestInit = {}
@@ -329,7 +263,6 @@ export async function fetchJsonRevalidated<T>(
   return parseJsonBody<T>(result.body);
 }
 
-/** Parked vault invocations awaiting the owner's confirmation. */
 export async function listParked(): Promise<ParkedInvocation[]> {
   const base = await requireGatewayBase();
   const body = await fetchJsonRevalidated<{ parked: ParkedInvocation[] }>(
@@ -352,7 +285,6 @@ export async function getNotifications(
   );
 }
 
-/** Content-free Notifications SSE doorbell; callers re-fetch the canonical payload. */
 export async function subscribeMobileNotificationsChanges(
   onChange: () => void,
   signal: AbortSignal
@@ -433,12 +365,7 @@ export async function decideNotificationsScope(
   );
 }
 
-/**
- * The stable client-session id both halves of an OAuth ceremony must carry.
- * The gateway binds a pending ceremony to it (plus the enrolled device), so
- * begin and complete MUST send the same value — hence the persisted store
- * rather than a per-call random.
- */
+/** Begin and complete MUST send the same value — persisted, never per-call random. */
 async function oauthClientSessionId(): Promise<string> {
   const stored = await Store.hydrate<string>(OAUTH_CLIENT_SESSION_KEY, "");
   if (/^[A-Za-z0-9_-]{32,128}$/u.test(stored)) return stored;
@@ -447,11 +374,6 @@ async function oauthClientSessionId(): Promise<string> {
   return minted;
 }
 
-/**
- * Begin the canonical connection re-authorization flow from a needs-auth row.
- * `surface` selects the Assist Worker's *deep-link* return so the in-app auth
- * session can catch it — see lib/connection-reauth.ts for the full rationale.
- */
 export async function beginNotificationsConnectionAuthorization(
   connectionId: string
 ): Promise<string> {
@@ -470,11 +392,7 @@ export async function beginNotificationsConnectionAuthorization(
   return body.auth_url;
 }
 
-/**
- * Deliver the Assist code-courier tuple to the gateway. Nothing here is
- * persisted: the tuple lives in memory for the length of this call, exactly as
- * the PWA/desktop couriers do (docs/oauth-assist.md step 5).
- */
+/** Assist courier tuple is NEVER persisted (docs/oauth-assist.md step 5). */
 export async function completeNotificationsConnectionAuthorization(
   handoff: AssistHandoff
 ): Promise<void> {
@@ -507,7 +425,6 @@ export async function updateMobileNotice(
   );
 }
 
-/** Approve or deny one parked invocation. */
 export async function confirmParked(
   invocationId: string,
   approve: boolean
@@ -523,12 +440,6 @@ export async function confirmParked(
   );
 }
 
-/**
- * One vault of the owner's registry — a "vault" in the UI. Presentation
- * (`color`/`icon`/`blurb`) lives in `core_vault.settings_json` (#280: profiles
- * are vaults). Mirrors `VaultListEntry` in packages/client gateway-client-vault
- * ts — `color` is a raw hex string, `icon` a design-tokens IconName key.
- */
 export interface VaultRow {
   vaultId: string;
   name: string;
@@ -539,14 +450,8 @@ export interface VaultRow {
 }
 
 /**
- * The owner's vault registry from `GET /centraid/_vault/vaults` (returns
- * `{ vaults }`). `undefined` when the gateway mounts no vault plane (route
- * 404s) — a valid deployment, so callers render a "no vault" state, not an
- * error. There is no server-side active flag (#289): the active vault is a
- * device-local pointer (see lib/vault-links.ts), and the Vaults switcher reads this
- * list to offer the vaults this device may address. Deliberately header-free
- * (no `vaultHeader()`): the switcher's own data source must not depend on the
- * active vault being valid, and an unknown `x-centraid-vault` would 404 here.
+ * `undefined` on 404 (no vault plane) — not an error. HEADER-FREE: an unknown
+ * `x-centraid-vault` would 404. Active vault is device-local (#289).
  */
 export async function listVaults(): Promise<VaultRow[] | undefined> {
   const base = await requireGatewayBase();
@@ -565,14 +470,8 @@ export async function listVaults(): Promise<VaultRow[] | undefined> {
 }
 
 /**
- * Rename a vault and/or update its presentation via `PATCH
- * /centraid/_vault/vaults/:id` (only supplied fields are written). Returns the
- * updated row. The vault is named by URL path, so this is header-free like
- * `listVaults` — no `vaultHeader()`. Vault create/delete have NO client HTTP
- * surface by design (#289): the gateway answers 405 and points at
- * `centraid-gateway vault create|delete` on the host. The mobile "Vaults"
- * feature (lib/vault-links.ts) adds/switches/forgets device-local (gateway, vault)
- * tuples — it never creates or destroys a vault.
+ * Header-free; vault named by path. Create/delete have NO client HTTP (#289).
+ * Mobile "Vaults" adds/switches/forgets device-local tuples, never vaults.
  */
 export async function updateVault(
   vaultId: string,
@@ -589,11 +488,7 @@ export async function updateVault(
   );
 }
 
-// --- Display metadata ---
-//
-// Prefer the row's real `name`/`description`/`iconKey`/`colorKey` from the
-// listing. Fall back per-field: built-in template metadata for known ids,
-// then title-cased id + palette hash + generic icon.
+// Display metadata: row → builtin template → title-cased id + palette hash.
 
 const BUILTIN_BY_ID = new Map<string, AppMetaResolved>(
   BUILTIN_APPS.map((a) => [a.id, a])
@@ -639,11 +534,6 @@ function asColorKey(value: string | undefined): ColorKey | undefined {
     : undefined;
 }
 
-/**
- * Map an app id (plus any display overrides) into a tile-renderable
- * `AppMetaResolved`. `iconKey`/`colorKey` are optional; anything absent falls
- * back to the bundled catalog and then to derived display metadata.
- */
 export function resolveAppMeta(row: {
   id: string;
   name?: string;
@@ -665,22 +555,12 @@ export function resolveAppMeta(row: {
   };
 }
 
-/**
- * The label an auto-founded gateway gives its owner before anyone has said who
- * they are (`build-gateway.ts`). A placeholder, not a name — a member still
- * carrying it counts as "not set yet".
- */
+/** Auto-founded owner label (`build-gateway.ts`). Placeholder — "not set yet". */
 export const PLACEHOLDER_MEMBER_LABEL = "You";
 
 /**
- * The name of the person this device just enrolled as, from the household
- * roster (`GET /centraid/_gateway/devices`, the row flagged `current`).
- *
- * A name belongs to the PERSON, not to the phone. Pairing a second device for
- * someone the gateway already knows must not ask them who they are again, so
- * onboarding reads this and skips its profile step when it comes back set.
- * Empty string = the roster still says "You"; `undefined` = the gateway has no
- * device plane, or the read failed — both mean "ask", never "assume".
+ * Person's name, not the phone's. `""` = roster still "You"; `undefined` = no
+ * plane or read failed. Both mean "ask", never "assume".
  */
 export async function readSelfMemberName(): Promise<string | undefined> {
   try {

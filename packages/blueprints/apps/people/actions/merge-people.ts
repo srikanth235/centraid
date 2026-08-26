@@ -1,6 +1,6 @@
 /**
  * Fold a duplicate person into a survivor via the ontology primitive
- * `core.merge_party` (#290). People no longer own a soft-merge fork —
+ * `core.merge_party` (#290) and never a soft-merge fork of People's own:
  * every FK re-points, the merged party is deleted, and the act is
  * confirm-gated for non-owner callers.
  *

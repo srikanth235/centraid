@@ -1,4 +1,4 @@
-// Byte helpers for the CBSF sealer (#419 M0.4).
+// Byte helpers for the CBSF sealer (#419.4).
 //
 // Hermes has no Buffer and its `atob`/`btoa` coverage is inconsistent across
 // RN releases, so base64 is implemented here rather than assumed. Everything

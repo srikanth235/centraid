@@ -1,4 +1,4 @@
-// The ceremony-free Commons destination model (issue #731): a roster of
+// The ceremony-free Commons destination model (#731): a roster of
 // people, never another vault owned by the same person.
 import path from "node:path";
 import { pathToFileURL } from "node:url";

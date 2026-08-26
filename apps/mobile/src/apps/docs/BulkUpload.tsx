@@ -1,4 +1,4 @@
-// Bulk upload (Docs handoff Part 2 §13; issue #821) — per-file progress and
+// Bulk upload (Docs handoff Part 2 §13; #821) — per-file progress and
 // an HONEST partial failure: `9 of 12 landed · 3 did not · nothing was
 // discarded`. A failure never silently drops a file: every picked file stays
 // on this list with its own state and its own Retry until the member leaves.

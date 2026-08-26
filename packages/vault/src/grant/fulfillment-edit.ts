@@ -1,28 +1,10 @@
 /*
- * EDIT fulfillment (issue #825, ruling G-edit): where an audience's write
- * goes. The grant plane does not grow a second write rail — the commons
- * machinery IS the edit strategy — so this module only answers the routing
- * question and hands the write to `commonsGrantForCommand`. Steward
- * authorization, quota, recovery and refusal behave exactly as they did
- * before the grant plane existed; nothing here authorizes anything.
- *
- * The container a command addresses is decided by the DECLARED routing table
- * (commons-routing.ts, issue #750) and never by the command's name. What this
- * module adds is the same resolution read against `share_grant` instead of
- * `share_circle_grant`, so a standing grant can answer "does this write land
- * inside something I shared, and may the writer make it".
- *
- * Two v1 lines are drawn here, both refusals rather than silent successes:
- *
- *   - CO-CONTRIBUTION — an audience ADDING an item to a granted container —
- *     ships for `tally.group` only. Albums and folders are shared for their
- *     items' content in v1; an audience adding a photo to someone's album is
- *     a product decision that has not been made, and accepting the write
- *     would make it by accident.
- *   - A container with a standing EDIT grant but NO commons rail is refused,
- *     not applied. That is the #750 failure mode exactly: a write that does
- *     not reach the rail lands as a private local mutation and the next
- *     compile reverts it — silent member data loss.
+ * EDIT fulfillment (#825, ruling G-edit). NOTHING HERE AUTHORIZES ANYTHING:
+ * routing only, over the DECLARED table (commons-routing.ts, #750) and never
+ * the command's name. Two v1 REFUSALS, never silent successes —
+ * co-contribution ships for `tally.group` alone, and an edit grant with no
+ * commons rail is refused, since a write off the rail is a local mutation the
+ * next compile reverts.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -37,11 +19,8 @@ import { commonsGrantForCommand } from "../share/commons.js";
 import type { ShareGrantRecord } from "./grant-store.js";
 import { listShareGrantsForSubject } from "./grant-store.js";
 
-/**
- * Commands that INTRODUCE an item into the container they address, as opposed
- * to editing the content of one already inside it. Declared, not inferred: a
- * name-shaped guess ("starts with add_") is the heuristic #750 deleted.
- */
+/** Commands that INTRODUCE an item rather than edit one inside. Declared,
+ *  never inferred (#750). */
 export const SHARE_GRANT_CO_CONTRIBUTION_COMMANDS: readonly string[] = [
   "core.add_document",
   "core.create_folder",
@@ -49,33 +28,25 @@ export const SHARE_GRANT_CO_CONTRIBUTION_COMMANDS: readonly string[] = [
   "tally.add_expense",
 ];
 
-/** The container types whose audience may co-contribute in v1. */
+/** Container types whose audience may co-contribute in v1. */
 export const SHARE_GRANT_CO_CONTRIBUTION_TYPES: readonly ShareableItemType[] = [
   "tally.group",
 ];
 
 export interface ShareGrantEditRoute {
-  /** The command that was routed — carried so a caller can re-derive the
-   * refusal against a narrower set of grants (see `shareGrantEditRefusal`). */
   command: string;
   containerType: ShareableItemType;
-  /** The container in ORIGIN ids — the subject of the grants below. */
+  /** ORIGIN ids. */
   containerId: string;
-  /** Live standing grants over that container, view and edit alike. */
+  /** Every live grant over it, view and edit alike. */
   grants: readonly ShareGrantRecord[];
-  /** The commons grant the write delegates to, when the rail carries one. */
   commonsGrantId?: string;
-  /** Is the command part of the container type's declared write surface? */
   actable: boolean;
-  /** Why the grant plane will not accept this write. Absent when it will. */
+  /** Absent when the write will be accepted. */
   refusal?: string;
 }
 
-/**
- * Container ids one declared route could be addressing, NEAREST FIRST. A
- * document inside a shared subtree resolves to the folder that encloses it
- * most closely, which is what keeps a shared subtree one share.
- */
+/** NEAREST FIRST: the closest enclosing folder keeps a subtree one share. */
 function candidateContainers(
   db: DatabaseSync,
   route: CommonsCommandRoute,
@@ -101,7 +72,6 @@ function candidateContainers(
   ).flatMap((tag) => ancestorFolders(db, tag.concept_id));
 }
 
-/** A folder and every folder above it, nearest first. */
 function ancestorFolders(db: DatabaseSync, folderId: string): string[] {
   return (
     db
@@ -142,19 +112,9 @@ function refusalFor(input: {
   return undefined;
 }
 
-/**
- * The same refusal, re-derived against a NARROWER set of grants than the
- * container's — the ones that actually reach the party making the write.
- *
- * `routeShareGrantEdit` answers about a container, so its `refusal` is the
- * container's whole grant set folded together: one party's edit grant silences
- * "shared for view only" for everyone the container is shared with. That is
- * the right answer to the container question and the WRONG answer to the actor
- * question — a view-only audience member is not permitted by someone else's
- * edit grant. A caller that knows who is writing (the gateway seam) passes
- * that actor's own grants here and gets the capability line drawn where the
- * grants drew it: per audience, never per container.
- */
+/** Against only the grants that reach the WRITER: the route's own `refusal`
+ *  folds the whole container, so one edit grant would silence "view only" for
+ *  everyone. Per audience, never per container. */
 export function shareGrantEditRefusal(
   route: ShareGrantEditRoute,
   grants: readonly ShareGrantRecord[]
@@ -171,11 +131,8 @@ export function shareGrantEditRefusal(
   });
 }
 
-/**
- * Where an ordinary command lands in the grant plane, or `undefined` when it
- * addresses nothing anyone has shared — which is the overwhelming majority of
- * writes, and must stay indistinguishable from the world before grants.
- */
+/** `undefined` when nothing shared is addressed — indistinguishable from the
+ *  world before grants. */
 export function routeShareGrantEdit(
   db: DatabaseSync,
   input: { command: string; commandInput: Record<string, unknown> }
@@ -194,9 +151,7 @@ export function routeShareGrantEdit(
         route.containerType,
         input.command
       );
-      // The delegation target, read through the commons resolver itself so
-      // the rail's own routing decision — not a copy of it — is what a caller
-      // hands the write to.
+      // The rail's own decision, never a copy of it.
       const commonsGrantId = commonsGrantForCommand(
         db,
         input.command,

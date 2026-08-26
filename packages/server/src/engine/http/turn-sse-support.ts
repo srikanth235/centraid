@@ -4,7 +4,6 @@ import path from "node:path";
 import type { ConversationHistoryStore } from "../conversation/history.js";
 import type { ConversationWorkspaceKind } from "../conversation/schema.js";
 
-/** A file uploaded to the blob CAS before the turn, referenced by its hash. */
 export interface TurnAttachmentRef {
   hash: string;
   mime: string;
@@ -14,13 +13,7 @@ export interface TurnAttachmentRef {
 
 const ATTACHMENT_HASH_RE = /^[a-f0-9]{64}$/u;
 
-/**
- * Parse+validate the `attachments` field of a `_turn` POST body (issue
- * #190's wire shape) — shared by every `_turn`-shaped route (the per-app
- * surface and the vault assistant's shell-level surface) so both validate
- * identically. Anything malformed is silently dropped rather than
- * rejecting the whole turn — a bad ref just means that one file doesn't ride.
- */
+/** Parse+validate a `_turn` POST's `attachments` (#190); malformed refs are dropped. */
 export function parseTurnAttachmentRefs(raw: unknown): TurnAttachmentRef[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter((a): a is TurnAttachmentRef => {
@@ -34,11 +27,7 @@ export function parseTurnAttachmentRefs(raw: unknown): TurnAttachmentRef[] {
   });
 }
 
-/**
- * Validate and canonicalize explicitly owner-selected extra workspace roots.
- * Persistence of the returned realpaths is the per-conversation consent
- * receipt; a symlink swap therefore cannot widen a later turn's authority.
- */
+/** Realpath owner-selected extra roots; persisting them is the consent receipt against symlink widening. */
 export async function parseAdditionalDirectories(
   raw: unknown
 ): Promise<string[]> {
@@ -77,11 +66,6 @@ export function parseWorkspaceKind(
     : undefined;
 }
 
-/**
- * Resolve validated attachment refs to on-disk blob paths for the harness's
- * multimodal content blocks — the shape `ConversationTurnInput.attachments`
- * expects. `appId` scopes the blob CAS lookup (an app id, or `_assistant`).
- */
 export function resolveTurnAttachments(
   conversationStore: ConversationHistoryStore | undefined,
   appId: string,
@@ -97,11 +81,7 @@ export function resolveTurnAttachments(
   );
 }
 
-/**
- * Keep only refs that name a real file in this app's CAS. When the sender
- * supplies a size receipt it must match the stored bytes, so a forged or
- * stale ref can neither enter the ledger nor reach a harness process.
- */
+/** Keep only refs naming a real CAS file; size receipts must match stored bytes. */
 export function validateTurnAttachmentRefs(
   conversationStore: ConversationHistoryStore | undefined,
   appId: string,
@@ -122,14 +102,8 @@ export function validateTurnAttachmentRefs(
 }
 
 /**
- * Serialize work on `(appId, conversationId)` so a second POST queues behind the
- * first. The route handler awaits the previous tail before scheduling its
- * own. The lock entry is cleared lazily once the current task settles.
- *
- * The lock map is per-runtime — held on the `Runtime` instance and threaded
- * through the route context. A module-level map would collide across
- * gateways that share an `appId` (two profiles can install the same
- * template). See issue #113.
+ * Serialize work on `(appId, conversationId)`; each caller awaits the previous
+ * tail. The lock map is per-runtime, not module-level (#113).
  */
 export async function withConversationLock<T>(
   conversationLocks: Map<string, Promise<void>>,
@@ -143,9 +117,7 @@ export async function withConversationLock<T>(
   const next = new Promise<void>((resolve) => {
     release = resolve;
   });
-  // The map holds the *chained* tail (previous → next) so newer callers
-  // await everything ahead of them. Keep a reference to that exact promise
-  // so the cleanup branch can identify "nobody else queued after me".
+  // Chained tail (previous → next): newer callers await everything ahead of them; identity tells cleanup nobody queued after.
   const chained = previous.then(() => next);
   conversationLocks.set(key, chained);
   await previous;

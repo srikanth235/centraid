@@ -1,4 +1,4 @@
-// Storage (spec §4.5; issue #821) — what this PHONE can say about where the
+// Storage (spec §4.5; #821) — what this PHONE can say about where the
 // drive's bytes are, and nothing it cannot.
 //
 // The desktop screen prints byte totals ("18.4 GB · 2.1 GB could be

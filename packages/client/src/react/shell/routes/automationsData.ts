@@ -6,11 +6,8 @@ import {
   relativeTime,
   triggersSummary,
 } from "../../../app-format.js";
-// Automations overview data layer — ports the vanilla app-automations.ts
-// `collectAutomationRuns` + `buildOverviewData`. Every display value (hue,
-// glyph, trigger/status labels, formatted run meta) is computed here so the
-// React AutomationsOverviewScreen imports no vanilla formatters. All derivation
-// helpers come from the pure automation-identity + app-format modules.
+// The automations overview data layer: every display value is computed here so
+// AutomationsOverviewScreen formats nothing itself.
 import {
   auStatusForRow,
   glyphForId,
@@ -47,19 +44,16 @@ export const AU_STATUS_LABEL: Record<AuStatusKind, string> = {
   failed: "Failed",
 };
 
-/** Title-Case trigger-origin icon + label for a run row — shared by the
- *  overview feed's `metaLabel`, the single-view's run rows, and the thread's
- *  run entries (automationThreadData.ts), so a run never surfaces the raw
- *  lowercase `triggerOrigin`/`triggerKind` enum ("data" · 1.2s) to a user. */
+/** Shared by every run-row surface: the raw `triggerOrigin`/`triggerKind` enum
+ *  must never reach a user. */
 export function triggerOriginLabel(run: CentraidAutomationTurnRecord): {
   icon: string;
   label: string;
 } {
   return run.triggerKind === "compile"
     ? { icon: "Sparkle", label: "Compile" }
-    : // An interactive turn is the owner ASKING about runs, not a run. Left
-      // unlabelled it fell through to the "Cron" default, so a question you
-      // typed showed up in the history as a scheduled fire.
+    : // An interactive turn is the owner ASKING about runs, not a run; without
+      // this arm it falls through to the "Cron" default.
       run.triggerKind === "interactive"
       ? { icon: "Send", label: "You asked" }
       : run.triggerOrigin === "webhook"
@@ -73,10 +67,6 @@ export function triggerOriginLabel(run: CentraidAutomationTurnRecord): {
               : { icon: "Clock", label: "Cron" };
 }
 
-/** Render a `where` condition clause readably — a plain string passes
- *  through, a structured `{column, op, value?}` array renders the same
- *  compact `column op value` lines the builder shows (formatWhereClauses),
- *  and any other shape falls back to pretty-printed JSON. */
 function formatWhereClause(where: unknown): string {
   if (where === undefined || where === null) return "—";
   if (typeof where === "string") return where;
@@ -89,46 +79,16 @@ function formatWhereClause(where: unknown): string {
   }
 }
 
-/**
- * Fetch the automation rows + their recent run feed (vanilla
- * collectAutomationRuns).
- *
- * Returns the rows alongside the feed because the caller needs them too, and
- * they cost a request. `loadAutomationsOverviewData` used to call
- * `listAutomations()` itself *and* sit in the same `Promise.all` as this
- * function, which called it again — the overview paid for the same list twice
- * on every visit. Handing the rows back means one fetch, still fully parallel.
- */
+/** Returns the rows beside the feed: the caller shares this `Promise.all`, so
+ *  fetching `listAutomations()` again would pay for the list twice. */
 export async function collectAutomationRuns(): Promise<{
   rows: CentraidAutomationRow[];
   entries: AutomationFeedEntry[];
 }> {
-  // The calls fail DIFFERENTLY on purpose.
-  //
-  // The automation list is load-bearing: the overview cannot render without
-  // it, and an empty list is indistinguishable from "you have no automations".
-  // So a list failure THROWS and the overview paints its error card. This
-  // function used to swallow both — which was harmless while the overview
-  // fetched the list itself, and became a silent regression the moment it
-  // started sourcing rows from here: a 500 rendered the empty state over a
-  // broken gateway, with no error and no Retry.
-  //
-  // The run feed is decoration. Losing it should cost you the recent-activity
-  // rows, not the page, so it degrades to empty on its own.
-  //
-  // Callers for whom automations are themselves decoration (Home, Starred)
-  // catch the throw at their own call site and degrade the whole block.
-  //
-  // The run feed itself is TWO independently-windowed fetches, not one
-  // (issue #731 M2). A single `listAutomationTurns({ limit: 100 })` call —
-  // no lane filter — used to hand back whichever 100 turns ran most
-  // recently; a large photo import fires the recognition automations once
-  // per photo, so it could fill the entire 100-row window with recognition
-  // runs and leave a member's own "Recent activity" empty. Fetching the
-  // member lane and the collapsed recognition lane as separate
-  // `systemLane`-scoped requests (`listAutomationTurnsByLane`,
-  // `gateway-client-automations.ts`) means each gets its own 100-row window
-  // regardless of how busy the other lane is.
+  // THE CALLS FAIL DIFFERENTLY ON PURPOSE. The list is load-bearing, so it
+  // THROWS: swallowed, a 500 paints the empty state over a broken gateway. The
+  // run feed is decoration and degrades to empty. Keep it as TWO lane-scoped
+  // fetches (#731) — one window lets recognition runs crowd out the member's.
   const [autos, memberRuns, recognitionRuns] = await Promise.all([
     listAutomations(),
     listAutomationTurnsByLane({ limit: 100, systemLane: "member" }).catch(
@@ -144,8 +104,7 @@ export async function collectAutomationRuns(): Promise<{
     rows: autos,
     entries: runs.map((run) => ({
       automationId: run.automationId ?? "",
-      // Live automation name → the run's own last-known name (carried on the
-      // run record even after the automation is deleted) → the raw ref.
+      // Live name → the run record's name (it survives deletion) → the ref.
       automationName: run.automationId
         ? (nameByRef.get(run.automationId) ??
           run.automationName ??
@@ -156,14 +115,8 @@ export async function collectAutomationRuns(): Promise<{
   };
 }
 
-/** Derive the React overview DTO from the loaded rows + run feed (vanilla buildOverviewData).
- *  `attentionByRef` is an optional, caller-computed map of automation `ref` →
- *  pending-consent-item count (the fleet row's amber attention badge —
- *  Automations UI revamp, receipts/issue-387-automations-ui-revamp.md). It's computed by the
- *  route wrapper via `filterConsentForAutomation` (automationThreadData.ts)
- *  rather than here, so this module doesn't take on a reverse dependency on
- *  the thread data layer that already depends on it. Omitted entirely (e.g.
- *  existing callers/tests), every row's `attentionCount` is 0. */
+/** `attentionByRef` (ref → pending-consent count) is computed by the route: this
+ *  module must not depend on the thread data layer that depends on it. */
 export function buildOverviewData(
   rows: readonly CentraidAutomationRow[],
   entries: readonly AutomationFeedEntry[],
@@ -191,8 +144,7 @@ export function buildOverviewData(
     if (lastEntry?.run.endedAt !== undefined && !lastEntry.run.ok)
       attention += 1;
   }
-  // Keep the prose consistent with the health tiles below it — drafts are
-  // not "paused", they've simply never run.
+  // Drafts are not "paused": they have simply never run.
   const subParts = [`${active} active`, `${paused} paused`];
   if (drafts > 0) subParts.push(`${drafts} drafts`);
   if (memberRuns.length > 0) subParts.push(`${memberRuns.length} recent runs`);
@@ -289,11 +241,6 @@ export function buildOverviewData(
   };
 }
 
-/** The hero/trigger derivation shared by the thread header DTO
- *  (automationThreadData.ts) and the editor route: webhook URL resolution,
- *  cron next-run projections, and the data/condition trigger detail blocks.
- *  Kept here (not in screen-contracts.ts, which stays free of ambient ipc
- *  types) since it takes the raw `CentraidAutomationRow`. */
 export interface AutomationHeroDTO {
   cronExprs: string[];
   nextRuns: string[];
@@ -305,21 +252,12 @@ export interface AutomationHeroDTO {
   when: string;
 }
 
-/** Derive the hero/trigger block for one automation row (vanilla portion of
- *  deriveAutomationHero is factored here so automationThreadData.ts's thread
- *  header can reuse it instead of re-deriving webhook/cron/data/condition
- *  detail a second time). */
 export function deriveAutomationHero(
   row: CentraidAutomationRow,
   /**
-   * The active gateway's base URL (`auth().baseUrl` — see
-   * `gateway-client-core.ts`). The webhook route only ever lives on the
-   * gateway that owns the automation (issue #96: core gateway mount), so a
-   * bare `/_centraid-hook/<id>` path is ambiguous the moment more than one
-   * gateway exists (remote daemon vs. this desktop's embedded one) — the
-   * caller resolves it and passes it in here so this function stays pure
-   * (no import of the gateway-client module, which has a load-time
-   * `window.CentraidApi` side effect the unit tests stub around).
+   * The active gateway's base URL. A bare `/_centraid-hook/<id>` is ambiguous
+   * once more than one gateway exists, and the caller resolves it so this stays
+   * pure — importing gateway-client would add a load-time `window` side effect.
    */
   gatewayOrigin: string
 ): AutomationHeroDTO {
@@ -355,10 +293,7 @@ export function deriveAutomationHero(
           };
   }
 
-  // Data/condition triggers get the same hero-level treatment as cron/webhook
-  // — a user must be able to see WHAT a condition checks without opening raw
-  // JSON (the manifest's `where` is `unknown`; a structured value is
-  // pretty-printed, a plain string passes through).
+  // A user must see WHAT a condition checks without opening raw JSON.
   const dataTrig = row.triggers.find(
     (t): t is { kind: "data"; entities: readonly string[]; every?: string } =>
       t.kind === "data"

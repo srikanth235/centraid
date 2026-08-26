@@ -24,9 +24,9 @@ import type { WalDbName } from "./wal-format.js";
 /**
  * WAL prefix soundness (L2) and generation minting.
  *
- * Split from `wal-address-properties.test.ts` (#656 Layer 1D): listing and
- * minting are a separate surface from the key encoders, and the combined file
- * exceeded the file-size cap.
+ * Kept apart from `wal-address-properties.test.ts` (#656): listing and minting
+ * are a separate surface from the key encoders, and one combined file breaches
+ * the file-size cap.
  */
 describe("WAL list prefixes (L2)", () => {
   test("a segment prefix matches every key of its stream and no other", () => {

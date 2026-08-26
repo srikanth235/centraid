@@ -3,9 +3,8 @@
 // refresh discipline, and the attachment flow. It imports the real barrel (not
 // a path-loaded copy) so it exercises exactly the module graph an app gets.
 //
-// There are no custom elements left to register here — #799 retired the last
-// four and the `KitElement` base; `kit-css.test.ts` pins that the stylesheet
-// lost their host rules with them.
+// There are no custom elements to register here (#799); `kit-css.test.ts`
+// pins that the stylesheet carries no host rules for any.
 import { describe, expect, it, vi } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";

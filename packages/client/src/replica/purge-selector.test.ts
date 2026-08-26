@@ -1,5 +1,5 @@
 /**
- * Replica purge selector storage helpers (issue #545 B8).
+ * Replica purge selector storage helpers (#545).
  */
 
 import { describe, expect, it } from "vitest";

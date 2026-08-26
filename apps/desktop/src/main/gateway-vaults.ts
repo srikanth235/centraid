@@ -1,5 +1,5 @@
 /*
- * `GATEWAYS_LIST_VAULTS` (issue #376) — read the vault list of a gateway the
+ * `GATEWAYS_LIST_VAULTS` (#376) — read the vault list of a gateway the
  * client is not (necessarily) addressing right now, without flipping the
  * active gateway. Powers the flat (gateway, vault) switcher: the renderer
  * can preview every vault on every profile before committing to one.

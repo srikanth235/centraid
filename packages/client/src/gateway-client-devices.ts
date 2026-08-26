@@ -1,16 +1,7 @@
 /*
- * Renderer-side client for the gateway's paired-device surface (issue #376 —
- * `packages/server/src/routes/devices-routes.ts`). Backs the Gateway page's
- * Devices card (list + revoke).
- *
- *   GET    /centraid/_gateway/devices
- *   DELETE /centraid/_gateway/devices/<enrollmentId>
- *
- * The gateway scopes the roster to the caller's plane: the browser PWA shell
- * (device-token auth) sees only its own vaults' devices and its own row marked
- * `current`; the desktop's admin bearer sees every vault's devices. A gateway
- * with no device plane at all (the desktop embed) has no such surface — the
- * routes 404, which `listGatewayDevices` reports as an empty roster.
+ * Renderer-side client for the gateway's paired-device surface (#376). The
+ * roster is scoped to the caller's plane: a device token sees only its own
+ * vaults' devices. No device plane 404s, reported here as an empty roster.
  */
 
 import { readDirectBlob } from "./device-blob-source.js";
@@ -56,11 +47,8 @@ export interface DeviceEnrichmentLease {
   entityId: string | null;
   reason: "search-miss" | "on-view" | "manual";
   detail: string | null;
-  /**
-   * The wire twin of the gateway's `EnrichmentCapability`, narrowed by issue
-   * #724 to the device lane: model-shaped work runs on the gateway's
-   * recognition automation and is never leased to a device.
-   */
+  /** Narrowed to the device lane (#724): model-shaped work runs on the
+   *  gateway's recognition automation and is never leased to a device. */
   capability: "previews" | "poster" | "pdfText";
   contributionVariant: string | null;
   deviceId: string;
@@ -69,26 +57,16 @@ export interface DeviceEnrichmentLease {
   attempt: number;
 }
 
-/**
- * One vault a device (or a freshly minted ticket) reaches — the wire twin of
- * the gateway's `DeviceDTO`/ticket `vaults[]` (#726). Ownership replaces
- * roles: a device reaches exactly the vaults its owner owns, so there is
- * nothing per-vault left to grant beyond the vault itself.
- */
+/** Ownership replaces roles (#726): nothing per-vault is left to grant. */
 export interface GatewayDeviceVault {
   vaultId: string;
   vaultName?: string;
 }
 
-/** One paired device (mirrors the gateway route's `DeviceDTO`). */
 export interface CentraidGatewayDevice {
-  /** The revocation handle (the enrollment row id). */
   deviceId: string;
-  /** The device's key (iroh EndpointId, or a synthetic `http:<uuid>`). */
   endpointId: string;
-  /** The person this device acts as (#726). The roster groups on it. */
   ownerId: string;
-  /** That person's display label, denormalized so a roster needs one call. */
   ownerLabel: string;
   label: string;
   platform?: string;
@@ -97,14 +75,10 @@ export interface CentraidGatewayDevice {
   vaultName?: string;
   addedAt?: string;
   lastUsedAt?: string;
-  /** True for the device making the request (never set for the admin caller). */
   current?: boolean;
-  /** Device tombstone — never a role (#726): the owner and their access are
-   *  untouched, this binding just no longer answers for it. */
+  /** A device tombstone, never a role (#726). */
   revoked: boolean;
-  /** Whether this device consented to durable OPFS/IndexedDB state. */
   rememberDevice: boolean;
-  /** Server-enforced app allow-list for a constrained Companion device. */
   grantProfile?: string[];
   compute?: DeviceComputeProfile;
   checkpoint?: {
@@ -115,7 +89,6 @@ export interface CentraidGatewayDevice {
   };
 }
 
-/** Every paired device the caller may see; `[]` when the gateway has no device plane. */
 export async function listGatewayDevices(): Promise<CentraidGatewayDevice[]> {
   const { baseUrl, token } = await auth();
   try {
@@ -129,70 +102,38 @@ export async function listGatewayDevices(): Promise<CentraidGatewayDevice[]> {
     );
     return out.devices ?? [];
   } catch (error) {
-    // A gateway without a device plane (desktop embed) simply has none.
     if (error instanceof GatewayClientError && error.code === "not_found")
       return [];
     throw error;
   }
 }
 
-/** A freshly minted one-time pairing ticket (the inverse of revoke). */
 export interface GatewayDeviceTicket {
-  /** The pasteable one-line token for the client's "Add gateway" dialog. */
   ticket: string;
-  /** The person the redeeming device will act as. */
   ownerId: string;
   ownerLabel: string;
-  /** Every vault the ticket carries. The first is echoed flat below. */
   vaults: GatewayDeviceVault[];
   vaultId: string;
   vaultName?: string;
-  /** Ticket expiry, ISO-8601. */
   expiresAt: string;
 }
 
 /**
- * What the panel sends to mint. Ownership admits no cross-person grant
- * (#726): a ticket always lands on the CALLER's own owner, so there is
- * nothing here to name a person or a role with — only which of the caller's
- * own vaults to carry, or none to carry every vault they own.
- *
- * `forPerson` is the one exception (#726 P1 "Add someone"): it mints a NEW
- * owner and a vault of their own, then binds the ticket to THAT pair instead
- * of the caller's. Mutually exclusive with `vaultId`/`vaultIds` — those name
- * a subset of the caller's own vaults, which has no meaning once the ticket
- * is landing somebody else's brand-new one.
+ * Ownership admits no cross-person grant (#726): a ticket lands on the CALLER's
+ * own owner. `forPerson` is the one exception and excludes `vaultId`/`vaultIds`.
  */
 export interface GatewayDeviceTicketInput {
-  /** Landing vault when `vaultIds` is omitted; also the fallback target. */
   vaultId?: string;
-  /** Explicit vault subset, target-first. Omitted = every vault the caller
-   *  owns, target-first. */
   vaultIds?: string[];
-  /** Mint a vault for a NEW person instead of self-pairing. */
   forPerson?: { label: string; vaultName?: string };
-  /**
-   * Idempotency key the gateway REQUIRES with `forPerson` (issue #750):
-   * generated once per intended mint (a UUID) and reused on retry, so a
-   * retried request can never mint a second owner/vault.
-   */
+  /** REQUIRED with `forPerson` (#750): one key per intended mint, reused on
+   *  retry, so no retry mints a second owner/vault. */
   operationId?: string;
   ttlMinutes?: number;
 }
 
-/**
- * Mint a device-pairing ticket from the app (the operator twin of
- * `centraid-gateway pair`). The gateway scopes it to the caller's plane and
- * defaults the target vault to the active `x-centraid-vault` when none is given.
- *
- * Every ticket a device caller may mint is either a SELF-PAIR (#726) — it
- * lands on the caller's own owner, reaching exactly the vaults that owner
- * already owns, which is why a bare `{ttlMinutes}` call is safe and
- * sufficient — or an *Add someone* mint (`forPerson`, #726 P1), which lands
- * on a freshly created owner and vault instead. Access is ownership, so
- * there is no third shape: a ticket can never land another EXISTING person
- * in the caller's vaults.
- */
+/** Either a SELF-PAIR or a `forPerson` mint; no third shape exists, so a
+ *  ticket can never land another EXISTING person in the caller's vaults. */
 export async function createGatewayDeviceTicket(
   input?: GatewayDeviceTicketInput
 ): Promise<GatewayDeviceTicket> {
@@ -209,14 +150,9 @@ export async function createGatewayDeviceTicket(
 }
 
 /**
- * Revoke one paired DEVICE — "this phone was stolen". The person and their
- * other devices are untouched (removing a person is a host-custody act,
- * `owners-routes.ts` — unreachable from this device-token client). Idempotent
- * — `removed:false` when already gone.
- *
- * The row survives as a tombstone (`revoked: true`), so prior attribution
- * still resolves. Revoking the owner's last live device for a vault 409s
- * until `confirmLastDevice` echoes that vault's name back.
+ * Revoke one DEVICE: the person and their other devices are untouched, and the
+ * row survives as a tombstone so prior attribution still resolves. Revoking a
+ * vault's last live device 409s until `confirmLastDevice` echoes its name.
  */
 export async function revokeGatewayDevice(
   deviceId: string,
@@ -282,7 +218,6 @@ const NO_COMPUTE: DeviceComputeCapabilities = {
   backgroundTransfer: false,
 };
 
-/** Toggle idle-device contribution and refresh the current device's capability advertisement. */
 export async function setGatewayDeviceCompute(
   device: CentraidGatewayDevice,
   contributeWhileCharging: boolean
@@ -335,7 +270,6 @@ export async function getGatewayDeviceWorkStatus(): Promise<
   }
 }
 
-/** Pull one compatible job only while the caller proves charging + unmetered eligibility. */
 export async function leaseGatewayDeviceWork(input: {
   vaultId: string;
   capabilities: DeviceEnrichmentLease["capability"][];
@@ -399,7 +333,6 @@ function workVaultHeaders(
   return { ...authHeaders(token, contentType), [VAULT_HEADER]: vaultId };
 }
 
-/** Read the original bytes for a leased job from that job's vault. */
 export async function readGatewayDeviceWorkSource(input: {
   vaultId: string;
   contentId: string;
@@ -425,8 +358,8 @@ export async function readGatewayDeviceWorkSource(input: {
   if (direct.status === 401 || direct.status === 403) {
     await readJson<never>(direct, "authorize direct device read");
   }
-  // Local-primary vaults have no provider URL. Their permanent fallback is
-  // the ordinary content-id route (never address this route by sha).
+  // Local-primary vaults have no provider URL: their permanent fallback is
+  // the content-id route, which is never addressed by sha.
   const res = await doFetch(
     baseUrl,
     `/centraid/_vault/blobs/${enc(input.contentId)}`,
@@ -445,7 +378,6 @@ export async function readGatewayDeviceWorkSource(input: {
   return res.blob();
 }
 
-/** Submit one device-produced derivative through the verified contribution door. */
 export async function stageGatewayDeviceWorkDerivative(input: {
   vaultId: string;
   parentSha256: string;

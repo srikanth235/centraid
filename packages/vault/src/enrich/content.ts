@@ -1,4 +1,4 @@
-// Agent content access (issue #299 §2, resolving the #296 §7 seam): the
+// Agent content access (#299 §2, resolving the #296 §7 seam): the
 // size-bounded byte primitive enrichers and the assistant read through.
 // Visual inputs remain derivative-only: a vision enricher reads `preview` or
 // `thumb`, never the GPS-bearing source. Audio/video has no meaningful preview

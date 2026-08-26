@@ -1,22 +1,6 @@
-// What the Connectors place SAYS about a connection (#765, spec §4).
-//
-// Pure: no React, no gateway, no renderer. The screen owns the frame and the
-// hook owns the wire; every word a row or the standing line carries is decided
-// here, so the copy contract is under test without mounting anything — the
-// same split `kit/components/health-line.ts` and `screens/home/home-status.ts`
-// already make.
-//
-// Two honest departures from the reference's demo rows, both forced by what
-// the gateway actually serves a phone:
-//
-//  1. The reference's healthy row carries a `Configure` verb. Mobile has no
-//     credential wizard (configuring a BYO client means typing a client id and
-//     secret, which is a desktop act), so a healthy row's verb is `Pause` —
-//     the one thing `PATCH /_vault/connections/<id>` genuinely does from here.
-//     A `Configure` button that opened nothing would be worse than no button.
-//  2. `Expiring` is computed from `tokenExpiresAt` rather than reported: the
-//     gateway sends the timestamp and no verdict, so the threshold below is
-//     this screen's, and it is stated rather than hidden.
+// Connectors copy (#765 §4). Pure — no React. Healthy-row verb is `Pause`,
+// not `Configure`: mobile has no credential wizard. `Expiring` is computed
+// from `tokenExpiresAt` here; the gateway sends a timestamp, not a verdict.
 
 import {
   EMPTY_HEALTH,
@@ -27,42 +11,32 @@ import {
 import type { HealthCopy, OpsState } from "../../kit/components/health-line";
 import type { ConnectionEntry } from "../../lib/connections";
 
-/** The one thing this screen can do to a row, chosen by its health. */
 export type ConnectorAct = "reauthorize" | "pause" | "resume";
 
-/** One connection, already worded. The screen binds the handler. */
 export interface ConnectorRow {
   key: string;
   connectionId: string;
   title: string;
   sub: string;
-  /** The one state word beside the title. */
   meta: string;
-  /** Metadata takes `net` — this connection to the outside has failed. */
+  /** `net` — this connection to the outside has failed. */
   net: boolean;
   action: string;
   act: ConnectorAct;
 }
 
-/** The chip row's four narrowings (spec §4 `full`). */
 export type ConnectorFilter = "all" | "failing" | "needs-auth" | "paused";
 
-/**
- * Where `ready` becomes `full` — the row count at which the page stops being
- * readable in one scroll and the filter chips start earning their space. The
- * reference's own two fixtures are 5 rows (`ready`) and 9 (`full`); 8 is the
- * boundary between them.
- */
+/** `ready` → `full` at this count (between the reference's 5 and 9 fixtures). */
 export const FULL_AT = 8;
 
-/** Inside this window a live token is worth mentioning before it lapses. */
+/** Live tokens inside this window are worth mentioning before they lapse. */
 const EXPIRING_WITHIN_DAYS = 14;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** "1 minute" / "4 minutes" — the plural rule this module needs, once. */
 export function countWord(count: number, singular: string): string {
   return `${String(count)} ${singular}${count === 1 ? "" : "s"}`;
 }
@@ -77,7 +51,6 @@ function parsed(iso: string | null): number | undefined {
   return Number.isNaN(at) ? undefined : at;
 }
 
-/** `9 August` — a day the member would name, not an ISO string. */
 function dayPhrase(at: number): string {
   return new Date(at).toLocaleDateString(undefined, {
     day: "numeric",
@@ -85,10 +58,6 @@ function dayPhrase(at: number): string {
   });
 }
 
-/**
- * How long ago something last worked, in the register the row uses: minutes
- * and hours while it is still today, a named day after that.
- */
 export function agoPhrase(at: number, now: number): string {
   const ago = now - at;
   if (ago < MINUTE) return "just now";
@@ -97,17 +66,12 @@ export function agoPhrase(at: number, now: number): string {
   return dayPhrase(at);
 }
 
-/** `last worked 4 minutes ago`, or the honest absence of any run. */
 export function lastWorkedPhrase(entry: ConnectionEntry, now: number): string {
   const at = parsed(entry.lastRunAt);
   return at === undefined ? "never run" : `last worked ${agoPhrase(at, now)}`;
 }
 
-/**
- * The token's remaining life, when it is short enough to matter. `undefined`
- * for a credential with no expiry, an unreadable one, or one with more than
- * `EXPIRING_WITHIN_DAYS` left — a phrase that always appears is not news.
- */
+/** Remaining life when short enough to matter; else `undefined`. */
 export function expiryPhrase(
   entry: ConnectionEntry,
   now: number
@@ -126,7 +90,6 @@ function credentialWord(entry: ConnectionEntry): string {
   return "no credential";
 }
 
-/** The state word in the row's one mono slot. */
 export function statusWord(entry: ConnectionEntry, now: number): string {
   switch (entry.status) {
     case "needs-auth":
@@ -140,11 +103,8 @@ export function statusWord(entry: ConnectionEntry, now: number): string {
   }
 }
 
-/** `alex@pemberton.example · OAuth · last worked 9 August`. */
 export function subLine(entry: ConnectionEntry, now: number): string {
-  // A lapsed connection says WHY in the broker's own words when it has them;
-  // "last worked 9 August" is true but answers a question nobody asked once
-  // the row already says `Needs re-auth`.
+  // needs-auth: prefer the broker's note over "last worked …".
   const tail =
     entry.status === "needs-auth" && entry.authNote
       ? entry.authNote
@@ -168,12 +128,10 @@ const ACTION_LABEL: Record<ConnectorAct, string> = {
   resume: "Resume",
 };
 
-/** Whether this connection's trouble is with the outside world. */
 export function isNet(entry: ConnectionEntry): boolean {
   return entry.status === "needs-auth" || entry.status === "failing";
 }
 
-/** One connection, worded. */
 export function connectorRow(
   entry: ConnectionEntry,
   now: number
@@ -191,7 +149,6 @@ export function connectorRow(
   };
 }
 
-/** Does this connection survive the chip that is on? */
 export function matchesFilter(
   entry: ConnectionEntry,
   filter: ConnectorFilter
@@ -208,7 +165,6 @@ export function matchesFilter(
   }
 }
 
-/** The chip row, in the reference's order, with the live one marked. */
 export function filterChips(
   filter: ConnectorFilter
 ): { key: ConnectorFilter; label: string; on: boolean }[] {
@@ -221,11 +177,7 @@ export function filterChips(
   return chips.map(([key, label]) => ({ key, label, on: key === filter }));
 }
 
-/**
- * `12 connections · 1 needs re-authorization · 1 paused` — the reference's own
- * meta sentence. The app bar suppresses it at phone width, so it lands on the
- * section heading instead, where the count belongs to the list under it.
- */
+/** Meta sentence; at phone width the app bar suppresses it, so it lives on the heading. */
 export function countSentence(entries: readonly ConnectionEntry[]): string {
   const needsAuth = entries.filter((e) => e.status === "needs-auth").length;
   const paused = entries.filter((e) => e.status === "paused").length;
@@ -240,15 +192,12 @@ export function countSentence(entries: readonly ConnectionEntry[]): string {
   ]);
 }
 
-/** `showing 3 of 12` — only ever shown while a chip narrows the list. */
+/** Only while a chip narrows the list. */
 export function showingSentence(shown: number, total: number): string {
   return `showing ${String(shown)} of ${String(total)}`;
 }
 
-/**
- * Which of the five states the page is in. `full`/`empty` are read off the
- * row count rather than stored, so they cannot disagree with what rendered.
- */
+/** `full`/`empty` from row count — never stored, so they cannot disagree. */
 export function opsStateFor(
   load: "loading" | "error" | "ready",
   count: number
@@ -259,18 +208,13 @@ export function opsStateFor(
   return count >= FULL_AT ? "full" : "ready";
 }
 
-/** The first connection this screen could actually re-authorize, if any. */
 export function firstNeedingAuth(
   entries: readonly ConnectionEntry[]
 ): ConnectionEntry | undefined {
   return entries.find((entry) => entry.status === "needs-auth");
 }
 
-/**
- * The standing line's words. The generic three are the reference's own
- * per-state sentences; `healthLineFor` decides which is published and whether
- * the inline verb comes with it.
- */
+/** Standing line. Generic three are the reference's per-state sentences. */
 export function connectorsHealth(
   entries: readonly ConnectionEntry[],
   now: number

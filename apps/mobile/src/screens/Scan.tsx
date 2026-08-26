@@ -96,7 +96,7 @@ export default function ScanScreen({
   const [allocations, setAllocations] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
-  // THE OCR CONSENT LATCH (issue #712 C3). `undefined` means either "not yet
+  // THE OCR CONSENT LATCH (#712). `undefined` means either "not yet
   // hydrated" or "never answered" — `ocrConsentReady` tells the two apart so
   // the extraction effect below never fires on a half-read latch.
   const [ocrConsent, setOcrConsent] = useState<ScanOcrConsentRecord>();
@@ -194,7 +194,7 @@ export default function ScanScreen({
     [gatewayBase]
   );
 
-  // THE LOAD-BEARING RULE (issue #712 C3): extraction is reachable only once
+  // THE LOAD-BEARING RULE (#712): extraction is reachable only once
   // the latch has an explicit answer. While unanswered this waits — never
   // treats "not yet answered" as "declined" — so the gate below gets to ask
   // first. Once answered, this fires (or doesn't) exactly once per capture.
@@ -213,9 +213,9 @@ export default function ScanScreen({
   const answerOcrConsent = useCallback(
     (answer: "on-device" | "not-now"): void => {
       setOcrConsent(answerScanOcrConsent(answer));
-      // Re-key into the vault's egress-consent ledger (#807 W3), best-effort.
+      // Re-key into the vault's egress-consent ledger (#807), best-effort.
       // A RECORD, INCLUDING THE "no" — never a gate: this latch is per-device
-      // by law (#712 C3), so the fire gate never reads an `on-device` row.
+      // by law (#712), so the fire gate never reads an `on-device` row.
       if (!gatewayBase) return;
       void fetch(`${gatewayBase}/centraid/_vault/enrich/consent`, {
         body: JSON.stringify({
@@ -393,7 +393,7 @@ export default function ScanScreen({
       <CloseHeader colors={colors} onClose={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.content}>
         {fileUri && ocrConsentReady && !ocrConsent ? (
-          // THE CONSENT GATE (issue #712 C3), shown once per device, before
+          // THE CONSENT GATE (#712), shown once per device, before
           // the first extraction. Declining still saves the scan — the
           // destination flow below handles an unextracted scan inline,
           // never as a dead end.
@@ -582,7 +582,7 @@ export default function ScanScreen({
                     colors={colors}
                   />
                 ) : (
-                  // Declined at the gate (issue #712 C3): stated inline,
+                  // Declined at the gate (#712): stated inline,
                   // never a dead control — the field above simply doesn't
                   // exist for a scan with no extracted text.
                   <Text style={[styles.help, { color: colors.textSoft }]}>

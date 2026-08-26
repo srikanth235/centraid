@@ -1,26 +1,7 @@
 /**
- * Successor-invitation DELIVERY for the steward-absence ceremony (issue #750).
- *
- * `recoverCommonsFromReplica` re-founds the group from a member's replica and
- * leaves every other seat INVITED — consent is never fabricated. Until now
- * "sending those invitations is left to the caller" and no caller existed, so
- * the ceremony produced a steward-of-one and the group stayed dead.
- *
- * Delivery follows exactly the paths the ordinary create-a-commons route uses,
- * in this order per member seat:
- *
- *   1. CO-HOSTED — the member vault is mounted on this same gateway: queue the
- *      invitation straight onto its seat.
- *   2. LINKED PEER — an approved vault link already exists between the NEW
- *      steward and the member (true for N=2 always, and for any member already
- *      linked to the successor): push it over the peer plane.
- *   3. CLAIM TICKET — no link exists (the N≥3 case: the member's only link was
- *      to the vault that disappeared). The successor mints a one-time claim
- *      token bound to that party; the operator carries it out of band and the
- *      member redeems it after pairing with the new steward. This is
- *      old-steward-independent by construction — nothing in the claim path
- *      touches the lost vault — but it is NOT automatic, and the runbook
- *      (docs/recovery/commons-steward-loss.md) says so plainly.
+ * Successor-invitation delivery (#750). Consent is never fabricated.
+ * Per seat: co-hosted queue, then linked-peer push, then an out-of-band
+ * claim (not automatic). Runbook: docs/recovery/commons-steward-loss.md.
  */
 
 import {
@@ -33,32 +14,23 @@ import {
 import type { CommonsCapability, VaultDb } from "@centraid/vault";
 
 export type CommonsInvitationDeliveryState =
-  /** Written directly onto a co-hosted member seat. */
   | "queued"
-  /** Accepted by the member's gateway over an existing vault link. */
   | "delivered"
-  /** No link to the successor: a claim token the operator must carry. */
   | "claim"
-  /** A link exists but the peer refused or could not be reached right now. */
   | "unreachable";
 
 export interface CommonsInvitationDelivery {
   partyId: string;
   memberVaultId?: string;
   state: CommonsInvitationDeliveryState;
-  /** Present only for `claim`; one-time, never logged or stored by callers. */
   claimToken?: string;
 }
 
 export interface DeliverCommonsRecoveryInvitationsInput {
-  /** The successor's steward seat — the vault that ran the ceremony. */
   seat: VaultDb;
   stewardVaultId: string;
-  /** The SUCCESSOR grant id returned by the ceremony. */
   grantId: string;
-  /** Member vaults mounted on this same gateway. */
   vaultFor?: (vaultId: string) => VaultDb | undefined;
-  /** Peer-plane push; returns false when no link/dial is available. */
   invitePeer?: (input: {
     stewardVaultId: string;
     memberVaultId: string;
@@ -74,10 +46,6 @@ export interface DeliverCommonsRecoveryInvitationsInput {
   now?: string;
 }
 
-/** The member vault this seat knows for a party, from its own bindings. The
- *  successor's roster is party-keyed; bindings are what turn a party into an
- *  address, and they survive the old steward because they were projected into
- *  this replica while it was still syncing. */
 function boundVaultId(seat: VaultDb, partyId: string): string | undefined {
   const row = seat.vault
     .prepare(
@@ -150,10 +118,8 @@ export async function deliverCommonsRecoveryInvitations(
         continue;
       }
     }
-    // No link to the successor (or the link is down): mint the out-of-band
-    // claim. Overwriting a previous claim for the same party is deliberate —
-    // an undelivered ticket is not consent, and re-running the ceremony
-    // should hand the operator a fresh one rather than a stale hash.
+    // Overwriting a previous claim for the same party is deliberate — an
+    // undelivered ticket is not consent.
     const claimed = createCommonsClaimInvitation({
       seat: input.seat.vault,
       invitation: base,

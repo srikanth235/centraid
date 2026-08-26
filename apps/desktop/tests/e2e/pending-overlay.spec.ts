@@ -13,26 +13,14 @@ import {
   waitForHome,
 } from "./fixtures";
 
-// Desktop offline honesty (matrix cell `desktop.offline`): a write made with
-// the renderer's network severed lands in the durable replica outbox, paints
-// its row as pending in the production app, and BOTH survive a full Electron
-// reload while still offline.
+// Matrix cell `desktop.offline`: an offline write lands in the durable replica
+// outbox and both the optimistic row and its pending state survive a full
+// Electron reload. Nothing is mocked; the gateway is real.
 //
-// It drove Tally, Tasks and Agenda until those three interfaces were removed
-// pending a ground-up redesign, and is rebuilt here on Docs — the remaining
-// app whose production rows render the shared pending overlay
-// (`apps/docs/components/List.tsx` → `_shared/PendingWriteActions.tsx`). The
-// contract asserted is unchanged and app-agnostic: replica ⊕ outbox recovery
-// across a reload, with the pending state visible to the member the whole
-// time. Nothing here is mocked; the local gateway is the real one.
-//
-// The offline write is issued through `window.centraid.write` rather than a
-// toolbar control ON PURPOSE. Docs' only rename affordances live in the
-// sidebar the inline seat hides and behind the Quick Look info panel, so a
-// UI-driven rename would spend most of this journey proving navigation. The
-// door used is the same one the app's own handler calls, and every observable
-// after it — the optimistic title, the pending chip, their survival across the
-// reload — is the production UI's.
+// The offline write goes through `window.centraid.write`, not a toolbar
+// control, on purpose — Docs' rename affordances are hidden in the inline seat,
+// so a UI-driven rename would spend the journey proving navigation. Every
+// observable after that door is the production UI's.
 
 const DOC_TITLE = "quarterly-review.txt";
 const DOC_BODY = "Numbers for the quarterly review.";
@@ -55,16 +43,13 @@ async function foundDesktop(page: Page): Promise<void> {
     .getByTestId("first-run-choice")
     .getByRole("button", { name: /start fresh on this mac/iu })
     .click();
-  // First run is one connection act: the local path starts the embedded host
-  // and hands straight to Home. Profile identity belongs in Settings, so this
-  // fixture must not resurrect the deleted name/color gate.
+  // First run hands straight to Home: never reintroduce a name/color gate here.
   const onboarding = page.getByTestId("onboarding-view");
   await onboarding.waitFor({ state: "visible", timeout: 60_000 });
   await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
 }
 
-/** The document ids the drive read carries for a given exact title. */
 async function driveIdsFor(page: Page, title: string): Promise<string[]> {
   type Drive = { documents: Array<{ document_id: string; title: string }> };
   const drive = await page.evaluate(() =>
@@ -83,12 +68,9 @@ test("a production Docs row queued offline survives an Electron reload", async (
     await foundDesktop(page);
     await openFirstParty(page, "Docs");
 
-    // Write-rail readiness must be proven BEFORE severing the network: the
-    // replica session bootstraps asynchronously, an offline session can never
-    // finish bootstrapping, and a write issued before it does throws
-    // not-bootstrapped instead of queueing. The probe is a write the vault
-    // deterministically REFUSES (an unstaged sha fails add_document's
-    // staged_or_owned precondition), so readiness costs no row.
+    // Prove write-rail readiness BEFORE severing: an offline session never
+    // finishes bootstrapping, and a pre-bootstrap write throws instead of
+    // queueing. The probe is a write the vault refuses, so it costs no row.
     await expect
       .poll(
         () =>
@@ -111,9 +93,6 @@ test("a production Docs row queued offline survives an Electron reload", async (
       )
       .not.toBe("replica-not-ready");
 
-    // One real document, through the product's own upload control, while the
-    // gateway is still reachable — this is the canonical row the offline write
-    // then decorates.
     await page.locator('input[aria-label="Upload files"]').setInputFiles({
       name: DOC_TITLE,
       mimeType: "text/plain",
@@ -134,10 +113,8 @@ test("a production Docs row queued offline survives an Electron reload", async (
       )
       .toBe(1);
 
-    // Sever the renderer's network and rename the document. Stay on the
-    // session the readiness probe proved: remounting the route would start a
-    // replica walk that an offline session can never finish, and the write
-    // would then throw instead of queueing.
+    // Stay on the probed session: remounting starts a replica walk an offline
+    // session cannot finish, and the write would throw instead of queueing.
     await page.context().setOffline(true);
     await page.evaluate(
       async ({ id, title, intentId }) =>
@@ -149,9 +126,6 @@ test("a production Docs row queued offline survives an Electron reload", async (
       { id: documentId, title: RENAMED_TITLE, intentId: RENAME_INTENT }
     );
 
-    // The overlay is the member's answer, painted by the production row: the
-    // new title stands where the old one was, and the row says it has not
-    // landed yet.
     await expect(
       page.getByRole("button", { name: `Select ${RENAMED_TITLE}` })
     ).toBeVisible({ timeout: 30_000 });
@@ -159,25 +133,18 @@ test("a production Docs row queued offline survives an Electron reload", async (
       "queued"
     );
 
-    // Durability is the whole claim: a full Electron reload, still offline,
-    // must restore BOTH the optimistic row and its pending state from the
-    // local outbox rather than snapping back to the canonical title.
     await page.reload({ waitUntil: "domcontentloaded" });
     await openFirstParty(page, "Docs");
     await expect(
       page.getByRole("button", { name: `Select ${RENAMED_TITLE}` })
     ).toBeVisible({ timeout: 30_000 });
-    // Either honest word for "still in the outbox": `queued` while the drain
-    // has not tried, `pending` once it has and is waiting on a connection.
-    // What must never appear is a settled row or a denial — the vault has not
-    // been reachable since the write.
+    // Both words mean "still in the outbox"; a settled row or denial must never
+    // appear, since the vault has been unreachable since the write.
     await expect(page.locator(".kit-pending-chip").first()).toHaveText(
       /^(?:queued|pending)$/u
     );
 
-    // One row, not two: the outbox entry DECORATES the canonical document it
-    // names — an overlay that minted a second row would show the member two
-    // copies of one file the moment they went offline.
+    // One row, not two: the outbox entry decorates the canonical document.
     expect(await driveIdsFor(page, RENAMED_TITLE)).toEqual([documentId]);
     expect(await driveIdsFor(page, DOC_TITLE)).toEqual([]);
 

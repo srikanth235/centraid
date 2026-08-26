@@ -1,15 +1,9 @@
-// Formatting + file-type helpers — pure functions of their arguments; none
-// hold or mutate app state. Split out of app.tsx so both the
-// orchestrator (currentRows' type filter, the upload size-skip message, the
-// empty-row copy) and the row/details/quick-look components can call these
-// directly instead of threading them all as props.
 import { formatBytes } from "@centraid/design";
 
 import { safeDocumentUrl } from "../_shared/untrusted.ts";
 import type { CustodyInfo, DocFields, TypeMeta } from "./types.ts";
 
-// Token-layer `formatBytes`, not `@centraid/design/elements`: Metro pulls this
-// file into the phone bundle, and the elements subpath is DOM-only.
+// Token-layer `formatBytes`, never `@centraid/design/elements` — Metro pulls this into the phone bundle; elements is DOM-only.
 export const fmtBytes = (n: number | null | undefined): string =>
   !n || !Number.isFinite(Number(n)) || n < 0 ? "—" : formatBytes(n);
 
@@ -51,18 +45,7 @@ export function purgeCountdown(iso: string | null | undefined): string {
   return `purges in ${days} days`;
 }
 
-/**
- * THE KIND TABLE. One entry per kind the drive names, and each one carries the
- * shape it wears (`glyph`).
- *
- * FOUR SHAPES ACROSS EIGHT KINDS, which is the handoff's own arithmetic — its
- * `DKIND` gives `pdf`, `md`, `txt` and `word` the SAME page glyph, `sheet` and
- * `deck` the same table, and keeps a distinct mark only for a picture and for
- * time-based media. A member is being told "page", "picture", "table",
- * "plays"; the exact format is what the Kind column is for, one field to the
- * right, and duplicating it as eight lookalike outlines would make the leading
- * edge of the row harder to scan rather than easier.
- */
+/** Four glyphs across eight kinds — eight lookalike outlines make the row's leading edge harder to scan. */
 const KINDS = {
   pdf: {
     label: "PDF",
@@ -104,9 +87,7 @@ const KINDS = {
     name: "Presentation",
     cat: "slide",
     cv: "--kind-slide",
-    // A deck is a table of contents more than it is a page — the handoff maps
-    // its own `deck` to the sheet glyph for the same reason.
-    glyph: "sheet",
+    glyph: "sheet", // deck is a TOC, not a page
   },
   doc: {
     label: "DOC",
@@ -126,7 +107,6 @@ const KINDS = {
 
 type KindId = keyof typeof KINDS;
 
-/** What the MEDIA TYPE says, when it says anything. */
 function kindFromMediaType(t: string): KindId | null {
   if (t === "application/pdf") return "pdf";
   if (t.startsWith("video/")) return "video";
@@ -156,17 +136,7 @@ function kindFromMediaType(t: string): KindId | null {
   return null;
 }
 
-/**
- * WHAT THE FILENAME SAYS, which is the answer whenever the media type has none.
- *
- * This is not belt-and-braces, it is the common case for a whole family of
- * kinds. An Office file is a ZIP container: a gateway that types bytes by
- * sniffing them stores `application/octet-stream` for every `.xlsx`, `.docx`
- * and `.pptx` that arrives — so the drive called them all "File" and drew the
- * page glyph on every one, which is exactly the sameness a per-kind mark
- * exists to break. The member named the file; the extension is their own
- * statement of what it is, and it is the only one on hand.
- */
+/** Fallback when media type is silent: Office files sniff as ZIP/`octet-stream`. */
 const KIND_BY_EXTENSION: Readonly<Record<string, KindId>> = {
   pdf: "pdf",
   jpg: "image",
@@ -226,21 +196,9 @@ function kindFromName(name: string): KindId | null {
   return KIND_BY_EXTENSION[name.slice(dot + 1).toLowerCase()] ?? null;
 }
 
-/**
- * What a document IS.
- *
- * `name` is the KIND'S OWN WORD — what the Kind column, the rail's Facts row
- * and the stage's meta line all print. It is a noun a member would use, so
- * "PDF", not "PDF document": the thing it is describing is already known to be
- * a document, and the column has 96px.
- *
- * The MEDIA TYPE is asked first and the FILENAME second, never the other way
- * round: a stored type is what the vault knows, an extension is what somebody
- * typed. The filename only ever answers a question the type left open.
- */
+/** Media type first, filename second — never reverse. `name` is the kind's own word ("PDF", 96px column). */
 export function typeMeta(
   mediaType: string | null | undefined,
-  /** The document's own title. Pass it wherever there is one. */
   name?: string | null
 ): TypeMeta {
   const t = String(mediaType ?? "").toLowerCase();
@@ -249,25 +207,12 @@ export function typeMeta(
   return KINDS[kind];
 }
 
-// The vault's own edit_document precondition (media_type LIKE 'text/%',
-// packages/vault/src/commands/documents.ts) — kept in exact lockstep so the
-// Edit affordance only ever shows where the command would actually accept
-// it. Anything else (including a scanned PDF or an image) takes the
-// Replace-file door instead.
+// Lockstep with edit_document (`media_type LIKE 'text/%'`). Else Replace-file.
 export function isTextKind(doc: DocFields): boolean {
   return /^text\//iu.test(String(doc.media_type ?? ""));
 }
 
-// Decode a data: URI's text payload directly, without a network round trip.
-// The stage's paper sheet (components/QuickLookText.tsx) needs this for any document
-// whose bytes stayed inline (issue #296: small text bodies never rewrite to
-// a blob: route) — `fetch()`-ing a data: URI is blocked by the app's own
-// CSP (`connect-src` inherits `default-src 'self'`; only `img-src`
-// explicitly allows `data:`, which is why an `<img src="data:...">` works
-// but a fetch of the same URI does not), so this is the only door, not an
-// optimization. UTF-8 safe: base64 payloads decode through a real
-// TextDecoder rather than the classic (and multi-byte-unsafe) `atob()`
-// alone.
+// Only door: CSP blocks `fetch()` of `data:` (`connect-src` is `'self'`; only `img-src` allows `data:`). Small text never rewrites to a blob (#296). Base64 via TextDecoder, never `atob()` alone.
 export function decodeDataUri(uri: string | null | undefined): string | null {
   const s = String(uri ?? "");
   if (!s.startsWith("data:")) return null;
@@ -287,41 +232,25 @@ export function decodeDataUri(uri: string | null | undefined): string | null {
   }
 }
 
-/**
- * The document's OWN prose, when the bytes are already in hand client-side.
- *
- * A small text body never rewrites to a blob route (issue #296), so it rides
- * along on `content_uri` as a `data:` URI — the same bytes the Download link
- * hands the owner. Reading it costs no round trip and no consent beyond the
- * read that produced the row, which is why the card and the quick look can
- * show the real document instead of a decorative mock of one. Returns null
- * for a non-text document, and for a text document whose bytes live behind a
- * `blob:` route (that needs an async fetch, which the editor owns).
- */
+/** Inline `data:` prose (#296). Null for non-text or `blob:` (editor owns that fetch). */
 export function inlineText(doc: DocFields): string | null {
   if (!isTextKind(doc)) return null;
   const text = decodeDataUri(doc.content_uri);
   return text && text.trim() ? text : null;
 }
 
-/**
- * A prose excerpt of a markdown/plain-text body: the syntax characters are
- * stripped so a card shows sentences rather than `## ` and `**`, and the
- * result is a single soft-wrapped paragraph the reading register can set.
- * Deliberately NOT a markdown renderer — a 104px thumbnail has no room for
- * structure, and half-rendered structure is worse than none.
- */
+/** Not a markdown renderer: 104px thumbnail has no room for structure. */
 export function textExcerpt(body: string, max = 220): string {
   const plain = body
-    .replace(/^---\n[\s\S]*?\n---\n/u, "") // YAML front matter
-    .replace(/```[\s\S]*?```/gu, " ") // fenced code
-    .replace(/!\[[^\]]*\]\([^)]*\)/gu, " ") // images
-    .replace(/\[(?<label>[^\]]*)\]\([^)]*\)/gu, "$<label>") // links → their text
-    .replace(/^\s{0,3}#{1,6}\s+/gmu, "") // ATX headings
-    .replace(/^\s{0,3}>\s?/gmu, "") // block quotes
-    .replace(/^\s{0,3}(?:[-*+]|\d+\.)\s+/gmu, "") // list markers
-    .replace(/^\s{0,3}(?:[-*_]\s*){3,}$/gmu, " ") // thematic breaks
-    .replace(/[*_~`]/gu, "") // inline emphasis / code
+    .replace(/^---\n[\s\S]*?\n---\n/u, "")
+    .replace(/```[\s\S]*?```/gu, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/gu, " ")
+    .replace(/\[(?<label>[^\]]*)\]\([^)]*\)/gu, "$<label>")
+    .replace(/^\s{0,3}#{1,6}\s+/gmu, "")
+    .replace(/^\s{0,3}>\s?/gmu, "")
+    .replace(/^\s{0,3}(?:[-*+]|\d+\.)\s+/gmu, "")
+    .replace(/^\s{0,3}(?:[-*_]\s*){3,}$/gmu, " ")
+    .replace(/[*_~`]/gu, "")
     .replace(/\s+/gu, " ")
     .trim();
   return plain.length > max ? `${plain.slice(0, max).trimEnd()}…` : plain;
@@ -352,64 +281,26 @@ export function isMedia(doc: DocFields): boolean {
   return isVideo(doc) || isAudio(doc);
 }
 
-/**
- * Can Docs SHOW this kind at all (spec §10.1's `render` column)?
- *
- * "A kind is a fact about the bytes. Whether Docs can SET it is a separate
- * fact, and the facts panel exists for the difference." (§10.1 comment,
- * verbatim.) The three kinds it cannot show are Word, Spreadsheet and Deck —
- * so a row of one says "cannot be shown" BEFORE the member taps it, and the
- * rail answers what the viewer cannot.
- *
- * Keyed off `typeMeta`'s own category rather than a second media-type table:
- * two tables would eventually disagree, and the one that disagreed would be
- * the one telling a member their document is unopenable.
- */
+/** Showable (§10.1)? Key off `typeMeta` category — never a second media-type table. */
 export function canRender(doc: DocFields): boolean {
   const { cat } = typeMeta(doc.media_type, doc.title);
   if (cat === "sheet" || cat === "slide") return false;
   if (cat !== "doc") return cat !== "other";
-  // The `doc` category holds both text kinds (which render) and the binary
-  // word-processor kinds (which do not).
+  // `doc` = text (render) and binary word-processor (not).
   return String(doc.media_type ?? "").startsWith("text/");
 }
-/**
- * The FILL sibling of a kind's text rung (`--kind-pdf` → `--kind-pdf-fill`).
- *
- * `cv` is the kind as TEXT — a solved, deepened/lifted shade (see the two-rung
- * note in Chrome.module.css). Painting a decorative bar or a tint with it makes
- * the thumbnail read as a muddier version of its own label; worse, tinting a
- * surface with the ink that lands on it walks the background toward the
- * foreground and eats the contrast the solve just bought. Fills read the raw
- * palette hue instead, which is what the palette is for.
- */
+/** Fill sibling of the text rung. `cv` is a solved TEXT shade — filling with it eats contrast. */
 export function fillVar(cv: string): string {
   return `${cv}-fill`;
 }
 
-/** A kind tint — always built from the FILL rung, never from the text one, so
- *  a label painted `var(cv)` keeps its measured ratio on top of it. */
+/** Fill rung, never the text one — a label painted `var(cv)` keeps its measured ratio. */
 export function tintBg(cv: string, pct: number): string {
   return `color-mix(in oklab, var(${fillVar(cv)}) ${pct}%, transparent)`;
 }
 
-// The row list's empty-state copy USED to live here as `emptyStateFor`: one
-// flat cascade of nav/search/type combinations, rendered through `.kit-empty`.
-// It is gone. §4.6 says there are exactly FIVE empty states and that they are
-// distinguishable — a new drive, an empty folder, an empty shelf, a filter
-// with no matches, a search with no matches — and only the first is a
-// whole-screen state. That model lives in `view-copy.ts` (the copy),
-// `view-state.ts` (which variant, and whether a read has even landed) and
-// `components/EmptyState.tsx` (the block). Nothing here needed to know about
-// `AppState` any more, which is why this module is pure again.
+// No empty-state copy here — that lives in view-copy/view-state/EmptyState; a sixth answer would drag `AppState` into a pure module.
 
-// The blob custody projection (issue #352 phase 4, blob/custody.ts) in
-// owner-facing words + a tone the CSS keys off (custody-ok/custody-warn/
-// custody-danger) — mirrors the photos app's own custodyMeta exactly.
-// Returns null for a custody-less row (an inline `data:` document whose
-// bytes never left vault.db, or the standing sweep hasn't run yet) — the
-// caller renders nothing rather than claim a state the vault never
-// asserted.
 const CUSTODY_META: Record<string, CustodyInfo> = {
   "local-only": { label: "On this device only", tone: "warn" },
   replicated: { label: "Backed up", tone: "ok" },
@@ -423,19 +314,7 @@ export function custodyMeta(
   return (state ? CUSTODY_META[state] : undefined) ?? null;
 }
 
-// Per-row altitude (docs/blueprint-seats.md "Byte custody vocabulary"): a
-// row mark exists for the EXCEPTION only, never the norm. `replicated` and
-// `remote-only` are where bytes are designed to live — a dot on every row
-// (including the steady state) would caption the norm in prose under every
-// document, the anti-pattern Apple Photos and Google Photos both rejected
-// and mobile's `tile-overlays.ts` `stateOverlay` already encodes. `pending-
-// offsite` is the transient window between local-only and replicated, so it
-// falls through with the same nothing `stateOverlay` gives `queued`/
-// `uploading`. `local-only` is the one state a member can lose something to;
-// `missing` is a distinct integrity failure (bytes on NEITHER tier) rather
-// than a custody-location fact, but it is genuinely actionable, so it keeps
-// its row dot too. The full four-state story stays in `custodyMeta` above,
-// read by Details.tsx's per-item chip (the on-demand altitude).
+// Row mark for exceptions only: `local-only` (loss) and `missing` (integrity). Norms (`replicated`/`remote-only`/`pending-offsite`) get nothing.
 const CUSTODY_ROW_EXCEPTIONS: ReadonlySet<string> = new Set([
   "local-only",
   "missing",
@@ -448,11 +327,6 @@ export function custodyRowMark(
   return CUSTODY_META[state] ?? null;
 }
 
-// Real activity (issue #352 phase 4, queries/activity.ts): consent.provenance
-// stamps `prov_activity` as `command.<command name>` (execution.ts) — this is
-// the owner-facing gloss for every command documents.ts registers. An
-// unrecognized activity (a future command this map hasn't caught up with
-// yet) still renders honestly instead of vanishing: its raw name, cleaned up.
 const ACTIVITY_LABELS: Record<string, string> = {
   "command.core.add_document": "Uploaded",
   "command.core.rename_document": "Renamed",
@@ -476,8 +350,6 @@ export function activityLabel(activity: string | null | undefined): string {
   return cleaned || "Activity";
 }
 
-// `agent_kind` (consent.provenance, W3C PROV agent class) in the same
-// owner/agent framing the rest of the app uses for who acted.
 const AGENT_KIND_LABELS: Record<string, string> = {
   owner: "You",
   app: "This app",

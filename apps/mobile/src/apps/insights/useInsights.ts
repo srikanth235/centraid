@@ -1,17 +1,5 @@
-// The Analytics place's data half (#765): two reads, one preference, and one
-// export — nothing about layout or copy.
-//
-// The two reads stay independent, as they were before the revamp: usage
-// (`/_insights/summary`, vault-scoped) and health (`/_gateway/health`,
-// gateway-wide) can be served by different gateway versions. The SUMMARY is
-// what this page is: without it there is no page, so its failure is the error
-// state. Health is a qualifier — its failure costs the page its Gateway facts
-// and the uptime clause of the standing line, and nothing else.
-//
-// The window is the page's one parameter. Changing it re-reads, which is why
-// the count facts, the chart, the section metas and the axis can never
-// disagree about which window they are describing: they are all derived from
-// one summary that was fetched for one window.
+// Analytics data half (#765): usage (`/_insights/summary`) is the page;
+// health (`/_gateway/health`) is a qualifier and must never sink it.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -24,33 +12,25 @@ import { shareCsv } from "./insights-export";
 import { DEFAULT_WINDOW_DAYS, nothingRan } from "./insights-model";
 import { readWindowPref, writeWindowPref } from "./insights-window-pref";
 
-/** What the gateway answered. `empty` is derived from it, never stored. */
 export type InsightsLoad =
   | { kind: "loading" }
-  /** `at` is when the answer landed. Every relative phrase on the page is
-   *  measured from it rather than from `Date.now()` at render time: a clock
-   *  read during render is impure, and a row that silently re-ages on an
-   *  unrelated re-render claims a freshness nothing re-checked. */
+  /** `at` is when the answer landed — relative phrases measure from it, not `Date.now()` at render. */
   | {
       at: number;
       kind: "ready";
       summary: InsightsSummary;
       health?: GatewayHealth;
     }
-  /** `reason` is the underlying failure, shown as the error panel's one fact —
-   *  the panel's own body never changes, because what is safe does not. */
   | { kind: "error"; reason: string };
 
 export interface InsightsController {
   load: InsightsLoad;
   state: OpsState;
-  /** The clock every relative phrase on the page is measured from. */
   now: number;
   windowDays: number;
   setWindowDays: (days: number) => void;
   refreshing: boolean;
   exporting: boolean;
-  /** A failed export, said once, above the blocks. */
   exportError: string | undefined;
   refresh: () => Promise<void>;
   retry: () => void;
@@ -74,8 +54,6 @@ async function read(
     apply({ kind: "error", reason: NOT_PAIRED });
     return;
   }
-  // Health must never sink the page, so it resolves to `undefined` on any
-  // failure; the summary is the page, so its failure is the error state.
   const [summaryResult, health] = await Promise.all([
     fetchInsightsSummary(windowDays).then(
       (summary) => ({ ok: true, summary }) as const,
@@ -95,15 +73,7 @@ async function read(
   });
 }
 
-/**
- * Which of the states the page is in.
- *
- * There is no `full`: Analytics does not cycle on row count, because its chip
- * row is unconditional (spec §5 — "its chip row is always shown, not gated by
- * `full`"), so a `full` state would render exactly the `ready` page. `empty`
- * is read off the summary rather than stored, so it cannot disagree with what
- * rendered.
- */
+/** No `full`: the chip row is always shown (spec §5). `empty` is derived, not stored. */
 export function opsStateFor(load: InsightsLoad): OpsState {
   if (load.kind === "loading") return "loading";
   if (load.kind === "error") return "error";
@@ -116,14 +86,10 @@ export function useInsights(): InsightsController {
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | undefined>();
-  // A ref, not state: the guard has to hold WITHIN a tick, or two taps on
-  // Export before React re-renders would open two share sheets over one file.
+  // Ref, not state: the guard must hold within a tick or two taps open two sheets.
   const inFlight = useRef(false);
 
-  // The stored window arrives after the first read has already started, so a
-  // member whose window is not the default sees one extra read. Waiting for
-  // the preference before reading anything is the alternative to a blank
-  // frame, and a blank frame is worse.
+  // Stored window arrives after the first read; waiting for it is a blank frame.
   useEffect(() => {
     let cancelled = false;
     void readWindowPref().then((saved) => {
@@ -138,8 +104,6 @@ export function useInsights(): InsightsController {
     void read(windowDays, setLoad);
   }, [windowDays]);
 
-  // Switching the active vault re-points usage at a different vault — re-read,
-  // because the numbers on screen belong to the vault that was selected.
   useEffect(
     () => subscribeVaultLinks(() => void read(windowDays, setLoad)),
     [windowDays]

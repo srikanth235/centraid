@@ -1,20 +1,16 @@
 // What the phone viewer *is*, as data — separate from what draws it.
 // governance: allow-repo-hygiene file-size-limit The #712 declarative viewer catalog is intentionally kept together so ordering and capability invariants stay auditable.
 //
-// The phone rearranges the desktop viewer; it does not water it down. Same five
-// actions, same names, same order, same marks — moved to where a thumb is. The
-// filmstrip stays. The info rail becomes a sheet. Every one of those decisions
-// is a value in this module rather than a number buried in a StyleSheet, so it
-// can be asserted without rendering React Native (§7, CHANGELOG §D).
+// The phone REARRANGES the desktop viewer; it does not water it down. Same five
+// actions, same names, same order, same marks. Every such decision is a value
+// here rather than a number in a StyleSheet, so it can be asserted without
+// rendering React Native (§7, CHANGELOG §D) — keep it that way.
 //
-// Nothing here reads a colour: tones are named (`ink` / `net`) and resolved
-// against the native token layer at the call site. RN has no `oklch()`, so the
-// tokens are already concrete there — but a hex in this file would be a second
-// source of truth for a value the design system owns.
+// Nothing here reads a colour: tones are named (`ink` / `net`) and resolved at
+// the call site. A hex here would be a second source of truth.
 
-// Imports the leaf module rather than `kit/fetch-gate`'s barrel: this file is
-// asserted without rendering React Native (see the module comment above), and
-// the barrel also re-exports `FetchChoice.tsx`, which pulls in `react-native`.
+// The leaf module, never `kit/fetch-gate`'s barrel: the barrel re-exports
+// `FetchChoice.tsx`, which pulls in `react-native`.
 import {
   PHOTOS_VIDEO_STATUS,
   photosOriginalNotFetched,
@@ -38,19 +34,15 @@ export interface ViewerAction {
 }
 
 /**
- * The five, in the order the desktop bar carries them. Trash is the only one in
- * `--net`, and it is an outline — a destructive control is never a large filled
+ * The five, in the order the desktop bar carries them. Trash is the only `net`
+ * one, drawn as an outline — a destructive control is never a large filled
  * surface (§18).
  */
 export const VIEWER_BOTTOM_ACTIONS: readonly ViewerAction[] = [
-  // `Copy to another place`, since issue #726 retired the Photos "Sharing"
-  // place: the action puts this photograph into another vault the member
-  // names, so the label names a DESTINATION, never the verb `Share` with an
-  // invisible effect — the same resting caption the web viewer's
-  // `ACTION_LABELS.copy` carries (blueprints `viewer.ts`), so the two clients
-  // cannot name one action differently. The visible label and the spoken one
-  // are read from this same field, so they cannot disagree (a control whose
-  // accessible name is not its visible label is a WCAG 2.5.3 failure).
+  // Names a DESTINATION, never the verb `Share` with an invisible effect
+  // (#726), and matches the web's `ACTION_LABELS.copy` so the two clients
+  // cannot name one action differently. `label` is both the visible and the
+  // spoken name; splitting them is a WCAG 2.5.3 failure.
   { id: "copy", label: "Copy to another place", icon: "share", tone: "ink" },
   { id: "favorite", label: "Favorite", icon: "heart", tone: "ink" },
   { id: "info", label: "Info", icon: "info", tone: "ink" },
@@ -62,21 +54,13 @@ export const VIEWER_BOTTOM_ACTIONS: readonly ViewerAction[] = [
 export const VIEWER_ACTION_TARGET = 56;
 
 /**
- * THE BOTTOM ROW'S ANATOMY: chip · capsule · chip.
+ * THE BOTTOM ROW'S ANATOMY: chip · capsule · chip — grouped by CONSEQUENCE. The
+ * end chips each carry one action that reaches beyond this photograph (Copy,
+ * Trash); the middle capsule carries the three that do not.
  *
- * The five actions did not change — this is where they SIT. A single bar of
- * five equal cells gives the destructive action the same weight as Info, and
- * puts the one control a member reaches for by reflex (Copy to vault) in the
- * same undifferentiated queue as the rest. Grouping separates them by
- * consequence: the two ends are chips carrying one action each — Copy to
- * vault, which reaches outside this vault, and Trash, which is the only
- * destructive one — and the middle capsule carries the three that change
- * nothing outside this photograph.
- *
- * The ORDER is untouched: flattening these groups reproduces
- * `VIEWER_BOTTOM_ACTIONS` exactly, which is what keeps the phone's arrangement
- * a rearrangement of the desktop bar rather than a different set of controls
- * (CHANGELOG §D). That equality is asserted, not remembered.
+ * Flattening these groups must reproduce `VIEWER_BOTTOM_ACTIONS` exactly — that
+ * equality is what keeps this a rearrangement of the desktop bar rather than a
+ * different set of controls (CHANGELOG §D), and it is asserted.
  */
 export interface ViewerActionGroup {
   /** `chip` is one round plate around one action; `capsule` is a pill that
@@ -99,61 +83,33 @@ export function viewerAction(id: ViewerActionId): ViewerAction {
   return action;
 }
 
-/**
- * The floating chrome's round chip — 44, the touch floor EXACTLY, and
- * deliberately not the bar's 56.
- *
- * A 56 circle sitting on a photograph is a plate, not a chip: the old bar
- * earned its 56 by being a full-width strip where the target and its label
- * shared one cell, and nothing floating over the stage has that excuse. The
- * three-up capsule keeps 56 per target (`VIEWER_ACTION_TARGET`) because those
- * targets are neighbours and 44 side by side is where mis-taps start.
- */
+/** The touch floor EXACTLY, and deliberately not the bar's 56: a 56 circle
+ *  floating on a photograph is a plate, not a chip. The capsule keeps 56 per
+ *  target because those targets are neighbours. */
 export const VIEWER_CHROME_CHIP = 44;
 
 /** How far the floating chrome stands off the stage's edges. Stated once so
  *  the layout and `viewerChromeHeight` cannot drift apart. */
 export const VIEWER_CHROME_INSET = 8;
 
-/**
- * The three floating elements at the stage's head, in leading→trailing order.
- *
- * There is no top BAR any more. A full-width strip is a second ground laid over
- * the photograph, and it charged the stage its own height on every screen; three
- * elements standing on the stage cost only the plates they occupy. The stamp is
- * the middle one because it is the only one that is not a control — a member
- * scanning for something to press skips the centre.
- */
+/** Leading→trailing. There is NO top bar: a full-width strip is a second ground
+ *  over the photograph. The stamp takes the middle because it is the only one
+ *  that is not a control. */
 export const VIEWER_TOP_CHROME = ["back", "stamp", "overflow"] as const;
 
-/**
- * What the floating chrome claims at the head of the stage.
- *
- * The stage runs UNDER it — that is the whole point of floating — so the viewer
- * never subtracts this. The editor does: it has its own controls at the top of
- * its own body, and a chip floating over them would be one control obscuring
- * another.
- */
+/** The viewer never subtracts this — the stage runs UNDER the floating chrome.
+ *  The editor does subtract it: its own top controls must not be obscured. */
 export function viewerChromeHeight(insetTop: number): number {
   return insetTop + VIEWER_CHROME_CHIP + VIEWER_CHROME_INSET * 2;
 }
 
-/**
- * Why a write control disables in a read-only vault — the ONE sentence for
- * this truth on the phone (v4 handoff §6, §18, issue #711 item M). Two
- * different stub strings used to say the same thing in two places
- * (`PhotoLightboxToolbar`'s bottom-bar reasons and `PhotoLightbox`'s
- * write-refusal panel copy); a member reading both would have no way to know
- * they were the same fact. There is exactly one string now, so the two
- * surfaces can never drift again.
- */
+/** The ONE sentence for this truth on the phone (§6, §18). Two strings saying
+ *  the same thing leave a member with no way to know they are one fact. */
 export const READ_ONLY_VAULT_REASON =
   "This vault is read-only for you, so meaning cannot be written into it.";
 
-/**
- * The filmstrip, kept on the phone. Swipe and the strip are the same control
- * approached from two directions; dropping it would make the phone a slideshow.
- */
+/** Kept on the phone: swipe and the strip are one control from two directions,
+ *  and dropping it makes the phone a slideshow. */
 export const FILMSTRIP = {
   height: 58,
   current: 58,
@@ -170,20 +126,13 @@ export function infoSheetHeight(screenHeight: number): number {
 }
 
 /**
- * Slideshow is a different mode from the viewer, not the viewer with things
- * switched off in the UI: no filmstrip, no info, determinate position (§7.3).
+ * A different MODE from the viewer, not the viewer with things switched off:
+ * no filmstrip, no info, determinate position (§7.3).
  *
- * A MODEL MUST NOT DESCRIBE CONTROLS THAT DO NOT RENDER. This used to claim
- * `transports: 1, pause: true` while the phone rendered neither — and the one
- * control it DID render wore a pause glyph and exited the slideshow, so the
- * model, the mark and the behaviour were three different stories (issue #711).
- *
- * The phone's slideshow has exactly one top-bar action and it is `Leave`
- * (prototype line 4492). Building the transport is a RECORDED NON-GOAL: Google
- * Photos has no phone slideshow transport either, and a pause control that only
- * exists on one surface is a worse answer than one that exists on neither. The
- * desktop keeps its transport; when the phone earns one, `transports` goes to 1
- * and this comment goes away.
+ * A MODEL MUST NOT DESCRIBE CONTROLS THAT DO NOT RENDER — `transports: 1` while
+ * the phone renders none makes model, mark and behaviour three stories (#711).
+ * A phone transport is a recorded NON-GOAL; when one is built, `transports`
+ * goes to 1 and this note goes away.
  */
 export const SLIDESHOW = {
   filmstrip: false,
@@ -192,29 +141,17 @@ export const SLIDESHOW = {
   pause: false,
 } as const;
 
-/**
- * The slideshow's ONE top-bar action, as a single object.
- *
- * Label and effect are read from the SAME value by the control that renders it,
- * which is the structural reason they can no longer disagree — the bug this
- * replaces was a label (a pause glyph) and an effect (exit) that had drifted
- * apart because they were written in two places.
- */
+/** One object, so label and effect are read from the SAME value and cannot
+ *  drift into a pause glyph that exits. */
 export const SLIDESHOW_ACTION = { effect: "leave", label: "Leave" } as const;
 
-/** The slideshow's title, where the photograph's caption sits in the viewer. */
 export const SLIDESHOW_TITLE = "Slideshow";
 
-/**
- * How long one photograph is held. The member-facing meta line PROMISES four
- * seconds (proto 4511), so the number is a promise, not a taste: 3.5s here with
- * "4 seconds a photograph" on screen was the copy lying about the code.
- */
+/** A PROMISE, not a taste: `slideshowMeta` prints this number on screen. */
 export const SLIDESHOW_INTERVAL_MS = 4000;
 
-/** `12 of 184 · 4 seconds a photograph` — the meta line, which is also the ONLY
- *  place the position index appears now; the viewer's own meta line carries the
- *  capture line instead (proto 4511). */
+/** `12 of 184 · 4 seconds a photograph` — the only place the position index
+ *  appears; the viewer's own meta line carries the capture line (proto 4511). */
 export function slideshowMeta(index: number, total: number): string {
   const at = slideshowPosition(index, total);
   const seconds = Math.round(SLIDESHOW_INTERVAL_MS / 1000);
@@ -229,22 +166,14 @@ export function slideshowPosition(
   return { position: String(index + 1), total: String(total) };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // What the floating stamp says
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
-/**
- * The name the photograph answers to. It is no longer the stamp's first line —
- * WHEN outranks WHAT there (see `captureStamp`) — but it is still the accessible
- * name of the stamp, and it is still the visible first line for a photograph
- * that has no capture time to show instead.
- *
- * The timeline flattens a vault row's `title` column into `filename` (see
- * `timeline-engine.ts`), so the caption and the file name arrive in the same
- * field. A value that still LOOKS like a file name has never been captioned, so
- * it is treated as the last-resort fallback the handoff allows rather than
- * promoted to a caption the member never wrote.
- */
+/** `timeline-engine.ts` flattens a vault row's `title` into `filename`, so a
+ *  caption and a file name arrive in one field. A value still SHAPED like a
+ *  file name was never captioned, and must stay a last-resort fallback rather
+ *  than be promoted to a caption the member never wrote. */
 const FILENAME_SHAPED = /\.[a-z0-9]{2,5}$/iu;
 
 export function viewerTitle(input: {
@@ -257,28 +186,18 @@ export function viewerTitle(input: {
 }
 
 /**
- * `30 July 2026` over `17:42 · Lyme Regis` — the floating stamp, in two lines.
+ * `30 July 2026` over `17:42 · Lyme Regis` — the floating stamp. WHEN outranks
+ * WHAT: the date takes the first line and the emphasis.
  *
- * This used to be one run of text (`captureLine`) under the caption, and it read
- * as a footnote. WHEN a photograph was taken is the fact a member is actually
- * looking for when they open one, so it takes the stamp's first line and the
- * emphasis; the clock and the place follow beneath it in the numeric register,
- * where a time and a place name belong.
- *
- * Composition still matches the web viewer's `captureLine` (blueprints
- * `viewer.ts`) field for field — same date parts, same clock, same place — so
- * the two clients cannot describe one photograph differently. Only the LINE
- * BREAK is the phone's, and the phone earns it: it has no info rail beside the
- * stage, so the stamp is the whole answer rather than a summary of one.
- *
- * A photograph with no capture time says nothing rather than inventing one —
- * both fields come back empty and the caller shows the name instead.
+ * Composition matches the web viewer's `captureLine` field for field, so the
+ * two clients cannot describe one photograph differently; only the LINE BREAK
+ * is the phone's. No capture time ⇒ both fields empty and the caller shows the
+ * name — never an invented date.
  */
 export interface CaptureStamp {
-  /** `30 July 2026` — the first line, and the one that carries the weight. */
   date: string;
-  /** `17:42 · Lyme Regis` — the second, soft. The place simply stops the line
-   *  short when there is none, rather than leaving a dangling separator. */
+  /** The place stops the line short when there is none, never leaving a
+   *  dangling separator. */
   time: string;
 }
 
@@ -304,22 +223,19 @@ export function captureStamp(input: {
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The vault a photograph is in
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
- * Sharing is a place a photograph is in, not a permission attached to it — and
- * the only fact on the vault record is whether it is the member's OWN
- * (CHANGELOG §H). A vault a member happened to call "Sharing" is still their
- * own, and must still read as reachable by nothing. There is no third kind of
- * place: the place a copy lands is the recipient's vault, so a photograph
- * copied somewhere reads like one in any other shared vault.
+ * Sharing is a PLACE a photograph is in, not a permission on it, and the only
+ * fact on the vault record is whether it is the member's own (CHANGELOG §H). A
+ * vault someone named "Sharing" is still their own. There is no third kind of
+ * place — a copy lands in the recipient's vault.
  */
 export interface VaultLine {
-  /** What the vault CALLS itself — the whole answer to "where is it". */
   value: string;
-  /** What being in this vault means. A pure function of `personal`. */
+  /** A pure function of `personal`, never of the label. */
   meaning: string;
 }
 
@@ -340,16 +256,12 @@ export function marksAsElsewhere(personal: boolean): boolean {
   return !personal;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Zoom
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
-/**
- * THE rung. One number for every way into a zoom, because a double tap and a
- * `+` that land on different magnifications are two different controls wearing
- * one name: the double tap used to go to 2.5 (`lightbox-gestures.ts`) while the
- * chip went to 2.4, so the readout changed depending on which one you used.
- */
+/** THE rung — one number for every way into a zoom. A double tap and a `+` that
+ *  land on different magnifications are two controls wearing one name. */
 export const ZOOM_RUNG = 2.5;
 
 /** The ceiling the pinch is clamped to. Past this a preview is pixels. */
@@ -361,9 +273,8 @@ const ZOOM_STEP = 0.5;
 /** `fit` is the floor: the photograph is never smaller than its own frame. */
 export const ZOOM_FIT = 1;
 
-/** Scales within this of a rung count as being ON it — a pinch settles on
- *  1.0000001 often enough that an exact comparison would read `100% · drag to
- *  pan` on a photograph that is not zoomed at all. */
+/** A pinch settles on 1.0000001 often enough that an exact comparison reads
+ *  `100% · drag to pan` on a photograph that is not zoomed at all. */
 const ZOOM_EPSILON = 0.001;
 
 export function isZoomed(scale: number): boolean {
@@ -392,17 +303,13 @@ export function zoomReadout(scale: number): ZoomReadout {
   return { label: `${zoomPercent(scale)} · drag to pan`, mode: "zoomed" };
 }
 
-/** `240%` — the exact magnification, which is the whole point of the readout. */
 function zoomPercent(scale: number): string {
   return `${Math.round(scale * 100)}%`;
 }
 
-/**
- * "Fit" has to mean fit on a 390px portrait screen as well as a 1420px window,
- * so the box is the constraint and the asset's own ratio decides which axis
- * binds. The ratio comes from the asset record, which is known before the bytes
- * arrive — that is what stops a tile reflowing when they land (§7.1, §14).
- */
+/** The box is the constraint and the asset's own ratio decides which axis binds.
+ *  The ratio comes from the RECORD, known before the bytes arrive — which is
+ *  what stops a tile reflowing when they land (§7.1, §14). */
 export function fitMedia(
   aspectRatio: number,
   box: { width: number; height: number }
@@ -428,9 +335,9 @@ export function assetAspectRatio(asset: {
   return width / height;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Transports — one slot, three variants
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export type TransportVariant = "video" | "audio" | "live";
 
@@ -474,30 +381,17 @@ export function transportSpec(
   return null;
 }
 
-/**
- * `0:08` / `0:24` — mono, tabular, and never a bare float.
- *
- * Rounds rather than truncates, because this is the twin of the web viewer's
- * `clock` (blueprints `viewer.ts`) and the two clients must print the SAME
- * duration for the same recording: a 24.6s video that reads `0:24` on the phone
- * and `0:25` in the browser is one video with two lengths.
- */
+/** ROUNDS, never truncates — the twin of the web viewer's `clock`, and one
+ *  recording must not have two lengths across the clients. */
 export function formatMediaClock(seconds: number): string {
   const whole = Math.max(0, Math.round(seconds));
   const minutes = Math.floor(whole / 60);
   return `${minutes}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-/**
- * The video's resolution name, from the RECORD's pixel height — never a
- * filename or a codec guess. Named after the marketing rungs a member
- * recognises; a height that falls between rungs reads an honest `NNNp` rather
- * than being promoted to a rung it does not clear.
- *
- * Mirrors the web's `videoResolutionLabel` (blueprints `viewer.ts`) rung for
- * rung — the same recording must not be `4K` on one client and `1440p` on the
- * other.
- */
+/** From the RECORD's pixel height — never a filename or codec guess. A height
+ *  between rungs reads an honest `NNNp` rather than being promoted. Mirrors the
+ *  web's `videoResolutionLabel` rung for rung. */
 function videoResolutionLabel(asset: { height?: number }): string | null {
   const height = Number(asset.height);
   if (Number.isNaN(height) || height <= 0) return null;
@@ -508,15 +402,8 @@ function videoResolutionLabel(asset: { height?: number }): string | null {
   return `${Math.round(height)}p`;
 }
 
-/**
- * `video · 4K · 0:24` (proto 4541) — kind, resolution, duration.
- *
- * Each field the record does not carry is OMITTED, never invented: a video with
- * no recorded height reads `video · 0:24`, not `video · ?p · 0:24`, and one
- * with no recorded duration reads `video · 4K` rather than a fabricated `0:00`.
- * The composition rules are the web's `videoKindLabel`, part for part, so both
- * clients label one video identically.
- */
+/** `video · 4K · 0:24` (proto 4541). A field the record lacks is OMITTED, never
+ *  invented as `?p` or `0:00`. Part for part, the web's `videoKindLabel`. */
 export function videoKindLabel(asset: {
   height?: number;
   durationS?: number;
@@ -529,14 +416,11 @@ export function videoKindLabel(asset: {
   return parts.join(" · ");
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Where the bytes are
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
-/**
- * An original that is offloaded by the OS, still on the gateway, or behind a
- * metered connection is each a truthful state — never a broken image (§12).
- */
+/** Each is a truthful state — never a broken image (§12). */
 export type OriginalPlacement =
   | "on-device"
   | "offloaded"
@@ -551,7 +435,7 @@ export interface OriginalStatus {
   action?: string;
 }
 
-/** Copy for the inline action. One string, so it cannot drift between rows. */
+/** One string, so it cannot drift between rows. */
 export const LOAD_THE_ORIGINAL = "Load the original";
 
 export function resolveOriginalPlacement(input: {
@@ -562,8 +446,8 @@ export function resolveOriginalPlacement(input: {
 }): OriginalPlacement {
   if (input.hasDeviceOriginal && input.offloaded !== true) return "on-device";
   if (input.hasDeviceOriginal) return "offloaded";
-  // A metered connection is a state of the *fetch*, not of the bytes, and it
-  // outranks "on the gateway" because it is the thing the member must decide.
+  // Metered is a state of the *fetch*, not the bytes, and outranks "on the
+  // gateway" because it is the thing the member must decide.
   if (input.unlocked !== true && isMeteredConnection(input.networkType))
     return "metered";
   return "on-gateway";
@@ -597,11 +481,8 @@ export function originalStatus(
   }
 }
 
-/**
- * The paragraph under Facts. It says where the bytes are and what that costs,
- * because "explicit choice" is only honest if the choice is described before it
- * is offered.
- */
+/** Says where the bytes are AND what fetching costs: "explicit choice" is only
+ *  honest if the choice is described before it is offered. */
 export function originalWhereabouts(status: OriginalStatus): string {
   if (status.placement === "on-device")
     return "The original is on this device.";
@@ -612,16 +493,13 @@ export function originalWhereabouts(status: OriginalStatus): string {
   return "The original is on the gateway — opening reads a smaller copy, and fetching the full-quality one is your choice.";
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The one status line inside the stage
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
-/**
- * The phone's teaching line (proto 4637–4639). The desktop shows the bytes here
- * because its gestures are a mouse wheel and a keyboard; the phone's are not
- * discoverable, so the one line the stage owns spends itself saying what the
- * fingers can do — until the bytes have something better to say.
- */
+/** The phone's teaching line (proto 4637–4639): its gestures are not
+ *  discoverable, so the stage's one line teaches them until the bytes have
+ *  something better to say. */
 const VIEWER_GESTURE_STATUS =
   "Swipe for the next · pinch or double tap to zoom · swipe up for info";
 
@@ -640,27 +518,17 @@ export interface ViewerStatus {
 }
 
 /**
- * Which of the four things the stage's ONE line says — and in which order.
+ * The stage's ONE line, and the precedence is deliberate — NOT "the bytes
+ * always win", which would keep the gesture line and zoom readout off screen.
  *
- * The precedence is deliberate, and it is NOT "the bytes always win", which is
- * what the phone used to do (the byte status was printed unconditionally, so
- * the gesture line and the zoom readout the handoff specifies never appeared at
- * all):
- *
- * 1. **Zoomed** outranks everything. A member holding a magnified photograph
- *    has one question — how far in am I, and how do I get out — and the answer
- *    is time-critical in a way "where are the bytes" is not. The inline action
- *    is dropped here on purpose (proto 4644 blanks it while zoomed): a fetch
- *    that reflows the photograph under a pinched finger is a control firing
- *    into a moving target.
- * 2. **A byte status with something to DO** — an original that is offloaded,
- *    on the gateway, or behind a metered connection. This is the only case
- *    where the member is being offered a choice, and an offer is worth more
- *    than a lesson. Its action routes through the fetch gate.
- * 3. **Video**, which describes the copy that is playing.
- * 4. Otherwise the teaching line. This is where "Original on this device" ends
- *    up — a fact with no action and no cost, which the info sheet also carries
- *    under Facts, so the stage line is better spent on the gestures.
+ * 1. **Zoomed** outranks everything, and drops the inline action (proto 4644):
+ *    a fetch that reflows the photograph under a pinched finger fires into a
+ *    moving target.
+ * 2. **A byte status with something to DO** — the only case offering a choice,
+ *    and an offer beats a lesson.
+ * 3. **Video**, describing the copy that is playing.
+ * 4. Otherwise the teaching line. "Original on this device" lands here: no
+ *    action, no cost, and the info sheet carries it under Facts anyway.
  */
 export function viewerStatus(input: {
   scale: number;
@@ -674,21 +542,17 @@ export function viewerStatus(input: {
   return { text: VIEWER_GESTURE_STATUS };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Gestures
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
-/**
- * Nothing is reachable by gesture alone (§15). Every gesture the phone adds has
- * a control that does the same job, and the pairing is asserted rather than
- * remembered.
- */
+/** Nothing is reachable by gesture alone (§15): every gesture has a control
+ *  doing the same job, and the pairing is asserted. */
 export const GESTURE_POINTER_EQUIVALENTS: Readonly<Record<string, string>> = {
   "double tap": "Zoom to fit",
-  // The drag that moves a magnified photograph. Its equivalent is `Fit`: a
-  // member who cannot drag gets to the parts they cannot see by returning the
-  // whole photograph to the screen, which is the same information by another
-  // road. (The desktop's answer is the arrow keys; a phone has none to offer.)
+  // `Fit` is drag's equivalent: a member who cannot drag reaches what they
+  // cannot see by returning the whole photograph to the screen. A phone has no
+  // arrow keys to offer instead.
   drag: "Fit to the screen",
   pinch: "Zoom to fit",
   "swipe left": "Next photograph",

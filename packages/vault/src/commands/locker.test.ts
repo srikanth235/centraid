@@ -49,7 +49,7 @@ describe("locker", () => {
       .prepare("SELECT * FROM locker_item WHERE item_id = ?")
       .get(itemId) as Record<string, unknown> | undefined;
   }
-  /** At-rest secret value, decrypted for assertion (issue #293: rows hold ciphertext). */
+  /** At-rest secret value, decrypted for assertion (#293: rows hold ciphertext). */
   function unsealCell(itemId: string, column: string): string | null {
     const r = row(itemId);
     const v = r?.[column];

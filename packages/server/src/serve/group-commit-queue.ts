@@ -2,22 +2,13 @@ export type GroupCommitResult =
   | { ok: true; value: unknown }
   | { ok: false; error: unknown };
 
-/**
- * A short write coalescer for the constrained gateway profile.
- *
- * SQLite WAL + synchronous=NORMAL defers durable WAL sync to checkpoints. The
- * queue gathers independently arriving handler writes for one short window and
- * executes them in a single event-loop phase, letting SQLite amortize that
- * checkpoint work without weakening Centraid's per-invocation transaction and
- * evidence boundaries by wrapping unrelated commands in one SQL transaction.
- */
-/**
- * The most writes one event-loop phase may execute (issue #659 G11). Each is a
- * synchronous SQLite transaction, so an uncapped batch is an uncapped
- * event-loop stall — the exact thing the low-end lag budget measures.
- */
+// Per-phase cap (#659).
 const DEFAULT_MAX_BATCH = 64;
 
+/**
+ * Write coalescer: gathers arriving writes into one event-loop phase so
+ * SQLite amortizes checkpoint work without crossing transaction boundaries.
+ */
 export class GroupCommitQueue {
   private readonly pending: Array<{
     run: () => unknown;
@@ -41,10 +32,7 @@ export class GroupCommitQueue {
         resolve: (value) => resolve(value as T),
         reject,
       });
-      // A full batch does not wait out the rest of its window (issue #659 G11):
-      // under a burst the window would otherwise keep collecting, and the
-      // single event-loop phase that executes the batch would block for as long
-      // as the burst lasted. Re-arm at zero so the batch runs next tick.
+      // A full batch does not wait out its window (#659): re-arm at zero.
       if (this.pending.length >= this.maxBatch) {
         if (this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(() => this.flush(), 0);
@@ -58,12 +46,9 @@ export class GroupCommitQueue {
     });
   }
 
-  /** Drain immediately during orderly shutdown. */
   flush(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
-    // Never execute more than one batch's worth in a single phase; the
-    // remainder re-arms below and gets its own window (issue #659 G11).
     const batch = this.pending.splice(0, this.maxBatch);
     if (this.runBatch && batch.length > 0) {
       try {
@@ -87,8 +72,7 @@ export class GroupCommitQueue {
         }
       }
     }
-    // A callback can enqueue recursively. Give that work its own durability
-    // window instead of extending this batch without a bound.
+    // Recursive enqueues get their own window, not an unbounded batch.
     if (this.pending.length > 0 && !this.timer) {
       this.timer = setTimeout(() => this.flush(), this.windowMs);
       this.timer.unref?.();

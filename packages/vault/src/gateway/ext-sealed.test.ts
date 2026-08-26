@@ -1,4 +1,4 @@
-// Ext-band sealed columns (issue #298 item 9): a blueprint app that declares
+// Ext-band sealed columns (#298): a blueprint app that declares
 // `sealed: [...]` on its own ext.tables gets the full Locker treatment —
 // ciphertext at rest via the seal sweep, placeholder in default reads,
 // plaintext only under the reveal verb, hash tokens in the journal, and a

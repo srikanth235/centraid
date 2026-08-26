@@ -1,5 +1,5 @@
 /*
- * Identity is fail-closed (issue #750 invariant 1): a vault's peers pinned
+ * Identity is fail-closed (#750 invariant 1): a vault's peers pinned
  * its public key at link time, so a missing or swapped seed for a vault that
  * already minted one must REFUSE loudly — never silently mint a replacement
  * key that would make every signed route assertion fail downstream.

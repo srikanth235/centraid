@@ -1,23 +1,9 @@
 /*
- * The host seam for the grant plane's fulfillment engine (issue #825).
- *
- * The engine in `@centraid/vault` knows how to keep one grant true; it does
- * not know which vaults this host has mounted, and it must not. This file is
- * the join: it turns the gateway's vault registry into the engine's `seatFor`
- * and drives the two host-level questions —
- *
- *   - a SUBJECT changed, so every live grant over it has work to do;
- *   - a grant was REVOKED, so its removal has to go out.
- *
- * One audience must never cost another. A grant that fails — a subject over
- * its ceiling, an audience vault that will not open — is reported as a failure
- * for THAT grant and the pass carries on, because the alternative is one
- * unreachable peer silently stalling every other person's copy.
- *
- * Delivery is best-effort by nature and the report says so plainly: nothing
- * here retries, waits, or promotes a `remove_sent` into a `removed`. What the
- * host could do, it did; the fulfillment rows are the durable record of the
- * rest.
+ * The host seam for the grant fulfillment engine (#825). The engine must NOT
+ * learn which vaults this host mounted; this file is the join, turning the
+ * vault registry into `seatFor`. One audience must never cost another: a
+ * failing grant is reported as that grant's failure and the pass carries on.
+ * Delivery is best-effort — nothing here retries or promotes `remove_sent`.
  */
 
 import {
@@ -32,28 +18,18 @@ import type {
   VaultDb,
 } from "@centraid/vault";
 
-/** What the host can reach right now. */
 export interface GrantFulfillmentHost {
-  /** The mounted vault for a gateway vault id, or `undefined` when it is not
-   *  mounted here — a fact about this host, never about the grant. */
+  /** `undefined` is a fact about this HOST, never about the grant. */
   vaultFor: (vaultId: string) => VaultDb | undefined;
   logger?: { warn: (message: string) => void };
 }
 
-/** One grant's pass. `failed` carries the reason instead of throwing it. */
 export type GrantFulfillmentReport =
   | { grantId: string; outcome: "fulfilled"; result: GrantFulfillmentResult }
   | { grantId: string; outcome: "failed"; reason: string };
 
-/**
- * A whole pass, and whether it could run at all.
- *
- * `unmounted` is NOT an empty `reports` list. "This host cannot see the origin
- * vault" and "the origin vault has no grants over this subject" are different
- * facts, and a caller that renders them the same would tell an owner their
- * share reached nobody when the truth is that nobody looked. Every read on
- * this seam keeps the two apart, all the way out to the route's wire shape.
- */
+/** `unmounted` is NOT an empty `reports` list, and collapsing the two tells an
+ * owner their share reached nobody when nobody looked. */
 export type GrantFulfillmentPass =
   | { origin: "mounted"; reports: readonly GrantFulfillmentReport[] }
   | { origin: "unmounted"; reason: string };
@@ -73,7 +49,6 @@ function unmounted(vaultId: string): { origin: "unmounted"; reason: string } {
   };
 }
 
-/** One grant's pass, isolated: its failure is reported, never thrown on. */
 function passOne(input: {
   host: GrantFulfillmentHost;
   origin: VaultDb;
@@ -106,14 +81,8 @@ function passOne(input: {
   }
 }
 
-/**
- * Carry a subject's current truth to every live grant over it. Called after
- * the subject changed — a photo added to a shared album, a document edited —
- * which is the whole of "view grants sync forward".
- */
 export function fulfillGrantsForSubject(input: {
   host: GrantFulfillmentHost;
-  /** The vault the subject lives in, and its gateway id. */
   originVaultId: string;
   subjectType: ShareableItemType;
   subjectId: string;
@@ -143,11 +112,7 @@ export function fulfillGrantsForSubject(input: {
   };
 }
 
-/**
- * One named grant's pass — what a share gesture runs the instant it is made,
- * so the owner's answer carries where their share actually got to rather than
- * a promise that some later sweep will look.
- */
+/** Run by the share gesture itself, so its answer is where the share got to. */
 export function fulfillGrant(input: {
   host: GrantFulfillmentHost;
   originVaultId: string;
@@ -174,11 +139,7 @@ export function fulfillGrant(input: {
   };
 }
 
-/**
- * Send one revoked grant's removal out to the audience vaults it was
- * delivered to. The store dated the revocation already; this is the delivery
- * half, and it is the only thing that ever writes `removed`.
- */
+/** The delivery half of a revocation, and the ONLY writer of `removed`. */
 export function propagateGrantRemoval(input: {
   host: GrantFulfillmentHost;
   originVaultId: string;
@@ -214,28 +175,15 @@ export function propagateGrantRemoval(input: {
 }
 
 /*
- * ── The subject-change doorbell ────────────────────────────────────────────
+ * ─── the subject-change doorbell ───
  *
- * A grant is not a snapshot (ruling G-membership), so the audience's copy has
- * to follow the origin's edits. The gateway's post-commit doorbell is the
- * signal available for that, and it names committed ENTITY TYPES — never rows.
- * That is why the pass below is over every live grant SUBJECT in the vault
- * rather than the types that were written: a photo added to a shared album
- * commits the membership row, not the album, and narrowing by type would drop
- * exactly the case the ruling exists to guarantee.
- *
- * Re-projection is idempotent in OUTCOME, not free and not invisible: each
- * pass scrubs and re-projects every live grant's closure, so row ids stay
- * stable but the audience's change stream sees a full delete-then-insert.
- * The doorbell also rings on EVERY provenance commit, not only on commons
- * commands the way `recompileCommonsGrants` does, and the first ring of a
- * window runs its pass inline on the committing request's path. A vault with
- * no live grants pays one indexed read and stops, which is the overwhelming
- * majority of commits; the rest is v1's accepted cost of keeping a standing
- * grant true without a diff the engine deliberately does not keep.
+ * A grant is not a snapshot (ruling G-membership). The doorbell names committed
+ * ENTITY TYPES, never rows, so the pass MUST cover every live grant SUBJECT:
+ * a photo added to a shared album commits the membership row, not the album.
+ * Re-projection is idempotent in OUTCOME, not free — the audience's change
+ * stream sees a delete-then-insert.
  */
 
-/** Distinct live grant subjects in one vault, oldest grant first. */
 function liveGrantSubjects(
   origin: VaultDb
 ): { subjectType: ShareableItemType; subjectId: string }[] {
@@ -252,11 +200,7 @@ function liveGrantSubjects(
   }));
 }
 
-/**
- * Bring every live grant in one vault back up to the origin's current truth.
- * Failure-isolated per grant by `passOne`, so one unreachable audience or one
- * over-ceiling subject never stops the others.
- */
+/** Failure-isolated by `passOne`: one bad audience stops nothing. */
 export function refreshGrantsAfterCommit(input: {
   host: GrantFulfillmentHost;
   originVaultId: string;
@@ -279,22 +223,14 @@ export function refreshGrantsAfterCommit(input: {
 }
 
 export interface GrantRefreshDoorbell {
-  /** A vault just committed; its grants may have work to do. */
   ring: (vaultId: string) => void;
-  /** Drop every open coalescing window (gateway shutdown). */
   stop: () => void;
 }
 
 /**
- * Coalesce commit doorbells per vault. A burst of writes — an import, a
- * document being typed into — must not run one whole re-projection pass per
- * commit, so the first ring passes immediately and the rest of the window
- * collapses into a single trailing pass.
- *
- * Every pass is swallowed on failure by construction: a doorbell that threw
- * would turn a committed vault write into an apparent failure, and the grant
- * plane's durable state (the fulfillment rows) is what actually records where
- * delivery stands.
+ * The first ring passes immediately and the rest of the window collapses into
+ * one trailing pass. Failures are swallowed by construction: a doorbell that
+ * threw would turn a committed vault write into an apparent failure.
  */
 export function createGrantRefreshDoorbell(input: {
   host: GrantFulfillmentHost;

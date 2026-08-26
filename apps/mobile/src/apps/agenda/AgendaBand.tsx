@@ -31,7 +31,6 @@ import type { ThemeColors } from "../../kit/theme";
 import { AGENDA_BAND_CAPSULE, resolveAgendaBand } from "./agenda-band";
 import type { AgendaBandDestinationKey } from "./agenda-band";
 
-/** The group plate's inner gutter and the gap between the two plates. */
 const GROUP_GUTTER = 2;
 const PLATE_GAP = 8;
 
@@ -39,7 +38,6 @@ export interface AgendaBandProps {
   owner: BandOwner;
   current: AgendaBandDestinationKey;
   onSelect: (key: AgendaBandDestinationKey) => void;
-  /** The capsule's one tap: all apps and places, in one move. */
   onHome: () => void;
 }
 

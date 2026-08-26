@@ -1,5 +1,5 @@
 // The drive's row set, shared by every shelf that paints documents
-// (issue #821): All, one folder, Recently changed, Starred, Trash and the
+// (#821): All, one folder, Recently changed, Starred, Trash and the
 // Search results all draw THIS — rows in one container (1px rule, 12 radius,
 // `bgElev` ground, per the handoff's row-container recipe), the quick-actions
 // menu on `···` and press-and-hold, the honest loading/empty/error states,
@@ -54,7 +54,6 @@ export interface DriveListProps {
   status?: string | null;
   /** The matched passage per document id, on the Search shelf. */
   snippets?: Readonly<Record<string, string>>;
-  /** Extra axes for the shared empty-state model. */
   empty?: {
     query?: string;
     filtered?: boolean;

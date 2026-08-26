@@ -1,11 +1,11 @@
-// Per-table size breakdown (issue #367 §E1): the diagnostics bundle needs
+// Per-table size breakdown (#367): the diagnostics bundle needs
 // to make "which table is actually big" obvious for a mounted vault, so the
 // growth-runway work in the rest of §E (journal archival, FTS bounding,
 // inline-body thresholds) is aimed at real numbers instead of guesses.
 //
 // Primary method: SQLite's `dbstat` virtual table (compiled in when SQLite
 // is built with `SQLITE_ENABLE_DBSTAT_VTAB`). Probed live against this
-// repo's node:sqlite (see issue #367 report): `ENABLE_DBSTAT_VTAB` IS in
+// repo's node:sqlite (see #367 report): `ENABLE_DBSTAT_VTAB` IS in
 // `pragma_compile_options()`, and `SELECT ... FROM dbstat WHERE aggregate
 // = TRUE` returns one row per btree object (`pgsize` = total bytes,
 // `pageno` = page count when aggregated) without a full page-by-page scan.

@@ -2,8 +2,8 @@
  * Optional warm ACP process pool — reuse a still-live harness process across
  * sequential turns that share kind + cwd + sessionId.
  *
- * Each conversation turn used to spawn and kill a harness, so multi-turn latency and
- * session/load effectiveness suffered. When a turn ends cleanly we keep the
+ * Spawning and killing a harness on every conversation turn costs multi-turn
+ * latency and session/load effectiveness. When a turn ends cleanly we keep the
  * child for a short idle window; the next turn with the same session id can
  * skip spawn + initialize and reattach via session/resume (or load).
  *
@@ -172,7 +172,6 @@ export async function disposeSlot(
   }
 }
 
-/** Test helper: drop every warm slot. */
 export async function clearWarmPool(): Promise<void> {
   const all = [...pool.values()];
   pool.clear();

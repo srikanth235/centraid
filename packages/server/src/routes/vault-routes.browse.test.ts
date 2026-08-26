@@ -3,7 +3,7 @@ import http from "node:http";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-// The Vault Atlas Browse routes (issue #441 Part B, B3): the owner-gated
+// The Vault Atlas Browse routes (#441): the owner-gated
 // table editor over HTTP. The read/write policy is proven in packages/vault;
 // here we prove the route surface — the picker, keyset rows, column metadata,
 // a journalled insert that comes back on a read, and the dependent-blocked

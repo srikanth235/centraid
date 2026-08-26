@@ -1,4 +1,4 @@
-// The three dynamic states the Backup surface has to be able to say (#712 P5),
+// The three dynamic states the Backup surface has to be able to say (#712),
 // plus the fourth the fail-closed queue read forces. What is pinned here is
 // which EVIDENCE produces which verdict — the whole reason the phone may claim
 // "failing" where the web's Storage screen honestly may not.
@@ -87,9 +87,9 @@ describe(backupVerdictCopy, () => {
   });
 
   it("every verdict names an icon the mobile resolver actually knows", () => {
-    // `icon-resolver.ts` throws on an unknown name, and the previous Backup
-    // screen shipped `check-circle`, which is neither a registry name nor an
-    // alias — so the healthy state raised rather than rendered.
+    // `icon-resolver.ts` throws on an unknown name: a hyphenated `check-circle`
+    // is neither a registry name nor an alias, so the healthy state raises
+    // rather than renders.
     const known = new Set([
       "CheckCircle",
       "cloud",

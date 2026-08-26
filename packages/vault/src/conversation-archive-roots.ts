@@ -1,4 +1,4 @@
-// CAS GC roots for the conversation-ledger band (issue #438 decision 6). The
+// CAS GC roots for the conversation-ledger band (#438 decision 6). The
 // `conversation_archive` table is created by app-engine, but it lives in the
 // SAME journal.db the vault holds open, so this vault-side reader lets every
 // custody/backup GC path union its segment shas WITHOUT the vault importing

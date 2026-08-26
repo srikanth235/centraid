@@ -1,25 +1,11 @@
-// File-drop customs (issue #290 phase 2): one door for every dropped file.
-// The extension routes to a parser, parsers produce StageCandidates, and the
-// staging spine dispositions them into a reviewable draft batch. A Takeout
-// zip is just a bag of the same file kinds — entries route recursively and
-// land in ONE batch on one `file.takeout` connection.
-//
-// TWO ROUTES, NOT ONE (issue #721 A1). Text entries decode and parse; media
-// entries never touch `decodeImportText` at all — their bytes go straight
-// into the CAS through the same blob staging band mbox attachments use, and
-// the payload carries only the sha plus what the archive says ABOUT the
-// photo (takeout-sidecar.ts). A photo library is not text that happens to be
-// binary; it is the one file kind where the bytes ARE the record.
-//
-// RESUMABILITY IS STRUCTURAL, NOT A FEATURE. Nothing here retries, resumes or
-// checkpoints, because the queue is the database: `sync_external_entity` maps
-// (connection, archive path) → asset with the payload's content hash, so a
-// re-import of the same archive dispositions every already-published row as
-// `skip` before a single byte is written; a row whose publish threw is
-// recorded failed while the rest of the batch lands (staging.ts), and the
-// next import of the same archive sees exactly those rows as `create`. A
-// 20,000-photo archive interrupted halfway is finished by dropping the same
-// zip on it again.
+// File-drop customs (#290): one door for every dropped file. The extension
+// routes to a parser and the staging spine dispositions candidates into a
+// reviewable draft batch; a Takeout zip routes recursively into ONE batch.
+// TWO ROUTES, NOT ONE (#721): media bytes never touch `decodeImportText` —
+// they go straight into the CAS, and the payload carries only the sha plus
+// what the archive says ABOUT the photo. RESUMABILITY IS STRUCTURAL: the
+// queue is the database, so a re-import dispositions published rows as `skip`
+// and failed ones as `create`; an interrupted archive finishes by re-dropping.
 
 import { sniffMediaType } from "../blob/pipeline.js";
 import { stageBlobBytes, mediaLocationPolicy } from "../blob/staging.js";
@@ -53,29 +39,16 @@ import { parseVcards } from "./vcard.js";
 import { readZipEntries } from "./zip.js";
 
 export interface StageFileOptions {
-  /** Original filename — routes the parser and labels the connection. */
   filename: string;
-  /** File bytes (zip) or text; text sources accept either. */
   data: Buffer | string;
-  /** Account name for statement CSVs (default: the filename stem). */
   accountName?: string;
-  /** Currency for statement rows that carry none (default: vault base). */
   currency?: string;
-  /**
-   * Live Photo / motion-photo pairing for a SINGLE dropped media file (issue
-   * #724 A2). A Takeout zip derives its own capture-group id from the
-   * archive's own file-name pairing (`takeout-sidecar.ts`'s `pairingKey`) —
-   * there is no archive here to pair within, so a caller that already knows
-   * two device uploads are one shutter click (the camera-roll import's own
-   * `live:<localId>` convention, `photos-backup.ts`) passes it straight
-   * through. Ignored for a zip import, whose own pairing wins.
-   */
+  /** Only for a single dropped media file (#724 A2); a zip's own pairing wins. */
   captureGroupId?: string;
 }
 
 export interface StageFileResult extends StageResult {
   kind: string;
-  /** Zip entries that matched no importer (reported, never silent). */
   unrouted: string[];
 }
 
@@ -168,13 +141,8 @@ function partyCandidates(text: string): StageCandidate[] {
   }));
 }
 
-/**
- * Email attachments go through the blob staging band (issue #296): bytes
- * hash into the CAS NOW (the spool pipeline sniffs/extracts on the way),
- * the payload carries shas, and the message publisher claims them at
- * publish. A batch hold (applied after the batch id exists) pins the stage
- * past the TTL while the owner reviews.
- */
+/** Attachment bytes hash into the CAS NOW (#296); the publisher claims the
+ *  shas at publish, and a batch hold pins them past the TTL. */
 function messageCandidates(
   db: VaultDb,
   text: string,
@@ -209,27 +177,16 @@ function messageCandidates(
   }));
 }
 
-/**
- * A media EXTENSION is a claim; the bytes settle it (issue #721) — the same
- * content-wins rule `csvCandidates` applies to a `.csv`. Ten bytes of text in
- * a file called `photo.heic` is not a photograph, and letting it become one
- * would put a `kind = 'scan'` row with no pixels in the owner's library. It
- * falls through to the text route instead, where it is reported unrouted.
- */
+/** A media EXTENSION is a claim; the bytes settle it (#721) — text in a
+ *  `photo.heic` falls through and is reported unrouted. */
 function isMediaFile(filename: string, bytes: Buffer): boolean {
   if (!isMediaPath(filename)) return false;
   const type = sniffMediaType(bytes, undefined, filename);
   return type.startsWith("image/") || type.startsWith("video/");
 }
 
-/**
- * One photo or video (issue #721). The bytes hash into the CAS NOW — same
- * band, same batch hold, same claim-at-publish contract as mbox attachments
- * (issue #296) — and the payload carries the sha plus the archive's own
- * testimony. Nothing here reads pixels: `stageBlobBytes` runs the spool
- * pipeline, so EXIF and dimensions are already on the staging row by the time
- * the publisher claims it.
- */
+/** Nothing here reads pixels: `stageBlobBytes` runs the spool pipeline, so
+ *  EXIF is on the staging row before the publisher claims it (#721). */
 function mediaCandidates(
   db: VaultDb,
   entry: TakeoutMediaEntry,
@@ -243,9 +200,7 @@ function mediaCandidates(
   return [
     {
       entityType: "media.asset",
-      // The in-archive path is the honest stable key: the same archive
-      // imported twice maps to the same asset, and no two photos in one
-      // export can share it.
+      // The in-archive path is the stable key.
       externalId: entry.path,
       payload: {
         stagedSha: staged.sha256,
@@ -254,9 +209,8 @@ function mediaCandidates(
         byteSize: staged.byteSize,
         path: entry.path,
         capturedAt: entry.sidecar.capturedAt,
-        // Sidecar GPS passes the SAME `media.location` gate the EXIF
-        // extractor does (blob/staging.ts): a vault set to `strip` must not
-        // find its coordinates smuggled back in through a JSON file.
+        // Sidecar GPS passes the same `media.location` gate as EXIF: a
+        // `strip` vault must not find coordinates smuggled back in.
         latitude: keepLocation ? entry.sidecar.latitude : null,
         longitude: keepLocation ? entry.sidecar.longitude : null,
         caption: entry.sidecar.caption,
@@ -297,8 +251,7 @@ function transactionCandidates(
 function passwordCandidates(text: string): StageCandidate[] {
   return parsePasswordsCsv(text).map((item) => ({
     entityType: "locker.item",
-    // Stable across re-imports of the same export: a login's identity is
-    // where + who, not its (rotating) password.
+    // A login's identity is where + who, not its rotating password.
     externalId: `login:${item.title}:${item.username ?? ""}`,
     payload: {
       title: item.title,
@@ -326,7 +279,6 @@ function markdownCandidates(filename: string, text: string): StageCandidate[] {
   ];
 }
 
-/** CSVs route by CONTENT: a password column means a password-manager export. */
 function csvCandidates(
   text: string,
   opts: { accountName: string; currency: string }
@@ -355,7 +307,6 @@ function baseCurrency(db: VaultDb): string {
   return row?.base_currency ?? "USD";
 }
 
-/** Route ONE file's content to candidates. Unknown extensions yield none. */
 function candidatesFor(
   db: VaultDb,
   filename: string,
@@ -380,11 +331,8 @@ function candidatesFor(
   }
 }
 
-/**
- * Stage a dropped file into a reviewable draft batch. Publishing is the
- * separate explicit act (`publishBatch`) — first contact with real data is
- * always staged (issue #290 decision 2).
- */
+/** Publishing is a separate explicit act (`publishBatch`) — first contact with
+ *  real data is always staged (#290). */
 export function stageFile(
   db: VaultDb,
   importer: Identity,
@@ -396,8 +344,7 @@ export function stageFile(
   const unrouted: string[] = [];
   let kind: string;
   const candidates: StageCandidate[] = [];
-  // Blob shas the parsers staged (email attachments) — pinned to the batch
-  // below so the review pause never races the staging TTL (issue #296).
+  // Pinned to the batch below so review never races the staging TTL (#296).
   const stagedShas: string[] = [];
 
   const keepLocation = mediaLocationPolicy(db) !== "strip";
@@ -405,11 +352,8 @@ export function stageFile(
   if (extension(options.filename) === "zip") {
     kind = "file.takeout";
     const entries = readZipEntries(input);
-    // Read the archive as a photo library FIRST: which entries are media,
-    // what each one's sidecar says, and which entries were consumed as
-    // metadata. Everything the plan did not claim walks the text route
-    // below, so Takeout's `archive_browser.html` and its stray bookkeeping
-    // JSON still land in `unrouted` — reported, never silently eaten.
+    // Read the archive as a photo library FIRST; unclaimed entries walk the
+    // text route into `unrouted`, never eaten.
     const plan = planTakeout(entries);
     const mediaByPath = new Map(plan.media.map((item) => [item.path, item]));
     for (const entry of entries) {
@@ -436,10 +380,8 @@ export function stageFile(
       else candidates.push(...routed);
     }
   } else if (isMediaFile(options.filename, input)) {
-    // A single dropped photo is a one-photo import: same publisher, same
-    // dedupe, no archive around it to carry a sidecar or an album. Its
-    // capture group (if any) has to come from the CALLER instead — see
-    // `StageFileOptions.captureGroupId`.
+    // No archive to carry a sidecar or album, so a capture group comes from
+    // the caller.
     kind = `file.${extension(options.filename)}`;
     const path = normalizeArchivePath(options.filename);
     candidates.push(

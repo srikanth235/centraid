@@ -1,25 +1,5 @@
-/*
- * Unified harness-turn primitive.
- *
- * Both chat and builder share this entry point. It dispatches to a
- * `HarnessSpec` from the registry (`./registry.ts`) based on the user's
- * persisted `harness.kind` pref:
- *
- * Since issue #479 every kind uses the same transport — the generic ACP
- * client over JSON-RPC stdio. They differ only in what is spawned:
- *
- *   - `codex` / `claude-code` → their first-party ACP adapter, which drives
- *     the user's `codex` / `claude` CLI underneath
- *   - every other kind (`gemini`, `qwen`, `opencode`, `grok`, `kimi`,
- *     `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`,
- *     `droid`, custom `acp`) → the CLI itself, with its own ACP flag,
- *     subcommand, or dedicated ACP binary
- *
- * Every harness emits the same `TurnStreamEvent` shape, so callers don't
- * need to know which one ran a given turn. The returned `harnessSessionId`
- * (codex thread id / claude session id / ACP session id) is opaque —
- * round-trip it on the next turn via `prevSessionId` to resume.
- */
+// Dispatch by `harness.kind` (#479); session ids are opaque — pass back
+// as `prevSessionId`.
 
 import type {
   TurnConfig,
@@ -29,10 +9,6 @@ import type {
 
 import { HARNESSES } from "./registry.js";
 
-// The turn-driver contract (`ToolContext`, `TurnInput/Config/Result`)
-// now lives in `@centraid/server/engine` so the harness-agnostic run engine can
-// speak it. Re-exported here so this package's modules + back-compat
-// consumers keep importing them from `@centraid/server/acp`.
 export type {
   ToolContext,
   TurnInput,

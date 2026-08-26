@@ -1,6 +1,5 @@
 // Conversation-band archival selector edges + referencedHashes union (issue
-// #438). Split from archive.test.ts (500-line repo-hygiene cap); shared
-// fixtures in test-fixtures.ts.
+// #438). Shared fixtures in test-fixtures.ts.
 
 import { describe, expect, it } from "vitest";
 

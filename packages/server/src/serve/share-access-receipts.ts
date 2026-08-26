@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { GatewayDatabase } from "./gateway-db.js";
 
 /**
- * One row per EDGE, not per item (#726 P2): three photographs placed by one
+ * One row per EDGE, not per item (#726): three photographs placed by one
  * edge leave one receipt carrying all three item ids, never three receipts.
  */
 export interface ShareAccessReceiptInput {

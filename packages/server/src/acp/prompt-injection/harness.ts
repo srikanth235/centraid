@@ -1,26 +1,9 @@
 /*
- * Red-team harness for the prompt-injection corpus (#842 slice A5 / W2.2).
- *
- * #630 hardened the DISPLAY of hostile content; nothing attacked the AGENT
- * LOOP. This helper drives the real ACP turn machinery — the same
- * `runAcpTurn` seam the backend suite exercises via `fake-acp-harness.mjs`,
- * imported through `test-fixtures.ts`, no parallel fake — against a REAL vault
- * gateway confined to a single agent grant. The fake harness plays the DUPED
- * agent: whatever an injected instruction "convinces" it to do, the structural
- * boundary is the gateway credential + grant, not the model's compliance.
- *
- * Each corpus payload carries hostile content plus the one tool call the
- * injection tries to induce. We run the content through a real turn (proving it
- * enters the agent's context and that the agent's blanket vault reach is
- * refused), then push the induced op through the SAME confined executor the
- * turn wires and assert the structural outcome — parked, denied, refused, or,
- * for the negative control, an in-grant read that still works.
- *
- * Determinism: every assertion is on a structural enum (invoke status, a thrown
- * consent deny, the parked queue, the egress consent set) — never on an id,
- * timestamp, or ordering. So the suite is deterministic without a fake clock,
- * which matters because the turn spawns a real subprocess doing real stdio/HTTP
- * I/O that `vi.useFakeTimers()` would wedge.
+ * Prompt-injection corpus harness (#842). Boundary is the gateway grant, not
+ * model compliance: real ACP turn (`runAcpTurn` / `fake-acp-harness.mjs` via
+ * `test-fixtures.ts`) against a one-grant vault; fake harness plays the duped
+ * agent. Assert structural enums only — never id, timestamp, or order;
+ * `vi.useFakeTimers()` would wedge the real subprocess I/O.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -53,7 +36,6 @@ import { runVaultInvokeTool, runVaultSqlTool } from "../vault-sql-tool.js";
 
 const PURPOSE = "dpv:ServiceProvision";
 
-/** One hostile fixture: carrier content + the induced tool call + its expected structural fate. */
 export interface Payload {
   id: string;
   carrier: "ics" | "ocr" | "commons";
@@ -78,10 +60,7 @@ export type Attempt =
 
 const CORPUS_DIR = fileURLToPath(new URL("corpus/", import.meta.url));
 
-/**
- * Discover the corpus from disk — GROW-ONLY. Dropping a new `*.json` in
- * `corpus/` is picked up automatically; nothing here hardcodes the list.
- */
+/** Grow-only: new `corpus/*.json` is picked up; nothing hardcodes the list. */
 export function loadCorpus(): Payload[] {
   return readdirSync(CORPUS_DIR)
     .filter((name) => name.endsWith(".json"))
@@ -97,15 +76,10 @@ export interface Scenario {
   gw: Gateway;
   agentCred: Credential;
   owner: Credential;
-  /** The ACP ToolContext the turn wires: every vault runner is agent-confined. */
   agentCtx: ReturnType<typeof vaultToolContext>;
 }
 
-/**
- * A vault whose only agent grant is `schedule` + `locker` (read+act). Reads of
- * any other schema, whole-model SQL, and out-of-grant commands are all outside
- * the turn's authority; `locker.purge_item` is in-grant but confirm-gated.
- */
+/** Agent grant is `schedule`+`locker` only; `locker.purge_item` is confirm-gated. */
 export function buildScenario(): Scenario {
   const db = openVaultDb();
   const boot = bootstrapVault(db, { ownerName: "Priya" });
@@ -147,8 +121,7 @@ export function buildScenario(): Scenario {
   const agentCtx = vaultToolContext({
     // vault_sql is the owner's whole-model surface; an agent turn is refused.
     vaultSql: (sql: string) => gw.sql(agentCred, { sql }),
-    // The typed write path, executed under the agent grant: out-of-grant
-    // commands deny, confirm-gated commands park.
+    // Out-of-grant denies; confirm-gated parks.
     vaultInvoke: (call) =>
       gw.invoke(agentCred, {
         command: call.command,
@@ -161,19 +134,12 @@ export function buildScenario(): Scenario {
 }
 
 export interface TurnObservation {
-  /** The serialized `session/prompt` content the fake harness received. */
   promptText: string;
-  /** The `--mode=vault` probe: did the agent's whole-model read come back refused? */
   vaultCallIsError: boolean | null;
-  /** Did the turn reach a terminal `final` event? */
   endedFinal: boolean;
 }
 
-/**
- * Drive the hostile content through a REAL turn against the fake ACP harness.
- * The harness dials the per-turn loopback MCP server backed by `agentCtx`, so
- * the only path it has to the vault is the confined executor.
- */
+/** Real turn; the only vault path is the confined executor on `agentCtx`. */
 export async function runInjectedTurn(
   payload: Payload,
   agentCtx: Scenario["agentCtx"]
@@ -207,7 +173,6 @@ export async function runInjectedTurn(
   };
 }
 
-/** The structural fate of an induced op, normalized across the tool surfaces. */
 export type AttemptOutcome =
   | { kind: "refused"; detail: string }
   | { kind: "denied"; detail: string }
@@ -215,11 +180,7 @@ export type AttemptOutcome =
   | { kind: "executed"; detail: string }
   | { kind: "allowed"; rowCount: number };
 
-/**
- * Push the induced op through the SAME confined executor the turn wired —
- * `runVault*Tool` for the MCP tool surface, `gw.read` for the agent-scoped row
- * read — and report only the structural outcome.
- */
+/** Same confined executor the turn wired; report only the structural outcome. */
 export async function applyAttempt(
   scenario: Scenario,
   attempt: Attempt
@@ -261,10 +222,8 @@ export async function applyAttempt(
 }
 
 /**
- * Egress widening: the durable provider-egress consent set is seeded with the
- * automation's ONE consented provider (codex). Content asking to route through
- * an unlisted provider must not add it — the ladder membership predicate is
- * content-independent, so the dispatch is refused and the grant set unchanged.
+ * Consent set seeded with codex only. Unlisted provider must not be added —
+ * membership is content-independent; dispatch refused, grant set unchanged.
  */
 async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
   const kind = provider as HarnessKind;
@@ -274,14 +233,13 @@ async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
   const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
   store.ensureAutomationConversation(automationRef, "demo", "Nightly", "codex");
   store.close();
-  // The live ladder holds codex only; the injected provider is not a member.
+  // Ladder holds codex only; the injected provider is not a member.
   const consent = new ProviderEgressConsentStore(
     makeJournalDbProvider(journalDbFile),
     (member) => member === "codex"
   );
   const before = consent.has(automationRef, kind, "automations");
-  // The egress gate refuses an unlisted provider BEFORE the turn runs, so this
-  // no-op turn body must never be reached for a widening payload.
+  // Egress refuses an unlisted provider BEFORE the turn; this body must not run.
   const runTurn: RunTurnFn = async (input) => {
     input.onEvent({ type: "final", text: "ok" });
     return { harnessKind: "codex" };
@@ -322,7 +280,6 @@ async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
     : { kind: "executed", detail: "dispatch was not refused" };
 }
 
-/** How many `core_party` rows carry this display name (for "no write" checks). */
 export function partyCountByName(db: VaultDb, displayName: string): number {
   const row = db.vault
     .prepare("SELECT count(*) AS n FROM core_party WHERE display_name = ?")

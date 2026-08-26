@@ -6,7 +6,7 @@
 // A friend is a canonical core.party (kind='person'), the same person spine
 // People and every other surface use; `tally_friend` is the bare enrolment
 // marker — a party is "a friend in Tally". The avatar hue is NOT stored here
-// (issue #441 A3): it lived twice, once here and once on people_profile, both
+// (#441): it lived twice, once here and once on people_profile, both
 // 1:1 on the same party, free to disagree. One hue per party now: Tally reads
 // people_profile's hue when the party is also a CRM contact, else derives a
 // stable one from the party id. The owner is the implicit `me`
@@ -15,20 +15,20 @@
 // A group IS an audience — and the vault already has exactly one audience
 // mechanism, social.circle (the #274 decision that circles deliberately stay
 // separate from collections). tally_group is a thin DECORATION on a circle
-// (issue #310 S4): the emoji icon and colour the circle has no home for ride
+// (#310): the emoji icon and colour the circle has no home for ride
 // here, the name and the membership live on the circle itself
 // (social_circle_member, the owner included). The third "group of people"
 // table this domain briefly re-introduced is gone. Deleting a group is
 // refused while it still holds expenses, mirroring the folders
 // "delete when empty" rule; deleting it removes its circle too.
 //
-// Trash (issue #441 A4): the owner-authored CONTENT rows — tally_expense and
+// Trash (#441): the owner-authored CONTENT rows — tally_expense and
 // tally_settlement — carry the uniform soft-delete pair `deleted_at` /
 // `purge_at` with the CHECK guard (`purge_at IS NULL OR deleted_at IS NOT NULL`),
 // matching Docs/Photos/Locker. tally.delete_expense is a reversible grace-window
 // trash now (not an instant hard delete), and the lifecycle sweep is what finally
 // purges the row, cascades its splits, and cleans its polymorphic references
-// (the expense memo annotation among them — previously leaked on hard delete).
+// (the expense memo annotation among them).
 // Two tables stay HARD-delete, by design, not oversight:
 //   - tally_friend is a bare enrolment marker (a party "is a friend in Tally"),
 //     an identity decoration with no content of its own — un-enrolling is not
@@ -52,7 +52,7 @@
 // the add/edit commands re-validate that server-side. Timestamps TEXT ISO-8601
 // UTC; dates are TEXT YYYY-MM-DD; PKs TEXT UUIDv7; all tables STRICT.
 //
-// The finance bridge (issue #310 S1): Tally is a lens over shared money, not
+// The finance bridge (#310): Tally is a lens over shared money, not
 // a second ledger. Expenses and settlements carry a nullable `txn_id` into
 // core_transaction — settle_up EMITS a canonical transaction when the owner
 // is a party to the payment (their money actually moved), and either row can

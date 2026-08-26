@@ -166,6 +166,58 @@ A perf rig seeded with the same fixtures the unit tests use measures nothing —
 - The volume table lives **with the rig**, in its README, next to the numbers it produces — so a reviewer can see what "at scale" meant on the day the baseline was captured and challenge it, rather than inferring it from seed code.
 - When a budget moves, the measured value and the volume it was measured at move together. A ceiling with no stated volume is not a budget.
 
+## Comments face forward
+
+Code comments are the State layer (AGENTS.md: "code-level facts live in code comments next to the invariant"). The governing definition ([#861](https://github.com/srikanth235/centraid/issues/861)): **a comment is a forward-facing obligation — a message to the next editor stating something the code cannot state, alive only as long as its deletion would mislead someone.** A comment records how the code must be edited, never how it came to be. History lives in issues, receipts, and `git log` — cite it by bare issue link, never by narration.
+
+**Every comment is one of four species; unclassifiable means delete.**
+
+- **Contract** — what callers rely on beyond the signature (`// Pure — returns a new state.`), only where the types can't carry it.
+- **Rationale** — the constraint that forced this shape, so the next editor doesn't "simplify" it away (`// Protocol floor, not product version, decides skew (#512).`).
+- **Warning** — the obvious edit that is wrong (`// Don't fold boot-phase failures into tracking — they read as real outages.`).
+- **Orientation** — module headers only: the mental model to load before reading the file. The one legitimate long form; a map of the territory, never a travelogue of how it was reached.
+
+**The deletion test rules every comment.** Ask: _which future edit does this comment prevent or permit?_ No concrete answer → delete. "The reader would have to read the code" is not an answer — code is the sole authority on what code does. **Deletion is the default disposition**; rewriting is the trap that launders worthless-but-true content into well-groomed noise.
+
+**Every fact lives at the strongest rung that holds it**: type > assertion/test > check script > comment. The comment channel is the residue — the home of last resort for what resists encoding. Push facts up the ladder when you touch them; what a test already proves, a comment repeats only if orientation demands it, by citing the test.
+
+**Comments run on a shared trust budget.** Readers — human and model alike — decide once per codebase whether comments are load-bearing, and one rotted comment poisons that prior for all of them. The channel optimizes precision, never coverage: few comments that stop the reader cold beat many well-groomed ones. Most editors of this codebase are models, and a comment is context injected at the exact edit site — write surviving rationale and warnings in the **directive register** (state the obligation, cite the ruling), not the essay register.
+
+**No tenure.** A comment is a cached judgment whose inputs are the surrounding code. An edit that touches commented code re-runs the deletion test on the adjacent comments as part of the change.
+
+### Mechanical surrogates
+
+These find _surrogates_ of rot, never verdicts — a green run proves nothing about information content, and the deletion test cannot be regexed. Warn-only: `bun scripts/lint-comment-file-refs.mjs` finds dangling file references; `bun scripts/lint-comment-narration.mjs` (fuzzy) flags past-tense narration for review; `node scripts/lint-comment-blocks.mjs` flags over-long blocks. The one blocking gate is the density ratchet below (`bun run test:comment-density`). `node scripts/comment-only-diff.mjs [<ref>]` is not a gate at all — it reprints both sides of a diff with comments removed and proves a sweep changed no code, which is the evidence a doctrine-sweep PR cites.
+
+**The tense test.** A sentence about the past — _was, used to, until #N, replaced, retired, previously_ — either restates a present obligation (rewrite it forward-facing) or it doesn't (delete it, keeping at most a bare `(#N)` on a surviving sentence). Tense is the surrogate: a changelog conjugated into present tense still fails the deletion test.
+
+| Bad | Good |
+| --- | --- |
+| `// This replaces toast.ts and undoToast.ts.` | _(delete — git log and the issue carry it)_ |
+| `// It was teal with a white orbit until #707.` | _(delete, or `// Monochrome mark (#707).` if the fact constrains edits)_ |
+| `// used to run a full export per chunk; now batched` | `// One export per batch (#N): per-chunk export is O(vault) per tick.` |
+| `// Wave 2 of #351 wires up the version handshake` | _(delete the process story; state the obligation: `// Skew is judged on the protocol floor, not product version (#512).`)_ |
+
+**File references must be live; prefer symbols.** Name another file in a comment only if it exists; prefer the exported _symbol_ (greppable, visible to rename tooling) over the filename. A comment asserting a call relationship ("X calls this") names the actual current caller or asserts nothing.
+
+**Long invariant blocks use capitalized headings** — `// WHY THE HEAD IS NOT JUST THE OLDEST.` — one heading per named invariant, prose under it. Models: `packages/design/src/elements/attachments.ts`, `packages/vault/src/schema/fts.ts`, `packages/server/src/enrich/semantic-search.ts`.
+
+**Section banners** use the box-drawing form `// ─── name ─────` (one style repo-wide). No new banners are required anywhere; a file that needs many is usually a module-size smell.
+
+**Suppression comments** carry the toolchain's real name (`oxlint-disable…`, never `eslint-disable…`) and a `-- reason` clause.
+
+### The density budget
+
+Doctrine governs what a comment may say; the budget governs how much ([#861](https://github.com/srikanth235/centraid/issues/861)).
+
+- **The metric is character share** — non-whitespace comment characters over non-whitespace file characters, comment ranges taken from the TypeScript parser. Line counts are gameable: fuse three comment lines into one wrapped sentence and the count falls while the prose is unchanged.
+- **Per-file cap 15%** for files of 40 non-blank lines or more; **global target ≤10%**, printed on every run.
+- **Enforcement is a per-file ratchet** — `tests/comment-density-ratchet.json`, `bun run test:comment-density`. Any rise fails CI. Downward re-pins are free (`--write` recomputes, and refuses to raise a pin). A deliberate raise is a hand edit to the baseline carrying an approved-deviation note in the receipt.
+- **Blocks over 10 lines warn** — 15 for a file-top orientation header — via `scripts/lint-comment-blocks.mjs`.
+- **The allowlist is by name, with a reason**, for registries where the prose _is_ the payload. Never delete load-bearing rationale to hit a number; the allowlist is that pressure valve.
+
+Deliberate non-goal of this rule: **no JSDoc tag vocabulary** — prose JSDoc is house style (`@param`/`@returns` restating types is the canonical zero-information comment).
+
 ## Small invariants
 
 - Behaviour-preserving refactors keep tests green without rewriting assertions to match new private helpers ([TESTING.md](../TESTING.md)).

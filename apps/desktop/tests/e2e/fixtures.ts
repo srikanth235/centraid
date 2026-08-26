@@ -16,21 +16,12 @@ const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
 
 /*
- * E2E harness for the desktop app, rebuilt for the post-#109/#137/#141
- * architecture:
- *
- *   - App *code* lives in the gateway's git store; the renderer is a thin
- *     HTTP client that talks to the ACTIVE gateway directly (Bearer token).
- *   - `settings.json` no longer carries a gateway URL/token — those are
- *     derived from the active EndpointId-keyed row in the main-process-owned
- *     `<userData>/connections.json`. The Electron test entry maps that
- *     EndpointId to the loopback mock in memory; no URL/token is persisted.
- *   - Apps/automations/turns/templates all come from the gateway over HTTP,
- *     so the mock is the single source of fixture data — `gateway.state` is
- *     mutable and every test shapes it before (or during) the run.
- *
- * Each test owns a fresh tmp `userData`, a fresh mock gateway on a random
- * loopback port, and its own Electron process — state never leaks.
+ * E2E harness. The renderer is a thin HTTP client against the ACTIVE gateway,
+ * so this mock is the single source of fixture data and `gateway.state` is
+ * mutable per test. `settings.json` persists no URL/token: the active row in
+ * `<userData>/connections.json` is EndpointId-keyed and the Electron test entry
+ * maps that id to the loopback mock in memory. Each test owns a fresh tmp
+ * `userData`, mock gateway, and Electron process — state never leaks.
  */
 
 // ─────────────────────────── mock gateway ───────────────────────────
@@ -42,7 +33,6 @@ export interface AppMetaEntry {
   kind?: "app" | "automation";
 }
 
-/** Raw git-store version row (what GET /git-versions returns). */
 export interface GitVersion {
   tag: string;
   version: number;
@@ -51,59 +41,39 @@ export interface GitVersion {
   active: boolean;
 }
 
-/** A single SSE frame: the JSON object to emit, plus an optional pre-delay (ms). */
 export interface SseFrame {
   data: Record<string, unknown>;
   delayMs?: number;
 }
 
 export interface MockState {
-  /** GET /centraid/_apps */
   apps: AppMetaEntry[];
-  /** GET /centraid/_templates */
   templates: Array<Record<string, unknown>>;
-  /** GET /centraid/_automations → { rows } */
   automations: Array<Record<string, unknown>>;
-  /** GET /centraid/_automations/turns → { turns } (also per-ref) */
   automationTurns: Array<Record<string, unknown>>;
-  /** GET /centraid/_automations/turn?turnId= → { turn } */
   automationTurnsById: Record<string, Record<string, unknown>>;
-  /** Native items returned by expanded turn reads. */
   automationItemsByTurn: Record<string, Array<Record<string, unknown>>>;
   /** GET /centraid/_apps/:id/git-versions (undefined → 404 = never published) */
   versions: Record<string, GitVersion[]>;
-  /** GET /centraid/_apps/:id/logs → { entries } */
   logsById: Record<string, Array<Record<string, unknown>>>;
-  /** GET /centraid/_apps/:id/files → { files } */
   filesById: Record<string, Array<{ path: string; content: string }>>;
-  /** GET /_centraid-user/prefs → { prefs } */
   prefs: Record<string, unknown>;
-  /** GET /centraid/_insights/summary */
   insights: Record<string, unknown>;
   /** GET /centraid/_brief/today (legacy alias: /daily) */
   dailyBrief: Record<string, unknown>;
-  /** GET /centraid/_turn/harness-status */
   harnessStatus: Record<string, unknown>;
-  /** GET /centraid/_harnesses/status */
   harnessesStatus: Record<string, unknown>;
-  /** GET/PUT /centraid/_vault/enrich → `{enrich, rules}` (issue #807). */
+  /** GET/PUT /centraid/_vault/enrich → `{enrich, rules}` (#807). */
   enrich: Record<string, unknown>;
-  /** The cascade's scoped rules, served alongside the tiers above. */
   enrichRules: Array<Record<string, unknown>>;
   /** GET /centraid/_vault/enrich/consent → `{consent}` — answered questions. */
   enrichConsent: Array<Record<string, unknown>>;
   /** GET /centraid/_enrich/profiles → `{profiles}` (engine-profiles.ts). */
   enrichProfiles: Array<Record<string, unknown>>;
-  /**
-   * GET /centraid/_vault/enrich/effective?domain=&capability= → what the ONE
-   * resolver folds, keyed by capability (issue #814). Settings asks this per
-   * capability rather than folding tiers and rules itself, so the mock has to
-   * answer it or the page renders its gateway-didn't-answer state.
-   */
+  /** GET /centraid/_vault/enrich/effective — keyed by capability (#814);
+   *  Settings asks per capability rather than folding tiers itself. */
   enrichEffective: Record<string, Record<string, unknown> | null>;
-  /** GET /_centraid-conversations/apps/:appId/sessions → { sessions } */
   conversations: Array<Record<string, unknown>>;
-  /** GET /_centraid-conversations/apps/:appId/sessions/:id → messages */
   conversationMessages: Array<Record<string, unknown>>;
 
   /** Per-method status overrides keyed by a coarse op name. */
@@ -115,52 +85,39 @@ export interface MockState {
   /** When set, EVERY route returns this status (e.g. 401 to drive auth_required). */
   forceStatus?: number;
 
-  /** turnId minted by turn-now + reported on create. */
   nextAutomationTurnId: string;
-  /** Result body for clone. */
   cloneResult?: Record<string, unknown>;
-  /** Result body for create-app. */
   createAppResult?: Record<string, unknown>;
-  /** Result body for create-automation. */
   createAutomationResult?: Record<string, unknown>;
 
-  /** SSE frames for POST /centraid/:appId/_turn */
   turnFrames: SseFrame[];
-  /** SSE frames for GET /centraid/_automations/turn/events */
   automationTurnFrames: SseFrame[];
 
-  // ── Household / sharing plane (#781; the reads journey 2.12 needed) ──
-  // The desktop's bearer is the host-custody caller, so the mock mirrors the
-  // host-custody visibility of each real route: every person, every device,
-  // every mounted vault. Shapes mirror the real handlers cited on each field.
+  // ── Household / sharing plane (#781) ──
+  // The desktop bearer is the host-custody caller, so visibility is "all of
+  // it". Shapes mirror the real handlers cited per field.
 
   /** GET /centraid/_gateway/owners → `{owners}` (owners-routes.ts `ownerDto`). */
   owners: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/devices → `{devices}` (devices-routes.ts `DeviceDTO`). */
   devices: Array<Record<string, unknown>>;
   /** GET /centraid/_vault/scopes → `{scopes}` (scopes-routes.ts `ScopeRow`).
-   *  `installed` is answered only when the request names `?app=` — "not
-   *  asked" and "not installed" are different answers, same as the route. */
+   *  `installed` is answered only for `?app=`: not asked ≠ not installed. */
   scopes: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/links → `{links}` (vault-links-routes.ts `linkDto`). */
   links: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/edges → `{edges}` (edges-routes.ts `edgeWire`).
-   *  Same-owner placements only — copy-as-share retired (#825, ruling
-   *  G-copy), and with it the D9 receive setting and the parked-ask surface
-   *  this fixture used to serve. */
+   *  Same-owner placements only: there is no copy-as-share (#825, G-copy). */
   edges: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/commons/invitations?actorVaultId= → `{invitations}`
-   *  (commons-routes.ts / `listCommonsInvitations`), filtered to the asking
-   *  vault the way the real route reads one member vault's own rows. */
+   *  (commons-routes.ts), filtered to the asking vault like the real route. */
   commonsInvitations: Array<Record<string, unknown>>;
-  /** GET /centraid/_gateway/commons/recovery?actorVaultId= → the
-   *  `CommonsVaultObservability` body (commons-recovery-routes.ts →
-   *  `commonsObservabilityForVault`): `{vaultId, grants}` keyed per vault. */
+  /** GET /centraid/_gateway/commons/recovery?actorVaultId= →
+   *  `{vaultId, grants}` (commons-recovery-routes.ts). */
   commonsRecovery: Record<string, Array<Record<string, unknown>>>;
   /** GET /centraid/_gateway/device-work/status → `{vaults}` (device-work-
-   *  routes.ts) — the roster's queued/leased enrichment depth. The absorb-all
-   *  `{}` fallthrough is NOT shape-compatible here: the client reads
-   *  `out.vaults`, and an undefined array crashed the whole Household route. */
+   *  routes.ts). The absorb-all `{}` fallthrough is NOT shape-compatible: the
+   *  client reads `out.vaults` and an undefined array kills Household. */
   deviceWork: Array<Record<string, unknown>>;
 }
 
@@ -168,7 +125,7 @@ export interface MockGateway {
   url: string;
   token: string;
   state: MockState;
-  /** Calls observed, in arrival order (excludes OPTIONS preflight). */
+  /** In arrival order; excludes OPTIONS preflight. */
   calls: Array<{
     method: string;
     pathname: string;
@@ -176,13 +133,11 @@ export interface MockGateway {
     auth?: string;
     body?: string;
   }>;
-  /** Convenience: number of calls matching a method + path predicate. */
   countCalls: (method: string, pathTest: (p: string) => boolean) => number;
   close: () => Promise<void>;
 }
 
 interface MockGatewayOptions {
-  /** Optional on-disk git-store mirror used by persistence e2e assertions. */
   appsDir?: string;
 }
 
@@ -357,9 +312,8 @@ async function route(
 ): Promise<void> {
   const seg = p.split("/").filter(Boolean); // e.g. ['centraid','_apps','todo-abc']
 
-  // The desktop suite exercises the opt-in automation surfaces. Keep that
-  // intent explicit in the mock handshake now that the shell reads one
-  // capability map before rendering its launcher (C1, issue #774).
+  // The shell reads one capability map before rendering its launcher (#774),
+  // so the opt-in automation surfaces must be explicit here.
   if (p === "/centraid/_gateway/info" && method === "GET") {
     return json(res, 200, {
       capabilities: {
@@ -377,7 +331,7 @@ async function route(
     });
   }
 
-  // ---- editing/session lifecycle (match specific before /:id) ----
+  // ─── editing/session lifecycle (match specific before /:id) ─────
   if (p === "/centraid/_apps/_sessions" && method === "POST") {
     const sid = (() => {
       try {
@@ -411,7 +365,7 @@ async function route(
     return json(res, 200, result);
   }
 
-  // ---- apps collection ----
+  // ─── apps collection ─────
   if (p === "/centraid/_apps") {
     if (method === "GET") return json(res, 200, s.apps);
     if (method === "POST") {
@@ -432,16 +386,14 @@ async function route(
     }
   }
 
-  // ---- single app: /centraid/_apps/:id[/...] ----
+  // ─── single app: /centraid/_apps/:id[/...] ─────
   if (seg[0] === "centraid" && seg[1] === "_apps" && seg[2]) {
     const id = decodeURIComponent(seg[2]);
     const sub = seg[3];
     if (!sub) {
       if (method === "DELETE") {
-        // Mirror the gateway: a 200 or 404 (already-gone) drops the app from
-        // the registry, so a subsequent listApps() won't resurrect the tile.
-        // A 5xx leaves it registered. (Offline is modelled by closing the
-        // server entirely, so this handler never runs in that case.)
+        // Mirrors the gateway: 200 or 404 drops the app so listApps() cannot
+        // resurrect the tile; 5xx leaves it registered.
         if (s.deleteStatus === 200 || s.deleteStatus === 404) {
           s.apps = s.apps.filter((a) => a.id !== id);
           if (options.appsDir) {
@@ -486,11 +438,11 @@ async function route(
       return json(res, 200, { id, sha: "rollback-sha" });
   }
 
-  // ---- templates ----
+  // ─── templates ─────
   if (p === "/centraid/_templates" && method === "GET")
     return json(res, 200, s.templates);
 
-  // ---- user identity + prefs ----
+  // ─── user identity + prefs ─────
   if (p === "/_centraid-user/id" && method === "GET")
     return json(res, 200, { id: "user-test" });
   if (p === "/_centraid-user/prefs") {
@@ -502,7 +454,7 @@ async function route(
     }
   }
 
-  // ---- automations ----
+  // ─── automations ─────
   if (p === "/centraid/_automations") {
     if (method === "GET") {
       if (s.automationsStatus !== 200)
@@ -525,10 +477,8 @@ async function route(
   if (p === "/centraid/_automations/turn-now" && method === "POST") {
     if (s.runNowStatus !== 200)
       return json(res, s.runNowStatus, { error: "run_failed" });
-    // Mirror the gateway: firing a turn materialises its ledger row, so the
-    // automation thread feed shows it on the authoritative reload. The
-    // thread is the only route to the forensic viewer now (Run now no longer
-    // navigates there itself), so without this the feed stays empty.
+    // Mirrors the gateway: firing a turn materialises its ledger row, without
+    // which the thread feed — the only route to the viewer — stays empty.
     const fired = s.automationTurnsById[s.nextAutomationTurnId];
     if (
       fired &&
@@ -581,9 +531,8 @@ async function route(
   if (p === "/centraid/_automations/set-enabled" && method === "POST") {
     if (s.setEnabledStatus !== 200)
       return json(res, s.setEnabledStatus, { error: "failed" });
-    // Mirror the gateway: the toggle persists, so the thread's reload-after-
-    // toggle renders the new state instead of snapping back to the seeded one.
-    // `ref` travels in the query string; `enabled` in the body.
+    // The toggle must persist or reload-after-toggle snaps back to the seed.
+    // `ref` travels in the query string, `enabled` in the body.
     const ref = url.searchParams.get("ref");
     const next = safeJson(body)["enabled"];
     s.automations = s.automations.map((a) =>
@@ -605,27 +554,26 @@ async function route(
     return json(res, 200, { ok: true });
   }
 
-  // ---- insights ----
+  // ─── insights ─────
   if (p === "/centraid/_insights/summary" && method === "GET")
     return json(res, 200, s.insights);
 
-  // ---- home daily brief (canonical plane: /centraid/_brief/today) ----
+  // ─── home daily brief (canonical plane: /centraid/_brief/today) ─────
   if (
     (p === "/centraid/_brief/today" || p === "/centraid/_brief/daily") &&
     method === "GET"
   )
     return json(res, 200, s.dailyBrief);
 
-  // ---- harness / agents ----
+  // ─── harness / agents ─────
   if (p === "/centraid/_turn/harness-status" && method === "GET")
     return json(res, 200, s.harnessStatus);
   if (p === "/centraid/_harnesses/status" && method === "GET")
     return json(res, 200, s.harnessesStatus);
 
-  // ---- vault atlas (v11 Vault embeds the census) ----
-  // The absorb fallback is `{}`. AtlasScreen used to treat that as a census
-  // and crash on `stats.packs` — the client now refuses a non-census 200,
-  // and the mock serves a valid empty census so household e2e is deterministic.
+  // ─── vault atlas (v11 Vault embeds the census) ─────
+  // `AtlasScreen` refuses a non-census 200, so the absorb-all `{}` will not do:
+  // serve a valid empty census to keep household e2e deterministic.
   if (p === "/centraid/_vault/atlas/stats" && method === "GET") {
     return json(res, 200, {
       generatedAt: "2026-08-01T00:00:00.000Z",
@@ -658,9 +606,9 @@ async function route(
     });
   }
 
-  // ---- enrichment policy + engine profiles (issue #807) ----
-  // Tiers, rules and answers are vault state; profiles are gateway prefs, and
-  // the two paths stay separate here exactly as they are in the product.
+  // ─── enrichment policy + engine profiles (issue #807) ─────
+  // Tiers/rules/answers are vault state, profiles are gateway prefs — the two
+  // paths stay separate here exactly as in the product.
   if (p === "/centraid/_enrich/profiles" && method === "GET")
     return json(res, 200, { profiles: s.enrichProfiles });
   if (p === "/centraid/_vault/enrich") {
@@ -672,9 +620,7 @@ async function route(
     }
   }
   if (p === "/centraid/_vault/enrich/effective" && method === "GET") {
-    // Keyed by capability, matching the real resolver's answer shape. A
-    // capability the test did not seed resolves to null, which is exactly what
-    // the page renders as "this build has no words for it".
+    // Keyed by capability, like the real resolver: an unseeded one is null.
     const capability = url.searchParams.get("capability") ?? "";
     return json(res, 200, {
       tier: s.enrich[url.searchParams.get("domain") ?? ""] ?? null,
@@ -683,8 +629,7 @@ async function route(
     });
   }
   if (p === "/centraid/_vault/enrich/rules" && method === "PUT") {
-    // One scope's decision about one capability. The owner route answers with
-    // the stored rule, which is what the page re-reads rather than assuming.
+    // The owner route answers with the stored rule, which the page re-reads.
     const rule = safeJson(body) as Record<string, unknown>;
     return json(res, 200, {
       rule: { ...rule, updatedAt: new Date().toISOString() },
@@ -693,12 +638,10 @@ async function route(
   if (p === "/centraid/_vault/enrich/consent" && method === "GET")
     return json(res, 200, { consent: s.enrichConsent });
 
-  // ---- vault consent context used by the current automation fleet/thread ----
-  // NOT part of the agent→harness rename: `_vault/agents` lists *enrolled
-  // automation agents* (the consent-grant identity), not harnesses, and
-  // `vault-routes.ts` still answers `{ agents }`. Renaming the key here made
-  // `listAgents()` return undefined, so `loadAutomationsOverviewData` threw on
-  // `agents.find(...)` for every seeded row — the whole overview died.
+  // ─── vault consent context (automation fleet/thread) ─────
+  // NOT part of the agent→harness rename: `_vault/agents` lists enrolled
+  // automation agents, and `vault-routes.ts` answers `{ agents }`. Renaming
+  // this key makes `listAgents()` undefined and kills the whole overview.
   if (p === "/centraid/_vault/agents" && method === "GET")
     return json(res, 200, { agents: [] });
   if (p === "/centraid/_vault/blocking" && method === "GET")
@@ -711,18 +654,15 @@ async function route(
   if (p === "/centraid/_vault/outbox-grants" && method === "GET")
     return json(res, 200, { grants: [] });
 
-  // ---- Household / sharing plane (#781) ----
-  // Serves the roster and owner-scope reads the Household journey renders
-  // from. Each handler mirrors the real route's response shape (cited inline);
-  // the desktop bearer is the host-custody caller, so visibility is "all of
-  // it", matching each route's host-custody branch.
+  // ─── Household / sharing plane (#781) ─────
+  // Each handler mirrors its real route's response shape, cited inline, on the
+  // host-custody branch the desktop bearer takes.
 
-  // owners-routes.ts GET: `sendJson(res, 200, {owners: […ownerDto]})`.
+  // owners-routes.ts GET: `{owners: […ownerDto]}`.
   if (p === "/centraid/_gateway/owners" && method === "GET")
     return json(res, 200, { owners: s.owners });
 
-  // devices-routes.ts GET: `{devices}` sorted current-first then label
-  // (`compareDevices`), one row per (device, vault) enrollment.
+  // devices-routes.ts GET: `{devices}` sorted current-first then label.
   if (p === "/centraid/_gateway/devices" && method === "GET") {
     const devices = [...s.devices].sort((a, b) => {
       if (a.current === true && b.current !== true) return -1;
@@ -732,9 +672,8 @@ async function route(
     return json(res, 200, { devices });
   }
 
-  // scopes-routes.ts GET: `{scopes: ScopeRow[]}` in registry order.
-  // `installed` is present only when the request named `?app=` — with no app
-  // named the field is omitted entirely (not asked ≠ not installed).
+  // scopes-routes.ts GET: `{scopes}` in registry order. `installed` appears
+  // only for `?app=` — omitted otherwise (not asked ≠ not installed).
   if (p === "/centraid/_vault/scopes" && method === "GET") {
     const appId = url.searchParams.get("app");
     const scopes = s.scopes.map((row) => {
@@ -750,8 +689,8 @@ async function route(
   if (seg[0] === "centraid" && seg[1] === "_gateway" && seg[2] === "links") {
     const linkId = decodeURIComponent(seg[3] ?? "");
     if (seg[4] === "approve" && method === "POST") {
-      // The real route approves the CALLER's side; the caller here owns the
-      // vaults the scopes plane lists, so that side is the one that flips.
+      // The real route approves the CALLER's side — here, the vaults the
+      // scopes plane lists.
       const own = new Set(s.scopes.map((row) => row.vaultId));
       s.links = s.links.map((link) => {
         if (link.linkId !== linkId) return link;
@@ -771,10 +710,9 @@ async function route(
     }
   }
 
-  // edges-routes.ts GET (`{edges}`). The pending/answer verbs retired with
-  // copy-as-share (#825, ruling G-copy) and are deliberately NOT served here:
-  // a fixture that answered a route the gateway 404s would let a journey pass
-  // against a fiction.
+  // edges-routes.ts GET (`{edges}`). No pending/answer verbs: copy-as-share
+  // does not exist (#825), and answering a route the gateway 404s would let a
+  // journey pass against a fiction.
   if (p === "/centraid/_gateway/edges" && method === "GET")
     return json(res, 200, { edges: s.edges });
 
@@ -811,13 +749,11 @@ async function route(
     return json(res, 200, { invitation });
   }
 
-  // device-work-routes.ts GET status: `{vaults: [{vaultId, name, total,
-  // available, leased}]}` — the roster's "N queued · M leased" note.
+  // device-work-routes.ts GET: `{vaults:[{vaultId,name,total,available,leased}]}`.
   if (p === "/centraid/_gateway/device-work/status" && method === "GET")
     return json(res, 200, { vaults: s.deviceWork });
 
-  // commons-recovery-routes.ts GET: the `CommonsVaultObservability` body —
-  // `{vaultId, grants}`; the client keeps only the fields it renders.
+  // commons-recovery-routes.ts GET: `{vaultId, grants}`.
   if (p === "/centraid/_gateway/commons/recovery" && method === "GET") {
     const actorVaultId = url.searchParams.get("actorVaultId") ?? "";
     return json(res, 200, {
@@ -826,13 +762,13 @@ async function route(
     });
   }
 
-  // ---- unified chat turn (SSE) ----
+  // ─── unified chat turn (SSE) ─────
   if (seg[0] === "centraid" && seg[2] === "_turn" && method === "POST") {
     void writeSse(res, s.turnFrames);
     return;
   }
 
-  // ---- conversations ----
+  // ─── conversations ─────
   if (
     seg[0] === "_centraid-conversations" &&
     seg[1] === "apps" &&
@@ -915,8 +851,8 @@ async function readMockApps(appsDir: string): Promise<{
         apps.push(appEntry({ ...manifest, id }));
       }
     } catch {
-      // A half-written directory is intentionally absent from the mock's
-      // restart inventory, matching the gateway's manifest boundary.
+      // A half-written directory is absent from the restart inventory, like
+      // the gateway's manifest boundary.
     }
   });
   return { apps, automations };
@@ -987,7 +923,6 @@ export async function makeEnv(): Promise<TestEnv> {
   const userData = path.join(workspace, "userData");
   await fs.mkdir(userData, { recursive: true });
   const gatewayId = crypto.randomBytes(32).toString("hex");
-  // Mock-owned app files are fixture data, not desktop connection state.
   const appsDir = path.join(workspace, "mock-apps");
   await fs.mkdir(appsDir, { recursive: true });
   return { workspace, userData, gatewayId, appsDir, gatewayProxies: {} };
@@ -997,11 +932,8 @@ export async function cleanupEnv(env: TestEnv): Promise<void> {
   await fs.rm(env.workspace, { recursive: true, force: true });
 }
 
-/**
- * Seed a REMOTE gateway profile pointing at the mock, mark it active, and
- * (by default) mark onboarding complete so the app boots straight to home.
- * Pass `{ onboarding: true }` to leave onboarding pending (the first-run view).
- */
+/** `{ onboarding: true }` leaves onboarding pending (the first-run view);
+ *  otherwise the app boots straight to home. */
 export async function seedRemoteGateway(
   env: TestEnv,
   gateway: { url: string },
@@ -1028,7 +960,7 @@ export async function seedRemoteGateway(
   );
 }
 
-/** Seed an additional paired remote profile without changing the active gateway. */
+/** Does not change the active gateway. */
 export async function seedRemoteGatewayProfile(
   env: TestEnv,
   gateway: { url: string },
@@ -1066,20 +998,17 @@ export async function launchApp(
       `dist/main.js not found at ${main}. Run \`npm run build\` in apps/desktop first.`
     );
   });
-  // Launch through a test-only entry that applies e2e-specific main-process
-  // setup (the Linux keyring backend switch) and then loads the real app, so
-  // production main.ts stays free of any test/CI/platform branches. Electron
-  // resolves the app root by walking up to apps/desktop/package.json, so the
-  // app behaves identically to launching `desktopRoot` directly.
+  // A test-only entry applies e2e main-process setup (Linux keyring switch)
+  // and then loads the real app, keeping production main.ts free of test
+  // branches. Electron still resolves the app root from apps/desktop.
   const entry = path.join(__dirname, "electron-entry.mjs");
   const app = await _electron.launch({
     args: [entry, `--user-data-dir=${env.userData}`],
     env: {
       ...process.env,
       NODE_ENV: "test",
-      // The local gateway moved out of Electron userData in #555. Keep every
-      // E2E worker's real gateway state inside its disposable workspace so it
-      // cannot contend with the developer's/service's canonical gateway.db.
+      // Each worker's gateway state stays in its disposable workspace so it
+      // cannot contend with the canonical gateway.db (#555).
       CENTRAID_DATA_DIR: path.join(env.workspace, "gateway-data"),
       CENTRAID_EMBEDDED_GATEWAY: "1",
       CENTRAID_E2E_IROH_PROXY_MAP: JSON.stringify(env.gatewayProxies),
@@ -1102,7 +1031,6 @@ export async function launchApp(
 
 // ─────────────────────────── DOM helpers ───────────────────────────
 
-/** A published-app metadata row for the gateway's listApps response. */
 export function appEntry(
   over: Partial<AppMetaEntry> & { id: string }
 ): AppMetaEntry {
@@ -1113,7 +1041,7 @@ export function appEntry(
   };
 }
 
-/** Build a CentraidAutomationRow for the listAutomations / read responses. */
+/** A CentraidAutomationRow for listAutomations / read. */
 export function automationRow(over: {
   id: string;
   name?: string;
@@ -1146,7 +1074,6 @@ export function automationRow(over: {
   };
 }
 
-/** Build a native CentraidAutomationTurnRecord. */
 export function automationTurnRecord(over: {
   turnId: string;
   automationId: string;
@@ -1177,7 +1104,6 @@ export function automationTurnRecord(over: {
   };
 }
 
-/** Build a native CentraidAutomationItem. */
 export function automationTurnItem(over: {
   turnId: string;
   ordinal: number;
@@ -1208,7 +1134,7 @@ export function automationTurnItem(over: {
   };
 }
 
-/** Build one `ownerDto` row (owners-routes.ts) for `state.owners`. */
+/** One `ownerDto` row (owners-routes.ts). */
 export function gatewayOwnerRecord(over: {
   ownerId: string;
   label: string;
@@ -1224,7 +1150,7 @@ export function gatewayOwnerRecord(over: {
   };
 }
 
-/** Build one `DeviceDTO` enrollment row (devices-routes.ts) for `state.devices`. */
+/** One `DeviceDTO` enrollment row (devices-routes.ts). */
 export function gatewayDeviceRecord(over: {
   deviceId: string;
   endpointId: string;
@@ -1255,7 +1181,7 @@ export function gatewayDeviceRecord(over: {
   };
 }
 
-/** Build one `ScopeRow` (scopes-routes.ts) for `state.scopes`. */
+/** One `ScopeRow` (scopes-routes.ts). */
 export function scopeRowRecord(over: {
   vaultId: string;
   label: string;
@@ -1266,14 +1192,13 @@ export function scopeRowRecord(over: {
     vaultId: over.vaultId,
     label: over.label,
     personal: over.personal === true,
-    // Every row the route lists is owned by the caller, so it is writable —
-    // a per-row wire field sourced by the gateway, never derived client-side.
+    // A per-row wire field from the gateway, never derived client-side.
     canWrite: true,
     ...(over.installed === undefined ? {} : { installed: over.installed }),
   };
 }
 
-/** Build one `linkDto` row (vault-links-routes.ts) for `state.links`. */
+/** One `linkDto` row (vault-links-routes.ts). */
 export function gatewayLinkRecord(over: {
   linkId: string;
   vaultA: string;
@@ -1304,8 +1229,7 @@ export function gatewayLinkRecord(over: {
   };
 }
 
-/** Build one commons observability grant (commons-observability.ts), with only
- *  the fields the client's recovery surface renders plus honest zero counters. */
+/** Only the fields the recovery surface renders, plus honest zero counters. */
 export function commonsRecoveryGrantRecord(over: {
   grantId: string;
   containerType: string;
@@ -1335,7 +1259,7 @@ export function commonsRecoveryGrantRecord(over: {
   };
 }
 
-/** Mark an app "known/published" in localStorage so it isn't classed a draft. */
+/** Marks an app "known/published" so it is not classed a draft. */
 export async function markUserApp(
   page: Page,
   app: { id: string; name: string; desc?: string }
@@ -1360,13 +1284,8 @@ export async function markUserApp(
   }, app);
 }
 
-/** Wait for the home shell to be present.
- *
- *  Post-#707/#708 the stem replaces the old sidebar, and Home is the content
- *  springboard (or day-one first-moves) rather than the library shelf + filter
- *  tabs. Wait past the "Reading your vault…" WorkingState so tests see the
- *  graded treatment (springboard or first-run), not the loading skeleton.
- */
+/** Waits past the "Reading your vault…" WorkingState, so tests see the graded
+ *  treatment (springboard or first-run), not the loading skeleton (#707/#708). */
 export async function waitForHome(page: Page): Promise<void> {
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
   const home = page.locator(
@@ -1427,8 +1346,8 @@ export async function clearFirstRunSample(page: Page): Promise<void> {
 
 /** Open the ⌘K / Ctrl+K command palette (stem Search, with keyboard fallback). */
 export async function openCommandPalette(page: Page): Promise<void> {
-  // Stem Search's accessible name is "Search" or "Search ⌘K" depending on host.
-  // Always .first() — other surfaces can also expose a Search control.
+  // Name is "Search" or "Search ⌘K" by host; `.first()` because other
+  // surfaces also expose a Search control.
   const search = page.getByRole("button", { name: /^Search/u });
   if ((await search.count()) > 0) {
     await search.first().click();
@@ -1440,10 +1359,7 @@ export async function openCommandPalette(page: Page): Promise<void> {
     .waitFor({ state: "visible" });
 }
 
-/**
- * The shell's one status line (#707) replaced toasts. Notes from `showToast` /
- * `postStatus` land here as polite live-region text.
- */
+/** One status line, no toasts (#707): `showToast`/`postStatus` land here. */
 export function statusLine(page: Page) {
   // The frame's one status line (StatusLine.tsx), not an app's leftover
   // `#noticeBanner` — that output is also aria-live=polite and comes first
@@ -1451,12 +1367,8 @@ export function statusLine(page: Page) {
   return page.locator("output[aria-live='polite']:not(#noticeBanner)").first();
 }
 
-/** Open an installed (or draft) app by its display name via the command palette.
- *
- *  Home no longer lists custom apps as library cards (#708) — the palette is
- *  the durable open path for anything that is not a first-party springboard
- *  tile. First-party apps also appear here under the Apps group.
- */
+/** The palette is the durable open path: Home lists no custom apps as library
+ *  cards (#708). First-party apps appear here too, under Apps. */
 export async function openAppFromPalette(
   page: Page,
   appName: string
@@ -1471,28 +1383,18 @@ export async function openAppFromPalette(
     .click();
 }
 
-/** How long a test waits for a well-behaved Electron shutdown before forcing it. */
 const CLOSE_TIMEOUT_MS = 8_000;
 
-/** Close Electron and wait until its OS process has exited.
- *
- * `ElectronApplication.close()` can resolve just before Chromium releases the
- * app's single-instance lock. Tests that immediately relaunch must wait for the
- * process boundary, otherwise the replacement process exits without a window.
- *
- * The close is BOUNDED. A hung teardown used to surface as "Test timeout of
- * 60000ms exceeded" pointing at the test body, even though every assertion had
- * already passed — the trace showed a `close()` with no matching `after`. That
- * is maximally misleading: a shutdown bug gets reported as a product bug. So we
- * cap the wait, SIGKILL the Electron process if it overruns, and shout about it
- * on stderr. The test still passes (its assertions did pass), but the force-kill
- * is loud enough to be findable in CI logs instead of silently absorbed.
+/**
+ * Waits for the OS process boundary: `close()` can resolve just before Chromium
+ * releases the single-instance lock, and a relaunching test would then get a
+ * process that exits without a window. The wait is BOUNDED and force-kills
+ * loudly on overrun — unbounded, a teardown hang reports as a test-body timeout,
+ * i.e. a shutdown bug filed as a product bug.
  */
 export async function closeApp(app: ElectronApplication): Promise<void> {
-  // Idempotent: the restart tests close mid-body and close again from their
-  // outer `finally` as a backstop. Playwright throws from `process()` once the
-  // application is gone, which for a teardown helper just means "already
-  // closed" — nothing left to do.
+  // Idempotent: restart tests close mid-body and again from `finally`, and
+  // Playwright throws from `process()` once the application is gone.
   let child: ReturnType<ElectronApplication["process"]>;
   try {
     child = app.process();
@@ -1511,9 +1413,8 @@ export async function closeApp(app: ElectronApplication): Promise<void> {
     timer = setTimeout(() => resolve("timeout"), CLOSE_TIMEOUT_MS);
   });
 
-  // Swallowed here, not at the race: if we end up force-killing, the pending
-  // `close()` rejects later with nobody awaiting it, and an unhandled rejection
-  // would fail an unrelated test further down the file.
+  // Swallowed here, not at the race: after a force-kill the pending `close()`
+  // rejects unawaited and would fail an unrelated test downstream.
   const closed = app.close().catch(() => undefined);
 
   try {
@@ -1537,7 +1438,6 @@ export async function closeApp(app: ElectronApplication): Promise<void> {
   }
 }
 
-/** Best-effort name of the running test, for the force-kill warning. */
 function testTitle(): string {
   try {
     return test.info().titlePath.slice(1).join(" › ") || "unknown test";
@@ -1546,10 +1446,7 @@ function testTitle(): string {
   }
 }
 
-/**
- * Rail renames from #667 — older e2e labels still resolve to the current
- * button text so call sites that predate the IA pass do not go dark.
- */
+/** Older e2e labels still resolve to current button text (#667). */
 const RAIL_LABEL_ALIASES: Readonly<Record<string, string>> = {
   Analytics: "Activity",
   Data: "Vault",
@@ -1560,13 +1457,9 @@ const RAIL_LABEL_ALIASES: Readonly<Record<string, string>> = {
   "Vault Atlas": "Vault",
 };
 
-/** Click a stem nav item by its visible label.
- *
- *  The default launcher is deliberately short, so an E2E journey may ask for
- *  an unpinned destination. Prefer the standing row when it exists; otherwise
- *  use the frame's honest All apps/More door instead of teaching fixtures a
- *  private route shortcut. Scope lookups because app routes may also render a
- *  same-named app-bar verb (for example, Automations after a template clone). */
+/** The default launcher is short, so an unpinned destination goes through the
+ *  frame's All apps/More door — never a private route shortcut. Lookups are
+ *  scoped because app routes may render a same-named app-bar verb. */
 export async function gotoNav(page: Page, label: string): Promise<void> {
   const railLabel = RAIL_LABEL_ALIASES[label] ?? label;
   const stem = page.locator('nav[aria-label="Apps"]');
@@ -1586,46 +1479,34 @@ export async function gotoNav(page: Page, label: string): Promise<void> {
     .click();
 }
 
-/** The grid item for an app, keyed by its stable data-app-id anchor.
- *
- *  Matches springboard content tiles, day-one first-moves, and library AppCards
- *  (Starred / overview). Prefer `.first()` at the call site when both a move
- *  and a tile could match during transitions.
- */
+/** Matches springboard tiles, first-moves, and library AppCards; prefer
+ *  `.first()` when a move and a tile could both match mid-transition. */
 export function tile(page: Page, appId: string) {
   return page.locator(`[data-app-id="${appId}"]`);
 }
 
-/** Open an app from Home (springboard tile or first-move) by id. */
 export async function openTile(page: Page, appId: string): Promise<void> {
-  // The springboard button IS the tile (data-testid="home-tile"); first-moves
-  // and AppCards also carry data-app-id. Click the anchor itself rather than
-  // requiring a nested app-tile child that Home no longer renders.
+  // The springboard button IS the tile: Home renders no nested app-tile child.
   await tile(page, appId).first().click();
 }
 
-/** Open a tile's overflow (⋯) action menu. Located by accessible role/name so
- * it survives card restyles — the class churn in #230 is exactly what broke
- * the old `.cd-card-more` selector. AppCards (Starred) still expose this;
- * springboard tiles do not — use openAppFromPalette + Build for that path. */
+/** Locate by role/name, never by class — card restyles churn classes (#230).
+ *  Only AppCards expose this; springboard tiles need openAppFromPalette. */
 export async function openTileMenu(page: Page, appId: string): Promise<void> {
   await tile(page, appId).getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menu").waitFor({ state: "visible" });
 }
 
-/** Click a context-menu item by text. */
 export async function clickMenuItem(page: Page, text: string): Promise<void> {
   await page.getByRole("menuitem", { name: text, exact: true }).click();
 }
 
-/** Wait for the confirm modal with the given title. */
 export async function expectConfirm(page: Page, title: string): Promise<void> {
   await page
     .getByRole("dialog", { name: title, exact: true })
     .waitFor({ state: "visible" });
 }
 
-/** Click the danger "Delete" button in the open confirm modal. */
 export async function confirmDelete(page: Page): Promise<void> {
   await page
     .getByRole("dialog")

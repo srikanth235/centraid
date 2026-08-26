@@ -1,30 +1,15 @@
-// The info rail, as a phone sheet: 64% of the screen, with a grabber, opened by
-// Info or by a swipe up (§7.2).
-//
-// Every row here is a *write* — something that can succeed, be queued, be
-// refused, or be undone — not a read-out. That is why a refusal renders as a
-// panel of its own rather than an alert: it has to say what was tried, why it
-// was refused, and what to do, and it has to leave the typed text on the device
-// so the member has not lost their sentence (§13).
-//
-// Below the hairline the Facts are mono, because a number is not a word: the
-// numeric role pins its own direction so a dimension does not read back to
-// front under RTL. Last comes one paragraph on where the original actually is —
-// an original that is offloaded, on the gateway, or behind a metered connection
-// is a truthful state with a sentence, never a broken image (§12).
+// The info rail as a phone sheet: 64% of the screen, grabber (§7.2). Every
+// row is a *write* (succeed, queue, refuse, undo), so a refusal renders as
+// its own panel — what was tried, why, what to do — with typed text kept on
+// device (§13). Facts are mono; numerics pin RTL direction. Last: one
+// paragraph on where the original actually is (§12).
 //
 // OWNER RULING (#711, 2a/2c) — do not "fix" this back:
-//  - This sheet stays on PAPER, not stage ground, same as the web rail. Both
-//    clients arrived at this independently, and Google Photos (our north
-//    star) does the same: dense facts read better on paper, and the stage
-//    exists to frame the photograph, not to host text. This is a deliberate
-//    amendment to the prototype's `vInfoStyle`, which had seated the panel
-//    over the stage.
-//  - There is NO destructive control on this sheet, and there never has
-//    been one here — Trash lives only on the viewer bar
-//    (PhotoLightboxToolbar.tsx). A second destructive path inside a facts
-//    panel is a misfire waiting to happen, and the prototype's own panel
-//    deliberately carries no destructive control either.
+//  - PAPER, not stage ground, like the web rail; amends the prototype's
+//    `vInfoStyle`, which seated the panel on the stage.
+//  - NO destructive control here, ever — Trash lives only on the viewer bar
+//    (PhotoLightboxToolbar.tsx); a second destructive path in a facts panel
+//    is a misfire waiting to happen.
 
 import * as Clipboard from "expo-clipboard";
 import React, { useMemo, useState } from "react";
@@ -55,31 +40,27 @@ export interface InfoChip {
   label: string;
 }
 
-/** What the sheet needs that the asset record does not carry itself. */
 export interface PhotoInfoSheetProps {
   visible: boolean;
   onClose: () => void;
   asset: PhotoAsset;
   screenHeight: number;
-  /** The linked place's STORED name — may still be its own coordinate, which
-   *  the phrase ladder refuses to print. Undefined when no place is linked. */
+  /** Linked place's STORED name — may be a bare coordinate, which the phrase
+   *  ladder refuses to print. Undefined when no place is linked. */
   placeName?: string;
-  /** A settlement name from the opt-in gazetteer automation, when there is one. */
+  /** Settlement name from the opt-in gazetteer automation, when one exists. */
   placeGazetteer?: string;
-  /** Where the photograph was taken, for the relative rung of the ladder, the
-   *  copy action, and nothing else. Never rendered as a name. */
+  /** Where taken: relative-ladder rung and copy action only, never a name. */
   placeLat?: number;
   placeLng?: number;
-  /** The member's own named places, as anchors for "3.4 km NE of Home". */
+  /** Member's named places, anchors for "3.4 km NE of Home". */
   namedPlaces?: readonly NamedPlace[];
   placeSetByYou: boolean;
   onRemovePlace: () => void;
   tags: readonly InfoChip[];
   onAddTag: (label: string) => Promise<string | undefined>;
   people: readonly InfoChip[];
-  /** The vault the photograph is in, and what it *is* — never its name. */
-  /** Whether the vault this photograph sits in is the member's OWN. Undefined
-   *  when the scope is not known here — the row is then simply not drawn. */
+  /** Whether the vault is the member's OWN; undefined → row not drawn. */
   vaultPersonal?: boolean;
   vaultLabel: string;
   gatewayName: string;
@@ -104,8 +85,8 @@ export function PhotoInfoSheet(
   const [pendingTag, setPendingTag] = useState("");
   const [refusal, setRefusal] = useState<Refusal>();
   const [copiedLocation, setCopiedLocation] = useState(false);
-  // Page to another photograph and the sheet is about that one instead. Derived
-  // during render so the field can never show the previous caption for a frame.
+  // Page to another photograph and the sheet is about that one instead.
+  // Derived during render so the field never shows the previous caption.
   if (captionAssetId !== asset.id) {
     setCaptionAssetId(asset.id);
     setCaption(asset.filename ?? "");
@@ -114,12 +95,9 @@ export function PhotoInfoSheet(
     setCopiedLocation(false);
   }
 
-  // WHERE IT WAS TAKEN IS A PHRASE. The ladder in
-  // `@centraid/blueprints/apps/photos/place-phrase` is the same one the web
-  // panel renders, so the two surfaces cannot drift on what they say about a
-  // place: the member's own name, else a gazetteer name, else a phrase relative
-  // to a place they DID name, else "A place with no name yet". Never the
-  // coordinate — that goes only into the clipboard, and only when asked.
+  // WHERE IT WAS TAKEN IS A PHRASE: same ladder the web panel renders, so the
+  // surfaces cannot drift. Own name, else gazetteer, else relative to a named
+  // place, else "A place with no name yet". Coordinate: clipboard only, on ask.
   const place = placePhrase({
     placeName: props.placeName,
     gazetteerName: props.placeGazetteer,
@@ -141,10 +119,8 @@ export function PhotoInfoSheet(
     props.vaultPersonal === undefined
       ? undefined
       : vaultLine(props.vaultPersonal, props.vaultLabel);
-  // An asset the device's media store gave no timestamp for has no capture
-  // date to print. It says so rather than formatting `new Date(undefined)`,
-  // which renders "Invalid Date" — a fact the sheet does not have, dressed as
-  // one it does.
+  // No timestamp from the media store means no capture date to print — not
+  // "Invalid Date" dressed as a fact.
   const capture = useMemo(
     () =>
       asset.capturedAt === undefined
@@ -173,12 +149,9 @@ export function PhotoInfoSheet(
   if (!visible) return null;
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose}>
-      {/* No scrim: the prototype seats this panel *inside* the stage
-          (`vInfoStyle`, mobile branch — an absolutely positioned 64%-height
-          panel over the stage with a hairline top edge and no backdrop).
-          The stage is already the darkest surface in the system, so dimming
-          it a second time only muddies the photograph the panel describes.
-          The pressable stays: it is the tap-outside-to-close target. */}
+      {/* No scrim: this panel sits *inside* the stage (`vInfoStyle`), which is
+          already the darkest surface — dimming it again muddies the photograph.
+          The pressable stays as the tap-outside-to-close target. */}
       <Pressable
         accessibilityLabel="Close photo information"
         accessibilityRole="button"
@@ -251,9 +224,8 @@ export function PhotoInfoSheet(
                 </Pressable>
               </View>
             ) : null}
-            {/* The one action that spells the coordinate out, and only because
-                the member asked. The label carries no digits: a control that
-                prints the thing it is about has already handed it over. */}
+            {/* Spells the coordinate out only because the member asked; the
+                label carries no digits — printing it would be handing it over. */}
             {exact === null ? null : (
               <View style={styles.chipRow}>
                 <Pressable

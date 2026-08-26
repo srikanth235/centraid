@@ -11,7 +11,7 @@ import { relationRowsFrom } from "./atlasScreenModel.js";
 
 import styles from "./AtlasScreen.module.css";
 
-// "How they relate" (v9 §6, issue #765) — the relations block.
+// "How they relate" (v9 §6, #765) — the relations block.
 //
 // One row per relation, each opening the kind it starts from, plus the orrery
 // as the last row's detail. The orrery is the one thing on this route the v9

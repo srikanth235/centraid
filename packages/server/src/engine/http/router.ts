@@ -1,10 +1,4 @@
-/**
- * URL parser for the /centraid prefix route.
- *
- * The plugin registers ONE route (path: "/centraid", match: "prefix") and
- * does its own dispatch. This module turns a raw req.url into a typed
- * Route object and is the only place URL shape lives.
- */
+// URL parser for the /centraid prefix route — the only place URL shape lives.
 
 export type Route =
   | { kind: "registry-list" }
@@ -19,7 +13,6 @@ export type Route =
   | {
       kind: "app-chat";
       appId: string;
-      /** Segments under `/centraid/<appId>/`, starting with `_turn`. */
       segments: string[];
     }
   | { kind: "app-harness-status"; refresh: boolean }
@@ -28,14 +21,7 @@ export type Route =
 const PREFIX = "/centraid";
 const DRAFT_PREFIX = "/centraid/_draft/";
 
-/**
- * Parse a request URL, peeling off an optional draft-preview prefix
- * (issue #141). A `/centraid/_draft/<sessionId>/<inner…>` URL is rewritten
- * to its inner `/centraid/<inner…>` form (query string preserved) and
- * parsed normally, with the session id returned alongside so the caller
- * can run the session worktree's handlers instead of the live ones. A
- * URL without the prefix parses exactly as before with no session id.
- */
+/** `#141` draft-preview prefix: rewrite to inner `/centraid/…` + session id. */
 export function parseWithDraft(
   method: string,
   rawUrl: string
@@ -49,7 +35,7 @@ export function parseWithDraft(
   const draftSessionId = decodeURIComponent(
     slash === -1 ? rest : rest.slice(0, slash)
   );
-  const innerPath = slash === -1 ? "" : rest.slice(slash); // leading '/<appId>/…' or ''
+  const innerPath = slash === -1 ? "" : rest.slice(slash);
   const innerUrl = `${PREFIX}${innerPath}${url.search}`;
   if (!draftSessionId) return { route: { kind: "not-found" } };
   return { route: parseRoute(method, innerUrl), draftSessionId };
@@ -65,9 +51,6 @@ export function parseRoute(method: string, rawUrl: string): Route {
   const segments = pathname.split("/").filter(Boolean);
   const m = method.toUpperCase();
 
-  // Registry endpoints — reserved id "_apps". Apps live in the git store;
-  // creation/publish goes through the gateway's apps-store surface, not
-  // here. This module exposes the read/data/deregister endpoints only.
   if (segments[0] === "_apps") {
     if (segments.length === 1) {
       if (m === "GET") return { kind: "registry-list" };
@@ -83,8 +66,6 @@ export function parseRoute(method: string, rawUrl: string): Route {
 
     const sub = decodeURIComponent(segments[2] ?? "");
 
-    // Per-app settings.json (issue #286: the silo's `__centraid_settings`
-    // table became a file; the renderer reads/writes app-owned keys here).
     if (sub === "settings" && segments.length === 3) {
       if (m === "GET") return { kind: "app-settings-read", appId };
       if (m === "PUT") return { kind: "app-settings-write", appId };
@@ -98,9 +79,6 @@ export function parseRoute(method: string, rawUrl: string): Route {
     return { kind: "not-found" };
   }
 
-  // /centraid/_turn/harness-status — gateway-wide preflight for local CLI
-  // adapters. Not app-scoped; reserved id `_turn` is checked before the
-  // generic `app-*` dispatch below.
   if (segments[0] === "_turn") {
     if (
       segments[1] === "harness-status" &&
@@ -118,23 +96,16 @@ export function parseRoute(method: string, rawUrl: string): Route {
   const appId = decodeURIComponent(segments[0] ?? "");
   if (!appId || appId.startsWith("_")) return { kind: "not-found" };
 
-  // `/centraid/<id>` names no endpoint. #799 retired the UI-byte plane, so an
-  // app is reached only through the named RPC/stream sub-routes below.
+  // `/centraid/<id>` names no endpoint (#799).
   if (segments.length === 1) return { kind: "not-found" };
 
   const second = decodeURIComponent(segments[1] ?? "");
 
-  // /centraid/<id>/_changes — Server-Sent Events stream of app writes (the
-  // change bus). The connection stays open until the client closes.
   if (second === "_changes") {
     if (m !== "GET" || segments.length !== 2) return { kind: "not-found" };
     return { kind: "app-changes", appId };
   }
 
-  // /centraid/<id>/actions/<action> and /centraid/<id>/queries/<query> — the
-  // app RPC plane (issue #505, retiring the `/centraid/_tool/centraid_*`
-  // shim). A `POST` invokes the declared handler with a `{ input?, intentId? }`
-  // body; the app id + handler name live in the path.
   if (second === "actions" && m === "POST" && segments.length === 3) {
     const action = decodeURIComponent(segments[2] ?? "");
     if (!action) return { kind: "not-found" };
@@ -146,18 +117,12 @@ export function parseRoute(method: string, rawUrl: string): Route {
     return { kind: "app-query", appId, query };
   }
 
-  // /centraid/<id>/_describe — the app's declared-handler catalogue (issue
-  // #505, replacing `centraid_describe`). `GET` returns the manifest; an
-  // optional `?action=<name>`/`?query=<name>` narrows to one handler.
   if (second === "_describe") {
     if (m !== "GET" || segments.length !== 2) return { kind: "not-found" };
     const query = Object.fromEntries(url.searchParams.entries());
     return { kind: "app-describe", appId, query };
   }
 
-  // /centraid/<id>/_turn[/...] — per-app chat surface. The sub-route parser
-  // in chat-routes.ts owns the method/path matrix; here we just hand it the
-  // tail so the dispatch in runtime.ts can stay flat.
   if (second === "_turn") {
     return { kind: "app-chat", appId, segments: segments.slice(1) };
   }

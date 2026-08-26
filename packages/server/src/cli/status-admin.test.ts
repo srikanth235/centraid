@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * `centraid-gateway status` (issue #382) — a data-dir-only unit test:
+ * `centraid-gateway status` (#382) — a data-dir-only unit test:
  * `--data-dir` given but no service ever installed, so `queryServiceStatus`
  * reports `installed: false` without shelling out to a real launchd/systemd
  * (both platforms handle "unit not found" as a normal, zero-exit read — see
@@ -80,8 +80,8 @@ describe("status-admin scenarios", () => {
     async () => {
       // An explicit, per-run label. Without it the probe asks launchd/systemd
       // about the DEFAULT label, so on any machine that actually runs Centraid
-      // the service is installed and "never-installed" reads `true` — the test
-      // was asserting a property of the host, not of the code (#656).
+      // the service is installed and "never-installed" reads `true` — a
+      // property of the host, not of the code (#656).
       const neverInstalled = `dev.centraid.never-installed.${crypto.randomUUID()}`;
       const parsed = lastJson(
         await capture(() =>

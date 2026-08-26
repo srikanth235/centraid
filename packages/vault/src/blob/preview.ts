@@ -1,27 +1,8 @@
-// The preview ladder (issue #405 §2): two sealed derivative rungs beside every
-// image original — a TINY ~256 px thumbnail (~20-40 KB) for the browse grid
-// and a MEDIUM ~2048 px preview (~300-500 KB) for the lightbox — so the
-// browse surface never touches a multi-MB original just to paint a tile.
-//
-// Generation is HYBRID (issue #405 §2, "gateway-as-backstop"): a capable
-// client produces both rungs at capture time on free edge CPU (photos
-// upload.js — its canvas is the client's raster codec), and this module is
-// the GATEWAY BACKSTOP for everything a client can't reach — imported
-// libraries (Takeout), weak/old clients, server-side ingestion (connectors
-// and automations writing blobs). Preview generation is inside the owner's
-// trust boundary: the gateway already holds plaintext on ingest, so
-// downscaling there leaks nothing to the provider (the E2EE gateway↔provider
-// seam is untouched — derivatives replicate as sealed CAS blobs like every
-// other byte).
-//
-// The one gap the backstop has to close is that the vault runtime carries NO
-// raster codec (packages/vault stays dependency-light — uuid only), so the
-// codec is an INJECTED interface: the gateway package owns the actual
-// jpeg-js/pngjs implementation (packages/server/src/preview) and hands it in
-// via VaultDb.previewCodec. This file is the dependency-free orchestration —
-// it decides WHAT is missing and stages the results through the existing
-// ingest/promote path (variant/variant_of), so dedup, custody and
-// replication all "just work" with no new plumbing.
+// The preview ladder (#405): two sealed derivative rungs beside every image
+// original. A capable client makes both at capture time; this is the GATEWAY
+// BACKSTOP for what a client cannot reach. The vault carries NO raster codec,
+// so it is INJECTED via `VaultDb.previewCodec`; results stage through the
+// existing ingest/promote path, so dedup and replication need no new plumbing.
 
 import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/core/blob";
 
@@ -30,26 +11,13 @@ import { nowIso } from "../ids.js";
 import { stageBlobBytes } from "./staging.js";
 import { shaOfBlobUri } from "./store.js";
 
-/** Tiny rung (issue #405 §2): the browse-grid thumbnail, ~256 px long edge. */
 export const TINY_EDGE = BLOB_TINY_EDGE;
-/** Medium rung (issue #405 §2): the lightbox preview, ~2048 px long edge. */
 export const MEDIUM_EDGE = BLOB_MEDIUM_EDGE;
 
-/**
- * How many image items the gateway backstop processes per sweep (issue #405
- * §2: "up to a bounded batch per sweep"). Preview generation is cheap CPU
- * QoS, never a foreground duty — a large Takeout import drains a batch at a
- * time across successive hourly sweeps rather than pinning a core on mount.
- */
+/** Cheap CPU QoS, never foreground: one batch per sweep (#405). */
 export const PREVIEW_BACKFILL_BATCH = 24;
-/** Maximum complete plaintext image retained while remote-primary bytes flow. */
 export const INGRESS_PREVIEW_MAX_BYTES = 32 * 1024 * 1024;
 
-/**
- * The maps tiny→`thumb` and medium→`preview` onto the existing derivative
- * variant vocabulary (schema/blob.ts already spells both), so the ladder
- * needs NO schema change — a rung is just a (variant, maxEdge) pair.
- */
 export const PREVIEW_LADDER: readonly {
   variant: "thumb" | "preview";
   maxEdge: number;
@@ -58,27 +26,16 @@ export const PREVIEW_LADDER: readonly {
   { variant: "preview", maxEdge: MEDIUM_EDGE },
 ];
 
-/** A downscaled raster the codec produced — bytes plus the resulting size. */
 export interface PreviewOutput {
   bytes: Buffer;
-  /** Always a raster type the browse surface can paint (JPEG for v0). */
   mediaType: string;
   width: number;
   height: number;
 }
 
 /**
- * The injected raster codec (issue #405 §2). Decode + downscale + re-encode
- * one image to fit within `maxEdge` on its long side, WITHOUT upscaling (a
- * source already smaller than `maxEdge` re-encodes at its native size). The
- * implementation lives in the gateway package with its npm decoders; the
- * vault layer only ever sees this interface.
- *
- * Returns `null` for anything it cannot or will not process — an unsupported
- * type (GIF/WebP/video), a corrupt decode, or an input past the codec's
- * memory cap. `null` is not an error: the browse surface's placeholder
- * contract (issue #404, media.js `gridSrc`) already covers a missing thumb,
- * so a skipped item simply renders a placeholder.
+ * Fit one image within `maxEdge` on its long side, never UPSCALING. `null` is a
+ * refusal, not an error: the item renders its placeholder (#404).
  */
 export interface PreviewCodec {
   downscale: (
@@ -86,31 +43,24 @@ export interface PreviewCodec {
     mediaType: string,
     maxEdge: number
   ) => PreviewOutput | null | Promise<PreviewOutput | null>;
-  /** 64-bit dHash, encoded as 16 lowercase hexadecimal characters. */
   perceptualHash: (
     source: Buffer,
     mediaType: string
   ) => string | null | Promise<string | null>;
-  /** ThumbHash bytes as unpadded standard base64, or null for an undecodable input. */
   thumbhash: (
     source: Buffer,
     mediaType: string
   ) => string | null | Promise<string | null>;
 }
 
-/** What one backstop pass touched — folded into the sweep receipt. */
 export interface PreviewBackfillResult {
-  /** Image items examined this pass (bounded by the batch cap). */
   scanned: number;
-  /** Variant blobs actually staged (0-2 per scanned item). */
   generated: number;
-  /** Inline perceptual-hash contributions actually staged (0-1 per item). */
   phashesGenerated: number;
-  /** Inline ThumbHash placeholders actually staged (0-1 per item). */
   thumbhashesGenerated: number;
-  /** Items the codec declined outright (unsupported type / decode failure). */
+  /** The codec declined the item. */
   skippedUnsupported: number;
-  /** Items whose original bytes were absent from BOTH tiers — an integrity gap. */
+  /** Absent from BOTH tiers — an integrity gap. */
   missingBytes: number;
 }
 
@@ -159,7 +109,6 @@ export interface IngressPreviewInput {
   stagedBy?: string;
 }
 
-/** Generate capture-time rungs + dHash while complete plaintext is in hand. */
 export async function contributeIngressPreviews(
   db: VaultDb,
   codec: PreviewCodec,
@@ -193,8 +142,7 @@ export async function contributeIngressPreviews(
     generated += 1;
     return stageNextRung(index + 1);
   }
-  // Preview rungs are a quality ladder: a codec declining one stops later,
-  // more expensive rungs from being attempted.
+  // A quality ladder: a declined rung stops the costlier ones after it.
   await stageNextRung(0);
   if (!hasStagedOrClaimedVariant(db, input.sha256, "phash")) {
     try {
@@ -211,7 +159,7 @@ export async function contributeIngressPreviews(
         generated += 1;
       }
     } catch {
-      // A hash miss only removes a duplicate hint; binary previews still win.
+      // A hash miss only removes a duplicate hint.
     }
   }
   if (!hasStagedOrClaimedVariant(db, input.sha256, "thumbhash")) {
@@ -229,13 +177,12 @@ export async function contributeIngressPreviews(
         generated += 1;
       }
     } catch {
-      // A missing placeholder only means a blank tile until the thumb lands.
+      // A missing placeholder means a blank tile until the thumb lands.
     }
   }
   return generated;
 }
 
-/** Yield the event loop between items — preview CPU never starves live work. */
 function yieldTick(): Promise<void> {
   return new Promise<void>((resolve) => {
     setImmediate(resolve);
@@ -243,19 +190,10 @@ function yieldTick(): Promise<void> {
 }
 
 /**
- * The gateway backstop pass (issues #405 §2 and #414 D9): find live image
- * content missing a tiny/medium rung or pHash, generate the gap through the codec,
- * and stage the result via the SAME `stageBlobBytes(variant, variantOf)` path
- * a client upload uses — which, because the parent is already claimed, folds
- * the derivative straight into `core_content_derivative` (staging.ts) so it
- * dedups, gets custody and replicates with no bespoke wiring.
- *
- * Bounded (`limit`, default `PREVIEW_BACKFILL_BATCH`) and idempotent: a
- * contribution that already exists is never regenerated, so a client-supplied
- * thumb or higher-quality pHash that beat the sweep always wins —
- * the backstop only fills holes. Per-item failures are counted, never fatal:
- * one unreadable image must not sink the batch, and a codec crash must not
- * fail the custody sweep this rides along with.
+ * Bounded and idempotent: an existing contribution is never regenerated, so a
+ * client-supplied thumb that beat the sweep wins. Per-item failures are
+ * counted, never fatal — a codec crash must not fail the custody sweep this
+ * rides along with (#405, #414).
  */
 export async function backfillPreviews(
   db: VaultDb,
@@ -274,11 +212,8 @@ export async function backfillPreviews(
   if (limit <= 0) return result;
   const now = options.now ?? nowIso();
 
-  // Live image originals missing at least one rung. `deleted_at IS NULL`
-  // keeps the backstop off trashed items (they render from what they already
-  // hold until purge); the raster filter is `media_type LIKE 'image/%'` so
-  // video/audio never enter (video posters are a client-only concern in v0,
-  // and the gateway video backstop is deliberately out — issue #405 §2).
+  // `deleted_at IS NULL` keeps the backstop off trashed items; the raster
+  // filter keeps video out — a video backstop is a non-goal (#405).
   const items = db.vault
     .prepare(
       `SELECT i.content_id, i.content_uri, i.media_type
@@ -326,9 +261,7 @@ export async function backfillPreviews(
     const parentSha = shaOfBlobUri(item.content_uri);
     if (!parentSha) return processNextItem(index + 1);
     try {
-      // Which rungs this item still lacks — recomputed per item so a
-      // client-supplied variant that landed since the outer query is honored
-      // (we never overwrite an existing rung).
+      // Recomputed per item: an existing rung is never overwritten.
       const missing = PREVIEW_LADDER.filter(
         (rung) =>
           !hasVariant(db, item.content_id, rung.variant) &&
@@ -339,16 +272,14 @@ export async function backfillPreviews(
       if (missing.length === 0 && !missingPhash && !missingThumbhash) {
         return processNextItem(index + 1);
       }
-      // Local hit first; a remote-only original reads through custody.open at
-      // backfill pace (the read-through re-caches it locally as a side effect).
+      // A remote-only original reads through custody.open at backfill pace.
       const bytes =
         db.blobs.getSync(parentSha) ?? (await db.blobs.open(parentSha));
       if (!bytes) {
         result.missingBytes += 1;
         return processNextItem(index + 1);
       }
-      // A codec that declines the tiny rung declines the medium too — it's the
-      // same decode. Skip the whole item, count it once.
+      // Declining the tiny rung declines the medium: same decode.
       let unsupported = await stageMissingPreviewRungs(
         db,
         codec,
@@ -390,9 +321,7 @@ export async function backfillPreviews(
       }
       if (unsupported) result.skippedUnsupported += 1;
     } catch {
-      // Best-effort maintenance: one unreadable image (corrupt bytes, a decode
-      // that threw) is counted implicitly by producing nothing and never
-      // sinks the batch or the custody sweep this pass rides along with.
+      // One unreadable image never sinks the batch or the custody sweep.
     }
     await yieldTick();
     return processNextItem(index + 1);
@@ -401,7 +330,6 @@ export async function backfillPreviews(
   return result;
 }
 
-/** Whether a content item already carries the requested binary/inline slot. */
 function hasVariant(
   db: VaultDb,
   contentId: string,
@@ -419,7 +347,6 @@ function hasVariant(
   return row !== undefined;
 }
 
-/** Capture-time uploads can still be staged or already claimed. */
 function hasStagedOrClaimedVariant(
   db: VaultDb,
   parentSha: string,

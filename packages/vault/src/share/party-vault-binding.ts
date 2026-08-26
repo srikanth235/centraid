@@ -1,26 +1,16 @@
 /*
- * `share_party_vault_binding` — the vault-resident answer to "is this person
- * linked to a vault of their own, and which one?" (issue #821).
+ * `share_party_vault_binding` — vault-resident "is this person linked to a
+ * vault of their own, and which one?" (#821). Gateway calls this from
+ * `serve/link-party-bindings.ts`.
  *
- * The table has existed since #731, written by the commons plane
- * (`createCommonsGrant`, invitation claims, roster/control projection), so
- * the fact was reachable only for people who had already been pulled into a
- * share. The link ceremony — the gesture where the owner
- * ACTUALLY binds a person to a peer vault — recorded the association solely
- * as gateway-side JSON (`vault_links.permissions_json.commonsPartyIds`), which
- * no vault query can see. A People-band query asking "show me who I'm linked
- * with" had nothing to join against. This module is the write the ceremony
- * was missing; the gateway calls it from `serve/link-party-bindings.ts`.
- *
- * Two rules live here, at the table they constrain:
+ * Two rules at the table they constrain:
  *
  *   - UNIQUE (party_id, vault_id) is TOTAL — it does not exempt revoked rows.
- *     So re-linking after a revocation must RE-LIGHT the existing row (clear
+ *     Re-linking after revocation must RE-LIGHT the existing row (clear
  *     `revoked_at`), never insert a second one.
- *   - The partial unique index `…_live_party` allows a party at most ONE live
- *     vault. A second live vault for the same person is a genuine ambiguity
- *     (which of the two is "them"?), so we keep the binding already standing
- *     and report the conflict rather than throwing or silently re-pointing it.
+ *   - Partial unique `…_live_party` allows a party at most ONE live vault.
+ *     A second live vault is genuine ambiguity; keep the standing binding
+ *     and report conflict rather than throw or silently re-point.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -28,11 +18,9 @@ import type { DatabaseSync } from "node:sqlite";
 import { uuidv7 } from "../ids.js";
 import { ensureCommonsParty } from "./commons.js";
 
-/** What a bind attempt did — reportable, never thrown at the caller. */
 export type PartyVaultBindOutcome =
-  /** A live row now stands for (party, vault): inserted, re-lit, or refreshed. */
   | "bound"
-  /** The party already holds a LIVE binding to a DIFFERENT vault; left alone. */
+  /** Party already holds a LIVE binding to a DIFFERENT vault; left alone. */
   | "conflict";
 
 export type PartyVaultRevokeOutcome = "revoked" | "absent";
@@ -46,7 +34,6 @@ export interface PartyVaultBindingRow {
   revoked_at: string | null;
 }
 
-/** The one live binding for `partyId`, if any. */
 function livePartyVaultBinding(
   db: DatabaseSync,
   partyId: string
@@ -60,11 +47,9 @@ function livePartyVaultBinding(
 }
 
 /**
- * Bind `partyId` to `vaultId`, idempotently. Safe to replay: a repeated
- * approval, a re-run ceremony, and a redelivered event all land on the same
- * row. Party ids are shared across linked vaults (the Commons model), so the
- * counterpart's party is mirrored into this vault first — exactly what
- * `createCommonsGrant` does — because the binding's FK names `core_party`.
+ * Idempotent. Party ids are shared across linked vaults, so the counterpart
+ * is mirrored first — same as `createCommonsGrant` — because the FK names
+ * `core_party`.
  */
 export function bindPartyToVault(
   db: DatabaseSync,
@@ -73,14 +58,13 @@ export function bindPartyToVault(
     vaultId: string;
     vaultPublicKey?: string | null;
     linkedAt: string;
-    /** How to name the mirrored party when this vault has never seen it. */
     displayName?: string;
   }
 ): PartyVaultBindOutcome {
   const live = livePartyVaultBinding(db, input.partyId);
   // One live vault per person: keep the standing binding, report the clash.
-  // Re-pointing it would silently rewrite who this person "is" on the peer
-  // plane, and inserting alongside it would just hit the partial unique index.
+  // Re-pointing silently rewrites who this person "is"; inserting hits the
+  // partial unique index.
   if (live && live.vault_id !== input.vaultId) return "conflict";
   ensureCommonsParty(
     db,
@@ -113,9 +97,8 @@ export function bindPartyToVault(
   return "bound";
 }
 
-/** Tombstone the binding for this pair. The row stays: a revoked binding is
- *  the memory that these two were once linked, and the row a later re-link
- *  re-lights (the UNIQUE key is total). */
+/** Tombstone the pair. The row stays: memory that these two were linked, and
+ *  the row a later re-link re-lights (UNIQUE is total). */
 export function revokePartyVaultBinding(
   db: DatabaseSync,
   input: { partyId: string; vaultId: string; revokedAt: string }

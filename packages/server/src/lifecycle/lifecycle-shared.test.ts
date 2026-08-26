@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * Lifecycle-shared publish/delete helpers (issue #147, Concern 3).
+ * Lifecycle-shared publish/delete helpers (#147, Concern 3).
  *
  * The point of these helpers is that no route hand-sequences
  * `publish → ensureRegistered → reconcile` (or `deleteApp → deregister →

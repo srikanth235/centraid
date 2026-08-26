@@ -112,8 +112,8 @@ describe(BarsBlock, () => {
   });
 
   it("draws every column it is given, and tightens the gutter rather than dropping days", () => {
-    // The block used to sample to ten columns itself, so a spike vanished and
-    // the screen had no way to know (#775).
+    // The block never samples to ten columns itself: a spike would vanish and
+    // the screen would have no way to know (#775).
     const month = Array.from({ length: 30 }, (_unused, index) =>
       day(String(index), 40, 0)
     );

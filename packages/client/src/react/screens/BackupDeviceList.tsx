@@ -6,14 +6,14 @@ import { formatDuration } from "../shell/routes/gatewayData.js";
 
 import styles from "./BackupCard.module.css";
 
-// The brief's device list (issue #708 A2): every device with its size, scope,
+// The brief's device list (#708): every device with its size, scope,
 // and last-seen — last-seen in the mono/tabular register. This reuses the
 // paired-device roster (`gateway-client-devices.ts`, the same data
 // DevicesCard shows) rather than inventing a new device concept: "what would
 // I lose" is answered by the offsite copy (the health metrics above), this
-// list is "what else already has a copy." A role column used to sit here;
-// ownership (#726) leaves nothing per-device left to distinguish — every
-// listed device already reaches everything its owner owns.
+// list is "what else already has a copy." There is no role column: ownership
+// (#726) leaves nothing per-device to distinguish — every listed device
+// already reaches everything its owner owns.
 //
 // SEAM: the device-pairing wire (`CentraidGatewayDevice`) carries no
 // per-device storage footprint and no declared replica shape/scope — those

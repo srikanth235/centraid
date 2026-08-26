@@ -1,7 +1,7 @@
 /*
  * Shared harness for the `/centraid/_gateway/devices` route tests.
  *
- * The roster/revocation tests and the invitation-minting tests (issue #599)
+ * The roster/revocation tests and the invitation-minting tests (#599)
  * live in sibling files but drive one real gateway.db, so the wiring is here
  * rather than copied twice. Each test file owns its own `afterEach(cleanup)`.
  */

@@ -12,48 +12,19 @@ import {
 import type { AppInfo, ScaffoldFile } from "./scaffold-types.js";
 import { AppScaffoldError } from "./scaffold-types.js";
 
-/**
- * Options for {@link cloneTemplate}.
- */
 export interface CloneTemplateOptions {
-  /** Absolute path under which the new app folder is created. */
   appsDir: string;
-  /** Id for the new app (folder name). Validated against the standard rules. */
   newAppId: string;
-  /** Absolute path to the template's source directory (e.g. from `@centraid/blueprints`). */
   templateDir: string;
-  /** Optional display name; defaults to whatever the template's `app.json` had. */
   newName?: string;
-  /**
-   * Optional one-line description, seeded from the template manifest by the
-   * caller so the cloned app's `app.json` carries it forward (the
-   * builder surfaces it under the title and the home tile uses it as the
-   * tile subtitle).
-   */
   newDesc?: string;
-  /**
-   * Template tile identity from the catalog entry (issue #263). Backfills
-   * `app.json#iconKey` / `#colorKey` when the template's own copy predates
-   * the keys; a template app.json that already declares them wins.
-   */
+  /** Backfilled (#263); a template declaring them wins. */
   iconKey?: string;
   colorKey?: string;
 }
 
-/**
- * Copy a bundled template into `<appsDir>/<newAppId>/` and rewrite the
- * pieces that need to be unique to the new instance:
- *
- *   - `app.json#name`    → `newName` (or the template's existing name)
- *   - `app.json#version` → `"0.1.0"` (the clone is a fresh app, not the template)
- *   - `package.json#name` → `centraid-app-<newAppId>` (only if it followed the
- *      `centraid-app-*` convention; foreign names are left alone)
- *
- * Throws `AppScaffoldError`:
- *   - `invalid_id`     — `newAppId` fails the id regex
- *   - `already_exists` — destination dir already exists
- *   - `no_app`     — `templateDir` is missing or not a directory
- */
+/** Rewrites what must be unique: name, a fresh `0.1.0`, and `package.json#name`
+ *  — the last only when it followed the `centraid-app-*` convention. */
 export async function cloneTemplate(
   opts: CloneTemplateOptions
 ): Promise<AppInfo> {
@@ -77,18 +48,10 @@ export async function cloneTemplate(
   await fs.mkdir(opts.appsDir, { recursive: true });
   await copyDir(opts.templateDir, destDir);
 
-  // Ensure the canonical centraid subdirs exist — this call backstops
-  // templates that pre-date one. Bundled templates may ship automations as
-  // `automations/<id>/` folders (e.g.
-  // `journal/automations/weekly-recap/`); those carry through
-  // unchanged via `copyDir` above — this step only adds missing
-  // directories, never overwrites contents (issue #70).
+  // Adds missing directories only; never overwrites copied content (#70).
   await ensureCanonicalSubdirs(destDir);
 
   await rewriteAppJson(destDir, opts.newName, opts.newDesc, opts.newAppId);
-  // Backfill the tile identity from the catalog entry so a clone of an
-  // older cached template (app.json without iconKey/colorKey) still lands
-  // with the template's canonical look (issue #263).
   if (opts.iconKey || opts.colorKey) {
     await stampAppVisualIdentity(destDir, {
       iconKey: opts.iconKey,
@@ -96,13 +59,7 @@ export async function cloneTemplate(
     });
   }
   await rewritePackageJson(destDir, opts.newAppId);
-  // Automation templates carry a sibling `automation.json#name` whose
-  // value the Automations page surfaces as the row title. Keep it in
-  // sync with `app.json#name` so a clone of "Briefing" → "Briefing 2"
-  // is consistent across both surfaces. The clone path stamps
-  // `generated.{by,at}` too so the manifest reflects the clone time
-  // rather than the original template's authoring time. No-op for app
-  // templates with no automations/<id>/ subdirs.
+  // `automation.json#name` is a row title, so it tracks `app.json#name`.
   if (opts.newName) {
     await rewriteAutomationManifestNames(destDir, opts.newName, {
       stampGenerated: true,
@@ -124,11 +81,7 @@ export async function cloneTemplate(
   };
 }
 
-/**
- * True when any sibling app under `appsDir` (other than `excludeId`,
- * when given) already uses `name` as its `app.json#name`. Comparison is
- * case-insensitive and whitespace-trimmed.
- */
+/** Case-insensitive and whitespace-trimmed. */
 export async function isDisplayNameTaken(
   appsDir: string,
   name: string,
@@ -154,16 +107,7 @@ export async function isDisplayNameTaken(
   return findMatchingName(0);
 }
 
-/**
- * Suggest a non-colliding app id starting from `preferred`. If `preferred`
- * is free, returns it; otherwise tries `preferred-2`, `preferred-3`, ...
- * until one is free (capped at 1000 attempts as a safety bound).
- *
- * Pass `{ alwaysSuffix: true }` to skip the bare `preferred` candidate and
- * start at `preferred-2`. Used by the template-clone path so a clone never
- * consumes the template's own id — keeps templates and clones cleanly
- * separated even on the first clone.
- */
+/** `alwaysSuffix` keeps a clone off the template's own id. */
 export async function suggestAppId(
   appsDir: string,
   preferred: string,
@@ -187,25 +131,8 @@ export async function suggestAppId(
   return findAvailableId(start);
 }
 
-/**
- * Pick a `(id, name)` pair where the directory id is free AND the display
- * name doesn't collide with any existing app's `app.json#name`. Used by
- * the default template-clone path so two clones never both surface as
- * "Hydrate" on the home shelf — directory ids are unique by construction
- * (`suggestAppId`), but display names have to be probed against siblings
- * (the user may have renamed an unrelated app to "Hydrate 2" earlier).
- *
- * Probes the bare `(preferredId, preferredName)` first — the very first
- * clone of `hydrate` should be just "Hydrate" / `hydrate`, not awkward
- * "Hydrate 2" / `hydrate-2`. Falls through to `(preferredId-N,
- * `${preferredName} N`)` with `N = 2, 3, …` only on collision. Caps at
- * 1000 attempts; throws `already_exists` if every candidate is taken.
- *
- * The template and the user's clone live in different filesystem trees
- * (`packages/blueprints/<id>/` vs `<appsDir>/<id>/`), so a clone
- * using the template's bare id is not a collision — the gateway only
- * routes `<appsDir>` entries.
- */
+/** Id and name advance in lockstep, so two clones never both read "Hydrate".
+ *  The bare pair is tried first: the template lives in a different tree. */
 export async function suggestCloneIdentity(
   appsDir: string,
   preferredId: string,
@@ -232,16 +159,7 @@ export async function suggestCloneIdentity(
   return findAvailableIdentity(1);
 }
 
-/**
- * Filesystem-free variant of {@link suggestCloneIdentity} for the
- * git-store backend (issue #137): the desktop no longer has a local
- * workspace dir to scan, so the caller hands in the already-published
- * apps (id + optional display name, e.g. from `listAppsWithMeta()`).
- * Same bare-first-then-`-N` advancement and 1000-attempt cap. Id and
- * display-name collisions are checked case-insensitively against the
- * supplied set; both advance in lockstep so the home shelf never shows
- * two identically-titled tiles for fresh clones.
- */
+/** Filesystem-free `suggestCloneIdentity` for the git-store backend (#137). */
 export function suggestCloneIdentityFrom(
   existing: ReadonlyArray<{ id: string; name?: string }>,
   preferredId: string,
@@ -268,32 +186,16 @@ export function suggestCloneIdentityFrom(
 }
 
 export interface CloneTemplateFilesOptions {
-  /** Id for the new app. Validated against the standard rules. */
   newAppId: string;
-  /** The template's files (the desktop reads its bundled catalog locally). */
   templateFiles: ScaffoldFile[];
-  /** Optional display name; defaults to the template's `app.json#name`. */
   newName?: string;
-  /** Optional one-line description; defaults to the template's. */
   newDesc?: string;
-  /**
-   * Template tile identity from the catalog entry (issue #263). Backfills
-   * `app.json#iconKey` / `#colorKey` when the template's own copy predates
-   * the keys; a template app.json that already declares them wins.
-   */
+  /** Backfilled (#263); a template declaring them wins. */
   iconKey?: string;
   colorKey?: string;
 }
 
-/**
- * Filesystem-free variant of {@link cloneTemplate} for the git-store/HTTP
- * path (issue #141). Takes the template's file map and returns the full
- * rewritten file map for the new app — same rewrites as the disk path:
- *   - `app.json` → fresh `id`, `name`, `version` "0.1.0", carried/overridden `description`
- *   - `package.json#name` → `centraid-app-<id>` (only if it followed the convention)
- *   - `automations/<id>/automation.json#name` + re-stamped `generated`
- * Seeds `automations/README.md` when the template ships no automations.
- */
+/** Filesystem-free `cloneTemplate` (#141); must match the disk path's rewrites. */
 export function cloneTemplateFiles(
   opts: CloneTemplateFilesOptions
 ): ScaffoldFile[] {
@@ -311,7 +213,6 @@ export function cloneTemplateFiles(
     }
   };
 
-  // app.json — fresh id/version, name + description applied.
   const appJsonIdx = byPath.get("app.json");
   let parsedAppJson: Record<string, unknown> = {};
   if (appJsonIdx !== undefined) {
@@ -341,8 +242,6 @@ export function cloneTemplateFiles(
   const descTrimmed = descSource.trim();
   if (descTrimmed) nextAppJson.description = descTrimmed;
   else delete nextAppJson.description;
-  // Backfill the tile identity from the catalog entry (issue #263) —
-  // no-op when the template's app.json already declares the keys.
   const withVisual =
     applyAppVisualIdentity(JSON.stringify(nextAppJson, null, 2) + "\n", {
       iconKey: opts.iconKey,
@@ -350,7 +249,7 @@ export function cloneTemplateFiles(
     }) ?? JSON.stringify(nextAppJson, null, 2) + "\n";
   set("app.json", withVisual);
 
-  // package.json — only rewrite the convention-following name.
+  // Only the convention-following name is rewritten.
   const pkgIdx = byPath.get("package.json");
   if (pkgIdx !== undefined) {
     try {
@@ -379,7 +278,6 @@ export function cloneTemplateFiles(
     }
   }
 
-  // Seed an automations brief when the template ships none.
   const hasAutomation = out.some((f) =>
     /^automations\/[^/]+\/automation\.json$/u.test(f.path)
   );
@@ -402,7 +300,7 @@ async function copyDir(src: string, dest: string): Promise<void> {
     } else if (entry.isFile()) {
       await fs.copyFile(srcPath, destPath);
     }
-    // Symlinks/other types: skip. Templates only ship plain files.
+    // Symlinks and other types: skipped. Templates ship plain files only.
     return copyNextEntry(index + 1);
   };
   return copyNextEntry(0);
@@ -432,13 +330,10 @@ async function rewriteAppJson(
       newName ?? (typeof parsed.name === "string" ? parsed.name : "Untitled"),
     version: "0.1.0",
   };
-  // The cloned app gets a fresh id — the manifest's `id` field must
-  // track the new folder name, not the template's original id. Without
-  // this the dispatcher's manifest-id check would mismatch the
-  // registry id (which is the folder name).
+  // The manifest `id` must track the new folder name, or the dispatcher's
+  // manifest-id check mismatches the registry id.
   if (newAppId) next.id = newAppId;
-  // Caller-provided `newDesc` wins; otherwise preserve whatever the template
-  // had. Empty strings clear the field.
+  // `newDesc` wins; an empty string clears the field.
   const descSource =
     newDesc ??
     (typeof parsed.description === "string" ? parsed.description : "");
@@ -466,8 +361,7 @@ async function rewritePackageJson(
     return; // unparseable; leave alone.
   }
   const currentName = typeof parsed.name === "string" ? parsed.name : "";
-  // Only rewrite names that follow the `centraid-app-*` convention; leave
-  // unrelated names alone so we don't clobber author intent.
+  // Unrelated names are left alone rather than clobbering author intent.
   if (!currentName.startsWith("centraid-app-")) return;
   parsed.name = `centraid-app-${newAppId}`;
   await fs.writeFile(pkgPath, JSON.stringify(parsed, null, 2) + "\n");
@@ -503,11 +397,6 @@ async function readAppMeta(appDir: string): Promise<{
   }
 }
 
-/**
- * Canonical centraid subdirs every app carries.
- * Idempotent — `mkdir { recursive: true }` is a no-op on existing dirs,
- * so re-cloning or cloning an already-canonical template is fine.
- */
 const CANONICAL_SUBDIRS = ["queries", "actions", "automations"] as const;
 
 async function ensureCanonicalSubdirs(appDir: string): Promise<void> {
@@ -516,12 +405,7 @@ async function ensureCanonicalSubdirs(appDir: string): Promise<void> {
       fs.mkdir(path.join(appDir, sub), { recursive: true })
     )
   );
-  // Seed a brief only when the template didn't ship one of its own.
-  // The brief is a placeholder for an empty `automations/` folder —
-  // its presence means "no manifests here yet," not "this is all the
-  // template provides." Templates that bundle real manifests usually
-  // ship their own README alongside them; either way, we never
-  // clobber existing content.
+  // Seeded only when the template shipped no README of its own.
   const readmePath = path.join(appDir, "automations", "README.md");
   try {
     await fs.access(readmePath);

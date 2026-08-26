@@ -212,8 +212,8 @@ describe(validateManifest, () => {
   it("omits kind when absent and carries an automation kind through", () => {
     // No `kind` → a normal UI app; the field is simply absent.
     expect(validateManifest(baseManifest()).kind).toBeUndefined();
-    // `kind: 'automation'` marks a UI-less automation app (replaces the
-    // legacy `auto.` id prefix) and round-trips through validation.
+    // `kind: 'automation'` marks a UI-less automation app and round-trips
+    // through validation.
     const auto = { ...baseManifest(), kind: "automation" };
     expect(validateManifest(auto).kind).toBe("automation");
   });
@@ -256,7 +256,7 @@ describe(validateManifest, () => {
     expect(() => validateManifest(m)).toThrow(ManifestError);
   });
 
-  // The designed-state partition (issue #839 G7). The block is optional so the
+  // The designed-state partition (#839). The block is optional so the
   // UI-less automation manifests keep validating; when it IS present it must be
   // a CLOSED partition, because a forgotten state would otherwise read as a
   // deliberate non-goal.

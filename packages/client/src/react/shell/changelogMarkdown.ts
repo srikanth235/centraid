@@ -1,27 +1,11 @@
-/*
- * Markdown-lite → HTML for release notes shown in the "What's new" modal.
- *
- * GitHub release notes are simple markdown — headings (### Fixed / ### New),
- * bullet lists, and inline bold/italic/code/links. Rather than pull a full
- * markdown dependency (the desktop keeps deps lean, v0), this renders the
- * subset the notes use. Every raw character is HTML-escaped first, then only
- * our own known tags are re-introduced, so any literal HTML in the notes shows
- * as text — safe to inject even though the notes come from the GitHub API.
- *
- * The output is a string of bare semantic tags (h4/ul/li/p/strong/em/code/a);
- * the modal's CSS module styles them via descendant selectors on the container,
- * so nothing here needs the hashed class names.
- */
+// Markdown-lite → HTML for release notes; escape raw input FIRST, then reintroduce only our tags.
 
 const escapeHtml = (s: string): string =>
   s.replace(/[&<>"']/gu, (c) => `&#${c.charCodeAt(0)};`);
 
-/** Inline spans: `**bold**`, `*italic*`/`_italic_`, `` `code` ``, `[t](url)`. */
 function inline(raw: string): string {
   let s = escapeHtml(raw);
-  // Links first — only http(s), rendered as safe external anchors. `escapeHtml`
-  // leaves `/ : ( ) [ ]` intact and turns `&` (query separators) into `&#38;`;
-  // restore that in the href so the URL works, while the label stays escaped.
+  // Links first; restore `&#38;` in hrefs so query URLs work.
   s = s.replace(
     /\[(?<label>[^\]]+)\]\((?<url>https?:\/\/[^\s)]+)\)/gu,
     (_m, label: string, url: string) => {
@@ -42,12 +26,7 @@ function inline(raw: string): string {
   return s;
 }
 
-/**
- * Render release-notes markdown to an HTML string. Supports ATX headings
- * (`#`..`######`, all collapse to one section-label level), `-`/`*` bullet
- * lists, and paragraphs separated by blank lines, with the inline spans above.
- * Returns `''` for empty/blank input so the caller can show a fallback.
- */
+/** ATX headings (all one level), `-`/`*` bullets, blank-line paragraphs. */
 export function changelogNotesToHtml(md: string): string {
   const lines = md.replace(/\r\n/gu, "\n").split("\n");
   const out: string[] = [];

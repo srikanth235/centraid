@@ -1,20 +1,9 @@
 /*
- * governance: allow-repo-hygiene file-size-limit (#567) the SSE transport, durable lock, hydration, artifact fold, and atomic ledger settlement form one turn transaction whose cleanup ordering must remain visible together
+ * governance: allow-repo-hygiene file-size-limit (#567) transport, durable lock, hydration, artifact fold, and ledger settlement form one turn transaction whose cleanup ordering must stay visible together
  *
- * The SSE turn driver — the transport-and-ledger half of a chat turn,
- * shared by every `_turn`-shaped route. Extracted from `turn-routes.ts`
- * (the per-app surface keeps its app lookups, manifest reads and prompt
- * assembly) so the vault assistant's shell-level turn route drives the
- * SAME stream shape, accumulator, run-ledger fold, and resume-handle
- * bookkeeping without duplicating them.
- *
- * What it owns, start to finish:
- *   - SSE headers, banner comment, 30s heartbeats, client-abort wiring;
- *   - the event accumulator that folds `TurnStreamEvent`s into `runs` /
- *     `run_nodes` (assistant text, tool trace, usage, error);
- *   - the per-(appId, conversationId) async lock;
- *   - `recordTurn` + `noteTurn` against the conversation store;
- *   - the closing `event: end` frame.
+ * The transport-and-ledger half of every `_turn`-shaped route: the stream, the
+ * accumulator, the per-(appId, conversationId) lock, `recordTurn`, the `end`
+ * frame. Routes keep only their own lookups and prompt assembly.
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -54,8 +43,7 @@ function pathInside(candidate: string, root: string): boolean {
   );
 }
 
-/** Same ceiling the inline-artifact path enforces — a harness-reported
- *  workspace file is no more trusted than an inline one. */
+/** A harness-reported workspace file is no more trusted than an inline one. */
 const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
 async function workspaceArtifact(
@@ -80,8 +68,7 @@ async function workspaceArtifact(
   const requested = path.isAbsolute(decoded)
     ? decoded
     : path.resolve(base, decoded);
-  // Containment first, and silently: a path outside the turn's roots is a
-  // boundary decision, not a failure the owner needs told about.
+  // Silently: outside the roots is a boundary decision, not a failure.
   let candidate: string;
   try {
     candidate = await fs.realpath(requested);
@@ -93,10 +80,8 @@ async function workspaceArtifact(
   } catch {
     return undefined;
   }
-  // Past containment the file was meant to be captured, so a miss is a real
-  // dropped artifact — surface it rather than swallowing it. Stat BEFORE
-  // reading: the old order slurped whole directories' worth of bytes into
-  // memory (and any size at all) before deciding it wanted them.
+  // Past containment a miss is a real dropped artifact, so surface it. Stat
+  // BEFORE reading, or the cap decides after the bytes are already in memory.
   try {
     const stat = await fs.stat(candidate);
     if (!stat.isFile()) return undefined;
@@ -138,62 +123,42 @@ export type { TurnAttachmentRef } from "./turn-sse-support.js";
 export interface DriveTurnOptions {
   req: IncomingMessage;
   res: ServerResponse;
-  /** Ledger scope the turn records under (an app id, or `_assistant`). */
   appId: string;
   conversationId: string;
   message: string;
-  /** Working dir handed to the harness as `dataDir`. */
   dataDir: string;
-  /** Canonical host-resolved root chosen from the Centraid workspace selector. */
   workspaceDirectory?: string;
   workspaceKind?: TypeImport_wkgbyq.ConversationWorkspaceKind;
-  /** The route-assembled system-prompt preamble. */
   extraSystemPrompt: string;
   runner: ConversationRunner;
   conversationStore?: ConversationHistoryStore | undefined;
-  /** Central scratch dir for harness-owned `<conversationId>.jsonl` files. */
   conversationHarnessSessionDir: string;
   conversationLocks: Map<string, Promise<void>>;
-  /** Leading SSE comment, e.g. `chat <appId> session <id>`. */
   banner: string;
-  /** Chat register the turn belongs to (`'ask'` = app copilot). */
+  /** `'ask'` is the app copilot. */
   register?: "ask" | "build" | undefined;
   model?: string | undefined;
   thinking?: string | undefined;
   harnessKind?: TypeImport_nu6ai6.HarnessKind | undefined;
-  /** One provider, or the whole set the client has accumulated (issue #567). */
+  /** One provider, or the whole set the client has accumulated (#567). */
   providerConsent?:
     | TypeImport_nu6ai6.HarnessKind
     | readonly TypeImport_nu6ai6.HarnessKind[]
     | undefined;
   additionalDirectories?: string[];
   idempotencyKey?: string | undefined;
-  /**
-   * Modest per-vault turn-concurrency gate (issue #420). When set and already
-   * at capacity, the driver writes a `429` + `Retry-After` and never opens the
-   * SSE stream. The slot is held for the whole drive and released when the
-   * stream ends. Absent in hermetic tests → unbounded (the old behavior).
-   */
+  /** At capacity the driver writes 429 and never opens the stream (#420). */
   limiter?: TurnLimiter | undefined;
-  /** When set, this turn is a regenerate of the given turn id — recorded as
-   *  `turns.retry_of` so the transcript collapses it into a sibling pager
-   *  (issue #420). */
+  /** Recorded as `turns.retry_of`, collapsing the turn into a sibling pager. */
   retryOf?: string | undefined;
   prevHarnessSessionId?: string | undefined;
   prevHarnessKind?: string | undefined;
   prevHarnessUsageSnapshot?: TypeImport_nu6ai6.HarnessUsageSnapshot | undefined;
   /** CAS refs recorded on the turn's `message_in` item. */
   attachmentRefs?: TurnAttachmentRef[];
-  /** Resolved blob paths handed to the harness for multimodal blocks. */
   turnAttachments?: { path: string; mime: string; filename?: string }[];
-  /**
-   * Fire-and-forget LLM auto-title hook (issue #420). Invoked once, ONLY after
-   * the FIRST successful turn of a still-unnamed conversation, with the turn's
-   * user message and assistant answer. The callback owns the cheap-tier
-   * inference and the "apply only if the title is still the derived truncation"
-   * guard; the driver just decides *when* to fire it. Never awaited — a title
-   * miss must never affect the turn.
-   */
+  /** Fired once on the naming turn and never awaited (#420); the callback
+   * owns the inference and the rename guard, the driver only the timing. */
   generateTitle?: (args: {
     conversationId: string;
     userMessage: string;
@@ -201,18 +166,11 @@ export interface DriveTurnOptions {
   }) => void;
 }
 
-/**
- * Drive one chat turn over an SSE response, folding the stream into the
- * run ledger. Resolves when the stream has ended (the response is closed
- * here, always).
- */
+/** The response is always closed here. */
 export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
   const { res } = opts;
 
-  // Backpressure (issue #420): a modest per-vault ceiling on running turns.
-  // Beyond it, 429 + Retry-After BEFORE any SSE header — the client retries
-  // (with the same idempotency key, so a retry can only ever replay). The slot
-  // is held for the whole drive and released in the finally below.
+  // 429 BEFORE any SSE header, so the client's retry can only replay (#420).
   const releaseSlot = opts.limiter?.tryAcquire();
   if (opts.limiter && !releaseSlot) {
     writeTurnBusy(res);
@@ -236,19 +194,14 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     conversationStore,
   } = opts;
 
-  // Start the SSE stream up-front so the harness sees `connected` even if
-  // the harness takes a while to spin up. Heartbeats every 30s keep proxies
-  // from timing out a long quiet stretch (model thinking, big tool call).
+  // Open before the harness spins up; heartbeats survive quiet stretches.
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  // Bounded writer (issue #659 G6): a client that stops draining a turn stream
-  // is dropped instead of buffering the whole run in gateway memory. The turn
-  // itself keeps running and is recorded in the ledger, so a reconnect replays
-  // it from there — nothing is lost by dropping the socket.
+  // Bounded writer (#659): drop a stalled client; the ledger replays the turn.
   const stream = new SseStream(res);
   stream.comment(opts.banner);
   const heartbeat = setInterval(() => {
@@ -260,10 +213,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     stream.event(event.type, JSON.stringify(event));
   };
 
-  // Turn accumulator — folds the harness's `TurnStreamEvent`s into the
-  // `runs` / `run_nodes` audit trace (issue #90). The harness's `usage`
-  // event (when emitted) is folded into the turn's `step` node so the
-  // ledger carries real token + cost accounting for chat turns.
+  // Folds events into the `runs`/`run_nodes` trace; `usage` lands on `step` (#90).
   const turnStartedAt = Date.now();
   const acc = {
     aiText: "",
@@ -336,7 +286,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         acc.finalText = acc.aiText || event.text;
         return;
       case "usage":
-        // Keep cost + provenance for the ledger (issue #514) — do not strip.
+        // Keep cost + provenance for the ledger (#514) — do not strip.
         acc.usage = {
           ...(event.model === undefined ? {} : { model: event.model }),
           ...(event.harness === undefined ? {} : { harness: event.harness }),
@@ -379,9 +329,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         });
         break;
       }
-      // No ledger state to fold for these; the SSE write still happens via
-      // `writeEvent`. Listed explicitly (not a default) so a newly added
-      // event type fails the exhaustiveness check instead of slipping through.
+      // Listed, never `default`: a new event type must fail exhaustiveness.
       case "assistant.start":
       case "reasoning.delta":
       case "context":
@@ -415,8 +363,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
   req.on("close", onClientClose);
   req.on("error", onClientClose);
 
-  // Harness-owned scratch file in the central scratch dir. Make sure the
-  // parent dir exists before any harness writes to it.
   const sessionFile = path.join(
     opts.conversationHarnessSessionDir,
     `${conversationId}.jsonl`
@@ -459,13 +405,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         : undefined;
       lockLeaseHeartbeat?.unref?.();
       try {
-        // Idempotency (issue #420): a duplicate POST with a key that already names a
-        // recorded turn on this conversation replays the recorded answer instead of
-        // re-running the model. The per-conversation lock makes the in-flight case
-        // fall out for free — a duplicate that arrives while the first turn is still
-        // running QUEUES behind this same lock, so by the time it acquires the lock
-        // the first turn has recorded and this branch replays it (no 409 needed, no
-        // double-run). Replay skips the harness AND recordTurn, so no duplicate row.
+        // A key naming a recorded turn replays it, skipping harness AND
+        // recordTurn; in-flight duplicates queue on the lock, so no 409 (#420).
         if (opts.idempotencyKey && conversationStore) {
           const recorded = conversationStore.findRecordedTurn(
             appId,
@@ -488,14 +429,9 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         );
         const targetHarnessKind =
           opts.harnessKind ?? (await runner.resolveHarnessKind?.());
-        // The harness's failover ladder can land on a provider this route never
-        // targeted, and every provider has its OWN binding and its OWN hydration
-        // watermark. So resume + hydration are resolved PER RUNG, on demand,
-        // through `resumeForKind` — one planned-once-per-kind memo. Resolving it
-        // eagerly against the primary target and reusing that plan down the
-        // ladder silently dropped the whole conversation whenever rung 0 was
-        // skipped (breaker open), and folded the full ledger on every turn even
-        // when no rung ever needed it.
+        // Every provider has its OWN binding and hydration watermark: resolve
+        // resume PER RUNG via `resumeForKind`. One eager plan reused down the
+        // ladder drops the conversation whenever rung 0 is skipped.
         const harnessSessions = conversationStore
           ? new HarnessSessions({
               binding: (kind) => {
@@ -611,11 +547,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           req.off("close", onClientClose);
           req.off("error", onClientClose);
           if (conversationStore && !acc.consentRequired) {
-            // Retire a binding the harness had to abandon (D9). `hydrationKind:
-            // 'recovery'` means the resume handle we handed this harness was
-            // rejected and it self-healed onto a fresh session. Left `active`,
-            // that dead handle would be re-offered on every subsequent turn,
-            // paying a failed resume + a full-ledger recovery fold each time.
+            // Retire the binding the harness abandoned (D9); left active, the
+            // dead handle costs a failed resume + recovery fold every turn.
             if (
               runResult?.hydrationKind === "recovery" &&
               runResult.harnessKind
@@ -634,26 +567,18 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                 );
               }
             }
-            // Whether this conversation is still unnamed BEFORE we record — an
-            // empty title is the "first turn of a new thread" signal (recordTurn
-            // sets the derived truncation below). Read once here so the auto-title
-            // hook fires exactly on the naming turn (issue #420).
+            // Read BEFORE recordTurn, which sets the derived title (#420).
             const wasUnnamed =
               conversationStore.getSessionMeta(appId, conversationId)?.title ===
               "";
-            // Persist the turn as a `runs` row + its `run_nodes` trace. The
-            // assistant reply (or the turn error) is one `step` node ordered
-            // after the turn's `tool` nodes — matching the transcript shape
-            // `getSession` reconstructs.
+            // One `step` after the `tool` nodes: the shape `getSession` rebuilds.
             try {
               const endedAt = Date.now();
               const roots = [
                 opts.workspaceDirectory ?? opts.dataDir,
                 ...(opts.additionalDirectories ?? []),
               ];
-              // Candidate nodes are ledger-ordered. Attach each node before the
-              // next so optional upload failures keep their notices aligned with
-              // the originating tool item.
+              // Strictly in order: a failure notice must stay beside its item.
               const attachNextCandidate = async (
                 index: number
               ): Promise<void> => {
@@ -710,8 +635,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
               };
               await attachNextCandidate(0);
               const nodes: TurnNode[] = [...acc.toolNodes];
-              // The turn consumed tokens whether it ended in a reply or an
-              // error, so the `usage` totals apply to either step node.
+              // Tokens were spent either way: usage applies to both step shapes.
               const usage = acc.usage ?? {};
               if (acc.errorMessage !== undefined) {
                 nodes.push({
@@ -733,10 +657,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
               }
               conversationStore.recordTurn(appId, {
                 conversationId,
-                // The harness's surface decides the ledger kind: the builder-capable
-                // unified runner reports `'build'`, the data-only runner leaves it
-                // unset → recorded as `'chat'` (issue #181). Read statically off the
-                // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
+                // Off the runner, not the result: an errored turn still tags (#181).
                 ...(runner.runKind ? { kind: runner.runKind } : {}),
                 ...(opts.retryOf === undefined
                   ? {}
@@ -802,9 +723,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
             } catch {
               /* best-effort — a ledger miss never fails the turn */
             }
-            // LLM auto-title (issue #420): only on the naming turn of a new thread,
-            // only when the turn actually produced an answer. Fire-and-forget — the
-            // callback owns the cheap inference and the rename guard.
+            // Only on the naming turn, and only when an answer was produced (#420).
             if (
               wasUnnamed &&
               opts.generateTitle &&

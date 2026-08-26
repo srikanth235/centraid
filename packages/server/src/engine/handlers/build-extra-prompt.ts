@@ -8,7 +8,7 @@
  * Lives in app-engine so all hosts see identical app context. The harness
  * never assembles app-specific content itself.
  *
- * Post-silo (issue #286 phase 2) there is no per-app database to describe:
+ * Post-silo (#286) there is no per-app database to describe:
  * the fragment carries the app's identity, its declared handler catalog
  * (the dispatcher's whole routing surface), and its vault declaration —
  * canonical scopes and/or ext-band tables. Data questions ride the vault

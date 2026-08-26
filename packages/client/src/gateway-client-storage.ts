@@ -1,23 +1,9 @@
 /*
- * Renderer-side client for the gateway's storage-connection surface (issue
- * #367 §C1/§D — `packages/server/src/routes/storage-routes.ts`). Backs the
- * Gateway page's Storage card (read-only: status + usage) and the Settings
- * → Storage screen (full CRUD + test + the per-vault attach flow).
- *
- *   GET    /centraid/_gateway/storage/connections
- *   POST   /centraid/_gateway/storage/connections
- *   PATCH  /centraid/_gateway/storage/connections/<id>
- *   DELETE /centraid/_gateway/storage/connections/<id>
- *   POST   /centraid/_gateway/storage/connections/<id>/test
- *   GET    /centraid/_gateway/storage/status
- *   GET    /centraid/_gateway/storage/usage
- *   PUT    /centraid/_vault/blob-store        (per-vault attach — vault-routes.ts)
- *
- * Every connection row NEVER carries a secret field, sealed or not — the
- * gateway simply never puts one on the wire (storage-connections.ts).
+ * Renderer client for gateway storage-connections (#367). A connection row
+ * NEVER carries a secret field — the gateway never puts one on the wire.
  */
 
-/* eslint-disable max-classes-per-file -- the two typed gate errors (recovery-kit + home-profile) are one storage-connection boundary (#436) */
+/* oxlint-disable max-classes-per-file -- the two typed gate errors (recovery-kit + home-profile) are one storage-connection boundary (#436) */
 
 import {
   auth,
@@ -28,7 +14,7 @@ import {
 } from "./gateway-client-core.js";
 import { consumeSseFrames, frameData } from "./turn-stream.js";
 
-/** One kind only (#436 §2): every connection is a managed provider home bundle. */
+/** One kind only (#436): every connection is a managed provider home bundle. */
 export type StorageConnectionKind = "provider";
 
 export interface StorageConnectionDTO {
@@ -54,8 +40,7 @@ export interface CreateProviderConnectionInput {
 
 export type CreateStorageConnectionInput = CreateProviderConnectionInput;
 
-/** Thrown for the recovery-kit gate specifically, so callers can branch on
- *  it without string-matching a generic `GatewayClientError`. */
+/** Recovery-kit gate — branch on this, do not string-match `GatewayClientError`. */
 export class RecoveryKitNotConfirmedError extends Error {
   constructor(message: string) {
     super(message);
@@ -63,9 +48,7 @@ export class RecoveryKitNotConfirmedError extends Error {
   }
 }
 
-/** Thrown when the provider doesn't advertise the `home` profile (issue #436
- *  §1) — the create/attach route's 400 `provider_not_home_profile`. Carries the
- *  parsed list of missing home capabilities so the UI can name them plainly. */
+/** 400 `provider_not_home_profile` (#436 §1). Carries missing caps for the UI. */
 export class ProviderNotHomeProfileError extends Error {
   readonly missingCapabilities: string[];
   constructor(message: string, missingCapabilities: string[]) {
@@ -75,8 +58,7 @@ export class ProviderNotHomeProfileError extends Error {
   }
 }
 
-/** Pull the `(missing a, b, c)` clause out of the gateway's home-profile
- *  message into a clean capability list. Empty when none was named. */
+/** Parse `(missing a, b, c)` from the gateway message. Empty when unnamed. */
 function parseMissingCapabilities(message: string | undefined): string[] {
   const match = /missing (?<capabilities>[^)]+)\)/u.exec(message ?? "");
   const capabilities = match?.groups?.capabilities;
@@ -87,7 +69,6 @@ function parseMissingCapabilities(message: string | undefined): string[] {
     .filter((c) => c.length > 0);
 }
 
-/** Every configured storage connection (never carries a secret field). */
 export async function listStorageConnections(): Promise<
   StorageConnectionDTO[]
 > {
@@ -103,11 +84,7 @@ export async function listStorageConnections(): Promise<
   return out.connections ?? [];
 }
 
-/**
- * Create a connection. Refused with `RecoveryKitNotConfirmedError` (HTTP
- * 409) when the connection is usable for `cas` and the operator hasn't
- * exported, re-selected, and verified the current recovery kit.
- */
+/** 409 `RecoveryKitNotConfirmedError` until the current recovery kit is verified. */
 export async function createStorageConnection(
   input: CreateStorageConnectionInput
 ): Promise<StorageConnectionDTO> {
@@ -184,7 +161,6 @@ export type StorageConnectionTestResult =
   | { ok: true; detail: string }
   | { ok: false; error: string };
 
-/** Real signed HEAD probe against the connection's bucket. */
 export async function testStorageConnection(
   id: string
 ): Promise<StorageConnectionTestResult> {
@@ -200,12 +176,7 @@ export async function testStorageConnection(
   return readJson<StorageConnectionTestResult>(res, "test storage connection");
 }
 
-/**
- * Bounded storage-tier metrics (issue #405 §7) — process-lifetime custody
- * counters that make cache health visible. All byte/count fields reset on
- * gateway restart. `budgetBytes` is `null` for an unlimited tier (no disk to
- * measure); the card shows an "unlimited" state rather than a budget bar.
- */
+/** Process-lifetime custody counters (#405). Reset on restart; `budgetBytes` null = unlimited. */
 export interface StorageCacheStatusDTO {
   spoolBytes: number;
   budgetBytes: number | null;
@@ -242,11 +213,10 @@ export interface StorageVaultStatusDTO {
     consecutiveFailures: number;
   };
   throttleBytesPerSec?: number;
-  /** Bounded storage-tier health (issue #405 §7); absent on older gateways. */
+  /** Absent on older gateways (#405). */
   cache?: StorageCacheStatusDTO;
 }
 
-/** Per-vault replication progress — backs the Storage card's per-vault rows. */
 export async function getStorageStatus(): Promise<StorageVaultStatusDTO[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_gateway/storage/status", {
@@ -260,11 +230,7 @@ export async function getStorageStatus(): Promise<StorageVaultStatusDTO[]> {
   return out.vaults ?? [];
 }
 
-/**
- * Authenticated custody-transition stream. A strict client uses this as the
- * completion edge: the durable local receipt may already be claimed, while a
- * later event makes the offsite acknowledgment visible without polling lag.
- */
+/** Completion edge for offsite ack — local receipt may already be claimed. */
 export async function streamStorageCustody(
   onStatus: (vaults: StorageVaultStatusDTO[]) => void,
   signal: AbortSignal
@@ -293,7 +259,7 @@ export async function streamStorageCustody(
           };
           if (Array.isArray(parsed.vaults)) onStatus(parsed.vaults);
         } catch {
-          // A malformed frame is isolated; the next custody event remains useful.
+          // Isolate a malformed frame; the next custody event remains useful.
         }
       },
       { signal }
@@ -303,7 +269,6 @@ export async function streamStorageCustody(
   }
 }
 
-/** One store class's usage figures, as `centraid-storage-provider/1` reports them. */
 export interface StoreUsageReportDTO {
   bytesStored: number;
   objectCount: number;
@@ -315,19 +280,16 @@ export interface StoreUsageReportDTO {
 export interface StorageConnectionUsageDTO {
   connectionId: string;
   kind: StorageConnectionKind;
-  /** `null` before the first successful poll, or if the provider doesn't meter.
-   *  Keyed by store class — `backup`, `cas`, `derived` (PROTOCOL.md StoreClass). */
+  /** `null` before first poll or if unmetered. Keyed by store class (PROTOCOL.md). */
   providerReported: Partial<
     Record<"backup" | "cas" | "derived", StoreUsageReportDTO>
   > | null;
-  /** Locally-computed replicated bytes (custody's own ground truth) — compare
-   *  against `providerReported` for an honest drift/integrity read. */
+  /** Custody's own ground truth — compare against `providerReported` for drift. */
   localReplicatedBytes: number;
   fetchedAt?: string;
   error?: string;
 }
 
-/** Per-connection usage — the quota bar's data source. */
 export async function getStorageUsage(): Promise<StorageConnectionUsageDTO[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_gateway/storage/usage", {
@@ -352,7 +314,6 @@ export interface BlobStoreSettingsDTO {
   encrypt?: boolean;
 }
 
-/** The addressed vault's current byte-custody settings. */
 export async function getVaultBlobStore(): Promise<BlobStoreSettingsDTO> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/blob-store", {
@@ -366,12 +327,7 @@ export async function getVaultBlobStore(): Promise<BlobStoreSettingsDTO> {
   return out.blob_store;
 }
 
-/**
- * Attach a storage connection to the addressed vault's CAS remote tier
- * (`PUT /centraid/_vault/blob-store`, vault-routes.ts). Refused with
- * `RecoveryKitNotConfirmedError` (409) the same way `createStorageConnection`
- * is; there is no bypass for exporting live remote custody.
- */
+/** 409 `RecoveryKitNotConfirmedError` — no bypass for exporting live remote custody. */
 export async function attachVaultStorageConnection(
   connectionId: string
 ): Promise<BlobStoreSettingsDTO> {
@@ -395,8 +351,7 @@ export async function attachVaultStorageConnection(
   return out.blob_store;
 }
 
-/** Revert the addressed vault to local-only storage (`blob_store: {kind:
- *  'fs'}`) — never gated by the recovery kit; going local-only is always safe. */
+/** Local-only (`kind: 'fs'`) — never gated by the recovery kit. */
 export async function detachVaultStorageConnection(): Promise<BlobStoreSettingsDTO> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/blob-store", {

@@ -1,52 +1,8 @@
 /**
- * The People shelf's roster (v4 handoff §5): every person the member has
- * CONFIRMED on a face, with how many photographs carry them and which ones —
- * PLUS, since issue #711's review, the unconfirmed proposals sitting beside
- * them (v4 handoff proto :3760 `PPEOPLE`: named cards next to "Unnamed"
- * cards, each with its own count — "People as a browsable set. Unnamed
- * people are shown as unnamed, not hidden.").
- *
- * The two stay in SEPARATE arrays (`people` / `proposals`), never merged
- * into one list, because they answer different questions with different
- * truth values:
- *   - `people`: "who is in my library" — a name the member said yes to.
- *   - `proposals`: "what has the enricher noticed that nobody has named or
- *     rejected yet" — evidence, not an identity. A proposal NEVER carries a
- *     `name`; the type has no field for one, so a caller cannot render a
- *     name for a proposal by accident.
- *
- * HOW A PROPOSAL IS GROUPED — and the one honest limit of this grouping:
- * `media_face_region.party_id` is "candidate person from the People match,
- * WHEN THE MODEL OFFERED ONE" (enrich-publishers.ts's own doc comment on
- * `FaceRegionPayload`) — nullable, and never treated as a name here even
- * when it resolves to an already-confirmed party, because THIS region was
- * never confirmed as them. Regions that share a non-null `party_id` are one
- * proposal (the model's own claim that they are the same face, across
- * however many photographs). A region with no candidate at all is its own
- * proposal of one — which is *every* region today: no shipped producer of
- * face regions sets `party_id` at all. (The `face-proposer` automation that
- * used to write them was deleted in issue #712 — face detection is becoming
- * the Photos app's own, and it will be identity-blind for the same reason:
- * naming a person is the owner's assertion, made in the app.) That is not
- * this query approximating anything: there is no face-similarity signal in
- * this schema to group strangers by today, so every unconfirmed face
- * honestly IS its own proposal until an identity-matching enricher ships —
- * at which point regions sharing its `party_id` group for free, no shape
- * change needed here.
- *
- * `unmatchedTotal` is the same count `queries/face-queue.ts` derives for the
- * Face Review surface (same entity, same `review_state = 'proposed'` filter,
- * issue #712 — an answered region, rejected or deliberately left unnamed, is
- * not pending on either surface) — computed once here so the People shelf's
- * pending note no longer needs its own separate read of a different query to
- * say a true number.
- *
- * `asset_ids` rides along so one read serves both halves of the shelf — the
- * card grid AND one person's own timeline sub-state — without a second round
- * trip per person. It is bounded by the same window the region read is.
- *
- * A consent denial is a first-class outcome, not an error: the UI renders it
- * as the permission screen (§13).
+ * The People shelf's roster (§5). Confirmed people and unconfirmed proposals
+ * stay in SEPARATE arrays (#711): a proposal is evidence, not an identity, and
+ * has no `name` field. Nothing writes `party_id` and there is no
+ * face-similarity signal, so a proposal of one region is honest (#712).
  *
  * @type {import('@centraid/server/engine').QueryHandler}
  */
@@ -59,7 +15,7 @@ interface RawRegion {
   bbox_json?: unknown;
   party_id?: string | null;
   confirmed_by_party_id?: string | null;
-  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
+  /** proposed | confirmed | rejected | dismissed (#712). */
   review_state?: string | null;
 }
 
@@ -86,25 +42,15 @@ interface RawContent {
   content_uri?: unknown;
 }
 
-/** How many confirmed+unconfirmed regions one read covers. A face region is
- *  one row per person per photograph, so this is a photograph budget, not a
- *  person one. Matches `queries/face-queue.ts`'s own bound so the two
- *  queries see the same backlog and can never disagree on its size. */
+/** Must match `queries/face-queue.ts` or they disagree on the backlog. */
 const REGION_LIMIT = 4000;
 
-/** How many unconfirmed proposal GROUPS the shelf shows a cover for. The
- *  grid teases the backlog (a handful of covers); Face Review is where the
- *  member works the whole thing one at a time (§8). Bounding this is what
- *  keeps the grid's asset+content join cheap on a library with a large
- *  unreviewed backlog. */
+/** Bounded to keep the grid's asset+content join cheap. */
 const PROPOSAL_LIMIT = 60;
 
 interface ProposalGroup {
   partyId: string | null;
   assetIds: Set<string>;
-  /** The region this group's cover crop is drawn from — its own bbox and
-   *  asset, first-seen order (region_id ascending, same tiebreak
-   *  face-queue.ts uses since there is no created_at column to sort on). */
   coverRegion: RawRegion;
 }
 
@@ -142,9 +88,7 @@ export default async function people({ ctx }: HandlerArgs) {
       regions.map((region) => [region.region_id, region] as const)
     );
 
-    // ── unconfirmed proposals — grouped, never named (see file header) ──
-    // Still-open proposals only: a rejected or dismissed region has been
-    // answered, so it is neither a person's face nor anybody's backlog.
+    // Still-open only: an answered region is nobody's backlog.
     const proposalGroups = new Map<string, ProposalGroup>();
     for (const group of grouped.pendingByParty) {
       const coverRegion = group.coverRegionId
@@ -217,11 +161,7 @@ export default async function people({ ctx }: HandlerArgs) {
       const { src, thumb } = srcOf(content);
       return {
         cluster_id: key,
-        // Carried for reference (e.g. spotting the same candidate across
-        // reloads) — NEVER resolved to a name here. See file header.
         party_id: group.partyId,
-        // Distinct photographs behind this proposal — an exact count, never
-        // an estimate, the same contract `Person.count` holds.
         count: group.assetIds.size,
         region_id: group.coverRegion.region_id,
         cover: asset
@@ -245,20 +185,14 @@ export default async function people({ ctx }: HandlerArgs) {
           name: nameOf.get(entry.id) ?? null,
           count: entry.assetIds.length,
           asset_ids: entry.assetIds,
-          // The distinct parties who answered, each carrying whatever name
-          // `core.party` holds for them — `null` where the confirmer is not a
-          // `kind = 'person'` party this read named (a device or a service that
-          // acted for the owner), which the view renders as "someone else on
-          // this library" rather than as an invented name.
+          // `null` for a non-person confirmer: the view says "someone else".
           confirmed_by: entry.confirmerIds.map((confirmerId) => ({
             party_id: confirmerId,
             name: nameOf.get(confirmerId) ?? null,
           })),
         })),
       proposals,
-      // Same derivation as face-queue.ts's `unmatchedTotal` — the pending
-      // note's live count, not the (usually smaller) number of proposal
-      // GROUPS rendered above.
+      // The pending count, not the groups above.
       unmatchedTotal: grouped.pendingTotal,
     };
   } catch (error) {

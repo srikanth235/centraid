@@ -1,4 +1,4 @@
-// The vector-extension loader (issue #721 E3). Two properties are worth a test
+// The vector-extension loader (#721). Two properties are worth a test
 // and neither is "does sqlite-vec work": that a failed load is a CAPABILITY
 // ANSWER rather than a broken vault, and that the extension-loading permission
 // does not survive the load — the owner's `vault_sql` surface runs on this same

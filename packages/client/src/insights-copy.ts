@@ -1,4 +1,4 @@
-// Insights' cross-surface copy (issue #805, slice C).
+// Insights' cross-surface copy (#805).
 //
 // `react/screens/InsightsScreen.tsx` + `react/shell/routes/InsightsRoute.tsx`
 // and mobile's `apps/insights/*` render the same rollup and had four copies of

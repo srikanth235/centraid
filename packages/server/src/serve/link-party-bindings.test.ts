@@ -1,5 +1,5 @@
 /*
- * The link ceremony's vault-side footprint (issue #821): approving a link on
+ * The link ceremony's vault-side footprint (#821): approving a link on
  * both sides must leave a `share_party_vault_binding` row in the vault that
  * holds the party, revoking it must tombstone that row, and re-linking must
  * re-light the SAME row rather than trip the table's total UNIQUE key.

@@ -1,5 +1,5 @@
 /*
- * Who a replica shape is FOR (#726 P4). `consent_access_grant` selects a
+ * Who a replica shape is FOR (#726). `consent_access_grant` selects a
  * grantee two ways — `app_id` or `grantee_party_id` — and this module is the
  * only place that difference is visible. Everything downstream
  * (`evaluateConsent`, row filters, field masks, `projectReplicaPage`) works on

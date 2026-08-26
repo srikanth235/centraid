@@ -1,5 +1,5 @@
 /*
- * Tripwire for `types.ts`'s `LockerItemType` (issue #712 C4).
+ * Tripwire for `types.ts`'s `LockerItemType` (#712).
  *
  * `types.ts` is deliberately type-only (no runtime members — see its own
  * header), so the union cannot be exported as a value and compared directly

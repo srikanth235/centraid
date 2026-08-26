@@ -1,11 +1,4 @@
-/**
- * Audit-row helpers for automation handler runs (issue #80).
- *
- * Split out of `runner.ts` so the handler orchestrator stays
- * focused on worker/message orchestration. Everything here is
- * pure-ish — the only side-effect surface is the supplied
- * `AutomationRunsStore` reference.
- */
+/** Audit-row helpers for automation handler runs (#80). */
 
 import { randomUUID } from "node:crypto";
 
@@ -21,23 +14,15 @@ import { resolveItemCost } from "@centraid/server/engine";
 
 import type { HistoryConfig } from "../manifest/manifest.js";
 
-/**
- * Sink for live run-stream events (issue #158). The host wires this to its
- * `runId`-keyed bus; when unwired it's a no-op (the durable ledger still
- * records every node). A wedged sink must never fail the handler — every
- * emit is guarded.
- */
+/** Live run-stream sink (#158), host-wired to its `runId` bus; unwired = no-op
+ *  (ledger still records all nodes). Every emit is guarded — a wedged
+ *  sink must never fail the handler. */
 export type RunEventSink = (ev: AutomationTurnStreamEvent) => void;
 export const noopRunEventSink: RunEventSink = () => undefined;
 
-const AUDIT_FIELD_BYTE_CAP = 64 * 1024; // 64 KB hard cap on args_json / output_json per node.
+const AUDIT_FIELD_BYTE_CAP = 64 * 1024; // args_json / output_json per node.
 
-/**
- * Stringify a value for an audit field, capping the byte length at
- * 64 KB. Oversize payloads are replaced with a `{_truncated, bytes,
- * head}` envelope so the UI / debugging path can see the size without
- * blowing up the file.
- */
+/** Capped stringify; oversize payloads become a `{_truncated, bytes, head}` envelope. */
 export function truncateForAudit(value: unknown): string | undefined {
   if (value === undefined) return undefined;
   let json: string;
@@ -67,12 +52,7 @@ export interface RunRef {
   output?: unknown;
 }
 
-/**
- * Project a `turns` row into the handler-facing `ctx.runs` ref. Each fire is
- * the automation's stable execution conversation, so the automation ref is passed in
- * (it's no longer the conversation id); `inputText` is the turn's ordinal-0
- * `message_in` payload, fetched by the caller.
- */
+/** Project a `turns` row into the handler-facing `ctx.runs` ref; `automationRef` is the automation's stable id, not a conversation id. */
 export function rowToRunRef(
   row: Turn,
   automationRef: string,
@@ -130,12 +110,7 @@ export interface HandlerReturnEnvelope {
   output?: unknown;
 }
 
-/**
- * Pull `{ summary, output }` out of a handler's return value. Handlers
- * may return undefined (no-op) or `{ summary?, output? }`. Anything
- * else (bare string, number, array) is ignored — `summary` is only
- * picked up from a returned object.
- */
+/** Pull `{ summary?, output? }` out of a handler's object return; anything else is ignored. */
 export function extractReturnEnvelope(value: unknown): HandlerReturnEnvelope {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     const v = value as Record<string, unknown>;
@@ -154,27 +129,21 @@ export function makeNodeId(runId: string, ordinal: number): string {
 export interface OpenRunNodeArgs {
   store: ConversationStore;
   emit: RunEventSink;
-  /** The turn this item belongs to. */
   runId: string;
   ordinal: number;
-  /** Stable harness-native correlation key for overlapping tool calls. */
+  /** Harness-native correlation key for overlapping tool calls. */
   callId?: string;
   batchId?: number;
   kind: ItemKind;
   /** Tool name or `'delegate'`. */
   name?: string;
   args?: unknown;
-  /** Lossless harness event envelope, when one exists. */
+  /** Lossless harness event envelope, if any. */
   rawJson?: string;
   started: number;
 }
 
-/**
- * Open a durable "running" run node (issue #158, ledger-tail hybrid) AND
- * publish `item.start` to the live bus. Returns the item id for the
- * matching `closeRunNode`. Store + sink failures are swallowed — a broken
- * ledger or wedged subscriber must never fail the handler.
- */
+/** Open a durable "running" node (#158) AND publish `item.start`; failures swallowed. */
 export function openRunNode(args: OpenRunNodeArgs): string {
   const nodeId = makeNodeId(args.runId, args.ordinal);
   const argsJson =
@@ -213,17 +182,12 @@ export function openRunNode(args: OpenRunNodeArgs): string {
   return nodeId;
 }
 
-/**
- * Map a chat `usage` event (issue #158, Phase 2) onto the token/model fields
- * `closeRunNode` persists. Returns `{}` when no usage was observed (a harness
- * still on the collect-on-exit path).
- */
+/** Map a turn-stream `usage` event (#158) onto `closeRunNode`'s token/model fields; `{}` when none observed. */
 export function usageCloseFields(
   usage: Extract<TurnStreamEvent, { type: "usage" }> | undefined
 ): Partial<CloseRunNodeArgs> {
   if (!usage) return {};
-  // Prefer harness cost when present; catalog fill happens in closeRunNode when
-  // tokens exist but cost does not (issue #514).
+  // Prefer harness cost; catalog fill happens in closeRunNode (#514).
   const costSource =
     usage.costSource ??
     (usage.costUsd === undefined ? undefined : ("harness" as const));
@@ -255,17 +219,14 @@ export interface CloseRunNodeArgs {
   callId?: string;
   ok: boolean;
   result?: unknown;
-  /** Lossless harness completion envelope, when one exists. */
+  /** Lossless harness completion envelope, if any. */
   rawJson?: string;
   error?: string;
-  /** Child turn id for an item that spawned a child turn. Dormant — no current producer. */
+  /** Child turn id for an item that spawned one. Dormant: no producer. */
   childTurnId?: string;
   started: number;
   ended: number;
-  /**
-   * Token/model rollup for a `delegate` node (issue #158, Phase 2). Learned at
-   * end-of-turn from the turn plane's `usage` event; feeds `runs.total_*`.
-   */
+  /** Token/model rollup for a `delegate` node (#158); feeds `runs.total_*`. */
   model?: string;
   harness?: string;
   inputTokens?: number;
@@ -276,12 +237,8 @@ export interface CloseRunNodeArgs {
   costSource?: "harness" | "estimated";
 }
 
-/**
- * Settle a node opened by `openRunNode`: write the outcome to the ledger
- * AND publish `item.end`. The `item.end` `result` and `rawJson` carry the
- * untruncated values (they're ephemeral on the bus); the ledger row keeps the
- * 64 KB-capped copies.
- */
+/** Settle an open node: ledger write AND `item.end`. Bus gets untruncated
+ *  values (ephemeral); the ledger keeps the capped copies. */
 export function closeRunNode(args: CloseRunNodeArgs): void {
   const durationMs = args.ended - args.started;
   const outputJson =

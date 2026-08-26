@@ -1,36 +1,12 @@
-// Frame-drop instrumentation for the #659 scroll probe.
-//
-// React Native publishes no frame timeline to Maestro or adb, so a frame-drop
-// number can only come from inside the app. This is that hook and nothing more:
-// it counts `requestAnimationFrame` callbacks over a window the probe asks for,
-// and reports how many the display could have delivered in the same window.
-//
-// Two things keep it honest.
-//
-// **It self-calibrates the denominator.** A 60 fps result is excellent on a
-// 60 Hz phone and 50 % dropped on a ProMotion iPhone, so a hardcoded 60 would
-// report whatever the author assumed rather than what the device did. The target
-// rate is derived from the fastest intervals actually observed in the sample —
-// the periods where nothing was dropped — and snapped to a real display rate.
-// The resolved rate is reported alongside the percentage so no reader has to
-// guess which denominator produced it.
-//
-// **It runs only when asked.** There is no ambient timer: `sampleFrames`
-// schedules the first frame when it is called and stops scheduling when the
-// window closes. Nothing in this module starts on import (D5 — every poller
-// justified; this one exists for the duration of one measurement).
+// Frame-drop probe (#659). Self-calibrate Hz from observed intervals
+// (hardcoded 60 is wrong on ProMotion). No ambient timer (D5).
 
 export interface FrameSample {
-  /** Frames the app actually rendered inside the window. */
   frames: number;
-  /** Frames the display could have delivered at `targetHz`. */
   expectedFrames: number;
   elapsedMs: number;
-  /** Frames per second the app sustained across the window. */
   fps: number;
-  /** Display rate the sample resolved to; the denominator for `droppedPercent`. */
   targetHz: number;
-  /** `(expected - frames) / expected`, clamped at zero, as a percentage. */
   droppedPercent: number;
 }
 
@@ -39,16 +15,13 @@ export interface FrameSamplerDeps {
   now: () => number;
 }
 
-/** Rates a real display runs at. A p10 interval near one of these snaps to it. */
+/** Real display rates; a p10 interval near one of these snaps to it. */
 const KNOWN_REFRESH_HZ = [120, 90, 60, 30] as const;
 const SNAP_TOLERANCE = 0.12;
 
 /**
- * Count rendered frames for `durationMs`, then report against the rate the
- * device demonstrated it can hit.
- *
- * The window is measured from the first callback rather than from the call, so
- * the cost of scheduling the first frame is not charged as a drop.
+ * Count frames for `durationMs` against the rate the device demonstrated.
+ * Window starts at the first callback — scheduling cost is not a drop.
  */
 export async function sampleFrames(
   durationMs: number,
@@ -101,12 +74,8 @@ export async function sampleFrames(
 }
 
 /**
- * The rate the display was capable of during this sample.
- *
- * The 10th-percentile interval is the app's best sustained pace: a single
- * anomalously short delta cannot move it the way a minimum could, and dropped
- * frames only ever make intervals longer. Snapping to a real refresh rate when
- * it is close keeps the denominator from drifting run to run.
+ * Display rate for this sample. p10 interval = best sustained pace (a min
+ * would follow one short delta; drops only lengthen). Snap to a real Hz.
  */
 export function resolveTargetHz(intervals: readonly number[]): number {
   const positive = intervals
@@ -122,13 +91,8 @@ export function resolveTargetHz(intervals: readonly number[]): number {
 }
 
 /**
- * One line the probe copies out. Machine-first on purpose: the harness reads it
- * with a Maestro `copyTextFrom`, so it has to survive being turned into a plain
- * string with no structure around it. The exact string is pinned by this
- * module's test — that assertion is the contract with
- * `tests/agent-e2e-mobile/flows/scroll-frames.mjs`, which parses it with
- * a `dropped=<number>%` match. No parser lives here: the probe is `.mjs` and
- * could not import one.
+ * One Maestro `copyTextFrom` line. Shape is pinned by this module's test —
+ * `scroll-frames.mjs` parses `dropped=<number>%`. No parser here (probe is `.mjs`).
  */
 export function formatFrameSample(sample: FrameSample): string {
   return [

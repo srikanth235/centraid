@@ -1,9 +1,8 @@
 /*
- * Staged-rollout wiring (issue #468, I5/I6).
+ * Staged-rollout wiring (#468, I5/I6).
  *
- * Thin Electron-facing surface over `update-rollout-core.ts`. The real
- * auto-updater state machine (I4) will call into here; until then the
- * unpackaged dev loop keeps using `update-watcher.ts` (dist mtime poll).
+ * Thin Electron-facing surface over `update-rollout-core.ts` —
+ * `update-watcher.ts` gates every announce through `admitUpdate`.
  *
  * Persists a stable per-install bucket id under userData so the time ramp
  * is not re-rolled every check.

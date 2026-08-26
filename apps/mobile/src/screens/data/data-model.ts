@@ -1,17 +1,6 @@
-// What the Data place SAYS, derived from what the gateway actually sent
-// (#765, spec §6).
-//
-// Pure on purpose: every sentence on that screen is a fact about the vault,
-// so the mapping from census/graph/browse payloads to rows, subs, captions
-// and counts is the part worth testing, and it is tested here without a
-// renderer (the convention `screens/home/tile-model.ts` already follows).
-//
-// The rule this file exists to hold: a clause appears only when the payload
-// carries it. `lib/atlas.ts` types the phone's read surface deliberately
-// narrower than the wire — there are no write timestamps in the census and no
-// per-kind write pulse — so the reference's `12 written today` and its
-// `4 min` meta column have NOTHING behind them here and are absent rather
-// than approximated. Same for the reference's `Written today` filter chip.
+// What the Data place SAYS, from what the gateway actually sent (#765, §6). A
+// clause appears only when the payload carries it: the phone's read surface has
+// no write timestamps, so `12 written today` is absent, never approximated.
 
 import { formatBytes, formatRelativeTime } from "@centraid/design";
 
@@ -24,53 +13,37 @@ import type {
   BrowseTable,
 } from "../../lib/atlas";
 
-/** One kind in the census, with the display strings its row needs. */
 export interface KindRow {
-  /** The logical name — what `fetchBrowseRows({ table })` is asked for. */
   logical: string;
   title: string;
   sub: string;
   rows: number;
   bytes: number | null;
-  /** The engine's own bookkeeping rather than something an app writes. */
+  /** Engine bookkeeping, not an app's write. */
   machinery: boolean;
 }
 
-/** One relation between two kinds, already worded. */
 export interface RelationRow {
   key: string;
   title: string;
   sub: string;
-  /** The kind the Browse verb switches the record table to. */
   browse: string;
 }
 
-/** A record, plus the raw row behind it — the table shows the first, the
- *  record view shows the second, and both need the same identity. */
 export interface RecordView {
   id: string;
   record: DocRecord;
   row: Record<string, unknown>;
 }
 
-/** The kinds list is long enough to need filtering above this many rows. The
- *  reference's own ready state is 5 kinds and its full state is 12. */
 export const FULL_AT = 8;
 
-/** How many records the table asks for. The reference shows six. */
 export const RECORD_PAGE = 6;
 
-/** The `Largest` chip keeps the top of the list, not a threshold — a vault
- *  where every kind is small still has a largest handful. */
+/** `Largest` keeps a top slice, never a threshold. */
 const LARGEST_KEEP = 5;
 
-/**
- * Columns a record's title may come from, best first.
- *
- * Browse rows are raw column maps (the only shape the gateway has), so the
- * title is a GUESS at which column a member would recognise — and when none
- * of these exist the id is shown rather than an invented label.
- */
+/** Best first; with no match the id is shown, never an invented label. */
 const TITLE_COLUMNS = [
   "title",
   "name",
@@ -82,11 +55,8 @@ const TITLE_COLUMNS = [
   "display_name",
 ] as const;
 
-/** Columns that say what sort of thing one record is (the hidden `Kind`). */
 const KIND_COLUMNS = ["kind", "type", "mime_type", "mime", "ext"] as const;
 
-/** Columns that say when a record was written (the hidden `Written`), newest
- *  meaning first. Also what `newest first` is ordered by — see `useData`. */
 const TIME_COLUMNS = [
   "updated_at",
   "modified_at",
@@ -96,38 +66,22 @@ const TIME_COLUMNS = [
   "ts",
 ] as const;
 
-/** Grouped digits, the one numeric register these pages read in. */
 export function count(n: number): string {
   return n.toLocaleString();
 }
 
-/** `1 record` / `1,908 records` — the count and its noun, agreeing. */
 export function recordCount(n: number): string {
   return `${count(n)} ${n === 1 ? "record" : "records"}`;
 }
 
-/**
- * A kind's sub line: `1,908 records · 1.2 GB`.
- *
- * The size clause is dropped when the census was taken by the `estimate`
- * method, which reports `bytes: null` — a kind whose size is unknown says
- * nothing about its size.
- */
+/** `bytes: null` (the `estimate` method) drops the size clause. */
 export function kindSub(kind: Pick<AtlasKind, "rows" | "bytes">): string {
   return kind.bytes === null
     ? recordCount(kind.rows)
     : `${recordCount(kind.rows)} · ${formatBytes(kind.bytes)}`;
 }
 
-/**
- * The census, flattened into rows.
- *
- * Only POPULATED kinds appear: a table with no rows is a shape the schema
- * allows, not something an app has written, and the empty state's own sentence
- * ("Kinds appear here as apps write records") is the promise that it will show
- * up when it does. The engine's own bookkeeping sorts after everything a
- * member's apps wrote, and within each half the biggest kind leads.
- */
+/** Only POPULATED kinds: an empty table is a schema shape, not a write. */
 export function censusKinds(census: AtlasCensus): KindRow[] {
   const out: KindRow[] = [];
   for (const pack of census.packs) {
@@ -149,20 +103,15 @@ export function censusKinds(census: AtlasCensus): KindRow[] {
   });
 }
 
-/** The filter chips, published only when the list is long (spec §10's `full`
- *  branch). `Written today` is not among them: see the file header. */
 export type KindFilter = "all" | "largest" | "machinery";
 
 export const KIND_FILTERS: readonly { id: KindFilter; label: string }[] = [
   { id: "all", label: "All kinds" },
   { id: "largest", label: "Largest" },
-  // The census divides packs into what apps write and what the engine keeps
-  // for itself; this is that second half, named as the census names it.
   { id: "machinery", label: "The engine's own" },
 ];
 
-/** Largest by size where the census measured sizes, by record count where it
- *  only estimated — the one honest reading of "largest" per method. */
+/** By size where measured, by record count where estimated. */
 export function filterKinds(rows: KindRow[], filter: KindFilter): KindRow[] {
   if (filter === "machinery") return rows.filter((row) => row.machinery);
   if (filter === "largest") {
@@ -182,16 +131,8 @@ function friendlyName(graph: AtlasGraph, logical: string): string {
   return node?.friendly ?? node?.label ?? logical;
 }
 
-/**
- * How the kinds relate.
- *
- * The graph carries two different mechanisms and they are not interchangeable:
- * an AUTHORED link is something a member or an app said ("this photograph is
- * of that person"), a FOREIGN KEY is the schema's own rule. Authored links are
- * the ones worth reading, so they lead; the FK edges are the fallback for a
- * vault that has not linked anything yet, which is most new vaults — without
- * them this section would be empty on a store that plainly does relate.
- */
+/** Authored links lead; FK edges are the fallback for a vault that has linked
+ * nothing yet. */
 export function relationRows(graph: AtlasGraph): RelationRow[] {
   if (graph.authoredLinks.length > 0) {
     return [...graph.authoredLinks]
@@ -213,9 +154,7 @@ export function relationRows(graph: AtlasGraph): RelationRow[] {
     .map((edge) => ({
       browse: edge.fromLogical,
       key: `${edge.fromTable}:${edge.col}:${edge.toTable}`,
-      // `fill` is the share of child rows that actually carry the reference —
-      // a schema rule that half the records opt out of is a different fact
-      // from one they all obey, and the row says which.
+      // `fill`: the share of child rows that actually carry the reference.
       sub: `${edge.col} · ${Math.round(edge.fill * 100)}% of ${recordCount(edge.childRows)}`,
       title: `${friendlyName(graph, edge.fromLogical)} → ${
         edge.toLogical === null
@@ -245,9 +184,7 @@ function firstOf(
   return "";
 }
 
-/** The write time as the store keeps it — an ISO string or an epoch NUMBER.
- *  Stringifying a number first would hand `Date.parse` something it cannot
- *  read, and the row would claim it had no time at all. */
+/** ISO string or epoch NUMBER — stringify first and `Date.parse` fails. */
 function timeOf(row: Record<string, unknown>): string | number | undefined {
   for (const column of TIME_COLUMNS) {
     const value = row[column];
@@ -257,25 +194,15 @@ function timeOf(row: Record<string, unknown>): string | number | undefined {
   return undefined;
 }
 
-/** The column a page can be ordered by to read newest first, if it has one. */
 export function timeColumn(columns: readonly string[]): string | undefined {
   return TIME_COLUMNS.find((column) => columns.includes(column));
 }
 
-/** The record's id: the store's own `id`, else the rowid the browse route
- *  selects alongside it for rowid tables. */
 function recordId(row: Record<string, unknown>, index: number): string {
   const id = text(row, "id") || text(row, "__rowid");
   return id || `row-${String(index)}`;
 }
 
-/**
- * One page of raw rows, read as records.
- *
- * `kind` and `written` are the two columns the wide table would show and this
- * surface folds into one annotation line; either may be missing, and
- * `snipLine` already renders what is there without a stray separator.
- */
 export function browseRecords(page: BrowseRowsPage): RecordView[] {
   return page.rows.map((row, index) => {
     const id = recordId(row, index);
@@ -293,14 +220,7 @@ export function browseRecords(page: BrowseRowsPage): RecordView[] {
   });
 }
 
-/**
- * The sentence under the table.
- *
- * `newest first` is a claim about the ORDER, so it is made only when the page
- * was actually ordered by a write time descending. A store whose records carry
- * no timestamp comes back in the key order the gateway paginates by, and the
- * caption says that instead of borrowing the reference's words.
- */
+/** `newest first` claims an ORDER: say it only when the page has one. */
 export function tableCaption(
   shown: number,
   total: number,
@@ -312,8 +232,6 @@ export function tableCaption(
   return `The first ${count(shown)} of ${count(total)}${order}. The table scrolls rather than pages, the way the drive does.`;
 }
 
-/** The kind whose records are shown: the one asked for by name, else the
- *  biggest thing the member's own apps wrote. */
 export function pickBrowseTable(
   tables: readonly BrowseTable[],
   wanted?: string
@@ -330,8 +248,6 @@ export function pickBrowseTable(
   return [...pool].sort((a, b) => b.rows - a.rows)[0];
 }
 
-/** `9 kinds · 12,408 records · 2.1 GB` — the standing detail, from the census
- *  totals and nothing else. */
 export function censusDetail(census: AtlasCensus): string {
   const clauses = [
     `${count(census.totals.populatedKinds)} ${census.totals.populatedKinds === 1 ? "kind" : "kinds"}`,

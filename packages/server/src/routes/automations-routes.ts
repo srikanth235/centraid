@@ -1,32 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit (#387) single dispatch surface for the automation read/turn/item/SSE wire (one switch over one HTTP contract); splitting scatters the route table without a seam
-// HTTP surface for automation runtime ops (issue #141).
+// HTTP surface for automation runtime ops (#141), so the desktop is a thin
+// client for local AND remote gateways alike rather than reading local files.
 //
-// The desktop used to read automation manifests off the local
-// materialized `main` and read/write turn ledgers + analytics from local
-// SQLite directly — so these operations threw for a remote gateway.
-// These routes move them onto HTTP so the desktop is a thin client for
-// local AND remote gateways alike. Mounted via `serve()`'s
-// `extraHandlers`, after the bearer check.
-//
-// Refs and turn ids carry `/` and `:`, so they ride query params rather
-// than path segments to keep parsing trivial:
-//
-//   GET  /centraid/_automations                       list → {rows, errors}
-//   GET  /centraid/_automations/read?ref=             one automation → {row}
-//   POST /centraid/_automations/turn-now?ref=         fire now → {turnId}
-//   POST /centraid/_automations/invoke-and-await?ref= run payload → outcome
-//   GET  /centraid/_automations/turns?ref=&limit=     turn feed → {turns}
-//   GET  /centraid/_automations/turn?turnId=          one turn → {turn}
-//   POST /centraid/_automations/turn?ref=             interactive turn → TurnStreamEvent SSE
-//   GET  /centraid/_automations/turn/items?turnId=    item timeline → {items}
-//   POST /centraid/_automations/turn/pin?turnId=      body {pinned} → {ok}
-//   GET  /centraid/_insights/summary?windowDays=      insights payload
-//
-// Code (manifests) resolves from the git-store materialized `main`
-// (`<active-main>/apps`); data (run ledgers, analytics) from the
-// gateway's stable `appsDir`. Turn-now executes on THIS host with the
-// gateway's own harness config — the desktop's provider key is not used
-// for a remote fire.
+// Refs and turn ids carry `/` and `:`, so they ride QUERY PARAMS, never path
+// segments. Manifests resolve from the materialized `main`, ledgers from the
+// stable `appsDir`. Turn-now executes on THIS host with the gateway's own
+// harness config — a remote fire never uses the desktop's provider key.
 
 import crypto from "node:crypto";
 import { existsSync } from "node:fs";
@@ -66,54 +45,33 @@ import {
 } from "./route-helpers.js";
 import { SseSubscriberCap } from "./sse-cap.js";
 
-/**
- * The production subscriber cap for `/centraid/_automations/turn/events` —
- * one gateway process serves one of these (`buildGateway` calls
- * `makeAutomationsRouteHandler` with no override), so this instance's live
- * count IS the real count (issue #351).
- */
+/** One per process, so this count IS the real one (#351). */
 const defaultSubscriberCap = new SseSubscriberCap();
 
-/** Live subscriber count on the automation turn-events SSE stream. */
 export function turnEventsSubscriberCount(): number {
   return defaultSubscriberCap.current();
 }
 
 export interface AutomationsRouteOptions {
-  /** Git store — code (manifests) resolve from `<getActiveMainLink()>/apps`. */
   store: WorktreeStore;
-  /** The vault's `journal.db` — every turn's full ledger lives here (#280). */
+  /** The vault's `journal.db`: every turn's full ledger (#280). */
   journalDbFile: string;
-  /** The vault's run-summary rollup (same file as the ledger, #280). */
   analytics: AnalyticsStore;
-  /** Insights aggregator over the same rollup. */
   insights: InsightsStore;
-  /**
-   * Fire an automation now (fire-and-forget). Injected so `serve()` wires the
-   * automation handler with the gateway's directories + turn driver, and tests can
-   * stub it. The turnId is minted by the route and passed in.
-   */
+  /** The route mints the turnId and passes it in. */
   runAutomation: (input: { automationRef: string; turnId: string }) => void;
-  /** The same fire path, awaited for capture and the Test run affordance. */
+  /** The same fire path, awaited for capture and Test run. */
   invokeAndAwait?: (input: {
     automationRef: string;
     turnId: string;
     payload?: unknown;
   }) => Promise<unknown>;
-  /**
-   * Subscribe to a turn's live native events. Wired to the gateway event bus.
-   * Returns an unsubscribe. Omitted in hosts that
-   * don't stream — the SSE endpoint then replays the ledger and closes.
-   */
+  /** Omitted where nothing streams: SSE then replays and closes. */
   subscribeTurnEvents?: (
     turnId: string,
     listener: (ev: AutomationTurnStreamEvent, serialized: string) => void
   ) => () => void;
-  /**
-   * Drive a real interactive automation turn. The route owns the standard
-   * `TurnStreamEvent` SSE transport; the injected lifecycle owns ledger,
-   * scoped harness dispatch, and automation-bus fanout.
-   */
+  /** The route owns the SSE transport; the lifecycle owns ledger and fanout. */
   runInteractiveTurn?: (input: {
     row: automation.Row;
     turnId: string;
@@ -126,11 +84,10 @@ export interface AutomationsRouteOptions {
     thinking?: string;
     attachmentRefs?: TurnAttachmentRef[];
   }) => Promise<void>;
-  /** Overridable for tests; production callers take the shared default. */
   subscriberCap?: SseSubscriberCap;
 }
 
-/** Parse a stored `*_json` ledger column back to a value; raw string on failure. */
+/** Raw string on parse failure. */
 function safeParseJson(json: string): unknown {
   try {
     return JSON.parse(json) as unknown;
@@ -139,25 +96,16 @@ function safeParseJson(json: string): unknown {
   }
 }
 
-/**
- * Native automation turn JSON enriched with its stable conversation identity.
- */
 interface AutomationTurnJson extends Turn {
   automationId?: string;
-  /** The automation's last-known display name — see `RunSummary.automationName`. */
+  /** Last-known display name; see `RunSummary.automationName`. */
   automationName?: string;
-  /** Active harness binding on the stable automation conversation. */
   harnessKind?: string;
   /** Built-in recognition runs stay in their own history lane. */
   systemLane?: "recognition";
 }
 
-/**
- * Reconstruct a durable ledger item as live-stream events for SSE replay: an
- * `item.start`, plus an `item.end` when the item has finished (in-flight items
- * — `endedAt` NULL — replay as start-only and finish live off the bus). The
- * inbound `message_in` item is not a trace node and is filtered by the caller.
- */
+/** An in-flight item replays start-only; `message_in` is filtered by the caller. */
 function replayItemEvents(item: Item): AutomationTurnStreamEvent[] {
   const start: AutomationTurnStreamEvent = {
     type: "item.start",
@@ -189,7 +137,6 @@ function replayItemEvents(item: Item): AutomationTurnStreamEvent[] {
   return [start, end];
 }
 
-/** Enrich the native row with its automation conversation identity. */
 function turnToAutomationTurn(
   turn: Turn,
   automationRef: string | undefined,
@@ -207,11 +154,7 @@ function turnToAutomationTurn(
   };
 }
 
-/**
- * Build the automation/insights route handler. Returns a function
- * suitable for `startRuntimeHttpServer`'s `extraHandlers`: resolves
- * `true` when it owned the request.
- */
+/** Resolves `true` when it owned the request. */
 export function makeAutomationsRouteHandler(
   opts: AutomationsRouteOptions
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
@@ -219,9 +162,7 @@ export function makeAutomationsRouteHandler(
     path.join(opts.store.getActiveMainLink(), "apps");
   const subscriberCap = opts.subscriberCap ?? defaultSubscriberCap;
 
-  // Turn-ledger store — every automation turn's full ledger is the vault's
-  // single `journal.db` (#280), so per-execution file resolution is gone. A
-  // ledger file that doesn't exist yet just means no turn ever landed here.
+  // One `journal.db` per vault (#280); a missing file means no turn yet.
   const turnsStore = journalConversationStore(opts.journalDbFile);
   const turnsStoreForTurnId = (
     _turnId: string
@@ -230,9 +171,8 @@ export function makeAutomationsRouteHandler(
     return turnsStore;
   };
 
-  // SSE: stream one run end-to-end (issue #158, ledger-tail hybrid). Subscribe
-  // to the bus first (so events during replay aren't lost), replay the durable
-  // ledger snapshot, then drain buffered + live events until `turn.end`.
+  // Ledger-tail hybrid (#158): subscribe FIRST so events during replay are
+  // not lost, then replay the snapshot and drain until `turn.end`.
   const streamTurnEvents = (
     req: IncomingMessage,
     res: ServerResponse,
@@ -247,7 +187,7 @@ export function makeAutomationsRouteHandler(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    // Bounded writer (issue #659 G6) — a paused viewer is dropped, not buffered.
+    // Bounded writer (#659) — a paused viewer is dropped, not buffered.
     const stream = new SseStream(res);
     stream.comment(`turn ${turnId}`);
     const heartbeat = setInterval(() => {
@@ -275,9 +215,7 @@ export function makeAutomationsRouteHandler(
       stream.event(ev.type, serialized);
     };
 
-    // Buffer live events that land during replay; drain once the snapshot is
-    // written. The client dedupes by ordinal, so a replay/live overlap on the
-    // same node is harmless.
+    // Buffered during replay; the client dedupes by ordinal.
     const queue: Array<readonly [AutomationTurnStreamEvent, string]> = [];
     let replayed = false;
     const drain = (): void => {
@@ -305,7 +243,7 @@ export function makeAutomationsRouteHandler(
       for (const ev of replayItemEvents(item)) write(ev);
     }
 
-    // Run already finished (background fire / late join) — emit terminal + close.
+    // Already finished (late join): emit terminal and close.
     if (turn && turn.endedAt !== undefined) {
       write({
         type: "turn.end",
@@ -316,8 +254,7 @@ export function makeAutomationsRouteHandler(
       cleanup();
       return true;
     }
-    // No live transport wired and the run is still open: replay-only, then
-    // close so the client can fall back to polling rather than hang.
+    // No live transport and the run is open: close so the client polls.
     if (!opts.subscribeTurnEvents) {
       cleanup();
       return true;
@@ -379,10 +316,7 @@ export function makeAutomationsRouteHandler(
         });
       }
 
-      // The compiler's output made legible: the instructions-first editor
-      // owns intent, but the deterministic plan the headless compiler writes
-      // (`automation.json` + `handler.js`) is what actually runs. Surfacing it
-      // read-only lets the owner see exactly what their prose became.
+      // The editor owns intent, but the compiled plan is what runs.
       if (sub === "source" && method === "GET") {
         const ref = automation.parseRef(url.searchParams.get("ref") ?? "");
         if (!ref)
@@ -442,15 +376,10 @@ export function makeAutomationsRouteHandler(
         const limit = Number(url.searchParams.get("limit"));
         const boundedLimit =
           Number.isFinite(limit) && limit > 0 ? Math.min(limit, 250) : 50;
-        // `systemLane` splits the combined feed at the fetch, not after
-        // (issue #731 M2). Before this, the unscoped `turns` query filled
-        // its one `boundedLimit` window with whatever ran most recently —
-        // so a large photo import (which fires the recognition automations
-        // once per photo) could fill the entire window with recognition
-        // runs and leave a member's own "Recent activity" empty. "member"
-        // and "recognition" are each fetched as their own SQL-filtered,
-        // independently-bounded query; omitting the param keeps the old
-        // combined behavior for other callers.
+        // `systemLane` must split the feed AT THE FETCH (#731): one unscoped
+        // window fills with whatever ran most recently, so a photo import
+        // starves "Recent activity". Each lane is its own bounded query;
+        // omitting the param keeps the combined feed.
         const systemLaneParam = url.searchParams.get("systemLane");
         const laneFilter: "member" | "recognition" | undefined =
           systemLaneParam === "member" || systemLaneParam === "recognition"
@@ -592,12 +521,8 @@ export function makeAutomationsRouteHandler(
             ? body.thinking
             : undefined;
         const attachmentRefs = parseTurnAttachmentRefs(body.attachments);
-        // Same fd-exhaustion guard as `turn/events` (sse-cap.ts): every
-        // accepted request holds an open response, a 30s heartbeat, and —
-        // once the per-automation lock clears — an ACP child. A client
-        // reconnect loop across N automations must not open N unbounded
-        // streams. A refusal is a clean `503` + `Retry-After` JSON body,
-        // distinguishable from a dropped stream.
+        // fd-exhaustion guard: each request holds a response, a heartbeat and
+        // eventually an ACP child, so a reconnect loop must not open N streams.
         const releaseSlot = subscriberCap.admit(res);
         if (!releaseSlot) return true; // 503 + Retry-After already written
         const turnId = `${row.ref}:interactive:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
@@ -612,7 +537,7 @@ export function makeAutomationsRouteHandler(
           "X-Accel-Buffering": "no",
           "X-Centraid-Turn-Id": turnId,
         });
-        // Bounded writer (issue #659 G6).
+        // Bounded writer (#659).
         const stream = new SseStream(res);
         stream.comment(`automation ${row.ref} turn ${turnId}`);
         const heartbeat = setInterval(() => {

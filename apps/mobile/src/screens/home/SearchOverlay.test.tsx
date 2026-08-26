@@ -1,19 +1,9 @@
-// Regression coverage for the v4 Binding Layer search overlay anatomy
-// (issue #711). This isn't a snapshot of every pixel — it pins the handful
-// of rules a future edit is likeliest to silently undo, because each one
-// has already been invented/reintroduced once by a previous pass:
-//
-//  - the panel is OPAQUE paper (bg-elev), never glass — no translucent tint
-//    film anywhere in the tree
-//  - the try-chips are an empty-query-only affordance
-//  - the foot is the exact two-part copy the brief specifies
-//  - the empty line is the exact spec string, smart quotes included
-//  - there is no app-filter row, no APPS icon grid, no RECENTS section
-//
-// The absence checks are structural: they inspect the
-// *rendered* tree (via mocked primitives that leave a fingerprint if used),
-// not the source text, so they still catch a reintroduction that renames
-// variables or restyles things.
+// Regression coverage for the v4 Binding Layer search overlay anatomy (#711).
+// Pins the rules a future edit is likeliest to silently undo: OPAQUE paper
+// (bg-elev, never glass/tint film), try-chips as an empty-query-only
+// affordance, the exact foot and empty-line copy, and NO app-filter row /
+// APPS icon grid / RECENTS section. Absence checks are structural — they
+// inspect the *rendered* tree via fingerprinting mocks, not the source text.
 
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -34,9 +24,8 @@ type UseSearchRecentsModule = typeof import("./useSearchRecents");
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-// Solid, alpha-free values on every rung — a translucent film sneaking back
-// in would show up as an `rgba(` value on some `data-bg`, which the opaque-
-// panel test below scans for directly.
+// Solid, alpha-free mock values — a translucent film sneaking back would show
+// up as an `rgba(` value on some `data-bg`, which the opaque-panel test scans for.
 const mocks = vi.hoisted(() => ({
   colors: {
     accent: "#mock-accent",
@@ -106,10 +95,8 @@ vi.mock(import("react-native"), async () => {
       },
       create: <T,>(styles: T): T => styles,
     },
-    // Layout fingerprints for the foot assertions: the note's `flex` and
-    // `textAlign` become data attributes, so the no-overflow contract (the
-    // hint is bounded to its own trailing column) is testable on the
-    // rendered tree.
+    // Foot fingerprints: the note's `flex`/`textAlign` become data
+    // attributes so the no-overflow contract is testable on the rendered tree.
     Text: ({
       children,
       style,
@@ -152,9 +139,7 @@ vi.mock(import("react-native"), async () => {
         ),
       }),
     // The one View mock detail this suite leans on: a `backgroundColor` in
-    // the (possibly array) style becomes a `data-bg` attribute, so the
-    // opaque-panel test can find and inspect every background actually
-    // painted, instead of trusting that nothing else was added.
+    // style becomes `data-bg`, so every painted background is inspectable.
     View: ({
       children,
       style,
@@ -166,8 +151,7 @@ vi.mock(import("react-native"), async () => {
       const bg = flat.backgroundColor;
       return element("div", {
         ...(typeof bg === "string" ? { "data-bg": bg } : {}),
-        // A `flexWrap` fingerprint, so the one-row try-chip contract can
-        // assert that no wrapping row ever comes back.
+        // flexWrap fingerprint for the one-row try-chip contract.
         ...(typeof flat.flexWrap === "string"
           ? { "data-flexwrap": flat.flexWrap }
           : {}),
@@ -188,8 +172,7 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
-      // The shared page margin the overlay insets its content by — the same
-      // 18 the generated lowering carries (handoff `R.margin.m`, :3356).
+      // Shared page margin the overlay insets its content by (handoff `R.margin.m`).
       pageMargin: 18,
       t: () => ({}),
       useTheme: () => ({
@@ -202,8 +185,7 @@ vi.mock(
 );
 
 // No paired gateway in this suite — the search effect no-ops without a
-// session, which is exactly the state the empty-copy and foot-format
-// assertions below want (predictable, always-zero results).
+// session: the predictable, always-zero state the assertions want.
 vi.mock(
   import("../../kit/replica/ReplicaProvider"),
   () =>
@@ -276,10 +258,8 @@ describe("the search overlay anatomy", () => {
 
       // The opaque paper layer itself, and nothing else painting a colour.
       expect(painted).toStrictEqual([mocks.colors.bgElev]);
-      // Belt and braces: whatever is painted, none of it may carry alpha —
-      // an `rgba(` tint film reads the same as the one this overlay used to
-      // stack under a backdrop blur. (`expo-blur` is gone from the app
-      // entirely, so a live blur can no longer be reintroduced by accident.)
+      // Belt and braces: nothing painted may carry alpha (`expo-blur` is
+      // absent from the app entirely, so a live blur cannot sneak back).
       for (const value of painted) expect(value).not.toMatch(/rgba\(/u);
     });
   });
@@ -325,9 +305,8 @@ describe("the search overlay anatomy", () => {
   });
 
   describe("the fixed foot", () => {
-    // The brief's note (:6022) leads with ↵ — a keyboard glyph. On a phone
-    // only that glyph becomes its tap equivalent; every other word,
-    // including the honesty clause, stays verbatim.
+    // The brief's note (:6022) leads with ↵; on a phone only that glyph
+    // becomes its tap equivalent, every other word stays verbatim.
     const FOOT_NOTE =
       "tapping opens the owning app — record addressing is not built";
 
@@ -351,10 +330,8 @@ describe("the search overlay anatomy", () => {
         (candidate) => candidate.textContent === FOOT_NOTE
       );
       expect(note).toBeTruthy();
-      // `flex: 1` caps the note at the width the count leaves over (it wraps
-      // inside that column), and right alignment keeps it pinned to the
-      // trailing edge — the RN analogue of the brief's
-      // `margin-inline-start: auto` (:3326).
+      // `flex: 1` caps the note to the width the count leaves over; right
+      // alignment pins it to the trailing edge (brief's `margin-inline-start: auto`).
       expect(note?.dataset.flex).toBe("1");
       expect(note?.dataset.textalign).toBe("right");
     });

@@ -1,4 +1,4 @@
-// Bank-statement CSV parser unit tests (issue #545 B6).
+// Bank-statement CSV parser unit tests (#545).
 
 import { describe, expect, test } from "vitest";
 

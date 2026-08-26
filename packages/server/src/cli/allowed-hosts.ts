@@ -1,5 +1,5 @@
 /**
- * Operator Host allowlist helpers for non-loopback binds (issue #504 packaging).
+ * Operator Host allowlist helpers for non-loopback binds (#504 packaging).
  *
  * Loopback forms (localhost / 127.0.0.1 / ::1) are always accepted by
  * app-engine. Extra hostnames come from CLI flags and/or env so Docker

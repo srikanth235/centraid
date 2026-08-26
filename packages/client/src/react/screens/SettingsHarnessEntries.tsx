@@ -19,9 +19,9 @@ import styles from "./SettingsHarnessesScreen.module.css";
 // credential. A button that could only explain itself is a verb that does
 // nothing, so the caption carries the fact in `--net` and the picks go quiet.
 //
-// Each entry used to carry an expandable "N tools" drawer listing the builtins
-// and MCP tools the harness exposed. That listing is retired: Connectors is
-// where the member reasons about what a harness can reach.
+// No entry carries an expandable "N tools" drawer listing the builtins and MCP
+// tools a harness exposes: Connectors is where the member reasons about what a
+// harness can reach.
 
 /**
  * One harness. The "used by" chips report which lanes land here — they answer

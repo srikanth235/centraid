@@ -1,23 +1,10 @@
-/*
- * What the vault can actually HONOUR, declared once (the #750 pattern: a
- * declared registry, not a remembered list). A subject type is offerable only
- * if some strategy can fulfil it, and the answer differs by capability:
- *
- *   - view is answered by CLOSURE REPROJECTION — the subject's rows are read
- *     as a closure and projected into the audience vault;
- *   - edit is answered by COMMONS ROUTING, and only where the commons routing
- *     table has ACTABLE commands for that container type. Offering edit on a
- *     container nobody can route a write to would accept the gesture and then
- *     silently revert every member edit at the next compile.
- *
- * `locker.item` is a shareable item type and is deliberately ABSENT: secrets
- * are not offered as a standing grant. Its absence here is the refusal.
- */
+/* What the vault can HONOUR (#750): view = closure reprojection; edit =
+ * commons routing where actable. `locker.item` absent — secrets are never
+ * offered as a standing grant. */
 
 import type { ShareableItemType } from "../share/closure.js";
 import type { ShareGrantCapability } from "./grant-store.js";
 
-/** How a capability is delivered, or `undefined` when it is not offered. */
 export type ShareFulfillmentStrategy =
   | "closure-reprojection"
   | "commons-routing";
@@ -61,7 +48,7 @@ const BY_SUBJECT = new Map<string, ShareSubjectDeclaration>(
   SHARE_SUBJECT_REGISTRY.map((entry) => [entry.subjectType, entry])
 );
 
-/** True for a subject type this vault will actually stand a grant over. */
+/** True for a subject type this vault stands grants over. */
 export function isOfferableSubjectType(
   value: string
 ): value is ShareableItemType {
@@ -74,11 +61,7 @@ export function shareSubjectDeclaration(
   return BY_SUBJECT.get(subjectType);
 }
 
-/**
- * Which strategy answers this capability for this subject, or `undefined`
- * when the pair is not offered at all — the honest refusal a caller should
- * report rather than accepting a grant it cannot keep.
- */
+/** Strategy for this capability; `undefined` = not offered. */
 export function fulfillmentAnswerFor(
   subjectType: string,
   capability: ShareGrantCapability

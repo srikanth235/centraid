@@ -340,9 +340,9 @@ describe("DESIGN.md body", () => {
     for (const tier of Object.keys(DENSITY_TIERS)) expect(body).toContain(tier);
     expect(body).toContain("`data-density`");
     expect(body).toContain("Never on a control");
-    // The tone axis is retired — one page, for the shell and every app in
-    // it. The freedom table no longer offers a surface tone row, though the
-    // prose may still legitimately name the retired axis while explaining it.
+    // There is no tone axis — one page, for the shell and every app in it.
+    // The freedom table offers no surface tone row, though the prose may
+    // legitimately name the axis while explaining its absence.
     expect(body).not.toContain("| Surface tone |");
     // v4s took a second row with it. A `register` row would put the face back
     // in the app's hands, which is the thing the ruling withdrew.

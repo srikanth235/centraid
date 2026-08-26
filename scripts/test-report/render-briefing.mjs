@@ -94,6 +94,7 @@ function stateCell(state) {
 }
 
 /**
+
  * One ledger row. A cell is either an HTML fragment or a `[class, fragment]`
  * pair; the roles are spelled out because these are grid divs rather than a
  * table, and a grid with no roles reads to a screen reader as one run-on line.

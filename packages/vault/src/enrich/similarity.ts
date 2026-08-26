@@ -1,17 +1,6 @@
-// Similarity primitives (issue #299): the perceptual-hash distance function
-// SQL can call, and the pure-JS cosine scan behind semantic search.
-//
-// `vault_hamming` is registered as an app-defined SQLite function beside
-// `vault_content_text` — near-duplicate detection is then one query:
-//   SELECT ... WHERE vault_hamming(a.phash, b.phash) <= 6
-// Hashes are hex strings (producer-agnostic: the client canvas computes a
-// 64-bit dHash today; a server codec plug-in may later). Mismatched lengths
-// and NULLs are "not comparable", never an error — the function returns NULL
-// and SQL three-valued logic drops the row.
-//
-// The embedding scan is deliberately brute-force float32 cosine: a personal
-// vault holds thousands of rows, not billions, and an exact scan keeps the
-// index additive (issue #299 phase 5 — nothing else may depend on it).
+// Similarity primitives (#299): hex hashes — mismatched lengths/NULLs are
+// "not comparable", never errors. Brute-force cosine by design; the index
+// stays additive (#299 phase 5).
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -33,12 +22,10 @@ export function hexHamming(a: unknown, b: unknown): number | null {
   return distance;
 }
 
-/** Register `vault_hamming` on a vault connection. */
 export function registerHammingFn(db: DatabaseSync): void {
   db.function("vault_hamming", { deterministic: true }, hexHamming);
 }
 
-/** Little-endian float32 encode — the `enrich_embedding.vector` BLOB shape. */
 export function encodeVector(values: readonly number[]): Buffer {
   const buf = Buffer.allocUnsafe(values.length * 4);
   values.forEach((v, i) => buf.writeFloatLE(v, i * 4));
@@ -53,7 +40,6 @@ export function decodeVector(blob: Buffer): Float32Array {
   );
 }
 
-/** Cosine similarity of a query against one stored vector; NaN-safe. */
 export function cosine(query: Float32Array, stored: Float32Array): number {
   if (query.length !== stored.length || query.length === 0) return 0;
   let dot = 0;
@@ -74,11 +60,7 @@ export interface SemanticHit {
   score: number;
 }
 
-/**
- * Exact cosine scan over `enrich_embedding` for one model, optionally
- * filtered to entity types. Callers own consent — the gateway filters hits
- * to rows the caller may read before returning them.
- */
+/** Exact cosine scan over `enrich_embedding`. CALLERS OWN CONSENT: filter hits to readable rows first. */
 export function scanEmbeddings(
   vault: DatabaseSync,
   model: string,

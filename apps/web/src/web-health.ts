@@ -8,11 +8,11 @@ export const HEALTH_POLL_INTERVAL_MS = 15000;
  *
  * Every field on `CentraidGatewayRuntime` that describes a WINDOW rather than
  * an instant — `checksTotal`, `checksFailed`, `samples`, `outages`,
- * `statusSince`, `trackingSince` — used to be rebuilt from nothing on each
- * poll, so this seat reported `1 checks this session · 100.0%` forever, the
- * Heartbeats row read `1 run · 0 failed` after an hour of running, and the
- * sample ring the System page draws its availability strip from was
- * permanently empty. Desktop keeps this state in the main process
+ * `statusSince`, `trackingSince` — must survive across polls. Rebuilt from
+ * nothing on each poll, this seat reports `1 checks this session · 100.0%`
+ * forever, the Heartbeats row reads `1 run · 0 failed` after an hour of
+ * running, and the sample ring the System page draws its availability strip
+ * from stays permanently empty. Desktop keeps this state in the main process
  * (`gateway-monitor-core.ts`); the browser has no main process, so it keeps it
  * here.
  *

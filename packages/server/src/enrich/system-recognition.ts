@@ -7,7 +7,7 @@
  * and — the part that matters for an off-by-default recipe — the scheduler
  * reconcile filters these rows on `row.enabled` instead of on the experimental
  * automations gate. So a system recognition recipe shipping `enabled: false`
- * (`place-names`, issue #816) holds no scheduler registration and bootstraps no
+ * (`place-names`, #816) holds no scheduler registration and bootstraps no
  * data cursor until a member turns it on, while the always-on recipes keep the
  * photos pipeline flowing regardless of that gate. Being listed here is
  * therefore the correct home for an opt-in recipe, not a bypass of the opt-in.

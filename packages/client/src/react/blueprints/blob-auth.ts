@@ -1,12 +1,5 @@
-// Lightweight vault-blob authorizer (issue #505 Phase 4 / boot-size fix).
-//
-// A leaf module on purpose: `inline-blob-images.ts` is eager (InlineAppRoute →
-// App), so anything it imports lands in the shell's boot chunk. Reaching
-// `authorizeBlobUrl` through a barrel used to drag the whole app substrate in
-// with it and regress initial-load JS. Nothing here needs that substrate —
-// only the authed gateway client — so it stands alone, and every caller
-// (`inline-blob-images`, `blob-staging`, `homeTileContent`, the host client's
-// `blobUrl`/`blobText`) imports it directly.
+// Leaf module: `inline-blob-images.ts` is eager, so a barrel import of
+// `authorizeBlobUrl` would drag the app substrate into the shell boot chunk.
 import {
   auth,
   authHeaders,
@@ -14,21 +7,13 @@ import {
   VAULT_HEADER,
 } from "../../gateway-client-core.js";
 
-/** The vault blob route prefix every inline blob reference points at. */
 export const BLOB_PREFIX = "/centraid/_vault/blobs";
 
-/** The DOM attribute an inline app stamps to say which scope owns these bytes. */
 export const SCOPE_ATTR = "data-scope";
 
 /**
- * Authorization headers for a blob request, addressed at ONE scope.
- *
- * A blob path carries a content id, and content ids are minted PER VAULT — the
- * same photo shared into an audience has the same sha in two vaults, and two
- * unrelated items can collide across vaults by design (issue #599). Without the
- * scope the request falls through to the shell's ambient focused vault, which
- * either 404s or, worse, renders the WRONG bytes. Every blob fetch on a
- * multi-scope surface therefore names its scope.
+ * Address ONE scope. Content ids are per-vault (#599); omitting scope falls
+ * through to the ambient vault and can render the wrong bytes.
  * @public
  */
 export function blobAuthHeaders(
@@ -38,7 +23,6 @@ export function blobAuthHeaders(
   return { ...authHeaders(token), ...(scope ? { [VAULT_HEADER]: scope } : {}) };
 }
 
-/** Fetch vault bytes through the shell's authenticated gateway transport. */
 async function authorizedBlobResponse(
   pathname: string,
   scope?: string
@@ -55,15 +39,8 @@ async function authorizedBlobResponse(
 }
 
 /**
- * Fetch a `/_vault/blobs/…` pathname through the authed gateway client and hand
- * back a `blob:` object URL for it (or null if the fetch is refused). The caller
- * OWNS the returned URL's lifecycle and must `URL.revokeObjectURL` it. Shared by
- * `renderAttachments` (attachment strips) and `inline-blob-images` (the generic
- * grid/lightbox/cover authorizer), so both reach vault bytes the same way.
- *
- * `scope` is the id of the mounted scope these bytes belong to; omitting it
- * addresses the shell's ambient scope, which is only correct on a single-scope
- * surface.
+ * Caller owns the returned `blob:` URL and must `URL.revokeObjectURL` it.
+ * Omit `scope` only on a single-scope surface.
  * @public
  */
 export async function authorizeBlobUrl(
@@ -75,10 +52,8 @@ export async function authorizeBlobUrl(
 }
 
 /**
- * Read a text blob through the same authenticated door as `authorizeBlobUrl`.
- * Returning the text directly is load-bearing for inline apps: fetching the
- * object URL again would be a second request governed by the shell's CSP,
- * whose `connect-src` intentionally does not admit `blob:`.
+ * Return text directly — a second fetch of the object URL is blocked by CSP
+ * (`connect-src` does not admit `blob:`).
  * @public
  */
 export async function authorizeBlobText(

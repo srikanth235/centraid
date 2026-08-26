@@ -1,5 +1,4 @@
 /**
- * Matrix cell agent-runtime.contracts (#535 coverable-today).
  * Registry shape is the public contract every harness kind must satisfy.
  */
 import { describe, expect, test } from "vitest";

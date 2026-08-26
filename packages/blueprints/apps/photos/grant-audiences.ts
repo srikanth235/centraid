@@ -1,11 +1,4 @@
-/**
- * PHOTOS' OWN WAY INTO THE GRANT SHEET (issue #825, wave 6).
- *
- * The grant kit draws the sheet; the HOST says who is in the room. The roster
- * MAPPING is not Photos' either — `_shared/grant-audiences.ts` owns it for
- * every app and both seats — so what is left here is genuinely Photos': what a
- * multi-selection means, and when the sheet is allowed to open at all.
- */
+/** Photos' grant-sheet entry (#825); roster mapping lives in _shared/. */
 
 import { useState } from "react";
 
@@ -20,36 +13,21 @@ import {
 } from "../_shared/grant-gateway.ts";
 import type { GrantAudienceOption } from "../_shared/grant-plane.ts";
 
-/**
- * Why a multi-selection cannot be shared (v1). A grant stands over ONE subject
- * — one photograph, or one album — and the door records exactly that. Turning
- * a selection of twelve into twelve standing grants would leave a member with
- * twelve rows to revoke one at a time and no object they could point at, so
- * the control refuses in the member's own terms and names the way through: an
- * album IS the shareable many, and a photograph added to it later reaches the
- * same audience with no second gesture.
- */
+/** One subject per grant — twelve photos = twelve revocations; share the album. */
 export const ONE_AT_A_TIME =
   "Sharing stands over one photograph or one album — select a single photograph, or share the album.";
 
-/** Photos' one way into the grant sheet, for all three web entries. */
 export interface PhotoShareEntry {
-  /** Who the sheet may name. Empty until a request has resolved the roster. */
+  /** Empty until the first request resolves the roster. */
   audiences: GrantAudienceOption[];
   open: boolean;
-  /**
-   * The member asked to share. The roster is read HERE rather than on mount —
-   * a member who adds someone in People and comes back sees them, and no
-   * Photos surface holds a roster read it may never need. A refusal is spoken
-   * before the sheet opens: an empty picker is not an answer, and neither is
-   * "you know nobody" when the truth is that the read failed.
-   */
+  /** Failed read ≠ "you know nobody". */
   request: () => void;
   close: () => void;
 }
 
 export function usePhotoShare(
-  /** The frame's one status line — every refusal lands there, never a toast. */
+  /** Every refusal lands here. */
   refuse: (message: string) => void
 ): PhotoShareEntry {
   const [audiences, setAudiences] = useState<GrantAudienceOption[]>([]);
@@ -63,8 +41,7 @@ export function usePhotoShare(
         return;
       }
       void readGrantAudiences().then((read) => {
-        // A roster that could not be read is NOT an empty roster: the member
-        // is told the read failed, not that they know nobody.
+        // An unreadable roster is NOT an empty one.
         if (!read.ok) {
           refuse(ROSTER_UNREADABLE);
           return;

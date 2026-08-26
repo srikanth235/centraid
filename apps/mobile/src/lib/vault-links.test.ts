@@ -1,5 +1,5 @@
 /**
- * Vaults owner (issue #545 C5) — device-local (gateway, vault) registry.
+ * Vaults owner (#545) — device-local (gateway, vault) registry.
  */
 import { describe, expect, it, vi } from "vitest";
 

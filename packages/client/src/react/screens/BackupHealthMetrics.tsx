@@ -11,7 +11,7 @@ import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./BackupCard.module.css";
 
-// The five-metric health surface (issue #436 §6) — the ONE story the Backups
+// The five-metric health surface (#436) — the ONE story the Backups
 // page tells about your data's safety, in exactly five readouts and nothing
 // else. Every metric here maps 1:1 to `deriveStorageMetrics`'s output; the raw
 // custody clocks that feed Freshness live behind the card's Diagnostics

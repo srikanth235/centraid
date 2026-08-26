@@ -1,11 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit the one-door pipeline (§10) — identity → consent → contract → execution → evidence must stay one auditable unit
-// The gateway (§10): one door, every request, no exceptions. Sole holder of
-// connections; every read and typed command walks identity → consent →
-// contract → execution → evidence. It stays a thin, mostly declarative
-// interpreter over the consent and capability tables: no domain logic, no
-// reasoning, no rendering. Byte custody (issue #296) rides the same door —
-// staging is pre-model (no receipt until a command claims), egress is
-// consent-checked resolution; the bytes themselves live behind db.blobs.
+// Gateway (§10): one door. Identity → consent → contract → execution → evidence. No domain logic. Byte custody (#296) rides the same door.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -162,24 +156,7 @@ import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
 import { queryAppView, registerAppView } from "./views.js";
 import type { ViewDefinition, ViewResult } from "./views.js";
 
-/**
- * Structural guard for reading `consent.provenance` (issue #352 phase 3/4 —
- * the app-plane activity read). journal.db already carries a full audit
- * trail keyed by (entity_type, entity_id) — every command write stamps one
- * via `writeProvenance` — and `consent.provenance` is a registered logical
- * entity, so a table-scoped grant alone would let `read()`'s normal path
- * return it. That is not enough: a caller holding read on `consent.provenance`
- * could otherwise pass ANY `entity_type` in `where` and browse another app's
- * or another domain's activity history wholesale — the grant is a table-level
- * yes/no, it cannot itself express "only entities you can already read".
- *
- * So a non-owner read of this one table is held to two EXTRA rules beyond
- * the normal consent check: it must scope to exactly one (entity_type,
- * entity_id) pair, and the caller must independently hold read consent on
- * that entity's own table. Returns a failure reason, or null when the read
- * is properly scoped. Owner-device reads (the assistant, the shell) bypass
- * this — same as every other entity, the owner already sees everything.
- */
+/** Non-owner provenance reads (#352) must scope to one (entity_type, entity_id) and hold read on that entity's table. */
 function provenanceScopeFailure(
   vault: DatabaseSync,
   identity: Identity,
@@ -236,10 +213,7 @@ function commonsStewardDeviceLabel(
 export interface GatewayDeps {
   /** Best-effort hint emitted only after journal.db provenance is durable. */
   onProvenanceCommitted?: (entityTypes?: readonly string[]) => void;
-  /**
-   * Best-effort hint emitted after the canonical parked-decision projection
-   * changes. `created` is true only when a new owner decision was added.
-   */
+  /** Best-effort hint after the parked-decision projection changes. */
   onDecisionChanged?: (created: boolean) => void;
   /** Runs only after the command/log transaction commits. */
   onCommonsCommandSequenced?: (grantId: string) => void;
@@ -251,8 +225,8 @@ export type InvocationBatchResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: unknown };
 
-/** A Commons op/reconciliation failure is still inside the pre-commit
- * gateway batch and must roll back the command marker and domain rows. */
+/** A Commons failure is still inside the pre-commit batch and must roll back
+ * the command marker and domain rows. */
 const commonsOperationErrors = new WeakSet<object>();
 function markCommonsOperationError(source: unknown): Error {
   const error = new Error(
@@ -271,7 +245,7 @@ function isCommonsOperationError(value: unknown): boolean {
 }
 
 export class Gateway {
-  /** Registered commands: handler + sealed-class declarations (issue #293). */
+  /** Registered commands: handler + sealed-class declarations (#293). */
   private readonly commands = new Map<string, RegisteredCommand>();
   private readonly lockerAuthentication: LockerAuthentication;
   private activeBatchInvocationIds: string[] | undefined;
@@ -288,9 +262,8 @@ export class Gateway {
 
   /**
    * Host-only Locker authentication plane; app bridges restrict the caller.
-   * ASYNC since issue #659 G11 — the scrypt derivation behind an unlock runs
-   * on the threadpool instead of blocking the gateway's event loop, so the
-   * caller must await it (the app bridge is already an async dispatcher).
+   * ASYNC (#659 G11): the scrypt derivation runs on the threadpool rather than
+   * blocking the gateway's event loop, so callers must await.
    */
   authenticateLocker(request: LockerAuthRequest): Promise<LockerAuthResult> {
     return this.lockerAuthentication.handle(request);
@@ -305,9 +278,8 @@ export class Gateway {
   }
 
   /**
-   * Data-keyed Locker reveal gate (issue #630 review). Lives on the gateway
-   * so every reveal arm — app bridge, agent bridge, tests — hits the same
-   * lock, not only the locker HTTP path that previously special-cased fill.
+   * Data-keyed Locker reveal gate (#630 review). Lives on the gateway so every
+   * reveal arm — app bridge, agent bridge, tests — hits the same lock.
    */
   private enforceLockerReveal(
     request: RevealRequest,
@@ -322,10 +294,10 @@ export class Gateway {
   }
 
   /**
-   * Run one short arrival window inside a shared vault + journal commit pair.
-   * Each invocation keeps its own savepoints, contract checks and outcome;
-   * successful canonical markers are provisionally stamped in the vault
-   * transaction and re-verified before a later shared pair reclaims them.
+   * One short arrival window inside a shared vault + journal commit pair. Each
+   * invocation keeps its own savepoints, contract checks and outcome;
+   * successful canonical markers are stamped provisionally and re-verified
+   * before a later shared pair reclaims them.
    */
   invokeBatch<T>(runs: readonly (() => T)[]): T[] {
     return this.invokeBatchSettled(runs).map((result) => {
@@ -334,9 +306,8 @@ export class Gateway {
     });
   }
 
-  /** Batch variant used by the request queue. Each run owns matching vault
-   * and journal savepoints: a failure rolls back both sides plus provisional
-   * notification markers, while sibling runs may still commit together. */
+  /** Each run owns matching vault and journal savepoints: a failure rolls back
+   * both sides plus provisional markers, while siblings may still commit. */
   invokeBatchSettled<T>(
     runs: readonly (() => T)[]
   ): InvocationBatchResult<T>[] {
@@ -382,23 +353,16 @@ export class Gateway {
           this.db.journal.exec(`RELEASE ${savepoint}`);
           return { ok: true, value };
         } catch (error) {
-          // A command can cross the canonical vault commit and then fail
-          // while finalizing journal evidence. Preserve that marker and its
-          // domain writes so the next retry repairs the journal exactly once;
-          // only work that never crossed the boundary rolls back to the
-          // per-run vault savepoint. The finalization helper has already
-          // rolled back its own incomplete evidence prefix; the outer journal
-          // savepoint is retained only when replay needs its invocation row.
+          // A command can cross the vault commit then fail finalizing journal
+          // evidence: preserve marker and domain writes so the next retry
+          // repairs the journal exactly once.
           const committedAfterStart = (
             this.db.vault
               .prepare("SELECT invocation_id FROM replica_invocation_commit")
               .all() as { invocation_id: string }[]
           ).some((row) => !markersBefore.has(row.invocation_id));
-          // Commons byte-budget rejection is a pre-commit policy failure:
-          // the command may already have recorded its ordinary invocation
-          // marker, but none of the domain/op rows may escape the batch.
-          // Preserve markers only for failures after the canonical command
-          // crossed the durable boundary (journal-finalization/replay).
+          // Commons byte-budget rejection is PRE-commit policy failure — no
+          // domain/op row may escape the batch.
           const shouldRollback =
             error instanceof CommonsMaxSizeError ||
             isCommonsOperationError(error) ||
@@ -425,9 +389,7 @@ export class Gateway {
       endReplicaCommit(this.db.vault, replicaCommit);
       this.db.vault.exec("COMMIT");
       this.db.journal.exec("COMMIT");
-      // Failed runs were rolled back to matching vault + journal savepoints.
-      // Publish notifications only for the successful runs now durable in
-      // both databases.
+      // Publish only runs now durable in BOTH databases.
       notifyReplicaCommit(this.db.vault);
       if (decisionChanges.length > 0) {
         this.emitDecisionChanged(decisionChanges.some(Boolean));
@@ -459,28 +421,27 @@ export class Gateway {
     return outcome;
   }
 
-  /** Reconciliation is after commit and therefore cannot turn durable success
-   * into a reported failure. Mount/peer sweeps repair a missed best-effort hint. */
+  /** Reconciliation is post-commit and must never turn durable success into a
+   * reported failure; mount/peer sweeps repair a missed hint. */
   private emitCommonsCommandSequenced(grantId: string): void {
     try {
       this.deps.onCommonsCommandSequenced?.(grantId);
     } catch {
-      // The canonical op is already committed. Restore reconciliation is the
-      // durable retry path, so this post-commit notification must not throw.
+      // Restore reconciliation is the durable retry path, so this post-commit
+      // notification must not throw.
     }
   }
 
-  /** Intent delivery is recovered by the bounded sweep, so its prompt wake
-   * is best-effort and cannot turn a durable queue write into a failure. */
+  /** Recovered by the bounded sweep, so a prompt wake is best-effort and must
+   * not turn a durable queue write into a failure. */
   private emitCommonsIntentQueued(grantId: string): void {
     try {
       this.deps.onCommonsIntentQueued?.(grantId);
     } catch {
-      // The persisted intent remains discoverable by the sweep clock.
+      // A wake hook's throw must not fail the queueing it signals.
     }
   }
 
-  /** Register a domain command: the agent.command contract row + handler. */
   registerCommand(def: CommandDefinition): void {
     const existing = lookupCommand(this.db.vault, def.name);
     const commandId = existing?.command_id ?? uuidv7();
@@ -495,8 +456,8 @@ export class Gateway {
       def.risk,
       ONTOLOGY_VERSION,
     ];
-    // Confirmation is a Tier 3/4 property of the COMMAND (issue #306
-    // decision 1), not a function of risk — risk is a salience marker.
+    // Confirmation is a Tier 3/4 property of the COMMAND (#306 decision 1),
+    // never a function of risk — risk is only a salience marker.
     const requiresConfirmation = def.confirm === true ? 1 : 0;
     if (existing) {
       this.db.vault
@@ -540,7 +501,6 @@ export class Gateway {
     });
   }
 
-  /** The discover surface: capabilities visible to any authenticated caller. */
   discover(cred: Credential): {
     name: string;
     schema: string;
@@ -572,7 +532,6 @@ export class Gateway {
     return authenticate(this.db.vault, cred);
   }
 
-  /** Consent-checked read: row filters and field masks applied, receipted. */
   read(cred: Credential, rawRequest: ReadRequest): ReadResult {
     const identity = this.identify(cred);
     const request = {
@@ -620,9 +579,7 @@ export class Gateway {
         `deny (receipt ${receiptId}): ${consent.failing}`
       );
     }
-    // Per-entity activity guard (issue #352 phase 3/4) — see
-    // provenanceScopeFailure's doc comment for why a table-level grant on
-    // consent.provenance alone is not a safe read.
+    // Per-entity activity guard — see `provenanceScopeFailure`.
     if (
       ref.schema === "consent" &&
       ref.table === "provenance" &&
@@ -648,11 +605,8 @@ export class Gateway {
     }
     const target = ref.file === "vault" ? this.db.vault : this.db.journal;
     const now = nowIso();
-    // Your own business only: an agent reading the invocation ledger sees
-    // ITS invocations, structurally — this is how a parked send resumes
-    // (watch your own rows for status changes) without any caller ever
-    // reading another actor's traffic. Not grant-configurable: appended
-    // beside the grant filter, so it can narrow but never widen.
+    // An agent sees ITS invocations, so a parked send resumes by watching its
+    // own rows. Appended beside the grant filter: narrows, never widens.
     const structuralFilter =
       identity.kind === "agent" && request.entity === "agent.command_invocation"
         ? [{ column: "caller_id", op: "eq" as const, value: identity.callerId }]
@@ -678,10 +632,8 @@ export class Gateway {
         consent.fieldMask.includes(scalarPrimaryKey))
         ? scalarPrimaryKey
         : undefined;
-    // Ordering is what turns a bounded read into a RECENT window (issue
-    // #262) — validated like a filter column, so it can't widen anything.
-    // An exposed scalar PK is the stable secondary key shared with browser
-    // replicas. Hidden/composite keys stay opaque and local ties rerun here.
+    // Ordering makes a bounded read a RECENT window (#262); validated like a
+    // filter column so it cannot widen anything.
     const order = compileOrderBy(
       target,
       ref.physical,
@@ -690,12 +642,8 @@ export class Gateway {
     );
     const select = applyFieldMask(target, ref.physical, consent.fieldMask);
     const limit = Math.min(Math.max(request.limit ?? 1000, 1), 10_000);
-    // The automation plane never sees demo data (issue #290 phase 1):
-    // condition triggers evaluate agent-credentialed reads, so seeded rows
-    // are structurally excluded here — a fake "rent due" row must not fire a
-    // real reminder. Owners and apps DO see demo rows: rendering them is the
-    // scenario's whole point. Appended beside the grant filter, so it can
-    // narrow but never widen.
+    // The automation plane never sees demo data (#290): a fake "rent due" row
+    // must not fire a real reminder. Narrows, never widens.
     const demoExclusion =
       identity.kind === "agent" &&
       ref.file === "vault" &&
@@ -712,8 +660,8 @@ export class Gateway {
         ...callerFilter.params,
         ...(demoExclusion ? [request.entity] : [])
       ) as Record<string, unknown>[];
-    // Sealed columns never ride a read (issue #293): default reads show a
-    // placeholder; plaintext takes the `reveal` verb and its per-item receipt.
+    // Sealed columns never ride a read (#293): reads show a placeholder;
+    // plaintext takes the `reveal` verb and its per-item receipt.
     if (sealedCols.length > 0) {
       for (const row of rows) {
         for (const col of sealedCols) {
@@ -736,11 +684,10 @@ export class Gateway {
   }
 
   /**
-   * Reveal (issue #293): plaintext of one entity's sealed columns, under the
-   * `reveal` scope verb — never `read`, never `read+act`. Owner devices pass
-   * (they own the model) unless readonly; every reveal writes a receipt
-   * naming the item and the columns, so "what looked at my secrets" always
-   * has an answer. Values never touch the journal.
+   * Reveal (#293): plaintext of one entity's sealed columns under the `reveal`
+   * verb — never `read`, never `read+act`. Owner devices pass unless readonly.
+   * Every reveal writes a receipt naming the item and columns, so "what looked
+   * at my secrets" always has an answer. Values never touch the journal.
    */
   reveal(cred: Credential, rawRequest: RevealRequest): RevealResult {
     const identity = this.identify(cred);
@@ -793,9 +740,8 @@ export class Gateway {
       if (!sealedCols.includes(col))
         return deny(`${col} is not a sealed column`);
     }
-    // Resolve a stable alias to the live item (issue #298 item 4). Only
-    // locker.item carries aliases; the lookup rides the reveal grant, so no
-    // separate read scope is needed for a connector to survive a rotation.
+    // Alias → live item (#298). Only locker.item carries aliases, and the
+    // lookup rides the reveal grant, so a connector survives a rotation.
     let entityId = request.entityId;
     if (request.alias !== undefined) {
       if (request.entity !== "locker.item")
@@ -812,9 +758,8 @@ export class Gateway {
       entityId = hit.item_id;
     }
     if (!entityId) return deny("reveal needs an entityId or alias");
-    // Locker lock is data-keyed: every reveal of locker.item consults the
-    // in-memory auth plane when credentials are configured. Fill needs an
-    // unlocked session; UI/agent reveals consume a one-time item permit.
+    // Locker lock is data-keyed: fill needs an unlocked session; UI/agent
+    // reveals consume a one-time item permit.
     if (request.entity === "locker.item") {
       try {
         this.enforceLockerReveal(request, entityId, context !== undefined);
@@ -837,8 +782,8 @@ export class Gateway {
     if (consent.decision === "deny")
       return deny(consent.failing, consent.grantId);
     const pk = pkColumn(this.db.vault, ref.physical);
-    // The grant's row filter clamps WHICH items are revealable — this is how
-    // a connector's grant names its specific locker items (issue #293 dec 8).
+    // The grant's row filter clamps WHICH items are revealable — how a
+    // connector's grant names its specific locker items (#293 dec 8).
     const rowFilter = compileFilters(
       this.db.vault,
       ref.physical,
@@ -871,9 +816,8 @@ export class Gateway {
         values[col] = String(value); // pre-seal legacy plaintext
       }
     }
-    // A successful unseal proves this key sealed this vault's secrets —
-    // stamp the fingerprint if a pre-#298 vault never recorded it, so the
-    // open-time custody check covers legacy vaults too.
+    // A successful unseal proves this key sealed this vault's secrets, so
+    // stamp the fingerprint a pre-#298 vault never recorded.
     if (unsealedAny) stampSealKeyFingerprint(this.db.vault, this.db.sealKey);
     const receiptId = writeReceipt(this.db.journal, {
       grantId: consent.grantId,
@@ -893,11 +837,10 @@ export class Gateway {
   }
 
   /**
-   * The owner's whole-model SQL read (the vault assistant's primary tool):
-   * one read-only statement over the full canonical schema — joins, window
-   * functions, recursive CTEs over core_link. Owner-device credential only;
-   * no consent clamping applies because there is no third party in the
-   * loop, but every run is receipted like any other read.
+   * The owner's whole-model SQL read (the assistant's primary tool): one
+   * read-only statement over the full canonical schema. Owner-device only — no
+   * consent clamping, because there is no third party — but every run is
+   * receipted like any other read.
    */
   sql(cred: Credential, request: VaultSqlRequest): VaultSqlResult {
     const identity = this.identify(cred);
@@ -944,9 +887,9 @@ export class Gateway {
   }
 
   /**
-   * Consent-checked full-text search over a text-indexed entity: matching
-   * runs inside SQLite's FTS5 shadow tables (schema/fts.ts), so a caller
-   * gets its LIMIT of ranked matches instead of a whole table to grep.
+   * Consent-checked full-text search: matching runs inside SQLite's FTS5 shadow
+   * tables (schema/fts.ts), so a caller gets its LIMIT of ranked matches
+   * instead of a whole table to grep.
    */
   search(cred: Credential, rawRequest: SearchRequest): SearchResult {
     const identity = this.identify(cred);
@@ -955,11 +898,8 @@ export class Gateway {
       purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
     };
     const result = searchEntity(this.db, identity, request);
-    // Search-miss prioritization (issue #299 phase 5): an OWNER search that
-    // found nothing records what was wanted; enrichers drain the queue
-    // before their backlog. Owner-plane only (an app's misses are its own
-    // business), deduped against open requests so repeat searches don't
-    // spam the queue.
+    // Search-miss prioritization (#299): owner-plane only, deduped against
+    // open requests, so enrichers drain the queue first.
     if (result.rows.length === 0 && identity.kind === "owner-device") {
       const open = this.db.vault
         .prepare(
@@ -980,11 +920,10 @@ export class Gateway {
   }
 
   /**
-   * The card resolver (issue #272): (type, id) references → minimal
-   * renderable cards, under the resolvable-if-linked consent rule — so a
-   * projection renders what the owner linked into its view without holding
-   * read scopes on the foreign domain. Receipted per batch; per-ref denials
-   * come back as 'denied' cards, never as an exception.
+   * The card resolver (#272): (type, id) refs → minimal renderable cards under
+   * the resolvable-if-linked rule, so a projection renders what the owner
+   * linked without holding read scopes on the foreign domain. Receipted per
+   * batch; per-ref denials come back as 'denied' cards, never exceptions.
    */
   resolveRefs(cred: Credential, request: RefRequest): ResolveResult {
     const identity = this.identify(cred);
@@ -992,12 +931,11 @@ export class Gateway {
   }
 
   /**
-   * The consented change feed (data triggers' outbox): provenance rows for
-   * the watched entities after the caller's cursor. Every watched entity is
+   * The consented change feed (data triggers' outbox). Every watched entity is
    * consent-checked for read under the declared purpose — one denied entity
-   * denies the whole pull (fail closed, receipted). A `null` cursor
-   * bootstraps: no rows, just the current watermark, so a fresh watcher
-   * never replays history it was not granted while it happened.
+   * denies the whole pull (fail closed, receipted). A `null` cursor bootstraps
+   * to the watermark, so a fresh watcher never replays history it was not
+   * granted while it happened.
    */
   changes(cred: Credential, rawRequest: ChangesRequest): ChangesResult {
     const identity = this.identify(cred);
@@ -1055,8 +993,8 @@ export class Gateway {
     if (request.cursor !== null) {
       const limit = Math.min(Math.max(request.limit ?? 200, 1), 500);
       const placeholders = request.entities.map(() => "?").join(", ");
-      // Demo writes never reach the feed (issue #290 phase 1): data triggers
-      // ride this outbox, and scenario data must not fire automations.
+      // Demo writes never reach the feed (#290): data triggers ride this
+      // outbox, and scenario data must not fire automations.
       const rows = this.db.journal
         .prepare(
           `SELECT prov_id, entity_type, entity_id, prov_activity, agent_kind, occurred_at
@@ -1082,10 +1020,8 @@ export class Gateway {
         occurredAt: r.occurred_at,
       }));
       const last = changes.at(-1);
-      // Advance to the last matched row; on an empty pull, jump to the
-      // pre-select watermark (safe — it was captured before the range scan,
-      // so nothing ≤ it can still be unmatched-but-matching) so a quiet
-      // watcher never rescans the same cold range twice.
+      // On empty pull jump to the pre-select watermark (captured before the
+      // range scan): nothing ≤ it stays unmatched-but-matching.
       if (last) cursor = last.provId;
       else if (watermark > cursor) cursor = watermark;
     }
@@ -1103,36 +1039,8 @@ export class Gateway {
   }
 
   /**
-   * THE GRANT PLANE'S ONE SEAM into ordinary writes (issue #825, ruling
-   * G-edit), or `undefined` when the grant plane has nothing to say.
-   *
-   * ACTOR-AWARENESS IS THE WHOLE POINT. `routeShareGrantEdit` answers about
-   * the CONTAINER: it returns a route — refusals included, "shared for view
-   * only" among them — whenever ANY grant covers the container, because a
-   * router that had to ask who was writing would be authorizing, which is not
-   * its job. So the seam asks. A grant constrains the AUDIENCE it names and
-   * never the vault that issued it: an owner editing a document inside a
-   * folder they shared for view is exercising their own ownership, not the
-   * grant, and refusing them would make sharing a way to lock yourself out.
-   * The owner's write therefore goes through exactly as it did before the
-   * grant plane existed, and only a write made on behalf of some OTHER party
-   * consults the refusals.
-   *
-   * An `app` credential carries no party: an installed app is the owner's own
-   * foreground door, so it is the owner acting and the plane stands aside
-   * without a query. And a non-owner party the grants over this container
-   * never NAMED is not this plane's business either — a grant speaks about
-   * the audience it addressed, so an actor no grant reaches is left to the
-   * consent layer that was already deciding for them.
-   *
-   * ASKING WHO IS WRITING IS NOT ENOUGH — the refusal has to be RE-DERIVED
-   * from that actor's own grants. The route's own `refusal` folds the whole
-   * container's grant set together, so on a container shared to A for edit and
-   * B for view it reports no view-only refusal at all, and B's write would
-   * sail past a seam that merely checked B was named by something. So the seam
-   * filters the container's grants down to the ones whose audience resolves to
-   * this actor and re-asks the engine (`shareGrantEditRefusal`) about those.
-   * The refusal sentences stay the engine's; only the grant set narrows.
+   * Grant plane's one seam into ordinary writes (#825 G-edit). Grant constrains the named audience, never the issuing vault.
+   * Re-derive refusal from THIS actor's grants — a mixed edit+view container's folded refusal would miss a view-only member.
    */
   private shareGrantRefusal(
     identity: Identity,
@@ -1161,13 +1069,11 @@ export class Gateway {
     return { reason, containerId: route.containerId, actorPartyId };
   }
 
-  /** Typed-command invocation: the only write path (rule R04). */
+  /** The only write path (rule R04). */
   invoke(cred: Credential, rawRequest: InvokeRequest): InvokeOutcome {
     const identity = this.identify(cred);
-    // BEFORE the commons rail, not after it. A refusal the grant plane draws
-    // — co-contribution to a folder, a view-only subject — is a refusal about
-    // the STANDING GRANT, and the commons rail beneath it would happily carry
-    // the write to the steward and apply it there.
+    // BEFORE the commons rail: a refusal here is about the STANDING GRANT,
+    // not something the rail should carry to the steward.
     const refused = this.shareGrantRefusal(identity, rawRequest);
     if (refused) {
       const receiptId = writeReceipt(this.db.journal, {
@@ -1223,9 +1129,8 @@ export class Gateway {
       | undefined;
     const actorPartyId = grantActor?.party_id ?? local.owner_party_id;
     if (grant.stewardPartyId !== actorPartyId) {
-      // Installed apps are the ordinary foreground UI door. Only an enrolled
-      // agent is an automation/background executor; treating every non-device
-      // credential as background silently discarded inline app member writes.
+      // Installed apps are the foreground door; only an enrolled agent is a
+      // background executor.
       const background = cred.kind === "agent";
       const stewardLabel = commonsStewardDeviceLabel(
         this.db.vault,
@@ -1358,15 +1263,14 @@ export class Gateway {
     rawRequest: InvokeRequest,
     deterministicIdSeed?: string
   ): InvokeOutcome {
-    // Purposes are off the critical path (issue #306 decision 4): a caller
-    // that names none rides the default; the journal records what applied.
+    // Purposes are off the critical path (#306 decision 4): a caller naming
+    // none rides the default, and the journal records what applied.
     const request = {
       ...rawRequest,
       purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
     };
-    // The demo register is the owner loading a scenario — no app or agent
-    // ever mints demo data (a granted caller marking real-looking rows as
-    // purgeable would be an integrity hole, not a feature).
+    // The demo register is the OWNER loading a scenario: a granted caller
+    // marking real-looking rows purgeable would be an integrity hole.
     if (request.demo && identity.kind !== "owner-device") {
       const receiptId = writeReceipt(this.db.journal, {
         grantId: null,
@@ -1420,9 +1324,8 @@ export class Gateway {
         objectId: command.command_id,
         purpose: request.purpose,
         decision: "deny",
-        // A refusal is attributed too (issue #599 decisions 7–8): "the
-        // assistant, acting for Sid, was refused" is the row an owner
-        // needs to read, not "some agent was refused".
+        // A refusal is attributed too (#599 decisions 7–8): "the assistant,
+        // acting for Sid, was refused" is the row an owner needs.
         detail: {
           failing: consent.failing,
           ...actingOwnerDetail(identity, request),
@@ -1471,11 +1374,8 @@ export class Gateway {
       : null;
     if (replayed) return this.trackBatchInvocation(replayed);
 
-    // Confirmation routing (issue #306 decision 2, amending #294 decision 4):
-    // an installed caller's declared commands execute under the install-time
-    // grant — risk is a salience marker in the journal, never a park trigger.
-    // Only a Tier 3/4 command (`confirm: true` → capability row) parks, and
-    // it parks for EVERY non-owner caller, regardless of ceiling.
+    // Confirmation routing (#306 decision 2, amending #294 decision 4): risk
+    // never parks; only `confirm: true` does, for EVERY non-owner caller.
     const sealedInput = this.commands.get(request.command)?.sealedInput ?? [];
     const capability = this.db.vault
       .prepare(
@@ -1576,9 +1476,8 @@ export class Gateway {
         "consent",
         "only the owner confirms parked invocations"
       );
-    // Journal denial commits before vault settlement. A crash in that gap
-    // leaves the encrypted payload present, but it is no longer executable:
-    // any retry (even an accidental approve) finishes the original denial.
+    // Journal denial commits before vault settlement: any retry, even an
+    // accidental approve, finishes the original denial.
     const priorDenial = readDurableParkedDenial(this.db, invocationId);
     if (priorDenial) {
       const pending = readDurableParkedPayload(this.db, invocationId);
@@ -1633,9 +1532,8 @@ export class Gateway {
         `handler missing for parked command ${entry.commandName}`
       );
     }
-    // A durable confirmation may outlive the grant that originally admitted
-    // it. Re-check at decision time so a crash between revoking the grant and
-    // deleting its parked payload can never let a later approval execute.
+    // A durable confirmation may outlive its grant — re-check at decision
+    // time or a revoked grant could still execute.
     const decisionAt = nowIso();
     const grantStillActive =
       entry.grantId === null ||
@@ -1711,7 +1609,7 @@ export class Gateway {
     return outcome;
   }
 
-  /** Standing duty: revocation cascade — owner-only, instant and total. */
+  /** Owner-only, instant and total. */
   revokeGrant(cred: Credential, grantId: string): RevocationResult {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
@@ -1758,30 +1656,19 @@ export class Gateway {
     return result;
   }
 
-  /** Standing duty: lifecycle sweep — purge_at deletions, grant/share expiry. */
   sweep(cred: Credential): SweepResult {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
       throw new GatewayError("consent", "only the owner runs sweeps");
     const result = sweepLifecycle(this.db, owner);
-    // Near-duplicate cluster projection (issue #352 phase 3/4) — a cheap,
-    // fully rebuildable recompute; riding the same standing clock as
-    // everything else in duties.ts keeps it fresh without a bespoke timer.
+    // Cheap, fully rebuildable; rides the standing clock.
     recomputeDuplicateClusters(this.db.vault);
-    // Memories v0 (issue #724 W7) — same rebuildable-projection mold as the
-    // cluster recompute just above; it reads media_asset_phash.cluster_id
-    // AFTER that recompute so a phash grouping that changed this sweep is
-    // reflected in the same pass's 'similar' memories rather than a sweep
-    // behind.
+    // AFTER the recompute above (#724): a regrouped sweep feeds this pass's
+    // 'similar' memories. Face clusters read what the faces sweep wrote (#724).
     rebuildMemories(this.db.vault);
-    // Face grouping (issue #724 W5) — the third rebuildable projection on this
-    // clock. It reads media_face_region and the face vectors the gateway's
-    // faces sweep wrote, so it runs AFTER nothing in particular here: a pass
-    // that finds no new faces writes nothing at all.
     rebuildFaceClusters(this.db.vault);
-    // Device work rides the same bounded standing clock: seed jobs for old
-    // video/audio/PDF content and clear vanished ownership so a gateway
-    // backstop that looks for NULL leases can resume immediately.
+    // Seed jobs for old video/audio/PDF content and clear vanished ownership,
+    // so a backstop looking for NULL leases can resume immediately.
     releaseExpiredEnrichmentLeases(this.db.vault);
     drainSatisfiedEnrichmentRequests(this.db.vault);
     queueMissingDeviceEnrichmentBacklog(this.db.vault, {
@@ -1790,16 +1677,14 @@ export class Gateway {
       limit: 100,
     });
     this.ringProvenance();
-    // Sweeps commit canonical changes outside the command execution path.
-    // Wake replica SSE streams at the same post-commit boundary.
+    // Sweeps commit outside the command path; wake replica SSE streams at the
+    // same post-commit boundary.
     notifyReplicaCommit(this.db.vault);
     return result;
   }
 
-  /**
-   * View service: register a declarative app view. Apps register their own;
-   * the owner may register on an app's behalf by passing appId.
-   */
+  /** Apps register their own views; the owner may register on an app's behalf
+   * by passing appId. */
   registerView(
     cred: Credential,
     options: {
@@ -1829,7 +1714,7 @@ export class Gateway {
     });
   }
 
-  /** View service: execute a registered view, clamped to the app's scopes. */
+  /** Clamped to the app's scopes. */
   queryView(
     cred: Credential,
     viewName: string,
@@ -1851,7 +1736,6 @@ export class Gateway {
     return queryAppView(this.db, identity, owningApp, viewName, purpose);
   }
 
-  /** Standing duty: file custody — WAL checkpoint both files. */
   checkpoint(cred: Credential): { vault: string; journal: string } {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
@@ -1859,7 +1743,6 @@ export class Gateway {
     return checkpointVault(this.db);
   }
 
-  /** Standing duty: file custody — verifiable consistent backup of both files. */
   backup(cred: Credential, destDir: string): BackupResult {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
@@ -1868,11 +1751,10 @@ export class Gateway {
   }
 
   /**
-   * The ext band (issue #286 phase 2). Diff-apply an app's declared
-   * extension tables to the live band, keep the typed write trio
-   * (`ext.<appId>.insert|update|delete`) registered exactly when the band
-   * is non-empty, and receipt the change. Owner-only: DDL comes from the
-   * manifest through the host, never from the app.
+   * The ext band (#286): diff-apply an app's declared extension tables to the
+   * live band, keep the typed write trio registered exactly when the band is
+   * non-empty, and receipt the change. Owner-only — DDL comes from the manifest
+   * through the host, never from the app.
    */
   applyAppExt(
     cred: Credential,
@@ -1893,9 +1775,8 @@ export class Gateway {
   }
 
   /**
-   * Ensure the app's draft band matches the specs: first call seeds from
-   * live rows, later calls diff-apply and keep draft rows. `reset` drops
-   * the band first for a fresh live snapshot.
+   * First call seeds from live rows; later calls diff-apply and keep draft
+   * rows. `reset` drops the band first for a fresh live snapshot.
    */
   seedAppExtDraft(
     cred: Credential,
@@ -1920,7 +1801,6 @@ export class Gateway {
     return { ...outcome, receiptId };
   }
 
-  /** Discard the app's draft band (session close / reset). */
   dropAppExtDraft(
     cred: Credential,
     appId: string
@@ -1964,7 +1844,6 @@ export class Gateway {
     return { purged, receiptId };
   }
 
-  /** Re-arm the write trios for every app with an active band (host boot). */
   registerAllExtCommands(): void {
     for (const appId of extAppIds(this.db.vault))
       this.registerExtCommands(appId);
@@ -1978,7 +1857,6 @@ export class Gateway {
     for (const name of extCommandNames(appId)) this.deregisterCommand(name);
   }
 
-  /** Remove a command's contract row, capability and handler. */
   deregisterCommand(name: string): void {
     const existing = lookupCommand(this.db.vault, name);
     if (existing) {
@@ -2018,9 +1896,9 @@ export class Gateway {
   }
 
   /**
-   * Purge demo data (issue #290 phase 1) — whole vault or one app's
-   * scenario. Owner-only, receipted; rows a non-demo FK still holds are
-   * reported blocked, never force-deleted.
+   * Purge demo data (#290), whole vault or one app's scenario. Owner-only,
+   * receipted; rows a non-demo FK still holds are reported blocked, never
+   * force-deleted.
    */
   purgeDemo(cred: Credential, appId?: string): DemoPurgeResult {
     const owner = this.requireOwner(cred, "only the owner purges demo data");
@@ -2029,16 +1907,14 @@ export class Gateway {
     return result;
   }
 
-  /** Seeded-row counts per app — the "demo data present" surface. */
   demoStatus(cred: Credential): { appId: string; rows: number }[] {
     this.requireOwner(cred, "only the owner inspects demo status");
     return demoStatus(this.db);
   }
 
   /**
-   * File-drop customs (issue #290 phase 2): stage a dropped file into a
-   * reviewable draft batch on its (kind, filename) connection. Nothing
-   * touches a domain table until the owner publishes.
+   * File-drop customs (#290): stage a dropped file into a reviewable draft
+   * batch. Nothing touches a domain table until the owner publishes.
    */
   stageImportFile(
     cred: Credential,
@@ -2048,7 +1924,6 @@ export class Gateway {
     return stageFile(this.db, owner, options);
   }
 
-  /** Publish a reviewed draft batch — creates/updates land, receipted. */
   publishImport(cred: Credential, batchId: string): PublishResult {
     const owner = this.requireOwner(
       cred,
@@ -2063,7 +1938,6 @@ export class Gateway {
     );
   }
 
-  /** Discard a draft batch — rows dropped, nothing published. */
   discardImport(cred: Credential, batchId: string): { receiptId: string } {
     const owner = this.requireOwner(
       cred,
@@ -2073,12 +1947,11 @@ export class Gateway {
   }
 
   /**
-   * Blob ingress (issue #296 §3): hash raw bytes into the local CAS and
-   * record a staging row. NOT a vault write — no receipt, no content item;
-   * the command that claims the sha (`core.attach` / `core.add_document` /
-   * `media.add_asset` with `staged_sha`) is the write, and mints the
-   * receipt. Unclaimed stages sweep after the TTL. Any caller that may act
-   * can stage; claiming is where consent bites.
+   * Blob ingress (#296): hash raw bytes into the local CAS and record a staging
+   * row. NOT a vault write — no receipt, no content item; the command that
+   * claims the sha is the write and mints the receipt. Unclaimed stages sweep
+   * after the TTL. Any caller that may act can stage; claiming is where consent
+   * bites.
    */
   stageBlob(
     cred: Credential,
@@ -2092,11 +1965,10 @@ export class Gateway {
   }
 
   /**
-   * Blob egress resolution (issue #296 §5): consent (read on
-   * core.content_item, receipted) plus the DERIVED reachability rule — the
-   * bytes serve only when some edge in the model claims them. Returns
-   * resolution metadata; the transport streams bytes from custody itself
-   * (`db.blobs.open`), so Range never crosses this boundary.
+   * Blob egress (#296): consent (read on core.content_item, receipted) plus the
+   * DERIVED reachability rule — bytes serve only when some edge in the model
+   * claims them. Returns metadata only; the transport streams from custody, so
+   * Range never crosses this boundary.
    */
   resolveBlob(
     cred: Credential,
@@ -2152,12 +2024,10 @@ export class Gateway {
   }
 
   /**
-   * Agent content access (issue #299 §2, the #296 §7 seam): the size-bounded
-   * byte primitive enrichers and the assistant read through. Structural
-   * rule: DERIVATIVES EGRESS, NEVER ORIGINALS — the surface only spells
-   * `thumb`, `preview` and `text`. Consent is the same read evaluation the
-   * blob routes run, and every fetch (allow or deny) is receipted — the
-   * "multimodal hand-off is its own consent event" decision, made code.
+   * Agent content access (#299 §2, the #296 §7 seam). Structural rule:
+   * DERIVATIVES EGRESS, NEVER ORIGINALS — the surface spells only `thumb`,
+   * `preview` and `text`. Consent is the same read evaluation the blob routes
+   * run, and every fetch, allow or deny, is receipted.
    */
   async contentForAgent(
     cred: Credential,
@@ -2230,12 +2100,7 @@ export class Gateway {
     return { ...outcome, receiptId };
   }
 
-  /**
-   * Standing duty: blob replication + reconciliation (issue #296 §6).
-   * Pushes local bytes the remote tier lacks, deletes remote orphans
-   * nothing claims, and reports shas missing from BOTH tiers (integrity
-   * errors are surfaced, never papered over). Owner-only, receipted.
-   */
+  /** Standing duty: blob replication + reconciliation (#296). Pushes local bytes the remote lacks, deletes unclaimed orphans, reports shas missing from BOTH tiers — integrity errors surface, never papered over. */
   async sweepBlobs(
     cred: Credential,
     options?: {
@@ -2247,49 +2112,32 @@ export class Gateway {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
       throw new GatewayError("consent", "only the owner sweeps blob custody");
-    // Archived journal segments are claimed by the manifest chain, not by
-    // any core_content_item row — without this union the reconcile sweep
-    // would delete their remote replicas as orphans (issue #367 §E2).
+    // Archive segments are claimed by the manifest chain / ledger (#367,
+    // #438), not by content rows — a pruned segment is the only copy of its
+    // rows. Without these unions reconcile deletes them.
     const live = liveBlobShas(this.db.vault);
     for (const sha of archivedSegmentShas(this.db.journal)) live.add(sha);
-    // Conversation-ledger archive segments are claimed the same way (issue #438
-    // decision 6) — a pruned segment is the ONLY copy of its rows, so it must
-    // read as reachable or the sweep would delete the only durable copy.
     for (const sha of conversationArchiveShas(this.db.journal)) live.add(sha);
-    // Retained-snapshot GC roots (issue #436 §6) pin remote objects the live
-    // model no longer claims but a recovery-to-N would still need. They protect
-    // from the orphan delete without joining `live` (which would spuriously
-    // re-push a remote-only original the local tier does not hold).
+    // Retained-snapshot GC roots (#436) must NOT join `live`: recovery-to-N
+    // still needs them, and `live` would re-push a remote-only original.
     const result = await this.db.blobs.reconcile(live, {
       ...(options?.skipOrphanDelete ? { skipOrphanDelete: true } : {}),
       ...(options?.extraLiveRoots
         ? { extraLiveRoots: options.extraLiveRoots }
         : {}),
-      // Orphan-grace window (issue #439 R4): the recovery window N, as ms. The
-      // gateway resolves it from the provider's retention ladder; the delete is
-      // deferred until an orphan has been observed for longer than N.
+      // Orphan-grace window (#439): wait past the recovery window N.
       ...(options?.graceWindowMs === undefined
         ? {}
         : { graceWindowMs: options.graceWindowMs }),
     });
-    // Refresh the app-readable custody-state mirror (issue #352 phase 3/4)
-    // AFTER reconcile — the snapshot reflects the post-sweep steady state,
-    // not a stale pre-sweep gap.
+    // Refresh the app-readable custody mirror AFTER reconcile, so it reflects
+    // the post-sweep steady state rather than a stale gap.
     await refreshCustodyState(this.db);
-    // The aggregate rollup (issue #711) reads the mirror that was just written
-    // AND the replica evidence reconcile just healed against the real remote
-    // listing — the same post-reconcile condition BlobCache requires before it
-    // will shed an original rather than a preview. Computing it anywhere else
-    // in the sweep would grade "safe to release" against stale evidence.
+    // Rollup (#711) needs the fresh mirror AND healed replica evidence — the
+    // same condition BlobCache requires before shedding an original.
     refreshCustodyRollup(this.db);
-    // Preview backstop (issue #405 §2): fill missing tiny/medium derivatives
-    // for image content a capable client never produced — Takeout imports,
-    // weak/old clients, server-side ingestion. Bounded per sweep (cheap edge
-    // CPU QoS) and only when the host wired a raster codec (the vault package
-    // carries none). Best-effort maintenance: a codec failure is swallowed so
-    // it can never fail the custody sweep it rides along with. Real work lives
-    // in blob/preview.ts — gateway.ts stays over its line cap on a waiver, so
-    // this addition is deliberately a thin call-through.
+    // Preview backstop (#405): fill missing tiny/medium derivatives, bounded,
+    // best-effort (failures never fail the sweep). Real work in blob/preview.ts.
     let previewsGenerated = 0;
     let phashesGenerated = 0;
     let thumbhashesGenerated = 0;
@@ -2303,18 +2151,12 @@ export class Gateway {
         // swallowed on purpose — see the comment above.
       }
     }
-    // Device leases and gateway backstops share the typed derivative row as
-    // their completion truth. Once an expired/unowned job's rung exists,
-    // close it here so queue depth reflects the actual remaining work.
+    // Leases and backstops share the derivative row as completion truth:
+    // close an expired job once its rung exists.
     drainSatisfiedEnrichmentRequests(this.db.vault);
-    // Bounded-cache eviction (issue #405 §3): run LAST, after reconcile has
-    // healed the replication index and the preview backstop has generated this
-    // sweep's new rungs — so the pass evicts against fresh replication evidence
-    // and never sheds a tiny it just made. Sheds replicated LRU mediums/
-    // originals until the spool is under budget; pinned tinies, staged bytes and
-    // un-replicated last copies are untouchable. The evicted rows read back
-    // `remote-only` on the NEXT sweep's `refreshCustodyState` (custody-state.ts
-    // doc). No-op when the vault is local-only or the budget isn't exceeded.
+    // Bounded-cache eviction (#405) runs LAST, against fresh evidence — never
+    // sheds a tiny just made. Pinned tinies, staged bytes and un-replicated
+    // last copies are untouchable.
     const evicted = this.db.blobs.evictAfterReconcile();
     const receiptId = writeReceipt(this.db.journal, {
       grantId: null,
@@ -2327,20 +2169,17 @@ export class Gateway {
       detail: {
         orphansDeleted: result.orphansDeleted.length,
         orphansSkipped: result.orphansSkipped.length,
-        // Orphans held by the recovery-window grace (issue #439 R4) — deferred,
-        // not skipped; they delete on a future sweep once the grace elapses.
+        // Held by the recovery-window grace (#439) — deferred, not skipped.
         orphansGraceHeld: result.orphansGraceHeld.length,
         replicated: result.replicated.length,
         missing: result.missing,
-        // The preview backstop's per-sweep yield (issue #405 §2) — 0 when no
-        // codec is wired or no image was missing a rung.
+        // 0 when no codec is wired or no image was missing a rung.
         previewsGenerated,
         // Inline dHash contributions published beside preview rungs.
         phashesGenerated,
         // Inline ThumbHash placeholders published beside preview rungs.
         thumbhashesGenerated,
-        // The bounded-cache eviction yield (issue #405 §3) — 0 when the spool
-        // is under budget or the vault is local-only.
+        // 0 when the spool is under budget or the vault is local-only.
         evictedBlobs: evicted.evictedBlobs,
         evictedBytes: evicted.evictedBytes,
       },
@@ -2348,7 +2187,6 @@ export class Gateway {
     return { ...result, receiptId };
   }
 
-  /** Standing duty: ingest customs — ICS events enter through the border post. */
   importIcs(cred: Credential, icsText: string): ImportResult {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
@@ -2358,7 +2196,6 @@ export class Gateway {
     return result;
   }
 
-  /** Standing duty: ingest customs — vCards resolve to identities, never duplicates. */
   importVcards(cred: Credential, vcfText: string): ImportResult {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
@@ -2368,7 +2205,6 @@ export class Gateway {
     return result;
   }
 
-  /** Standing duty: export & portability — the whole model out, verifiable. */
   exportVault(cred: Credential): {
     artifact: VaultExport;
     exportId: string;
@@ -2380,7 +2216,6 @@ export class Gateway {
     return exportVault(this.db, owner);
   }
 
-  /** Full portable bundle: canonical tables, readable adapters, blobs + hashes. */
   async exportPortableVault(cred: Credential): Promise<PortableExport> {
     const owner = this.identify(cred);
     if (owner.kind !== "owner-device")
@@ -2397,8 +2232,7 @@ export class Gateway {
       callerId: p.identity.callerId,
       caller: this.callerName(p.identity),
       // The confirmation surface shows WHAT is asked, never secret material
-      // (issue #293) — sealed inputs ride as hash tokens here too, nested ext
-      // secrets included (issue #298 item 9).
+      // (#293): sealed inputs ride as hash tokens, nested ext secrets included.
       input: redactCommandInput(
         this.db.sealKey,
         p.commandName,
@@ -2410,10 +2244,8 @@ export class Gateway {
   }
 
   /**
-   * The requester kind for the approval surface's trust badge — refines
-   * `Identity['kind']`'s `'agent'` into `'assistant'` when the credential is
-   * the vault assistant's own enrolled identity (`_assistant`,
-   * `VaultPlane.invokeAsAssistant`), not an automation's.
+   * Refines `Identity['kind']`'s `'agent'` into `'assistant'` for the vault
+   * assistant's own enrolled identity (`_assistant`, `invokeAsAssistant`).
    */
   private callerKind(identity: Identity): ParkedCallerKind {
     if (identity.kind !== "agent") return identity.kind;
@@ -2423,7 +2255,7 @@ export class Gateway {
     return row?.enrollment_key === "_assistant" ? "assistant" : "agent";
   }
 
-  /** Display name for a parked caller — WHO wants the act, for the owner. */
+  /** WHO wants the act, for the owner. */
   private callerName(identity: Identity): string | null {
     if (identity.kind === "owner-device") return "owner";
     const byApp = identity.kind === "app";

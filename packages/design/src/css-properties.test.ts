@@ -101,7 +101,7 @@ describe("generated stylesheet values", () => {
       "--t-annot-label-on-size",
       "--t-band-size",
     ]);
-    // rem = px / 16 — the shell now emits host-relative units (issue #708)
+    // rem = px / 16 — the shell now emits host-relative units (#708)
     // so 200% OS text scale, which moves the ROOT font-size, actually reaches
     // these rungs; a `px` literal would be invisible to that preference.
     // 0.71875rem is gone with the 11.5px size it lowered: a rung whose rem

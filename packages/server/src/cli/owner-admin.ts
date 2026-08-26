@@ -1,5 +1,5 @@
 /*
- * `centraid-gateway owners` — the people on this box (issue #726).
+ * `centraid-gateway owners` — the people on this box (#726).
  *
  * Stopped-daemon filesystem maintenance, exactly like `devices`: mutations
  * take gateway.db's exclusive lock and refuse while the daemon is running,

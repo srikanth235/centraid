@@ -1,13 +1,13 @@
 /*
- * Canonical daemon layout (issue #555). Desktop and headless hosts derive
+ * Canonical daemon layout (#555). Desktop and headless hosts derive
  * the same tree. gateway.db is control state + process lock; keys/ is
  * custody; vault/ is sovereign state; cache/ is disposable; gateway-logs/
  * is diagnostics. A zero-vault gateway does not create vault/ or cache/.
  *
- * The `devicesFile` / `pairingTicketsFile` / `webSessionsFile` aliases were
- * removed in #568 item J: all three resolved to `gateway.db`, so their names
- * described a loose-JSON layout that has not existed since #555. Callers name
- * `gatewayDbFile` (or pass the open `GatewayDatabase`) directly.
+ * Callers name `gatewayDbFile` (or pass the open `GatewayDatabase`) directly:
+ * there are no `devicesFile` / `pairingTicketsFile` / `webSessionsFile`
+ * aliases, whose names described a loose-JSON layout this tree does not have
+ * (#555, #568).
  */
 
 import path from "node:path";

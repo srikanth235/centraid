@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /*
- * `centraid` — product CLI over the gateway wire protocol (issue #504 batch 3).
+ * `centraid` — product CLI over the gateway wire protocol (#504 batch 3).
  *
- * Auth: --token | CENTRAID_TOKEN | CENTRAID_GATEWAY_TOKEN (issue #505 phase 7
- * retired the daemon's on-disk `token.bin`, so there is nothing to auto-read
- * from a data dir — supply the loopback secret the daemon was started with, or
- * a per-device token from pairing).
+ * Auth: --token | CENTRAID_TOKEN | CENTRAID_GATEWAY_TOKEN (the daemon keeps no
+ * on-disk `token.bin` (#505), so there is nothing to auto-read from a
+ * data dir — supply the loopback secret the daemon was started with, or a
+ * per-device token from pairing).
  * Streaming verbs are deferred (documented below and in README).
  */
 

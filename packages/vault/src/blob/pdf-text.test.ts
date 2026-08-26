@@ -1,4 +1,4 @@
-// PDF text backstop + decompression-bomb guard (issue #545 B6).
+// PDF text backstop + decompression-bomb guard (#545).
 
 import { deflateSync } from "node:zlib";
 

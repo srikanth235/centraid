@@ -1,14 +1,6 @@
 /*
- * The two single-row-per-vault tables behind #750 invariants 1–2, and the only
- * code that reads or writes them.
- *
- * `vault_directory` holds a vault's ONE stable identity record; `vault_routes`
- * holds ONE replaceable address row per vault that lives elsewhere. They are
- * split out of the links store because they answer a different question than a
- * link does: a link is permission between a pair, while these two are facts
- * about a single vault that every link naming it resolves through. Keeping the
- * SQL here is what makes "one identity, one route, no duplication" checkable by
- * reading one file.
+ * The single-row-per-vault tables behind #750 invariants 1–2; keeping the SQL
+ * here makes "one identity, one route" checkable by reading one file.
  */
 
 import type { GatewayDatabase } from "./gateway-db.js";
@@ -42,7 +34,6 @@ function toRoute(row: VaultRouteRow): LinkRoute {
   };
 }
 
-/** A vault's one stable identity record (#750 invariant 1). */
 export function directoryEntryOf(
   gatewayDatabase: GatewayDatabase,
   vaultId: string
@@ -59,10 +50,7 @@ export function directoryEntryOf(
   };
 }
 
-/**
- * How to reach `vaultId` — `undefined` when it is a vault on this gateway
- * (a route row's mere presence is what "remote" means, #750 invariant 2).
- */
+/** undefined when the vault is local (#750 invariant 2). */
 export function routeOf(
   gatewayDatabase: GatewayDatabase,
   vaultId: string
@@ -73,17 +61,8 @@ export function routeOf(
   return row ? toRoute(row) : undefined;
 }
 
-/**
- * Record a vault's identity (and, when known, label) in the directory.
- *
- * The key is write-ONCE (#750 invariant 1: a vault's identity is stable;
- * only its route is replaceable cache). A second ceremony naming the same
- * vault with a different key is not a re-bind — it is someone claiming a
- * vault id that is not theirs, and the whole directory exists so that
- * claim can be refused. Rotation is deliberately not this path
- * (docs/decisions.md defers it to re-invitation), so there is no honest
- * caller that needs to change a recorded key. Only the label moves.
- */
+/** Key is write-ONCE (#750 invariant 1): a second ceremony naming the vault
+ * with a different key throws rather than re-binds; only the label moves. */
 export function upsertDirectoryRow(
   gatewayDatabase: GatewayDatabase,
   vaultId: string,

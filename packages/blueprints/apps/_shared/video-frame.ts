@@ -61,7 +61,6 @@ function canvasBlob(
   });
 }
 
-/** One canonical hardware-decoded poster/thumb capture pipeline for every browser surface. */
 export async function captureVideoFrames(
   source: Blob
 ): Promise<CapturedVideoFrames | null> {

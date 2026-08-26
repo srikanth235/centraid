@@ -1,11 +1,4 @@
-/**
- * Parent-side handlers for the worker's `ctx.*` messages (issue #80).
- *
- * Split out of `runner.ts` so the handler orchestrator stays focused
- * on worker lifecycle + message routing. Each function here takes the
- * audit `AutomationRunsStore` (when present) and returns a reply that
- * matches the worker's expected wire shape.
- */
+/** Parent-side handlers for the worker's `ctx.*` messages (#80); replies in the worker's shape. */
 
 import type {
   ConversationStore,
@@ -32,7 +25,7 @@ export interface AuditState {
   runId: string;
   automationId: string;
   ordinal: number;
-  /** Live run-stream sink. No-op until the host wires its bus (issue #158). */
+  /** Live run-stream sink; no-op until the host wires a bus (#158). */
   emit: RunEventSink;
 }
 
@@ -46,7 +39,7 @@ export interface CtxReply {
   error?: string;
 }
 
-/** One `ctx.delegate` content reference, as the worker sent it (issue #299). */
+/** One `ctx.delegate` content reference, as sent by the worker (#299). */
 export interface DelegateContentRef {
   contentId: string;
   variant: string;
@@ -54,19 +47,15 @@ export interface DelegateContentRef {
 }
 
 /**
- * Resolve `ctx.delegate` content refs into attachments through the vault
- * bridge (issue #299 §2): each fetch runs under the automation's grant and
- * is receipted host-side as its own consent event. Resolution is
- * fail-closed — a denied or missing derivative fails the delegate call with
- * the reason (and receipt id) in the error, never a silent partial prompt.
+ * Resolve `ctx.delegate` content refs into attachments via the vault
+ * bridge (#299), under the automation's grant. Fail-closed: denial fails
+ * the call — never a silent partial prompt.
  */
 export async function resolveContentAttachments(
   vault: VaultBridge | undefined,
   refs: readonly DelegateContentRef[]
 ): Promise<DelegateAttachment[]> {
-  // A content-free call needs no vault authority. In particular, recognition
-  // capability probes use the same resolver with an empty list before the
-  // reserved deterministic executor checks the addressed capability.
+  // Content-free calls need no vault authority (probes pass []).
   if (refs.length === 0) return [];
   if (!vault) {
     throw new Error(
@@ -118,11 +107,8 @@ export async function resolveContentAttachments(
 }
 
 /**
- * Service one `ctx.delegate` call: open a `delegate` run node, dispatch, forward
- * streamed chat events as `item.delta`, and settle the item with the
- * token/model rollup. Returns the reply the host sends back to the worker.
- * Extracted from the orchestrator so each file stays under the repo-hygiene line
- * cap (issue #166).
+ * Service one `ctx.delegate` call: open a `delegate` node, dispatch, forward
+ * events as `item.delta`, settle with the token/model rollup.
  */
 export async function handleDelegateMessage(
   audit: AuditState,
@@ -155,11 +141,9 @@ export async function handleDelegateMessage(
     },
     started,
   });
-  // When the harness streams (issue #158, Phase 2), forward each chat event as a
-  // native `item.delta`, and remember the last `usage` event so
-  // `closeRunNode` can persist the token/model rollup. ACP tool calls become
-  // their own durable items keyed by toolCallId: parallel calls can share a
-  // name and finish out of order, so ordinal/name correlation is invalid.
+  // Forward chat events as `item.delta` (#158); keep the last usage
+  // for closeRunNode's rollup. ACP tool calls become durable items keyed by
+  // toolCallId: parallel calls share names — ordinal/name correlation void.
   let lastUsage: Extract<TurnStreamEvent, { type: "usage" }> | undefined;
   let finalRawJson: string | undefined;
   const toolItems = new Map<
@@ -168,8 +152,7 @@ export async function handleDelegateMessage(
   >();
   const onEvent = (ev: TurnStreamEvent): void => {
     if (ev.type === "usage") lastUsage = ev;
-    // Keep the last envelope that HAS one: an `error` following a `final`
-    // would otherwise blank the captured `final` envelope with its undefined.
+    // Keep the last envelope WITH one: an error after a final must not blank it.
     if (
       (ev.type === "final" || ev.type === "error") &&
       ev.rawJson !== undefined
@@ -316,18 +299,11 @@ export async function handleDelegateMessage(
 }
 
 /**
- * Service one `ctx.vault` call: open a `tool` run node named `vault.<op>`,
- * proxy through the host-injected bridge (the automation's enrolled
- * `consent.agent` credential lives host-side), and settle the node.
- *
- * Replay safety: an `invoke` without a caller-supplied `invocationId` gets a
- * deterministic one derived from the run id + the node's ordinal. Re-firing
- * the same runId replays the recorded outcome inside the vault instead of
- * double-executing — the handler lint already guarantees the call sequence
- * is deterministic.
- *
- * Without a bridge every call fails closed with `VAULT_UNAVAILABLE`,
- * mirroring app handlers on gateways that mount no vault plane.
+ * Service one `ctx.vault` call: open a `tool` node named `vault.<op>`, proxy
+ * the host-injected bridge (the enrolled credential lives host-side), settle.
+ * Replay safety: missing invocationId gets a deterministic one (run id +
+ * ordinal) — re-firing replays, never double-executes. Without a bridge:
+ * fail closed VAULT_UNAVAILABLE.
  */
 export async function handleVaultMessage(
   audit: AuditState,
@@ -438,11 +414,10 @@ export function handleRunsMessage(
   }
 ): CtxReply {
   try {
-    // An automation's runs are the turns of its stable ref-keyed conversation.
+    // An automation's runs are its ref-keyed conversation's turns.
     const automationRef = filter.automationId ?? audit.automationId;
     const limit = filter.limit ?? 50;
-    // Fetch one extra row so we can drop the in-progress self-turn without
-    // short-changing the caller's limit.
+    // One extra row drops the in-progress self-turn without shorting the limit.
     const rows = audit.store
       .listAutomationTurns(automationRef, {
         ...(filter.status ? { status: filter.status } : {}),

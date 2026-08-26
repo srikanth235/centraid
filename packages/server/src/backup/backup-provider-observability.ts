@@ -1,5 +1,5 @@
 /*
- * Provider-observability helpers for the gateway backup engine (issue #414).
+ * Provider-observability helpers for the gateway backup engine (#414).
  * Policy declaration and inventory/audit collection live here so the service
  * remains the serialized lifecycle owner rather than growing wire-protocol
  * parsing inline.

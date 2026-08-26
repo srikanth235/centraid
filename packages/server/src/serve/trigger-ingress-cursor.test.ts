@@ -1,5 +1,5 @@
 /*
- * The cursor-advance invariant (issue #541 review). The regression this
+ * The cursor-advance invariant (#541 review). The regression this
  * guards: reporting the source's LATEST durable id after returning only a
  * capped prefix, which counted the surplus as `skipped` and dropped every
  * webhook delivery past the 51st in one window — even though those rows were

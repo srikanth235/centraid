@@ -1,11 +1,8 @@
-// Blob staging (issue #296 §3): raw bytes arriving is NOT a vault write —
-// the command that claims them is. Both ingress doors (the HTTP upload route
-// and the import spine's stageBlobFromFile) land here: hash into the local
-// CAS, run the spool pipeline (sniff/EXIF/text), record a `blob_staging`
-// row. No receipt, no content item, invisible to the ontology. A command
-// (core.attach / core.add_document / media.add_asset) later promotes the
-// staged sha into a `core_content_item` in-transaction and mints the
-// receipt; unclaimed rows sweep after a TTL.
+// Blob staging (#296): raw bytes arriving is NOT a vault write — the claiming
+// command is. Both ingress doors land here: hash into local CAS, run the spool
+// pipeline, record a blob_staging row (no receipt, invisible to the ontology).
+// A command promotes the sha in-transaction and mints the receipt; unclaimed
+// rows sweep after a TTL.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -50,11 +47,11 @@ export function mediaLocationPolicy(db: VaultDb): "keep" | "strip" {
 
 export interface StageBlobOptions {
   bytes: Buffer;
-  /** Caller-declared type — a hint; content sniffing wins when it knows. */
+  /** Caller-declared hint; content sniffing wins. */
   mediaType?: string;
   /** Original filename, kept for the claim's default title. */
   filename?: string;
-  /** Row id of whoever staged (device/app/agent) — audit color, not consent. */
+  /** Who staged (device/app/agent) — audit color, not consent. */
   stagedBy?: string;
   /** Pin past the TTL while an import draft batch references these bytes. */
   heldByBatch?: string;
@@ -75,12 +72,8 @@ export interface StagedBlob {
   existingContentId: string | null;
 }
 
-/**
- * The one ingress everything uses: hash raw bytes into the local CAS, sniff
- * the real media type, extract spool metadata, upsert the staging row.
- * Synchronous by design — the local tier is the spool, remote replication is
- * a sweep — so the import spine can call it mid-parse.
- */
+/** Sole ingress: hash→CAS, sniff, spool metadata, upsert staging row.
+ *  Synchronous — the local tier IS the spool — so import calls it mid-parse. */
 export function stageBlobBytes(
   db: VaultDb,
   options: StageBlobOptions
@@ -127,8 +120,7 @@ export function stageBlobBytes(
   const mediaType =
     contribution?.mediaType ??
     sniffMediaType(options.bytes, options.mediaType, options.filename);
-  // GPS policy gates HERE (issue #296 §4): `media.location = 'strip'` means
-  // extraction never writes coordinates anywhere downstream.
+  // GPS gates HERE (#296): 'strip' means coordinates never written downstream.
   const meta = binary
     ? extractBlobMeta(options.bytes, mediaType, {
         keepLocation: mediaLocationPolicy(db) !== "strip",
@@ -139,9 +131,8 @@ export function stageBlobBytes(
     : (db.vault
         .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
         .get(sha256) as { content_id: string } | undefined);
-  // Keep the typed slot and its claimed-content association as one database
-  // mutation. A device may complete its lease immediately after this call;
-  // it must never observe a deleted staging slot without the derivative row.
+  // Typed slot + claimed-content association stay ONE mutation: a device
+  // completing its lease must never see slot gone without the derivative row.
   db.vault.exec("SAVEPOINT stage_blob_bytes");
   try {
     db.vault
@@ -173,9 +164,7 @@ export function stageBlobBytes(
         contribution?.textContent ?? null,
         nowIso()
       );
-    // A derivative arriving AFTER its parent was already claimed (a slow
-    // thumb upload racing the claim) registers immediately — otherwise it
-    // would sit unclaimed until the TTL reaped it.
+    // Derivative after parent claimed registers immediately, else TTL reaps it.
     if (options.variant && options.variantOf) {
       const parent = db.vault
         .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
@@ -240,14 +229,10 @@ export function stageBlobBytes(
     throw error;
   }
 
-  // Remote-primary custody starts at the same durable local receipt for every
-  // ingress caller (HTTP, import, preview backfill). The transfer coordinator
-  // coalesces by SHA and drains continuously; this remains off the command
-  // transaction and does not mint a receipt by itself.
-  // Inline semantic contributions deliberately have no CAS object. Recording
-  // them as local receipts would enqueue replication for bytes that do not
-  // exist and turn a harmless text/hash row into a permanently failing
-  // custody transfer.
+  // Remote-primary custody starts at this durable local receipt for every
+  // caller; the coordinator coalesces/drains continuously, off the command
+  // transaction, minting nothing itself. Inline contributions have NO CAS
+  // object: a receipt would replicate nonexistent bytes, failing forever.
   if (binary) db.blobTransfers.recordLocalReceipt(sha256, byteSize);
 
   return {
@@ -281,15 +266,12 @@ export function stagedInfoTx(
 }
 
 export interface StagingSweepResult {
-  /** Staging rows past the TTL — rows dropped, unrented bytes reclaimed. */
+  /** Staging rows past the TTL; unrented bytes reclaimed. */
   expired: string[];
 }
 
-/**
- * The staging TTL sweep: unclaimed, unheld rows past the TTL drop, and their
- * bytes leave the local CAS unless a content item independently owns the
- * same sha (dedup: claiming bytes elsewhere must survive a stale stage).
- */
+/** TTL sweep: unclaimed/unheld rows drop; bytes leave CAS unless another item
+ *  owns the sha (dedup must survive a stale stage). */
 export function sweepBlobStaging(
   db: VaultDb,
   options: { ttlHours?: number; now?: string } = {}

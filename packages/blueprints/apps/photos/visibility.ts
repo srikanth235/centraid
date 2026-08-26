@@ -1,10 +1,3 @@
-// What the grid/lightbox consider "currently visible" (issue #352's search
-// augment lives here): the album filter, then the search filter, plus the
-// asset lookup the lightbox needs to reach an off-window search hit.
-// app.tsx still owns the underlying `assets`/`trash`/`searchResults` arrays
-// and passes them in as getters — same split toolbar/picker use for
-// their own regions — so this stays pure, DOM-free, and easy to reason about
-// on its own.
 import { assetKey } from "./asset-key.ts";
 import { TRASH } from "./constants.ts";
 import { dayKey, fmtDay, fmtMonth } from "./format.ts";
@@ -12,7 +5,7 @@ import type { Asset } from "./types.ts";
 
 export interface Visibility {
   visibleAssets: () => Asset[];
-  /** By COMPOSITE key (see asset-key.ts), never a bare `asset_id`. */
+  /** Composite key, never a bare `asset_id`. */
   findAsset: (key: string) => Asset | undefined;
 }
 
@@ -31,12 +24,6 @@ export function createVisibility({
   getSearchQuery: () => string;
   getSelectedAlbum: () => string | null;
 }): Visibility {
-  // Client-side fallback/extras: day/month labels, kind, and album NAMES stay
-  // a cheap local match (queries/search.ts's own doc comment explains why
-  // album-name matching isn't worth a vault round trip). `asset.title` still
-  // rides along here too — that keeps search over the loaded window working
-  // even while the server call (title/caption FTS) is in flight, has failed,
-  // or was denied.
   function matchesSearchLocal(asset: Asset): boolean {
     const query = getSearchQuery();
     const key = dayKey(asset.taken_at);
@@ -58,23 +45,15 @@ export function createVisibility({
       .every((token) => hay.includes(token));
   }
 
-  // Trashed content falls out of the FTS index entirely (a soft-deleted row
-  // never matches), so the trash shelf keeps the old client-only match. For
-  // the live shelves, server hits (queries/search.ts, issue #352) are merged
-  // with the local match: for "All" (no album selected) server hits reach
-  // the WHOLE live library, not just this window; for a selected
-  // album/Favorites, an off-window server hit is scoped to what's already
-  // loaded here (its album membership isn't known otherwise) — the same
-  // reach search had before.
+  // Trash is client-only (soft-deleted rows leave FTS). Live: merge server
+  // hits (#352); All = whole library; album/Favorites = already-loaded only.
   function visibleAssets(): Asset[] {
     const query = getSearchQuery();
     const selectedAlbum = getSelectedAlbum();
     if (!query) return getAlbumAssets();
     if (selectedAlbum === TRASH) return getTrash().filter(matchesSearchLocal);
     const scoped = getAlbumAssets();
-    // Keyed by (scope, asset) throughout: on a merged timeline a bare
-    // `asset_id` is not an identity, so a colliding id across two scopes would
-    // otherwise collapse two different photos into one row here (issue #599).
+    // Composite key (#599): a bare `asset_id` would collapse two scopes.
     const scopedKeys = selectedAlbum ? new Set(scoped.map(assetKey)) : null;
     const merged = new Map<string, Asset>();
     for (const a of scoped.filter(matchesSearchLocal))
@@ -86,10 +65,6 @@ export function createVisibility({
     return [...merged.values()];
   }
 
-  // An asset wherever it might currently live: the loaded window, trash, or
-  // an off-window server search hit (queries/search.ts can surface a photo
-  // this session never loaded into `assets`) — the lightbox needs this reach
-  // too, to open a tile that a search surfaced from outside the window.
   function findAsset(key: string): Asset | undefined {
     const match = (a: Asset): boolean => assetKey(a) === key;
     return (

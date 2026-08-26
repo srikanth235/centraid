@@ -1,4 +1,4 @@
-// Proposed filing (Docs handoff Part 2 §12; issue #821) — the `filing`
+// Proposed filing (Docs handoff Part 2 §12; #821) — the `filing`
 // capability's product screen, rendered HONESTLY EMPTY.
 //
 // The capability that would fill it ("Propose a title, a folder and a tag")

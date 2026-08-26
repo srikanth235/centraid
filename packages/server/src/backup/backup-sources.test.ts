@@ -1,9 +1,5 @@
 import { randomBytes, createHash } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
-// `assembleSourceEntries` against a real `VaultPlane`: blobs use the actual
-// ingest/attach pipeline, code uses a real `WorktreeStore`, and sealed values
-// use `locker.add_item`. Ordering is asserted from the returned array; DEKs
-// travel only in the wrapped recovery kit.
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -44,7 +40,6 @@ describe("backup-sources", () => {
     return plane;
   }
 
-  /** A capturing logger for the "empty code store" skip-log assertion. */
   function capturingLogger(): {
     info: string[];
     warn: string[];
@@ -62,11 +57,9 @@ describe("backup-sources", () => {
     };
   }
 
-  // A 1x1 transparent PNG — well under the 360KB inline data_uri cap.
   const PNG =
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
-  /** Real bytes through the real staging pipeline (issue #296 door), then claimed by core.attach. */
   function stageAndAttachBigBlob(
     plane: VaultPlane,
     subjectId: string,
@@ -100,7 +93,6 @@ describe("backup-sources", () => {
     return (out as { output: { task_id: string } }).output.task_id;
   }
 
-  /** Publish one real commit through a real WorktreeStore against the plane's own code store root. */
   async function publishRealApp(
     plane: VaultPlane,
     appId: string
@@ -131,7 +123,6 @@ describe("backup-sources", () => {
     const bundleDir = await tempDir("backup-sources-bundle");
     const captured = capturingLogger();
 
-    // The capture tick lives in doRunBackup now — run it here as the service would.
     plane.walTick();
     const entries = await assembleSourceEntries({
       plane,
@@ -144,17 +135,12 @@ describe("backup-sources", () => {
       "vault.db",
       "journal.db",
     ]);
-    // No sealed value was ever written — even though openVaultDb eagerly
-    // mints the key FILE on first open, the fingerprint stamp (the real
-    // "has this vault ever sealed a value" signal) is absent, so no
-    // seal-key entry — see the sealKeyEntry doc comment in backup-sources.ts.
+    // Key FILE is minted on first open; the fingerprint stamp is the real "ever sealed" signal — no stamp, no seal-key entry.
     expect(entries.some((e) => e.kind === "seal-key")).toBe(false);
-    // The empty-code-store skip is logged, not silent.
     expect(
       captured.info.some((m) => m.includes("no code store bare repo yet"))
     ).toBe(true);
 
-    // The staged DB copies are real, openable SQLite files — not stubs.
     entries.forEach((entry) => {
       const db = new DatabaseSync(entry.absolutePath, { readOnly: true });
       try {
@@ -166,8 +152,6 @@ describe("backup-sources", () => {
         db.close();
       }
     });
-    // vault.db is specifically a staged copy of the real vault, not an empty
-    // shell — the bootstrapped core_vault row must be there.
     const vaultCopy = new DatabaseSync(entries[0]!.absolutePath, {
       readOnly: true,
     });
@@ -188,8 +172,6 @@ describe("backup-sources", () => {
       const plane = await openPlane();
       const bundleDir = await tempDir("backup-sources-bundle");
 
-      // (b) Two real blobs: one through the small inline data_uri door, one
-      // through the staged-bytes door (large enough to exercise file custody).
       const taskId = addTask(plane, "Frame the print");
       const inlineOut = plane.gateway.invoke(plane.ownerCredential, {
         command: "core.attach",
@@ -215,11 +197,8 @@ describe("backup-sources", () => {
       const bigSha = stageAndAttachBigBlob(plane, taskId, bigBytes);
       expect(bigSha).toBe(sha256Of(bigBytes));
 
-      // (c) A real code-store commit via WorktreeStore, mirroring exactly what
-      // publishing an app through the gateway produces on disk.
       await publishRealApp(plane, "todo");
 
-      // (d) A real sealed value — password is a SEALED_COLUMNS entry.
       const lockerOut = plane.gateway.invoke(plane.ownerCredential, {
         command: "locker.add_item",
         input: {
@@ -246,11 +225,7 @@ describe("backup-sources", () => {
         "blob",
         "git-bundle",
       ]);
-      // Blob entries are sorted by path (backup-sources.ts: deterministic
-      // manifests, not insertion order) — the big blob's random content means
-      // its sha, and therefore its sort position relative to the inline
-      // blob's sha, is not fixed across runs. Assert the blob PATHS as a set,
-      // sorted the same way the source does, rather than a hardcoded order.
+      // Blob paths sort by path (deterministic manifests), not insertion order — random sha is not stable across runs.
       const smallBlobPath = `blobs/sha256/${inlineSha.slice(0, 2)}/${inlineSha}`;
       const bigBlobPath = `blobs/sha256/${bigSha.slice(0, 2)}/${bigSha}`;
       const expectedBlobPaths = [smallBlobPath, bigBlobPath].sort((a, b) =>
@@ -263,7 +238,6 @@ describe("backup-sources", () => {
         "apps.bundle",
       ]);
 
-      // Staged DB copies are real, openable SQLite.
       const vaultCopy = new DatabaseSync(entries[0]!.absolutePath, {
         readOnly: true,
       });
@@ -278,8 +252,6 @@ describe("backup-sources", () => {
         vaultCopy.close();
       }
 
-      // Blob entries point at the REAL CAS files — bytes match, sha matches
-      // filename (content-addressed).
       const smallBlobEntry = entries.find((e) => e.path === smallBlobPath)!;
       const bigBlobEntry = entries.find((e) => e.path === bigBlobPath)!;
       expect(path.basename(smallBlobEntry.absolutePath)).toBe(inlineSha);
@@ -289,15 +261,11 @@ describe("backup-sources", () => {
       expect(path.basename(bigBlobEntry.absolutePath)).toBe(bigSha);
       const bigOnDisk = await fs.readFile(bigBlobEntry.absolutePath);
       expect(bigOnDisk.equals(bigBytes)).toBe(true);
-      // Blob entries read the CAS IN PLACE — never duplicated into the bundle dir.
+      // CAS in place — never duplicated into the bundle dir.
       expect(smallBlobEntry.absolutePath.startsWith(plane.dir)).toBe(true);
       expect(smallBlobEntry.absolutePath.startsWith(bundleDir)).toBe(false);
 
-      // The git bundle is a real, verifiable bundle — `git bundle verify`
-      // needs a repository context (any repo — it only checks the bundle's
-      // own prerequisites, none here since it's a full `--all` bundle), so
-      // run it against the bare repo itself. Then clone from it and read back
-      // the published app.
+      // `git bundle verify` needs a repo context — run against the bare repo (full `--all` bundle has no prerequisites).
       const bundleEntry = entries[4]!;
       const bareRepoDir = path.join(plane.codeStoreRoot, "apps.git");
       await expect(
@@ -350,8 +318,7 @@ describe("backup-sources", () => {
       expect.arrayContaining([pendingSha, remoteSha])
     );
 
-    // Simulate the provider HEAD-confirmation path. The local file remains
-    // resident, but the durable outbox no longer considers it snapshot material.
+    // HEAD-confirmed: local file stays resident, durable outbox no longer treats it as snapshot material.
     plane.db.blobTransfers.state.completeOutbox(remoteSha);
     new ReplicaIndex(plane.db.vault).mark(remoteSha, remoteBytes.length);
     plane.walTick();
@@ -374,10 +341,7 @@ describe("backup-sources", () => {
     const plane = await openPlane();
     const bundleDir = await tempDir("backup-sources-bundle");
 
-    // Issue #408: db entries read the WAL shipper's pinned base clones IN PLACE
-    // (under <vaultDir>/wal-ship/bases), never copies. This vault has no code
-    // store, so there is no git bundle either — assembly writes nothing at all,
-    // and re-running it accumulates nothing (there is no staging dir to wipe).
+    // #408: db entries read the WAL shipper's pinned bases IN PLACE (`wal-ship/bases`), never copies. No code store → assembly writes nothing, and re-running accumulates nothing.
     plane.walTick();
     const first = await assembleSourceEntries({
       plane,
@@ -392,8 +356,6 @@ describe("backup-sources", () => {
       log: silentLogger,
     });
     expect(second.map((e) => e.path)).toStrictEqual(["vault.db", "journal.db"]);
-    // A code-store-less vault writes nothing into the bundle dir (no bundle, no
-    // digest sidecar) — it stays empty across repeated assemblies.
     await expect(fs.readdir(bundleDir)).resolves.toStrictEqual([]);
     for (const entry of second) {
       expect(entry.absolutePath).toContain(path.join("wal-ship", "bases"));
@@ -401,7 +363,6 @@ describe("backup-sources", () => {
       expect(entry.walGeneration).toMatch(/^[0-9a-f]{32}$/u);
       expect(entry.baseTickMs).toBeGreaterThan(0);
     }
-    // Both bases from ONE tick — the coordination the restore asserts.
     expect(second[0]!.baseTickMs).toBe(second[1]!.baseTickMs);
   });
 
@@ -410,13 +371,7 @@ describe("backup-sources", () => {
     const bundleDir = await tempDir("backup-sources-bundle");
     plane.walTick();
 
-    // The pair the producer must never register: two bases from two ticks. It is
-    // unreachable through the shipper now (generations break together), and a
-    // busy checkpoint DEFERS a break rather than half-completing one — but that
-    // is a claim about the shipper, and this is the assertion that stands
-    // regardless of it. Such a pair has no coordinated restore point: the newer
-    // base already holds receipts for rows that live only in the older one's
-    // SEGMENTS, so losing any one of those hands back a dangling receipt.
+    // Two bases from two ticks — no coordinated restore point (newer base holds receipts for rows that live only in the older one's SEGMENTS). Assert here regardless of the shipper's own generation pairing.
     const shipper = plane.walShipper!;
     const real = shipper.currentBases.bind(shipper);
     shipper.currentBases = () => {
@@ -433,13 +388,9 @@ describe("backup-sources", () => {
 
   test("the code-store bundle is REUSED untouched while refs are unchanged, and REGENERATED when they move", async () => {
     const plane = await openPlane();
-    // The PERSISTENT bundleDir (as the service passes `<cacheDir>/code-bundle/<id>`)
-    // survives between assemblies — the standing bundle + its `apps.bundle.refs`
-    // digest sidecar are what the reuse gate keys on.
     const bundleDir = await tempDir("backup-sources-bundle");
     await publishRealApp(plane, "todo");
 
-    // First assembly: bundle is generated fresh, sidecar written, in the bundleDir.
     plane.walTick();
     const first = capturingLogger();
     const e1 = await assembleSourceEntries({
@@ -455,9 +406,7 @@ describe("backup-sources", () => {
     );
     const mtime1 = (await fs.stat(bundle1.absolutePath)).mtimeMs;
 
-    // Second assembly with the SAME refs: the file is reused UNTOUCHED — same path,
-    // byte-identical mtime (the engine's reuse fast path keys on exactly this), and
-    // the reuse is logged. A fresh `git bundle create` here would have moved mtime.
+    // Same refs → reuse UNTOUCHED (mtime is the fast-path key). A fresh `git bundle create` would have moved mtime.
     const second = capturingLogger();
     const e2 = await assembleSourceEntries({
       plane,
@@ -471,9 +420,6 @@ describe("backup-sources", () => {
       true
     );
 
-    // Publishing a second app moves the store's refs (new commit + `todo2/v1` tag),
-    // so the digest changes and the bundle regenerates — and the fresh bundle
-    // carries BOTH apps.
     await publishRealApp(plane, "todo2");
     const e3 = await assembleSourceEntries({
       plane,

@@ -50,7 +50,7 @@ describe(Button, () => {
     // The bug this pins: `size` and `variant` are independent props, so the
     // type system cannot catch a size class that paints. A chrome-size
     // primary that renders unfilled is a commit control the eye cannot find
-    // (issue #708, invariant 3 — the shell owns no colour, commit is filled
+    // (#708, invariant 3 — the shell owns no colour, commit is filled
     // ink), and it fails silently in exactly the place it matters most.
     expect(
       renderToStaticMarkup(

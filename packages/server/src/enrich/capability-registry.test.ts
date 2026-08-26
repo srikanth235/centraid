@@ -1,4 +1,4 @@
-// The capability registry (issue #807) — that the contracts cover what this
+// The capability registry (#807) — that the contracts cover what this
 // build actually ships, and that the output-schema ids obey the one
 // version-identity convention the vault already owns.
 

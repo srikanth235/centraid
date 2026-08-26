@@ -1,4 +1,4 @@
-// core.merge_party (issue #290 phase 2): folding a duplicate person re-points
+// core.merge_party (#290): folding a duplicate person re-points
 // every reference — engine FKs, polymorphic (type, id) pairs, identifiers
 // with primary demotion, the external-id map — and deletes the duplicate.
 

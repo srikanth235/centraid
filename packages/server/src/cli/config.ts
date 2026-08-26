@@ -60,7 +60,7 @@ export interface DaemonConfig {
   port?: number;
   harness?: DaemonHarnessConfig;
   /**
-   * Whether the daemon binds its iroh endpoint (issue #289). Defaults to
+   * Whether the daemon binds its iroh endpoint (#289). Defaults to
    * true — the endpoint IS the remote story; set false for HTTP-only
    * setups (tests, boxes fronted by their own transport).
    */

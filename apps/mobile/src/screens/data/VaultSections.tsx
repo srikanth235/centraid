@@ -130,9 +130,9 @@ export function VaultSharingSection({
 
   useEffect(refresh, [refresh]);
 
-  // A parked incoming SHARE used to be drawn here beside the links; copy-as-
-  // share retired (#825, ruling G-copy), and a grant's audience answers its
-  // channel invitation in People rather than on this section.
+  // No parked incoming SHARE is drawn here beside the links (#825, ruling
+  // G-copy): a grant's audience answers its channel invitation in People
+  // rather than on this section.
   const visibleRead: SharingRead = replica.gatewayBase
     ? read
     : { links: [], state: "ready" };

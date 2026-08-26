@@ -1,7 +1,8 @@
 // One row of the unlocked Locker list.
 //
-// Extracted so the screen file is the unlock/session lifecycle and this is the
-// cell. Both halves of the memo contract live here: the row is memoized, and
+// Separate from the screen file so that one is the unlock/session lifecycle
+// and this is the cell. Both halves of the memo contract live here: the row is
+// memoized, and
 // `onOpen` takes the row rather than a pre-bound closure so every row can share
 // one stable callback — a per-row arrow would defeat the memo.
 

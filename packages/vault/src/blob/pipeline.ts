@@ -1,19 +1,14 @@
-// The spool pipeline (issue #296 §4): what the gateway learns from bytes
-// while they sit in the local spool. Everything here is dependency-free and
-// synchronous — declared media types are hints (content decides), image
-// dimensions and EXIF capture metadata come from the bytes, and text-shaped
-// formats yield an extracted-text candidate for the parent's FTS row.
-// Failures degrade to "a blob with no metadata", never block ingress.
+// Spool pipeline (#296): what the gateway learns from bytes in the local
+// spool. Dependency-free, synchronous; declared types are hints, content
+// decides; failures degrade, never block.
 //
-// GPS is a policy surface, not a parser detail: `extractBlobMeta` always
-// reports whether location was present, but coordinates only ride along when
-// the caller passes `keepLocation` (the `media.location` vault setting,
-// issue #296 §4 — automatic extraction must not silently write location).
+// GPS is policy: presence always reported, coordinates only with
+// `keepLocation` (`media.location` setting).
 
 import { parseIsoBmffMetadata, parseMediaMetadata } from "./media-metadata.js";
 import { extractPdfText } from "./pdf-text.js";
 
-/** Magic-byte table: prefix (at offset) → media type. Order matters. */
+/** Prefix → type. Order matters. */
 const MAGIC: { offset: number; bytes: number[]; type: string }[] = [
   { offset: 0, bytes: [0xff, 0xd8, 0xff], type: "image/jpeg" },
   {
@@ -31,7 +26,6 @@ const MAGIC: { offset: number; bytes: number[]; type: string }[] = [
   { offset: 0, bytes: [0x1a, 0x45, 0xdf, 0xa3], type: "video/webm" },
 ];
 
-/** RIFF containers and ISO-BMFF (mp4/mov/heic) need a second probe. */
 function sniffContainers(bytes: Buffer): string | null {
   if (bytes.length >= 12 && bytes.toString("latin1", 0, 4) === "RIFF") {
     const kind = bytes.toString("latin1", 8, 12);
@@ -61,7 +55,6 @@ const EXT_TYPES: Record<string, string> = {
   mp4: "video/mp4",
 };
 
-/** True when the buffer decodes as UTF-8 text with no NULs in the probe. */
 function looksLikeText(bytes: Buffer): boolean {
   const probe = bytes.subarray(0, Math.min(bytes.length, 4096));
   if (probe.includes(0)) return false;
@@ -74,9 +67,8 @@ function looksLikeText(bytes: Buffer): boolean {
 }
 
 /**
- * The real media type of a byte payload: magic bytes win, containers next,
- * the declared hint (when plausible) next, filename extension after that,
- * and a text/binary probe last. Never returns an empty string.
+ * Real media type: magic bytes → containers → plausible hint → extension →
+ * text probe.
  */
 export function sniffMediaType(
   bytes: Buffer,
@@ -87,9 +79,8 @@ export function sniffMediaType(
   for (const m of MAGIC) {
     if (bytes.length < m.offset + m.bytes.length) continue;
     if (m.bytes.every((b, i) => bytes[m.offset + i] === b)) {
-      // EBML is a container signature, not a track kind. Preserve an honest
-      // browser declaration for audio-only WebM; absent that hint, video is
-      // the conservative default and the bounded parser still reads tracks.
+      // EBML is a container signature, not a track kind: keep the browser's
+      // honest audio/video declaration when present.
       if (
         m.type === "video/webm" &&
         (hint === "audio/webm" || hint === "video/webm")
@@ -109,15 +100,14 @@ export function sniffMediaType(
 export interface BlobMeta {
   width?: number;
   height?: number;
-  /** EXIF DateTimeOriginal, ISO-8601 (no zone — camera local time). */
+  /** EXIF DateTimeOriginal, ISO-8601 camera-local (no zone). */
   captured_at?: string;
   /** Whether EXIF carried GPS tags — reported even when stripped. */
   has_location?: boolean;
   latitude?: number;
   longitude?: number;
-  /** Extracted document text (bounded) — becomes the `text` variant. */
+  /** Bounded extracted document text → the `text` variant. */
   text?: string;
-  /** Parse-only video/audio container metadata (never decoded/transcoded). */
   duration_s?: number;
   codec?: string;
   title?: string;
@@ -125,14 +115,9 @@ export interface BlobMeta {
   [k: string]: unknown;
 }
 
-/** Extracted text is bounded — an index feed, not a second copy of the doc. */
 const MAX_EXTRACT_CHARS = 200_000;
 
-/**
- * Everything the spool learns from one payload. `keepLocation` gates GPS
- * coordinates (default: keep — it is the owner's vault; derivatives always
- * strip regardless).
- */
+/** Meta from one payload; `keepLocation` gates GPS coordinates (default keep). */
 export function extractBlobMeta(
   bytes: Buffer,
   mediaType: string,
@@ -174,9 +159,8 @@ export function extractBlobMeta(
 }
 
 /**
- * Bounded streaming twin: prefix covers signatures/EXIF/WebM headers, while
- * a final tail probe finds ISO-BMFF `moov` metadata even when it follows a
- * multi-hundred-megabyte `mdat`. No original-provider read is needed.
+ * Bounded streaming twin: head probe + tail probe for `moov` past a huge
+ * `mdat`.
  */
 export function extractBlobMetaFromProbes(
   head: Buffer,
@@ -185,9 +169,6 @@ export function extractBlobMetaFromProbes(
   options: { keepLocation?: boolean } = {}
 ): BlobMeta {
   const meta = extractBlobMeta(head, mediaType, options);
-  // A streaming upload retains bounded plaintext probes at both ends. Page
-  // content commonly sits near the trailer, so give the tail an independent
-  // cheap-text pass when the header probe did not yield useful text.
   if (
     mediaType === "application/pdf" &&
     meta.text === undefined &&
@@ -255,14 +236,9 @@ interface JpegExif {
   longitude?: number;
 }
 
-/**
- * Minimal TIFF/EXIF walk: DateTimeOriginal (0x9003 in the Exif sub-IFD) and
- * the GPS IFD's latitude/longitude rationals. Anything unparseable returns
- * what parsed so far.
- */
+/** TIFF/EXIF walk: DateTimeOriginal (0x9003) and GPS rationals. */
 function parseJpegExif(bytes: Buffer): JpegExif {
   const out: JpegExif = {};
-  // Find the APP1/Exif segment.
   let i = 2;
   let tiff = -1;
   while (i + 4 < bytes.length && bytes[i] === 0xff) {
@@ -308,10 +284,10 @@ function parseJpegExif(bytes: Buffer): JpegExif {
     }
     return entries;
   };
-  // TIFF value widths by type: BYTE/ASCII 1, SHORT 2, LONG 4, RATIONAL 8.
+  // TIFF value widths: BYTE/ASCII 1, SHORT 2, LONG 4, RATIONAL 8.
   const TYPE_BYTES: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8 };
   const valueAt = (entry: Entry): number => {
-    // Values wider than 4 bytes live at a pointed-to offset.
+    // >4-byte values live at a pointed-to offset.
     const size = TYPE_BYTES[entry.type] ?? 4;
     return entry.count * size <= 4
       ? entry.valueOffset
@@ -319,7 +295,7 @@ function parseJpegExif(bytes: Buffer): JpegExif {
   };
   const ascii = (entry: Entry): string => {
     const at = valueAt(entry);
-    // eslint-disable-next-line no-control-regex -- EXIF ASCII fields are NUL-padded to a fixed length; trim the trailing NULs (#296)
+    // oxlint-disable-next-line no-control-regex -- EXIF ASCII fields are NUL-padded to a fixed length; trim the trailing NULs (#296)
     return bytes.toString("latin1", at, at + entry.count).replace(/\0+$/u, "");
   };
   const rationals = (entry: Entry): number[] => {
@@ -341,7 +317,7 @@ function parseJpegExif(bytes: Buffer): JpegExif {
     const dto =
       sub.find((e) => e.tag === 0x9003) ?? ifd0.find((e) => e.tag === 0x0132);
     if (dto && dto.type === 2) {
-      // "YYYY:MM:DD HH:MM:SS" → ISO-8601 local instant.
+      // "YYYY:MM:DD HH:MM:SS" → ISO-8601 local.
       const raw = ascii(dto);
       const m =
         /^(?<year>\d{4}):(?<month>\d{2}):(?<day>\d{2}) (?<time>\d{2}:\d{2}:\d{2})$/u.exec(

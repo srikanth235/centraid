@@ -245,7 +245,7 @@ describe("serve scenarios", () => {
       vaults: Array<Record<string, unknown>>;
       recoveryKit: { confirmedAt: number | null };
     };
-    // recoveryKit (issue #351 wave 4) reads "never confirmed" — there's no
+    // recoveryKit (#351) reads "never confirmed" — there's no
     // BackupService (and so no state.json) to have recorded a confirmation.
     // The status surface still inventories the active vault so the UI can show
     // its local-only destination and policy before backup is configured.

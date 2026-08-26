@@ -1,50 +1,18 @@
 /*
- * Per-app change notification bus.
- *
- * The runtime emits an `AppChange` after an app acts — a successful
- * action handler (whose writes ride ctx.vault) or an assistant write on the
- * app's behalf. With the per-app silo gone there is no table-level
- * changeset: the event means "this app's data may have moved; re-derive
- * what you render".
- *
- * Subscribers come and go via `subscribe()`. The HTTP SSE endpoint at
- * `GET /centraid/<appId>/_changes` is the main consumer; other in-process
- * consumers (e.g. log fanout) can subscribe too.
- *
- * Delivery is synchronous, fire-and-forget, in subscription order. Listener
- * errors are caught and logged so one bad subscriber can't block others or
- * stall a write.
+ * Per-app change bus. No table-level changeset: the event means "this app's
+ * data may have moved; re-derive". Delivery is sync, fire-and-forget.
+ * Listener errors are caught so one bad subscriber cannot stall a write.
  */
 
 import type { RuntimeLogger } from "../runtime.js";
 
 export interface AppChange {
   appId: string;
-  /** Table names mutated within this change. Sorted, deduplicated. */
   tables: string[];
-  /** Wall-clock time of the commit (ms since epoch). */
   ts: number;
-  /**
-   * Who initiated the write:
-   *  - `'assistant'` — an in-process assistant tool call on the app's behalf.
-   *  - `'handler'`   — a user-authored action / query handler.
-   *  - `'external'`  — any other path without harness or handler context.
-   *
-   * Subscribers can use this to render differently (e.g. flash assistant-driven
-   * rows) without needing to listen on a separate bus.
-   */
   source: "assistant" | "handler" | "external";
-  /**
-   * When `source === 'assistant'`, the tool-call id from the harness's
-   * dispatch (codex `callId` / Claude `tool_use_id`). Lets a renderer pin a
-   * later refresh to the same chat-pill the user is looking at.
-   */
+  /** When `source === 'assistant'`, the harness dispatch id for the chat-pill. */
   toolCallId?: string;
-  /**
-   * Stable id for a single `ConversationRunner.run` invocation. Used by the chat UI
-   * to group all writes from one turn — handy for "assistant updated 3
-   * rows" style summaries.
-   */
   turnId?: string;
 }
 
@@ -61,12 +29,7 @@ function serializeChange(change: AppChange): string {
   return JSON.stringify(payload);
 }
 
-/**
- * In-process pub-sub keyed by appId. Construct once per `Runtime`. A no-op
- * default is constructed when the host doesn't supply one — that way the
- * change-tracking call sites (runQuery, handler-runner) never need to
- * branch on "is the bus enabled?".
- */
+/** A no-op default is constructed when the host doesn't supply one. */
 export class ChangeBus {
   private readonly listeners = new Map<string, Set<ChangeListener>>();
   private readonly logger: RuntimeLogger | undefined;
@@ -75,11 +38,6 @@ export class ChangeBus {
     this.logger = opts.logger;
   }
 
-  /**
-   * Subscribe to changes for one app. Returns an unsubscribe function.
-   * Same listener may be added more than once; each add requires a matching
-   * unsubscribe call.
-   */
   subscribe(appId: string, listener: ChangeListener): () => void {
     let set = this.listeners.get(appId);
     if (!set) {
@@ -96,18 +54,16 @@ export class ChangeBus {
   }
 
   /**
-   * Emit a change. An EMPTY table list is meaningful post-#286: handler
-   * writes ride ctx.vault, so there is no table-level changeset — the
-   * event says "this app acted; re-derive what you render".
+   * An EMPTY table list is meaningful post-#286: handler writes ride
+   * ctx.vault, so there is no table-level changeset — the event says "this
+   * app acted; re-derive what you render".
    */
   emit(change: AppChange): void {
     const set = this.listeners.get(change.appId);
     if (!set || set.size === 0) return;
     const serialized = serializeChange(change);
     // Set iteration is safe under concurrent delete in JS (the deleted
-    // element is skipped, the rest are still visited in insertion order),
-    // so a listener can unsubscribe itself during dispatch without
-    // breaking the loop.
+    // element is skipped, the rest still visit in insertion order).
     for (const listener of set) {
       try {
         listener(change, serialized);
@@ -121,7 +77,6 @@ export class ChangeBus {
     }
   }
 
-  /** Test/diagnostic helper. */
   listenerCount(appId: string): number {
     return this.listeners.get(appId)?.size ?? 0;
   }

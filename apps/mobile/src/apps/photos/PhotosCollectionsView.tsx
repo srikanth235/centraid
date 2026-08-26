@@ -1,30 +1,9 @@
-// Collections — the shape of a member's library, on one page.
+// Collections — the landing surface of Photos, and NOT "Albums": every shelf
+// gets a named section over a horizontal rail. The section model is pure, in
+// `photos-collections.ts`.
 //
-// This is the landing surface of Photos now, and it replaces the destination
-// that used to be called "Albums". Two things were wrong with that name: it
-// described one section of what the screen showed, and the screen it named was
-// a two-column grid of album tiles with a Favorites row bolted above it, while
-// every other shelf this product has — People, Places, Duplicates, Trash —
-// was reachable only from the bottom row of a sheet behind a **More** tab. A
-// member could use Photos for a month without learning that Places existed.
-//
-// So the page is the shelves, all of them, each one a named section over a
-// horizontal rail of covers. The section model — including what each section
-// says when it is empty — is in `photos-collections.ts` and is pure; this file
-// is its frame and its navigation.
-//
-// AN EMPTY SECTION STILL RENDERS. That is the part worth defending: on a fresh
-// vault most of this page is empty cards, and each card names what would
-// appear there and why it has not. The alternative — showing only sections
-// that already have something in them — makes the first week of a vault a
-// screen that silently grows features, and a member who never favourites a
-// photograph never finds out that Favorites is where they would go. The
-// sentences are the product explaining itself; they are not placeholders.
-//
-// The rail is the tile-with-a-burned-in-label form, and the label is inside
-// the tile rather than under it because these covers are IDENTITY (which
-// album, which person) rather than content — the same reason the vault mark
-// carries its initial and not a caption.
+// AN EMPTY SECTION STILL RENDERS: its sentence names what would appear there and
+// why it has not — the product explaining itself, not a placeholder.
 
 import { Image } from "expo-image";
 import React, { useMemo } from "react";
@@ -52,9 +31,7 @@ import { usePhotoTimeline } from "./timeline-source";
 
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
 
-/** The rail's tile. 132 wide is two-and-a-bit tiles on the narrowest phone
- *  this app supports — enough that the third is visibly cut, which is what
- *  tells a member the rail scrolls without a chevron saying so. */
+/** Two-and-a-bit tiles on the narrowest phone: the cut third says the rail scrolls. */
 const TILE = 132;
 
 function RailTile({
@@ -66,9 +43,7 @@ function RailTile({
   onPress: () => void;
   styles: Styles;
 }): React.JSX.Element {
-  // The derivative-then-original ladder, same as every other surface that
-  // draws a replica photograph: `?variant=thumb` 404s until the gateway's
-  // preview backstop has run, and the original is sitting whole in CAS.
+  // `?variant=thumb` 404s until the gateway's preview backstop has run.
   const media = useImageFallback(tile.uri ?? "", tile.originalUri, tile.id);
   return (
     <Pressable
@@ -88,14 +63,9 @@ function RailTile({
             style={styles.coverImage}
           />
         ) : null}
-        {/* A SQUARE tile burns its label into the cover, lower-left, over a
-            scrim: a caption below would make the rail's rows different heights
-            the moment one name wrapped.
-
-            A ROUND one cannot — the label band is a rectangle, and the circle
-            clips it, so "Owner" rendered as "wner" with its left third cut
-            off. A person's name goes UNDER the circle instead, centred, which
-            is also where iOS puts it. */}
+        {/* A square tile burns its label in; a caption below would make rows
+            different heights. A circle clips that band, so a round tile's name
+            goes under it instead. */}
         {tile.label && !tile.round ? (
           <View style={styles.labelWrap}>
             <Text numberOfLines={1} style={styles.label}>
@@ -133,12 +103,8 @@ function Section({
   return (
     <View style={styles.section}>
       <View style={styles.head}>
-        {/* "Open this shelf" keeps the verb it always had — title plus the
-            chevron pointing INTO the section. Collapse is a second, separate
-            control (below) rather than a second meaning bolted onto this
-            same tap target, per the header comment on `PhotosCollectionsView`
-            below: a member who has learned "tap the row to go in" must not
-            discover one day that the same tap now only folds the rail. */}
+        {/* Title plus chevron means "go in". Collapse is a separate control
+            below, never a second meaning on this target. */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
@@ -156,13 +122,8 @@ function Section({
         {section.count === undefined ? null : (
           <Text style={styles.headCount}>{section.count.toLocaleString()}</Text>
         )}
-        {/* The collapse affordance: a chevron that points at the rail it
-            governs (down when the rail shows, and rotated to point up once
-            it is folded away) rather than a second `chevron-right`, so it
-            cannot be mistaken for a second way to open the shelf. There is no
-            `ChevronUp` glyph in the shared registry, so the fold is drawn by
-            rotating the one `chevron-down` glyph 180° instead of adding a
-            near-duplicate icon. */}
+        {/* Points at the rail it governs, never a second `chevron-right`. The
+            registry has no `ChevronUp`, so the fold rotates `chevron-down`. */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
@@ -215,23 +176,9 @@ export default function PhotosCollectionsView({
   onToggleSection,
 }: {
   navigation: Nav;
-  /** Per-section collapse — SESSION state, not a member preference: unlike
-   *  the rung (`photos-rungs.ts`), which reads the same everywhere and is
-   *  worth a durable write, which shelves are folded is a reading posture
-   *  for the one visit, and this repo has no member-preference plane to
-   *  spend on it (see `photos-library-menu.ts`'s header for the same
-   *  argument about the Library filter). A collapsed section is still IN the
-   *  set — its heading and count still render — so this is a display fold,
-   *  never a filter.
-   *
-   *  OWNED BY `PhotosHome.tsx` now, not this file (issue #712): the page's
-   *  trailing `···` chip that opens Show All / Collapse All moved into the
-   *  header row those two commands share with Library's Sliders chip, so the
-   *  state they act on had to move with it — a menu in one file driving a
-   *  `useState` in another would drift the moment either side changed on its
-   *  own. The per-section chevrons below stayed exactly where they are; they
-   *  just read and write the state through these two props now instead of a
-   *  local `useState`. */
+  /** SESSION state, and a display fold — never a filter. Owned by
+   *  `PhotosHome.tsx` (#712), which hosts the Show All / Collapse All menu; this
+   *  file keeps no `useState` for it. */
   collapsed: ReadonlySet<CollectionSectionKey>;
   onToggleSection: (key: CollectionSectionKey) => void;
 }): React.JSX.Element {
@@ -255,19 +202,16 @@ export default function PhotosCollectionsView({
     "photos",
     useMemo(() => ({ entity: "media.face_region" }), [])
   );
-  // A face row carries a party ID, never a name — the name lives on the party.
-  // `PhotosPeopleView` resolves it the same way, and the two must not disagree
-  // about who is in the member's library.
+  // A face row carries a party ID, never a name; `PhotosPeopleView` resolves it
+  // the same way, and the two must not disagree.
   const parties = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
   );
 
   const sections = useMemo(() => {
-    // `target_id`, not `asset_id`: a collection entry is polymorphic
-    // (core_collection_entry carries target_type/target_id), and reading the
-    // column a photographs-only mind expects yields every album empty with
-    // nothing to show for it.
+    // `target_id`, not `asset_id`: collection entries are polymorphic, and the
+    // photographs-only column yields every album empty.
     const albums = collections.rows.map((row) => ({
       collectionId: String(row.collection_id),
       name: String(row.name ?? "Album"),
@@ -276,17 +220,13 @@ export default function PhotosCollectionsView({
           (entry) => String(entry.collection_id) === String(row.collection_id)
         )
         .map((entry) => String(entry.target_id)),
-      // Issue #721 B5: the member's own key-photo choice, straight off the
-      // collection row — `chosenCover` (`photos-collections.ts`) is what
-      // turns this into a tile, in preference to the newest member.
+      // The member's own key-photo choice, preferred over the newest member (#721).
       ...(row.cover_content_id
         ? { coverContentId: String(row.cover_content_id) }
         : {}),
     }));
-    // Only CONFIRMED faces make a person: a proposed region is the enricher's
-    // candidate, and a candidate is not somebody the member has said is in
-    // their library. `confirmed_by_party_id` is the column the schema pins to
-    // `review_state = 'confirmed'`, so either reads the same answer.
+    // Only CONFIRMED faces make a person — a proposed region is the enricher's
+    // candidate, not somebody the member has named.
     const facesByParty = new Map<string, string[]>();
     for (const face of faces.rows) {
       if (!face.confirmed_by_party_id) continue;
@@ -334,18 +274,8 @@ export default function PhotosCollectionsView({
     places.rows,
   ]);
 
-  /**
-   * One switch over the closed key union: a section added to the model
-   * without a destination fails to typecheck right here.
-   *
-   * `tile` absent means the HEADING was pressed — "show me all of these".
-   * Favorites/Trash have no such destination and say so by opening the
-   * tile's own photograph instead (they reach their shelf either way via
-   * the tile, or PhotoStateView`'s own filter). Memories DOES have one now
-   * (issue #724 W7, `MemoriesView.tsx`): the heading opens the full surface
-   * (On this day, Trips, Similar moments), and a tile keeps opening straight
-   * to the photograph it already did.
-   */
+  /** Closed key union, so a section with no destination fails to typecheck here.
+   *  Absent `tile` means the HEADING was pressed. */
   const open = (key: CollectionSectionKey, tile?: CollectionTile): void => {
     switch (key) {
       case "memories":
@@ -363,9 +293,6 @@ export default function PhotosCollectionsView({
             partyId: tile.id,
             personName: tile.label ?? "Unnamed",
           });
-        // People is off the band (issue #712) — the heading pushes the roster
-        // route directly rather than a `PhotosHome` destination that no
-        // longer exists.
         else navigation.navigate("PhotosPeople");
         break;
       case "places":
@@ -380,9 +307,7 @@ export default function PhotosCollectionsView({
         navigation.navigate("PhotoStateView", { mode: "favorites" });
         break;
       case "videos":
-        // Same door as Favorites (issue #721 B3): a filter over the same
-        // shelf screen, not a bespoke grid — `PhotoStateView` already knows
-        // how to be "the timeline, filtered", and Videos is nothing else.
+        // A filter over the same shelf screen, never a bespoke grid (#721).
         navigation.navigate("PhotoStateView", { mode: "videos" });
         break;
       case "duplicates":
@@ -399,15 +324,8 @@ export default function PhotosCollectionsView({
   };
 
   return (
-    // No header row of its own anymore (issue #712). This page used to draw
-    // a second trailing `···` chip here, below the real "Photos" header
-    // (`PhotosHome.tsx`) — two stacked trailing controls where iOS Photos
-    // has exactly one. That chip's menu (Show All / Collapse All) moved into
-    // the SAME header slot Library's Sliders chip uses, scoped to whichever
-    // destination is current; see `PhotosHome.tsx`'s `menuGroups` comment.
-    // Only the per-section fold chevrons stay here — they act on `collapsed`
-    // and `onToggleSection`, the two props that now own what used to be this
-    // file's own `useState`.
+    // No header row of its own (#712): the Show All / Collapse All menu lives in
+    // `PhotosHome.tsx`'s header slot. Only the per-section chevrons stay here.
     <ScrollView
       contentContainerStyle={styles.scroll}
       showsVerticalScrollIndicator={false}
@@ -432,10 +350,6 @@ type Styles = ReturnType<typeof makeStyles>;
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // The fold: same 44pt slot height as every other header control in this
-    // app (`PhotosHome.styles.ts`'s `headerBtn`), so the row's own touch
-    // targets read as a matched pair rather than one control being an
-    // afterthought.
     collapseBtn: {
       alignItems: "center",
       height: 44,
@@ -480,15 +394,9 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: pageMargin,
     },
     headCount: { ...t("mono"), color: colors.textFaint },
-    // The "open this shelf" tap target: title plus its chevron, exactly the
-    // pair that always meant "go in" — now its own Pressable so the collapse
-    // control beside it (`collapseBtn`) can be a second, distinct target
-    // rather than a second meaning layered onto this one.
     headOpen: { alignItems: "center", flexDirection: "row", gap: spacing[1] },
     headSpacer: { flex: 1 },
-    // The section name is the loudest thing in its own band, and every band
-    // looks the same: this page has no primary, because choosing one would be
-    // choosing for the member which of their own shelves matters.
+    // No primary section: choosing one would choose for the member.
     headTitle: { ...t("title"), color: colors.text },
     label: { ...t("smallStrong"), color: colors.onStage },
     labelUnder: {

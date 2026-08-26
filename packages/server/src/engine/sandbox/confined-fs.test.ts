@@ -1,21 +1,8 @@
 /*
- * The filesystem mirror the sandbox substitutes for `node:fs` (#842 W7.1).
- *
- * WHY THIS FILE EXISTS. `fs-guard.ts`, `confined-fs.ts` and
- * `confined-fs-promises.ts` are the whole of the filesystem confinement — the
- * code that decides whether a granted lane may read a path — and they were
- * exercised ONLY through worker threads, which V8 coverage does not
- * instrument. That is the worst possible combination: the most
- * security-critical modules in the sandbox were reading 0% covered, so nothing
- * about them was measured, and a refactor that quietly broke the confinement
- * would have registered as no change at all. `policy.test.ts` proves the
- * POLICY objects are right; this proves the ENFORCEMENT that reads them is.
- *
- * Every test below is a confinement claim, not a line-count exercise. The
- * arrangement is deliberate: a granted root with a real file in it, a sibling
- * directory that is NOT granted but shares a name prefix, and a symlink from
- * inside the root pointing out of it — the three shapes a path check gets
- * wrong.
+ * Direct tests of sandbox fs enforcement (#842). Worker-thread coverage
+ * does not instrument these modules; `policy.test.ts` pins POLICY, this
+ * pins the guard. Arrangement: granted root, prefix-sharing sibling, and
+ * an in-root symlink pointing out.
  */
 
 import { promises as fs, realpathSync } from "node:fs";
@@ -37,19 +24,13 @@ import {
 
 describe("sandbox filesystem confinement", () => {
   let base: string;
-  /** The granted root. */
   let root: string;
-  /** A sibling that SHARES A PREFIX with the root and is not granted. */
   let sibling: string;
   let insideFile: string;
   let outsideFile: string;
-  /** A symlink that lives inside the root and points outside it. */
   let escapeLink: string;
 
   beforeAll(async () => {
-    // `tempDir` rather than a raw `mkdtemp`: it registers the directory for the
-    // suite-wide cleanup the test-kit owns, which is why the raw call is
-    // restricted.
     base = await tempDir("centraid-confined-");
     root = path.join(base, "granted");
     sibling = path.join(base, "granted-evil");
@@ -67,9 +48,7 @@ describe("sandbox filesystem confinement", () => {
     test("refuses everything while no root is granted", () => {
       setConfinedReadRoots([]);
       expect(confinedReadRoots()).toStrictEqual([]);
-      // The empty-grant case is the one a bug is most likely to invert, because
-      // "no roots" reads like "no restriction" if the check is written as a
-      // negation. It must mean "nothing is readable".
+      // Empty grant is "nothing is readable", not "no restriction".
       expect(() => guardReadPath("readFileSync", insideFile)).toThrow(
         SandboxDeniedError
       );
@@ -78,8 +57,6 @@ describe("sandbox filesystem confinement", () => {
     test("admits a path inside a granted root and returns it absolute", () => {
       setConfinedReadRoots([root]);
       expect(guardReadPath("readFileSync", insideFile)).toBe(insideFile);
-      // Relative input resolves against cwd before the check, so a caller cannot
-      // dodge confinement by passing a relative path.
       expect(
         guardReadPath("readFileSync", path.relative(process.cwd(), insideFile))
       ).toBe(insideFile);
@@ -87,9 +64,7 @@ describe("sandbox filesystem confinement", () => {
 
     test("refuses a sibling directory that merely shares the root's prefix", () => {
       setConfinedReadRoots([root]);
-      // `/…/granted-evil` starts with `/…/granted`. A `startsWith` check admits
-      // it; `path.relative` does not. This is the prefix bug the guard's own
-      // comment names, pinned so it cannot come back.
+      // Prefix sibling: `startsWith` admits `/granted-evil`; `path.relative` does not.
       expect(() => guardReadPath("readFileSync", outsideFile)).toThrow(
         /refused|denied/iu
       );
@@ -97,9 +72,6 @@ describe("sandbox filesystem confinement", () => {
 
     test("refuses a symlink inside the root that points outside it", () => {
       setConfinedReadRoots([root]);
-      // The link's own path is inside the root. Only realpath resolution catches
-      // this, so a guard that checked the literal path would hand the handler
-      // the file the link points at.
       expect(() => guardReadPath("readFileSync", escapeLink)).toThrow(
         SandboxDeniedError
       );
@@ -107,12 +79,10 @@ describe("sandbox filesystem confinement", () => {
 
     test("checks a missing file against its nearest existing ancestor", () => {
       setConfinedReadRoots([root]);
-      // Inside the root: allowed, even though nothing is there yet.
       expect(guardReadPath("statSync", path.join(root, "a/b/c.txt"))).toBe(
         path.join(root, "a/b/c.txt")
       );
-      // Outside it: still refused. Without the ancestor walk, a probe for a
-      // non-existent path would skip the check entirely and leak existence.
+      // Missing-file probes still walk ancestors — skip would leak existence.
       expect(() =>
         guardReadPath("statSync", path.join(sibling, "a/b/c.txt"))
       ).toThrow(SandboxDeniedError);
@@ -134,10 +104,6 @@ describe("sandbox filesystem confinement", () => {
       expect(() =>
         guardReadPath("readFileSync", Buffer.from(outsideFile))
       ).toThrow(SandboxDeniedError);
-      // `new URL("file://…")` is a first-class path argument to node's own fs.
-      // If the guard did not understand it the coercion would return null and
-      // every URL read would be refused — closed, but broken for a legitimate
-      // caller — so the spelling is asserted in both directions.
       expect(guardReadPath("readFileSync", pathToFileURL(insideFile))).toBe(
         insideFile
       );
@@ -182,10 +148,7 @@ describe("sandbox filesystem confinement", () => {
 
     test("openSync refuses every mode that can write, inside the root too", () => {
       setConfinedReadRoots([root]);
-      // The lane is READ-confined, and `openSync` is the one read entry point
-      // that its second argument can turn into a write. So the mode is checked
-      // as well as the path: `w`, `a` and every `+` variant reach a write path
-      // and must be refused even on a file this lane is allowed to read.
+      // `openSync` modes that write (`w`/`a`/`+`) refuse even on a granted file.
       for (const mode of ["w", "a", "w+", "r+", "a+", "wx", "as+"])
         expect(
           () => confined.openSync(insideFile, mode),
@@ -196,8 +159,7 @@ describe("sandbox filesystem confinement", () => {
 
     test("existsSync REFUSES rather than answering false for an outside path", () => {
       setConfinedReadRoots([root]);
-      // Answering `false` would be a side channel: a handler could map the disk
-      // by probing. A refusal says "not your business", which is different.
+      // False would be a side channel; refuse rather than answer.
       expect(() => confined.existsSync(outsideFile)).toThrow(
         SandboxDeniedError
       );
@@ -223,13 +185,10 @@ describe("sandbox filesystem confinement", () => {
       for (const [name, call] of writers) {
         expect(call, `${name} must refuse`).toThrow(SandboxDeniedError);
       }
-      // The grant is read-confined, so a granted root is still not writable.
       expect(confined.existsSync(target)).toBe(false);
     });
 
     test("the default export mirrors the named surface", () => {
-      // A handler doing `import fs from "fs"` must meet the same refusals as one
-      // doing `import { writeFileSync } from "fs"`.
       expect(confined.default.writeFileSync).toBe(confined.writeFileSync);
       expect(confined.default.readFileSync).toBe(confined.readFileSync);
       expect(confined.default.promises).toBe(confined.promises);
@@ -271,8 +230,6 @@ describe("sandbox filesystem confinement", () => {
 
     test("the async symlink escape is refused too", async () => {
       setConfinedReadRoots([root]);
-      // The two mirrors share `guardReadPath`, and this is what proves the async
-      // half actually calls it rather than reimplementing a weaker check.
       await expect(confinedPromises.readFile(escapeLink)).rejects.toThrow(
         SandboxDeniedError
       );
@@ -291,7 +248,6 @@ describe("sandbox filesystem confinement", () => {
         ["copyFile", () => confinedPromises.copyFile()],
         ["chmod", () => confinedPromises.chmod()],
         ["symlink", () => confinedPromises.symlink()],
-        // `open` is refused outright: a handle is a write primitive in disguise.
         ["open", () => confinedPromises.open()],
       ];
       for (const [name, call] of writers)
@@ -309,7 +265,6 @@ describe("sandbox filesystem confinement", () => {
       expect(confinedReadRoots()).toHaveLength(2);
       expect(String(confined.readFileSync(secondFile))).toBe("second");
       expect(String(confined.readFileSync(insideFile))).toBe("inside");
-      // The ungranted sibling stays refused with two roots in play.
       expect(() => confined.readFileSync(outsideFile)).toThrow(
         SandboxDeniedError
       );

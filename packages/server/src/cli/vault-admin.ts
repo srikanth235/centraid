@@ -1,22 +1,8 @@
 /*
- * `centraid-gateway vault …` — the stopped-daemon filesystem maintenance
- * surface for vault lifecycle (issue #289).
- *
- * Vault create/delete left the HTTP surface: they are landlord acts,
- * guarded by having shell access to the box — a family owner's device can
- * never delete a sibling's vault because no unauthenticated route exists.
- * Mutations take gateway.db's exclusive lock and therefore refuse while the
- * daemon is running.
- *
- *   centraid-gateway vault list   --data-dir <path> [--json]
- *   centraid-gateway vault create --data-dir <path> [--name <name>] [--json]
- *   centraid-gateway vault rename --data-dir <path> <vaultId> <name>
- *   centraid-gateway vault delete --data-dir <path> <vaultId>
- *
- * `--json` (issue #382) wraps `list`/`create`'s output in a single
- * `{ok, vaults:[...]}` / `{ok, vaultId, name}` line instead of the default
- * one-JSON-object-per-line stream — a caller driving this over SSH (the
- * desktop's ConnectFlow) wants one line to parse, not an NDJSON stream.
+ * `centraid-gateway vault …` — stopped-daemon vault lifecycle maintenance
+ * (#289). Create/delete are landlord acts guarded by shell access alone.
+ * Mutations hold gateway.db's exclusive lock and refuse while the daemon
+ * runs. `--json` (#382) = single line, not NDJSON.
  */
 
 import { GatewayDatabase, GatewayLockError } from "../serve/gateway-db.js";
@@ -78,12 +64,9 @@ export async function commandVault(
   args: string[],
   fail: (msg: string, code?: number) => never
 ): Promise<void> {
-  // Pre-scan for `--json` so it governs the whole run — including a
-  // `fail()` triggered by argument parsing itself — regardless of flag order.
+  // Pre-scan `--json`: it governs the whole run incl. arg-parse failures, any flag order.
   const json = args.includes("--json");
-  // Explicit annotation: TS's never-return control-flow narrowing (used
-  // below on `parsed.dataDir`) only kicks in when the call-derived const is
-  // annotated — inferred-from-call-expression alone doesn't carry it.
+  // Annotation required for TS never-return narrowing on a call-derived const.
   const localFail: Fail = jsonFail(json, fail);
   await runJson(json, fail, async () => {
     const [action, ...rest] = args;
@@ -108,10 +91,7 @@ export async function commandVault(
       }
     }
     const registry = openVaultRegistry({
-      // The daemon always writes sealing keys through a protector, so a
-      // protector-less store cannot unwrap them: mounts fail, `list()`
-      // returns `[]`, and every verb here reports an empty gateway
-      // (issue #568 item D).
+      // Protector-less store can't unwrap sealed keys (#568): mounts fail.
       keyStore: daemonKeyStore(layout.keysDir),
       rootDir: layout.vaultDir,
       logger: quietLogger,
@@ -121,10 +101,7 @@ export async function commandVault(
       switch (action) {
         case "list": {
           const vaults = registry.list();
-          // A vault dir that would not mount is absent from `list()`, so a
-          // silent listing reads as "you have fewer vaults" instead of "one
-          // of them is broken" (issue #603 X1). The listing itself succeeded,
-          // so the exit code stays 0 — the failures are reported, not raised.
+          // Unmountable vaults vanish from `list()` — surface failedMounts rather than silently fewer vaults (#603).
           const failedMounts = registry.failedMounts();
           if (json) {
             process.stdout.write(

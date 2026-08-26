@@ -1,24 +1,14 @@
-// The durable upload queue (#419 M0.4) — the correctness kernel.
+// The durable upload queue (#419.4).
 //
-// DB FILE: its own, NOT the replica database. Three reasons:
+// Own DB file, NOT the replica: `PRAGMA user_version` is owned by replica
+// store-core (drop-and-rebuild on mismatch); a queued upload is unreplicated
+// source-of-truth; a long drain must not contend with replica transactions
+// on one `journal_mode=DELETE` handle.
 //
-//  1. `PRAGMA user_version` is owned by the replica store core, which keys its
-//     drop-and-rebuild on it (store-core.ts `initializeSchema`). Sharing the
-//     file leaves this schema no version marker of its own.
-//  2. Lifecycle is opposite. The replica is disposable derived state — it is
-//     wiped and rebootstrapped on any schema mismatch. A queued upload is
-//     unreplicated source-of-truth: losing it loses a photo that exists
-//     nowhere else yet. Coupling it to a disposable file is a category error.
-//     (`replica_intent_outbox` can share that file because an intent is
-//     replica-protocol-scoped and settles in seconds; an upload can outlive
-//     many rebootstraps while a 4 GB video drains over days.)
-//  3. A long drain writing part receipts should not contend with replica
-//     change-batch transactions on one `journal_mode=DELETE` handle.
-//
-// SECRETS: the per-blob content key is deliberately NOT persisted. `begin`
-// returns `keyBase64` on every call, including when it resumes an existing
-// session, so the key is re-fetched per drain and lives only in memory. Nor
-// are presigned URLs persisted — they expire, and `begin` re-mints them.
+// SECRETS: the per-blob content key is NOT persisted. `begin` returns
+// `keyBase64` on every call (including resume) so the key lives only in
+// memory. Presigned URLs are not persisted — they expire, and `begin`
+// re-mints them.
 
 import type { ReplicaSqliteDriver } from "@centraid/client/replica/native";
 
@@ -91,14 +81,6 @@ const DDL = `
   ${FOLLOWUP_DDL}
 `;
 
-/**
- * `pending`  enqueued, sha known, no session yet
- * `begun`    gateway session open
- * `uploading` at least one part in flight or done
- * `completing` all parts recorded, completion requested
- * `settled`  casAck receipt persisted (terminal)
- * `failed`   gave up after too many attempts (terminal until retried)
- */
 export type UploadItemState =
   | "pending"
   | "begun"
@@ -108,12 +90,8 @@ export type UploadItemState =
   | "failed";
 
 /**
- * `pending`  not yet uploaded
- * `put`      bytes accepted by the provider, ETag captured, receipt NOT yet
- *            acknowledged by the gateway. This state exists solely so the
- *            PUT-succeeded-but-recordPart-never-landed crash replays the
- *            receipt instead of re-uploading the bytes.
- * `recorded` gateway holds the ETag
+ * `put` exists solely so a PUT-succeeded-but-recordPart-never-landed crash
+ * replays the receipt instead of re-uploading the bytes.
  */
 export type UploadPartState = "pending" | "put" | "recorded";
 
@@ -167,20 +145,17 @@ export class UploadQueueStore {
       driver.all<{ user_version: number }>("PRAGMA user_version")[0]
         ?.user_version ?? 0;
     if (version === 0) {
-      // Fresh database: build the current schema in one shot.
       driver.exec(DDL);
       driver.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     } else if (version >= 1 && version < SCHEMA_VERSION) {
-      // The upload ledger is source-of-truth. Migrate transactionally and
-      // idempotently (see store-migrations.ts) so a kill mid-migration cannot
-      // brick the queue and lose a photo that exists nowhere else yet.
+      // Source-of-truth ledger: migrate transactionally and idempotently so a
+      // kill mid-migration cannot brick the queue.
       migrateUploadSchema(driver, version, FOLLOWUP_DDL);
     } else if (version === SCHEMA_VERSION) {
       driver.exec(DDL);
     } else {
-      // v0 pre-release: an unknown (future/foreign) version rebuilds in place
-      // rather than migrating. Only this module's own tables are named, so
-      // nothing else in the file is collateral.
+      // Unknown (future/foreign) version rebuilds in place. Only this module's
+      // own tables are named, so nothing else in the file is collateral.
       driver.exec(`
         DROP TABLE IF EXISTS upload_part;
         DROP TABLE IF EXISTS upload_followup;
@@ -193,17 +168,11 @@ export class UploadQueueStore {
     return new UploadQueueStore(driver);
   }
 
-  /**
-   * Idempotent by content sha: re-enqueuing bytes already queued or settled
-   * returns the existing item rather than creating a second upload of the same
-   * object. This is the local half of D10 dedupe; the gateway's
-   * `alreadyPresent` is the other half.
-   */
+  /** Local half of D10 dedupe; the gateway's `alreadyPresent` is the other half. */
   enqueue(upload: NewUpload): UploadItem {
     return this.transaction(() => this.enqueueItem(upload));
   }
 
-  /** Atomically persist addressed bytes and the canonical work they enable. */
   enqueueWithFollowup(
     upload: NewUpload,
     makeFollowup: UploadFollowupFactory
@@ -215,7 +184,6 @@ export class UploadQueueStore {
     });
   }
 
-  /** Every non-terminal item, oldest first — the recovery set after a restart. */
   pending(): UploadItem[] {
     return this.driver
       .all<ItemRow>(
@@ -225,7 +193,6 @@ export class UploadQueueStore {
       .map(toItem);
   }
 
-  /** Bounded local ledger for UI backup-state reconciliation. */
   all(): UploadItem[] {
     return this.driver
       .all<ItemRow>(
@@ -234,11 +201,7 @@ export class UploadQueueStore {
       .map(toItem);
   }
 
-  /**
-   * Durably attach the canonical mutation before transfer starts. The unique
-   * key makes producer retries idempotent while still allowing one blob to
-   * feed more than one app/entity.
-   */
+  /** Unique key makes producer retries idempotent; one blob may feed many apps. */
   enqueueFollowup(followup: NewUploadFollowup): UploadFollowup {
     const inputJson = JSON.stringify(followup.input);
     const intentId = stableFollowupIntentId(
@@ -270,11 +233,7 @@ export class UploadQueueStore {
     return toUploadFollowup(row);
   }
 
-  /**
-   * Canonical work whose bytes have a terminal casAck, oldest first. Poisoned
-   * follow-ups are excluded: a record that has exhausted its replay attempts is
-   * quarantined so it can neither replay again nor block the rest (F4).
-   */
+  /** Settled bytes, oldest first. Poisoned follow-ups excluded (F4). */
   pendingFollowups(): UploadFollowup[] {
     return this.driver
       .all<PersistedUploadFollowupRow>(
@@ -287,7 +246,6 @@ export class UploadQueueStore {
       .map(toUploadFollowup);
   }
 
-  /** True until this blob's canonical app mutation is durably accepted. */
   hasFollowupForItem(itemId: string): boolean {
     return (
       (this.driver.all<{ count: number }>(
@@ -297,7 +255,6 @@ export class UploadQueueStore {
     );
   }
 
-  /** Count one failed replay attempt and return the new total (F4). */
   countFollowupAttempt(followupId: number): number {
     this.driver.run(
       "UPDATE upload_followup SET attempts = attempts + 1 WHERE followup_id = ?",
@@ -311,7 +268,6 @@ export class UploadQueueStore {
     );
   }
 
-  /** Terminally quarantine a follow-up that has stopped being replayable (F4). */
   poisonFollowup(followupId: number, reason: string): void {
     this.driver.run(
       "UPDATE upload_followup SET poisoned_at = ?, last_error = ? WHERE followup_id = ?",
@@ -319,7 +275,6 @@ export class UploadQueueStore {
     );
   }
 
-  /** How many settled-byte follow-ups are quarantined — a health signal for boot. */
   poisonedFollowupCount(): number {
     return (
       this.driver.all<{ count: number }>(
@@ -359,7 +314,6 @@ export class UploadQueueStore {
       .map(toPart);
   }
 
-  /** Record an open gateway session and move the item into the transfer states. */
   markBegun(itemId: string, sessionId: string): void {
     this.driver.run(
       `UPDATE upload_item SET state = 'begun', session_id = ? WHERE item_id = ?`,
@@ -382,10 +336,9 @@ export class UploadQueueStore {
   }
 
   /**
-   * Persist the ETag the provider returned BEFORE the gateway has acknowledged
-   * it. Ordering is the whole point: a crash between the PUT and the receipt
-   * must find the ETag on disk, or the next drain re-uploads bytes the
-   * provider already holds.
+   * Persist the ETag BEFORE the gateway acknowledges it: a crash between PUT
+   * and receipt must find the ETag on disk, or the next drain re-uploads bytes
+   * the provider already holds.
    */
   markPartPut(itemId: string, partNumber: number, etag: string): void {
     this.driver.run(
@@ -402,7 +355,6 @@ export class UploadQueueStore {
     );
   }
 
-  /** Terminal, and the only place a casAck receipt is written. */
   settle(itemId: string, receipt: Record<string, unknown>): void {
     this.driver.run(
       `UPDATE upload_item SET state = 'settled', last_error = NULL, receipt_json = ?
@@ -442,10 +394,7 @@ export class UploadQueueStore {
           [upload.targetVaultId, existing.itemId]
         );
       }
-      // F6: a terminally-failed item is not a dead end. Re-enqueuing the same
-      // bytes revives it with fresh attempts and a cleared error, so the next
-      // backup run retries the transfer instead of a producer reporting a
-      // phantom success over a stuck row.
+      // F6: re-enqueue of a failed item revives it; do not report success over a stuck row.
       if (existing.state === "failed") {
         this.driver.run(
           `UPDATE upload_item SET state = 'pending', attempts = 0, last_error = NULL

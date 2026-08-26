@@ -1,9 +1,4 @@
-// One shelf, filtered (Photos v4 handoff §5): Favorites, Archive, Trash, or
-// one person's photographs. A shelf is the SAME timeline under a filter — the
-// grid below is `PhotoTimeline`, exactly as the library's is — and it carries
-// the app's band like every other Photos surface (§F): this screen is reached
-// from the More sheet, so `more` is the destination marked current, and the
-// old back chevron is gone because the band is the way out now.
+// One filtered shelf (Favorites / Archive / Trash / person): the same `PhotoTimeline` under a filter. Reached from More, so `more` is current — the band is the way out, not a back chevron.
 
 import React, { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
@@ -49,15 +44,7 @@ import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /**
- * What `Empty trash` does, and what it costs. The control fires the `purge-asset`
- * action (`media.purge_asset`, issue #711), which destroys the asset row, its
- * faces, tags, annotations and album membership NOW and hands the bytes to the
- * gateway's next storage sweep — instead of waiting out the 30-day window.
- *
- * Nothing here may use the undo grammar. `surfaceWriteOutcome` and the status
- * line both stay in their news register; the safety is the native confirm
- * below, which names the exact number and says plainly that it cannot be
- * undone BEFORE the first write leaves the device.
+ * `purge-asset` (#711) destroys the row NOW and hands bytes to the next storage sweep. No undo grammar — safety is the native confirm before the first write leaves the device.
  */
 export const EMPTY_TRASH_NOTE =
   "Deleting forever frees the space these hold. It cannot be undone.";
@@ -73,18 +60,12 @@ export default function PhotoStateView({
   const [selection, setSelection] = useState(new Set<string>());
   const params = route.params;
   const mode = params.mode;
-  // Person mode filters by a party's confirmed faces rather than by an asset
-  // flag — the same join FaceReview/PhotosCollectionsView use, just kept
-  // local to this view instead of a shared hook (one call site).
+  // Person mode: confirmed faces, not an asset flag — same join FaceReview/PhotosCollectionsView use; one call site, kept local.
   const faces = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "media.face_region" }), [])
   );
-  // Edit lineage, for the purge ORDER alone (issue #711). The timeline model
-  // carries no `source_asset_id`, and the vault refuses to destroy a
-  // photograph an edited copy still names as its source, so the shelf reads
-  // the lineage column straight off the trashed rows — bounded by the same
-  // `deleted_at not-null` filter the shelf itself is.
+  // Lineage for purge ORDER only (#711): timeline has no `source_asset_id`; vault refuses a source while a copy still names it.
   const trashedRows = useReplicaQuery(
     "photos",
     useMemo(
@@ -119,8 +100,6 @@ export default function PhotoStateView({
       timeline.assets.filter((asset) => {
         if (mode === "favorites") return asset.favorite && !asset.deleted;
         if (mode === "archive") return asset.archived && !asset.deleted;
-        // Issue #721 B3 — Collections' Videos shelf, opened here: the same
-        // `PhotoAsset.kind` fact `photos-collections.ts` filters on.
         if (mode === "videos") return asset.kind === "video" && !asset.deleted;
         if (mode === "person")
           return (
@@ -142,18 +121,14 @@ export default function PhotoStateView({
             ? params.personName
             : "Trash";
   const noun = assets.length === 1 ? "photograph" : "photographs";
-  // Trash's meta is the fuller status sentence (proto:3945) — count PLUS the
-  // purge window — because that window is the one fact a member needs before
-  // trusting the count. Every other mode is just the count and the noun.
+  // Trash meta is count PLUS the purge window (proto:3945) — the window is what makes the count trustworthy.
   const meta =
     mode === "trash"
       ? `${assets.length} in trash · purged 30 days after deletion`
       : `${assets.length} ${noun}`;
   const emptyCopy =
     mode === "favorites"
-      ? // The web shell's own string, imported so the empty state cannot
-        // read differently depending on which surface a member is on.
-        PHOTOS_EMPTY_FAVORITES
+      ? PHOTOS_EMPTY_FAVORITES
       : mode === "archive"
         ? PHOTOS_ARCHIVE_EMPTY
         : mode === "videos"
@@ -165,16 +140,11 @@ export default function PhotoStateView({
     surfaceWriteOutcome(result);
   };
   const selected = vaultAssets(assets, selection);
-  // One handler for the third selection target, shared by every Photos shelf
-  // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
-  // refusal grammar cannot drift between them.
   const share = usePhotoSelectionShare(
     () => selected,
     () => setSelection(new Set())
   );
-  // Empty trash acts on the WHOLE shelf rather than the selection, so it gets
-  // its own targets and its own refusal — the selection bar's answer is about
-  // whatever happens to be ticked, which is a different question.
+  // Empty trash acts on the WHOLE shelf, not the selection — different question, own refusal.
   const purgeTargets = vaultAssets(
     assets,
     new Set(assets.map((asset) => asset.id))
@@ -187,9 +157,6 @@ export default function PhotoStateView({
   const runEmptyTrash = (): void => {
     const count = purgeTargets.length;
     if (count === 0) return;
-    // The confirmation is the whole safety story: it names the exact number
-    // and says plainly that it cannot be undone, BEFORE anything is written.
-    // `destructive` is the platform's own styling for exactly this.
     Alert.alert(
       EMPTY_TRASH_CONFIRM.title(count),
       EMPTY_TRASH_CONFIRM.body(count),
@@ -211,7 +178,6 @@ export default function PhotoStateView({
             )
               .then(() => {
                 setSelection(new Set());
-                // No undo affordance rides this — there is nothing to undo.
                 postStatus(emptyTrashSummary({ purged, kept: count - purged }));
                 return refreshNow();
               })
@@ -223,8 +189,7 @@ export default function PhotoStateView({
       ]
     );
   };
-  // A shelf a member may not write into still SHOWS every target (§6); the
-  // sentence below the bar is what tells them why nothing will fire.
+  // A non-writable shelf still SHOWS every target (§6); the sentence below the bar is why nothing will fire.
   const writeBlockedReason = session
     ? selected.some((asset) => asset.canWrite === false)
       ? READ_ONLY_VAULT_REASON
@@ -244,32 +209,24 @@ export default function PhotoStateView({
   const blocked = { unavailableReason: writeBlockedReason ?? "" };
   const selectionBar = {
     count: selection.size,
-    // Trash swaps the fifth target for Restore (§6). Every other shelf here
-    // carries the base five untouched.
+    // Trash swaps the fifth target for Restore (§6).
     shelf: mode === "trash" ? ("trash" as const) : ("normal" as const),
     copyLabel: share.copyLabel,
     readOnlyReason: writeBlockedReason,
     favorite: canWrite
       ? {
           run: runSelection(
-            () =>
-              // On the Favorites shelf the only thing this target can mean is
-              // "take these off it" — the write the shelf's old head control
-              // performed, now where the handoff puts it.
-              batchFavorite(session!, selected, emit, mode !== "favorites"),
+            () => batchFavorite(session!, selected, emit, mode !== "favorites"),
             `${title} change not saved`
           ),
         }
       : blocked,
-    // Adding to an album is a library action; this shelf has no album picker
-    // and inventing a second one here would be a second answer to the same
-    // question. The Library index is where it lives.
+    // No album picker here — inventing a second one would be a second answer. Library is where it lives.
     addToAlbum: {
       unavailableReason: canWrite
         ? "Add to album from the library, where the albums are."
         : writeBlockedReason!,
     },
-    // Share is one standing grant over one photograph, through the one kit.
     share: share.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     trash: canWrite
@@ -288,10 +245,7 @@ export default function PhotoStateView({
       : blocked,
   };
   return (
-    // People is off the band (issue #712): a person's shelf is reached from
-    // Collections or the Library shelf list, never from the band itself, so
-    // `more` is the destination marked current for every mode this screen
-    // takes — including "person" — same as `PlacesView`/`FaceReview`.
+    // People is off the band (#712) — `more` is current for every mode, including person (`PlacesView`/`FaceReview`).
     <PhotosScreen current="more" selection={selectionBar}>
       <View style={styles.header}>
         <View style={styles.copy}>
@@ -308,8 +262,7 @@ export default function PhotoStateView({
             {meta}
           </Text>
         </View>
-        {/* The head keeps the COUNT and the way out of selection; the five
-            actions live in the bar at the foot, where a thumb is (§6). */}
+        {/* Head: count + way out of selection. Five actions live in the foot bar (§6). */}
         {selection.size ? (
           <Pressable
             accessibilityLabel="Done selecting"
@@ -322,9 +275,7 @@ export default function PhotoStateView({
         ) : assets.length ? (
           <View style={styles.headerActions}>
             {mode === "trash" ? (
-              // OUTLINED `--net`, never filled (proto:4800-4803) — the one
-              // irreversible control in the app must not look louder than Import.
-              // Pressing it opens the confirm; only the confirm destroys anything.
+              // OUTLINED `--net`, never filled (proto:4800-4803) — the irreversible control must not look louder than Import. Press opens confirm; only confirm destroys.
               <Pressable
                 accessibilityLabel="Empty trash"
                 accessibilityRole="button"
@@ -370,15 +321,11 @@ export default function PhotoStateView({
       <ReplicaStatusBar />
       {mode === "trash" ? (
         <>
-          {/* proto:4445, verbatim — the restore promise lives here, once,
-              rather than folded into the meta line where it would compete
-              with the count for the same breath. */}
+          {/* Restore promise once here, not folded into the meta line (proto:4445). */}
           <Text style={[styles.note, { color: colors.textSoft }]}>
             Deleted photographs stay here for 30 days, then they are purged.
           </Text>
-          {/* What the head's control does, said once, where the promise
-              above it is — and the refusal in its place when it cannot fire,
-              since a greyed control with nothing to read is the defect. */}
+          {/* Head control's cost, or the refusal in its place — a greyed control with nothing to read is the defect. */}
           {assets.length ? (
             <Text style={[styles.note, { color: colors.net }]}>
               {emptyTrashReason ?? EMPTY_TRASH_NOTE}

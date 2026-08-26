@@ -1,4 +1,4 @@
-// Local-rail command-tail replay (issue #750 invariant 7): `compileCommons`
+// Local-rail command-tail replay (#750 invariant 7): `compileCommons`
 // catches a co-hosted seat up by RE-EXECUTING the operations it missed, so the
 // steward never walks or projects the whole closure to describe a change and
 // the seat's own derived rows (OCR/embeddings/FTS) for unchanged items survive

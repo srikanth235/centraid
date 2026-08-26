@@ -1,14 +1,5 @@
-// What Tasks contributes to the FRAME (spec §1, §2).
-//
-// The contribution SHAPE is `_shared/app-frame.tsx`, the same module Docs and
-// Photos fill in; this file is what Tasks puts in it — the route's title, its
-// count and its ONE filled verb.
-//
-// THE ONE FILLED CONTROL IS QUICK ADD, and only where a task can actually be
-// captured. A route that draws no board (the Logbook, the reminder surface, the
-// consent gate) contributes no primary at all rather than a button that would
-// refuse — and a denied WRITE scope keeps the button while stating the reason,
-// because a control that vanishes teaches nothing.
+// Tasks' frame contribution (spec §1–2). No board → no primary at all; a
+// denied WRITE scope keeps the button and states the reason.
 import type { ReactNode } from "react";
 
 import {
@@ -27,17 +18,13 @@ import { QUICK_ADD, shelfCopy } from "./view-copy.ts";
 
 export interface AppBarState extends AppBarBase {
   shelf: ShelfId;
-  /** The open project's name — a project carries its OWN title in the bar. */
+  /** Project names itself in the bar. */
   projectName?: string;
-  /** Capture a task. Omitted where the route holds no board to capture into. */
   onQuickAdd?: () => void;
-  /** Why capture cannot fire, when it cannot — a denied write scope names
-   *  itself here rather than leaving a dead control on screen. */
+  /** Why capture cannot fire (e.g. denied write scope). */
   quickAddDisabledReason?: string;
 }
 
-/** The bar's count, in the words the route uses. `null` contributes nothing
- *  rather than a zero the view had to invent. */
 export function barCount(state: AppBarState): ReactNode {
   if (state.count === null) return undefined;
   return countLabel(
@@ -50,8 +37,6 @@ export function barTitle(state: AppBarState): string {
   return shelfCopy(state.shelf, state.projectName).title;
 }
 
-/** Does this route offer capture at all? The bar asks the shelf table, so the
- *  answer cannot drift from the one the routes themselves use. */
 export function offersQuickAdd(shelf: ShelfId): boolean {
   return allowsQuickAdd(shelf);
 }
@@ -66,8 +51,7 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
         <SearchBarButton label="Search tasks" onSearch={handleSearch} />
       ) : null}
       {offersQuickAdd(state.shelf) && handleQuickAdd ? (
-        // A disabled commit takes the plain outline, never the fill (§"the
-        // rules that make these three rooms one house", rule 4).
+        // A disabled commit takes the outline, never the fill (rule 4).
         <button
           type="button"
           className={disabled ? "kit-btn" : "kit-btn primary"}
@@ -83,8 +67,6 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
   return { title: barTitle(state), count: barCount(state), actions };
 }
 
-/** The compact band claim (§2) — Tasks' own four destinations plus More, which
- *  the frame ignores on any surface that is not compact. */
 export function bandClaim(
   shelf: ShelfId,
   onSelect: (segment: string) => void,

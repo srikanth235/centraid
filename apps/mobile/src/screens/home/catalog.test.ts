@@ -1,5 +1,5 @@
 /**
- * Home / Vaults launcher owner (issue #545 C5/C7 surface) — the pure catalog.
+ * Home / Vaults launcher owner (#545/C7 surface) — the pure catalog.
  */
 import { describe, expect, it } from "vitest";
 

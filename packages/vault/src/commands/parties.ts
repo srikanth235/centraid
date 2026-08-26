@@ -214,7 +214,7 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
       .prepare(`UPDATE core_party SET ${sets.join(", ")} WHERE party_id = ?`)
       .run(...values, input.party_id);
   }
-  // Birthday is one logical fact with two surfaces (issue #441 A2.3): the
+  // Birthday is one logical fact with two surfaces (#441): the
   // party's birth_date and any People "Birthday" important-date row. When the
   // birth_date moves, reconcile the matching People row's MM-DD so the two can
   // never disagree. (add_important_date reconciles the other direction.)
@@ -248,10 +248,9 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
   return { party_id: input.party_id };
 }
 
-/** Register the core party commands on a gateway. */
 export function registerPartyCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_PARTY);
   gateway.registerCommand(UPDATE_PARTY);
-  // Entity resolution rides the party family (issue #290 phase 2).
+  // Entity resolution rides the party family (#290).
   registerMergeCommands(gateway);
 }

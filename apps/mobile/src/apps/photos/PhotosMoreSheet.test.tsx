@@ -1,22 +1,10 @@
-// Pins the More sheet's anatomy (issue #711, cut back in #712):
-//
-//  - it carries exactly what `PHOTOS_MORE_ROWS` names, which is now ONE row.
-//    The five shelves it used to list — Sharing, Favorites, Places,
-//    Duplicates, Trash — are sections of Collections, on screen with their
-//    own counts, so a row here would be a second hidden door to each. A stray
-//    reintroduction is caught here and in `photos-more-router.test.ts`
-//  - Backup carries no meta: the figure would come from a network round trip
-//    this sheet has no business making, and a placeholder is the lie the old
-//    meta map existed to avoid
-//  - tapping a row calls `onSelect` with that row's OWN key, never a
-//    different one — the same "labelled destination opens something else"
-//    defect class this issue is about, one level up from the router itself
-//  - the foot line is the exact spec copy, and the old invented "More"
-//    eyebrow is gone
-//
-// Tile size is NOT covered here any more — it moved on from this sheet to
-// the Library's own header menu (`photos-library-menu.test.ts` carries the
-// rung rows now); see `PhotosMoreSheet.tsx`'s header for why.
+// Pins the More sheet's anatomy (#711, #712): exactly the one row
+// `PHOTOS_MORE_ROWS` names (shelf Collections are sections of Collections, so
+// a row here would be a second hidden door — a stray reintroduction is caught
+// here and in `photos-more-router.test.ts`); Backup carries no meta; tapping a
+// row calls `onSelect` with that row's OWN key; the foot line is exact spec
+// copy with no "More" eyebrow. Tile size is NOT covered here: it lives in
+// `photos-library-menu.test.ts` / `PhotosMoreSheet.tsx`'s header.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -161,12 +149,8 @@ describe("the More sheet's rows, meta and foot", () => {
     renderSheet();
     const labels = Array.from(container!.querySelectorAll("button"))
       .map((button) => button.getAttribute("aria-label") ?? "")
-      // Close is a CONTROL, not a destination — this count is of
-      // destinations, which is what the cap is about.
+      // Close is a CONTROL, not a destination.
       .filter((label) => label !== "Close");
-    // One row. Backup is not a shelf — it is a policy screen in the frame,
-    // about whether this device's bytes have left it, and that policy governs
-    // Docs' scans and Notes' attachments too.
     expect(labels).toStrictEqual(["Backup"]);
     for (const shelf of [
       "Sharing",
@@ -181,10 +165,8 @@ describe("the More sheet's rows, meta and foot", () => {
   });
 
   it("omits Backup's meta rather than inventing a number", () => {
-    // The row is labelled "Backup" now (#712 B1) and its meta is still absent:
-    // the figure it would carry comes from a network round trip this sheet has
-    // no business making, and a placeholder number is the lie the whole meta
-    // map exists to avoid.
+    // The row is labelled "Backup" now (#712) and its meta is still absent:
+    // a placeholder number is the lie the whole meta map exists to avoid.
     renderSheet();
     expect(rowButton("Backup").getAttribute("aria-label")).toBe("Backup");
   });
@@ -209,17 +191,14 @@ describe("the More sheet's rows, meta and foot", () => {
     const closeButtons = Array.from(
       container!.querySelectorAll("button")
     ).filter((button) => button.getAttribute("aria-label") === "Close");
-    // The scrim and the explicit head button both carry "Close" — the sheet
-    // has no grabber to dismiss it, so a real ✕ control must exist.
+    // The sheet has no grabber, so a real ✕ control must exist.
     expect(closeButtons.length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders the exact spec foot copy, and no invented eyebrow", () => {
     renderSheet();
     expect(container!.textContent).toContain("Everything Photos can show.");
-    // The old header was a bare "More" eyebrow with nothing else on its line;
-    // the foot sentence itself does not contain that word, so this also
-    // guards against it creeping back in as a separate heading.
+    // Also guards against a bare "More" eyebrow creeping back in.
     expect(
       Array.from(container!.querySelectorAll("span")).some(
         (span) => span.textContent === "More"

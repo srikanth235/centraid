@@ -1,10 +1,6 @@
 /*
- * Target-independent remote-CAS reconciliation (issue #414 D14).
- *
- * A vault may keep its primary bytes in provider/BYO S3 without configuring
- * the separate snapshot-backup store. This pass deliberately models that as
- * "backup not configured, CAS configured" instead of minting a fake backup
- * target merely so inventory can run.
+ * Target-independent remote-CAS reconciliation (#414): models "backup not
+ * configured, CAS configured" — never a fake backup target.
  */
 
 import {
@@ -66,11 +62,10 @@ export interface CasOnlyReconciliationOptions {
   storageConnections?: StorageConnectionStore;
   verifyBucket: boolean;
   checkedAt: string;
-  /** Deterministic collection seam for focused service tests. */
   collect?: typeof collectCasInventory;
 }
 
-/** Persistable failure shape that remains honest about the absent backup store. */
+/** Persistable failure shape, honest about the absent backup store. */
 export function failedCasOnlyReconciliation(
   checkedAt: string,
   mode: BackupReconciliationState["mode"],
@@ -95,7 +90,7 @@ export function failedCasOnlyReconciliation(
   };
 }
 
-/** Reconcile remote CAS custody without requiring or creating a backup target. */
+/** Reconcile remote CAS custody without requiring a backup target. */
 export async function runCasOnlyReconciliation(
   opts: CasOnlyReconciliationOptions
 ): Promise<BackupReconciliationState> {
@@ -109,26 +104,17 @@ export async function runCasOnlyReconciliation(
   });
   let cas = unavailableStore(result.configured, result.error);
   if (result.collection) {
-    // Live GC roots = liveBlobShas ∪ archivedSegmentShas ∪ retained-snapshot
-    // roots (issue #436 §6). The third term is provably EMPTY on this path:
-    // `runCasOnlyReconciliation` runs ONLY when no backup store/provider is
-    // configured (see BackupService.doRunReconciliation), so no snapshot
-    // manifest exists to reference a blob — there is nothing to open and no
-    // recovery window to protect. When a backup store IS configured, the
-    // reconciliation runs through `runBackupReconciliation`, which computes the
-    // root set from the provider's retained manifests. Kept explicit so the
-    // invariant is visible at both forks of the diff, not silently absent here.
-    // The base live set is SHARED and read-only (issue #659 L5): several
-    // consumers derive it in the same tick, and `liveBlobShasCached` memoizes
-    // it per vault write position. The two archive-root families are this
-    // caller's own extra roots, so they are unioned into a local copy rather
-    // than mutated into the shared set.
+    // Live GC roots (#436) = liveBlobShas ∪ archivedSegmentShas ∪ retained-
+    // snapshot roots — third term provably EMPTY here (no backup store ⇒ no
+    // manifests; the configured fork lives in `runBackupReconciliation`). The
+    // base set is SHARED/read-only (#659): union into a local copy, never
+    // mutate it.
     const live = new Set(liveBlobShasCached(opts.db.vault));
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
     for (const sha of conversationArchiveShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
     for (const sha of result.authenticatedFailures ?? []) index.unmark(sha);
-    // Scope the cas diff to `store='cas'` rows (issue #425 Wave 2).
+    // Scope the cas diff to `store='cas'` rows (#425).
     const rows = index.rows().filter((row) => row.store === "cas");
     cas = reconcileCasInventory({
       collection: result.collection,
@@ -142,8 +128,7 @@ export async function runCasOnlyReconciliation(
       unmark: (sha) => index.unmark(sha),
     });
     addAuthenticatedFailures(cas, result.authenticatedFailures ?? []);
-    // Diff the derived store class too, folding its drift into `cas`. The same
-    // `collect` seam drives it — a test's injected collector switches on `store`.
+    // Fold the derived store class's drift into `cas` via the same collect seam.
     await reconcileDerivedInto({
       cas,
       db: opts.db,

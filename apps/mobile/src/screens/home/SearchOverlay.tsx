@@ -1,19 +1,4 @@
-// The full-screen search overlay (issue #498, Slice B change #6; issue #707
-// Phase 5 — "Search everything" from Home's header; issue #711 — rewritten to
-// match the v4 Binding Layer handoff's search anatomy exactly:
-// design_handoff_photos/"Centraid System - Binding Layer v4.dc.html" :3250–
-// 3331 (markup) and :5996–6023 (styles). Local component state, not a nav
-// route, so it's cheap to open and dismiss. It autofocuses an input and
-// searches vault OBJECTS across every native app's replica — a note, a doc,
-// a person, an event, a task, a tally entry, a photo. Results group by the
-// app that owns them: a dot in the app's identity hue plus a micro-caps app
-// name, never an app-filter chip row or an app-icon grid — the brief's
-// "objects, not apps" contract holds in the anatomy here, not just the copy.
-//
-// Tapping the scrim dismisses: the opaque paper background sits under a
-// full-screen Pressable, and the content layer is `box-none`, so a tap on
-// empty space falls through to close while taps on the input / a chip / a
-// result / Cancel are handled.
+// Full-screen Home search (#498, #711). Objects, not apps. Scrim dismisses; content is `box-none`.
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -33,14 +18,8 @@ import { groupSearchHits } from "./search-model";
 import type { SearchGroup } from "./search-model";
 import { useSearchRecents } from "./useSearchRecents";
 
-// The brief's `R.margin.m` (:3356) — the mobile content margin every Home
-// surface shares. Was 20 here (issue #711 audit item d), then the literal 18;
-// it is now the shared `pageMargin` token, so no screen can drift again.
 const H_PADDING = pageMargin;
 
-// A stable-identity empty array — `hits` falls back to this rather than a
-// fresh `[]` literal every render, so the `groups` useMemo below actually
-// memoizes instead of recomputing on every keystroke that doesn't change it.
 const EMPTY_HITS: readonly BlueprintSearchHit[] = [];
 
 export interface SearchOverlayProps {
@@ -70,9 +49,6 @@ export default function SearchOverlay({
   const { suggestions } = useSearchRecents();
 
   const trimmed = query.trim();
-  // The brief's `searchIsRecent` (:6023) — the try-chip row is an empty-query
-  // affordance only; it disappears the moment there is a real query to judge
-  // results against.
   const isEmptyQuery = trimmed.length === 0;
   const hits = entitySearch?.key === trimmed ? entitySearch.hits : EMPTY_HITS;
   const groups = useMemo(() => groupSearchHits(hits), [hits]);
@@ -110,10 +86,7 @@ export default function SearchOverlay({
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      {/* The brief's `searchPanelStyle` (:6000) is an OPAQUE paper surface
-          (`t.surf` / bg-elev), not glass — no BlurView, no translucent tint
-          film (issue #711 audit item c). On mobile the panel is full-bleed
-          (:6000's `mob?'100%'`), so this one solid layer IS the panel. */}
+      {/* Opaque paper, not glass — no BlurView (#711). */}
       <View
         style={[StyleSheet.absoluteFill, { backgroundColor: colors.bgElev }]}
         pointerEvents="none"
@@ -141,9 +114,7 @@ export default function SearchOverlay({
             autoCorrect={false}
             autoCapitalize="none"
           />
-          {/* The brief's static scope label (:3260) — there is no app-filter
-              chip row to narrow this against; search always spans every
-              app, so the overlay says so rather than implying a choice. */}
+          {/* Scope is a label, not a filter. */}
           <Text style={styles.scope}>all apps</Text>
           <Pressable
             onPress={onClose}
@@ -183,8 +154,6 @@ export default function SearchOverlay({
           {searching ? (
             <Text style={styles.empty}>Searching your vault…</Text>
           ) : !isEmptyQuery && groups.length === 0 ? (
-            // The brief's exact `searchEmptyCopy` (:6018), smart quotes and
-            // all — never rewritten to straight quotes or paraphrased.
             <Text style={styles.empty}>
               {"Nothing across your apps matches “" + trimmed + "”."}
             </Text>
@@ -201,16 +170,7 @@ export default function SearchOverlay({
           )}
         </ScrollView>
 
-        {/* The brief's fixed foot (:3324–3329) — a count on the leading edge,
-            the record-addressing caveat pinned to the trailing edge via
-            `margin-inline-start: auto` (:3326). Always present, not gated on
-            a query: an honest zero read ("0 across 0 apps") beats hiding the
-            foot on an empty query. The brief's note copy (:6022, no `mob?`
-            branch) starts with ↵ — a KEYBOARD glyph; a phone has no return
-            key over results, so only the glyph becomes its tap equivalent.
-            The honesty clause is verbatim. The note is its own trailing
-            column (flex + right-aligned), so it wraps inside that column
-            instead of running off the screen edge or under the count. */}
+        {/* Count leading; caveat trailing. Always present, including zero. */}
         <View style={styles.foot}>
           <Text style={styles.footText}>
             {hits.length} across {groups.length} app
@@ -227,8 +187,6 @@ export default function SearchOverlay({
 
 type Styles = ReturnType<typeof makeStyles>;
 
-// One result group: the brief's dot-in-fill-colour + micro-caps app name +
-// mono count header (:3304–3309, :5273–5278), then its object rows.
 function SearchResultGroup({
   group,
   onPress,
@@ -246,8 +204,6 @@ function SearchResultGroup({
         <View
           style={[
             styles.groupDot,
-            // Absent when the id is not in the design registry — the
-            // renderer supplies a neutral token rather than inventing a hue.
             { backgroundColor: group.appColor ?? colors.textFaint },
           ]}
         />
@@ -268,10 +224,6 @@ function SearchResultGroup({
   );
 }
 
-// One vault-object row: kind (mono, a fixed column) / title (13px UI role) —
-// the brief's row anatomy (:3315–3319, :5279–5286). `meta` exists on the hit
-// but is dropped on purpose: the brief hides it on mobile (`mob?';display:
-// none':''`, :5286), so this native row never renders a meta column at all.
 function ObjectRow({
   kind,
   label,
@@ -305,13 +257,6 @@ const makeStyles = (
   radii: ThemeValue["radii"],
   targetMin: ThemeValue["targetMin"]
 ) => {
-  // The brief's Cancel is an outlined secondary button pinned to 30px tall
-  // (`btnSecondaryStyle+'height:30px;padding:0 12px;font-size:13px'`, :6008)
-  // — the shared `Button` component's minHeight is the 48pt coarse tap
-  // target every ordinary control uses, which is taller than the search
-  // field row itself, so this reads the same recipe colours through
-  // `nativeButtonStyle` and applies the compact geometry the brief specifies
-  // for this one inline context, rather than routing through `Button`.
   const secondary = nativeButtonStyle("secondary", {
     colors,
     radii,
@@ -359,10 +304,6 @@ const makeStyles = (
       paddingBottom: 8,
       paddingTop: 8,
     },
-    // The note owns the trailing column: `flex: 1` bounds it to the space
-    // the count leaves over (the RN analogue of the brief's
-    // `margin-inline-start: auto`, :3326), and right alignment keeps it
-    // pinned to the trailing edge while it wraps inside its own column.
     footNote: { flex: 1, textAlign: "right" },
     footText: { ...t("mono"), color: colors.textFaint },
     group: { marginBottom: 16 },
@@ -380,8 +321,6 @@ const makeStyles = (
       paddingBottom: 4,
       paddingTop: 8,
     },
-    // Micro-caps role — carries its own uppercase + tracking, so the label
-    // is never hand-uppercased on top of it (issue #711 audit item a/b).
     groupName: { ...t("eyebrow"), color: colors.textSoft, flex: 1 },
     headerRow: {
       alignItems: "center",
@@ -418,10 +357,6 @@ const makeStyles = (
     rowTitle: { ...t("control"), color: colors.text, flex: 1 },
     scope: { ...t("mono"), color: colors.textFaint, flexShrink: 0 },
     suggestLabel: { ...t("mono"), color: colors.textFaint, flexShrink: 0 },
-    // The brief's `suggestRowStyle` (:6009) is a plain flex row — ONE line,
-    // no wrap. The model (selectSuggestionChips) already caps count and total
-    // characters to what fits; `overflow: hidden` is the belt-and-braces
-    // clip, never a second ragged row.
     suggestRow: {
       alignItems: "center",
       borderBottomColor: colors.line,

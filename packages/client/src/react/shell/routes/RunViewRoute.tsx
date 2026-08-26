@@ -15,11 +15,10 @@ import PageScroll from "../PageScroll.js";
 import { Store } from "../store.js";
 import { buildRunSnapshot } from "./runViewData.js";
 
-// React-owned run viewer — replaces the vanilla renderRunView. The stream lives
-// here (SSE via streamAutomationTurn): a local node model keyed by ordinal +
-// accumulated streamed text, re-derived into a snapshot on each event and
-// pushed to the RunViewScreen through its onReady updater (same contract the
-// vanilla side used). Persisted timeline/log mode via Store.
+// The run viewer. The stream lives here (SSE via streamAutomationTurn): a
+// local node model keyed by ordinal + accumulated streamed text, re-derived
+// into a snapshot on each event and pushed to the RunViewScreen through its
+// onReady updater. Persisted timeline/log mode via Store.
 export default function RunViewRoute({
   automationId,
   runId,

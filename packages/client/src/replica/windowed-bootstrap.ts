@@ -16,10 +16,7 @@ import type {
   ReplicaCursor,
 } from "./types.js";
 
-/**
- * The coordinator surface this driver needs. Narrowed to a structural type so
- * the walk can be tested against a fake without a store or a worker.
- */
+/** Coordinator surface this driver needs — structural so tests can fake it. */
 export interface WindowedBootstrapTarget {
   bootstrapBegin: (header: ReplicaBootstrapHeader) => Promise<void>;
   bootstrapPage: (rows: ReplicaBootstrapPage["rows"]) => Promise<void>;
@@ -39,19 +36,13 @@ export interface RunWindowedBootstrapOptions {
   /** Rows per page; the gateway bounds this to 1..20000. */
   window?: number;
   signal?: AbortSignal;
-  /**
-   * Durable intent outcomes to reconcile at commit, resolved against the page-1
-   * cursor exactly as the single-shot path does.
-   */
   reconcileOutcomes?: (cursor: ReplicaCursor) => Promise<IntentOutcome[]>;
-  /** Delta pull used for the mandatory post-completion convergence replay. */
   pullChanges: (
     cursor: ReplicaCursor,
     signal: AbortSignal
   ) => Promise<ReplicaChangeBatch>;
   /** Guards against a pathological server that never stops emitting pages. */
   maxPages?: number;
-  /** Fires once page 1 is durably readable, before lazy backfill. */
   onFirstPage?: (
     cursor: ReplicaCursor,
     header: ReplicaBootstrapHeader
@@ -62,19 +53,10 @@ export interface RunWindowedBootstrapOptions {
 const DEFAULT_MAX_PAGES = 10_000;
 
 /**
- * Drive a windowed bootstrap to a converged, readable replica.
- *
- * Each page is read from its OWN server snapshot, so the assembled rows are not
- * a consistent cut: a row deleted after page 1 but before the page that would
- * have carried it simply never appears, and a row inserted mid-walk may appear
- * from a later snapshot. The repair is structural rather than best-effort — the
- * replica commits at the PAGE-1 cursor (the minimum across pages) and then
- * replays the change log from it before reporting success. Every change that
- * slipped between per-page snapshots is in that log, and replaying it over rows
- * that may already reflect it is idempotent (upserts overwrite, deletes remove).
- *
- * Skipping the replay would leave deletions leaked into the replica forever;
- * it is therefore part of this function, not of its callers.
+ * Drive a windowed bootstrap to a converged replica. Pages come from their
+ * OWN snapshots (not a consistent cut); the repair is structural — commit at
+ * the PAGE-1 cursor and replay the change log from it, idempotently. Skipping
+ * the replay would leak deletions forever.
  */
 export async function runWindowedBootstrap(
   options: RunWindowedBootstrapOptions
@@ -148,8 +130,7 @@ export async function runWindowedBootstrap(
     outcomes
   );
 
-  // Mandatory convergence. Replay until the log stops advancing; only then is
-  // the replica a faithful view of some real vault state.
+  // Mandatory convergence: replay until the log stops advancing.
   const converge = async (at: ReplicaCursor): Promise<ReplicaCursor> => {
     if (signal.aborted) return at;
     const batch = await options.pullChanges(at, signal);

@@ -1,7 +1,6 @@
-// The Details drawer's REAL activity trail (issue #352 phase 4): a plain
+// The Details drawer's REAL activity trail (#352): a plain
 // read over consent.provenance (queries/activity.ts already did the read and
-// the newest-first sort — this only renders it), replacing the old
-// synthesized created_at/updated_at guess. Mirrors History.tsx's own
+// the newest-first sort — this only renders it). Mirrors History.tsx's own
 // load/denied/empty pattern exactly, down to the async-effect shape — the
 // two panels are siblings inside the same drawer.
 import { useEffect, useState } from "react";

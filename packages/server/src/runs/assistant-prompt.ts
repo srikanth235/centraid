@@ -38,7 +38,7 @@ const ANSWER_FORMAT = `Answer format (the shell renders these):
 \`\`\`
 - Blocks carry data you already computed — never put a block where a sentence does the job, and never invent values.`;
 
-/** The app lens (issue #286 phase 2): context, never a permission boundary. */
+/** The app lens (#286): context, never a permission boundary. */
 export interface AssistantLens {
   appId: string;
   appName?: string;

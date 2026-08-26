@@ -49,7 +49,7 @@ type Suggest =
   | null;
 
 /**
- * Composer autocomplete (issue #420): @-mentions (entity picker → inserts a
+ * Composer autocomplete (#420): @-mentions (entity picker → inserts a
  * `@[label](ref:type/id)` chip) and slash-commands (leading `/` → runs an
  * existing shell action). Returns an augmented `onChange`, a keydown handler
  * that reports whether it consumed the event (so the composer skips Enter=send

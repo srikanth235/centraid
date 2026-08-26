@@ -1,15 +1,8 @@
-// The drive, projected from the phone's replica rows (issue #821).
-//
-// The web app's `drive` query performs these joins gateway-side
-// (packages/blueprints/apps/docs/queries/drive.ts, _shared.ts); the phone
-// reads the same entities off its consent-shaped replica and performs the
-// SAME joins here, pure and testable, so a row means the same thing on both
-// surfaces. Nothing is fabricated: every field below is a replica fact or
-// `null` where the replica cannot say ("unknown is not the same fact as
-// shared with nobody").
-//
-// Deliberately free of `react-native` and replica imports — plain rows in,
-// plain view models out (`docs-projection.test.ts`).
+// The drive, projected from the phone's replica rows (#821) — the same joins
+// the web `drive` query runs gateway-side, re-expressed pure and testable here.
+// Nothing is fabricated: every field is a replica fact or `null` where the
+// replica cannot say ("unknown" ≠ "shared with nobody"). No react-native or
+// replica imports: plain rows in, view models out (docs-projection.test.ts).
 
 import { canRender, typeMeta } from "@centraid/blueprints/apps/docs/format";
 import type {
@@ -41,9 +34,8 @@ const num = (row: EntityRow, key: string): number | null => {
   return typeof value === "number" ? value : null;
 };
 
-/** A drive row plus the one fact only the phone's own join can know: the
- *  folder tag points at a concept that no longer exists — §4.3's "a document
- *  whose folder has been deleted". */
+/** A drive row plus the one phone-only fact: the folder tag points at a
+ *  concept that no longer exists (§4.3 "folder deleted"). */
 export type MobileDriveDoc = DriveDoc & { folderGone: boolean };
 
 export interface DriveEntityRows {
@@ -53,8 +45,8 @@ export interface DriveEntityRows {
   concepts: readonly EntityRow[];
   schemes: readonly EntityRow[];
   custody: readonly EntityRow[];
-  /** `null` when any share read was denied or failed — every row then carries
-   *  `shared_with: null`, the graceful denial the web query ships too. */
+  /** `null` when any share read was denied/failed — every row then carries
+   *  `shared_with: null`, as the web query ships too. */
   shares: ShareEntityRows | null;
 }
 
@@ -70,16 +62,14 @@ export interface DriveProjection {
   documents: MobileDriveDoc[];
   folders: Folder[];
   rootFolderId: string | null;
-  /** Active (untrashed) documents filed at the drive's top level — the
-   *  Folders screen's Unfiled block. */
+  /** Active (untrashed) documents at the drive's top level — Unfiled. */
   unfiledCount: number;
 }
 
 /**
- * The whole projection: folders from the folders scheme, one folder tag per
- * document (root = unfiled = `folder_id: null`), starred from the flags
- * scheme, free-form labels from the tags scheme, the current content join,
- * custody by content id, and the commons-shares join.
+ * The whole projection: folders from the folders scheme (root = unfiled),
+ * one folder tag per document, starred/labels from flags/tags schemes,
+ * content join, custody by content id, commons-shares join.
  */
 export function projectDrive(rows: DriveEntityRows): DriveProjection {
   const schemeByUri = new Map(
@@ -144,7 +134,7 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
     })
   );
 
-  // One pass over the tag edges, split by which scheme their concept sits in.
+  // One pass over tag edges, by concept scheme.
   const folderByDoc = new Map<string, string>();
   const orphanTagDocs = new Set<string>();
   const starredDocs = new Set<string>();
@@ -168,9 +158,8 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
       if (list) list.push(entry);
       else labelsByDoc.set(docId, [entry]);
     } else if (!liveConceptIds.has(conceptId)) {
-      // The label has nothing on the other end — the folder (or scheme) this
-      // tag named was deleted. Only claimed when the doc has NO live folder
-      // tag, resolved below.
+      // Nothing on the other end — the named folder/scheme was deleted.
+      // Only claimed when the doc has NO live folder tag (below).
       orphanTagDocs.add(docId);
     }
   }
@@ -242,11 +231,8 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
   return { documents, folders, rootFolderId, unfiledCount };
 }
 
-// ---------------------------------------------------------------------------
-// Shares — the same bounded join `queries/_shared.ts` runs gateway-side,
-// re-expressed over replica rows. `null` never leaves this function: the
-// caller decides denial by whether the share READS landed at all.
-// ---------------------------------------------------------------------------
+// Shares — the same bounded join `queries/_shared.ts` runs gateway-side.
+// `null` never leaves this function.
 
 function folderChain(
   conceptId: string | null,
@@ -406,14 +392,12 @@ export function sharesByDocument(
   return byDocument;
 }
 
-// ---------------------------------------------------------------------------
 // The row's one state slot (§4.1) — the shared ladder, fed with phone facts.
-// ---------------------------------------------------------------------------
 
 const DAY_MS = 86_400_000;
 
-/** Days until a purge date, or `null` when the vault never asserted one —
- *  the slot then stays blank rather than printing a number nobody computed. */
+/** Days until purge, or `null` when the vault never asserted one — the slot
+ *  stays blank rather than printing a number nobody computed. */
 export function purgeDaysLeft(
   purgeAt: string | null | undefined,
   now: number = Date.now()
@@ -424,18 +408,16 @@ export function purgeDaysLeft(
   return Math.max(0, Math.ceil((stamp - now) / DAY_MS));
 }
 
-/** Are this document's bytes POSITIVELY elsewhere? Only `remote-only` and
- *  `missing` say so; an unswept (`null`) custody is unknown, and claiming
- *  "will not open" over unknown would be the row inventing a refusal. */
+/** POSITIVELY elsewhere? Only `remote-only`/`missing` say so; unswept
+ *  (`null`) custody is unknown — never invent a refusal over unknown. */
 export function bytesOnDevice(doc: Pick<DriveDoc, "custody_state">): boolean {
   return doc.custody_state !== "remote-only" && doc.custody_state !== "missing";
 }
 
 /**
- * The state slot, resolved: cannot render → trash countdown → on the gateway
- * only (offline, bytes elsewhere) → the custody mark. At most one thing, in
- * that order — the ladder itself is the shared `rowStateMark`
- * (view-copy.ts), so web and phone cannot disagree on precedence.
+ * State slot precedence: cannot render → trash countdown → remote-only
+ * (offline) → custody mark. The ladder is the shared `rowStateMark`
+ * (view-copy.ts), so web and phone cannot disagree.
  */
 export function docRowState(
   doc: Pick<
@@ -454,9 +436,7 @@ export function docRowState(
   });
 }
 
-// ---------------------------------------------------------------------------
 // Sort (§4.1's remembered orders)
-// ---------------------------------------------------------------------------
 
 export function sortDocuments<T extends DriveDoc>(
   docs: readonly T[],
@@ -475,8 +455,8 @@ export function sortDocuments<T extends DriveDoc>(
         );
       case "changed":
       case "owner":
-        // The phone offers no `owner` order — one vault — so both keys share
-        // the changed-newest clock.
+        // No `owner` order on the phone — one vault — so both keys share
+        // changed-newest.
         return (a.updated_at || a.created_at).localeCompare(
           b.updated_at || b.created_at
         );
@@ -485,9 +465,8 @@ export function sortDocuments<T extends DriveDoc>(
   return [...docs].sort((a, b) => dir * compare(a, b));
 }
 
-/** The kind's mark, as a kit `Icon` registry name — the SAME registry names
- *  the web app's `KIND_ICONS` table binds to the same glyph roles
- *  (blueprints/apps/docs/icons.ts), so a kind wears one shape everywhere. */
+/** The kind's mark as a kit `Icon` name — the same registry the web's
+ *  `KIND_ICONS` binds, so a kind wears one shape everywhere. */
 export function kindIconName(doc: {
   media_type?: string | null;
   title?: string | null;

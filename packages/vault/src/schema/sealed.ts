@@ -1,4 +1,4 @@
-// The sealed column class (issue #293): secrets as a first-class data class
+// The sealed column class (#293): secrets as a first-class data class
 // across the whole §10 pipeline. Sealing is a PIPELINE property, not a
 // storage feature — a column declared here is (1) ciphertext at rest,
 // (2) a placeholder in every default read including the owner's SQL surface,
@@ -20,14 +20,14 @@
 // attacker who owns the running gateway process (which must unseal to serve
 // reveals). In-memory vaults (tests) get an ephemeral random key.
 //
-// Lifecycle honesty (issue #298 item 1): once a vault has EVER sealed a
+// Lifecycle honesty (#298): once a vault has EVER sealed a
 // value, its key fingerprint is stamped into `core_vault.settings_json`. At
 // open time the loaded key must match that stamp — a missing or regenerated
 // key is a loud, distinguishable SealKeyError at OPEN, never a silent
 // re-mint discovered as GCM garbage at reveal. A vault that has never sealed
 // may still mint freely (nothing is lost by a fresh key).
 //
-// Recovery story (issue #298 item 2, decided): the key is exportable and
+// Recovery story (#298 item 2, decided): the key is exportable and
 // restorable ONLY through the explicit, receipted `key export` / `key
 // restore` admin gestures — copying the vault directory backs up ciphertext
 // only, and the product says so out loud when the key is absent at open.
@@ -60,7 +60,7 @@ import { KeyStore } from "./key-store.js";
  */
 export const SEALED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   "locker.item": ["password", "otp_seed", "card_number", "cvv", "content"],
-  // Broker-owned credentials (issue #304): tokens live on the connection's
+  // Broker-owned credentials (#304): tokens live on the connection's
   // credential sidecar so the gateway broker can inject them; every read
   // surface shows a placeholder and reseal covers them like any secret cell.
   "sync.connection_credential": [
@@ -144,7 +144,7 @@ function extSealedColumns(
 }
 
 /**
- * Staged-payload keys carrying secret material, per entity type (issue #293
+ * Staged-payload keys carrying secret material, per entity type (#293
  * decision 6): the import draft band deserves the same protection as the
  * live band, so these seal at stage time and unseal just-in-time for the
  * publisher. Keys are payload-shaped (camelCase), not column names.
@@ -277,7 +277,7 @@ export function sealKeyFileFor(vaultDir: string): string {
 
 /**
  * Resolve (or construct) the KeyStore that owns `file`'s directory. Shared
- * with `vault-identity.ts` (issue #726 P1): the identity seed lives in the
+ * with `vault-identity.ts` (#726): the identity seed lives in the
  * SAME directory as the seal key, so the same envelope/custody resolution
  * applies unchanged.
  */
@@ -300,7 +300,7 @@ export function sealKeyFingerprint(key: Buffer): string {
   return `sha256:${createHash("sha256").update(key).digest("hex").slice(0, 32)}`;
 }
 
-/** Loud, distinguishable key-custody failure (issue #298 item 1). */
+/** Loud, distinguishable key-custody failure (#298). */
 export class SealKeyError extends Error {
   constructor(
     readonly code: "missing" | "mismatch",
@@ -361,7 +361,7 @@ export function stampSealKeyFingerprint(
 }
 
 /**
- * Resolve the DEK for an on-disk vault (issue #298 item 1): load and verify
+ * Resolve the DEK for an on-disk vault (#298): load and verify
  * against the stamped fingerprint, minting only when provably safe.
  *
  * - Stamp present + key file missing → SealKeyError('missing'): the vault
@@ -370,7 +370,7 @@ export function stampSealKeyFingerprint(
  * - Stamp present + wrong key → SealKeyError('mismatch'): a regenerated or
  *   foreign key would turn every sealed cell into GCM garbage — refuse at
  *   open, not at reveal. Before failing, a `<file>.next` sidecar left by an
- *   interrupted rotation (issue #298 item 8) is checked and promoted when it
+ *   interrupted rotation (#298) is checked and promoted when it
  *   matches, completing the rotation crash-safely.
  * - No stamp → the vault never sealed anything; load-or-mint as before.
  */
@@ -436,7 +436,7 @@ export function redactSealedInput(
 }
 
 /**
- * Scrub declared secret input values out of free text (issue #298 item 7):
+ * Scrub declared secret input values out of free text (#298):
  * a handler error or SQLite constraint message that echoes its input would
  * otherwise carry the submitted secret into the journal, the receipt and the
  * HTTP error surface. Occurrences are replaced by the same keyed hash token
@@ -456,7 +456,7 @@ export function scrubSealedText(
   return out;
 }
 
-// The ext write trio nests its payload one level down (issue #298 item 9):
+// The ext write trio nests its payload one level down (#298):
 // `insert` carries secrets in `values`, `update` in `set`. Sealed columns
 // there are per-table and dynamic, so redaction and scrub must look inside
 // the container, keyed by the table's declared sealed list.
@@ -508,7 +508,7 @@ export function sealedValuesForCommand(
 }
 
 /**
- * Journal-safe copy of a command's input (issue #293 decision 4, extended for
+ * Journal-safe copy of a command's input (#293 decision 4, extended for
  * the ext band in #298 item 9): declared secrets — top-level and nested in the
  * ext `values`/`set` container — become keyed hash tokens, never values.
  */

@@ -103,11 +103,11 @@ function TemplateCard({
 }
 
 /**
- * Automation templates gallery, ported to React (issue #325, Phase 3). Live
- * search + trigger segmented filter + integration filter chips over the
- * category-grouped card grid. Cards open the (still-vanilla) preview drawer via
- * `onPreview`; the empty-state "Start from scratch" routes through
- * `onStartFromScratch`. Emits the same `cd-au-tpl-*` classes.
+ * Automation templates gallery. Live search + trigger segmented filter +
+ * integration filter chips over the category-grouped card grid. Cards open the
+ * route-owned preview drawer via `onPreview`; the empty-state "Start from
+ * scratch" routes through `onStartFromScratch`. Emits the `cd-au-tpl-*`
+ * classes global styles.css targets.
  */
 export default function AutomationTemplatesScreen({
   templates,

@@ -2,7 +2,7 @@
 // Tally commands (schema `tally`): the expense-splitting write surface. A
 // friend is a canonical core.party (kind='person') plus a tally_friend row
 // for the avatar hue; the owner is the implicit `me` and never a friend. A
-// group is an AUDIENCE (issue #310 S4): a social.circle carrying the name
+// group is an AUDIENCE (#310): a social.circle carrying the name
 // and the membership, decorated by a tally_group row with the emoji icon +
 // colour (owner always a member). An expense stores its
 // resolved splits (one tally_expense_split per participant) — the command
@@ -15,7 +15,7 @@
 // (money is recorded, not moved). Deleting a group is refused while it still
 // holds expenses; removing a member is refused while they are on the ledger.
 //
-// The finance bridge (issue #310 S1): Tally is a lens over shared money, not
+// The finance bridge (#310): Tally is a lens over shared money, not
 // a second ledger. A settlement the owner is party to IS the owner's money
 // moving, so settle_up emits a core_transaction on the auto-provisioned
 // "Tally settlements" cash account (external_id `tally:settlement:<id>` keeps
@@ -50,7 +50,7 @@ function ownerPartyId(ctx: HandlerCtx): string {
 }
 
 /**
- * Group membership lives on the group's circle (issue #310 S4) — one
+ * Group membership lives on the group's circle (#310) — one
  * audience mechanism, social_circle_member, not a per-domain junction.
  */
 function groupMemberIds(ctx: HandlerCtx, groupId: string): Set<string> {
@@ -102,7 +102,7 @@ const GROUP_EXISTS_SQL =
 const EXPENSE_EXISTS_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id";
 // A live expense is one not in the trash — the guard for edit/memo/trash so you
-// cannot mutate or re-trash a row already on its way out (issue #441 A4).
+// cannot mutate or re-trash a row already on its way out (#441).
 const EXPENSE_LIVE_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id AND deleted_at IS NULL";
 const EXPENSE_TRASHED_SQL =
@@ -383,7 +383,7 @@ const ADD_FRIEND: CommandDefinition = {
   idempotency: "once",
   risk: "low",
   handler: (ctx) => {
-    // The avatar hue is no longer stored on the friend row (issue #441 A3) —
+    // The avatar hue is no longer stored on the friend row (#441) —
     // one hue per party, read from people_profile or derived from party_id.
     const input = ctx.input as { name: string };
     const partyId = ctx.newId();
@@ -1174,8 +1174,9 @@ const EDIT_EXPENSE: CommandDefinition = {
       | undefined;
     if (!existing) throw new Error("expense not found");
     // Preserve live FX provenance unless the caller supplies a rate set.
-    // Previously undeclared FX keys were stripped by the schema, so every edit
-    // collapsed cross-currency rows to identity base currency.
+    // FX keys must stay declared on the input schema: an undeclared key is
+    // stripped, and every edit then collapses cross-currency rows to identity
+    // base currency.
     const base = baseCurrency(ctx);
     const hasFxInput =
       input.original_amount_minor !== undefined ||
@@ -1350,7 +1351,7 @@ const DELETE_EXPENSE: CommandDefinition = {
   idempotency: "once",
   risk: "low",
   handler: (ctx) => {
-    // Reversible grace-window trash (issue #441 A4), not an instant hard delete.
+    // Reversible grace-window trash (#441), not an instant hard delete.
     // Splits stay put — the balance engine already ignores them once the expense
     // drops out of the deleted_at IS NULL window, and the sweep cascades them at
     // purge (tally_expense_split ON DELETE CASCADE) along with cleaning the
@@ -1686,7 +1687,6 @@ const SET_EXPENSE_MEMO: CommandDefinition = {
   },
 };
 
-/** Register the Tally commands on a gateway. */
 export function registerTallyCommands(gateway: Gateway): void {
   registerTallyOrganizeCommands(gateway);
   gateway.registerCommand(ADD_FRIEND);

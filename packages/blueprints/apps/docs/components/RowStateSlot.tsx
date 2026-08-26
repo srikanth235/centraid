@@ -1,17 +1,5 @@
-// The row's ONE state slot (Docs spec §4.1) — the rendering half of
-// `rowStateMark` (view-copy.ts).
-//
-// "The state slot shows AT MOST ONE thing, in this order." (§4.1, verbatim.)
-// The ladder itself is a pure function in view-copy.ts; this component is the
-// DOM for whatever that function returned and holds no rule of its own. That
-// split is deliberate: expressed inline, three of those conditions could be
-// true at once, and a row would carry three marks.
-//
-// "Never a sentence on a row: the caption under the set carries the prose,
-// once." (§4.1, verbatim.) So the last rung renders as a GLYPH with a real —
-// visually hidden — name, never as text; the same idiom `Shared.tsx`'s
-// `CustodyDot` uses, and for the same reason: an `aria-label` on a faked
-// `role="img"` announces the same thing while inventing a role.
+// The row's ONE state slot (Docs spec §4.1): at most one thing, ladder order.
+// Rules live in `rowStateMark`; this renders its verdict.
 import type { ReactNode } from "react";
 
 import { canRender } from "../format.ts";
@@ -21,16 +9,7 @@ import type { RowStateInput } from "../view-copy.ts";
 
 import styles from "./RowStateSlot.module.css";
 
-/**
- * What THIS drive can honestly say about a row. Every field is read from the
- * projection or from a state the app already holds — nothing here is a guess:
- *
- *  * `cannotRender` — the kind table (§10.1), via `format.canRender`;
- *  * `inTrash`/`purgeInDays` — the row's own purge date;
- *  * `offline`/`bytesOnDevice` — `libraryReachability` plus blob custody;
- *  * `deviceOnly` — `custody_state`, the one custody state a member can lose
- *    something to.
- */
+// Fields only from the projection or held state — never a guess.
 export function rowStateFor(
   doc: DriveDoc,
   { trashed, offline }: { trashed: boolean; offline: boolean }
@@ -55,13 +34,7 @@ export function RowStateSlot({
   fallback = null,
 }: {
   input: RowStateInput;
-  /**
-   * What stands in the slot when the ladder has nothing to say. The one thing
-   * that ever goes here is the custody dot's own exception mark ("missing —
-   * needs attention"), which the ladder has no rung for: it is a fact about
-   * BYTES rather than about what opening the row would do. It renders only in
-   * the ladder's silence, so the slot still shows at most one thing.
-   */
+  /** Renders only when the ladder says nothing. */
   fallback?: ReactNode;
 }): ReactNode {
   const mark = rowStateMark(input);

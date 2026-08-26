@@ -1,134 +1,34 @@
-// governance: allow-repo-hygiene file-size-limit the canonical journal.db ledger-band DDL is one cohesive template-literal schema + its openers; #438 added the conversation_archive/conversation_digest tables in place — the band cannot be split across files without breaking ensureConversationLedger's single-statement idempotence
+// governance: allow-repo-hygiene file-size-limit the ledger-band DDL is one template-literal schema plus its openers; splitting it breaks ensureConversationLedger's single-statement idempotence
 /*
- * Centraid SQLite state. app-engine owns the CONVERSATION-LEDGER BAND of the
- * vault's `journal.db` — the old standalone `transcripts.db` folded into the
- * journal file (one fewer file per vault; both carry the same append-heavy,
- * derived-growth profile that keeps `vault.db` — the sovereign asset — small).
+ * app-engine owns the CONVERSATION-LEDGER BAND of the vault's `journal.db`, the
+ * append-heavy half that keeps `vault.db` — the sovereign asset — small. The
+ * file's other band is the vault package's append-only audit band.
  *
- *   journal.db (`<vaultDir>/<vaultId>/journal.db`) — one per vault, TWO bands:
- *     · the audit band (consent receipts, provenance, invocations, checks) —
- *       owned by the vault package, versioned by ITS single-rung ladder via
- *       `PRAGMA user_version`, append-only by contract;
- *     · the conversation-ledger band (this module) — the vault's conversation
- *       ledger + automation KV + the run-summary rollup. Runtime-owned and
- *       mutable (turns finish, titles change, CASCADE deletes), so it is NOT
- *       part of the append-only audit contract.
+ * This band is runtime-owned and MUTABLE, so it is not part of the audit
+ * contract. `turns.conversation_id`, `items.turn_id` and `attachments.item_id`
+ * are same-file CASCADE FKs; `turns.parent_turn_id` stays a plain column
+ * because a sub-run's parent may be recorded after this row in one batch.
+ * A conversation binds to its vault at creation, so a mid-thread switch cannot
+ * smear one across two vaults (#280), and none of it is reachable from handler
+ * `db` or the `vault_sql` tool.
  *
- *   Ledger-band tables:
- *     conversations    — the first-class spine: one durable thread per
- *                        chat window, automation, or builder session.
- *                        `kind` (chat|automation|build) lives here — a
- *                        thread is single-kind. `app_id` scopes a thread
- *                        to its app INSIDE the shared per-vault file (the
- *                        per-app scoping used to be the file itself);
- *                        `user_id` carries the vault owner's party id.
- *                        A conversation binds to its vault at creation —
- *                        it lives in that vault's file, so a mid-thread
- *                        vault switch can never smear a thread across two
- *                        vaults (#280).
- *     turns            — one row per execution: a chat turn, an automation
- *                        fire, a builder iteration. `conversation_id` is a
- *                        NOT NULL, FK-backed, CASCADE spine. Carries
- *                        denormalized token/cost rollups written at finish.
- *     items            — the ordered agentic trace, INCLUDING the inbound
- *                        message. `kind='message_in'` (ordinal 0) is the
- *                        user/trigger input as a first-class message;
- *                        `step` is one model inference call; `tool`/`delegate`
- *                        are per-call audit rows.
- *     attachments      — universal inbound-file rows (chat upload OR
- *                        webhook/email file), FK'd to the `message_in` item
- *                        they arrived on. Bytes live content-addressed on
- *                        disk at `<workspace appsDir>/<appId>/blobs/<hash>`,
- *                        never in sqlite. CASCADE off `items`.
- *     automation_state — per-automation KV, keyed by (automation_id, key).
- *                        The band's one semantic misfit: mutable WORKING
- *                        state (trigger cursors, handler KV), not history.
- *                        It stays for pragmatics — per-vault, transactional
- *                        with fires, travels with export; its true kin is
- *                        the sync spine's cursor sidecars in vault.db, and
- *                        it can promote there if backup asymmetry ever
- *                        makes the placement matter.
- *     automation_trigger_cursor
- *                      — one durable position per automation trigger source,
- *                        including bounded-gap metadata (`skipped` + window).
- *     trigger_ingress  — short-lived authenticated webhook/provider events;
- *                        gateway plumbing, never user ontology.
- *     run_summary      — a VIEW over turns ⋈ conversations (+ dominant
- *                        model from items): one row per finished run, every
- *                        kind — the Insights source. The ledger tables ARE
- *                        the data; there is no write path and nothing to
- *                        rebuild. Scoped per vault so a central store can
- *                        never aggregate across vaults (#280).
- *     conversation_archive
- *                      — #438 cold-state index: one row per archived
- *                        turn-range SEGMENT sealed into the vault blob CAS.
- *                        `segment_sha256` blobs are CAS GC roots; `pruned_at`
- *                        latches once raw rows are custody-gated-deleted.
- *                        CASCADE off `conversations` (true deletion removes it).
- *     conversation_digest
- *                      — #438 materialized rollup of the ARCHIVED portion,
- *                        one row per conversation, upserted at archive time.
- *                        Insights/Executions union this with live run_summary
- *                        so pruning raw rows stays invisible to every
- *                        dashboard. CASCADE off `conversations`.
- *     harness_health    — workspace × harness × failure-class circuit breakers
- *                        used only at turn boundaries.
- *     conversation_provider_consent
- *                      — explicit conversation × harness egress grants.
- *
- *     `turns.conversation_id` and `items.turn_id` and `attachments.item_id`
- *     are real same-file FKs (CASCADE): deleting a conversation drops its
- *     turns, items, and attachment rows. `turns.parent_turn_id` stays a
- *     plain column (a sub-run's parent may be recorded before this row in
- *     the same transaction batch). Runtime-owned; never reachable from
- *     handler `db` or the `vault_sql` harness tool.
- *
- * Versioning: the file's `PRAGMA user_version` belongs to the vault package's
- * audit-band ladder — this module must never stamp it. The ledger band is
- * instead ENSURED on open: every statement below is `IF NOT EXISTS`, so
- * `ensureConversationLedger` is idempotent, safe against a file the vault has
- * already migrated, and safe in the reverse order too (a worker that opens the
- * journal before the vault does creates only the ledger band; the vault's
- * ladder still runs from user_version 0 when the plane mounts). Pre-1.0 a
- * ledger shape change edits the DDL in place and dev vaults are recreated
- * (v0: no data migrations); post-1.0 the band gets its own versioning story.
- *
- * The old gateway identity file (`identity.sqlite`: users + user_prefs) is
- * gone — the vault owner IS the user (`core_vault.owner_party_id`), and
- * device-level prefs live in a plain JSON file (see `prefs-store.ts`).
- *
- * Each opener gets one connection per file. A host's worker subprocesses
- * (which may construct the runtime in every context but only the gateway
- * worker serves HTTP) never open a file unless they actually serve a route,
- * because providers open lazily. A worker connection coexists with the
- * gateway's own journal handle via WAL + busy_timeout.
+ * Versioning: NEVER stamp `user_version` — that belongs to the vault's ladder
+ * on the same file. The band is ENSURED on open instead, every statement
+ * `IF NOT EXISTS`, so it is idempotent and order-independent.
  */
 
 import { DatabaseSync } from "node:sqlite";
 
 /**
- * Lazy provider for a `DatabaseSync` handle. Stores call this once on
- * their first method invocation; the provider opens the file (and ensures
- * the ledger band) on first call and caches the handle.
+ * LAZY, because registration code runs in every worker subprocess and only the
+ * gateway worker serves the routes that touch this state.
  *
- * Lazy because a host's registration code may run in every worker
- * subprocess — only the gateway worker actually serves the HTTP routes
- * that touch this state, so deferring file open keeps stray DB handles
- * out of workers that never read or write.
- *
- * NOTE (#280): a provider may resolve to a DIFFERENT handle across calls —
- * the gateway wires "the ACTIVE vault's journal.db" as one provider, so
- * a vault switch changes what it returns. Stores that cache prepared
- * statements must compare the handle per call and re-prepare on change.
+ * A provider may resolve to a DIFFERENT handle across calls (#280): a vault
+ * switch changes what it returns, so a store caching prepared statements must
+ * compare the handle per call and re-prepare on change.
  */
 export type DatabaseProvider = () => DatabaseSync;
 
-/**
- * The conversation-ledger band of the vault's `journal.db` (issue #98 → #190
- * shape, moved per-vault and merged with the run-summary rollup by #280,
- * folded from the standalone `transcripts.db` into the journal file).
- * Every statement is `IF NOT EXISTS` — see the versioning note above.
- */
 export const CONVERSATION_LEDGER_DDL = `
     CREATE TABLE IF NOT EXISTS conversations (
       id                 TEXT PRIMARY KEY,
@@ -479,23 +379,10 @@ export const CONVERSATION_LEDGER_DDL = `
 
 `;
 
-/*
- * run_summary is a VIEW, not a table: one row per FINISHED run, every
- * kind — the Insights/Executions source. It used to be a denormalized
- * table maintained by a best-effort dual write at finishTurn, justified
- * when the rollup lived in a different file (central analytics.sqlite,
- * #280); with the ledger and the rollup in ONE file there is no boundary
- * left to denormalize across, so the ledger tables above are simply THE
- * source and the view is the lens (no write path, no drift).
- * automation_ref/app_id derivation and the dominant-model / dominant-
- * harness picks mirror the old write-through exactly.
- *
- * RECREATED ONLY WHEN THE DEFINITION CHANGES (issue #659 G11). This used to be
- * an unconditional DROP+CREATE on every journal open, which is a schema write —
- * a transaction, a schema-version bump, and an invalidation of every prepared
- * statement in the process — paid on every gateway start and every worker that
- * touches the file, to produce a view identical to the one already there.
- */
+/* A VIEW, not a table: ledger and rollup share one file, so nothing is left to
+ * denormalize across. RECREATED ONLY WHEN THE DEFINITION CHANGES (#659) — an
+ * unconditional DROP+CREATE on every open invalidates every prepared statement
+ * in the process. */
 export const RUN_SUMMARY_VIEW_DDL = `
 CREATE VIEW run_summary AS
   SELECT
@@ -554,25 +441,10 @@ CREATE VIEW run_summary AS
 `;
 
 /**
- * Conversation search plane (issue #420, Wave 3) — an FTS5 shadow table over
- * chat/build conversation titles + inbound message text, kept in sync by
- * triggers, exactly mirroring the vault's own FTS pattern (schema/fts.ts):
- * `snippet()` for match context, `unicode61 remove_diacritics 2` tokenizer.
- *
- * Grain is ONE row per conversation (not per item): the indexed `body` is the
- * concatenation of every inbound `message_in` item's text. Assistant answers
- * live in `items.output_json` as a JSON envelope, not indexable in a pure-SQL
- * trigger, so titles + the user's own words are the search surface — the words
- * a user actually remembers a thread by. A conversation accretes items
- * incrementally and the `body` row is maintained incrementally to match: the
- * insert trigger APPENDS the new item's text (issue #659 G4). Only the rare
- * paths — a title change, an item delete, the first-open backfill — re-derive
- * the whole body from items.
- *
- * The backfill at the tail is `NOT EXISTS`-guarded, so it populates rows once
- * when the index is first created on a pre-existing dev vault and is a no-op
- * on every subsequent open — keeping the whole block idempotent like the rest
- * of the ledger DDL.
+ * Grain is ONE row per conversation: `body` concatenates every inbound
+ * `message_in` text, since assistant answers are a JSON envelope no pure-SQL
+ * trigger can index. The insert trigger APPENDS (#659); the backfill is
+ * `NOT EXISTS`-guarded, keeping the block idempotent.
  */
 export const CONVERSATION_FTS_DDL = `
     CREATE VIRTUAL TABLE IF NOT EXISTS fts_conversation USING fts5(
@@ -604,14 +476,14 @@ export const CONVERSATION_FTS_DDL = `
     END;
 
     /*
-     * Item insert is INCREMENTAL (issue #659 G4). It used to delete the row and
-     * re-derive body by joining items↔turns and group_concat-ing the WHOLE
+     * Item insert is INCREMENTAL (issue #659 G4). Deleting the row and
+     * re-deriving body by joining items↔turns and group_concat-ing the WHOLE
      * conversation — inside the streaming write transaction, on every
-     * text-bearing item. That is O(conversation) per insert, so indexing a
-     * thread cost O(n²) and the cost grew with the thread the user was actively
-     * using. Appending the one new item's text is O(text) and produces exactly
-     * the same body string, because the old derivation was itself an
-     * insertion-ordered group_concat with the same ' ' separator.
+     * text-bearing item — is O(conversation) per insert, so indexing a
+     * thread costs O(n²) and the cost grows with the thread the user is
+     * actively using. Appending the one new item's text is O(text) and
+     * produces exactly the same body string, because that derivation is
+     * itself an insertion-ordered group_concat with the same ' ' separator.
      *
      * Rows exist only for 'chat'/'build' conversations (see conv_ai and the
      * backfill), so the UPDATE self-selects the same conversations the old
@@ -682,17 +554,12 @@ const CONVERSATION_ITEM_COUNT_DDL = `
     END;
 `;
 
-/**
- * Idempotently create the conversation-ledger band on an open journal
- * handle. Never touches `PRAGMA user_version` — that belongs to the vault
- * package's audit-band ladder on the same file. Callers that already hold
- * the vault's own journal handle (the gateway's vault plane) use this
- * directly instead of opening a second connection.
- */
+/** Never touches `PRAGMA user_version` — that is the vault's ladder. Callers
+ *  holding the vault's own journal handle use this rather than opening a
+ *  second connection. */
 export function ensureConversationLedger(db: DatabaseSync): void {
-  // Schema-dependent views are recreated by CONVERSATION_LEDGER_DDL. Upgrade
-  // the source tables first on an existing vault, otherwise SQLite rejects
-  // CREATE VIEW run_summary when it encounters the new `items.effort` column.
+  // Upgrade the source tables FIRST: SQLite rejects CREATE VIEW run_summary
+  // when it meets a column the existing tables do not have.
   const existingTable = (name: string): boolean =>
     db
       .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`)
@@ -756,7 +623,6 @@ export function ensureConversationLedger(db: DatabaseSync): void {
   if (!conversationCols.includes("last_hydrated_at")) {
     db.exec(`ALTER TABLE conversations ADD COLUMN last_hydrated_at INTEGER`);
   }
-  // Issue #514: cost provenance on existing vaults created before cost_source.
   const itemCols = (
     db.prepare(`PRAGMA table_info(items)`).all() as { name: string }[]
   ).map((c) => c.name);
@@ -798,9 +664,8 @@ export function ensureConversationLedger(db: DatabaseSync): void {
       );
     }
   }
-  // Pre-release cut-over: existing single resume handles become the first
-  // canonical binding. New turns update this table and keep the legacy
-  // conversation columns only as a read-through compatibility projection.
+  // The legacy conversation columns survive only as a read-through
+  // compatibility projection.
   db.exec(`
     INSERT OR IGNORE INTO conversation_harness_sessions (
       id, conversation_id, harness_kind, acp_session_id,
@@ -819,14 +684,9 @@ export function ensureConversationLedger(db: DatabaseSync): void {
   db.exec(CONVERSATION_FTS_DDL);
 }
 
-/**
- * Create `run_summary` only when it is absent or its stored definition differs
- * from {@link RUN_SUMMARY_VIEW_DDL} (issue #659 G11). SQLite records a view's
- * CREATE statement verbatim in `sqlite_master.sql` (without the trailing
- * semicolon), so comparing against the source we would execute is an exact
- * equality check — a definition edit still lands on every existing vault, but
- * an unchanged one costs a single indexed `sqlite_master` read.
- */
+/** SQLite records a view's CREATE statement verbatim in `sqlite_master.sql`
+ *  (minus the trailing semicolon), so this equality check is exact: an edit
+ *  still lands everywhere, an unchanged definition costs one read (#659). */
 function ensureRunSummaryView(db: DatabaseSync): void {
   const wanted = RUN_SUMMARY_VIEW_DDL.trim().replace(/;$/u, "");
   const existing = db
@@ -839,54 +699,21 @@ function ensureRunSummaryView(db: DatabaseSync): void {
   db.exec(RUN_SUMMARY_VIEW_DDL);
 }
 
-/**
- * Open a vault's `journal.db` at `dbPath` for ledger-band use: set the
- * per-connection pragmas (WAL journal, FK enforcement, busy_timeout) and
- * ensure the conversation-ledger tables exist. Safe on a file the vault
- * package has already migrated (the audit band and its user_version are
- * untouched) and on a bare path (only the ledger band is created; the
- * vault's ladder still runs when the plane mounts the file).
- *
- * Pragmas run outside any transaction (journal_mode in particular), then
- * the ensure executes its `IF NOT EXISTS` DDL.
- */
+/** Safe on a file the vault has already migrated and on a bare path alike.
+ *  Pragmas run OUTSIDE any transaction (journal_mode in particular). */
 export function openJournalDb(dbPath: string): DatabaseSync {
   const db = new DatabaseSync(dbPath);
-  // busy_timeout: wait for a contended lock instead of failing immediately.
-  // Load-bearing twice over: the multi-client gateway (standalone daemon) and
-  // the worker subprocesses that open the SAME journal file the gateway's vault
-  // plane holds open.
+  // busy_timeout is a STALL BUDGET (#659): this driver is synchronous, so the
+  // wait is a blocked event loop and a long timeout presents a hard-down
+  // gateway as a slow one.
   //
-  // The value is a STALL BUDGET, not a patience setting (issue #659 G11). This
-  // driver is `node:sqlite`'s SYNCHRONOUS one, so the wait is a blocked event
-  // loop: at the old 30s a single contended write could freeze every request,
-  // SSE heartbeat, and health probe on the gateway for half a minute — a
-  // hard-down gateway presented as a slow one. 10s still dwarfs any real
-  // contention on this file (a WAL checkpoint by the shipper, a worker's
-  // insert), so nothing that used to succeed now fails; it only bounds how long
-  // a genuinely stuck lock can hold the process hostage before the write
-  // surfaces SQLITE_BUSY to its caller.
+  // wal_autocheckpoint=0 keeps the WAL shipper the sole checkpointer — a
+  // PERFORMANCE HINT, not a correctness requirement (#411), since the shipper
+  // detects and heals a foreign checkpoint. Per connection, so EVERY by-path
+  // opener sets it.
   //
-  // wal_autocheckpoint=0: the vault's WAL shipper (issue #408) is the sole
-  // checkpointer of journal.db — its backup segments are raw WAL byte
-  // ranges, valid only while the WAL is append-only between the shipper's
-  // own TRUNCATE checkpoints. This is a PERFORMANCE HINT, not a correctness
-  // requirement (issue #411 action 1): the shipper VERIFIES salts/offsets at
-  // every capture and breaks the generation on any foreign checkpoint, so a
-  // default-autocheckpointing ledger connection (this one commits!) resetting
-  // the WAL in place at the 1000-page threshold is caught and healed while a
-  // shipper is ticking (and harmless when none is — no stream exists to hole).
-  // The pragma just keeps that heal — a full base re-upload — rare.
-  // Per connection, so EVERY by-path opener sets it, not just the vault's.
-  //
-  // auto_vacuum=INCREMENTAL (issue #438) bounds journal.db: the ledger-band
-  // archival prune frees pages that only `incremental_vacuum` returns to the OS.
-  // MUST precede journal_mode=WAL — on a fresh file the setting is pending until
-  // the first table is created, but once WAL writes page 1 the header is fixed
-  // and the pragma no longer takes at table-create time (only a full VACUUM can
-  // then convert). openVaultDb's openFile sets the same pragma on the same file;
-  // this by-path opener mirrors it so a journal reached ONLY through app-engine
-  // (worker subprocess, standalone daemon) still converges to incremental mode.
+  // auto_vacuum=INCREMENTAL MUST precede journal_mode=WAL (#438): once WAL
+  // writes page 1 the header is fixed and only a full VACUUM can convert.
   db.exec(`
     PRAGMA page_size=8192;
     PRAGMA auto_vacuum=INCREMENTAL;
@@ -898,14 +725,8 @@ export function openJournalDb(dbPath: string): DatabaseSync {
     PRAGMA temp_store=MEMORY;
     PRAGMA wal_autocheckpoint=0;
   `);
-  // One-time conversion for a file created before #438 (auto_vacuum=0, freelist
-  // mode) while fleet files are still small. A fresh file reads back 2 here (the
-  // pragma above is pending, page 1 already written by WAL); only a pre-existing
-  // NON-empty file still reads 0. The pragma above set INCREMENTAL as the VACUUM
-  // target, so one full VACUUM rewrites the file into incremental mode. No txn is
-  // held and no other connection is on the file yet at open. The WAL shipper
-  // (issue #408) treats this whole-file rewrite as a foreign checkpoint and heals
-  // via a generation break — a one-time base re-upload, acceptable at small size.
+  // A fresh file reads back 2 (the pragma is pending); only a pre-existing
+  // NON-empty file still reads 0, and one full VACUUM converts it.
   const autoVacuum = (
     db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
   ).auto_vacuum;
@@ -917,11 +738,6 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   return db;
 }
 
-/**
- * Wrap a fixed `dbPath` into a lazy `DatabaseProvider`. The provider
- * opens the journal file on the first call (ensuring the ledger band as a
- * side effect) and caches the handle for subsequent calls.
- */
 export function makeJournalDbProvider(dbPath: string): DatabaseProvider {
   let db: DatabaseSync | undefined;
   return () => {

@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505/#834); every screen's BODY lives in its own component under ./components, and what is left here is the routing, the reads and the frame contributions.
-// Notes — the query-free React tree (issue #505, rebuilt for #834).
+// Notes — the query-free React tree (#505, rebuilt for #834).
 //
 // This file decides WHICH screen; each screen decides what it looks like
 // (`components/*`). It holds the mutable state bag, the library read, the
@@ -335,7 +335,7 @@ export function Root({
     void logic.createNote();
   }, [logic]);
 
-  // ---- mount wiring: the doorbell, focus, width and the keyboard map ----
+  // ──── mount wiring: the doorbell, focus, width and the keyboard map ────
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, () => void core.refresh());
     const stopFocus = onFocusRefresh(() => void core.refresh());
@@ -392,10 +392,10 @@ export function Root({
       stopWidth();
       void logic.flushSave();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);
 
-  // ---- derive the render ----
+  // ──── derive the render ────
 
   const shelf = state.shelf;
   const openNotebookId = notebookIdFrom(shelf);
@@ -495,7 +495,7 @@ export function Root({
     void core.refresh();
   }, [core, state]);
 
-  // ---- the route switch ----
+  // ──── the route switch ────
 
   let routeBody: ReactNode;
   if (!loaded) {
@@ -807,7 +807,7 @@ export function Root({
     </>
   );
 
-  // ---- what Notes contributes to the FRAME ----
+  // ──── what Notes contributes to the FRAME ────
 
   const barCountValue =
     shelf === NOTE || shelf === CAPTURE || shelf === VOICE ? null : rows.length;

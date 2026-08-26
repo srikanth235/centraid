@@ -1,5 +1,5 @@
 /*
- * `centraid-gateway lock-status` (issue #555).
+ * `centraid-gateway lock-status` (#555).
  *
  * gateway.db is the process lock. A running daemon is asked first; when it
  * cannot answer, an exclusive open distinguishes "free" from "held by a live

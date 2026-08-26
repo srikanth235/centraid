@@ -75,10 +75,10 @@ Use `run-waterfall.mjs` for request counts, ratios, and the QUIC pool numbers; u
 All ceilings live in one file: **`apps/web/tests/e2e/perf-budgets.ts`**. Each number is documented inline with its measured value and headroom rationale.
 
 - **Hard gates:** request counts, transfer bytes, app-open encoded bytes, and the warm/cold + SW-tunnel + connect/stream ratios. These fail the build.
-- **Wall-clock gates:** the cold/warm open ceilings in `perfBudgets.timing` are now enforced too (`enforceTiming = true`, issue #468 L5). They are deliberately generous, because wall clock on a shared CI runner is the flakiest signal here.
+- **Wall-clock gates:** the cold/warm open ceilings in `perfBudgets.timing` are enforced (`enforceTiming = true`, issue #468 L5). They are deliberately generous, because wall clock on a shared CI runner is the flakiest signal here.
 - **Anti-vacuity:** the cold shell and the cold app open must each measure more than zero bytes. Without those two assertions a probe that silently stopped measuring would post the best numbers in the file.
 
-**When the bundling / code-split workstream lands** (or a richer app fixture is wired), the request counts and byte totals will change:
+**When a change moves the measured numbers** (bundling work, a richer app fixture), update the ceilings from a fresh measurement:
 
 1. Re-run `node scripts/perf/run-waterfall.mjs`.
 2. Read the new numbers from the SUMMARY / report.

@@ -1,4 +1,4 @@
-// The preview ladder's orchestration + gateway backstop (issue #405 §2). The
+// The preview ladder's orchestration + gateway backstop (#405). The
 // raster codec is STUBBED here — the vault package is dependency-free, so the
 // real jpeg-js/pngjs codec (and its own round-trip tests) live in the gateway
 // package. What these tests pin is everything AROUND the codec: which items
@@ -157,7 +157,7 @@ describe("preview", () => {
     );
     expect(inlinePhash(contentId)).toBe(expectedPhash);
     expect(mediaPhash(contentId)).toBe(expectedPhash);
-    // The ThumbHash hole gets filled too (issue #419), inline like the phash.
+    // The ThumbHash hole gets filled too (#419), inline like the phash.
     expect(first.thumbhashesGenerated).toBe(1);
     const expectedThumbhash = await stubCodec.thumbhash(
       Buffer.concat([PNG_BYTES, Buffer.alloc(1)]),

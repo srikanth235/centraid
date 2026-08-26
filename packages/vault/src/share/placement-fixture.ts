@@ -1,7 +1,7 @@
-// Shared fixture for the share-by-placement tests (issue #599 decision 11).
+// Shared fixture for the share-by-placement tests (#599 decision 11).
 // Two real on-disk vaults under one root - never mocked fs - because the
 // load-bearing claims are filesystem facts (inode identity, link counts,
-// per-vault GC). Split from placement.test.ts for the 500-line file cap.
+// per-vault GC). Kept out of placement.test.ts for the 500-line file cap.
 
 import { mkdirSync } from "node:fs";
 import path from "node:path";

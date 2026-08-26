@@ -15,143 +15,41 @@ import {
 import { mergePersistedSettings } from "./settings-merge.js";
 
 /**
- * Persisted desktop settings live at `<userData>/centraid-settings.json`
- * with mode `0600`. After issue #109 it carries only UI preferences and
- * a pointer at the active gateway — connection state is per-gateway and lives
- * in one `connections.json`; device identity and the detached daemon's
- * loopback secret stay in the OS keychain. See `gateway-store.ts`.
- *
- * Two shapes coexist here:
- *   - **Persisted form** (`PersistedSettings`): exactly what's
- *     serialized. Just the active gateway pointer + UI-level prefs.
- *   - **Effective form** (`DesktopSettings`, returned by `loadSettings`):
- *     the persisted fields, plus everything derived from the active
- *     gateway — a loopback `gatewayUrl`/`gatewayToken` for local runtime
- *     plumbing, or an iroh EndpointId for a remote connection. App *code* now
- *     lives in the gateway's git store (issue #137), so there is no
- *     `workspaceDir`; `appsDir` holds only per-app data.
- *     Every IPC handler that needs to act against the active gateway
- *     reads the effective form; that's why the shape didn't shrink
- *     when `runtimeMode` / `remoteGateway*` left it.
+ * `<userData>/centraid-settings.json`, mode 0600: UI prefs + active gateway
+ * pointer (#109), NOTHING else — connection state lives in gateway-store.ts,
+ * secrets in the keychain. `PersistedSettings` serializes; `DesktopSettings`
+ * adds active-gateway-derived fields (what IPC handlers read).
  */
 
 export interface PersistedSettings {
-  /** Active gateway id. Defaults to `'local'` on a fresh install. */
   activeGatewayId: string;
-  /**
-   * The active vault the client addresses on each gateway (issue #289),
-   * keyed by gateway id. The server no longer holds an active-vault
-   * pointer — the client owns it and sends it as `x-centraid-vault`.
-   * Switching vaults is a pure client-side pointer flip; a missing entry
-   * means "let the gateway pick" from the device's proved enrollments.
-   */
+  /** Per-gateway vault pointer (#289), sent as `x-centraid-vault`; missing = gateway picks. */
   activeVaultByGateway?: Record<string, string>;
-  /**
-   * ISO timestamp the user finished the first-run onboarding (set their
-   * own profile name + avatar color). Absent on a fresh install — the
-   * renderer reads this as the gate for showing the onboarding view
-   * instead of going straight to home. Once written it's permanent;
-   * a returning user always lands on home.
-   *
-   * We intentionally key on settings (not on the profile's `displayName`)
-   * because the profile is auto-created on boot for backend reasons
-   * (workspace dir, in-process runtime resolution), and we don't want
-   * the auto-created placeholder to ever read as "user has personalized".
-   */
+  /** The onboarding gate — NOT keyed on `displayName`, which boot auto-creates. Once written, permanent. */
   onboardingCompletedAt?: string;
-  /**
-   * Gateway down-alert threshold in seconds (gateway-monitor.ts): notify
-   * once the active gateway has been continuously unreachable this long.
-   * Absent → {@link DEFAULT_ALERT_SECONDS} (2 minutes). Clamped to
-   * [MIN_ALERT_SECONDS, MAX_ALERT_SECONDS] on read and write.
-   */
   gatewayAlertSeconds?: number;
-  /** Master switch for the gateway down alert. Absent → enabled. */
   gatewayAlertsEnabled?: boolean;
-  /**
-   * The changelog version the user has already seen — the running build's
-   * version at the last time the "What's new" modal auto-opened. The renderer
-   * auto-opens the modal once whenever `app.getVersion()` differs from this,
-   * then writes the new version back. Absent = never seen (fresh install).
-   */
   changelogSeenVersion?: string;
-  /**
-   * Launch Centraid automatically at OS login (issue #351, tier 4 — the
-   * cheap 80% fix for "always-on": with the detached gateway (#468 H1)
-   * the child can outlive a single session, and launch-at-login still
-   * brings the app UI back after reboot). Applied via
-   * `app.setLoginItemSettings` — see `login-item.ts`. Absent → disabled
-   * (opt-in; a fresh install never silently adds itself to login items).
-   * No-op on Linux — Electron doesn't implement `setLoginItemSettings`
-   * there.
-   */
+  /** Absent → disabled: a fresh install never silently adds itself to login items. No-op on Linux (no Electron `setLoginItemSettings`). */
   launchAtLogin?: boolean;
-  /**
-   * H5 / issue #468 — offer OS service install (`centraid-gateway service
-   * install`, label `dev.centraid.gateway`) during onboarding so the
-   * gateway survives logout/reboot. **Default off**; silent install is
-   * forbidden. Wiring the onboarding UI is a follow-up; this flag is the
-   * settings key. See `shouldOfferServiceInstall` in detached-gateway-core.
-   */
+  /** Whether onboarding OFFERS the OS service install (H5 / #468); silent install forbidden. */
   offerGatewayService?: boolean;
 }
 
 export interface DesktopSettings {
-  /** Remote gateway base URL — e.g. http://127.0.0.1:8765. Inlined here in
-   * #141 Phase 5 so desktop settings do not depend on the turn runtime. */
   gatewayUrl: string;
-  /**
-   * Bearer token sent as `Authorization: Bearer <token>` to the gateway.
-   * Empty string disables the header (works only against loopback gateways
-   * configured with `auth.mode: "none"`).
-   */
   gatewayToken?: string;
-  /** Persisted — the gateway the renderer is currently pointing at. */
   activeGatewayId: string;
-  /**
-   * The vault the renderer is addressing on the active gateway (issue
-   * #289), or `undefined` to let the gateway pick. Sent as the
-   * `x-centraid-vault` header on every request.
-   */
   activeVaultId?: string;
-  /**
-   * Derived — kind of the active gateway. `'local'` means the
-   * desktop runtime owns the loopback listener; `'remote'` means the
-   * connection is addressed by its persisted iroh EndpointId.
-   */
   activeGatewayKind: "local" | "remote";
-  /** Derived — the active gateway's user-facing label. */
   activeGatewayLabel: string;
-  /**
-   * Derived — the active profile's friendly name. Per #113, profiles carry
-   * an optional `displayName` that defaults to `label` at read time, so this
-   * field is always populated (often equal to `activeGatewayLabel`).
-   */
   activeProfileDisplayName: string;
-  /**
-   * Derived — the active profile's avatar color (`#RRGGBB`). Defaults to a
-   * deterministic palette pick keyed by gateway id when the profile hasn't
-   * explicitly set one.
-   */
   activeProfileAvatarColor: string;
-  /**
-   * ISO timestamp the user finished first-run onboarding. Absent on a
-   * fresh install — the renderer gates on this to show onboarding
-   * before home.
-   */
   onboardingCompletedAt?: string;
-  /** Gateway down-alert threshold in seconds (absent → 2-minute default). */
   gatewayAlertSeconds?: number;
-  /** Master switch for the gateway down alert (absent → enabled). */
   gatewayAlertsEnabled?: boolean;
-  /** Changelog version last shown by the "What's new" auto-open (absent → never). */
   changelogSeenVersion?: string;
-  /** Launch Centraid at OS login (absent → disabled). See `PersistedSettings.launchAtLogin`. */
   launchAtLogin?: boolean;
-  /**
-   * Offer OS service install for the detached gateway (H5). Absent → false.
-   * See `PersistedSettings.offerGatewayService`.
-   */
   offerGatewayService?: boolean;
 }
 
@@ -167,12 +65,6 @@ function persistedDefaults(): PersistedSettings {
   };
 }
 
-/**
- * Type-narrow a raw `settings.json` blob into `PersistedSettings`.
- * Unknown fields are silently dropped — defensive parsing for malformed
- * writes, not migration. Centraid is v0; there's no prior on-disk
- * shape to support.
- */
 function narrow(raw: Record<string, unknown>): PersistedSettings {
   const base = persistedDefaults();
   const activeRaw = raw.activeGatewayId;
@@ -204,11 +96,6 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
   };
 }
 
-/**
- * Defensive parse of `activeVaultByGateway` (issue #289): keep only
- * `string → non-empty-string` entries. Malformed-write hygiene, not
- * migration.
- */
 function sanitizeVaultMap(
   raw: unknown
 ): { activeVaultByGateway: Record<string, string> } | undefined {
@@ -243,35 +130,9 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
   await fs.rename(tmp, file);
 }
 
-/**
- * First-run keychain deferral (issue #603).
- *
- * Starting the local gateway — embedded or detached — reads/mints this
- * device's wrapping key and loopback token through `safeStorage`
- * (`gateway-secrets.ts`). On macOS that is an OS keychain access, and on a
- * fresh install it used to happen at `app.whenReady()` before the user had
- * seen a single word of UI: the very first thing Centraid did was spook the
- * user with a system keychain prompt.
- *
- * So on a **true first run** — persisted settings with no
- * `onboardingCompletedAt` — `resolveEffective` returns the settings with an
- * empty local URL/token instead of booting the runtime (a state the effective
- * shape already models, see the comment at the local branch below). The
- * renderer shows its first-run chooser, and picking "Start fresh on this Mac"
- * routes through `setActiveGatewayId('local')`, which flips this latch and
- * starts the gateway for real.
- *
- * A returning install (onboarding already completed) never takes this branch —
- * its gateway still starts eagerly at boot, as before.
- */
+/** First-run keychain deferral (#603): the local gateway's `safeStorage` mint must not prompt before any UI, so with no `onboardingCompletedAt` resolveEffective returns empty local URL/token instead of booting. */
 let localGatewayStartRequested = false;
 
-/**
- * Explicit "the user asked for the local gateway" signal. Called by
- * `setActiveGatewayId` (the renderer's local-connect path) and by the manual
- * gateway restart. Process-lifetime only; once `onboardingCompletedAt` is
- * persisted the deferral is moot anyway.
- */
 export function requestLocalGatewayStart(): void {
   localGatewayStartRequested = true;
 }
@@ -279,10 +140,6 @@ export function requestLocalGatewayStart(): void {
 async function resolveEffective(
   p: PersistedSettings
 ): Promise<DesktopSettings> {
-  // The local gateway must exist before we resolve — its profile
-  // is auto-created on first read. If the persisted `activeGatewayId`
-  // is stale (gateway was removed externally), fall back to local
-  // rather than crashing the whole settings read.
   await ensureLocalGateway();
   let resolved = await resolveGateway(p.activeGatewayId);
   if (!resolved) {
@@ -292,16 +149,9 @@ async function resolveEffective(
     resolved = await resolveGateway(LOCAL_GATEWAY_ID);
   }
   if (!resolved) {
-    // Should be impossible after ensureLocalGateway, but TypeScript
-    // can't see that. Throw with a useful message.
+    // Unreachable after `ensureLocalGateway`, but TypeScript cannot see it.
     throw new Error("Local gateway resolution failed unexpectedly.");
   }
-  // For local gateways, the URL/token are minted by the in-process
-  // runtime. If the runtime hasn't started yet we still return the
-  // settings (with empty URL/token) so boot-time code paths that just
-  // need `appsDir` don't deadlock waiting for it — which is exactly the
-  // state a deferred first run stays in until the user picks "Start fresh
-  // on this Mac" (see `localGatewayStartRequested` above).
   const deferLocalStart =
     p.onboardingCompletedAt === undefined && !localGatewayStartRequested;
   if (resolved.profile.kind === "local" && !resolved.url && !deferLocalStart) {
@@ -314,14 +164,11 @@ async function resolveEffective(
       token: handle.token,
     };
   }
-  // The vault the client addresses on this gateway (#289) — client-owned,
-  // keyed by gateway id. Undefined = let the gateway pick.
   const activeVaultId = p.activeVaultByGateway?.[resolved.profile.id];
   return {
     activeGatewayId: resolved.profile.id,
     activeGatewayKind: resolved.profile.kind,
     activeGatewayLabel: resolved.profile.label,
-    // `readProfile` thread defaults — these are always populated.
     activeProfileDisplayName:
       resolved.profile.displayName ?? resolved.profile.label,
     activeProfileAvatarColor: resolved.profile.avatarColor ?? BRAND,
@@ -354,23 +201,11 @@ export async function loadSettings(): Promise<DesktopSettings> {
   return resolveEffective(persisted);
 }
 
-/**
- * Read the persisted settings WITHOUT resolving the active gateway.
- * Used by code that needs the raw `activeGatewayId` pointer before
- * (or instead of) booting the in-process runtime — currently only
- * the test surface.
- */
 export async function loadPersistedSettings(): Promise<PersistedSettings> {
   return readPersisted();
 }
 
-/**
- * Patch the persisted settings. Connection state — gateway URL /
- * token / appsDir — is NOT settable through here; those go
- * through the gateway-store IPCs (`gateways:add`, `gateways:rename`,
- * etc.). The patch is rejected for any of those fields with an error
- * loud enough to fail fast in tests.
- */
+/** Connection state is NOT settable here (gateways IPC surface owns it) — patching it throws. */
 export async function saveSettings(
   patch: Partial<DesktopSettings>
 ): Promise<DesktopSettings> {
@@ -393,30 +228,16 @@ export async function saveSettings(
   return resolveEffective(next);
 }
 
-/**
- * Public helper — used by the gateway IPCs to flip the active id.
- * Identical wire format to `saveSettings({ activeGatewayId })` but
- * crashes loudly if the requested id doesn't resolve, so the caller
- * doesn't write an unresolvable pointer.
- */
 export async function setActiveGatewayId(id: string): Promise<DesktopSettings> {
   if (!(await listGateways()).some((g) => g.id === id)) {
     throw new Error(`Cannot activate unknown gateway: ${id}`);
   }
-  // Activating a gateway is a deliberate user act (the first-run chooser's
-  // "Start fresh on this Mac" lands here with `local`), so it lifts the
-  // first-run keychain deferral for the rest of this process.
+  // Deliberate user act — lifts the first-run keychain deferral.
   requestLocalGatewayStart();
   return saveSettings({ activeGatewayId: id });
 }
 
-/**
- * Point the client at another vault ON THE ACTIVE GATEWAY (issue #289).
- * This is a pure client-side pointer flip — no server call, no re-root:
- * every subsequent request just carries a different `x-centraid-vault`
- * header. Pass `undefined` to clear (let the gateway pick). Keyed by
- * gateway id, so switching gateways restores each one's last vault.
- */
+/** Client-side pointer flip (#289): no server call, no re-root; `undefined` clears; keyed by gateway. */
 export async function setActiveVaultId(
   vaultId: string | undefined
 ): Promise<DesktopSettings> {
@@ -436,11 +257,7 @@ export async function setActiveVaultId(
   return resolveEffective(next);
 }
 
-/**
- * Where per-gateway template copies are cached. The cache is gateway-data
- * disposable state, outside Electron userData; a copy under it shadows the
- * bundled template when its semver is higher.
- */
+/** Disposable gateway-data state; a copy here shadows the bundled template when its semver is higher. */
 export function templatesCacheDir(activeGatewayId: string): string {
   return gatewayTemplatesCacheDir(activeGatewayId);
 }

@@ -1,4 +1,4 @@
-// Segment serialization + digest materialization (issue #438 decisions 1/4/5).
+// Segment serialization + digest materialization (#438 decisions 1/4/5).
 // Builds one gzip(JSON) segment per eligible range, records its
 // conversation_archive index row, and folds the range's rollups into the
 // conversation_digest so Insights/Executions read identical numbers before
@@ -436,7 +436,7 @@ export function archiveRange(
 }
 
 /**
- * Decode one archived segment back into its rows — the round-trip read wave 3's
+ * Decode one archived segment back into its rows — the round-trip read
  * rehydration reuses. Verifies the sha the caller asked for is what the bytes
  * hash to is the sink's job (custody read-back); this just gunzips + parses.
  */

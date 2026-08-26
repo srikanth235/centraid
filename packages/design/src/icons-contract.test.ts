@@ -80,34 +80,13 @@ describe("single icon registry", () => {
 
 // ── App-icon silhouette contract (handoff brief, "App icons") ──────────────
 //
-// The brief specifies a CLASSIC FILLED MARK system: a rounded-square
-// container tinted with the app hue, a primary silhouette cut from it as
-// `fill-rule: evenodd` knockouts (so the tint reads as negative space), and a
-// secondary form at 50% opacity for decoration ONLY — the identifying detail
-// must never live in that low-opacity path, since it falls under the 3:1
-// non-text contrast floor at the sizes actually used.
-//
-// What THIS repo actually ships (`icons.ts`) is a different, simpler system:
-// single-tone Lucide-style STROKE icons. `IconPath` has no `fillRule` field
-// and `iconPathMarkup` never emits one; there is no "secondary path at
-// reduced opacity" concept anywhere in the render pipeline. That is a real
-// gap against the brief — the two-tone filled-mark system with evenodd
-// knockouts described there has never been authored — and it is NOT
-// mechanically checkable against real sources, because the property doesn't
-// exist to inspect: there is no icon anywhere in `ICON_DATA` that declares a
-// second, lower-opacity decorative path, so a test asserting "the identity
-// hue is absent from the secondary path" would vacuously pass over a
-// contract the icons never attempt in the first place. Rather than write
-// that pretend test, this suite instead pins the guarantee the CURRENT
-// architecture actually gives, which is strictly stronger for THIS repo's
-// rendering model: no icon may carry any baked-in colour at all (only
-// `currentColor`, i.e. the caller's `--chip-hue`/mark colour, decided by
-// `iconChipFinish` in tile.ts) — so there is no path, primary or secondary,
-// that could ever diverge from the container-driven identity hue. If a
-// two-tone filled mark is ever authored, the `fillRule` field below is the
-// seam: `iconPathMarkup` already emits it when present, so the moment a path
-// sets `fillRule: "evenodd"` this contract activates on it (see the "any
-// future evenodd path is well-formed" test).
+// The brief's two-tone filled mark — evenodd knockouts plus a 50%-opacity
+// decorative path — is not what this repo ships: icons are single-tone strokes,
+// so a test for "identity absent from the secondary path" would pass vacuously.
+// This suite pins the stronger guarantee the current model does give: no path
+// carries baked-in colour, only `currentColor`. `fillRule` is the seam —
+// `pathMarkup` already emits it, so the contract activates the day a filled
+// mark is authored.
 describe("app-icon silhouette contract", () => {
   const appIconNames = [...new Set(apps.map((app) => app.iconKey))];
 
@@ -116,12 +95,6 @@ describe("app-icon silhouette contract", () => {
     for (const name of appIconNames) expect(isIconName(name)).toBe(true);
   });
 
-  // Mechanically checkable, and the strongest form of "identity never leaks
-  // into a secondary path" this repo's single-tone icon model can express:
-  // no path may hold a literal colour. Every glyph paints in whatever colour
-  // the CALLER supplies via `currentColor` (the chip's `markColor`), so a
-  // path can never carry a hardcoded identity hue independent of the
-  // container that is supposed to be the only place the hue is decided.
   test("no app icon's path data carries a hardcoded colour", () => {
     for (const name of appIconNames) {
       for (const iconPath of icons[name]) {
@@ -133,11 +106,6 @@ describe("app-icon silhouette contract", () => {
     }
   });
 
-  // `fill-rule="evenodd"` is real, checked markup — `pathMarkup` already
-  // knows how to emit it (see the assertion just below) — but NO shipped
-  // icon uses it today, because no shipped icon is a filled compound
-  // silhouette with a knockout. This is the honest state of the gap: the
-  // authoring pattern the brief specifies has not been built.
   test("no shipped app icon currently declares an evenodd knockout (documents the gap)", () => {
     for (const name of appIconNames) {
       for (const iconPath of icons[name]) {
@@ -146,30 +114,17 @@ describe("app-icon silhouette contract", () => {
     }
   });
 
-  // The seam itself: `fillRule` on an `IconPath` renders as a real
-  // `fill-rule="evenodd"` attribute the moment one is authored, so this
-  // contract is enforceable on day one of a real filled-mark icon rather
-  // than needing a second pass through the renderer later.
   test("pathMarkup emits fill-rule when a path declares one", () => {
     const markup = pathMarkup({ d: "M0 0h10v10H0z", fillRule: "evenodd" });
     expect(markup).toContain('fill-rule="evenodd"');
   });
 
-  // "Legible at 14px" (the brief's smallest size in use) is a genuinely
-  // subjective, human-verified claim — no algorithm here decides whether a
-  // shape READS at 14px the way a designer's eye does. What IS mechanically
-  // checkable is a floor under two proxies that predict illegibility at
-  // small sizes: the rendered stroke never thins below a real device pixel,
-  // and the glyph doesn't accumulate so many path commands that its detail
-  // is finer than a 14px box can resolve. Both are necessary, neither is
-  // sufficient — this test cannot and does not claim to settle legibility on
-  // its own; it only rules out the two failure modes a heuristic can see.
+  // Legibility at 14px is human-verified; these two proxies only rule out the
+  // failure modes a heuristic can see. Necessary, never sufficient.
   const SMALLEST_SIZE_IN_USE = 14;
   const VIEW_BOX = 24;
   const MIN_DEVICE_STROKE_PX = 0.75;
-  // The densest shipped app icon (AddressBook: two paths, 18 path commands)
-  // sets the ceiling; a generous margin above it catches genuinely
-  // over-detailed future artwork without flagging today's set.
+  // Margin above the densest shipped icon (AddressBook, 18 commands).
   const MAX_PATH_COMMANDS = 24;
   const countCommands = (d: string): number =>
     (d.match(/[a-df-z]/giu) ?? []).length;
@@ -195,11 +150,8 @@ describe("app-icon silhouette contract", () => {
 
 // ── Photos v4 handoff icon keys (CHANGELOG v4 - Photos.md §B2) ─────────────
 //
-// Thirteen new keys for the shelves, the selection set and the viewer bar.
-// The names are the exact, lowercase names the handoff gives — "the names
-// are the binding part" — which is why this suite checks them by literal
-// key rather than through `ICON_CONCEPTS` (a separate, PascalCase-glyph
-// concept layer these keys deliberately do not go through).
+// The lowercase names are the binding part, so these are checked by literal key
+// and deliberately never through the PascalCase `ICON_CONCEPTS` layer.
 describe("Photos v4 handoff icon keys", () => {
   const PHOTOS_ICON_KEYS = [
     "heart",
@@ -224,9 +176,7 @@ describe("Photos v4 handoff icon keys", () => {
   });
 
   test("reused artwork does not duplicate or restyle the existing marks", () => {
-    // The handoff calls out photos/add/trash as possibly-existing; `add` and
-    // `trash` share the exact path data of `Plus` and `Trash` rather than
-    // drawing a second, competing glyph for the same action.
+    // Aliases share exact path data rather than drawing a competing glyph.
     expect(icons.add.map((p) => p.d)).toStrictEqual(icons.Plus.map((p) => p.d));
     expect(icons.trash.map((p) => p.d)).toStrictEqual(
       icons.Trash.map((p) => p.d)
@@ -265,9 +215,6 @@ describe("Photos v4 handoff icon keys", () => {
     }
   });
 
-  // Same distinguishability proxy as the app-icon suite above: no shipped
-  // key accumulates so many path commands that a 14px render can't resolve
-  // it, and every key is distinct from every other shipped key by path data.
   test("every key stays under the detail-density ceiling", () => {
     const MAX_PATH_COMMANDS = 24;
     const countCommands = (d: string): number =>
@@ -283,10 +230,7 @@ describe("Photos v4 handoff icon keys", () => {
     }
   });
 
-  // The five aliases share artwork on purpose (see the test above); every
-  // OTHER key in the set must be genuinely distinct artwork from its
-  // siblings, so this list is checked separately rather than with a
-  // conditional expect inside one shared loop.
+  // Shared artwork on purpose; every other key must be distinct.
   const REUSED_ALIASES = new Set([
     "add",
     "trash",

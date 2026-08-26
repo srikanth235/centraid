@@ -13,7 +13,7 @@ import { tempDir } from "./temp-dir.js";
 import { generateVolumeFixture } from "./volume-fixture.js";
 
 /**
- * Issue #656 Layer 1F. `quality-result.ts` and `volume-fixture.ts` are the
+ * `quality-result.ts` and `volume-fixture.ts` are the
  * substrate the perf and scale rigs stand on: the first decides whether a rig
  * has a budget at all, the second decides what "volume" means. A bug in either
  * does not fail a test — it produces a *false green*, which is strictly worse

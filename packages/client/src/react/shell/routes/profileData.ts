@@ -6,11 +6,11 @@ import {
 /*
  * The signed-in person's own profile.
  *
- * A name belongs to the PERSON, not to the browser that typed it. Onboarding
- * used to write it only into device-local settings, where nothing rendered it
- * and no other surface could ever see it — the roster kept saying "You".
- * These helpers read and write the owner roster instead, and the local
- * avatar colour rides along through `updateProfileMetadata` as before.
+ * A name belongs to the PERSON, not to the browser that typed it. Writing it
+ * only into device-local settings leaves nothing rendering it and no other
+ * surface able to see it — the roster keeps saying "You". These helpers read
+ * and write the owner roster instead, and the local avatar colour rides along
+ * through `updateProfileMetadata`.
  */
 
 /**

@@ -1,35 +1,16 @@
 // Tier 2: "All apps and places" — the sheet the band's More tab opens
-// (handoff :3123-3247, :5469-5485, :5990-5993).
+// (handoff :3123-3247).
 //
-// A searchable list where every installed app is a 44px row with its mark, its
-// count, and a pin switch, and PINNING WRITES THE HOME GRID ORDER. Pinning
-// into the grid is the brief's own Tier-2 wording — a grid scrolls, so a pin
-// can lift an app to the front without a cap and without anything being
-// pushed off the screen.
+// Every installed app is a 44px row (mark, count, pin switch); PINNING WRITES
+// THE HOME GRID ORDER — a grid scrolls, so a pin lifts without a cap. The
+// "places" half is the full ./places table; Home is pinned by law and shows
+// "by law" instead of a switch, and the Assistant lives in the apps half
+// (:3482), never a place. Each half gets its own sub-head in handoff copy
+// (:5484-5485).
 //
-// The "and places" half is now the full eleven-row table in ./places, not the
-// two-item stand-in (Assistant, Settings) this used to carry: every place a
-// 44px row with its mark, its `what` line, and a pin switch — except Home,
-// which is pinned by law and shows "by law" instead (Home cannot be unpinned,
-// the way a browser cannot unpin its own back button). The Assistant is NOT
-// here — it moved to the apps half, because the handoff settles it as "a
-// pinned app, reached from the app surface, from ⌘K, and from New chat"
-// (:3482), never a place the frame goes.
-//
-// Each half gets its own sub-head, in the handoff's own copy (:5484-5485):
-// "Apps · pinned apps appear on Home" and "Places · pinned places appear in
-// the launcher" — so a list mixing two kinds of thing says so, rather than
-// making a member read it twice to find out.
-//
-// Recency is specified for app rows and is NOT shown, because this app keeps
-// no per-app last-opened record; a fabricated "2 days ago" on a launcher row is
-// exactly the kind of number a member would plan around. The count beside each
-// row IS real — the same count the tile draws — and a withheld count (Locker)
-// renders withheld rather than as a zero.
-//
-// Cross-platform Modal (not ActionSheetIOS): the search field and per-row
-// switch need real layout, and the brief asks for identical iOS/Android
-// behaviour beyond safe-area handling.
+// Recency is NOT shown (no per-app last-opened record). Counts are real; a
+// withheld count renders withheld, never zero. Modal, not ActionSheetIOS:
+// search + per-row switches need real layout.
 
 import React, { useMemo, useState } from "react";
 import {
@@ -109,9 +90,8 @@ export default function AllAppsSheet({
     () => items.filter((item) => matchesQuery(item.meta.name, trimmed)),
     [items, trimmed]
   );
-  // A place this gateway does not serve is not listed and not pinnable here
-  // either — the sheet is where a member would otherwise pin it back onto the
-  // band and land on a dead route. See `places.ts` for why unknown ≠ off.
+  // A place this gateway does not serve is not listed or pinnable here —
+  // see `places.ts` for unknown ≠ off.
   const { features } = useReplica();
   const places = useMemo(
     () =>
@@ -120,10 +100,8 @@ export default function AllAppsSheet({
       ),
     [trimmed, features]
   );
-  // The handoff's own foot formula (:5990-5991): pinned apps (Home excluded,
-  // since it carries no switch) over the total installed, then pinned places
-  // (Home included, since it counts as pinned by law) over the places this
-  // gateway serves on this seat — the list the member is looking at.
+  // Foot formula (:5990-5991): pinned apps over installed; pinned places
+  // (Home counts as pinned by law) over served places.
   const footText = `${pinnedSet.size} of ${items.length} apps · ${
     pinnedPlaces(enabledPlacePins(placePins, features)).length
   } of ${enabledPlaces(features).length} places`;
@@ -254,8 +232,7 @@ function AppRow({
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
       <AppMark color={meta.color} iconKey={meta.iconKey} size={ROW_ICON} />
-      {/* Pinned reads full-weight ink; unpinned is a lighter name — never a
-          dimmed one. */}
+      {/* Pinned reads full-weight ink; unpinned a lighter name, never dimmed. */}
       <View style={styles.rowText}>
         <Text
           style={[styles.rowLabel, pinned && styles.rowLabelPinned]}
@@ -300,10 +277,8 @@ function PlaceRow({
       onPress={onOpen}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      {/* A place owns no identity hue, so it takes a bare ink mark — the same
-          rule the band follows for its own destinations, and always the
-          faintest ink token (never the active-state colour a band tab uses,
-          since nothing in this list is "current"). */}
+      {/* Places own no hue: bare mark in the faintest ink token — nothing
+          here is "current". */}
       <View style={styles.chip}>
         <Icon name={place.icon} size={16} color={colors.textFaint} />
       </View>
@@ -315,8 +290,7 @@ function PlaceRow({
           {place.what}
         </Text>
       </View>
-      {/* Home has no switch to offer — it is in the launcher by law — rather
-          than a switch that would only ever refuse (:3222-3239). */}
+      {/* Home has no switch — it is in the launcher by law (:3222-3239). */}
       {place.law ? (
         <Text style={styles.lawLabel}>by law</Text>
       ) : (
@@ -378,9 +352,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 20,
     },
     input: { ...t("body"), color: colors.text, flex: 1, padding: 0 },
-    // Home has no switch: "by law" fills the same 34px-ish slot in the same
-    // mono numeric register the counts use, so the row stays one shape whether
-    // it ends in a switch or the reason there isn't one (:3226, :5479).
+    // "by law" fills the switch slot, same mono numeric register (:3226, :5479).
     lawLabel: { ...t("mono"), color: colors.textFaint, textAlign: "center" },
     list: { marginTop: 8, maxHeight: 440 },
     row: {
@@ -397,9 +369,7 @@ const makeStyles = (colors: ThemeColors) =>
     rowPressed: { backgroundColor: colors.bgHover },
     rowText: { flex: 1 },
     scrim: { backgroundColor: colors.scrim, flex: 1 },
-    // The same style serves both sub-heads (:5482-5485) — the border-top is
-    // what separates one half of the sheet from the other, not a wrapping
-    // container's own rule.
+    // One style for both sub-heads (:5482-5485); border-top separates halves.
     sectionHead: {
       borderTopColor: colors.lineStrong,
       borderTopWidth: borders.hairline,
@@ -413,9 +383,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: 12,
       textTransform: "uppercase",
     },
-    // Elevated ground + a hairline all round (:5976-5978) — the panel used to
-    // sit on the page's own `colors.bg` with no border at all, which made it
-    // read as part of the page rather than a surface floating over it.
+    // Elevated ground + hairline all round (:5976-5978).
     sheet: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,

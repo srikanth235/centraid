@@ -1,5 +1,3 @@
-// WASM vips preview codec (issue #545 B7).
-
 import sharp from "sharp";
 import { describe, expect, test } from "vitest";
 

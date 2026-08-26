@@ -1,6 +1,6 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Settings account / vault data layer (issue #545 B8).
+ * Settings account / vault data layer (#545).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,8 +53,8 @@ describe("settingsAccountData", () => {
     });
 
     it("omits what this build cannot answer for rather than inventing it", async () => {
-      // The stamp replaced a hard-coded `v0.5.2`, which was a number the build
-      // could not vouch for. A host with no changelog bridge states the host.
+      // The stamp never carries a hard-coded version — that is a number the
+      // build cannot vouch for. A host with no changelog bridge states the host.
       window.CentraidApi.getChangelog = undefined;
       window.CentraidApi.getGatewayAuth = () =>
         Promise.reject(new Error("no gateway"));
@@ -110,7 +110,7 @@ describe("settingsAccountData", () => {
       expect(data?.deletable).toBe(false);
     });
 
-    // "On this device → Disconnect" (issue #665) exists only for a vault on a
+    // "On this device → Disconnect" (#665) exists only for a vault on a
     // REMOTE connection, and the confirm has to be able to name every vault
     // that leaves with it — `listVaults()` already answers for exactly the
     // connection in question, so the siblings come free.

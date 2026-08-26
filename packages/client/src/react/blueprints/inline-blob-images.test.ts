@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// This suite exercises the generic blob-image authorizer (issue #505 Phase 4).
+// This suite exercises the generic blob-image authorizer (#505).
 import { flushMacrotasks } from "@centraid/test-kit/flush";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";

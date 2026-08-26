@@ -1,33 +1,10 @@
 /*
- * Mobile resource evidence ledger (#842 W8.2).
- *
- * The claim "Centraid is well-behaved on a phone" needs numbers, and most
- * of the numbers that matter — battery drain per hour of foreground use,
- * peak resident memory under a real photo import, cold-start time on a
- * five-year-old Android — can only be produced by a real device. This repo
- * has no device. That is a genuine external block, not a gap somebody
- * forgot to close.
- *
- * The block is on the MEASUREMENT, not on the record. This module is the
- * record: a schema for what must be measured, on which surfaces, and a
- * validator that refuses the two ways such a ledger normally rots.
- *
- *  - **A blocked row must say what unblocks it.** `method: "blocked-external"`
- *    requires `blockedReason` and `unblockCondition` and forbids a value.
- *    A blocked lane is loud, cited, and countable — never silently absent.
- *  - **A measured row must be re-derivable.** `method: "measured"` and
- *    `method: "derived"` require a value, a `recomputedBy` pointing at the
- *    test that reproduces it, and a `tolerance`. The named test recomputes
- *    the number and fails when the ledger and the machine disagree, so a
- *    row cannot decay into a claim nobody checks.
- *
- * `derived` is the honest middle: a host-measured proxy for a device
- * quantity (on-disk vault bytes per thousand items is the same SQLite
- * layout on a phone; battery is not). A `derived` row never claims to be a
- * device measurement — `validateResourceLedger` refuses a `derived` row
- * whose `device.class` is anything but `host-proxy`.
- *
- * Determinism: no clock here. `at` is supplied by whoever writes a row.
+ * Mobile resource evidence ledger (#842). The validator refuses rot:
+ * a blocked row must say what unblocks it (`blocked-external` requires
+ * `blockedReason` + `unblockCondition` and forbids a value); a measured
+ * row must be re-derivable (`measured`/`derived` require `recomputedBy`
+ * + `tolerance`). A `derived` row may only claim device class
+ * `host-proxy`. No clock here: writers supply `at`.
  */
 
 export const RESOURCE_SURFACES = ["ios", "android", "host-proxy"] as const;
@@ -73,13 +50,13 @@ export interface ResourceObservation {
   readonly value: number | null;
   readonly unit: string;
   readonly device: ResourceDevice;
-  /** ISO instant the row was written, or the measurement's date. */
+  /** ISO instant or measurement date. */
   readonly at: string;
-  /** Repo-relative path or issue link a reader follows to the evidence. */
+  /** Repo-relative path or issue link. */
   readonly evidence: string;
-  /** Test that reproduces `value`. Required for measured/derived rows. */
+  /** Test reproducing `value`; required for measured/derived rows. */
   readonly recomputedBy?: string;
-  /** Fractional band the recomputation may differ by, e.g. 0.2 = ±20%. */
+  /** Recomputation band, e.g. 0.2 = ±20%. */
   readonly tolerance?: number;
   readonly blockedReason?: string;
   readonly unblockCondition?: string;
@@ -93,13 +70,7 @@ export interface ResourceLedger {
 
 export const RESOURCE_LEDGER_SCHEMA_VERSION = 1;
 
-/**
- * Every (surface, metric) pair the ledger must carry a row for. A pair
- * with no row is a silently-absent lane, which is the failure this whole
- * ledger exists to prevent; the validator reports it as an error, so the
- * only two legal states for a lane are "measured" and "blocked, with the
- * unblock condition written down".
- */
+/** Every (surface, metric) lane the validator demands a row for. */
 export const REQUIRED_RESOURCE_LANES: readonly (readonly [
   ResourceSurface,
   ResourceMetric,
@@ -196,7 +167,7 @@ export function validateResourceLedger(
   };
 }
 
-/** True when `observed` sits inside the row's recorded tolerance band. */
+/** True when `observed` is inside the row's tolerance band. */
 export function withinTolerance(
   row: ResourceObservation,
   observed: number

@@ -141,7 +141,7 @@ function registeredCommands(db: VaultDb): string[] {
           ORDER BY c.name`
       )
       .all() as { name: string; risk: string; requires_confirmation: number }[];
-    // Only the capability's confirm flag parks (issue #306; #308 fixed the
+    // Only the capability's confirm flag parks (#306; #308 fixed the
     // annotation) — advertising risk-high as parking would teach the model
     // a gate that no longer exists.
     return rows.map(

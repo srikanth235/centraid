@@ -1,9 +1,9 @@
-// Scan (Docs handoff Part 2 §14; issue #821) — "where documents are born on
+// Scan (Docs handoff Part 2 §14; #821) — "where documents are born on
 // a phone", framed by Docs and HANDED OFF to the frame's own Scan cover
 // (`src/screens/Scan.tsx`).
 //
 // That cover is the one honest camera entrance this phone already has: it
-// owns the camera permission, the per-device OCR consent gate (#712 C3), the
+// owns the camera permission, the per-device OCR consent gate (#712), the
 // on-device extraction with the member's review, and the `docs / upload`
 // producer that lands the capture as an image document with its extracted
 // text. Duplicating any of that here would be a second camera flow to keep

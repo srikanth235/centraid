@@ -1,9 +1,4 @@
-// Phase-B custody-gated prune (issue #438 decision 3). For each archive row not
-// yet pruned, the raw turns in its seq-range delete ONLY when the segment's
-// custody is proven — the delete lives behind the `custodyProven` latch in this
-// one code path, so prune-before-custody is structurally impossible. Items and
-// attachment rows CASCADE off `turns`; the digest already carries the range's
-// rollups, so Insights/Executions are unaffected.
+// Custody-gated prune (#438): deletes ONLY behind the `custodyProven` latch.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -17,14 +12,7 @@ interface PendingArchiveRow {
   segment_sha256: string;
 }
 
-/**
- * Reclaim pages the prune deletes freed. Mirrors the vault's
- * `journal-archive.ts` reclaimSpace: journal.db is opened with
- * `auto_vacuum=INCREMENTAL` (#438 wave 1, both openers), so `incremental_vacuum`
- * returns the freelist to the OS without rewriting the whole file. Open-time
- * database setup converts any pre-#438 file before this path runs; archival
- * never falls back to a whole-file `VACUUM`.
- */
+// Reclaims freed pages via `incremental_vacuum` (#438); never a whole-file VACUUM.
 export function reclaimJournalPages(journal: DatabaseSync): {
   mode: "incremental" | "none";
   ranVacuum: boolean;
@@ -44,15 +32,7 @@ export function reclaimJournalPages(journal: DatabaseSync): {
   return { mode, ranVacuum: false };
 }
 
-/**
- * Prune the raw rows of every custody-proven archive segment, bounded by
- * `maxSegments`. Each segment is one transaction: delete its turns (items +
- * attachments CASCADE), then latch `pruned_at`. `conversations.turn_count` is a
- * LIFETIME counter (bumped in noteTurn, never decremented — the existing
- * automation retention prune leaves it too), so it is deliberately untouched:
- * decrementing would make it disagree with every other post-delete path.
- * Returns the turns deleted and segments latched.
- */
+// One transaction per segment; `turn_count` is a LIFETIME counter — untouched.
 export function pruneCustodyProven(
   journal: DatabaseSync,
   custodyProven: CustodyProven,

@@ -1,15 +1,10 @@
-// Pure formatting + string helpers for the renderer, extracted from the builder
-// god-file so they can be unit-tested in isolation (TESTING.md §2 — "extract
-// logic, then test it"). Nothing here touches the DOM, `window`, the network,
-// or IPC: every function is a deterministic value→value transform (the only
-// ambient inputs are `Date`/`Math.random`, which callers/tests can pin).
+// Pure formatting helpers: no DOM, `window`, network, or IPC — deterministic transforms only.
 
 import { formatBytes as sharedFormatBytes } from "@centraid/design";
 
-/** The code languages the builder's Code view knows how to syntax-highlight. */
 export type CodeLang = "html" | "js" | "ts" | "css" | "json" | "md" | "other";
 
-/** Escape the three HTML-significant characters so source text renders inert. */
+/** Escape &, <, > so source text renders inert. */
 export function escapeHtml(s: string): string {
   return s
     .replaceAll("&", "&amp;")
@@ -17,8 +12,6 @@ export function escapeHtml(s: string): string {
     .replaceAll(">", "&gt;");
 }
 
-/** Span classes for each syntax-token kind, supplied by the caller (the Code
- * view passes its CSS-module locals so the emitted HTML stays scoped). */
 export interface TokenClasses {
   tag: string;
   attr: string;
@@ -27,7 +20,7 @@ export interface TokenClasses {
   com: string;
 }
 
-/** Default classes — the unscoped `tok-*` names, kept for tests/plain hosts. */
+/** Unscoped `tok-*` defaults, kept for tests/plain hosts. */
 export const DEFAULT_TOKEN_CLASSES: TokenClasses = {
   attr: "tok-attr",
   com: "tok-com",
@@ -37,12 +30,9 @@ export const DEFAULT_TOKEN_CLASSES: TokenClasses = {
 };
 
 /**
- * Minimal, dependency-free syntax highlighter for the Code view. Returns HTML
- * with per-kind span classes (`classes`, defaulting to `tok-*`). Each pass
- * wraps tokens in placeholder control chars (not real `<span>`s) so a later
- * regex can't match the literal text of an earlier injection — e.g.
- * `\s[\w-]+=` eating the ` class=` inside an inserted span. Placeholders are
- * swapped to spans only at the very end.
+ * Dependency-free syntax highlighter; emits HTML with per-kind span classes
+ * (`classes`, defaulting to `tok-*`). Tokens wrap placeholder control chars
+ * first so a later regex can't match injected text; spans swap in at the end.
  */
 export function tokenize(
   src: string,
@@ -98,7 +88,6 @@ export function tokenize(
     .replaceAll(END, "</span>");
 }
 
-/** Map a file path to the language used for syntax highlighting + the pill. */
 export function languageHint(p: string): CodeLang {
   if (p.endsWith(".ts")) return "ts";
   if (p.endsWith(".js") || p.endsWith(".mjs")) return "js";
@@ -109,10 +98,6 @@ export function languageHint(p: string): CodeLang {
   return "other";
 }
 
-/**
- * Per-language label shown in the colored pill next to a filename in the Code
- * view. Kept tiny + uppercase to read as metadata, not a brand mark.
- */
 export const LANG_DISPLAY: Record<CodeLang, string> = {
   html: "HTML",
   js: "JS",
@@ -123,7 +108,7 @@ export const LANG_DISPLAY: Record<CodeLang, string> = {
   other: "TXT",
 };
 
-/** Lowercase, hyphenate, and cap at 40 chars — the app-id slug grammar. */
+/** App-id slug grammar: lowercase, hyphenated, capped at 40 chars. */
 export function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -132,14 +117,13 @@ export function slugify(s: string): string {
     .slice(0, 40);
 }
 
-/** A slug seed plus a short random suffix, e.g. `morning-digest-a1b2c3`. */
+/** Slug seed + short random suffix, e.g. `morning-digest-a1b2c3`. */
 export function generateAppId(seed: string): string {
   const slug = slugify(seed) || "app";
   const suffix = Math.random().toString(36).slice(2, 8);
   return `${slug}-${suffix}`;
 }
 
-/** Coarse "Just now / Nm / Nh / Nd ago", falling back to a locale date. */
 export function relativeWhen(iso: string): string {
   try {
     const t = new Date(iso).getTime();
@@ -158,24 +142,17 @@ export function relativeWhen(iso: string): string {
   }
 }
 
-/** Human byte size with one decimal at KB/MB/GB/TB, integer bytes below 1 KiB.
- *  Steps all the way to TB (issue #367's Storage card shows quota-scale
- *  figures, not just app-log-scale ones) — behavior below 1 MB is unchanged
- *  from the original KB/MB-only helper. */
+/** One decimal KB→TB; integer bytes below 1 KiB (#367). */
 export function formatBytes(n: number): string {
   return sharedFormatBytes(n);
 }
 
-/**
- * A short title for a published version: its declared semver if present, else
- * the date-time parsed out of the generated `v_<iso>_<sha>` id, else a prefix.
- */
+/** Declared semver, else datetime from `v_<iso>_<sha>`, else a prefix. */
 export function shortVersionTitle(v: {
   versionId: string;
   declaredVersion?: string;
 }): string {
   if (v.declaredVersion) return v.declaredVersion;
-  // versionId looks like v_2026-05-08T14-30-00-000Z_a1b2c3
   const stamp = /v_(?<stamp>\d{4}-\d{2}-\d{2}T\d{2}-\d{2})-/u.exec(v.versionId)
     ?.groups?.stamp;
   return stamp ? stamp.replace("T", " ") : v.versionId.slice(0, 24);

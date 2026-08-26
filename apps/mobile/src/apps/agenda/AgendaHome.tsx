@@ -78,7 +78,6 @@ const dayKeyOf = (row: AgendaDay): string => row.key;
 /** One shared identity for "nothing to list": a fresh `[]` per render would
  *  make FlatList re-diff a list it already knows is empty. */
 const NO_DAYS: AgendaDay[] = [];
-/** Where the phone keeps its own birthday lead, and the row that opens it. */
 const BIRTHDAY_LEAD_KEY = "centraid:birthday-lead-days:v1";
 const BIRTHDAY_LEAD_ROW = "birthday-lead";
 
@@ -88,7 +87,6 @@ function startOfDay(date: Date): Date {
   return next;
 }
 
-/** Is the owner still owed an answer on this event? */
 function awaitsMe(
   event: NativeAgendaEvent,
   attendees: readonly Record<string, unknown>[],
@@ -186,8 +184,7 @@ export default function AgendaHome({
   ]);
 
   // One row per DAY the event occupies — not just the start day. A Friday–
-  // Sunday run must still paint Saturday. The walk is `spanLocalDays`, the
-  // same interval helper the web grid uses.
+  // Sunday run must still paint Saturday (`spanLocalDays`, same as the web grid).
   const days = useMemo<AgendaDay[]>(() => {
     return groupEventsByLocalDay(visible).map((bucket) => {
       const dayKey = contextDayKey(bucket.date);

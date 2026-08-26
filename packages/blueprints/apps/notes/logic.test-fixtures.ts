@@ -1,26 +1,4 @@
-// The seat Notes' vault-IO suites drive, shared by `logic.test.ts`,
-// `logic-commands.test.ts` and `logic-panes.test.ts` (#839 W2-1).
-//
-// A RECORDING FAKE, NOT A MOCK. The frame's status line, the gateway, the
-// router and the repaint entry point are small objects that accumulate what a
-// member would actually experience — the sentence now on the one status line
-// and every sentence before it, the undo it offers beside that sentence, the
-// commands and reads that reached the gateway, the routes the app moved to,
-// and how many times the pane repainted or the window was re-read. Suites
-// assert that accumulated state, so a case fails when the OUTCOME is wrong
-// (the wrong sentence, an undo that is not offered, a library re-read on the
-// typing path) rather than when the call that produced it is spelled
-// differently.
-//
-// NODE, NOT JSDOM, and deliberately so: these suites are a mutation seed
-// (`stryker.notes.config.mjs`), and Stryker's vitest runner reports "No tests
-// were executed" for a jsdom project — a suite under the `@vitest-environment
-// jsdom` docblock defends nothing in the mutation lane. The browser surface
-// this module actually touches is three properties wide (one `querySelector`,
-// `textContent`, `hidden`) plus `window.centraid` and `FileReader`, so it is
-// stood up by hand here; naming that surface exactly is the point, because
-// anything the module reaches for beyond it fails rather than silently
-// working.
+// Recording fake for Notes vault-IO suites (#839). Node, not jsdom: Stryker's vitest runner executes nothing under a jsdom docblock.
 import { onTestFinished } from "vitest";
 
 import { createLogic } from "./logic.ts";
@@ -75,7 +53,6 @@ export function data(patch: Partial<AppData> = {}): AppData {
 export type WriteOpts = { action: string; input?: Record<string, unknown> };
 export type ReadOpts = { query: string; input?: Record<string, unknown> };
 
-/** The one element this app writes to imperatively. */
 interface BannerStub {
   textContent: string;
   hidden: boolean;
@@ -83,7 +60,6 @@ interface BannerStub {
 
 let banner: BannerStub | null = null;
 
-/** Stand up (or withhold) the frame's notice banner and the vault client. */
 function mountBanner(present = true): void {
   banner = present ? { textContent: "", hidden: true } : null;
   (globalThis as { document?: unknown }).document = {
@@ -92,11 +68,6 @@ function mountBanner(present = true): void {
   };
 }
 
-/**
- * A `FileReader` stand-in — Node has `File`/`Blob` but no `FileReader`. The
- * two outcomes are what the app branches on: bytes in hand, or a device that
- * could not read them.
- */
 class StubFileReader {
   result: string | null = null;
   #handlers: Record<string, Array<() => void>> = { load: [], error: [] };
@@ -120,7 +91,6 @@ class StubFileReader {
 export type WriteFn = (opts: WriteOpts) => Promise<unknown>;
 export type ReadFn = (opts: ReadOpts) => Promise<unknown>;
 
-/** What the frame's ONE status line reads, and the undo it offers beside it. */
 export interface StatusLine {
   text: string;
   undo: (() => void) | null;
@@ -130,19 +100,12 @@ export interface Harness {
   state: AppState;
   data: AppData;
   logic: ReturnType<typeof createLogic>;
-  /** The status line as it reads now, or null while it carries nothing. */
   status: () => StatusLine | null;
-  /** Every sentence the status line has carried, oldest first. */
   statusTexts: string[];
-  /** Every typed command that reached the gateway, in order. */
   sent: WriteOpts[];
-  /** Every read the app asked the gateway for, in order. */
   asked: ReadOpts[];
-  /** Every route the app moved to, in order. */
   routes: ShelfId[];
-  /** How many times the pane repainted from the window already in hand. */
   paints: () => number;
-  /** How many times the app re-read its window from the vault. */
   reloads: () => number;
   banner: () => { text: string; hidden: boolean };
 }
@@ -152,11 +115,9 @@ export interface HarnessOver {
   data?: Partial<AppData>;
   write?: WriteFn;
   read?: ReadFn;
-  /** Withhold the frame's notice banner, as a served mount does. */
   banner?: boolean;
 }
 
-/** Build the app's logic over a stubbed gateway plus the frame's one banner. */
 export function harness(over: HarnessOver = {}): Harness {
   const appState = state(over.state);
   const appData = data(over.data);

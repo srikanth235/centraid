@@ -1,18 +1,6 @@
-// People's store and its READ side: what is in hand, what each screen is
-// showing, and where the member is.
-//
-// Not a component — no JSX, no props — and never a second copy of mutable
-// state. `createLogic()` is a factory `app-root.tsx` calls once at boot,
-// closing over the exact `state` and `data` objects it owns (passed by
-// reference and mutated in place, never reassigned, so this module always sees
-// the live values) plus the one orchestration entry point only `app-root.tsx`
-// can define: `render`. It is the shape `docs/logic.ts` uses, for the same
-// reason — the app's rules are readable and testable outside a render.
-//
-// THE WRITE SIDE IS `writes.ts`. Two files rather than one because they answer
-// two different questions ("what is true" and "what did this write do"), and
-// because one file carrying both is how this app's predecessor reached the
-// size where nobody read it.
+// People's READ side. `createLogic()` closes over the `state` and `data`
+// objects `app-root.tsx` owns, mutated in place and never reassigned. THE
+// WRITE SIDE IS `writes.ts`.
 import { debounce, readFailed } from "@centraid/design/elements";
 
 import { isOverdue, linkState } from "./format.ts";
@@ -28,8 +16,7 @@ import type {
   TrashedPerson,
 } from "./types.ts";
 
-/** How many people the roster window asks for. Matches the query's read max;
- *  `truncated` is named on the status line when a cap still bites. */
+/** Roster window size; matches the query's read max. `truncated` names a cap. */
 const ROSTER_WINDOW = 9_999;
 
 interface DeniedRead {
@@ -40,7 +27,6 @@ interface LogicDeps {
   state: AppState;
   data: AppData;
   render: () => void;
-  /** A read has landed (either way) — the gate every empty state is behind. */
   setLoaded: (loaded: boolean) => void;
   setConsent: (consent: { message: string } | null) => void;
   setReadFailed: (failed: boolean) => void;
@@ -57,8 +43,7 @@ export function createLogic({
   const banner = (): HTMLElement | null =>
     document.querySelector<HTMLElement>("#noticeBanner");
 
-  /** The app's one imperative banner. Rendered once by the chrome and never
-   *  reconciled, so these writes are never clobbered by React. */
+  /** Never reconciled — the chrome renders it once, so React cannot clobber it. */
   function notice(text?: string): void {
     const element = banner();
     if (!element) return;
@@ -78,9 +63,8 @@ export function createLogic({
         ...(input ? { input } : {}),
       });
     } catch {
-      // A THROW IS NOT AN EMPTY SET. The inline client tries the local replica
-      // and falls back to the gateway, so a failure means neither answered —
-      // which the app says, rather than drawing "nobody here yet".
+      // A THROW IS NOT AN EMPTY SET: replica and gateway both failed to answer,
+      // which the app says rather than drawing "nobody here yet".
       readFailed(banner());
       failed = true;
       setReadFailed(true);
@@ -89,9 +73,6 @@ export function createLogic({
     }
   }
 
-  /** Every read this app performs, in one place, so a screen can never open a
-   *  sixth. The secondary reads are conditional: a member on the roster has no
-   *  use for the dashboard, and asking for it anyway is a read nobody sees. */
   async function refresh(): Promise<void> {
     const roster = await read<
       DeniedRead & {
@@ -115,18 +96,14 @@ export function createLogic({
     }
     data.people = roster.people ?? [];
     data.truncated = Boolean(roster.truncated);
-    // THE SHARING PLANE'S OWN FLAG, never inferred from the rows. A window
-    // where nobody happens to be linked is not a window where the link facts
-    // are missing, and the two draw differently everywhere.
+    // THE SHARING PLANE'S OWN FLAG, never inferred from the rows: "nobody is
+    // linked" and "link facts are missing" draw differently everywhere.
     data.linksAvailable = Boolean(roster.links_available);
 
     if (state.shelf === TOUCH) {
       const dashboard = await read<DeniedRead & Partial<DashboardData>>(
         "dashboard"
       );
-      // The Reconnect rows say `every <n> days · <ago>`; the query returns
-      // identity and role only, so the cadence pair is joined back in from
-      // the roster read that landed just above.
       const byId = new Map(
         data.people.map((person) => [person.party_id, person])
       );
@@ -150,8 +127,7 @@ export function createLogic({
               reconnect: 0,
               upcoming: 0,
               starred: 0,
-              // Null, not zero: a dashboard that never answered has not said
-              // that nobody is linked (`components/TouchRoute.tsx`).
+              // Null, not zero: an unanswered dashboard has not said nobody is linked.
               linked: null,
               to_link: null,
             },
@@ -170,9 +146,7 @@ export function createLogic({
         { party_id: state.personId }
       );
       data.person = detail?.person ?? null;
-      // The person may have been trashed or merged away in another window. The
-      // member is not left on a screen about nobody: they go back to the
-      // roster, which is where they reached the person from.
+      // Trashed or merged away elsewhere — never strand the member on nobody.
       if (!data.person) {
         state.personId = null;
         state.shelf = null;
@@ -183,8 +157,6 @@ export function createLogic({
     render();
   }
 
-  /** The search shelf's own read, debounced, sequence-guarded, and honest
-   *  about the difference between "no matches" and "could not ask". */
   const applySearch = debounce(async (): Promise<void> => {
     const term = state.search.trim();
     if (!term) {
@@ -226,11 +198,7 @@ export function createLogic({
     render();
   }
 
-  // ---------- Navigation ----------
-
-  /** Every move goes through here, so the composer, the draft and the confirm
-   *  cannot outlive the screen they belong to — a half-typed note reappearing
-   *  three screens later is state leaking, not state preserved. */
+  /** Composer, draft and confirm must not outlive the screen they belong to. */
   function go(shelf: ShelfId, personId?: string | null): void {
     state.shelf = shelf;
     if (personId !== undefined) state.personId = personId;
@@ -245,8 +213,6 @@ export function createLogic({
   }
 
   function goBack(): void {
-    // Nested screens return to the person they are about; the person screen
-    // and Trash return to the roster (handoff § Navigation).
     if (state.shelf === PERSON || state.shelf === TRASH) {
       go(null, null);
       return;
@@ -266,13 +232,9 @@ export function createLogic({
     render();
   }
 
-  // ---------- Derivations ----------
-
-  /** The numbers the roster's status line and app bar are made of. `linked`
-   *  and `toLink` are counted over the SAME window as the rest — the rows in
-   *  hand — so the status line and the chips can never disagree about how
-   *  many people are linked. They are zero while the link facts are absent,
-   *  which is why every reader gates on `data.linksAvailable` first. */
+  /** Counted over the SAME window as the rows in hand, so the status line and
+   *  chips cannot disagree. Zero while link facts are absent — gate on
+   *  `data.linksAvailable`. */
   function rosterCounts(): {
     people: number;
     due: number;
@@ -292,10 +254,6 @@ export function createLogic({
     };
   }
 
-  /** The merge screen's candidates: everyone except the person on screen,
-   *  with the contract's own duplicates first — the `person` query marks a
-   *  channel shared with another party (`duplicate_party_ids`), and a person
-   *  the vault already suspects belongs at the top of the pick list. */
   function mergeCandidates(): PersonRow[] {
     const duplicates = new Set(
       (data.person?.contact ?? []).flatMap(
@@ -316,12 +274,7 @@ export function createLogic({
     return data.people.find((person) => person.party_id === partyId) ?? null;
   }
 
-  /**
-   * The AMBIENT sentence for the current screen — what the status line says
-   * while nothing has just happened. A write's own outcome replaces it in
-   * place (`writes.ts`), which is the frame's one status line doing its one
-   * job.
-   */
+  /** Shown while nothing has just happened; a write's outcome replaces it. */
   function ambientStatus(): string | null {
     const counts = rosterCounts();
     const links = data.linksAvailable;

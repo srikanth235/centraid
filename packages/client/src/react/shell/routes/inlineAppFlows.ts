@@ -42,7 +42,7 @@ export async function renameInlineApp({
 }
 
 /** Code-store apps only: the panel gives a bundled app no danger zone at all
- *  (issue #708 — it reinstalls at every vault mount, so there is nothing an
+ *  (#708 — it reinstalls at every vault mount, so there is nothing an
  *  uninstall could durably mean). */
 export async function deleteInlineApp({
   app,

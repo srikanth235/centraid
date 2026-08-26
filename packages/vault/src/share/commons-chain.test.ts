@@ -1,4 +1,4 @@
-// Verifiable commons history (issue #731): the op hash chain, the signed
+// Verifiable commons history (#731): the op hash chain, the signed
 // checkpoint digest, and the member-side parks that keep a diverged steward
 // from ever scrubbing a replica.
 

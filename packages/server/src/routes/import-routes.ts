@@ -1,4 +1,4 @@
-// File-drop import routes (issue #290 phase 2) — the owner's staged-import
+// File-drop import routes (#290) — the owner's staged-import
 // surface over the vault's staging spine. First contact with real data is
 // always a DRAFT: stage returns a disposition summary, the owner reviews,
 // then publishes or discards. Everything runs with the owner-device
@@ -40,7 +40,7 @@ const TARGET_FIELDS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Which base64 bodies are BINARY (issue #721). A zip always was; a dropped
+ * Which base64 bodies are BINARY (#721). A zip always was; a dropped
  * photo or video is too, and forcing it through the UTF-8 decode below would
  * refuse every JPEG on the grounds that it is not text.
  */
@@ -163,7 +163,7 @@ export function makeImportRouteHandler(
           ...(typeof body.currency === "string"
             ? { currency: body.currency }
             : {}),
-          // Live Photo pairing for a single dropped photo/video (issue #724
+          // Live Photo pairing for a single dropped photo/video (#724
           // A2) — see `StageFileOptions.captureGroupId`. Absent for anything
           // that is not the mobile camera-roll importer's own convention.
           ...(typeof body.captureGroupId === "string"
@@ -229,7 +229,7 @@ export function makeImportRouteHandler(
         segments.length === 1 &&
         segments[0] === "connections"
       ) {
-        // The health surface (issue #290 phase 4): every connection with its
+        // The health surface (#290): every connection with its
         // latest run — status is READABLE state, sync never dies silently.
         const connections = plane.gateway.read(owner, {
           entity: "sync.connection",

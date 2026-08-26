@@ -16,7 +16,7 @@ import controlsCss from "../styles/controls.module.css";
 import gwStyles from "./GatewayScreen.module.css";
 import styles from "./LocalFootprintCard.module.css";
 
-// Storage → Footprint (issue #544): what Centraid is using on THIS machine,
+// Storage → Footprint (#544): what Centraid is using on THIS machine,
 // split by component. The page's opening statement, so it leads with one
 // figure and one rail rather than a table — "how much, and how close to the
 // line" is the question; the breakdown is the follow-up.

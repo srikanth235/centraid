@@ -1,19 +1,7 @@
-// Pure-math DB (Differentiable Binarization) postprocess for the PP-OCR
-// detector, exercised directly by vitest with synthetic probability maps —
-// no ONNX import here.
-//
-// Scope note (be honest about the simplification, per the repo's "honest
-// absence" rule): the reference PaddleOCR/RapidOCR postprocess fits a
-// rotated minAreaRect around each contour and perspective-unwarps the crop,
-// so it can recover angled or curved text lines. This module instead keeps
-// the axis-aligned bounding box of each connected component. That is
-// correct and sufficient for the overwhelmingly common case (horizontal or
-// near-horizontal text, which is most of what a personal photo/document
-// library contains) and keeps the box shape compatible with the wire
-// contract's `[x, y, w, h]` box, which has no rotation field. Recovering
-// rotated boxes would need perspective-warp crops upstream of recognition
-// too; that is out of scope for this pass and is called out again in
-// README.md as a known gap for the integrator.
+// Pure-math DB postprocess for PP-OCR — no ONNX import.
+// Axis-aligned boxes only: the wire contract is `[x, y, w, h]` with no
+// rotation, and recovering a minAreaRect would also need warp crops
+// upstream of recognition. Honest absence; README names the gap.
 
 export interface Box {
   x: number;
@@ -22,13 +10,6 @@ export interface Box {
   height: number;
 }
 
-/**
- * Thresholds a probability map (row-major, `width * height` floats in
- * 0..1) into a binary mask. DB's own "binarization" is a soft, learned step
- * baked into the model; this is the postprocess-side hard threshold applied
- * to the model's output probability map, matching PaddleOCR's
- * `thresh` (default 0.3) db_postprocess parameter.
- */
 export function binarizeProbabilityMap(
   probs: ArrayLike<number>,
   width: number,
@@ -44,15 +25,10 @@ export function binarizeProbabilityMap(
 
 export interface ConnectedComponent {
   box: Box;
-  /** Pixel count of the component — used both for filtering tiny noise and for the unclip distance formula. */
   area: number;
 }
 
-/**
- * 4-connectivity flood fill over a binary mask, returning the axis-aligned
- * bounding box and pixel area of every connected foreground component.
- * Iterative (explicit stack) so a large mask cannot blow the call stack.
- */
+/** 4-connected flood fill; iterative so a large mask cannot blow the stack. */
 export function findConnectedComponents(
   mask: ArrayLike<number>,
   width: number,
@@ -119,13 +95,8 @@ export function findConnectedComponents(
 }
 
 /**
- * Expands a box outward, approximating DB's polygon "unclip" step (the
- * probability map is trained to under-shoot the true text region, so the
- * detector always grows boxes back out before cropping). Uses PaddleOCR's
- * own distance formula — `distance = area * unclipRatio / perimeter` —
- * applied as uniform padding on all four sides of the axis-aligned box
- * (the polygon-offset equivalent for a rectangle). Default ratio 1.5
- * matches PP-OCR's default `unclip_ratio`.
+ * Approximate DB unclip: `distance = area * unclipRatio / perimeter` as
+ * uniform padding. Default 1.5 matches PP-OCR `unclip_ratio`.
  */
 export function unclipBox(box: Box, area: number, unclipRatio = 1.5): Box {
   const perimeter = 2 * (box.width + box.height);
@@ -141,7 +112,6 @@ export function unclipBox(box: Box, area: number, unclipRatio = 1.5): Box {
   };
 }
 
-/** Clamps a box to the [0, width) x [0, height) image bounds, rounding to integer pixels. */
 export function clampBoxToImage(box: Box, width: number, height: number): Box {
   const x1 = Math.max(0, Math.min(width, Math.round(box.x)));
   const y1 = Math.max(0, Math.min(height, Math.round(box.y)));
@@ -155,12 +125,7 @@ export function clampBoxToImage(box: Box, width: number, height: number): Box {
   };
 }
 
-/**
- * Mean probability within a box region — used as the detection confidence
- * score PaddleOCR filters boxes by (default `box_thresh` 0.5), computed over
- * the ORIGINAL (unclipped) box so it reflects the model's own confidence in
- * that specific region rather than the padded crop.
- */
+/** Mean probability over the ORIGINAL (unclipped) box — never the padded crop. */
 export function meanProbabilityInBox(
   probs: ArrayLike<number>,
   width: number,
@@ -194,12 +159,6 @@ export interface DbPostprocessOptions {
   minArea?: number;
 }
 
-/**
- * Full DB postprocess pipeline: threshold -> connected components -> score
- * filter -> unclip -> clamp to image bounds. Pure function of a probability
- * map; the caller is responsible for getting that map out of the detector
- * ONNX session (see src/capabilities/ocr.ts).
- */
 export function dbPostprocess(
   probs: ArrayLike<number>,
   width: number,

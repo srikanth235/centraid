@@ -1,5 +1,5 @@
 // PEOPLE ON THE PHONE — the three band destinations, on one screen
-// (Binding Layer v12 handoff Part 1, issue #821).
+// (Binding Layer v12 handoff Part 1, #821).
 //
 // `People` (the roster), `Touch` (the keep-in-touch summary) and `Search` all
 // live here, switched by the band exactly the way `PhotosHome` switches its
@@ -159,7 +159,7 @@ export default function PeopleHome({
               // Each tile filters or navigates (handoff § Screens 2): the
               // people-counting tiles land on the roster with the matching
               // chip; Reconnect lands on the `Overdue` chip the copy table
-              // added for exactly this tap; Upcoming stays here, where the
+              // carries for exactly this tap; Upcoming stays here, where the
               // Upcoming section is one screen inch below.
               if (tile === "upcoming" || tile === "reconnect") {
                 if (tile === "reconnect") {

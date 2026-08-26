@@ -147,11 +147,11 @@ function TriggerInstructions({ text }: { text: string }): JSX.Element {
 }
 
 /**
- * Automation run-viewer, ported to React (issue #325, Phase 3). The vanilla
- * side owns the SSE stream + node model and pushes a fully-derived snapshot on
- * each event via the `update` fn handed to `onReady`; React renders the
- * timeline (rail + node cards + final outcome + KPI rail) or log (KPI strip +
- * transcript rows) mode. Same `cd-au-*` classes.
+ * Automation run-viewer. The route owns the SSE stream + node model and
+ * pushes a fully-derived snapshot on each event via the `update` fn handed to
+ * `onReady`; this screen renders the timeline (rail + node cards + final
+ * outcome + KPI rail) or log (KPI strip + transcript rows) mode. Emits the
+ * `cd-au-*` classes global styles.css targets.
  */
 export default function RunViewScreen({
   initialMode,

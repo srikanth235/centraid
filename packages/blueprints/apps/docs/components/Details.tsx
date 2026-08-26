@@ -1,16 +1,5 @@
-// The DETAILS RAIL (Docs spec §8) — one rail, three tabs.
-//
-// "One rail, three former screens: properties, the people a document names,
-// and the facts about a kind Docs cannot render. All three answer 'what is
-// this row', so they belong beside the row and not three screens away from
-// it." (§8, verbatim.) The tab bodies are in `DetailsTabs.tsx`; this file is
-// the rail: head, tabs, the document's own verbs, and the footer.
-//
-// TWO THINGS LEFT THIS FILE. Version history is a ROUTE now (§6.2) rather
-// than a disclosure inside a drawer, and Activity went with it — "what
-// happened to a document and which version it produced are one spine" — so
-// the rail's footer sends the member to that screen instead of unfolding a
-// second copy of it here.
+// Details rail (Docs spec §8); tab bodies live in `DetailsTabs.tsx`.
+// Version history and activity are a ROUTE (§6.2) — the footer links there.
 import { useEffect, useRef, useState } from "react";
 
 import { armConfirm } from "@centraid/design/elements";
@@ -30,19 +19,14 @@ import { ActionBtn, Icon } from "./Shared.tsx";
 import styles from "./Details.module.css";
 import shared from "./shared.module.css";
 
-// The custody chip's three tones are compound modifiers on the local base,
-// keyed off a lookup map so the tone never becomes `styles[\`custody-${tone}\`]`.
+// Pre-keyed tone classes; never dynamic `styles[`custody-${tone}`]`.
 const CUSTODY_CHIP_TONE: Record<CustodyTone, string> = {
   ok: styles.custodyOk!,
   warn: styles.custodyWarn!,
   danger: styles.custodyDanger!,
 };
 
-// A hidden file input, self-contained: click-through-to-picker plus the
-// change handler live entirely inside this button, so Details.tsx and
-// app.tsx never need a global replace-target/hidden-input pair the way
-// upload does (upload has no "which document" to remember; replace does,
-// and this keeps that fact local to the one place that needs it).
+// Self-contained hidden input: picker + change handler live here.
 function ReplaceButton({
   doc,
   onReplace,
@@ -60,8 +44,7 @@ function ReplaceButton({
         className={shared.detailBtn!}
         onClick={() => inputRef.current?.click()}
       />
-      {/* Opened programmatically by the button above; `hidden` already keeps it
-          out of the a11y tree, so it carries no aria-hidden on top of that. */}
+      {/* Opened programmatically; `hidden` keeps it out of the a11y tree. */}
       <input
         ref={inputRef}
         type="file"
@@ -95,12 +78,7 @@ export function Details({
   shareHost,
 }: {
   doc: DriveDoc;
-  /** DOCKED, not drawn over the drive. At a desk the rail is a column beside
-   *  the set (Chrome.tsx's content row) and the set stays reachable behind
-   *  no scrim at all — which is the only way §8's own closing sentence works:
-   *  the rail follows the selection, so the selection has to be clickable
-   *  while it is open. The compact form factor keeps the modal drawer, where
-   *  a 308px column beside a 390px set is not a column. */
+  /** Docked: a column beside the set, no scrim (§8). */
   docked: boolean;
   folderName: (id: string | null | undefined) => string;
   onClose: () => void;
@@ -113,24 +91,19 @@ export function Details({
   loadHistory: (
     documentId: string
   ) => Promise<{ versions?: VersionEntry[]; vaultDenied?: unknown }>;
-  /** §6.2's route. The rail SENDS the member to the spine; it no longer
-   *  unfolds a second copy of it inside a drawer. */
+  /** §6.2's route: the rail SENDS the member to the spine. */
   onOpenVersions: (documentId: string) => void;
   onAddTag: (doc: DriveDoc, label: string) => void;
   onRemoveTag: (doc: DriveDoc, tagId: string) => void;
-  /** The roster and status line Share needs. `null` where this seat has no
-   *  grant plane to reach — the rail then offers no Share at all, rather than
-   *  a control that can only refuse. */
+  /** `null` where this seat has no grant plane — no Share offered at all. */
   shareHost: DocsShareHost | null;
 }) {
   const m = typeMeta(doc.media_type, doc.title);
   const trashed = doc.trashed;
   const [tab, setTab] = useState<RailTabId>("props");
-  // A document is shared as a STANDING GRANT through the one shared kit —
-  // Docs holds no share state of its own beyond "is the sheet open".
+  // Sharing is a standing grant via the shared kit; local state = sheet open.
   const [shareOpen, setShareOpen] = useState(false);
-  // Every outcome this rail produces — a grant, a revoke, a save — leaves
-  // through the app's single status line and nowhere else.
+  // Every outcome leaves through the app's single status line.
   const handleStatus = (message: string): void => shareHost?.onStatus(message);
   const actorVaultId = mountedScopes()[0]?.id ?? "";
   const [residentDocumentId, setResidentDocumentId] = useState<string | null>(
@@ -181,16 +154,9 @@ export function Details({
       );
     }
   };
-  // The blob custody projection (issue #352 phase 4) — null for an inline
-  // document or one the standing sweep hasn't reached yet, rendered as
-  // nothing rather than a guess.
+  // Blob custody projection (#352): null renders as nothing, not a guess.
   const custody = custodyMeta(doc.custody_state);
 
-  // ONE BODY, TWO HOUSINGS. The rail's contents do not change with the form
-  // factor — the same head, tabs, facts and verbs — so the fork is the box
-  // around them and nothing else. Docked it is a plain landmark in the
-  // content row; as a drawer it is a modal dialog over a scrim, and only that
-  // form gets a backdrop, because only that form takes the screen.
   const body = (
     <>
       <div className={styles.detailsHead}>
@@ -206,12 +172,9 @@ export function Details({
       </div>
       <div className={styles.detailsBody}>
         <div className={styles.hero} style={{ background: tintBg(m.cv, 12) }}>
-          {/* The kind glyph, the same one the rows and the cards wear, for
-                every kind including a picture — never a thumbnail (the rail
-                is a fact sheet, not a viewer; Open puts the document on the
-                stage), and never `DOC` / `PDF` / `XLS`, which is the filename
-                extension wearing a badge two lines above where the rail
-                prints it. */}
+          {/* Kind glyph, same one the rows and cards wear, for every kind
+                including a picture — never a thumbnail (the rail is a fact
+                sheet; Open stages the document), never an extension badge. */}
           <span className={styles.heroGlyph}>
             <Icon svg={KIND_ICONS_LG[m.glyph]} />
           </span>
@@ -231,11 +194,7 @@ export function Details({
           </div>
         ) : null}
         <div className={shared.detailActions}>
-          {/* Exactly one primary in this sheet (DESIGN.md: at most one
-                filled ink element per view) — opening the document is the
-                drawer's reason to exist; everything beside it is `quiet`,
-                which has no fill, so the six actions stop reading as six
-                equals. */}
+          {/* Exactly one primary per view (DESIGN.md); the rest are `quiet`. */}
           <ActionBtn
             icon="open"
             label="Open"
@@ -251,12 +210,8 @@ export function Details({
             href={doc.content_uri ?? undefined}
             extra={{ download: doc.title ?? "file" }}
           />
-          {/* THE STAR LOSES ITS ★ AND KEEPS ITS GLYPH. It used to draw a
-                filled/hollow star character beside the word while every other
-                verb in this rail drew nothing — one region, two vocabularies.
-                The line glyph is the same shape the row menu, the selection bar
-                and the stage give this verb; whether it is ON is `aria-pressed`
-                and the word, which is where a state belongs. */}
+          {/* Star keeps its glyph, takes no ★; ON lives in `aria-pressed`
+                + the label. */}
           {trashed ? null : (
             <ActionBtn
               icon="star"
@@ -267,11 +222,8 @@ export function Details({
               extra={{ "aria-pressed": Boolean(doc.starred) }}
             />
           )}
-          {/* NO IN-PLACE EDIT, for any kind. Docs holds, versions and files
-                a document; it does not open one to type into. A new version
-                arrives as a whole FILE through Replace, which is the same
-                door an upload comes through and the same version chain
-                History reads — one write path instead of two. */}
+          {/* NO IN-PLACE EDIT, for any kind: versions arrive as whole files
+                via Replace — one write path, the chain History reads. */}
           {trashed ? null : <ReplaceButton doc={doc} onReplace={onReplace} />}
         </div>
         {trashed ? null : (
@@ -294,9 +246,7 @@ export function Details({
                   className={shared.detailBtn!}
                   onClick={() => setShareOpen(true)}
                 />
-                {/* OBJECT-FIRST: the rail is already about this one document,
-                    so the sheet opens over it and asks only who. Outcomes go
-                    to the app's single status line, never a second one here. */}
+                {/* Opens over this document, not a separate screen. */}
                 <GrantSheet
                   open={shareOpen}
                   onClose={() => setShareOpen(false)}
@@ -312,9 +262,7 @@ export function Details({
             ) : null}
           </>
         )}
-        {/* §8's tab strip. Three tabs, one underline — the same 2px ink
-              bar the shelf strip uses, so "which of these am I looking at"
-              means the same thing everywhere in the app. */}
+        {/* Three tabs, one 2px underline — the same ink bar as the shelf. */}
         <div className={styles.tabs} role="tablist" aria-label="Details">
           {RAIL_TABS.map((entry) => (
             <button
@@ -349,9 +297,7 @@ export function Details({
           className={shared.detailBtn!}
           onClick={() => onOpenVersions(doc.document_id)}
         />
-        {/* §8's own closing sentence: the rail is about ONE row, and it
-              follows the selection rather than pinning itself to a document
-              the member has moved on from. */}
+        {/* §8's closing sentence: the rail follows the selection. */}
         <p className={styles.railFoot}>{RAIL_NOTES.footer}</p>
       </div>
       <div className={styles.detailsFoot}>
@@ -392,18 +338,13 @@ export function Details({
   );
 
   return docked ? (
-    // A LANDMARK, NOT A DIALOG. Docked, this takes no focus trap, no
-    // `aria-modal` and no backdrop: nothing behind it is inert, which is the
-    // point — the member is meant to keep picking rows while it is open.
-    // `<aside>` because it is content beside the set and about the set.
+    // A LANDMARK, NOT A DIALOG: no focus trap, no `aria-modal`, no backdrop.
     <aside className={styles.railDock} aria-label="Document details">
       {body}
     </aside>
   ) : (
     <>
-      {/* Dismiss-on-outside-click as a real button, so the same gesture has a
-          keyboard equivalent. Only the drawer has one: a docked column takes
-          nothing away, so there is nothing for an outside click to dismiss. */}
+      {/* Outside-click dismiss as a real button for keyboard parity. */}
       <button
         type="button"
         className={`kit-plain-btn ${styles.detailsBackdrop}`}

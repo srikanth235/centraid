@@ -1,23 +1,10 @@
 /*
- * The LOCAL transport of a `deliver-give` effect (#726 P2, reshaped by #750
- * abstraction 5): both vaults are open in this process, so "delivery" is a
- * direct call into `@centraid/vault`'s share/move doors.
- *
- * It owns no state machine. Every status this file used to write by hand now
- * goes through `applyEdgeSignal` → `share-coordinator.ts`. What remains here
- * is the genuinely local part: which vault calls to make, in which order.
- *
- * Since #825 this is the ONLY transport an edge has: copy-as-share retired,
- * so a placement is always between two vaults one person owns and both are
- * open in this process.
- *
- * That order is the invariant a crash can land inside of: the audience
- * projection ALWAYS commits (and earns its receipt) before a move deletes the
- * source, and `target_state` is what a replay resumes from. One row, however
- * many items the scope carries: the target phase is ONE `shareItemsToVault`
- * call and ONE receipt; the source phase loops the per-item `moveOutOfVault`
- * door but needs no progress tracking of its own, because deleting an
- * already-deleted projected row is a documented no-op (`removal.ts`).
+ * LOCAL transport of `deliver-give` (#726 P2, #750 ab5; the only transport
+ * since #825). No state machine here — every status goes through
+ * `applyEdgeSignal`. CRASH INVARIANT: the audience projection commits (and
+ * earns its receipt) before a move deletes the source; replay resumes from
+ * `target_state`; deleting an already-deleted projected row is a documented
+ * no-op (`removal.ts`).
  */
 
 import type {
@@ -42,11 +29,7 @@ export interface DeliverGiveLocallyInput {
   move: typeof moveOutOfVault;
 }
 
-/**
- * Project the scope into the audience vault and, for a move, release the
- * source. Throws only for a genuine vault failure — the executor turns that
- * into a parked edge whose effect the next tick retries.
- */
+/** Project the scope into the audience vault; release the source for a move. */
 export function deliverGiveLocally(input: DeliverGiveLocallyInput): EdgeRow {
   const { itemIds } = parseEdgeScope(input.row.mode, input.row.scope_json);
   let current = input.row;
@@ -59,11 +42,8 @@ export function deliverGiveLocally(input: DeliverGiveLocallyInput): EdgeRow {
       itemType: current.item_type,
       itemIds,
       sharedBy: current.owner_id,
-      // Threat 8's cross-owner `media.location` gate inside `readShareClosure`
-      // has nothing left to gate: an edge is a same-owner placement
-      // (Work→Personal), which that gate never applied to. A grant to ANOTHER
-      // person goes through the grant plane's fulfillment engine, which reads
-      // its own closure and applies its own policy.
+      // Threat 8's cross-owner gate has nothing to gate: edges are same-owner;
+      // grants to another person ride the grant plane's own closure + policy.
       crossOwner: false,
     });
     current = applyEdgeSignal(input.db, current, input.facts, {
@@ -84,7 +64,6 @@ export function deliverGiveLocally(input: DeliverGiveLocallyInput): EdgeRow {
       type: "source-released",
     });
   }
-  // A pass that found both halves already executed (replay after a crash)
-  // still has to end the edge — the reducer decides whether it is ended.
+  // A replay that found both halves executed still ends the edge here.
   return applyEdgeSignal(input.db, current, input.facts, { type: "settled" });
 }

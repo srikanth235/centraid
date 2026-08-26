@@ -192,7 +192,7 @@ describe("business", () => {
       .get(activity_id);
     expect(activity).toMatchObject({ notation: "work" });
     // The session remark is a memo annotation on the canonical activity
-    // (issue #274), never an activity column.
+    // (#274), never an activity column.
     const memo = db.vault
       .prepare(
         `SELECT body_text FROM knowledge_annotation

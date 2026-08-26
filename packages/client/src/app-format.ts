@@ -1,16 +1,7 @@
-// Pure formatting + display helpers lifted out of the app.ts shell IIFE.
-// Every function here is stateless: it depends only on its arguments and
-// ambient globals (Icon, ICON_PALETTE) declared in types.d.ts, so it can be
-// imported by app.ts and the route modules split out of it. The shared design
-// formatter is the one exception: relative time is a cross-surface contract.
+// Stateless formatters. Relative time is the shared design contract.
 import { formatRelativeTime } from "@centraid/design";
 
-// Canonical icon → palette-hue mapping, lifted from the Centraid Redesign
-// bold.jsx APPS fixture. Every app type has a fixed colour identity in the
-// design (Todos is always indigo, Habits always rose, etc.). Used when minting
-// a new app and when hydrating drafts off disk. Sparkle is the default icon for
-// drafts and freshly-prompted apps before an icon is inferred — it gets the
-// violet sub-accent.
+// Fixed colour identity per icon. Sparkle (drafts / pre-inference) is violet.
 const CANONICAL_ICON_COLOR_KEY: Record<string, ColorKeyType> = {
   Gift: "violet",
   Habit: "rose",
@@ -36,11 +27,8 @@ export function colorForIcon(iconKey: IconNameType | string): ColorHexType {
 }
 
 /**
- * Resolve a home tile's visual identity from a gateway listing row's
- * `app.json` keys (issue #263). Raw pass-through strings from the wire —
- * validate against the Icon registry / palette before trusting them.
- * Returns `null` when neither key resolves, so callers fall back to the
- * legacy stored UserAppMeta / inference chain.
+ * Tile identity from listing `app.json` keys (#263). Validate against Icon
+ * / palette before trusting. Neither key resolves → `null` (legacy fallback).
  */
 export function tileVisualFromListing(row: {
   iconKey?: string;
@@ -66,20 +54,16 @@ export function tileVisualFromListing(row: {
   };
 }
 
-// "X ago" relative-time formatter.
 export function relativeTime(iso?: string): string {
   return formatRelativeTime(iso);
 }
 
-// Compact token count for the standing-order list / run rail.
 export function fmtTokens(n: number): string {
   if (n <= 0) return "—";
   if (n < 1000) return String(n);
   return `${(n / 1000).toFixed(1)}k`;
 }
 
-// A cron next-run pill label: "Today, 6:00 PM" / "Tomorrow, 6:00 PM" /
-// "Thu, 6:00 PM" (weekday within the week, else "Mon 9").
 export function relativeRunLabel(d: Date): string {
   const startOfDay = (x: Date): number =>
     new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
@@ -101,7 +85,6 @@ export function relativeRunLabel(d: Date): string {
   return `${day}, ${time}`;
 }
 
-// Trigger-origin/kind → human label for a run row.
 export function runTriggerLabel(run: CentraidAutomationTurnRecord): string {
   if (run.triggerOrigin === "webhook") return "Webhook trigger";
   const byKind: Record<string, string> = {
@@ -114,8 +97,6 @@ export function runTriggerLabel(run: CentraidAutomationTurnRecord): string {
   return byKind[run.triggerKind] ?? "Run";
 }
 
-// A node is still in flight when it has started but not ended (and hasn't
-// errored). Drives the pulsing accent spinner on its rail circle.
 export function nodeRunStatus(
   node: CentraidAutomationItem
 ): "ok" | "running" | "fail" {
@@ -124,15 +105,8 @@ export function nodeRunStatus(
 }
 
 /**
- * Translate a 5-field cron expression into a small-caps display
- * string. Covers the patterns the builder harness actually emits
- * (`0 20 * * 0`, `0 17 * * 1-5`, `*[asterisk-slash]N * * * *`, …);
- * unrecognized expressions fall back to the raw text so the
- * end-user at least sees something stable.
- *
- * Time zone is the user's local — the cron expression runs in UTC
- * server-side, but for the in-app surface we show what they'll
- * actually feel.
+ * 5-field cron → display. Unknown patterns fall back to the raw expr.
+ * Server runs UTC; this shows local wall time.
  */
 export function cronToHuman(expr: string): string {
   const fields = expr.trim().split(/\s+/u);
@@ -145,23 +119,20 @@ export function cronToHuman(expr: string): string {
     string,
   ];
 
-  // The cron digits are UTC; anchor them with the UTC setter so
-  // toLocaleTimeString performs the actual UTC→local conversion.
+  // Digits are UTC; UTC setter lets toLocaleTimeString convert to local.
   const utcAnchor = (h: number, m: number): Date => {
     const date = new Date();
     date.setUTCHours(h, m, 0, 0);
     return date;
   };
-  // Force en-US 12-hour clock so host locale (24h vs 12h, AM vs am) cannot
-  // drift product copy or the app-format unit suite.
+  // en-US 12h so host locale cannot drift product copy or the unit suite.
   const fmtTime = (h: number, m: number): string =>
     utcAnchor(h, m).toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
     });
-  // When the conversion crosses midnight, day-of-week labels shift too:
-  // -1, 0, or +1 days relative to the UTC day.
+  // Midnight-crossing shifts weekday labels by -1/0/+1 vs the UTC day.
   const dayShift = (h: number, m: number): number => {
     const date = utcAnchor(h, m);
     const diff = (date.getDay() - date.getUTCDay() + 7) % 7;
@@ -178,14 +149,12 @@ export function cronToHuman(expr: string): string {
     "Saturday",
   ];
 
-  // Every N minutes
   const stepMin = min.match(/^\*\/(?<step>\d+)$/u);
   if (stepMin && hour === "*" && dom === "*" && month === "*" && dow === "*") {
     const n = Number(stepMin.groups?.step);
     return n === 1 ? "Every minute" : `Every ${n} minutes`;
   }
 
-  // Hourly on the dot
   if (
     min === "0" &&
     hour === "*" &&
@@ -208,8 +177,7 @@ export function cronToHuman(expr: string): string {
       if (dow === "1-5") return `Weekdays at ${time}`;
       if (dow === "0,6" || dow === "6,0") return `Weekends at ${time}`;
     }
-    // Crossing midnight turns "weekdays"/"weekends" into an off-by-one set
-    // with no honest compact label — fall through to the raw-expr fallback.
+    // Midnight-crossing weekdays/weekends have no honest compact label.
     const single = Number(dow);
     if (!Number.isNaN(single) && single >= 0 && single <= 6) {
       return `${dayNames[(single + shift + 7) % 7]}s at ${time}`;
@@ -219,9 +187,6 @@ export function cronToHuman(expr: string): string {
   return expr;
 }
 
-// Human-readable summary of an automation's trigger list. One cron → its
-// `cronToHuman` form; many crons → a count; webhook/data/condition triggers
-// each add a tag; an empty list reads "Manual only".
 export function triggersSummary(
   triggers: ReadonlyArray<{ kind: string; expr?: string }>
 ): string {
@@ -240,14 +205,8 @@ export function triggersSummary(
 }
 
 /**
- * Render a condition trigger's `where` clauses compactly: one
- * `column op value` line per clause — the automation editor and the
- * automation view screen (automationsData) both read a condition trigger's
- * `where`, so this lives here rather than duplicated per layer. Returns
- * `null` for an absent/empty
- * `where` (the caller decides what "no clause" renders as); falls back to
- * raw pretty-printed JSON for any shape that isn't a structured
- * `{column, op, value?}` array.
+ * Compact `column op value` lines. Empty `where` → `null`. Unknown shape →
+ * pretty JSON. Shared by editor and view so they cannot diverge.
  */
 export function formatWhereClauses(where: unknown): string | null {
   if (!Array.isArray(where) || where.length === 0) return null;
@@ -265,7 +224,6 @@ export function formatWhereClauses(where: unknown): string | null {
   return lines.join("\n");
 }
 
-// Duration in ms → "950ms" / "1.4s" / "2m 5s".
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
@@ -274,8 +232,6 @@ export function formatDuration(ms: number): string {
   return secs ? `${mins}m ${secs}s` : `${mins}m`;
 }
 
-// Pretty-print a JSON string, passing it through unchanged when it doesn't
-// parse (e.g. an already-formatted blob or a non-JSON value).
 export function prettyJson(raw: string): string {
   try {
     return JSON.stringify(JSON.parse(raw), null, 2);
@@ -284,7 +240,6 @@ export function prettyJson(raw: string): string {
   }
 }
 
-/** True when the template is an automation app (`kind: 'automation'`). */
 export function isAutomationTemplate(t: {
   kind?: "app" | "automation";
 }): boolean {

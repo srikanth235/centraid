@@ -32,33 +32,15 @@ import { sortOverviewRows } from "./automationsOverviewGrouping.js";
 
 import styles from "./AutomationsOverviewScreen.module.css";
 
-// Automations overview — the v9 operational page (issue #765, spec §3).
-//
-// The screen is a SEQUENCE OF BLOCKS and nothing else: section heads, row
-// lists, a note. Its identity (title, the two verbs) lives in the app bar
-// (`opsBar.ts`), and its condition lives in the frame's status line — both fed
-// from here through `publishRouteSignals` at the one point the data resolves,
-// so the count line and the health line can never disagree about state.
-//
-// What the tile grid used to say, and where it went:
-//   glyph plate / hue        → gone. A hue per automation was decoration; the
-//                              list answers "what needs me?" by ORDER and by
-//                              the one net-toned row, not by colour.
-//   status pill              → the row's meta word ("Active", "Failing").
-//   attention badge          → a clause in the row's sub line, because a count
-//                              of things waiting on you is a sentence, not a
-//                              chip.
-//   last-run blurb + foot    → the row's sub line.
-//   date-grouped run feed    → one flat "recent runs across everything" list;
-//                              each run states its own time in its sub.
+// Automations overview (#765, spec §3). The screen is a SEQUENCE OF BLOCKS:
+// section heads, row lists, a note. Its identity (title, the two verbs) lives
+// in the app bar (`opsBar.ts`) and its condition in the frame's status line,
+// both fed from here through `publishRouteSignals` at the one point the data
+// resolves — so the count line and the health line cannot disagree.
 
-/** Rows past this many make the page `full` — the state that earns a filter
- *  row. Below it the chips would be four controls over a list you can already
- *  see all of. */
+/** Past this the page is `full` and earns its chips. */
 const FULL_THRESHOLD = 8;
 
-/** How many runs the "across everything" list shows. Beyond this the section
- *  stops being a glance and starts being a log; the run view is the log. */
 const RECENT_CAP = 10;
 
 type ChipId = "all" | "failing" | "paused" | "drafts";
@@ -72,9 +54,7 @@ const CHIP_LABEL: Record<ChipId, string> = {
 
 const CHIP_ORDER: readonly ChipId[] = ["all", "failing", "paused", "drafts"];
 
-// The empty state, the error plate and the skeleton note are the same words
-// mobile's Automations screen says, so they live in `../../automations-copy.js`
-// and `../../surface-copy.js` (issue #805).
+// Same words mobile's Automations screen says, so they live in shared copy (#805).
 const EMPTY_TITLE = AUTOMATIONS_EMPTY_TITLE;
 const EMPTY_BODY = AUTOMATIONS_EMPTY_BODY;
 const EMPTY_ACTION = AUTOMATIONS_EMPTY_ACTION;
@@ -87,25 +67,15 @@ function errorBody(sinceClock: string | null): string {
 
 const LOADING_NOTE = SKELETON_NOTE;
 
-/**
- * The suggestions note.
- *
- * The v9 brief's sentence is "Suggestions come from what you already do by
- * hand." That is not true of this product: `loadOverviewSuggestions`
- * (templatesData.ts) returns a curated slice of the TEMPLATE CATALOGUE, keyed
- * off a fixed id list — nothing watches what you do by hand and nothing infers
- * a rule from it. The second half of the sentence is true and load-bearing, so
- * it stands verbatim; the provenance half states the provenance this product
- * actually has. See the receipt for the mismatch.
- */
+/** Suggestions are a curated slice of the TEMPLATE CATALOGUE — nothing watches
+ *  what a member does by hand, and the note must not claim otherwise. */
 const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** "4 August" — the day a failure streak began. Day and month only: a year on
- *  a run that failed this week reads as an archive entry. */
+/** Day and month only: a year reads as an archive entry. */
 function dayLabel(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, {
     day: "numeric",
@@ -113,7 +83,6 @@ function dayLabel(ms: number): string {
   });
 }
 
-/** "09:12" — the clock the error panel's "nothing has run since" clause takes. */
 function clockLabel(ms: number): string {
   return new Date(ms).toLocaleTimeString(undefined, {
     hour: "2-digit",
@@ -122,21 +91,14 @@ function clockLabel(ms: number): string {
 }
 
 interface FailureStreak {
-  /** How many runs in a row failed, newest-first, before the first success. */
   count: number;
-  /** When the streak started — the OLDEST failure in it. */
+  /** The OLDEST failure in the streak. */
   startedAt: number;
 }
 
-/**
- * The unbroken run of failures at the head of an automation's history.
- *
- * Counted from the newest run backwards and stopped at the first success,
- * which is what makes "has failed its last 3 runs" a true sentence rather than
- * a total. `null` when the automation's newest run succeeded, or when the feed
- * carries no run for it at all (the window is 100 runs per lane — a quiet
- * automation can fall off the end of it).
- */
+/** Newest run backwards, stopped at the first success — that is what makes
+ *  "failed its last 3 runs" true rather than a total. `null` when the newest
+ *  run succeeded or the 100-run lane window carries none. */
 function failureStreak(
   ref: string,
   runs: readonly AuOverviewRunDTO[]
@@ -152,7 +114,6 @@ function failureStreak(
   return count === 0 ? null : { count, startedAt };
 }
 
-/** The row's second line: what fires it, then how it last went. */
 function rowSub(
   row: AuOverviewRowDTO,
   streak: FailureStreak | null
@@ -181,17 +142,14 @@ interface OverviewView {
   countLine: string;
   healthLabel: string;
   healthDetail: string;
-  /** The automation the status line's one inline verb opens. */
   failureRef: string | null;
-  /** The newest run's clock, kept for the error panel's "since" clause. */
+  /** Kept for the error panel's "since" clause. */
   lastRunClock: string | null;
   empty: boolean;
   full: boolean;
 }
 
-/** Everything the render and the published signals both need, derived once so
- *  the count line and the status line cannot be computed from two different
- *  readings of the same data. */
+/** Derived once, so render and published signals cannot read the data twice. */
 function deriveView(data: AuOverviewData, chip: ChipId): OverviewView {
   const memberRows = sortOverviewRows(
     data.rows.filter((row) => row.systemLane === undefined)
@@ -228,8 +186,7 @@ function deriveView(data: AuOverviewData, chip: ChipId): OverviewView {
           ? drafts
           : memberRows;
 
-  // The worst failure leads the status line: the longest streak, because "has
-  // failed its last 6 runs" is a different problem from "failed once".
+  // Longest streak leads: "failed its last 6 runs" is a different problem.
   const worst = [...failing].sort((a, b) => {
     const aStreak = streakByRef.get(a.ref)?.count ?? 1;
     const bStreak = streakByRef.get(b.ref)?.count ?? 1;
@@ -283,15 +240,12 @@ export default function AutomationsOverviewScreen({
   const [errMsg, setErrMsg] = useState("");
   const [chip, setChip] = useState<ChipId>("all");
   const [lastReadAt, setLastReadAt] = useState<number | null>(null);
-  // Survives the transition INTO the error state: the panel's "nothing has run
-  // since 09:12" clause is about the last reading that worked, so it cannot
-  // come from the data the screen no longer has.
+  // Survives the transition INTO the error state: the panel's "since" clause is
+  // about the last reading that worked.
   const [lastRunClock, setLastRunClock] = useState<string | null>(null);
 
-  // Keep the latest loadData without rebinding reload. Routes historically pass
-  // an inline async prop; if reload depended on that identity, every parent
-  // re-render remounted the load effect, thrashing the error/Retry UI (desktop
-  // e2e 8.2).
+  // Routes pass an inline async prop: depending on its identity would remount
+  // the load effect on every parent render and thrash the Retry UI.
   const loadDataRef = useRef(loadData);
   useEffect(() => {
     loadDataRef.current = loadData;
@@ -314,8 +268,7 @@ export default function AutomationsOverviewScreen({
     []
   );
 
-  /** The Reconnect affordance — the only path that puts the screen back into
-   *  `loading`; the mount read starts there already. */
+  /** The only path back into `loading`; the mount read starts there. */
   const reload = useCallback((): void => {
     setState("loading");
     void load();
@@ -325,8 +278,7 @@ export default function AutomationsOverviewScreen({
     void load();
   }, [load]);
 
-  // With no suggestion loader there are no suggestions — derived, not synced,
-  // so no effect has to blank the list out.
+  // Derived, not synced: no effect has to blank the list out.
   const [fetchedSuggestions, setFetchedSuggestions] = useState<
     AuOverviewSuggestionDTO[]
   >([]);
@@ -359,10 +311,8 @@ export default function AutomationsOverviewScreen({
             ? "full"
             : "ready";
 
-  // The inline verb opens an automation that may have changed identity since
-  // the effect last ran; the handler is read through a ref so the published
-  // signal's deps stay primitive and the frame is not re-signalled on every
-  // parent render.
+  // Read through a ref so the published signal's deps stay primitive and the
+  // frame is not re-signalled on every parent render.
   const openRef = useRef(onOpenAutomation);
   useEffect(() => {
     openRef.current = onOpenAutomation;
@@ -421,8 +371,7 @@ export default function AutomationsOverviewScreen({
     );
   }
 
-  // `view` is non-null on every path past the two early returns above: it is
-  // derived from the same `state` those branches eliminated.
+  // Non-null past the two early returns: derived from the `state` they eliminate.
   const v = view as OverviewView;
 
   const automationRows: RowDef[] = v.visibleRows.map((row) => {
@@ -433,10 +382,8 @@ export default function AutomationsOverviewScreen({
       action: {
         label: "Open",
         onClick: () => onOpenAutomation(row.ref),
-        // The one thing that distinguishes ten identical "Open" controls. It
-        // is a hint and not an `aria-label` because the button already renders
-        // visible text (aria-label discipline, issue #708 B.4); the shell
-        // lowers it to `title`, the phone to `accessibilityHint`.
+        // A hint, not an `aria-label`: the button already renders visible text
+        // (aria-label discipline, #708 B.4).
         hint: `Open ${row.name}`,
       },
       id: row.ref,

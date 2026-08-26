@@ -1,14 +1,8 @@
 /*
- * Launch planning: what process to spawn for a harness kind, and with what
- * environment.
- *
- * Native-ACP kinds spawn their own CLI with the ACP flag. Adapter-backed kinds
- * spawn `node <adapter entry>`; the user's `binPath` is redirected into the
- * adapter's "where is the real CLI" env var, since with an adapter in the
- * middle `binPath` names the harness CLI, not the process we launch.
- *
- * `config.env` is the ONE per-kind launch-env field and applies to both
- * flavours — headless presets and self-update suppressors are the same fact.
+ * Launch planning per harness kind. Native kinds spawn their own CLI + ACP
+ * flag; adapter-backed spawn `node <adapter entry>` with `binPath` redirected
+ * into the adapter's CLI locator env var. `config.env` is the ONE launch-env
+ * field for both flavours.
  */
 
 import type { TurnStreamEvent } from "@centraid/server/engine";
@@ -23,14 +17,7 @@ export interface LaunchPlan {
   env: NodeJS.ProcessEnv;
 }
 
-/**
- * Decide what process to spawn and with what environment.
- *
- * Throws when a launch is impossible (no binary, adapter not installed).
- * Findings worth telling the owner about are pushed onto `notices` rather than
- * emitted here, so they reach the transcript in turn order — after the
- * handshake has proved the harness is actually alive.
- */
+/** Throws when impossible; owner-facing findings ride `notices` (turn order). */
 export function planLaunch(
   config: AcpTurnConfig,
   extraPath: string | undefined,
@@ -50,9 +37,8 @@ export function planLaunch(
       ...(config.binPath ? { binPath: config.binPath } : {}),
       ...(extraPath ? { extraPath } : {}),
     });
-    // Native kinds get the same per-kind launch env as adapter-backed ones —
-    // it is one field on the config, not an adapter-only concern. `auggie` and
-    // `droid` need theirs to stop the CLI self-updating mid-session.
+    // Native kinds get the same per-kind launch env; auggie/droid need it to
+    // stop mid-session self-update.
     Object.assign(nativeEnv, config.env ?? {});
     return { bin, args: [...config.acpArgs, ...extraArgs], env: nativeEnv };
   }
@@ -66,12 +52,8 @@ export function planLaunch(
   if (config.binPath && adapter.binPathEnvVar)
     env[adapter.binPathEnvVar] = config.binPath;
 
-  // The claude adapter computes `ALLOW_BYPASS = !IS_ROOT || !!IS_SANDBOX` at
-  // module load and silently downgrades the requested mode when it is false.
-  // Running as root is the only case where that bites, and it is exactly the
-  // case where an unattended gateway most needs the non-interactive mode, so
-  // we opt in explicitly — and say so, rather than letting the user discover
-  // it as a mysteriously stalled tool call.
+  // The claude adapter downgrades the requested mode when root-without-
+  // sandbox; opt in explicitly for root unattended gateways, and say so.
   if (adapter.bypassNeedsSandboxWhenRoot && isRoot() && !env.IS_SANDBOX) {
     env.IS_SANDBOX = "1";
     notices.push({
@@ -85,8 +67,7 @@ export function planLaunch(
     });
   }
 
-  // `process.execPath` (not a node_modules/.bin shim): the adapters are ESM
-  // Node programs, and `spawn-env.ts` strips `node_modules/.bin` off PATH.
+  // `process.execPath`, not a .bin shim — spawn-env strips .bin off PATH.
   return { bin: process.execPath, args: [entry, ...extraArgs], env };
 }
 

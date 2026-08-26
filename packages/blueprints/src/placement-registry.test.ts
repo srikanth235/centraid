@@ -1,18 +1,9 @@
 /*
- * A4/A7 tripwires for `apps/_shared/placement-registry.ts` (issue #712).
- *
- *   - A4: `PlaceableItemType` must stay exactly `packages/vault`'s
- *     `ShareableItemType` minus `"locker.item"`. Blueprints cannot IMPORT
- *     `@centraid/vault` (see the registry's own header — that package is
- *     Node-only and blueprint apps are served straight to a browser), so
- *     this is a TRIPWIRE, not a type-level proof: it source-scans
- *     `closure.ts`'s literal array the same way `blueprint-seats.test.ts`
- *     source-scans `app.json` files, and fails loudly the moment the two
- *     lists drift instead of failing silently at a browser runtime that
- *     never typechecks against the real union.
- *   - A7: `"locker.item"` must never appear as a registry entry, and no
- *     `.tsx` source under `apps/` may pass it as a placement control's
- *     `itemType` — Locker is structurally excluded from sharing.
+ * A4/A7 tripwires for `apps/_shared/placement-registry.ts` (#712). A4:
+ * `PlaceableItemType` stays vault's `ShareableItemType` minus `"locker.item"`
+ * — blueprints cannot import `@centraid/vault`, so this source-scans
+ * `closure.ts` rather than proving it in types. A7: Locker is structurally
+ * excluded from sharing, in the registry and in every `itemType` passed.
  */
 
 import { readFileSync, readdirSync } from "node:fs";
@@ -21,9 +12,7 @@ import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-// Loaded by file URL (the blueprint apps are browser ES modules outside this
-// package's TS program — the same trick write-target.test.ts and
-// docs-media.test.ts use), so the shape is declared locally.
+// Browser ES modules outside this TS program, so the shape is local.
 interface PlacementEntity {
   itemType: string;
   appId: string;
@@ -46,8 +35,7 @@ const CLOSURE_PATH = path.resolve(
 );
 const APPS_DIR = path.join(PACKAGE_ROOT, "apps");
 
-/** Pull the quoted string literals out of vault's `SHAREABLE_ITEM_TYPES`
- *  array — a source scan, not an import, per the header above. */
+/** A source scan, not an import — see the header. */
 function vaultShareableItemTypes(): string[] {
   const source = readFileSync(CLOSURE_PATH, "utf8");
   const match = source.match(
@@ -62,8 +50,6 @@ function vaultShareableItemTypes(): string[] {
   return [...match[1]!.matchAll(/"(?<name>[^"]+)"/gu)].map((m) => m[1]!);
 }
 
-// Every TypeScript/TSX source file under this package's own `apps/` — the
-// same universe `blueprint-seats.test.ts` scans.
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -83,9 +69,7 @@ describe("placement registry (A4) mirrors vault's ShareableItemType minus locker
   const vaultTypes = vaultShareableItemTypes();
 
   it("vault's own list still contains locker.item — else this tripwire is stale", () => {
-    // Sanity check on the scan itself: if vault ever drops locker.item from
-    // ShareableItemType, the A7 exclusion becomes moot and this whole file's
-    // premise needs revisiting, not a silent pass.
+    // If vault drops locker.item, A7 is moot: revisit, never pass silently.
     expect(vaultTypes).toContain("locker.item");
   });
 
@@ -122,17 +106,9 @@ describe("locker is structurally excluded from placement (A7)", () => {
 });
 
 /*
- * A6 — THE LEDGER-ROOT AUDIT. Tally is the app whose whole posture is "born
- * shared": a Splitwise group is a multi-party balance and belongs in a
- * household vault from the moment it exists. It is therefore the honest test
- * of whether engine A is an ENGINE or just Photos' sharing code with a wider
- * type — the issue's own framing is that whatever edit Tally needs is an
- * ENGINE DEFECT, not a Tally patch.
- *
- * VERDICT: it consumes cleanly. Tally supplies a registry row and two call
- * sites; the engine has no Tally-shaped code in it at all. These assertions
- * are what would go red if someone "fixed" that by teaching the engine about
- * an app.
+ * A6. Tally is "born shared", so it tests whether engine A is an ENGINE or
+ * Photos' sharing code with a wider type: any edit Tally needs is an ENGINE
+ * DEFECT, not a Tally patch.
  */
 describe("Tally consumes the placement engine with zero engine edits (A6)", () => {
   const ENGINE_FILES = [
@@ -154,10 +130,7 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
   });
 
   it("no engine module branches on an app id or an item type", () => {
-    // The registry file itself names apps — that is what a registry IS — so
-    // only the RENDERERS are held to this. A renderer that grew an
-    // `if (itemType === "tally.group")` would be the fourth hand-copied union
-    // arriving by the back door.
+    // Only RENDERERS are held to this; a registry names apps by definition.
     for (const file of ENGINE_FILES.slice(1)) {
       const source = readFileSync(file, "utf8");
       expect(source.toLowerCase(), file).not.toContain("tally");
@@ -166,23 +139,8 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
     }
   });
 
-  // The pair that asserted Tally's own call sites — `tally/components/
-  // GroupManager.tsx` on the web and `apps/mobile/src/apps/tally/TallyHome.tsx`
-  // on the phone — passed the engine an `itemType` from the registry and an id,
-  // and nothing else. Both surfaces were removed whole pending a ground-up
-  // redesign, so the test is dropped rather than softened to a conditional
-  // read: a test that skips itself when its subject is missing passes for the
-  // wrong reason, and would go on passing if the rebuilt Tally handed the
-  // engine something it had to learn. Restore it with the screens. The
-  // registry entry it stood over (`tally.group`) is still asserted above, and
-  // the engine-side ban below is unaffected.
-
   it("record-only Tally reaches placement without touching custody", () => {
-    // The two engines are independent by construction: being "born shared"
-    // (engine A) says nothing about carrying bytes (engine B). Tally is the
-    // app that proves the split, and `blueprint-seats.test.ts` already gates
-    // the custody half — this only pins that placement did not drag any of it
-    // in through the back door.
+    // Being "born shared" says nothing about carrying bytes.
     const dir = path.join(APPS_DIR, "tally");
     for (const file of sourceFiles(dir)) {
       const text = readFileSync(file, "utf8");
@@ -193,15 +151,8 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
 });
 
 describe("Docs shares its actual folder container", () => {
-  // The native half of this pair asserted the same two facts about
-  // `apps/mobile/src/apps/docs/DocsHome.tsx` until that screen was removed
-  // pending its v11 design handoff. It is dropped rather than softened to a
-  // conditional read: a test that skips itself when its subject is missing
-  // passes for the wrong reason, and would go on passing if the rebuilt drive
-  // shared the wrong container. Restore it with the screen.
-  // #825 moved Docs' sharing off the Commons placement door and onto the
-  // grant plane too: a shared folder is one standing grant over the declared
-  // `docs.folder` subject, not a batch of item ids placed into a vault.
+  // A shared folder is ONE standing grant over `docs.folder`, never a batch
+  // of placed item ids (#825). Restore the native half with its screen.
   it("web shares the selected folder as one docs.folder grant", () => {
     const web = readFileSync(
       path.join(APPS_DIR, "docs", "app-root.tsx"),
@@ -209,8 +160,7 @@ describe("Docs shares its actual folder container", () => {
     );
     expect(web).toContain('subjectType: "docs.folder"');
     expect(web).toContain("shareFolder.folder_id");
-    // No app-private share plumbing survives anywhere in the app: no commons
-    // ShareSheet, no member array, no `window.centraid.share` of Docs' own.
+    // No app-private share plumbing survives anywhere in Docs.
     for (const file of sourceFiles(path.join(APPS_DIR, "docs"))) {
       const text = readFileSync(file, "utf8");
       expect(text, file).not.toContain("ShareSheet");
@@ -231,12 +181,8 @@ describe("Docs shares its actual folder container", () => {
   });
 });
 
-// #825 moved Photos' sharing off the Commons placement door and onto the
-// grant plane: a share is now a standing grant over ONE declared subject, not
-// a batch of item ids placed into a vault. What these two hold is that the
-// move is complete on the native seat — the subject types are the registry's
-// (`media.asset`, `core.collection`), and the retain half (receiving someone
-// else's album) is untouched, because retaining is not sharing.
+// A share is a standing grant over ONE declared subject (#825); retaining is
+// not sharing and stays on the Commons plane.
 describe("native Photos selection reaches the grant plane by subject", () => {
   it("shares the selected photograph as one media.asset grant", () => {
     const source = readFileSync(
@@ -247,8 +193,6 @@ describe("native Photos selection reaches the grant plane by subject", () => {
       "utf8"
     );
     expect(source).toContain('subjectType: "media.asset"');
-    // No app-private share plumbing survives: no member array, no source
-    // vault, no `session.share` call of Photos' own.
     expect(source).not.toContain("giveMany");
     expect(source).not.toContain("session.share");
     expect(source).not.toContain("itemIds");
@@ -265,7 +209,6 @@ describe("native Photos selection reaches the grant plane by subject", () => {
     expect(nativeAlbum).not.toContain('itemType="core.collection"');
     expect(nativeAlbum).not.toContain("Share album with household");
     expect(nativeAlbum).toContain('subjectType: "core.collection"');
-    // Retaining a received album is the Commons plane and stays exactly so.
     expect(nativeAlbum).toContain('itemType: "core.collection"');
     expect(nativeAlbum).toContain("Save to my vault");
 
@@ -353,10 +296,8 @@ describe("Save to my vault is gated by exact Commons residency", () => {
         PACKAGE_ROOT,
         "../../apps/mobile/src/apps/photos/AlbumDetail.tsx"
       ),
-      // The two native Docs surfaces (DocumentViewer.tsx, DocsHome.tsx) were in
-      // this list until they were removed pending the v11 design handoff. The
-      // rebuilt drive must rejoin it: the exact-residency gate is what stops
-      // "Save to my vault" appearing over an item that was never in Commons.
+      // The rebuilt Docs surfaces must rejoin this list: the exact-residency
+      // gate is what keeps "Save to my vault" off a non-Commons item.
     ];
     for (const file of files) {
       const source = readFileSync(file, "utf8");

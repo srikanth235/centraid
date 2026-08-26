@@ -1,7 +1,7 @@
 // One covering rule, two stores. SQLite rows say `null` for an unset column
 // and manifests say `undefined`; both planes must read them identically, or
 // the install-grant top-up and the consent memory come to disagree about what
-// the owner said (issue #541 review).
+// the owner said (#541 review).
 
 import { describe, expect, test } from "vitest";
 

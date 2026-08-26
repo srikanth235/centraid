@@ -1,28 +1,12 @@
 /*
  * The one store answering "may an edge cross between these two vaults" and
- * "where does that vault live" (issue #726 P2 §3 + P3 decisions 1–3; reshaped
- * by issue #750 invariants 1–2).
- *
- * Three tables, three facts, no duplication:
- *
- *   - `vault_directory` — one stable identity record (public key + label) per
- *     known vault, local and peer alike. Written only by the link ceremony,
- *     never by a route assertion (a route is never identity).
- *   - `vault_routes`   — ONE row per vault that lives elsewhere; its mere
- *     presence is what "remote" means (D3: locality is routing, not
- *     semantics). Two local vaults linked to the same peer vault resolve
- *     through this single row BY CONSTRUCTION, so one verified assertion
- *     re-routes every link at once.
- *   - `vault_links`    — pure permission: the canonical pair + approvals.
- *
- * A pair is always stored smaller-vault-id-first, so lookup is
- * order-independent and one pair can only ever have one row. Approval is the
- * ceremony in both localities: locally each owner's device approves its own
- * side; remotely minting the ticket is one side's approval and redeeming it
- * is the other's. An edge crosses only with BOTH sides approved.
- */
-
-import { randomUUID } from "node:crypto";
+ * "where does that vault live" (#726, #750 invariants 1–2). `vault_directory`
+ * holds ONE identity record per vault, written by the ceremony and never by a
+ * route assertion — a route is never identity. `vault_routes` holds ONE row
+ * per vault that lives elsewhere, and its mere presence is what "remote"
+ * means. `vault_links` is pure permission, stored smaller-id-first so lookup
+ * is order-independent, and an edge crosses only with BOTH sides approved.
+ */ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { SQLInputValue } from "node:sqlite";
 
@@ -66,7 +50,6 @@ export class VaultLinksStore {
     this.onLinkChanged = onLinkChanged;
   }
 
-  /** For hosts holding a data-dir path rather than an open handle. */
   static open(
     source: string | GatewayDatabase,
     onLinkChanged?: LinkChangeListener
@@ -74,7 +57,6 @@ export class VaultLinksStore {
     return new VaultLinksStore(databaseFor(source), onLinkChanged);
   }
 
-  /** Announce a settled link, and return it unchanged for chaining. */
   private announce<T extends VaultLink | undefined>(
     link: T,
     reason: LinkChangeReason
@@ -100,10 +82,8 @@ export class VaultLinksStore {
     return this.row("SELECT * FROM vault_links WHERE link_id = ?", linkId);
   }
 
-  /** The link between this exact pair, in either argument order. Named
-   *  `findPair`, not `find` (oxlint's `unicorn/no-array-method-this-argument`
-   *  pattern-matches any two-argument `.find(...)` call as Array.prototype's
-   *  `(predicate, thisArg)` form, regardless of receiver type). */
+  /** Named `findPair`, not `find`: oxlint's
+   *  `unicorn/no-array-method-this-argument` mis-matches any two-arg `.find`. */
   findPair(vaultX: string, vaultY: string): VaultLink | undefined {
     const [a, b] = pairOf(vaultX, vaultY);
     return this.row(
@@ -113,7 +93,6 @@ export class VaultLinksStore {
     );
   }
 
-  /** Every link naming this vault on either side. */
   listFor(vaultId: string): VaultLink[] {
     return this.rows(
       `SELECT * FROM vault_links
@@ -124,7 +103,6 @@ export class VaultLinksStore {
     );
   }
 
-  /** Every link naming ANY vault this owner owns, on either side. */
   listForOwner(ownerId: string): VaultLink[] {
     return this.rows(
       `SELECT * FROM vault_links vl
@@ -142,20 +120,15 @@ export class VaultLinksStore {
     return this.rows("SELECT * FROM vault_links ORDER BY created_at");
   }
 
-  /** A vault's one stable identity record (#750 invariant 1). */
   directoryEntry(vaultId: string): VaultDirectoryEntry | undefined {
     return directoryEntryOf(this.gatewayDatabase, vaultId);
   }
 
-  /**
-   * How to reach `vaultId` — `undefined` when it is a vault on this gateway
-   * (a route row's mere presence is what "remote" means, #750 invariant 2).
-   */
+  /** `undefined` when `vaultId` lives on this gateway (#750 invariant 2). */
   routeFor(vaultId: string): LinkRoute | undefined {
     return routeOf(this.gatewayDatabase, vaultId);
   }
 
-  /** Write-once identity, replaceable label — see `upsertDirectoryRow`. */
   private upsertDirectory(
     vaultId: string,
     publicKey: string,
@@ -171,12 +144,10 @@ export class VaultLinksStore {
     );
   }
 
-  /** Install/replace the peer's single route row (ceremony authority). */
   private upsertRoute(vaultId: string, route: LinkRoute): void {
     upsertRouteRow(this.gatewayDatabase, vaultId, route);
   }
 
-  /** `peerViewOf` (vault-link-row.ts) against this store's lookups. */
   private peerView(
     link: VaultLink,
     localVaultId: string
@@ -184,19 +155,12 @@ export class VaultLinksStore {
     return peerViewOf(link, localVaultId, this);
   }
 
-  /** `peerView` by link id — for callers holding a durable `link_id` row. */
   peerViewFor(linkId: string, localVaultId: string): LinkedPeer | undefined {
     const link = this.get(linkId);
     if (!link || link.revoked) return undefined;
     return this.peerView(link, localVaultId);
   }
 
-  /**
-   * Propose a link from a vault the caller owns to another vault ON THIS
-   * GATEWAY. Idempotent: proposing the same pair again returns the existing
-   * row untouched — the other owner's device approves separately, and
-   * proposing never re-marks an approval.
-   */
   propose(input: {
     fromVaultId: string;
     fromPublicKey: string;
@@ -204,13 +168,6 @@ export class VaultLinksStore {
     toPublicKey: string;
     fromPartyId?: string;
     toPartyId?: string;
-    /**
-     * Both vaults are on THIS gateway (unlike the remote ceremony's
-     * self-declared label), so their display names are already known and
-     * are recorded immediately — #726 P6 gap 3: a same-machine link must not
-     * sit unlabeled forever the way it did before (`propose()` used to write
-     * neither label at all).
-     */
     fromLabel?: string;
     toLabel?: string;
     now?: () => number;
@@ -222,8 +179,6 @@ export class VaultLinksStore {
     const linkId = randomUUID();
     const createdAt = new Date((input.now ?? Date.now)()).toISOString();
     const proposed = this.gatewayDatabase.transaction(() => {
-      // Both identities land in the directory; neither vault gets a route
-      // row, because both are here (#750: no route row IS "local").
       this.upsertDirectory(
         input.fromVaultId,
         input.fromPublicKey,
@@ -236,9 +191,7 @@ export class VaultLinksStore {
         input.toLabel ?? null,
         createdAt
       );
-      // The proposer's own side is approved by definition — the caller is a
-      // device whose owner owns it. The other side stays NULL until that
-      // owner's device approves.
+      // The other side stays NULL until that owner's device approves.
       this.gatewayDatabase.run(
         `INSERT INTO vault_links (
            link_id, vault_a, vault_b, approved_by_a, approved_by_b,
@@ -266,11 +219,8 @@ export class VaultLinksStore {
     return this.announce(proposed, "proposed");
   }
 
-  /**
-   * Approve `vaultId`'s side of `linkId`. Idempotent — approving twice keeps
-   * the original timestamp. `undefined` when `vaultId` names neither side, so
-   * the caller refuses `not_found` without leaking which side was wrong.
-   */
+  /** `undefined` when `vaultId` names neither side — the caller refuses
+   *  without leaking which side was wrong. */
   approve(
     linkId: string,
     vaultId: string,
@@ -293,14 +243,6 @@ export class VaultLinksStore {
     return this.announce(this.get(linkId)!, "approved");
   }
 
-  /**
-   * Record the far side of a COMPLETED remote ceremony (P3 decision 3: links
-   * are mutual and direction-free). Both approvals are stamped here because
-   * the ceremony IS the mutual approval — one side minted the ticket, the
-   * other redeemed it — and which side did which decides nothing. Identity
-   * lands in the directory, the peer's route in its ONE `vault_routes` row
-   * (ceremony authority: a re-run ceremony re-binds both).
-   */
   recordPeer(
     input: PeerLinkInput,
     approvals?: {
@@ -318,9 +260,7 @@ export class VaultLinksStore {
     return peer;
   }
 
-  /** `recordPeer`'s body, callable inside an already-open transaction
-   *  (`redeem` burns the ticket and writes the link in ONE transaction, and
-   *  SQLite transactions do not nest). */
+  /** Callable inside an open transaction — SQLite's do not nest. */
   private writePeer(
     input: PeerLinkInput,
     approvals?: {
@@ -367,9 +307,6 @@ export class VaultLinksStore {
     return this.peerForVault(input.peerVaultId, input.localVaultId);
   }
 
-  /** Complete the explicit party identities exchanged by a remote ceremony
-   * without reissuing approvals, changing routes, or treating vault keys as
-   * party ids. Both gateway copies end with the same direction-free mapping. */
   recordCommonsParties(input: {
     localVaultId: string;
     localPartyId: string;
@@ -401,12 +338,8 @@ export class VaultLinksStore {
   }
 
   /**
-   * Burn the ticket and write the link in ONE transaction, so a ticket can
-   * never be redeemed twice — not by a racing second scanner, not by a replay
-   * after a crash between the two writes. The redemption BINDS the link to
-   * the first presenting endpoint, and records into the directory the public
-   * key the TICKET promised (`peer_link_tickets.vault_public_key`), not
-   * whatever the vault holds by redemption time.
+   * Burn and write in ONE transaction, so a ticket can never be redeemed
+   * twice. The directory records the key the TICKET promised.
    */
   redeem(input: LinkRedemption): LinkedPeer | undefined {
     const peer = this.gatewayDatabase.transaction(() => {
@@ -425,8 +358,6 @@ export class VaultLinksStore {
             ? {}
             : { permissions: input.permissions }),
         },
-        // Minting the ticket was this side's approval; redeeming it is the
-        // far side's. Same two columns a local ceremony fills.
         { local: claimed.createdAt, peer: new Date().toISOString() }
       );
     });
@@ -438,7 +369,6 @@ export class VaultLinksStore {
     return peer;
   }
 
-  /** The live link a proved EndpointId currently routes to. */
   linkForEndpoint(peerEndpointId: string): VaultLink | undefined {
     return this.row(
       `SELECT vl.* FROM vault_links vl
@@ -450,7 +380,6 @@ export class VaultLinksStore {
     );
   }
 
-  /** The same link, seen from the local vault the routed side is linked to. */
   peerForEndpoint(peerEndpointId: string): LinkedPeer | undefined {
     const link = this.linkForEndpoint(peerEndpointId);
     if (!link) return undefined;
@@ -462,15 +391,10 @@ export class VaultLinksStore {
   }
 
   /**
-   * The live link a proved EndpointId routes to, for a NAMED peer vault
-   * (audit #726 finding 2). An iroh endpoint is per-GATEWAY, not per-vault
-   * (D1 invariant 2: one `endpointSecretKey` per box) — two vaults co-hosted
-   * on one remote gateway share an EndpointId, so `linkForEndpoint` alone
-   * cannot tell which of them a request concerns. Every route that attributes
-   * an edge to a counterparty MUST resolve through this method instead,
-   * feeding it a vault id the request itself claims (never inferred from the
-   * endpoint), so a wrong or stale claim resolves to nothing rather than to
-   * the other co-hosted vault's link.
+   * An endpoint is per-GATEWAY, so co-hosted vaults share one and
+   * `linkForEndpoint` cannot tell which a request concerns. Every route
+   * attributing an edge MUST resolve through here, on a vault id the REQUEST
+   * claims, so a stale claim resolves to nothing (#726).
    */
   linkForPeer(
     peerEndpointId: string,
@@ -488,8 +412,6 @@ export class VaultLinksStore {
     );
   }
 
-  /** The same link, seen from the local vault — the disambiguated counterpart
-   *  to `peerForEndpoint` (see `linkForPeer`). */
   peerForEndpointAndVault(
     peerEndpointId: string,
     peerVaultId: string
@@ -501,22 +423,14 @@ export class VaultLinksStore {
     return this.peerView(link, localVaultId);
   }
 
-  /** Admission predicate for the peer ALPN. Never a device question. Coarse
-   *  by design (endpoint-only): admission only asks "is there anyone to hear
-   *  from at all" — per-request attribution is `peerForEndpointAndVault`'s job. */
   isLinked(peerEndpointId: string): boolean {
     return this.linkForEndpoint(peerEndpointId) !== undefined;
   }
 
   /**
-   * Does this gateway hold ANY live remote link?
-   *
-   * A rotated peer dials from an EndpointId nothing here recognises — that is
-   * the case route re-assertion exists for — so admission cannot be "I already
-   * know this endpoint". It is "I have someone to hear from at all": with no
-   * links and no live ceremony the plane accepts nothing, and with either the
-   * only two routes an unrecognised caller can reach are both gated on a
-   * secret or a vault signature.
+   * A rotated peer dials from an EndpointId nothing here recognises, so
+   * admission is "I have someone to hear from at all", never "I know this
+   * endpoint".
    */
   hasAnyLink(): boolean {
     return (
@@ -532,7 +446,6 @@ export class VaultLinksStore {
     );
   }
 
-  /** The live link to a vault elsewhere, seen from the local side. */
   peerForVault(
     peerVaultId: string,
     localVaultId?: string
@@ -547,7 +460,6 @@ export class VaultLinksStore {
     return undefined;
   }
 
-  /** Every live link from `localVaultId` to a vault elsewhere. */
   peersOf(localVaultId: string): LinkedPeer[] {
     return this.listFor(localVaultId)
       .filter((link) => !link.revoked)
@@ -555,14 +467,9 @@ export class VaultLinksStore {
   }
 
   /**
-   * Replace a peer's route after a signature-verified assertion, unless an
-   * equal-or-newer one already won. Identity is deliberately NOT writable
-   * here: an assertion moves an address, never a key. A vault with no
-   * `vault_routes` row is a vault on this gateway (#750 invariant 2) — a
-   * route assertion for it is refused rather than applied — and a vault with
-   * no live link is nobody this gateway listens about. The single UPSERT is
-   * the multi-link invariant: every local vault linked to this peer resolves
-   * the new route through the one row this replaces.
+   * Identity is deliberately NOT writable here: an assertion moves an address,
+   * never a key. A vault with no route row is local and one with no live link
+   * is nobody this gateway listens about, so both are refused (#750).
    */
   recordRoute(input: {
     peerVaultId: string;
@@ -591,7 +498,6 @@ export class VaultLinksStore {
     });
   }
 
-  /** Tombstone a link. The row stays so a revoked peer stays recognisable. */
   revoke(linkId: string): boolean {
     const changed =
       this.gatewayDatabase.db

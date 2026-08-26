@@ -85,34 +85,19 @@ export function composeMobileNotifications(
 
 /** What one `syncNotifications` pass should do. */
 export interface NotificationPlan {
-  /** OS notifications to schedule now (empty on a seed or foreground pass). */
   notifications: MobileNotificationRow[];
-  /** Ledger to persist, or `undefined` to leave the stored ledger untouched. */
   nextDelivered?: string[];
-  /** True when this pass established the baseline instead of notifying. */
   seeded: boolean;
 }
 
-/** Bound on the device-side delivery ledger; oldest keys fall off first. */
+/** Device-side delivery ledger bound; oldest keys fall off first. */
 const LEDGER_LIMIT = 2_000;
 
 /**
- * Decide what a sync pass does, with no I/O (#647 review of PR #655).
- *
- * Two rules the old inline logic was missing:
- *
- *  1. **Seed silently.** The ledger starts absent, so the very first sync after
- *     a grant treated every already-open decision as new and fired one banner
- *     per row. A first pass now records the current payload as the baseline and
- *     notifies about nothing; only what appears *after* it is news.
- *  2. **Never notify over the owner's shoulder.** With the app active the Notifications
- *     itself is on screen, so a banner is noise. A foreground pass leaves the
- *     ledger alone — deliberately, so anything that arrived while the owner was
- *     looking still notifies on the next background wake if it is still waiting.
- *
- * `seeded` is tracked outside the ledger array so that an empty baseline (a
- * quiet Notifications at grant time) is not mistaken for "never seeded", which would
- * swallow the first real decision instead of announcing it.
+ * Decide what a sync pass does, with no I/O (#647). Two rules, easy to lose:
+ * seed silently (first pass records the baseline, notifies nothing); never
+ * notify over the owner's shoulder (foreground passes leave the ledger alone,
+ * so on-screen arrivals still notify on the next background wake).
  */
 export function planNotifications(input: {
   notifications: MobileNotificationsPull;

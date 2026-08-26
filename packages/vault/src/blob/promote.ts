@@ -1,4 +1,4 @@
-// Staged-sha promotion (issue #296 §3): the moment bytes become model. Runs
+// Staged-sha promotion (#296): the moment bytes become model. Runs
 // INSIDE a command's transaction — pure row work, no I/O (the bytes are
 // already in the local CAS) — so the receipt the command mints is the
 // receipt for custody. Shared by every claiming command (core.attach,

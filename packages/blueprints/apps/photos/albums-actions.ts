@@ -8,7 +8,7 @@ import { act, narrate, writeTarget } from "./outcomes.ts";
 import type { Album } from "./types.ts";
 
 // Albums are a per-scope collection this app only ever authors in the member's
-// OWN space (issue #599): a collection id means nothing outside the scope that
+// OWN space (#599): a collection id means nothing outside the scope that
 // minted it, and there is no cross-scope album. So all three commands resolve
 // through the `own` write target rather than following the chip selection.
 const ownScope = (): string | null => {

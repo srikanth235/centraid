@@ -1,11 +1,10 @@
 /*
- * Harness-kind routing for the automation dispatch path (issue #479).
+ * Harness-kind routing for the automation dispatch path (#479).
  *
  * A fire has its OWN dispatch surface, separate from the conversation
  * `runTurn`: `ctx.delegate` is a one-shot against the user's real provider,
- * routed through the harness registry. Issue #484 removed the `ctx.tool` rail
- * (and the mock-LLM session it puppeted), so the dispatch surface no longer
- * accepts a tool dispatcher — a fire whose handler only touches ctx.vault /
+ * routed through the harness registry. The dispatch surface accepts no tool
+ * dispatcher (#484): a fire whose handler only touches ctx.vault /
  * ctx.state constructs nothing and spawns nothing. These tests pin the
  * `ctx.delegate` routing at the one surviving seam.
  */
@@ -120,7 +119,7 @@ describe("run-automation-dispatch suite", () => {
     abortSignal: new AbortController().signal,
   };
 
-  // ---- zero-spawn seam ------------------------------------------------------
+  // ──── zero-spawn seam ──────────────────────────────────────────────────────
 
   test("the dispatch surface exposes only ctx.delegate — no tool dispatcher, nothing eager", async () => {
     // The seam itself is the assertion: a vault-/state-only fire never touches
@@ -165,7 +164,7 @@ describe("run-automation-dispatch suite", () => {
     expect(stub.calls).toHaveLength(0);
   });
 
-  // ---- ctx.delegate -----------------------------------------------------------
+  // ──── ctx.delegate ───────────────────────────────────────────────────────────
 
   test.each(ACP_KINDS)(
     "ctx.delegate on %s drives the registered harness",
@@ -451,8 +450,8 @@ describe("run-automation-dispatch suite", () => {
     });
   });
 
-  // Issue #479 retired the bespoke `codex exec` / claude-SDK arms: every kind
-  // now enters the same registry seam, so nothing spawns a CLI from this file.
+  // One integration path (#479): every kind enters the same registry
+  // seam, so nothing spawns a CLI from this file.
   test.each(["codex", "claude-code"] as const)(
     "ctx.delegate on %s routes through the registry like every other kind",
     async (kind) => {

@@ -5,7 +5,7 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 /*
  * `ensureProviderCasTarget` learns the provider's declared storage-class list
  * from the SAME discovery document it already reads for the `derived` grant
- * (issue #425 Wave 3), so the CAS-attach route can stamp
+ * (#425), so the CAS-attach route can stamp
  * `blob_store.supportedStorageClasses` into the vault. Exercised against the
  * real in-process fake provider server (real HTTP, real grant flow).
  */

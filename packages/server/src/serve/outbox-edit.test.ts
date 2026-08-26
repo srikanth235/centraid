@@ -1,4 +1,4 @@
-// The outbox edit registry (issue #308 A5 UI slice): the gmail.send request
+// The outbox edit registry (#308 A5 UI slice): the gmail.send request
 // rebuilder ports `rawRfc2822` from the gmail-send handler verbatim, and the
 // artifact shape guard rejects drift the owner surface has no control for.
 

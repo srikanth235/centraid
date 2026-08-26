@@ -1,42 +1,15 @@
 /*
- * PROTOCOL JOIN LANE (issue #839, gaps G11 + G12).
+ * PROTOCOL JOIN LANE (#839): one `serve()` daemon, N mounted vaults, one iroh
+ * client per seat, so every assertion travels the real transport. The laws
+ * hold at every N (`CENTRAID_JOIN_SEATS` raises it nightly). A seat is a vault
+ * identity plus its device, never a client bundle.
  *
- * Runs on the PR path at its 3-seat floor and again nightly at width — the
- * `protocol-join` job in `.github/workflows/e2e.yml` raises
- * `CENTRAID_JOIN_SEATS` and keeps the vitest JSON report as evidence.
+ * Topology is ONE gateway with N vaults, never N gateways: a grant resolves its
+ * audience through the host gateway's registry, and a cross-host grant parks at
+ * `syncing` deliberately (docs/protocol.md); #825 is the follow-up.
  *
- * Every other suite in this repo that exercises two vaults talking to each
- * other calls the vault package directly: `grant-fulfillment.test.ts` builds a
- * `Map` of mounted vaults, `grant-routes.test.ts` hand-rolls an
- * `IncomingMessage`. Nothing JOINS — nothing puts N seats on ONE gateway and
- * makes them speak the real wire. This lane is that missing rig: one `serve()`
- * daemon, N mounted vaults, and one iroh tunnel client per seat, so every
- * assertion below travels the same transport a paired phone uses.
- *
- * ── The v1 reach this rig respects ──────────────────────────────────────────
- *
- * A grant is fulfilled by resolving the audience vault through the HOST
- * gateway's own registry (docs/protocol.md, "Cross-host grant delivery is an
- * open gap"). A grant to a vault on a DIFFERENT gateway parks at `syncing` and
- * stays there — deliberately, not as an error. So the join topology is one
- * gateway with N mounted vaults, never N gateways. When #825's cross-host
- * follow-up lands, this file is where the second gateway joins.
- *
- * ── Seats ───────────────────────────────────────────────────────────────────
- *
- * A seat here is a VAULT IDENTITY plus the device that reaches it, not a
- * client bundle: `seat()` in `host-platform.ts` is a build-time constant, so
- * "custodian vs viewer" cannot be varied at runtime. `CENTRAID_JOIN_SEATS`
- * raises N for the nightly job; the laws are the same at every N.
- *
- * ── What this lane does NOT cover ───────────────────────────────────────────
- *
- * The skew test below asserts the update wall with SYNTHETIC version integers.
- * A real pinned-N−1-client artifact lane (build an older client, run it against
- * today's gateway) is out of scope here: the protocol window is a single point
- * (`GATEWAY_PROTOCOL_VERSION === GATEWAY_MIN_PROTOCOL_VERSION === 3`), so no
- * legal N−1 client exists to pin, and producing one is a release-pipeline
- * change — tracked under #842 W5.3, not here.
+ * The skew test uses SYNTHETIC version integers because the window is a single
+ * point, so no legal N−1 client exists to build (#842 W5.3).
  */
 
 import { promises as fs } from "node:fs";
@@ -74,21 +47,16 @@ import type { VaultPlane } from "./vault-plane.ts";
 const LOOPBACK_SECRET = "join-lane-loopback-secret";
 const DEVICE_HEADER = "x-test-device";
 const VAULT_HEADER = "x-centraid-vault";
-/** Owner decisions awaiting confirmation; `_vault` has no ROUTES constant for it. */
 const PARKED_PATH = "/centraid/_vault/parked";
 
-/**
- * Seats in the join. Three is the floor the laws need (an origin, an addressed
- * audience, and a bystander that proves addressing is real); the nightly job
- * raises it so fan-out and severance are asserted at width.
- */
+/** Three is the floor the laws need: origin, addressed audience, bystander. */
 const SEAT_COUNT = Math.max(3, Number(process.env.CENTRAID_JOIN_SEATS ?? 3));
 
 interface Seat {
   readonly label: string;
   readonly vaultId: string;
   readonly plane: VaultPlane;
-  /** The party row in the ORIGIN vault that stands for this seat's owner. */
+  /** The party row in the ORIGIN vault standing for this seat's owner. */
   partyId: string;
   client: TunnelClient;
   connection: Connection;
@@ -99,14 +67,12 @@ interface JoinWorld {
   endpoint: GatewayEndpointHandle;
   enrollments: EnrollmentStore;
   seats: Seat[];
-  /** Seat 0 — the vault whose subjects are shared. */
   origin: Seat;
 }
 
 const worlds: JoinWorld[] = [];
 const dataDirs: string[] = [];
 
-/** Every seat, endpoint, gateway and temp dir this file opened. */
 async function closeEverything(): Promise<void> {
   await Promise.all(
     worlds.splice(0).map(async (world) => {
@@ -124,7 +90,6 @@ async function closeEverything(): Promise<void> {
   );
 }
 
-/** One gateway, `SEAT_COUNT` mounted vaults, one live tunnel client per seat. */
 async function joinWorld(): Promise<JoinWorld> {
   const dataDir = await tempDir("protocol-join-");
   dataDirs.push(dataDir);
@@ -136,9 +101,7 @@ async function joinWorld(): Promise<JoinWorld> {
     gatewayDatabase: database,
     token: LOOPBACK_SECRET,
     deviceAccess: {
-      // The iroh forwarder stamps the QUIC-proved EndpointId; the endpoint
-      // below stamps the same header, so this seam reads the REAL identity of
-      // whichever seat opened the stream.
+      // Same header the iroh forwarder stamps: the REAL QUIC-proved identity.
       deviceKeyFor: (req) => {
         const value = req.headers[DEVICE_HEADER];
         return typeof value === "string" ? value : undefined;
@@ -164,9 +127,8 @@ async function joinWorld(): Promise<JoinWorld> {
     vaultIds.map(async (vaultId, index): Promise<Seat> => {
       const label = index === 0 ? "origin" : `seat-${index}`;
       const client = await createTunnelClient({ relays: "disabled" });
-      // Each seat is its own OWNER: co-hosted vaults belonging to different
-      // people is the topology v1 grants actually reach. Enrolment precedes
-      // the dial because the endpoint's `authorize` seam reads it.
+      // Each seat is its own OWNER. Enrolment precedes the dial: the
+      // endpoint's `authorize` seam reads it.
       enrollments.enroll({
         endpointId: client.endpointId,
         vaultIds: [vaultId],
@@ -194,13 +156,10 @@ async function joinWorld(): Promise<JoinWorld> {
     origin: seats[0]!,
   };
   worlds.push(world);
-  // Every audience seat gets a party row in the origin vault, bound to that
-  // seat's real vault id — the binding is what a grant resolves through.
   for (const seat of seats.slice(1)) seat.partyId = linkSeat(world, seat);
   return world;
 }
 
-/** A person in the origin vault whose vault binding names `seat`. */
 function linkSeat(world: JoinWorld, seat: Seat): string {
   const now = nowIso();
   const partyId = uuidv7();
@@ -219,7 +178,7 @@ function linkSeat(world: JoinWorld, seat: Seat): string {
   return partyId;
 }
 
-/** One document in the origin vault — the smallest whole subject a grant carries. */
+/** The smallest whole subject a grant carries. */
 function seedDocument(world: JoinWorld, title: string): string {
   const db = world.origin.plane.db;
   const now = nowIso();
@@ -254,7 +213,6 @@ function seedDocument(world: JoinWorld, title: string): string {
   return documentId;
 }
 
-/** Live + revoked grant rows this vault holds over one subject. */
 function grantRowCount(world: JoinWorld, subjectId: string): number {
   return (
     world.origin.plane.db.vault
@@ -276,7 +234,6 @@ interface WireAnswer {
   body: Record<string, unknown>;
 }
 
-/** One request from one seat, over that seat's own iroh connection. */
 async function ask(
   seat: Seat,
   input: {
@@ -302,7 +259,6 @@ async function ask(
   };
 }
 
-/** Say a standing share of `documentId` to `audience`, over the wire. */
 function shareDocument(
   world: JoinWorld,
   documentId: string,
@@ -342,13 +298,12 @@ describe("protocol join lane", () => {
       },
     });
     expect(documentTitles(addressed)).toStrictEqual(["Trip plan"]);
-    // Addressing is real, not ambient: a co-hosted vault that was not named
-    // receives nothing, even though the fulfillment engine can reach it.
+    // Addressing is real, not ambient: an unnamed co-hosted vault gets nothing.
     for (const bystander of world.seats.slice(2))
       expect(documentTitles(bystander)).toStrictEqual([]);
 
-    // A seat reads its OWN vault's grant plane; the origin's is not its to
-    // see, and the refusal is the vault-scope one, never an empty list.
+    // A seat reads only its OWN grant plane; refusal is vault-scope, not an
+    // empty list.
     const trespass = await ask(addressed, {
       method: "GET",
       target: ROUTES.vaultGrants,
@@ -357,11 +312,7 @@ describe("protocol join lane", () => {
     expect(trespass.status).toBe(403);
     expect(trespass.body).toMatchObject({ error: "vault_not_enrolled" });
 
-    // Fan out the same subject to every remaining seat: N delivered copies,
-    // one gesture each, all over the tunnel.
     for (const seat of world.seats.slice(2)) {
-      // Sequential on purpose: each gesture runs its own fulfillment pass over
-      // the subject, and overlapping them would hide which pass delivered.
       // oxlint-disable-next-line no-await-in-loop -- one pass per gesture
       const shared = await shareDocument(world, documentId, seat);
       expect(shared.status).toBe(201);
@@ -369,9 +320,8 @@ describe("protocol join lane", () => {
     for (const seat of world.seats.slice(1))
       expect(documentTitles(seat)).toStrictEqual(["Trip plan"]);
 
-    // Saying it three times AT ONCE, down three bi-streams of one live
-    // connection: created-or-exists is decided in the vault, so concurrency
-    // cannot mint a rival grant over the same (audience, subject, capability).
+    // Created-or-exists is decided in the vault, so racing bi-streams cannot
+    // mint a rival grant.
     const raced = seedDocument(world, "Race plan");
     const answers = await Promise.all(
       [0, 1, 2].map(() => shareDocument(world, raced, addressed))
@@ -408,19 +358,16 @@ describe("protocol join lane", () => {
     });
     expect(documentTitles(severed)).toStrictEqual([]);
 
-    // SEVERED, not idle. The subject moves on and is shared with a second
-    // seat; that gesture runs a fulfillment pass over the whole subject, so a
-    // grant that were merely dormant would ride it back into the first seat.
+    // SEVERED, not idle: the next gesture runs a full pass over the subject,
+    // which a merely dormant grant would ride back into the first seat.
     world.origin.plane.db.vault
       .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
       .run("Trip plan (final)", documentId);
     expect((await shareDocument(world, documentId, kept)).status).toBe(201);
     expect(documentTitles(kept)).toStrictEqual(["Trip plan (final)"]);
     expect(documentTitles(severed)).toStrictEqual([]);
-    // Removal takes the whole PROJECTION, not just the row that named it. A
-    // content item left behind would be an unreachable copy of the bytes the
-    // owner just took back — invisible to `documentTitles`, and the shape a
-    // row-only delete would leave.
+    // Removal takes the whole PROJECTION: a content item left behind is an
+    // unreachable copy of bytes the owner took back.
     const residue = severed.plane.db.vault
       .prepare(
         `SELECT (SELECT COUNT(*) FROM core_document) AS documents,
@@ -446,8 +393,7 @@ describe("protocol join lane", () => {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", verbs: "read+act" }],
     });
-    // Make the command confirm-gated. Tier 3/4 routing parks for EVERY
-    // non-owner caller (gateway.ts), which is the state this law is about.
+    // Confirm-gated: tier 3/4 routing parks for EVERY non-owner caller.
     origin.plane.db.vault
       .prepare(
         `UPDATE agent_capability SET requires_confirmation = 1
@@ -483,10 +429,8 @@ describe("protocol join lane", () => {
       },
     ]);
 
-    // RECONNECT: drop this seat's transport entirely and join again as a new
-    // device of the same owner. A parked payload is vault state, so it must
-    // outlive the connection that produced it — nothing re-parks, nothing is
-    // replayed, and the decision is still owed.
+    // A parked payload is vault state: it outlives its connection, and a
+    // reconnect re-parks and replays nothing.
     await origin.client.close();
     const rejoined = await createTunnelClient({ relays: "disabled" });
     const ownerId = world.enrollments.owners.ownerOf(origin.vaultId);
@@ -507,7 +451,7 @@ describe("protocol join lane", () => {
       { invocationId: parkedOutcome.invocationId },
     ]);
 
-    // SETTLE — the only exit. There is no unpark verb in this product.
+    // SETTLE is the only exit; there is no unpark verb.
     const denied = await ask(origin, {
       method: "POST",
       target: `${PARKED_PATH}/${parkedOutcome.invocationId}`,
@@ -519,10 +463,8 @@ describe("protocol join lane", () => {
       (await ask(origin, { method: "GET", target: PARKED_PATH })).body.parked
     ).toStrictEqual([]);
 
-    // Pinned behaviour, gateway.ts:1579 — journal denial commits BEFORE vault
-    // settlement, so a crash in that gap leaves the payload present. Any
-    // retry, even an accidental approve, must finish the original denial
-    // rather than execute. This asserts the recovery, not a wish.
+    // Journal denial commits BEFORE vault settlement, so a retry after a crash
+    // in that gap must finish the original denial, never execute.
     const retried = await ask(origin, {
       method: "POST",
       target: `${PARKED_PATH}/${parkedOutcome.invocationId}`,
@@ -540,17 +482,13 @@ describe("protocol join lane", () => {
       target: ROUTES.gatewayInfo,
     });
     expect(info.status).toBe(200);
-    // The live gateway this rig just booted judges green against today's
-    // client — the control case that makes every refusal below meaningful.
     expect(judgeGatewayInfo(info.body)).toMatchObject({ ok: true });
     expect(info.body).toMatchObject({
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
     });
 
-    // An N-1 CLIENT against this live gateway: refused by the mutual window.
-    // Synthetic integers, because the window is a single point and no legal
-    // N-1 client exists to build (see the file header).
+    // N-1 client, refused by the mutual window. Synthetic integers — see header.
     const older = GATEWAY_PROTOCOL_VERSION - 1;
     expect(
       protocolsCompatible({
@@ -561,8 +499,6 @@ describe("protocol join lane", () => {
       })
     ).toBe(false);
 
-    // The refusal a client SHOWS is one wall with the documented copy, and it
-    // carries no `info` — there is nothing to half-connect with.
     const wall = judgeGatewayInfo({
       ...info.body,
       protocolVersion: older,
@@ -579,9 +515,7 @@ describe("protocol join lane", () => {
     });
     expect(wall).not.toHaveProperty("info");
 
-    // NO FALLBACK MODE, stated as a sweep: across every neighbouring protocol
-    // integer, exactly one — today's — is accepted. Older and newer both wall,
-    // and nothing in between degrades into a reduced-feature connect.
+    // NO FALLBACK MODE: exactly one integer connects, none degrades.
     const span = GATEWAY_PROTOCOL_VERSION + 3;
     const outcomes = Array.from({ length: span }, (_unused, version) => {
       const judged = judgeGatewayInfo({
@@ -596,8 +530,7 @@ describe("protocol join lane", () => {
         version === GATEWAY_PROTOCOL_VERSION ? "connect" : "protocol_mismatch"
       )
     );
-    // The window is a single point today; a widening bump must move this line
-    // deliberately rather than let a silent fallback appear.
+    // A widening bump must move this line deliberately, not by silent fallback.
     expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(GATEWAY_PROTOCOL_VERSION);
   }, 120_000);
 });

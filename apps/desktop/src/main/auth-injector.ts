@@ -5,9 +5,8 @@
 // `auth.mode: "token"`. A request that already carries an Authorization
 // header (every `gateway-client` fetch) is left exactly as it is.
 //
-// The CSP `frame-ancestors` relaxation that used to sit beside this retired
-// with the app iframe it existed for (issue #799): this renderer frames
-// nothing, so it needs no response rewrite.
+// This renderer frames nothing (#799), so it needs no CSP
+// `frame-ancestors` response rewrite.
 //
 // The hook is scoped to the configured gateway origin, so other traffic in
 // the renderer is untouched. Settings live in the main process; call

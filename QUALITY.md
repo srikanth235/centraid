@@ -2,6 +2,44 @@
 
 ## Open
 
+- **Banner-heavy modules are a size smell, not a comment smell.** The files
+  that need many section banners to stay navigable —
+  `packages/server/src/engine/handlers/dispatcher.ts`,
+  `packages/server/src/engine/conversation/store.ts`,
+  `packages/server/src/serve/build-gateway.ts`,
+  `packages/server/src/doctor/integrity-checks.ts`, and the `acp/` cluster —
+  are using comments to draw module boundaries the file layout doesn't.
+  The #861 sweep normalized the banner style but deliberately did not touch
+  the shape (settled Q4 on the issue): whether these modules should split is a
+  code-ownership question that wants its own proposal, not a comment fix.
+
+- **Two dead exports serving a retired builder view.** `CodeLang`
+  (`packages/client/src/format.ts`) and `DiffRow`/`diffRows`
+  (`packages/client/src/diff.ts`) are referenced only inside their own
+  defining files — the builder Code view / Diff toggle they served is gone.
+  Found by the #861 Phase 2 comment sweep (a comment-only pass, so the
+  exports were left in place); they want deleting under their own change.
+
+- **Comments still speaking "chat" for the conversation ledger.** ~8 comment
+  sites (`packages/client/src/centraid-api.d.ts`,
+  `gateway-client-conversation.ts`, `gateway-client.ts`, and one contract-test
+  header) use the banned "chat"/"chat session" vocabulary for the
+  conversation ⊃ turn ⊃ item ledger. Neighbouring occurrences are real UI
+  strings, so the rename wants one coherent pass with the vocabulary rule in
+  hand, not a piecemeal comment sweep (#861).
+
+- **Blueprint handler contracts live in inert JSDoc, not types.** The
+  `apps/photos` action/query handlers are dynamically loaded default exports;
+  their only stated contract is a `@type {import('…').ActionHandler}` JSDoc
+  tag that tsc ignores in `.ts`. The #861 doctrine's encoding ladder says this
+  fact wants to climb: type the exports (e.g. `satisfies ActionHandler`) and
+  the ~20 tags can then be deleted as redundant with the checker.
+
+- **Sub-wave stamps in test-name string literals.** Seven
+  `apps/mobile/src/apps/photos/*.test.ts` `describe()` titles still carry
+  `(issue #721 B5)`-style process stamps. Strings, not comments, so out of
+  #861's comment-only scope; safe to rename in a test-title pass.
+
 - **A second offline write never settles its promise.** With the gateway
   severed, the first `window.centraid.write` of a session resolves `queued` as
   it should; every write issued after it in the same session queues, applies

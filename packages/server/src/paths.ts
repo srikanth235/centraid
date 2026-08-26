@@ -1,86 +1,61 @@
 /*
- * `GatewayPaths` — the on-disk slots a gateway runtime reads/writes.
+ * `GatewayPaths` — the on-disk slots a gateway runtime reads and writes.
  *
- * The caller (Electron desktop, the standalone daemon, or a test) is
- * responsible for *deriving* these paths from its own root layout. This
- * package never reaches for Electron's `app.getPath('userData')` or any
- * env-var convention; it just consumes absolute paths.
+ * The caller derives these from its own root layout; this package never
+ * reaches for Electron's `userData` or an env-var convention, it consumes
+ * absolute paths. All are absolute, and none need exist before `serve()`:
+ * a zero-vault registry is legal and stores open lazily.
  *
- * Issue #280 — the vault is the unit. Everything personal lives INSIDE a
- * vault's directory (`<vaultDir>/<vaultId>/`): the sovereign pair
- * (`vault.db` + `journal.db` — the journal carrying both the audit stream
- * and the conversation ledger + run rollup, the old `transcripts.db`
- * folded in), the per-app data dirs (`apps/`), the app code store
- * (`code/` — a bare git repo + worktrees), and the harness scratch
- * (`harness-sessions/`). Gateway-level mutable state is gateway.db;
- * long-lived secrets are KeyStore envelopes under keys/; cache and logs are
- * separate disposable/diagnostic directories.
- *
- * All paths are absolute. None need to exist before `serve()` is called —
- * a zero-vault registry is legal and stores open lazily on first use.
+ * The vault is the unit (#280): everything personal lives inside
+ * `<vaultDir>/<vaultId>/` — the sovereign pair (`vault.db` + `journal.db`),
+ * `apps/`, and the `code/` git store. Gateway state is `gateway.db`, secrets
+ * are KeyStore envelopes under `keys/`, and cache and logs are separate
+ * disposable directories.
  */
 
 export interface GatewayPaths {
-  /** Gateway data root. Defaults to the parent of `vaultDir` for legacy callers. */
+  /** Defaults to the parent of `vaultDir` for legacy callers. */
   dataDir?: string;
   /**
-   * The personal-vault root (duaility §12, #280). The gateway mounts the
-   * vault registry here: each vault lives in its own subdirectory holding
-   * BOTH the sovereign pair (`vault.db` + `journal.db`) and the vault's
-   * workspace (`apps/`, `code/`; the conversation ledger rides the journal
-   * file); exactly one vault is active at a time (pointer in
-   * `<vaultDir>/vaults.json`). The harness scratch (`harness-sessions/`)
-   * does NOT live here — it is disposable cache under `cacheDir`. Required —
-   * post-#280 the app surface IS vault-scoped, so a gateway without vaults
-   * has nothing to serve.
+   * The personal-vault root (duaility §12, #280): one subdirectory per vault,
+   * exactly one active at a time (pointer in `<vaultDir>/vaults.json`).
+   * Required — post-#280 the app surface IS vault-scoped.
    */
   vaultDir: string;
 
   /**
-   * Optional root for the per-vault DISPOSABLE harness cache
-   * (`<cacheDir>/<vaultId>/harness-sessions/`) — the embedded harness's
-   * per-conversation resume files and scratch cwd. Kept OUTSIDE `vaultDir` so
-   * the sovereign vault tree holds only `vault.db` + `journal.db`, app data,
-   * and code; journal.db is the authoritative conversation ledger and this
-   * cache is derived, safe to wipe, and never backed up with the vault. Omit
-   * to default to a `-cache` sibling of `vaultDir`; a host may point it at an
-   * OS cache location instead.
+   * Root for the per-vault DISPOSABLE harness cache
+   * (`<cacheDir>/<vaultId>/harness-sessions/`). Kept OUTSIDE `vaultDir` so the
+   * sovereign tree holds only the pair, app data, and code: this cache is
+   * derived, safe to wipe, and never backed up. Omit for a `-cache` sibling.
    */
   cacheDir?: string;
 
   /**
-   * Optional per-gateway template cache dir (issue #141). When set, the
-   * `GET /centraid/_templates` route resolves bundle-or-cache, letting a
-   * newer per-template copy shadow the bundled one. Omit for bundle-only
-   * resolution (the standalone daemon / tests).
+   * Per-gateway template cache (#141). Set makes `GET /centraid/_templates`
+   * resolve bundle-or-cache, so a newer copy shadows the bundled one; omit for
+   * bundle-only resolution.
    */
   templatesCacheDir?: string;
 
   /**
-   * Optional path to the gateway-owned model catalog (`model-catalog.json`,
-   * issue #188). When set, the default `harnessStatus` reporter persists the
-   * chat picker's per-harness model list here and re-enumerates it on Refresh.
-   * Omit to enumerate without persistence; there is no hardcoded default seed.
+   * Gateway-owned model catalog (#188). Set persists the chat picker's
+   * per-harness model list; omit to enumerate without persistence. There is no
+   * hardcoded default seed.
    */
   modelCatalogFile?: string;
 
   /**
-   * Optional path to the disk-cached model PRICE table (`model-pricing.json`,
-   * issue #445) — the pricing warmer's filtered LiteLLM fetch, kept fresh with
-   * a 24h TTL. Omit to default to a sibling of `modelCatalogFile`; without
-   * either, the warmer refreshes in-memory only and costing falls back to the
-   * bundled snapshot.
+   * Disk-cached model PRICE table (#445), kept fresh on a 24h TTL. Omit for a
+   * sibling of `modelCatalogFile`; without either, the warmer stays in-memory
+   * and costing falls back to the bundled snapshot.
    */
   modelPricingFile?: string;
 
   /**
-   * Optional directory for rotated JSONL persistence of the gateway's
-   * log ring (issue #351 — "logs don't survive restart, exactly when
-   * you want a post-mortem"). This has NO implicit
-   * default sibling: omitting it keeps `GatewayLogStore` in-memory-only
-   * (today's behavior), which is what tests and disposable embeds want.
-   * A host opts in by pointing this at a real directory (e.g. a
-   * `gateway-logs` sibling of `vaultDir`).
+   * Rotated JSONL persistence for the log ring (#351). NO implicit default
+   * sibling: omitting it keeps `GatewayLogStore` in-memory-only, which is what
+   * tests and disposable embeds want. A host opts in by naming a directory.
    */
   logsDir?: string;
 }

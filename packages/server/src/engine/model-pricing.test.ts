@@ -268,7 +268,7 @@ describe("setPricingCatalog overlay", () => {
     expect(
       costForUsage("claude-3-55-foo", { inputTokens: 1_000_000 })
     ).toBeUndefined();
-    // The overlay replaced the bundled snapshot outright.
+    // The overlay replaces the bundled snapshot outright.
     expect(priceForModel("claude-opus-4-8")).toBeUndefined();
     expect(costForUsage("model-x", { inputTokens: 1_000_000 })).toBeCloseTo(
       1,

@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-// Share-by-placement (issue #599 decision 11). Two real on-disk vaults under
+// Share-by-placement (#599 decision 11). Two real on-disk vaults under
 // one root — never mocked fs — because the load-bearing claims are filesystem
 // facts: a share HARDLINKS (same inode, link count 2, zero bytes copied), each
 // vault's GC unlinks only its own directory entry, and the inode is freed only
@@ -26,9 +26,9 @@ import {
 
 describe("placement suite", () => {
   afterEach(closeOpenVaults);
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
   // Placement
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
 
   test("a share projects the item into the audience vault and leaves the origin untouched", () => {
     const { origin, originBoot, audience } = household();
@@ -140,9 +140,9 @@ describe("placement suite", () => {
     ).toStrictEqual({ content_id: photo.contentId });
   });
 
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
   // Hardlink vs copy — the filesystem facts
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
 
   test("a same-filesystem share HARDLINKS the bytes — same inode, link count 2", () => {
     const { origin, originBoot, audience } = household();
@@ -215,9 +215,9 @@ describe("placement suite", () => {
     ).toThrow(/ENOENT/u);
   });
 
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
   // Idempotence
-  // ---------------------------------------------------------------------------
+  // ───────────────────────────────────────────────────────────────────────────
 
   test("re-sharing the same item is idempotent — same member and a different member", () => {
     const { origin, originBoot, audience } = household();

@@ -1,4 +1,4 @@
-// "Open elsewhere" (issue #821 §7–§8): hand ONE document's bytes, exactly as
+// "Open elsewhere" (#821 §7–§8): hand ONE document's bytes, exactly as
 // stored, to the operating system's own opener — the honest answer for a kind
 // Docs cannot set, and the stage's Download sibling. The bytes are staged in
 // the cache the same way Photos' share path stages its copy; nothing is

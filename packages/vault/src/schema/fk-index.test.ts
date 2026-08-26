@@ -1,4 +1,4 @@
-// Regression guard for issue #374 (SQLite hardening, Tier 2): SQLite never
+// Regression guard for #374 (SQLite hardening, Tier 2): SQLite never
 // auto-indexes the child side of a foreign key. With `PRAGMA foreign_keys =
 // ON` (always on — see ../db.ts) every DELETE/UPDATE on a parent row full-
 // scans any child table whose FK columns aren't covered by an index, and

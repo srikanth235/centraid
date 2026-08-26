@@ -3,10 +3,9 @@
  *
  * Both the run screen (a live execution) and the compiler workbench (a live
  * compile or test run) need the same thing: join a turn's SSE stream, fold
- * events into a live view, and re-read the ledger ONCE when it settles. This
- * used to live inline in `AutomationViewRoute.tsx`, which is why the compiler
- * had no way to watch its own compile turn — it lifted out unchanged rather
- * than being reimplemented a second, subtly-different way.
+ * events into a live view, and re-read the ledger ONCE when it settles. It
+ * lives here rather than inline in either surface, so neither surface carries
+ * a second, subtly-different implementation of the same watch.
  */
 import {
   readAutomationTurnExpanded,

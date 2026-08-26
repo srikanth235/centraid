@@ -1,7 +1,7 @@
 import { displayText } from "../../_shared/untrusted.ts";
 // `<section class="v-list">` — the search box + filtered/sorted row list for
-// the current nav. The React port of app.js's `LockerList` Lit component;
-// the search input is a controlled input driven by `search` (app.tsx calls
+// the current nav. The search input is a controlled input driven by `search`
+// (app.tsx calls
 // `render()` synchronously on every keystroke, same as any other state
 // change here — see logic.ts's `applySearchInput` for the debounced fetch
 // that runs behind it).

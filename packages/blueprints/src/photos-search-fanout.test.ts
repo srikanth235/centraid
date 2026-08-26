@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-// Photos' cross-scope search fan-out (issue #726 D10/D11 finding 3): the EXIT
+// Photos' cross-scope search fan-out (#726 D10/D11 finding 3): the EXIT
 // EVIDENCE that a scope which failed to answer no longer blanks a scope that
 // DID — the exact bug the audit named ("one friend's sleeping machine blanks
 // the owner's own library"). `search-scaffold.test.ts` already proves
 // `perScopeReach`/`scopeReachFacts` correct in isolation; what matters here is
-// that `createSearch` (apps/photos/search.ts) actually consumes them instead
-// of the old binary `allScopesReached` collapse. Loaded by file URL, since
+// that `createSearch` (apps/photos/search.ts) actually consumes them rather
+// than collapsing reach into one boolean. Loaded by file URL, since
 // `search.ts` reads `window.centraid` live; its `@centraid/design/elements`
 // import resolves to that package's source through this package's own
 // `vitest.config.ts` alias.

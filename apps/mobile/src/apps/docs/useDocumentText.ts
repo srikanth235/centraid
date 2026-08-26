@@ -1,4 +1,4 @@
-// One document's PROSE, as this device can actually have it (issue #821,
+// One document's PROSE, as this device can actually have it (#821,
 // §6 and §9 share it): inline `data:` bodies decode locally (the vault mints
 // small text inline — blob/mint.ts), everything else is one authenticated
 // fetch off the gateway's blob route. Where neither works the hook says WHY,

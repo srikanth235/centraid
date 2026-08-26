@@ -1,65 +1,19 @@
-// FACE REVIEW, NATIVE (issue #711, v4 handoff 4305-4318 / §8) — brought in
 // governance: allow-repo-hygiene file-size-limit The #712 face-review handoff remains one cohesive stateful screen; #716 only adds its testability contract.
-// line with the same handoff EnrichmentConsent.tsx already answers to, and
-// with the web twin (@centraid/blueprints FaceReview.tsx).
 //
-// WHAT THIS REPLACES, AND WHY EACH PIECE WAS A REAL DEFECT, NOT A STYLING GAP
-// (issue #711 review):
+// WHAT THIS SCREEN MAY NOT DO (#711). Web twin: blueprints' FaceReview.tsx.
+//   1. Titled "Face review", never "People review"; say "photographs".
+//   2. Crop and photograph are the evidence; bytes come from the local
+//      timeline (`usePhotoTimeline`), never the faces query.
+//   3. Every proposal carries reject/rename/dismiss/skip even when no name
+//      was proposed — unmatched is the primary case a detector produces.
+//   4. Confidence is in matches, never a percentage.
+//   5. No confirmed-people carousel; the roster is `PhotosPeopleView.tsx`.
+//   6. One face at a time (`buildQueue`), never a list over every region.
 //
-//   1. Title read "People review" — the handoff's own name for this screen
-//      is "Face review" (proto:4306, §16 `faces.title`).
-//   2. No face crop, no source photograph — just a `--skel` circle with a
-//      generic user glyph, because the old query never asked for bytes. The
-//      photograph and the crop are the evidence the member is being asked to
-//      judge (4307); a member confirming a face they cannot see is not
-//      meaningfully consenting. Fixed by widening the read to the LOCAL
-//      TIMELINE (`usePhotoTimeline`, the same source every other Photos
-//      screen already paints from) rather than the faces query — see
-//      `sourceAssetFor` below.
-//   3. The three escape rows (Someone else / Unknown person / Skip) did not
-//      exist — only a bare confirm/reject icon pair.
-//   4. CONFIRM RENDERED ONLY WHEN `party_id` WAS ALREADY SET, so an unmatched
-//      face — the PRIMARY case a face detector produces — was reject-only:
-//      no way forward at all beyond deleting it. Fixed: every proposal has
-//      "Not this person", "Someone else", "Unknown person" and "Skip"
-//      regardless of whether the enricher proposed a name.
-//   5. Confidence read `{pct}% confidence`, the enricher's raw similarity
-//      score. README.md:285 is explicit: confidence is expressed in
-//      MATCHES, not a percentage. Fixed by `face-review-queue.ts`'s
-//      `matchCountFor`.
-//   6. No progress line (v4 3966/4316's three-part note).
-//   7. AN INVENTED "CONFIRMED PEOPLE" horizontal carousel duplicating the
-//      real People destination (`PhotosPeopleView.tsx`, its own band
-//      destination per v4 §3.1) and using "{count} photos" — the handoff's
-//      vocabulary is "photographs" throughout. Removed outright, not
-//      relabelled: Face review is proposal triage, not a browsable roster
-//      (see PhotosPeopleView.tsx's own header for that same distinction).
-//   8. A FlatList over every unconfirmed region at once — batched, contrary
-//      to v4 3967 "One face at a time". Restructured into a single-entry
-//      queue (`face-review-queue.ts`'s `buildQueue`), one proposal on screen
-//      at a time.
-//
-// EVERY CONTROL IS A REAL WRITE NOW (issue #712), which was not true before —
-// this header used to end by explaining which button was an apology:
-//   * Confirm / Not this person / Someone else → `answer-face` with
-//     `confirm` or `reject`. "Someone else" is a picker over people ALREADY
-//     confirmed elsewhere in this vault; minting a BRAND NEW person has no
-//     action-plane command in app.json, so picking an existing one is the
-//     honest subset of "name this face yourself" this client can do.
-//   * Unknown person / Keep unnamed → `answer-face` with `dismiss`. It used
-//     to set a note reading "isn't wired up yet"; there was genuinely no
-//     vault command that meant "reviewed, deliberately left unnamed", so
-//     every stranger the member declined to name came back on the next
-//     replica pull. `media.answer_face_proposal` has one, and a dismissed
-//     face stays dismissed.
-//   * Skip: local only — nothing is written, so "it stays in the queue"
-//     (4315) is literally true, and it is now the ONLY control of which that
-//     is true.
-//
-// The cursor/progress arithmetic is `@centraid/blueprints`'
-// `apps/photos/triage-session` — the same pure model the web twin and the
-// duplicate review consume, so "1 of 54" cannot mean two different things
-// on two screens; `session` below explains the per-render build.
+// Every control but Skip is a real `answer-face` write (#712). Dismiss means
+// "reviewed, deliberately unnamed" — without it declined strangers return on
+// the next pull. "Someone else" picks people already confirmed here; no
+// command mints a new one. Progress arithmetic is `triage-session`.
 import { Image } from "expo-image";
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, View } from "react-native";
@@ -115,9 +69,7 @@ export default function FaceReview({
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
   );
-  // Metadata only (captured_at/width/height) — the same "no bytes over the
-  // replica" contract the old query kept. The PHOTOGRAPH itself is looked up
-  // from the local timeline below, exactly like every other Photos screen.
+  // Metadata only — no bytes over the replica.
   const assetsQuery = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "media.asset" }), [])
@@ -159,9 +111,8 @@ export default function FaceReview({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  // Frozen at first non-empty load — the numerator counts UP as the member
-  // works (4306 "1 of 54 unmatched"), instead of the denominator sliding
-  // around as other proposals land mid-session (same choice as the web twin).
+  // Frozen at first non-empty load: the numerator counts up as the member
+  // works, rather than the denominator sliding as new proposals land.
   const [sessionStartTotal, setSessionStartTotal] = useState<number | null>(
     null
   );
@@ -173,15 +124,9 @@ export default function FaceReview({
       );
   }, [sessionStartTotal, queue.length]);
 
-  // The shared triage model, BUILT PER RENDER rather than held in state — and
-  // that is the one thing this screen does differently from the web twin. The
-  // web surface loads a queue page and owns it; here the queue is DERIVED from
-  // live replica rows that re-resolve on every pull, so a session kept in
-  // state would need an effect to refill it on each new array identity, and
-  // that effect would set state that produces the next render. Deriving it
-  // instead keeps the data flow one-way, and the arithmetic the member reads
-  // (current, position, total, skip) still comes from one place for all three
-  // surfaces.
+  // Built per render, never held in state: the queue derives from live replica
+  // rows that re-resolve on every pull, so a stateful session would need a
+  // refill effect whose setState produces the next render.
   const session = useMemo(
     () => ({
       queue,
@@ -203,28 +148,17 @@ export default function FaceReview({
     sourceAsset && bbox
       ? faceCropStyle(bbox, sourceAsset.width, sourceAsset.height, CROP_PX)
       : null;
-  // The evidence on this card is the whole point of the card — a face the
-  // member is asked to name, over a photograph they are asked to recognise.
-  // Both come from the same asset, which is asked for as a derivative and may
-  // not have one yet, so both ride the one retry ladder rather than rendering
-  // as two empty boxes. Called unconditionally: it is a hook, and `current`
-  // changes as the queue advances.
+  // Crop and photograph are the same asset, whose derivative may not exist
+  // yet, so both ride one retry ladder. Called unconditionally: it is a hook.
   const media = useImageFallback(
     sourceAsset?.uri ?? "",
     sourceAsset?.originalUri,
     sourceAsset?.assetId ?? "none"
   );
 
-  /**
-   * The ONE write behind every answer on this screen (issue #712) — the same
-   * `answer-face` action, and the same three answers, the web twin fires.
-   *
-   * The OPTIMISTIC row is an upsert for all three: a rejection no longer
-   * deletes anything, so the local row must land in the same answered state
-   * the vault is about to write, or the queue would rebuild with the face
-   * still in it for the moment before the pull catches up. Rejected and
-   * dismissed regions carry no party — the vault's own CHECK says so.
-   */
+  /** The optimistic row is an upsert for all three answers: a rejection
+   *  deletes nothing, so the local row must land answered or the queue
+   *  rebuilds with the face in it. Rejected/dismissed carry no party (#712). */
   async function answer(
     kind: "confirm" | "reject" | "dismiss",
     partyId?: string
@@ -269,8 +203,8 @@ export default function FaceReview({
     }
   }
 
-  /** "Unknown person → Keep unnamed": reviewed, kept, deliberately unnamed —
-   *  and, unlike Skip, it does not come back on the next pull. */
+  /** Reviewed, kept, deliberately unnamed — unlike Skip it does not come back
+   *  on the next pull. */
   async function dismiss(): Promise<void> {
     setNote(null);
     if (await answer("dismiss")) {
@@ -321,9 +255,8 @@ export default function FaceReview({
           current ? (
             <>
               <View style={styles.tiles}>
-                {/* The face crop — no server-cropped variant exists, so the
-                  same source photograph is scaled/positioned so the bbox
-                  fills the box (face-crop.ts). */}
+                {/* No server-cropped variant exists: the source photograph is
+                  scaled so the bbox fills the box (`faceCropStyle`). */}
                 <View
                   style={[
                     styles.tile,
@@ -363,7 +296,7 @@ export default function FaceReview({
                     />
                   ) : null}
                 </View>
-                {/* The source photograph, aspect 1.5 per 4307. */}
+                {/* Source photograph, aspect 1.5. */}
                 <View
                   style={[
                     styles.tile,

@@ -1,11 +1,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-// Scenario seeds end-to-end (issue #290 phase 1): every blueprint seed.js
-// runs in the real handler worker against a real vault plane through the
-// demo bridge — the same path the demo route drives — then purges clean.
-// This is the schema-drift tripwire: a command a generator calls that no
-// longer exists (or whose input changed) fails HERE, not on an owner's
-// first click.
+// Scenario seeds end-to-end (#290): every blueprint seed.js runs in the real
+// handler worker against a real vault plane through the demo bridge, then
+// purges clean. Schema-drift tripwire: fails HERE, not on an owner's click.
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -93,9 +90,7 @@ describe("demo-seed", () => {
     for (const [appId, rows] of byApp)
       expect(rows, `${appId} seeded rows`).toBeGreaterThan(0);
 
-    // Every seeded ENTITY carries seed.demo provenance and one registry row —
-    // provenance may hold several rows per entity (a task added then completed
-    // writes twice), the registry exactly one.
+    // Provenance may hold several rows per entity; the registry exactly one.
     const provCounts = plane.db.journal
       .prepare(
         `SELECT count(DISTINCT entity_type || ':' || entity_id) AS n
@@ -109,7 +104,7 @@ describe("demo-seed", () => {
     };
     expect(provCounts.n).toBe(registered.n);
 
-    // Purge everything: registry empty, domain tables empty of demo rows.
+    // Purge: registry and domain tables empty of demo rows.
     const purge = plane.purgeDemo();
     expect(purge.blocked).toStrictEqual([]);
     expect(purge.purged).toBe(registered.n);
@@ -132,11 +127,9 @@ describe("demo-seed", () => {
     }
   }, 60_000);
 
-  // The photo roll is the one scenario whose bytes ship BESIDE its generator
-  // (issue #708): seed.js reads `sample/*.png` off its own directory through
-  // `import.meta.url`. A missing image, a lost `files:` entry, or a renamed
-  // sample would still "seed" — as zero assets — so this asserts the shape the
-  // grid, the favorites filter and the album rail actually render.
+  // The photo roll ships its bytes BESIDE its generator (#708): seed.js reads
+  // `sample/*.png` off its own dir; a missing image would still "seed" as
+  // zero assets.
   test("the photos scenario lands a full camera roll, favorites and an album", async () => {
     const dir = await tempDir();
     const plane = openPlane(dir);
@@ -151,8 +144,6 @@ describe("demo-seed", () => {
     expect(
       count("SELECT count(*) AS n FROM media_asset WHERE favorite = 1")
     ).toBe(2);
-    // Every asset carries what the grid needs to paint without a round trip:
-    // real bytes, dimensions, a capture time, and a ThumbHash placeholder.
     expect(
       count(
         `SELECT count(*) AS n FROM media_asset a
@@ -163,8 +154,7 @@ describe("demo-seed", () => {
             AND a.captured_at IS NOT NULL AND c.byte_size > 0`
       )
     ).toBe(19);
-    // The mobile journeys exercise the Years → Months → All drill-down, so a
-    // fresh harness vault must honestly cross both boundaries.
+    // The Years → Months → All drill-down needs a fresh vault to cross both.
     expect(
       count(
         "SELECT count(DISTINCT strftime('%Y-%m', captured_at)) AS n FROM media_asset"
@@ -175,11 +165,9 @@ describe("demo-seed", () => {
         "SELECT count(DISTINCT strftime('%Y', captured_at)) AS n FROM media_asset"
       )
     ).toBeGreaterThanOrEqual(2);
-    // Face proposals (issue #712): the portrait frames stage regions through
-    // the ordinary enrichment publisher, so People and the triage verb have a
-    // queue to answer on a fresh vault. Every seeded region must arrive
-    // UNANSWERED — a seed that pre-confirmed them would hide the one flow the
-    // scenario exists to exercise.
+    // Face proposals (#712) stage through the ordinary enrichment publisher;
+    // every seeded region arrives UNANSWERED — a pre-confirmed seed hides
+    // the one flow.
     expect(count("SELECT count(*) AS n FROM media_face_region")).toBe(8);
     expect(
       count(
@@ -191,15 +179,9 @@ describe("demo-seed", () => {
         "SELECT count(*) AS n FROM media_face_region WHERE bbox_json IS NULL"
       )
     ).toBe(0);
-    // Places. The shelf reads its sections off `place_id`, so a roll with no
-    // coordinates renders an empty Places on an otherwise full vault — which
-    // is what it did, and which looked like an unbuilt feature rather than
-    // absent data. Pinned as three separate facts because each fails
-    // differently: that frames are located at all, that identical coordinates
-    // COLLAPSE (16 located frames over 9 rows — a per-photo place row would
-    // make 16 and the shelf a list of duplicates), and that some frames stay
-    // unlocated, since "nobody told this one where it was taken" is a real
-    // state the grid has to keep handling.
+    // Places: the shelf reads sections off `place_id`; a coordinate-less roll
+    // renders empty Places. Coordinates COLLAPSE (16 frames, 9 rows); some
+    // stay unlocated.
     expect(
       count("SELECT count(*) AS n FROM media_asset WHERE place_id IS NOT NULL")
     ).toBe(16);

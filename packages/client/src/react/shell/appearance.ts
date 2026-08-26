@@ -1,16 +1,8 @@
-// Appearance prefs — the renderer-owned theme settings, ported out of the
-// vanilla app.ts. Pure helpers here (validation + wire mapping + the document
-// side-effect); the React hook that owns the live value and the gateway
-// round-trip lives in useAppearance.ts.
+// Validation, wire mapping, document side-effect; the live value and the
+// gateway round-trip belong to useAppearance.ts.
 //
-// The Binding Layer (#707) deleted the two colour overrides this module used
-// to write inline on `<html>`: the accent swatch (the shell now spends no hue
-// at all — `--accent` IS ink) and the `--bg-l` lightness anchor (the dark ramp
-// is literal surface tones, not one anchor plus `calc()`). An inline style
-// outranks every `[data-theme='…']` block, so a leftover override would
-// silently outrank the theme it is supposedly applying — which is exactly the
-// bug #608 group P fixed. Nothing colour-shaped is written here any more;
-// `applyPrefsToDocument` sets data attributes and lets the theme block win.
+// WRITE NOTHING COLOUR-SHAPED ON `<html>` (#707): an inline style outranks the
+// `[data-theme='…']` block it is applying.
 import { themes } from "@centraid/design";
 
 import type {
@@ -19,16 +11,8 @@ import type {
   ThemeName,
 } from "../../app-shell-context.js";
 
-/**
- * `system`, not `dark`. A member who has never opened Settings should see the
- * theme their machine is already in — and until this changed, first run could
- * not be light on any device, which made the grammar matrix's own reference
- * state for the threshold moment (`sh-light-first-run`) unreachable in the
- * product. `themeMode` carries the intent; `theme` is only the resolved name,
- * re-derived by `useAppearance` on mount and on every OS flip while the mode
- * stays `system`, so the value read here at module load is a starting point
- * and never the thing that goes stale.
- */
+/** `system`, not `dark`. `themeMode` is the intent; `theme` is only the
+ *  resolved name, re-derived by `useAppearance`. */
 export const DEFAULT_PREFS: AppearancePrefs = {
   cardVariant: "outlined",
   theme: resolveThemeMode("system"),
@@ -36,11 +20,9 @@ export const DEFAULT_PREFS: AppearancePrefs = {
   tileVariant: "gradient",
 };
 
-/** The media query `system` mode tracks. Exported so the hook subscribes to
- *  the same one it resolves against. */
+/** The hook must subscribe to the query it resolves against. */
 export const LIGHT_SCHEME_QUERY = "(prefers-color-scheme: light)";
 
-/** Resolve a mode to the theme name to apply. `system` reads the OS. */
 export function resolveThemeMode(mode: ThemeMode): ThemeName {
   if (mode !== "system") return mode;
   const mq =
@@ -52,20 +34,13 @@ function isThemeMode(v: unknown): v is ThemeMode {
   return v === "system" || (typeof v === "string" && v in themes);
 }
 
-/** Fold an arbitrary remote prefs object onto the typed AppearancePrefs shape,
- *  dropping unknown keys and values that don't match the unions. Mirrors the
- *  gateway's KNOWN_KEYS list (vanilla `pickAppearance`).
- *
- *  A stored `theme` naming a preset this build no longer registers is simply
- *  dropped, so the client opens on DEFAULT_PREFS.theme — no migration step
- *  and no error path (#608 group O). */
+/** Drops unknown keys and off-union values (mirrors KNOWN_KEYS), including a
+ *  `theme` this build no longer registers — no migration path. */
 export function pickAppearance(
   remote: Record<string, unknown>
 ): Partial<AppearancePrefs> {
   const out: Partial<AppearancePrefs> = {};
-  // `themeMode` carries the intent; `theme` is the resolved name the gateway
-  // bakes onto <html> for first paint. Accept either — a mode of `system`
-  // wins, since the resolved value it was saved with may be stale.
+  // Accept either, but `system` wins: the baked resolved name may be stale.
   if (isThemeMode(remote.themeMode)) out.themeMode = remote.themeMode;
   if (typeof remote.theme === "string" && remote.theme in themes) {
     out.theme = remote.theme as ThemeName;
@@ -82,10 +57,7 @@ export function pickAppearance(
   return out;
 }
 
-/** Convert typed prefs back into the gateway wire shape (vanilla
- *  `toRemoteShape`). Only the keys an owner can still set survive the Binding
- *  Layer flip — a stored `accent`/`bgL` on an older gateway is simply never
- *  read back (pickAppearance drops unknown keys), so no migration is owed. */
+/** Only owner-settable keys are sent; no migration is owed. */
 export function toRemoteShape(
   patch: Partial<AppearancePrefs>
 ): Record<string, unknown> {
@@ -96,13 +68,8 @@ export function toRemoteShape(
   return out;
 }
 
-/** Write the prefs onto `<html>` as data attributes. Symmetric with what the
- *  gateway bakes on first paint (vanilla `applyPrefs`, minus the iframe
- *  broadcast which is an iframe-host concern handled in R3).
- *
- *  Attributes only, never inline custom properties: the token layer owns every
- *  colour, and an inline style here would outrank the `[data-theme='…']` block
- *  it just selected. */
+/** Data attributes only, never inline custom properties — the token layer owns
+ *  every colour. */
 export function applyPrefsToDocument(
   prefs: AppearancePrefs,
   doc: Document = document

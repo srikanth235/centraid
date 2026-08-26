@@ -168,7 +168,7 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
   // The write is recorded under the ext row's OWN primary key, not the event
   // id: every downstream sweep (demo purge above all) deletes by the physical
   // pk, so an event-keyed registration deleted nothing and left the ext row
-  // holding an FK on the event that would not die (issue #708).
+  // holding an FK on the event that would not die (#708).
   const eventExtId = ctx.newId();
   ctx.db
     .prepare(
@@ -251,7 +251,7 @@ const RESCHEDULE_EVENT: CommandDefinition = {
   ],
   idempotency: "retry-safe",
   risk: "medium",
-  // Restates a commitment others may hold (issue #306 decision 1) — parks
+  // Restates a commitment others may hold (#306 decision 1) — parks
   // for owner confirmation on every non-owner invocation. Without this the
   // manifest's and Agenda's "parks for the owner" claim was cosmetic: any
   // caller with the install-time grant moved the event immediately.
@@ -442,7 +442,6 @@ function cancelEvent(ctx: HandlerCtx): Record<string, unknown> {
   return { event_id: input.event_id, sequence };
 }
 
-/** Register the schedule domain's first-boundary commands on a gateway. */
 export function registerScheduleCommands(gateway: Gateway): void {
   gateway.registerCommand(PROPOSE_EVENT);
   gateway.registerCommand(RESCHEDULE_EVENT);

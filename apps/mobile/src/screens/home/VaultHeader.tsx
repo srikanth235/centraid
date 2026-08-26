@@ -1,28 +1,6 @@
-// The two facts true on EVERY route: which vault, and which gateway holds it.
-//
-// The Binding Layer puts them at the head of the stem, so that on desktop they
-// are visible from every screen. Mobile has no stem — the band is capped at six
-// tabs and none of them can carry a two-line lockup — so they live at the head
-// of Home, which is the one screen every route returns to.
-//
-// This replaces the time-of-day greeting that used to sit here. A greeting is
-// true for about four hours and says nothing about where you are; a member with
-// two vaults on two gateways could not tell from the old header which one they
-// were looking at, on the screen whose whole job is to show them what they own.
-// The vault mark doubles as the vault SWITCH, so identity and "change identity"
-// are one control rather than two.
-//
-// The gateway line is mono because it is an address, and an address is a
-// numeric-register fact: it is scanned character by character, not read. When
-// the gateway is unreachable it says so in `--net`, in place, on the same line
-// — never a banner and never a badge.
-//
-// The head carries the compact band's two verbs (handoff :3480 "New chat and
-// Search move to the head; a row of places must not carry a verb"): Search
-// everything and New chat. Quick add/Capture is NOT one of them — it stays
-// reachable from wherever it already was, because the band's rule is that a
-// row of PLACES carries no verb, and the head mirrors exactly the two verbs
-// the band itself would have carried, not a third.
+// The two facts true on EVERY route: which vault, which gateway. No greeting.
+// The mark IS the vault switch. The gateway line is mono and says offline in
+// place, never a banner. Exactly the band's two verbs (:3480), never a third.
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -35,18 +13,10 @@ import { Text } from "../../kit/components/NativeText";
 import { borders, pageMargin, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-/** The vault mark, :5363–5365 — 30×30, radius 8. Smaller than the old 34px
- *  pill: it is a wash-ground identity chip now, not a solid-filled avatar, and
- *  the lighter fill reads best at the app-icon-chip size rather than a full
- *  control height. */
+/** :5363. A wash-ground chip, never a solid avatar. */
 const MARK = 30;
 
-/** `NEWCHAT_ICON`, handoff :3446 — a speech bubble with a `+`. Drawn inline
- *  from the handoff's own path data rather than through the shared `Icon`
- *  registry: the registry (packages/design/src/icons.ts) has no
- *  message-square-plus glyph yet, and this file cannot add one — it owns only
- *  mobile's Home chrome. Inlining the exact handoff paths keeps the pixels
- *  faithful without reaching outside that boundary. */
+/** :3446, inlined: the `Icon` registry has no such glyph. */
 const NEW_CHAT_PATHS = [
   "M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z",
   "M9 10h6M12 7v6",
@@ -70,26 +40,16 @@ function NewChatIcon({ color }: { color: string }): React.JSX.Element {
 }
 
 export interface VaultHeaderProps {
-  /** The active vault's name, or `undefined` while nothing is paired yet. */
   vaultName: string | undefined;
-  /** The gateway holding it — its host label, in the numeric register. */
   gatewayName: string | undefined;
-  /** The vault's identity colour (a raw hex from the vault link), if it has one. */
   color: string | undefined;
-  /** True when the gateway is not answering. Says so on the gateway line. */
   offline: boolean;
   onSwitchVault: () => void;
   onSearch: () => void;
   onNewChat: () => void;
 }
 
-/**
- * A vault with no name yet is a real state, not a blank.
- *
- * It happens between pairing a gateway and the enrolled vault resolving, and
- * for the whole of a fresh install. Both get copy that describes the state
- * rather than an empty lockup that reads as a failed render.
- */
+/** No name is a real state; never render a blank lockup. */
 const NO_VAULT = "No vault yet";
 const NO_GATEWAY = "not connected to a gateway";
 
@@ -106,15 +66,7 @@ export default function VaultHeader({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const name = vaultName?.trim() || NO_VAULT;
   const hue = /^#[0-9a-fA-F]{6}$/u.test(color ?? "") ? color : colors.text;
-  // The mark's ground is the same 13%/20% hue-over-surface wash every app icon
-  // chip draws (`iconChipFinish`, shared with LauncherGrid/FirstMoves) — the
-  // handoff's own `color-mix(in oklab, <hue> …%, transparent)` (:5365) lowered
-  // to RN, which has no `color-mix()`.
-  //
-  // `iconChipFinish` now returns the solved `-text` rung for known palette
-  // hues, while arbitrary vault hex values safely fall back to the submitted
-  // colour. The shared helper owns that distinction so this vault mark and app
-  // marks do not drift into separate contrast maths.
+  // `iconChipFinish` owns the wash and contrast maths (:5365).
   const finish = iconChipFinish(hue ?? colors.text, colors.bg, scheme);
   const gateway = gatewayName?.trim();
   const line = gateway
@@ -138,9 +90,7 @@ export default function VaultHeader({
             {(name[0] ?? "?").toUpperCase()}
           </Text>
         </View>
-        {/* `aria-label` on the container above is a REPLACEMENT, so the two
-            lines below are decorative to assistive tech and are not read
-            twice. */}
+        {/* The container's label REPLACES these lines to assistive tech. */}
         <View style={styles.names} accessibilityElementsHidden>
           <Text numberOfLines={1} style={styles.vault}>
             {name}
@@ -159,11 +109,7 @@ export default function VaultHeader({
       >
         <Icon name="Search" size={16} color={colors.textSoft} />
       </Pressable>
-      {/* New chat, not Quick add — :3480 "New chat and Search move to the
-          head" (the compact band's own two verbs). Filled only INSIDE the
-          band (:3474); in the head it is outlined, the same as Search,
-          because the route's own primary (Search everything on the title
-          row) holds the one-filled-ink budget here. */}
+      {/* Outlined here, filled only inside the band (:3474). */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="New chat"
@@ -179,11 +125,7 @@ export default function VaultHeader({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // Bounded, :5461–5463 — a 34×34 control with a hairline-strong border and
-    // a transparent ground, not the borderless icon-on-nothing the head drew
-    // before. `lineStrong` is the handoff's `t.line` (the darker of its two
-    // rungs; its `t.lineS` is the RN `line` hairline — see the mapping this
-    // file's finish/ground comment above works from).
+    // Bounded (:5461), never borderless.
     action: {
       alignItems: "center",
       borderColor: colors.lineStrong,
@@ -198,17 +140,11 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       flex: 1,
       flexDirection: "row",
-      // Same 12 the row itself carries — RN has no single flex container for
-      // all four of the lockup's children (mark, names, search, new chat) the
-      // way the handoff's one CSS `gap` does, so the same value is repeated
-      // on both of the two nested rows it takes to lay them out here.
       gap: 12,
     },
     mark: {
       alignItems: "center",
-      // 8, static — the handoff's own value (:5363), not `iconChipRadius()`'s
-      // 26%-of-size ratio: that function is for app icon chips, and the vault
-      // mark is drawn at a size (30px) the ratio would round to 7.8, not 8.
+      // Static 8 (:5363), not `iconChipRadius()` — that is for app chips.
       borderRadius: radii.md,
       height: MARK,
       justifyContent: "center",
@@ -222,14 +158,8 @@ const makeStyles = (colors: ThemeColors) =>
     row: {
       alignItems: "center",
       flexDirection: "row",
-      // `mobileLockupStyle`, :5529 — ONE `gap: R.gap.m` (12) across all four
-      // children of the lockup row, not the three-number fake (lockup gap +
-      // paddingEnd + action marginStart) this used to be.
       gap: 12,
-      // `mobileLockupStyle`, :5529-5530 — `padding: 12px 18px 8px`.
       paddingBottom: 8,
-      // The shared page margin (R.margin.m, :3356) — one token, not a
-      // literal repeated per screen.
       paddingHorizontal: pageMargin,
       paddingTop: 12,
     },

@@ -1,4 +1,4 @@
-// Version lineage (issue #352): a `revises` core.link between content items
+// Version lineage (#352): a `revises` core.link between content items
 // (NEW content item -> OLD content item), asserted wherever a wrapper
 // repoints its canonical body — core.edit_document,
 // core.replace_document_content, core.restore_document_version, and

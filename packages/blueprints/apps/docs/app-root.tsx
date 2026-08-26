@@ -1,10 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505); it is smaller than the served app.tsx + app-inline.tsx it replaces. Splitting it belongs to the app's own code evolution, not this migration.
-// Docs — query-free React tree (issue #505). Holds the `Root` component and
-// every constant, helper and type it needs that does NOT depend on the
-// node-side `./queries/*` handler modules. The shell's InlineAppModule
-// descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
-// wiring; there is deliberately no parallel served-system-app entry.
-
 import {
   useCallback,
   useEffect,
@@ -110,8 +104,7 @@ import {
 
 import styles from "./Chrome.module.css";
 
-// Vault entities this app's queries read — the doorbell filter re-derives only
-// when a change names one of these (or names none, i.e. "this app acted").
+// Re-derived when a change names one of these, or names none.
 export const CHANGE_TABLES = [
   "core.document",
   "core.content_item",
@@ -148,8 +141,7 @@ function makeState(view: AppState["view"]): AppState {
     view,
     shelf: null,
     filters: NO_FILTERS,
-    // The drive opens on last change, newest first — the order the status line
-    // names and the one the Recently changed shelf is a filtered view of.
+    // The order the status line names.
     sortKey: "changed",
     sortDir: -1,
     selecting: false,
@@ -175,10 +167,7 @@ function makeState(view: AppState["view"]): AppState {
   };
 }
 
-// The factory pair + the two async orchestration entry points app.tsx defines,
-// built once and threaded into the reused factories (mirrors app.tsx's module
-// scope). Kept in one ref so the circular wiring (nav needs logic.clearSelection,
-// logic needs nav.openQuick) resolves exactly as it does served.
+// One ref: nav needs logic.clearSelection and logic needs nav.openQuick.
 interface Core {
   logic: ReturnType<typeof createLogic>;
   nav: ReturnType<typeof createNav>;
@@ -196,23 +185,16 @@ export function Root({
   const [ready, setReady] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  // A read that actually came back FAILED — the only evidence this app has for
-  // "the gateway is out of reach" (view-state.ts `libraryReachability`). State
-  // rather than the ref below, because the banner, the caption and every row's
-  // state slot are rendered from it.
+  // State, not the ref below: banner and caption render from it.
   const [readFailedState, setReadFailedState] = useState(false);
   const [consent, setConsent] = useState<{ message: string } | null>(null);
   const [dropVisible, setDropVisible] = useState(false);
   const [dropTarget, setDropTarget] = useState("");
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
-  // `null` is "the roster is not an answer" — unread, or read and unreadable —
-  // which is not the same fact as a vault that knows nobody. Share is offered
-  // only once the roster IS an answer, and an empty one is.
+  // `null` = unread/unreadable, not empty — share needs an answer; empty is one.
   const [audiences, setAudiences] = useState<
     readonly GrantAudienceOption[] | null
   >(null);
-  // The compact band's overflow sheet (§1.5). React state rather than a field
-  // on the mutable `state` bag: nothing outside this component opens it.
   const [moreOpen, setMoreOpen] = useState(false);
 
   const [residentFolderIds, setResidentFolderIds] = useState<Set<string>>(
@@ -224,11 +206,8 @@ export function Root({
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const skeletonRef = useRef<HTMLDivElement | null>(null);
   const readFailedRef = useRef(false);
-  // The member was moved off a folder that no longer exists (view-state.ts
-  // rule 2). A ref, not state: it is SET during the same render that performs
-  // the move (so the destination can explain itself on that very frame) and
-  // cleared by the next navigation, which is a render-phase write no
-  // `setState` may do.
+  // Set during the render that performs the move — a render-phase write no
+  // `setState` may do (view-state.ts rule 2).
   const goneFolderRef = useRef(false);
 
   const dataRef = useRef<AppData>({
@@ -239,9 +218,6 @@ export function Root({
   const stateRef = useRef<AppState>(makeState(initialView(null)));
   const coreRef = useRef<Core | null>(null);
 
-  // Build the reused factories + orchestration entry points once. `render` funnels
-  // to `bump` (with a popover close, matching app.tsx's render()); the per-surface
-  // render entry points nav.ts calls all bump too (one tree).
   if (!coreRef.current) {
     const state = stateRef.current;
     const data = dataRef.current;
@@ -277,8 +253,7 @@ export function Root({
         bump();
         return;
       }
-      // Mutate `data` in place (never reassign) — logic.ts closed over this exact
-      // object at boot.
+      // Mutate in place, never reassign: logic.ts closed over this object.
       const incoming = next ?? data;
       data.folders = incoming.folders ?? [];
       data.documents = incoming.documents ?? [];
@@ -299,17 +274,13 @@ export function Root({
         !data.documents.some((d) => d.document_id === state.quickId)
       )
         state.quickId = null;
-      // The editor overlay manages its own body state after its initial fetch —
-      // a background refresh never closes it out from under a typing user.
+      // A background refresh must never close the editor over a typing user.
       bump();
     };
     core = { refresh } as Core;
 
     core.applySearch = debounce(async () => {
-      // Same reason as `nav.ts`: the field belongs to the Search shelf, so it
-      // is absent on every other one. This debounce can still be in flight
-      // when the member navigates away, and a missing field means there is no
-      // query left to apply.
+      // Debounce can outlive the shelf — a missing field means a stale query.
       const field = document.querySelector<HTMLInputElement>("#searchInput");
       if (!field) return;
       const q = field.value.trim();
@@ -323,8 +294,6 @@ export function Root({
         return;
       }
       const seq = ++state.searchSeq;
-      // The read is in flight, and the shelf says so in a DETERMINATE line
-      // over whatever it already has — never a spinner.
       state.searchStatus = "searching";
       render();
       let rows: DriveDoc[] = [];
@@ -336,11 +305,8 @@ export function Root({
         });
         rows = res?.documents ?? [];
       } catch {
-        // A THROW IS NOT AN EMPTY RESULT SET. The index lives on the gateway;
-        // if it could not be asked, the shelf says that and offers a retry
-        // rather than printing "nothing matches", which would be a claim
-        // nobody verified. This used to fall through to `rows = []` and the
-        // two outcomes were indistinguishable on screen.
+        // A throw is not an empty result set; falling through would claim
+        // "nothing matches" unverified.
         reached = false;
       }
       if (seq !== state.searchSeq) return;
@@ -409,15 +375,7 @@ export function Root({
     startCreateFolder: handleStartCreateFolder,
     triggerUpload: handleTriggerUpload,
   } = nav;
-  // OPENING A ROW OPENS THE STAGE (§1.8, §7). It used to be a fork: text left
-  // the drive for a reading SCREEN of its own, and every other kind opened on
-  // the stage. §1.8's rule is about the SHEET, not about the screen — "text
-  // renders on paper, capped at a 34em measure" — and the stage keeps that
-  // rule literally: `QuickLookText` stands paper on the theater ground. What
-  // the fork cost was everything around the sheet: text was the one kind a
-  // member could not step through with the arrows, could not see the
-  // properties of without going somewhere else, and had to back out of rather
-  // than close.
+  // Opening a row opens the stage, never a text-only fork (§1.8, §7).
   const handleOpenQuick = useCallback(
     (id: string) => core.nav.openQuick(id),
     [core]
@@ -440,19 +398,10 @@ export function Root({
     [rootRef]
   );
 
-  // Wrap nav.selectShelf so a shelf change also closes the React drawer and
-  // the band's More sheet — every navigation inside Docs clears what was open
-  // over it (spec §1.1's `dgo`/`dgoFromMore`).
+  // Every navigation clears what was open over it (§1.1).
   const selectShelf = useCallback(
     (shelf: ShelfId) => {
-      // THE QUERY BELONGS TO THE SEARCH SHELF and does not follow the member
-      // off it. `currentRows` answers with the vault's flat FTS matches
-      // whenever `state.search` is set, on whatever shelf is open — so a query
-      // left behind would make Starred, Trash and every folder show the same
-      // search results under the wrong breadcrumb. It used to be impossible to
-      // leave one behind, because the field was chrome the member could see
-      // from anywhere; now that the field lives on one shelf, leaving is what
-      // clears it.
+      // A query left behind shows search rows under the wrong breadcrumb.
       if (shelf !== SEARCH && state.search) {
         if (searchInputRef.current) searchInputRef.current.value = "";
         state.searchSeq += 1;
@@ -462,9 +411,8 @@ export function Root({
       }
       nav.selectShelf(shelf);
       goneFolderRef.current = false;
-      // Selection is scoped to the set it was entered over. `nav.selectShelf`
-      // already drops what was ticked; the MODE has to go with it, or the next
-      // shelf opens with a column of boxes nobody asked for.
+      // Mode must go with the ticks nav.selectShelf dropped, or the next
+      // shelf opens with stray checkboxes.
       state.selecting = false;
       setMoreOpen(false);
       setSideOpen(false);
@@ -472,16 +420,7 @@ export function Root({
     [nav, state]
   );
 
-  /**
-   * The way IN to search, from the app bar's Search control (frame.tsx) and
-   * from the compact band's Search tab. Both land on the shelf and put the
-   * caret in its field — Photos' `onSearch: () => navigateTo(SEARCH)` plus the
-   * focus the band used to do by hand, now that there is a field to focus that
-   * is not chrome.
-   *
-   * The focus is deferred one frame because the field does not exist until
-   * this navigation has rendered.
-   */
+  /** Focus the field next frame — it does not exist until this nav renders. */
   const openSearch = useCallback(() => {
     selectShelf(SEARCH);
     requestAnimationFrame(() => searchInputRef.current?.focus());
@@ -504,10 +443,7 @@ export function Root({
     [state]
   );
 
-  // Pressing a column head: the same column reverses, a different one takes
-  // over at ITS OWN natural direction. A name wants A→Z; a size, a date and a
-  // kind want the biggest, the newest and the ones you have most of first, and
-  // starting them ascending would make every member's first press a correction.
+  // Same column reverses; a new one takes its own natural direction.
   const onSortBy = useCallback(
     (key: SortKey) => {
       if (state.sortKey === key) state.sortDir = state.sortDir === 1 ? -1 : 1;
@@ -520,9 +456,7 @@ export function Root({
     [state]
   );
 
-  // The named orders (`SORT_OPTIONS`), anchored to the head's own button. A
-  // plain DOM popover, the same one the row kebab and "Move to…" use, so there
-  // is one popover in the app at a time and one Escape that closes it.
+  // Shared popover: one menu open, one Escape closes it.
   const onOpenSortMenu = useCallback(
     (anchor: HTMLElement) => {
       openPopover(anchor, (box) => {
@@ -538,17 +472,7 @@ export function Root({
                 state.sortDir = option.dir;
                 bump();
               },
-              // The tick marks the order the drive is in — the menu reports
-              // the state as well as setting it, so it is never a list of five
-              // things one of which mysteriously already happened.
-              //
-              // TRAILING, AND A TICK. It was a leading accent dot, which put
-              // the mark on the edge every label starts from and pushed the
-              // other four rows' text past it. The handoff's sort menu hangs
-              // its `key` — `'✓'` on the chosen order — off the far edge
-              // instead (`keyCss: 'flex:none;font:var(--section)'`), so the
-              // labels keep one edge and "which one is on" is answered at the
-              // other.
+              // Trailing tick, never a leading dot: labels keep one edge.
               on ? { trailing: "✓" } : {}
             )
           );
@@ -584,11 +508,7 @@ export function Root({
     void logic.uploadFiles(files);
   }, [logic]);
 
-  // Seed the narrow layout BEFORE the first paint (the served app sets is-narrow
-  // pre-render; observeWidth in the mount effect below only fires post-paint, so
-  // without this the drawer would paint as an in-flow sidebar and then slide out).
-  // The `.side` transition stays gated on `ready` (set one frame later) so this
-  // initial snap doesn't animate.
+  // Seed narrow before first paint — observeWidth is post-paint. `.side` gated on `ready` so this snap does not animate.
   useLayoutEffect(() => {
     const el = rootElRef.current;
     if (!el) return;
@@ -599,24 +519,20 @@ export function Root({
       setNarrow(isNarrow);
     }
   }, []);
-  // Enable the drawer slide transition only after the first painted frame, so
-  // the mount-time narrow snap above is instant and user-driven open/close animate.
+  // After the first painted frame, so the mount-time snap above is instant.
   useEffect(() => {
     const id = requestAnimationFrame(() => setReady(true));
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // THE ROSTER IS READ ONCE, HERE. Three surfaces open the share sheet — the
-  // folder rail, the details rail and the stage — and a roster read per sheet
-  // would ask People the same question three times for one app.
+  // THE ROSTER IS READ ONCE: three surfaces would otherwise ask People three times.
   useEffect(() => {
     if (!ready || !grantPlaneAvailable()) return;
     let active = true;
     void readGrantAudiences().then((read) => {
       if (!active) return;
-      // A ROSTER THAT COULD NOT BE READ IS NOT AN EMPTY ONE — `docsRosterAnswer`
-      // is where the two stay apart, and it hands back both halves: what Share
-      // may name, and what the status line owes the member.
+      // An unreadable roster is not an empty one; docsRosterAnswer keeps
+      // the two apart.
       const answer = docsRosterAnswer(read);
       if (answer.status) publishOutcome(frame, { text: answer.status });
       if (answer.audiences) setAudiences(answer.audiences);
@@ -665,7 +581,7 @@ export function Root({
         next.delete(folder.folder_id);
         return next;
       });
-      // Outcomes go through ONE door (§11): the frame's single status line.
+      // Outcomes go through ONE door (§11): the frame's status line.
       publishOutcome(frame, {
         text: SAVED_TO_MY_VAULT,
       });
@@ -679,7 +595,6 @@ export function Root({
     }
   };
 
-  // ---- chrome wiring: doorbell, focus, width, keys, drag/drop ----
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, () => void core.refresh());
     const stopFocus = onFocusRefresh(() => void core.refresh());
@@ -707,8 +622,6 @@ export function Root({
     };
     window.addEventListener("keydown", onKey);
 
-    // Close the "+ New" menu on any outside click (matches chrome.ts's
-    // `.closest('.d-new-wrap')` guard via the data-new-wrap hook Chrome stamps).
     const onDocClick = (e: MouseEvent): void => {
       if (
         state.newMenuOpen &&
@@ -720,7 +633,6 @@ export function Root({
     };
     document.addEventListener("click", onDocClick);
 
-    // Drag-and-drop onto the current folder.
     let dragDepth = 0;
     const dragHasFiles = (e: DragEvent): boolean =>
       [...(e.dataTransfer?.types ?? [])].includes("Files");
@@ -773,22 +685,16 @@ export function Root({
       stopFocus();
       stopWidth();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);
 
-  // Boot skeleton, then the real empty state — both driven with the same kit
-  // DOM helpers app.tsx used (their containers carry no JSX children, so the
-  // imperative writes are never clobbered by React reconciliation).
+  // Containers carry no JSX children, so React reconciliation never clobbers
+  // these imperative kit writes.
   useEffect(() => {
     if (!loaded && skeletonRef.current) showSkeleton(skeletonRef.current, 6);
   }, [loaded]);
 
-  // ---- derive the render (app.tsx's render()/renderSidebar/renderToolbar/… ) ----
-
-  // A FOLDER CAN VANISH UNDER US (deleted in another window). The member is
-  // NOT dropped silently on All any more: `shelfAfterRead` falls them back to
-  // Folders — where they reached the folder from — and says so once they are
-  // there (view-state.ts rule 2).
+  // A folder can vanish: `shelfAfterRead` falls back to Folders and says so (view-state.ts rule 2).
   const survived = shelfAfterRead(
     state.shelf,
     data.folders.map((f) => f.folder_id)
@@ -807,19 +713,8 @@ export function Root({
     ? logic.folderName(openFolderId)
     : undefined;
 
-  // Per-shelf counts for the strip, the More sheet and the NAVIGATION RAIL —
-  // one map, so the three surfaces can never disagree about how many things a
-  // shelf holds (v16 §3: "a count that disagrees with its shelf header is a
-  // defect"). The two the rail added are the two the strip had nowhere to put:
-  //
-  //   * ALL is the whole active drive, which is the number the app bar shows
-  //     on that shelf once nothing is filtered;
-  //   * RECENTLY CHANGED is a WINDOW, not a filter — `currentRows` takes the
-  //     eight most recent — so its count is that window's size and not the
-  //     drive's, which is what the shelf will actually draw.
+  // One map for strip, More sheet, and rail. Recent is a window, not a filter.
   const shelfCounts = new Map<string, number>([
-    // All's shelf id is `null`, so it keys on the band's own name for the root
-    // (`countKey`) rather than a third name invented here.
     [countKey(null), active.length],
     [RECENT, Math.min(active.length, RECENT_WINDOW)],
     [FOLDERS, data.folders.length],
@@ -827,69 +722,23 @@ export function Root({
     [TRASH, trashCount],
   ]);
 
-  // Search is a SHELF (shelves.ts), and it is the only shelf that draws a
-  // field. This asks about the DESTINATION, not about whether a query happens
-  // to be typed, because the field has to be there BEFORE anything is.
   const onSearchShelf = state.shelf === SEARCH;
-  // WHEN THE BOXES ARE DRAWN. The handoff's rule is `showBox: !!sel` — once
-  // anything is picked, every row grows a box so the next one can be picked
-  // beside it. `Select` still exists in the app bar as the keyboard-and-
-  // announcement way in, so the mode counts too; what neither of them does any
-  // more is put an empty box on every row of a drive nobody is selecting on.
   const showBoxes = state.selecting || state.selected.size > 0;
   const searching = Boolean(state.search.trim());
-  // THE SEARCH SHELF IS NOT THE DRIVE WITH A FIELD ON TOP. `showsDrive` says
-  // it paints the document row set, which it does — once there is a query. On
-  // the resting shelf it excludes itself, because everything `onDrive` gates
-  // would otherwise answer a question nobody asked: the bar would count the
-  // whole library as "3 results", the grid/list toggle would offer to arrange
-  // rows that are not there, and Select would offer to pick them.
+  // Resting search must not answer drive questions.
   const onDrive =
     showsDrive(state.shelf) && !state.search.trim() && !onSearchShelf;
-  // WIDER THAN `onDrive`, and on purpose: Folders draws a set too, so the pair
-  // means something there. Same two exclusions — a live query and the resting
-  // Search shelf — because neither has a set of this shelf's to arrange.
   const arrangeable =
     showsViewToggle(state.shelf) && !state.search.trim() && !onSearchShelf;
-  // Where selection is offered at all: any shelf that paints a row set.
   const selectable = allowsSelection(state.shelf) && (onDrive || searching);
-  // MAY THE RAIL BE DOCKED HERE? The handoff's `showInfoBtn: !mob &&
-  // (driveish || s === 'read')` — a set of documents to point at, and the
-  // width for a 308px column beside it. Narrow keeps the drawer, opened the
-  // way it always was: a row's menu → Details.
   const railable = !narrow && (onDrive || searching);
 
-  // WHO THE ROWS BELONG TO. This drive projects ONE vault — the query reads no
-  // per-document owner — so every row in it is the member's own, and the
-  // column says so in the product's own second person rather than printing a
-  // name it would have had to invent. The disc takes the same initial. The day
-  // a shared space puts somebody else's documents in this set, the owner
-  // becomes a per-row fact and this constant becomes a lookup; the column, its
-  // head and its comparator are already in place for it.
   const driveOwner = { name: "you", initial: "Y" };
 
-  // A space the member was placed in and may not write to (§12's `readonly`).
-  // `canWrite` is the SHELL'S answer — read, never inferred from a failed
-  // write, because a member should learn this before pressing Rename and not
-  // from pressing it. `null` on the ordinary case: one library, writable.
   const primaryScope = mountedScopes()[0];
   const readOnlyScope =
     primaryScope && !primaryScope.canWrite ? primaryScope.label : null;
 
-  // THE IN-PAGE TITLE AND ITS BYLINE ARE GONE (Chrome.tsx). Both restated what
-  // two surfaces above them already said, and each sentence they carried has a
-  // home that outlived them: the shelf's title and count are the app bar's
-  // (`frame.tsx` → `shelfCopy`); trash's purge window and the folder rule are
-  // captions under their own row sets (`view-copy.ts`). None of it was lost,
-  // and none of it is said twice.
-
-  // The compact button's label. The words are the column heads' own, so the
-  // two controls name the same four orders rather than inventing two dialects.
-  // ---- what the view may SAY about itself (view-state.ts, §4.6, §11) ----
-  //
-  // "Nothing is empty until a read has landed" and "offline is a state the app
-  // READS, never one it invents" are both rules this file used to get wrong by
-  // expressing them inline. Both are now one call each.
   const offline =
     libraryReachability({
       hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
@@ -904,8 +753,7 @@ export function Root({
     ...(filtersActive(state.filters) ? { filtered: true } : {}),
     ...(openFolderName ? { folderName: openFolderName } : {}),
     ...(active.length === 0 ? { driveIsEmpty: true } : {}),
-    // The new-folder editor is standing in the shelf's place, so the shelf is
-    // not the thing with nothing in it.
+    // The new-folder editor stands in the shelf's place, so it is not "empty".
     ...(state.creatingFolder ? { suppressed: true } : {}),
   });
 
@@ -918,13 +766,7 @@ export function Root({
     bump();
   }, [state]);
 
-  /**
-   * Type a query INTO the field on the member's behalf — what the resting
-   * panel's example chips do. The chips are literal queries a member could
-   * have typed, so this writes the words into the input and runs the same
-   * debounced read a keystroke would, rather than taking a private shortcut
-   * into the vault that the field would then disagree with.
-   */
+  /** Type into the field and run the same debounced read a keystroke would. */
   const runQuery = useCallback(
     (value: string) => {
       const input = searchInputRef.current;
@@ -937,16 +779,7 @@ export function Root({
     [handleSearchInput]
   );
 
-  /**
-   * Ask the index again for the query already in the field — the unreachable
-   * panel's one control.
-   *
-   * `applySearch` short-circuits when the field's value equals `state.search`,
-   * which is what stops every keystroke that lands back on the same string
-   * from re-reading. A retry has to get past that guard, so the remembered
-   * query is dropped first: the field still holds the words, and the next read
-   * sees them as new.
-   */
+  /** Drop the remembered query first: applySearch short-circuits on equality. */
   const retrySearch = useCallback(() => {
     state.search = "";
     handleSearchInput();
@@ -967,11 +800,7 @@ export function Root({
     [logic, state]
   );
 
-  // The way forward for an empty view, BY LABEL — and only where this app can
-  // actually perform it. A variant whose action is a route that has not landed
-  // ("Scan a document", "Move documents here") returns nothing and the button
-  // is not drawn, which is the difference between a screen that is honest
-  // about what it cannot do and one that dead-ends a member.
+  // Only where this app can perform it; unroutable labels draw no button.
   const emptyRunFor = useCallback(
     (label: string): (() => void) | undefined => {
       if (label === "Upload documents") return () => uploadRef.current?.click();
@@ -986,9 +815,7 @@ export function Root({
   const trashed = inTrash;
   const showFoot =
     state.driveTruncated && !searching && state.shelf !== STARRED;
-  // WHAT DOCS OWES THE SHARE KIT (issue #825): the roster, and the one status
-  // line. Absent until the roster has actually been read — a sheet opened over
-  // an unread roster would say "nobody yet" about a vault full of people.
+  // Absent until the roster is READ (#825).
   const handleShareStatus = (message: string): void => {
     publishOutcome(frame, { text: message });
   };
@@ -998,8 +825,6 @@ export function Root({
         onStatus: handleShareStatus,
       }
     : null;
-
-  // ---- slots ----
 
   const folderList = (
     <FolderList
@@ -1022,26 +847,8 @@ export function Root({
   );
   const storage = <Storage docs={active} truncated={state.driveTruncated} />;
 
-  // The shelf strip (§1.7). It is NOT drawn on the compact form factor whose
-  // band claim was honoured — the band carries the same six destinations there
-  // and drawing both would put Trash in a strip that scrolls out of sight
-  // while the band says the same thing better.
-  //
-  // BOTH HALVES OF THAT SENTENCE HAVE TO BE TRUE AT ONCE, so both are read.
-  // `narrow` is this app's own pane (< 860px, the width at which five columns
-  // stop fitting); `compact` is the SHELL's form factor, and the shell honours
-  // a band claim on nothing else (inline-types.ts, `claimBand`). Reading the
-  // pane alone dropped the strip on a pane the shell did not consider compact
-  // — no strip, no band, and six shelves reachable from nowhere. A layout
-  // signal may hide a navigation only where it knows the replacement rendered.
-  // WHICH SURFACE CARRIES THE SHELVES (v16, `_shared/nav-seat.ts`) — band,
-  // strip or rail, exactly one of the three and never two. The condition used
-  // to be spelled out here and again in the rail's own expression; it is one
-  // function now, so "a destination that exists only in the rail is a defect"
-  // holds by construction rather than by inspection.
+  // Read both `narrow` (pane) and `compact` (shell); only the shell honours a band claim.
   const seat = navSeat({ narrow, compact });
-  /** The band claim was HONOURED — the frame is carrying the shelves. The app
-   *  bar reads it too: it drops its own Search only where the band has one. */
   const handedOff = seat === "band";
   const shelfStrip =
     seat === "strip" ? (
@@ -1052,19 +859,7 @@ export function Root({
         narrow={narrow}
       />
     ) : null;
-  // THE RAIL DRAWS WHERE THE STRIP DREW — the definition of done's own rule,
-  // "a rail on exactly the routes that previously drew a strip, and no
-  // others". In this app that is every route: the seven off-strip destinations
-  // (Storage, What Docs may read, Add, Scan and the three boundary screens)
-  // draw no breadcrumb of their own, so the strip has always been the way back
-  // from them at a desk, and a rail that withdrew there would strand a member
-  // on a page whose only exit is the frame's stem. On those routes no row is
-  // current, which is the honest state: they are somewhere the rail does not
-  // name.
-  //
-  // The one gate is the DENIED SEAT. With no vault access there is nothing
-  // behind any of these destinations, and a column of them would be offering
-  // doors that all open onto the same panel.
+  // Rail draws where the strip drew; the denied seat gates it off.
   const navRail =
     seat === "rail" && !consent ? (
       <NavRail
@@ -1092,10 +887,7 @@ export function Root({
       onNewFolder={handleStartCreateFolder}
     />
   ) : null;
-  // Exactly one picked, and its bytes are reachable: a browser downloads one
-  // file per gesture, so a multi-selection has nothing honest to offer and the
-  // button stands down rather than fetching the first row and calling it "the
-  // download".
+  // A browser downloads one file per gesture — stand down for multi-selection.
   const soleSelected =
     state.selected.size === 1
       ? rows.find((d) => state.selected.has(d.document_id))
@@ -1123,48 +915,19 @@ export function Root({
       />
     ) : null;
 
-  // THE HANDOFF'S `barRow`, above the strip — ONE ROW, TWO STATES.
-  //
-  // `barNormal: !sel, selOn: !!sel` (prototype, verbatim): the selection row
-  // and the arrangement row are the same slot, and picking something SWAPS
-  // what the row carries rather than raising a second bar somewhere else. The
-  // selection bar used to be a floating accent pill below the shelf strip:
-  // two bars on screen at once, the drive's own controls still sitting above
-  // a row that had taken the drive over, and the picked count announced in a
-  // place nothing else on the screen speaks from.
-  //
-  // AN EMPTY BAND IS CHROME (Photos' `toolbarCarriesSomething`), so the row is
-  // null where neither state would carry anything — off the drive there are no
-  // rows to arrange, and on the resting Search shelf there are no rows at all.
-  //
-  // THE RAIL TOGGLE RIDES THE ARRANGEMENT STATE, on the leading side of the
-  // pair, and only where a rail could dock (`railable`) — the handoff's own
-  // order in `barRow`, and its own two withholdings (`!mob && !sel`). While
-  // something is picked this slot is the selection bar, so the question does
-  // not arise.
+  // ONE ROW, TWO STATES: selection and arrangement share this slot; null when
+  // neither carries anything. The rail toggle rides arrangement state.
   const toggleRail = (): void => {
     if (state.detailsId) {
       handleCloseDetails();
       return;
     }
-    // WHICH ROW? The one the member has already pointed at, and otherwise the
-    // first in the set — the handoff's `DDOC(this.state.dInfoId) || DDOCS[0]`.
-    // A toggle that opened on nothing would be a control that sometimes does
-    // nothing, and an empty rail says less than no rail.
+    // Pointed-at row, else first: a toggle that opens on nothing does nothing.
     const target =
       rows.find((d) => state.selected.has(d.document_id)) ?? rows[0];
     if (target) handleOpenDetails(target.document_id);
   };
-  // §8's CLOSING SENTENCE, MADE TRUE. The rail's own footer says "Everything
-  // here is about one row. Select another and the rail follows it" — it has
-  // said so since the rail was written, and until the rail could be docked it
-  // was not something the app did: a modal drawer over a scrim cannot follow a
-  // selection, because the set it would follow is behind the scrim.
-  //
-  // It follows a row that ends up PICKED, never one being let go. Deselecting
-  // the last row leaves the rail on the document it was showing rather than
-  // emptying it — the member has stopped pointing at something, which is not
-  // the same as asking a question about nothing.
+  // The rail follows a row being PICKED, never one being let go (§8).
   const pickRow = (id: string, index: number, shift: boolean): void => {
     handleToggleSelect(id, index, shift);
     if (railable && state.detailsId !== null && state.selected.has(id))
@@ -1181,26 +944,9 @@ export function Root({
       </>
     ) : null);
 
-  // ---- the route switch ----
-  //
-  // ONE BRANCH PER ROUTE, and each branch's BODY lives in its own component
-  // (components/DriveRoute, FoldersRoute, StorageRoute). The orchestrator decides
-  // WHICH screen; the component decides what that screen looks like. That
-  // split is what keeps this file under the size cap and what lets the
-  // remaining Docs routes land in parallel without three agents editing the
-  // same switch arm.
-  //
-  // The boot skeleton sits ABOVE the switch, because "a read has not landed"
-  // is a fact about the read and not about the shelf (view-state.ts rule 1).
-  // The EMPTY block does not: §4.6's five variants are each one state of a
-  // particular screen — an empty folder says a different thing from an empty
-  // drive — so `emptyStateView`'s verdict travels INTO the route body, which
-  // draws it in the row set's own place, under that screen's own breadcrumb
-  // and caption.
-  // The document-scoped route (§6.2). It stands IN the scroll region rather
-  // than over it: a version history is a spine, not something a member peers
-  // at through a hole in the drive. (§6.1's reading view was the second one
-  // here; it is the stage's paper sheet now.)
+  // One branch per route; each body in its own component. The boot skeleton
+  // sits ABOVE the switch (view-state.ts rule 1); emptiness is decided inside
+  // each route body by `emptyStateView`.
   const versionsDoc = state.versionsId
     ? data.documents.find((d) => d.document_id === state.versionsId)
     : null;
@@ -1275,9 +1021,8 @@ export function Root({
         trashed={trashed}
         offline={offline}
         filters={state.filters}
-        // Unfiltered, and the SAME set the current screen draws from: search
-        // results while a query is live, the whole drive otherwise. The People
-        // axis offers the audiences these rows actually name.
+        // The SAME set the screen draws from, so the People axis offers
+        // the audiences these rows actually name.
         filterRows={searching ? (state.searchResults ?? []) : data.documents}
         onSelectFilter={selectFilter}
         onClearFilters={clearFilters}
@@ -1309,24 +1054,19 @@ export function Root({
     );
   }
 
-  // §11's banner stands ABOVE whatever the route drew, exactly as §4.3's own
-  // state panels stand above the breadcrumb — and ONCE here rather than six
-  // times, because it changes what every route body below it can promise.
+  // Above whatever the route drew, and ONCE (§11).
   const scroll = (
     <>
       {offline && loaded ? (
         <OfflineBanner onRetry={() => void core.refresh()} />
       ) : null}
-      {/* The two SEAT states (§12). They change what every control below them
-          can promise, so each is stated once for the whole screen rather than
-          discovered one refusing button at a time. */}
+      {/* The two SEAT states (§12), stated once for the whole screen. */}
       {consent ? (
         <PermissionPanel />
       ) : readOnlyScope ? (
         <ReadOnlyPanel label={readOnlyScope} />
       ) : null}
-      {/* The upload queue stands ABOVE the route, on the same terms as the
-          banner: it is news about the drive, not a replacement for it. */}
+      {/* News about the drive, above the route — not a replacement for it. */}
       <UploadQueue
         items={state.uploadQueue}
         onDismiss={() => {
@@ -1334,11 +1074,9 @@ export function Root({
           bump();
         }}
       />
-      {/* THE FIELD IS THE SEARCH SHELF'S FIRST BLOCK, not chrome above every
-          shelf (components/SearchField.tsx, and the handoff's own
-          `fieldBlock` — the first thing the docs `search` scene pushes). It
-          sits inside the scroll host, so it takes `--content-margin` from the
-          same place the breadcrumb and the rows below it do. */}
+      {/* THE FIELD IS THE SEARCH SHELF'S FIRST BLOCK (SearchField.tsx,
+          `fieldBlock`), inside the scroll host so it takes `--content-margin`
+          from the same place the rows do. */}
       {onSearchShelf ? (
         <>
           <SearchField
@@ -1350,18 +1088,10 @@ export function Root({
             onKeyDown={onSearchKeyDown}
             onClear={clearSearch}
           />
-          {/* THE FOUR STATES ARE THE SHARED ONES (issue #712 S1), rendered by
-              `_shared/SearchScaffold.tsx` — the same module Photos' shelf
-              renders — so two apps do not grow two grammars for "no results".
-              Every string is Docs' own (`SEARCH_COPY`); the scaffold contains
-              no product noun.
-
-              The rows are the caller's children, which is why the drive is
-              nested inside rather than beside: with nothing typed there is no
-              row set to draw at all, and the resting panel is what the shelf
-              IS. Handing the drive its own top-level slot here would put the
-              whole library under a Search breadcrumb the moment the shelf
-              opened. */}
+          {/* THE FOUR STATES ARE THE SHARED ONES (#712 S1), rendered by
+              `_shared/SearchScaffold.tsx`, with Docs' own copy (`SEARCH_COPY`).
+              The drive nests INSIDE as the caller's child rows: beside it, a
+              resting shelf would carry a Search breadcrumb over the library. */}
           <SearchScaffold
             query={state.search}
             status={state.searchStatus}
@@ -1389,10 +1119,7 @@ export function Root({
     ? data.documents.find((d) => d.document_id === state.quickId)
     : null;
 
-  // THE RAIL, IN WHICHEVER HOUSING THE SURFACE HAS ROOM FOR. One element, one
-  // set of props; `railable` decides whether it goes into the content row as a
-  // column or over the drive as a drawer. Building it once is what keeps the
-  // two forms from drifting into two rails.
+  // ONE element, one set of props; `railable` picks column or drawer.
   const detailsRail = detailsDoc ? (
     <Details
       doc={detailsDoc}
@@ -1431,10 +1158,7 @@ export function Root({
             : {
                 onToggleStar: () => void handleToggleStar(quickDoc),
                 onRename: () => void logic.startRenameDoc(quickDoc),
-                // Trash from the stage CLOSES the stage: the document the
-                // viewer is standing on has left the shelf it was opened
-                // from, and a viewer left open over a trashed row is a
-                // surface describing something that is no longer there.
+                // Trash from the stage CLOSES the stage.
                 onTrash: () => {
                   handleCloseQuick();
                   void handleTrashDoc(quickDoc);
@@ -1442,10 +1166,8 @@ export function Root({
               })}
         />
       ) : null}
-      {/* THE ONE SHEET, opened over the folder. Docs no longer carries a
-          share flow of its own: who may see or edit a folder is a standing
-          grant, drawn by the shared kit, and every outcome lands on the
-          frame's single status line (§11). */}
+      {/* THE ONE SHEET, opened over the folder. Docs carries no share flow of
+          its own; outcomes land on the frame's status line (§11). */}
       {shareHost ? (
         <GrantSheet
           open={shareFolder !== null}
@@ -1466,38 +1188,14 @@ export function Root({
     </>
   );
 
-  // ---- what Docs contributes to the FRAME (frame.tsx, spec §1.4, §11) ----
-  //
-  // Called from EFFECTS, never during render: the bar and the band render
-  // ABOVE this app in the tree, so a contribution made while rendering would
-  // be updating a component that is already painting.
-  //
-  // THE BAR NOW CARRIES THE VERB, because on this seat nothing else could.
-  // `onPrimary` used to be withheld on the grounds that "Docs' own '+ New' is
-  // still a dropdown anchored in the sidebar, and a second filled control in
-  // the bar would be two answers to one question". That sidebar is
-  // `display: none` inline (Chrome.module.css: navigation belongs to the host
-  // stem), so there was no first answer either — a member on the web seat had
-  // no way to bring a document in at all.
-  //
-  // The verb is the SHELF'S, named by `primaryLabel` and doing exactly what it
-  // says: "New folder" on the Folders shelf opens the inline folder editor,
-  // "New" everywhere else opens the file picker. Those are the two rows the
-  // old dropdown held, split across the two places each one belongs — so the
-  // menu is not reproduced in the bar, it is spent. The fuller "four ways in"
-  // is the `newdoc` route, still withheld (docs/design-divergences.md).
-  //
-  // `onSearch` stays withheld: the query lives in this app's own topbar field,
-  // in view on every pointer surface, and a bar button that only focused a
-  // field already on screen is a second control for no second destination.
+  // Frame contribution from effects, never during render. Bar carries the verb;
+  // withhold `onSearch` — the query lives in the app's own field.
   const onPrimary = useCallback(() => {
     if (state.shelf === FOLDERS) handleStartCreateFolder();
     else handleTriggerUpload();
   }, [state, handleStartCreateFolder, handleTriggerUpload]);
 
-  // LEAVING THE MODE CLEARS THE SELECTION. A set of ticked rows that nobody
-  // can see is a set the next command would act on by surprise, so "Done"
-  // means done rather than hidden.
+  // Leaving select mode clears the selection — hidden ticks would surprise the next command.
   const onToggleSelecting = useCallback(() => {
     state.selecting = !state.selecting;
     if (!state.selecting) logic.clearSelection();
@@ -1510,22 +1208,16 @@ export function Root({
         shelf: state.shelf,
         ...(openFolderName ? { folderName: openFolderName } : {}),
         count: barCountValue,
-        // The bar drops its own Search only where the band carries one
-        // (frame.tsx). Same rule, same signal: an unhonoured claim would have
-        // taken the entry point away and put nothing back.
+        // Claim honoured only where the band carries one.
         compact: handedOff,
         onSearch: openSearch,
         onPrimary,
-        // Selection means nothing where no rows are painted — Folders lists
-        // labels, not documents — so the verb is contributed only on the
-        // shelves that have a row set to select from.
         ...(selectable
           ? { onToggleSelecting, selecting: state.selecting }
           : {}),
       })
     );
-    // `state` is a mutable bag held in a ref, so the bar's dependencies are
-    // the derived values above rather than the object it was read from.
+    // `state` is a mutable bag in a ref: depend on the derived values above.
   }, [
     frame,
     state.shelf,
@@ -1548,10 +1240,6 @@ export function Root({
       bandClaim(
         state.shelf,
         (segment) => {
-          // Search IS a screen now — the shelf plus its own field
-          // (components/SearchField.tsx) — so the band's Search tab navigates
-          // to it like every other destination. It used to reach sideways and
-          // focus the topbar field instead, because there was nowhere to go.
           if (segment === "search") {
             openSearch();
             return;
@@ -1563,7 +1251,7 @@ export function Root({
     );
   }, [frame, state.shelf, narrow, selectShelf, openSearch]);
 
-  // Hand the bar and the band back when Docs stops being the route.
+  // Hand the bar and band back when Docs stops being the route.
   useEffect(() => {
     return () => {
       frame.setAppBar(null);
@@ -1572,9 +1260,6 @@ export function Root({
   }, [frame]);
 
   return (
-    // Fill the app pane (a flex child of the route body) so the inline chrome gets
-    // real width — otherwise it collapses to content width and the component-width
-    // narrow observer wrongly flips to the phone drawer layout.
     <div
       ref={setRoot}
       style={{

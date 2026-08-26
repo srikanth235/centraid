@@ -1,4 +1,4 @@
-// The closure split (issue #726): an origin-side READ that writes nothing and
+// The closure split (#726): an origin-side READ that writes nothing and
 // serialises, and an audience-side PROJECTION that is the vault's own ingest
 // door. What is pinned here is the three claims the split is FOR — one closure
 // covers a set of items, a projected row is re-registered rather than

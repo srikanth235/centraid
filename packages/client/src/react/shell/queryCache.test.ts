@@ -240,10 +240,10 @@ describe("queryCache", () => {
     });
 
     it("survives a loader that resolves with nothing, and drops the stale copy", async () => {
-      // `JSON.stringify(undefined)` is `undefined`, not a string, so the byte
-      // check used to throw — OUTSIDE the settle handler's try, which killed the
-      // publish that follows it. The key then stayed on its hydrated copy
-      // forever and the revalidation became a silent unhandled rejection.
+      // `JSON.stringify(undefined)` is `undefined`, not a string, so a byte
+      // check OUTSIDE the settle handler's try would throw and kill the publish
+      // that follows it: the key would stay on its hydrated copy forever and
+      // the revalidation would become a silent unhandled rejection.
       const mod = await reboot();
       await readOnce(mod, "home:none", () => Promise.resolve({ n: 1 }));
       expect(

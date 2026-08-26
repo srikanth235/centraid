@@ -1,18 +1,8 @@
-// The phone's bottom band, as Tasks claims it (Tasks spec §2; issue #834).
-//
-// `Today · Upcoming · Inbox · Projects · More` — four PLACES plus More, which is
-// the invariant's exact cap. Only a place is in the band: Anytime, All, Search,
-// the Logbook, Catch up and Reminders are lenses or acts, so they sit behind
-// More rather than stealing a tab from somewhere a member actually goes.
-//
-// THE IDS AND THE LABELS ARE THE WEB APP'S OWN. They are imported from
-// `@centraid/blueprints/apps/tasks/shelves` and `view-copy` rather than
-// re-typed here, because the band, the rail and the app bar must be incapable
-// of disagreeing about what "Inbox" is — one table, two seats.
-//
-// This module is deliberately free of `react-native` imports so its rules can
-// be asserted directly (`tasks-band.test.ts`). `TasksBand.tsx` renders them and
-// adds nothing.
+// The phone's bottom band, as Tasks claims it (Tasks spec §2; #834): four
+// PLACES plus More — the invariant's exact cap; lenses/acts sit behind More.
+// Ids+labels come from the web app's tables so band, rail and app bar cannot
+// disagree. No `react-native` imports: `tasks-band.test.ts` asserts these
+// rules directly; `TasksBand.tsx` renders them unchanged.
 
 import {
   BAND_DESTINATIONS,
@@ -37,12 +27,9 @@ export interface TasksBandDestination {
   icon: string;
 }
 
-/** The cap the frame's band lives under, and therefore the cap a claiming app
- *  lives under: five destinations, of which the fifth is More. */
+/** Frame band's cap, hence a claiming app's: five destinations, fifth = More. */
 export const TASKS_BAND_MAX_DESTINATIONS = 5;
 
-/** The frame capsule's width (height comes from the row's `align-items:
- *  stretch`, the same as Photos and Docs). */
 export const TASKS_BAND_CAPSULE_SIZE = 52;
 
 const BAND_ICONS: Readonly<Record<TasksBandDestinationKey, string>> = {
@@ -53,9 +40,7 @@ const BAND_ICONS: Readonly<Record<TasksBandDestinationKey, string>> = {
   more: "more-vertical",
 };
 
-/** Tasks' five, in the spec's order — the web app's own four destinations plus
- *  the sheet. A key that is not one of the four fails to typecheck here rather
- *  than rendering a tab that goes nowhere. */
+/** Tasks' five in spec order: web's four destinations plus the sheet. */
 export const TASKS_BAND_DESTINATIONS: readonly TasksBandDestination[] = [
   ...BAND_DESTINATIONS.map((destination) => ({
     key: destination.id as TasksBandDestinationKey,
@@ -83,7 +68,7 @@ export const TASKS_BAND_CAPSULE: TasksBandCapsule = {
   inTabGroup: false,
 };
 
-/** Exactly one band exists at any moment — the frame's latch, per app. */
+/** Exactly one band exists at any moment — the frame's latch. */
 export type ResolvedTasksBand =
   | {
       owner: "app";
@@ -106,9 +91,7 @@ export function resolveTasksBand(owner: BandOwner): ResolvedTasksBand {
   };
 }
 
-// ---------------------------------------------------------------------------
-// The More sheet — the six lenses and acts that are not places
-// ---------------------------------------------------------------------------
+// ─── The More sheet — the six lenses and acts that are not places ───────────
 
 export interface TasksMoreRow {
   shelf: ShelfId;
@@ -126,8 +109,7 @@ const MORE_ICONS: readonly string[] = [
   "Bell",
 ];
 
-/** The sheet's rows, keyed to the SHARED shelf ids so the labels and the meta
- *  stay the web app's words rather than a second spelling of them. */
+/** Rows keyed to SHARED shelf ids: labels stay the web app's words. */
 export const TASKS_MORE_ROWS: readonly TasksMoreRow[] = MORE_SHELVES.map(
   (shelf, index) => {
     const row = MORE_ROWS.find((candidate) => candidate.shelf === shelf);

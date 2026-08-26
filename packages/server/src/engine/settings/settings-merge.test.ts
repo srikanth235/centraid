@@ -20,9 +20,9 @@ describe(buildSettingsInject, () => {
   });
 
   it("bakes no surface-temperature attribute — dark has one ramp", () => {
-    // The knob was removed for parity with the light theme (#608). Neither the
-    // old boolean `coolCast` nor the three-position `surfaceTemp` may smear an
-    // attribute onto <html> any more.
+    // There is no such knob (#608, parity with the light theme): neither the
+    // boolean `coolCast` nor the three-position `surfaceTemp` may smear an
+    // attribute onto <html>.
     for (const v of ["cool", "neutral", "warm", true, "tepid"]) {
       expect(buildSettingsInject([{ surfaceTemp: v }]).dataAttrs).toStrictEqual(
         {}

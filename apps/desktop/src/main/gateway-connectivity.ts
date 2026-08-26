@@ -1,11 +1,10 @@
 /*
- * GATEWAY_TEST_CONNECTION (issue #382) — the ConnectFlow "handshake ladder".
+ * GATEWAY_TEST_CONNECTION (#382) — the ConnectFlow "handshake ladder".
  * Wires `handshakeGateway` (version-handshake.ts) and
  * `fetchGatewayVaults`/`foldVaultsResponse` (gateway-vaults-core.ts) through
  * the pure fold functions in `gateway-connectivity-core.ts`. Never throws —
  * every failure is a failed stage with a human-actionable detail, per the
- * frozen IPC contract. (Issue #603 deleted the `ssh` ladder with the rest of
- * the SSH-connect feature; only ticket + known-gateway remain.)
+ * frozen IPC contract. Only the ticket and known-gateway rungs exist.
  */
 
 import {

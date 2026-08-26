@@ -1,18 +1,7 @@
-// The two filter menus in the Photos toolbar row, as values (v4 handoff §3,
-// §H, CHANGELOG H). No JSX here on purpose: the strip, the toolbar row and
-// the tile marker all need the same answers, and a menu component is the
-// wrong place to keep them.
-//
-// THE VAULT FILTER READS THE RECORD, NEVER A NAME. "Is this shared?" is
-// `personal === false` — the member's own photographs are the unmarked
-// default (§4.4). That is a property of the vault, written at founding and
-// untouched by renaming. What the member READS is still `scope.label`, which
-// the shell owns and the owner may rename; deriving the fact from a label
-// would break the moment they do.
+// Photos toolbar filters as values. Vault filter reads `personal === false`, never a name (§4.4).
 import type { InlineScope } from "../inline-types.ts";
 import type { Asset } from "./types.ts";
 
-/** The kind filter's rungs (§16). `all` is the resting state, not a value. */
 export const KINDS = [
   "all",
   "photo",
@@ -24,12 +13,7 @@ export const KINDS = [
 ] as const;
 export type KindFilter = (typeof KINDS)[number];
 
-/** Final copy, from the handoff. `all` names the resting state out loud so the
- *  menu never shows an unlabelled row — and it names it "Everything", which is
- *  what the timeline is showing when no kind is chosen. "All kinds" described
- *  the MENU (a list of kinds, all of them) rather than the RESULT, and a filter
- *  control resting at its widest setting should read as the thing you are
- *  looking at, not as the mechanism you would use to narrow it. */
+/** Resting kind is "Everything" (the result), not "All kinds" (the menu). */
 export const KIND_LABELS: Readonly<Record<KindFilter, string>> = {
   all: "Everything",
   photo: "Photographs",
@@ -40,11 +24,7 @@ export const KIND_LABELS: Readonly<Record<KindFilter, string>> = {
   selfie: "Selfies",
 };
 
-/**
- * Does `asset` belong to `kind`? The three derived kinds are facts about how a
- * photograph came to be, which the record carries as a source; where it does
- * not, the asset is simply not one of them. Nothing is guessed from a filename.
- */
+/** Derived kinds come from `source`; never guess from a filename. */
 export function matchesKind(asset: Asset, kind: KindFilter): boolean {
   if (kind === "all") return true;
   const media = String(asset.media_type ?? "");
@@ -58,15 +38,11 @@ export function filterByKind(list: Asset[], kind: KindFilter): Asset[] {
   return kind === "all" ? list : list.filter((a) => matchesKind(a, kind));
 }
 
-/** Any scope but the member's own — the tile marker's rule and the answer to
- *  "is this shared?" (§4.4, §H). A scope whose marker is unknown reads as the
- *  member's own: withholding the hint is harmless, marking everything is not. */
+/** Unknown marker reads as own: marking everything is not harmless. */
 export function isSharedScope(scope: InlineScope | undefined): boolean {
   return scope?.personal === false;
 }
 
-/** Sort order for the filter: the member's own scope, then every other place
- *  they can see, each in the order the shell listed them (§H). */
 function scopeRank(scope: InlineScope): number {
   return scope.personal === false ? 1 : 0;
 }
@@ -83,11 +59,7 @@ export function orderedScopes(
     .map((entry) => entry.scope);
 }
 
-/**
- * `vaultsOn` as a predicate. An empty set means "every one" rather than
- * "none": the resting state of a filter is the unfiltered view, and a member
- * who has never opened the menu must see their whole timeline.
- */
+/** Empty `vaultsOn` is "every one", not "none". */
 export function scopeIsOn(
   vaultsOn: ReadonlySet<string>,
   scopeId: string | null | undefined
@@ -95,11 +67,7 @@ export function scopeIsOn(
   return vaultsOn.size === 0 || vaultsOn.has(scopeId ?? "");
 }
 
-/**
- * The single scope a CREATING write should land in, or null for "wherever the
- * shell puts new things". One vault switched on is an unambiguous target;
- * "all", or several, is not, so the write falls back to the member's own.
- */
+/** One vault on is the write target; "all" or several is `null` (member's own). */
 export function writeScopeFor(vaultsOn: ReadonlySet<string>): string | null {
   return vaultsOn.size === 1 ? [...vaultsOn][0]! : null;
 }

@@ -1,25 +1,17 @@
 /**
- * The task board as a bounded window, never a whole-table pull (issue #262):
- * the newest open tasks by task_id (UUIDv7, so creation order; caller-sized,
- * default 500) plus the 50 most recently closed — exactly what the logbook
- * shows, so the read matches the UI instead of hauling the whole closed
- * history. Top-level open tasks come sorted (due first, then priority where
- * 1 is highest and 0 means unset, then title) with their subtasks nested;
- * closed top-level tasks form the logbook, most recently completed first.
- * Anything beyond the window is reachable through the FTS search query or by
- * growing the window (`truncated` tells the UI to offer that).
- *
- * Everything comes from the vault — this app holds no rows of its own; a
- * consent denial is a first-class outcome the UI renders, receipt included.
- *
- * Unfinished children of a completed or released parent are promoted onto
- * the open board (`nestTaskFamilies`) so completing a parent cannot hide
- * remaining work.
+ * Task board as a bounded window, never a whole-table pull (#262): newest
+ * open tasks by task_id (UUIDv7 creation order, caller-sized window, default
+ * 500) plus the 50 most recently closed — exactly what the logbook shows;
+ * beyond the window use FTS or grow it (`truncated` offers that). Open tasks
+ * sort due-first, then priority (higher more urgent, 0 unset), then title,
+ * subtasks nested; unfinished children of a completed or released parent
+ * are promoted onto the open board (`nestTaskFamilies`). Closed top-level
+ * tasks form the logbook. Everything comes from the vault — no rows of its
+ * own; consent denial is first-class, receipt included.
  */
 import { nestTaskFamilies } from "../when.ts";
 
-/** Raw schedule.task row shape as the vault projects it (the fields this
- *  query reads; unread columns ride the index signature). */
+/** Raw schedule.task row as the vault projects it (unread columns ride the index signature). */
 interface RawTask {
   task_id: string;
   parent_task_id?: string | null;
@@ -85,17 +77,16 @@ interface DecoratedAttachment {
 }
 
 /**
- * Group the owner's attachments for one subject type into a map keyed by
- * target_id, each value a UI-ready list joined to its content item. This is
- * the shared attachment-projection shape every app copies — polymorphic edges
- * in core.attachment, bytes in core.content_item.
+ * Group one subject type's attachments by target_id, each value joined to
+ * its content item — shared attachment-projection shape every app copies
+ * (core.attachment edges + core.content_item bytes).
  */
 function attachmentsBySubject(
   subjectType: string,
   attachments: RawAttachment[],
   contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
-  // Blob-backed bytes serve as same-origin URLs (issue #296).
+  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -165,10 +156,8 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       byId.set(t.task_id, t);
     }
 
-    // Families stay whole across the window edge: a subtask only renders
-    // under its parent, so first pull in any referenced parents the windows
-    // missed (`in` needs a non-empty array — skip when there's nothing to
-    // fetch)…
+    // Families stay whole across the window edge: fetch any referenced
+    // parents the windows missed (`in` needs a non-empty array).
     const missingParentIds = [
       ...new Set(
         [...byId.values()]
@@ -187,9 +176,8 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     }
 
     // …then the reverse edge: every subtask of a fetched top-level task —
-    // open ones so a windowed parent never renders with its still-to-do work
-    // silently gone, closed ones so `done_children` counts the truth (the
-    // read stays bounded: children of the windowed parents only).
+    // open so a windowed parent's to-do work isn't silently gone, closed
+    // so `done_children` counts true (children of windowed parents only).
     const topLevelIds = [...byId.values()]
       .filter((t) => !t.parent_task_id)
       .map((t) => t.task_id);
@@ -205,8 +193,7 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     const rows = [...byId.values()];
     const taskIds = rows.map((t) => t.task_id);
 
-    // Joins are `in`-bounded by the fetched set — attachment edges, then one
-    // content pull covering only those attachments' bytes.
+    // Joins are `in`-bounded by the fetched set.
     const attachments =
       taskIds.length > 0
         ? await ctx.vault.read({
@@ -239,10 +226,8 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       contentById
     );
 
-    // Cross-references (issues #272 + #282): a task's description can @-mention
-    // any vault entity. Read the live outbound links + their standoff anchors
-    // and resolve the far-end cards (resolvable-if-linked — this app holds no
-    // read scope on those domains). Mirrors the notes/library.js shape.
+    // Cross-references (#272, #282): @-mentioned entities resolve via live
+    // links + anchors; cards resolvable-if-linked.
     const links =
       taskIds.length > 0
         ? await ctx.vault.read({
@@ -373,12 +358,10 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       return String(a.title).localeCompare(String(b.title));
     };
 
-    // A REPEATING TASK NEVER STACKS, and the arithmetic that guarantees it
-    // lives in ONE place — `ctx.time` (packages/core/src/time). The row leaves
-    // here carrying the summariser's words and the collapse's two numbers, so
-    // no surface ever sees an RRULE string or re-counts a missed period for
-    // itself. That second count is the defect the shared summariser exists to
-    // prevent, and a UI is exactly where it grows back.
+    // A REPEATING TASK NEVER STACKS, and the collapse arithmetic lives in
+    // ONE place — `ctx.time` (packages/core/src/time). Rows leave here with
+    // the summariser's words + the collapse's two numbers so no surface ever
+    // sees an RRULE string or re-counts a missed period for itself.
     const nowIso = new Date().toISOString();
     const withRecurrence = (task: RawTask) => {
       const rrule = typeof task.rrule === "string" ? task.rrule : null;
@@ -431,9 +414,8 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       )
       .slice(0, 50);
 
-    // Counts describe what was fetched, not the whole table — a full open
-    // window means more open tasks exist beyond it, and `truncated` tells
-    // the UI to offer "Show more".
+    // Counts describe what was fetched, not the whole table; `truncated`
+    // tells the UI to offer "Show more".
     const openCount = rows.filter((t) => OPEN.has(t.status)).length;
     const truncated = openRows.length >= window;
     return {

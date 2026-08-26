@@ -1,34 +1,18 @@
 /*
- * Per-link hygiene budget for the peer plane (issue #726 P3, threat 7).
- *
- * A link is a standing invitation to spend this gateway's CPU, disk and
- * bandwidth. The budget is hygiene, not authorization: it bounds how fast a
- * LINKED peer may ask, so a misbehaving or compromised peer degrades itself
- * rather than the host. Authorization is the link; this only meters it.
- *
- * One bucket per key (the peer's proved EndpointId). Refill is computed from
- * elapsed time rather than a timer, so an idle key costs nothing and the
- * store can be swept lazily.
+ * Hygiene, not authorization (#726 P3): meters how fast a LINKED peer may
+ * ask. One bucket per proved EndpointId; elapsed-time refill.
  */
 
 export interface TokenBucketOptions {
-  /** Burst size: tokens available to a peer that has been quiet. */
   capacity: number;
-  /** Sustained rate. */
   refillPerSecond: number;
-  /** Injectable clock (tests). */
   now?: () => number;
 }
 
 export interface TokenBucket {
-  /**
-   * Spend `cost` tokens for `key`. `false` means the caller must refuse the
-   * request as a typed state — never queue it, never serve it late.
-   */
+  /** false ⇒ refuse as typed state; never queue or serve late. */
   take: (key: string, cost?: number) => boolean;
-  /** Milliseconds until `cost` tokens exist for `key`; 0 when they do. */
   retryAfterMs: (key: string, cost?: number) => number;
-  /** Drop a key's state (link revoked / connection gone). */
   forget: (key: string) => void;
   size: () => number;
 }
@@ -80,11 +64,7 @@ export function createTokenBucket(options: TokenBucketOptions): TokenBucket {
   };
 }
 
-/**
- * Peer-plane defaults. A link's legitimate traffic is bursty (a give opens an
- * edge, fetches a closure, then pulls blobs by sha), so the burst is generous
- * and the sustained rate is what actually bounds a runaway peer.
- */
+/** Generous burst; sustained rate bounds a runaway peer. */
 export const PEER_PLANE_BUDGET: TokenBucketOptions = {
   capacity: 120,
   refillPerSecond: 8,

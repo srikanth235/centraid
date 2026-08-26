@@ -1,24 +1,13 @@
-// Bridges shared design tokens AND the centraid IPC API into the renderer.
-// Renderer runs with contextIsolation=true and no node integration. We expose
-// JSON-cloneable values + IPC proxies via contextBridge.
-//
-// This file is bundled to CJS by `bun build` (Electron `sandbox: true` requires
-// CJS preload). Renderer typings live in `@centraid/client`'s `centraid-api.d.ts`.
-//
-// Deliberately a THIN shell: everything with behaviour lives in
-// `main/preload-core.ts`, which is Electron-free and unit-tested
-// (`main/preload-core.test.ts`). All this file does is adapt `ipcRenderer`
-// into the narrow `PreloadBridge` seam and expose the two built objects, so
-// the untestable part stays trivially correct by inspection.
+// Bridges design tokens AND the centraid IPC API into the renderer.
+// contextIsolation=true, no node integration. Bundled to CJS (`sandbox: true`).
+// Thin shell: behaviour lives in `main/preload-core.ts`.
 
 import { contextBridge, ipcRenderer } from "electron";
 import type { IpcRendererEvent } from "electron";
 
 import * as tokens from "@centraid/design";
 // `/font-faces`, never `/fonts`: this module is bundled into the SANDBOXED
-// preload, where `require("node:path")` does not resolve. Importing the
-// node-only half here fails the whole preload, and a preload that will not
-// load takes the entire app down with it (issue #707).
+// preload, where `require("node:path")` does not resolve (#707).
 import { toFontFaceCss } from "@centraid/design/font-faces";
 
 import type { PreloadBridge } from "./main/preload-core.js";
@@ -27,19 +16,12 @@ import {
   createCentraidTokens,
 } from "./main/preload-core.js";
 
-// Where the renderer finds the vendored `.woff2` faces.
-//
-// The shell document is loaded with `win.loadFile(dist/renderer/index.html)`,
-// so its base URL is `file://…/dist/renderer/`. A RELATIVE base is therefore
-// mandatory: an absolute `/fonts/…` would resolve to `file:///fonts/…`, the
-// same class of bug that broke the replica's sqlite worker before the Vite
-// `base: './'` fix. `scripts/copy-fonts.mjs` puts the files exactly here, and
-// the shell's CSP already allows `font-src 'self'`.
+// Relative base is mandatory: the shell document's URL is
+// `file://…/dist/renderer/`. An absolute `/fonts/…` resolves to `file:///fonts/…`.
 const FONT_BASE = "fonts";
 
-// The one place `ipcRenderer` is touched: a pure pass-through. Electron
-// stores listeners per (channel, function) pair, so `off` with the same
-// function detaches exactly what `on` attached — the core relies on that.
+// The one place `ipcRenderer` is touched. Electron stores listeners per
+// (channel, function) pair — `off` with the same function detaches `on`.
 const bridge: PreloadBridge = {
   invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
   on: (channel, listener) => {

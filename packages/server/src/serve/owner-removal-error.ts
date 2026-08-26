@@ -1,6 +1,5 @@
 /*
- * Split out of `owner-store.ts` (one class per file — `max-classes-per-file`):
- * removing a person who still owns vaults would orphan them — refused.
+ * Removing a person who still owns vaults would orphan them — refused.
  */
 
 export class OwnerRemovalError extends Error {

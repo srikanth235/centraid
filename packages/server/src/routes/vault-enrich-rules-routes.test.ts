@@ -1,5 +1,5 @@
 /*
- * The owner's door onto the enrichment policy cascade (issue #807, Wave 2).
+ * The owner's door onto the enrichment policy cascade (#807).
  *
  * The laws under test are the ones a member's privacy depends on: a rule may
  * be written only for a scope and a capability this build understands; the

@@ -1,12 +1,4 @@
-// The face-review crop math (issue #711, v4 4307 "the face crop"). There is
-// no server-cropped thumbnail for a face region — `media_face_region` only
-// carries `bbox_json` as a fraction of the FULL photograph (x, y, w, h, each
-// 0..1, top-left origin; see `enrich-publishers.ts`'s `FaceRegionPayload` and
-// `enrich.test.ts`'s fixtures). So the crop tile paints the SAME source
-// image every other tile uses and positions/scales it in CSS so the bbox
-// fills the square — no new blob variant, no server work.
-//
-// Pure and framework-free so web and native import one computation.
+// Crop math (#711): CSS-scale the tile image by bbox fractions; no new blob variant.
 export interface FaceBBox {
   x: number;
   y: number;
@@ -15,27 +7,15 @@ export interface FaceBBox {
 }
 
 export interface FaceCropStyle {
-  /** The <img>'s rendered width/height, in the SAME px unit as `boxPx`. */
   width: number;
   height: number;
-  /** Where the image's top-left lands relative to the crop box's top-left —
-   *  negative when the face sits away from the image's own top-left. */
   left: number;
   top: number;
 }
 
-// How much room around the tightest square that contains the bbox: a raw
-// face-detector box is snug (often clipping forehead/chin), and the
-// prototype's crop reads as a small portrait, not a passport photo. 1.6x
-// mirrors the common "add 30% margin per side" face-crop convention.
+// 1.6x covers snug detector boxes.
 const CROP_MARGIN = 1.6;
 
-/**
- * Where to draw `imgW`×`imgH` source image, scaled, inside a `boxPx`×`boxPx`
- * square so the bbox is centred and (mostly) fills it. Returns `null` when
- * there isn't enough information to crop honestly — the caller falls back to
- * painting the plain, uncropped photograph rather than guessing a position.
- */
 export function faceCropStyle(
   bbox: FaceBBox | null | undefined,
   imgW: number | null | undefined,

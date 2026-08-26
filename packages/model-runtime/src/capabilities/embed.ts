@@ -19,7 +19,7 @@ import type {
 // immich-app/ViT-B-32__openai. Both the image tower (visual.onnx) and the
 // text tower (textual.onnx) project into the SAME embedding space, so the
 // wire contract advertises one model id for both embed-image and embed-text
-// (issue #724 W8 requires this).
+// (#724 W8 requires this).
 export const EMBED_MODEL_ID: ModelId = "clip-vit-b-32@1";
 
 const CLIP_DIR = path.join(MODELS_DIR, "clip");

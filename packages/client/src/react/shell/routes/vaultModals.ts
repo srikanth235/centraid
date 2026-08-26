@@ -3,7 +3,7 @@ import type { VaultModalCommit } from "./VaultModal.js";
 
 // Gateway I/O for the Vaults (#280: a vault IS a vault) add / rename / delete
 // flows. The modal chrome is the React <VaultModal>; App.tsx (switcher "New
-// vault…") and SettingsRoute.tsx (the active-vault Vault page, issue #382)
+// vault…") and SettingsRoute.tsx (the active-vault Vault page, #382)
 // own the modal state and call these helpers on submit. Vault create/delete
 // are owner acts over the IPC bridge (local gateway only); metadata rides
 // updateVault.
@@ -43,7 +43,7 @@ export async function saveVault(
   // updateVault is a direct renderer->gateway HTTP call, not IPC, so unlike
   // create/switch/delete it never broadcasts VAULT_CHANGED on its own — the
   // sidebar head would keep showing the old name/color until an unrelated
-  // event refreshed it (found via live E2E, issue #382 follow-up).
+  // event refreshed it (found via live E2E, #382 follow-up).
   await window.CentraidApi.notifyVaultMetadataChanged();
 }
 

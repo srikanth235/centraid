@@ -16,7 +16,7 @@ import { MemoryBlobStore } from "./local.js";
 import type { BlobRange, BlobStat, BlobStore } from "./store.js";
 import { blobUriFor, sha256OfBytes } from "./store.js";
 
-// ---------- an instrumented in-memory remote ----------
+// ────────── an instrumented in-memory remote ──────────
 
 interface FakeRemote extends BlobStore {
   objects: Map<string, Buffer>;
@@ -98,7 +98,7 @@ function makeRemote(): FakeRemote {
   return store;
 }
 
-// ---------- harness: real vault.db tables, injected local + fake remote ----------
+// ────────── harness: real vault.db tables, injected local + fake remote ──────────
 
 interface Harness {
   db: VaultDb;
@@ -179,7 +179,7 @@ describe("cache", () => {
     return { bytes, sha: sha256OfBytes(bytes) };
   }
 
-  // ---------- §3: budget derivation ----------
+  // ────────── §3: budget derivation ──────────
 
   test("derived budget = clamp(1 GiB, 0.5*(free+spool), 100 GiB); explicit wins; memory = unlimited", () => {
     const db = openVaultDb();
@@ -260,7 +260,7 @@ describe("cache", () => {
     expect(h.local.hasSync(thumb.sha)).toBe(true);
   });
 
-  // ---------- §3: evict-only-if-replicated — never delete the last local copy ----------
+  // ────────── §3: evict-only-if-replicated — never delete the last local copy ──────────
 
   test("stale replica evidence cannot let admission delete the last local original", () => {
     const h = makeHarness({ budgetBytes: 20 });
@@ -385,7 +385,7 @@ describe("cache", () => {
     for (const sha of shas) expect(h.remote.objects.has(sha)).toBe(true);
   });
 
-  // ---------- §4: statusFor/replicate perform ZERO remote list() calls ----------
+  // ────────── §4: statusFor/replicate perform ZERO remote list() calls ──────────
 
   test("statusFor and replicate never list() the remote; reconcile lists once", async () => {
     const h = makeHarness({ budgetBytes: 1_000_000 });
@@ -419,7 +419,7 @@ describe("cache", () => {
     expect(h.cache.isReplicated(a.sha)).toBe(true); // a really did replicate
   });
 
-  // ---------- §2/§3: grid-scroll over a remote-only library — zero remote reads ----------
+  // ────────── §2/§3: grid-scroll over a remote-only library — zero remote reads ──────────
 
   test("serving tinies for N items performs zero remote GETs (originals remote-only)", async () => {
     const h = makeHarness({ budgetBytes: 1_000_000 });
@@ -473,7 +473,7 @@ describe("cache", () => {
     expect(gate.inFlightMax()).toBe(3); // it did saturate the pool
   });
 
-  // ---------- §7: QoS — interactive read-through preempts bulk replication ----------
+  // ────────── §7: QoS — interactive read-through preempts bulk replication ──────────
 
   test("bulk replication parks while an interactive read-through is in flight", async () => {
     const h = makeHarness({ budgetBytes: 100_000_000, qos: true });

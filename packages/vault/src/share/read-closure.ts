@@ -1,15 +1,6 @@
-// The ORIGIN half of a share (issue #726): read a closure, write nothing.
-//
-// Every query here runs against the origin vault and none of them mutates it,
-// so a share needs no transaction on the owner's side and no two-database
-// recovery machinery. The result is `WireClosure` — plain JSON (closure.ts) —
-// so the audience half can be in this process or behind a tunnel.
-//
-// ONE closure covers a SET of items. The row tables are POOLED: reading three
-// photographs that were re-imported from the same bytes yields one content
-// item, one set of derivatives and one blob manifest entry, not three. That
-// pooling is also what makes an album cheap — its entries and its cover
-// resolve to the same rows.
+// ORIGIN half of a share (#726): read a closure, write nothing — result is
+// `WireClosure` (closure.ts). ONE closure covers a SET of items: pooled row
+// tables mean re-imported photographs yield one content item.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -79,14 +70,10 @@ function draft(): ClosureDraft {
 }
 
 /**
- * Pool one content item and every derivative of it, plus the content
- * addresses they rent in the CAS.
- *
- * An inline body (`data:` uri) is carried in the row itself, so only a
- * blob-backed item earns a manifest entry — the same rule `liveBlobShas`
- * applies. Returns false when the origin has no such row, which is a fact for
- * a Tally receipt (its bytes may have been released) and an error for
- * anything the caller asked for by name.
+ * Pool one content item, its derivatives, and their CAS addresses (only
+ * blob-backed items earn a manifest entry, same rule as `liveBlobShas`).
+ * False when the origin lacks the row — a fact for a Tally receipt; an error
+ * when asked for by name.
  */
 function poolContent(
   origin: DatabaseSync,
@@ -146,13 +133,9 @@ function absent(itemType: ShareableItemType, itemId: string): VaultShareError {
 }
 
 /**
- * Strip `latitude`/`longitude` from a media asset's EXIF testimony (threat 8:
- * the ORIGIN's own `media.location` policy gates what crosses a CROSS-OWNER
- * boundary, mirroring how `projection-ingest.ts` gates whether the AUDIENCE
- * re-derives a place from it). `has_location` (a boolean fact, not a
- * coordinate) survives — the same shape `pipeline.ts` already produces when
- * `keepLocation` is false at ingest time. Unparseable JSON passes through
- * unchanged: it carries no coordinate to strip.
+ * Strip `latitude`/`longitude` from EXIF per the ORIGIN's `media.location`
+ * policy (threat 8), mirroring projection-ingest.ts. Boolean `has_location`
+ * survives; unparseable JSON passes through unchanged.
  */
 function stripGpsFromExif(exifJson: string | null): string | null {
   if (exifJson === null) return null;
@@ -242,9 +225,8 @@ function poolCollection(
 const DOCS_FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
 
 /**
- * Pool the actual Docs folder closure. A folder owns every document currently
- * filed anywhere below it, so re-reading this closure after an ordinary
- * `core.add_document` naturally makes the new child follow the grant.
+ * Pool the Docs folder closure. A folder owns every document filed below it,
+ * so re-reading after an ordinary `core.add_document` follows the new child.
  */
 function poolDocsFolder(
   origin: DatabaseSync,
@@ -357,22 +339,16 @@ export interface ReadShareClosureInput {
   /** Row ids in the ORIGIN vault. Repeats collapse to one item. */
   itemIds: readonly string[];
   /**
-   * True when the audience is NOT this owner's own vault (#726 P3 threat 8).
-   * Gates the ORIGIN's own `media.location` policy against `exif_json`: a
-   * `strip` vault redacts GPS coordinates from what crosses a cross-owner
-   * boundary, exactly as it would have withheld them at ingest. A same-owner
-   * edge (Work→Personal) is the owner's own data moving between their own
-   * vaults — no privacy boundary crossed, so it is left exactly as ingested.
-   * Defaults false: only a caller that has judged the edge cross-owner (the
-   * gateway's `judgeEdgeCrossing`) opts in.
+   * True only for a cross-owner edge (#726 P3 threat 8): gates the ORIGIN's
+   * `media.location` policy against `exif_json`. Same-owner edges move data
+   * exactly as ingested. Defaults false; only `judgeEdgeCrossing` opts in.
    */
   crossOwner?: boolean;
 }
 
 /**
- * Resolve everything a share of `itemIds` needs from the origin vault.
- * READ-ONLY: nothing here writes, so an unknown item is refused with nothing
- * placed anywhere and the owner's vault never enters a transaction.
+ * Resolve everything a share of `itemIds` needs. READ-ONLY: an unknown item is
+ * refused with nothing placed anywhere.
  */
 export function readShareClosure(
   origin: DatabaseSync,

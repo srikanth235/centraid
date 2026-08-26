@@ -1,21 +1,7 @@
 /*
- * `centraid-gateway doctor` — the in-product integrity scrub (issue #839 W1.2).
- *
- * A stopped-daemon diagnostic that opens every vault the gateway owns and runs
- * the reusable check library (`../doctor/integrity-checks.ts`) over them:
- *
- *   - `PRAGMA integrity_check` on `gateway.db` and each vault's `vault.db` +
- *     `journal.db`;
- *   - re-hashes CAS blobs against their content address (sampled; `--full`
- *     re-hashes every object);
- *   - audits the cross-vault hardlink refcount contract; and
- *   - checks each vault's replica change-log against its meta and audit journal.
- *
- * It prints one line per finding and exits nonzero if any check errored, so a
- * cron/CI wrapper can gate on it. Like the other maintenance verbs it takes
- * `gateway.db`'s exclusive lock and therefore refuses while the daemon runs —
- * a scrub racing a live writer would report false corruption. `--json` swaps
- * the human lines for a single machine-readable object.
+ * `centraid-gateway doctor` — the in-product integrity scrub (#839). One line
+ * per finding, nonzero exit when any check errored; exclusive-locks gateway.db
+ * and refuses while the daemon runs.
  *
  *   centraid-gateway doctor --data-dir <path> [--vault <id>] [--full] [--json]
  */
@@ -86,9 +72,8 @@ export async function commandDoctor(args: string[], fail: Fail): Promise<void> {
     if (!parsed.dataDir) localFail("--data-dir is required", 2);
     const layout = daemonLayoutFor(parsed.dataDir);
 
-    // A scrub reading mid-write would report false corruption, so hold the
-    // same exclusive lock the maintenance verbs take: refuse while the daemon
-    // owns gateway.db rather than diagnose a moving target.
+    // A scrub racing a live writer reports false corruption: hold the
+    // maintenance verbs' exclusive lock, refusing while the daemon runs.
     let gatewayDb: GatewayDatabase;
     try {
       gatewayDb = GatewayDatabase.open(parsed.dataDir, { lock: "exclusive" });
@@ -128,8 +113,7 @@ export async function commandDoctor(args: string[], fail: Fail): Promise<void> {
         full: parsed.full,
       });
 
-      // A vault that would not mount is an integrity fault of its own: the
-      // scrub never saw its files, so surface it rather than report "clean".
+      // An unmountable vault is an integrity fault of its own — never report clean.
       const failedMounts = registry.failedMounts();
 
       if (json) {
@@ -160,8 +144,7 @@ export async function commandDoctor(args: string[], fail: Fail): Promise<void> {
       }
 
       if (hasError(findings) || failedMounts.length > 0) {
-        // Not a usage/lock failure — a clean run that FOUND defects. Exit
-        // nonzero so a wrapper can gate on it; output already printed above.
+        // Clean run that FOUND defects: exit nonzero so a wrapper can gate.
         process.exitCode = 1;
       }
     } catch (error) {

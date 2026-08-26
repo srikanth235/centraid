@@ -1,34 +1,11 @@
 /*
- * CLOCK ADVERSITY against the automation scheduler (issue #842, W3.3).
- *
- * The DST zoo (`time-zoo-cron.test.ts`, #839) attacks the CALENDAR: it holds
- * the device clock honest and varies the zone's own irregularities. This file
- * attacks the DEVICE, and it attacks the ENGINE rather than the matcher: the
- * clock steps forward, steps backward, ticks slightly short of a minute, gets
- * its schedule's timezone rewritten underneath it, and — the case a single
- * process cannot express at all — two schedulers disagree about what time it
- * is while sharing one cursor row.
- *
- * Nothing here re-states the fall-back Overlap law. That law, and the pinned
- * defect standing against that law — docs/decisions.md **A-pinned**, the
- * fall-back double fire against docs/cron-timezone.md § "DST policy" — stay
- * owned by
- * time-zoo-cron.test.ts. What this file adds is the SAME family of question —
- * can a wall-clock minute be delivered twice, or vanish? — asked of the faults
- * that have nothing to do with tzdata.
- *
- * The three invariants every case below is stated in terms of:
- *
- *   NO DOUBLE FIRE  — one zone wall-clock minute is delivered at most once,
- *                     across every tick and across every device.
- *   NO SILENT SKIP  — a due minute the scheduler swept is either delivered or
- *                     counted in `skipped` with a `gapReason`; it never simply
- *                     disappears.
- *   NO DRIFT        — the committed position moves monotonically forward and
- *                     never past the latest instant the clock actually showed.
- *
- * Everything runs on `useFakeClock` plus the engine's injected `now` seam, so
- * no assertion here can read a real wall clock.
+ * CLOCK ADVERSITY against the automation scheduler (#842). The DST zoo
+ * (`time-zoo-cron.test.ts`) attacks the CALENDAR and owns the fall-back Overlap
+ * law; this attacks the DEVICE and the ENGINE. Three invariants: NO DOUBLE FIRE
+ * (one zone wall-clock minute at most once, across ticks and devices), NO
+ * SILENT SKIP (a swept due minute is delivered or counted in `skipped` with a
+ * `gapReason`) and NO DRIFT (the committed position moves forward only, never
+ * past the latest instant the clock showed).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,10 +31,8 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** `cron-cursor.ts` MAX_SCAN_MINUTES, restated so a horizon claim is explicit. */
 const SCAN_HORIZON_MS = 44_640 * MINUTE;
 
-/** Seeded so the jitter walk varies while any failure replays from its output. */
 const ADVERSITY_SEED = 842_033;
 
 function automationRow(ref: string, expr: string, tz?: string): Row {
@@ -87,13 +62,10 @@ function automationRow(ref: string, expr: string, tz?: string): Row {
   };
 }
 
-/** One scheduler over a shared store, with a clock the test moves by hand. */
 interface Device {
   readonly engine: VaultCursorEngine;
   readonly fires: TriggerCursorFireInput[];
-  /** Absolute instant this device believes it is; the test writes it. */
   at: number;
-  /** Advance this device's belief and let it process one tick. */
   tickAt: (instant: number) => Promise<void>;
 }
 
@@ -124,15 +96,12 @@ function device(
     tickAt: async (instant: number) => {
       state.at = instant;
       engine.tick();
-      // `tick` dispatches through `processSafely`, which is fire-and-forget by
-      // design; the delivery is only observable after its promise chain
-      // settles. This is a queue drain, not a sleep — see `flushMacrotasks`.
+      // `processSafely` is fire-and-forget: a queue drain, not a sleep.
       await flushMacrotasks();
     },
   };
 }
 
-/** Distinct zone wall-clock keys across a device's whole fire log. */
 function firedKeys(
   fires: readonly TriggerCursorFireInput[],
   tz?: string
@@ -153,7 +122,6 @@ function cursorAt(positionMs: number): AutomationTriggerCursor {
   };
 }
 
-/** Position the store holds for the single automation these tests register. */
 function storedPosition(
   store: MemoryCursorStore,
   ref: string
@@ -168,8 +136,6 @@ describe("a device clock that steps", () => {
   });
 
   it("delivers one fire and counts the rest when the clock jumps forward over due minutes", async () => {
-    // A laptop resuming from sleep: the clock is CORRECT again, it just moved
-    // in one step. Nine 09:0x fires became due while it slept.
     const store = new MemoryCursorStore();
     const ref = "clock/minutely";
     const dev = device(store);
@@ -181,9 +147,8 @@ describe("a device clock that steps", () => {
 
     await dev.tickAt(Date.parse("2026-06-15T09:10:00.000Z"));
 
-    // NO SILENT SKIP: the nine minutes the jump passed over are not delivered
-    // (the scheduler does not backfill, #149) but they are COUNTED, and the
-    // count carries a reason the member can be shown.
+    // NO SILENT SKIP: passed-over minutes are not backfilled (#149) but are
+    // COUNTED, with a reason the member can be shown.
     expect(dev.fires).toHaveLength(2);
     const jump = dev.fires[1] as TriggerCursorFireInput;
     expect(new Date(jump.element.occurredAt).toISOString()).toBe(
@@ -191,17 +156,13 @@ describe("a device clock that steps", () => {
     );
     expect(jump.skipped).toBe(8);
     expect(jump.gapReason).toBe("scheduler_gap");
-    // NO DRIFT: the position lands on the instant the clock showed, not past it.
     expect(storedPosition(store, ref)).toBe(
       Date.parse("2026-06-15T09:10:00.000Z")
     );
   });
 
   it("degrades the missed count to a floor beyond the 31-day scan horizon, never to a phantom", () => {
-    // A cursor restored from an old backup. cron-cursor.ts caps the backward
-    // scan at MAX_SCAN_MINUTES so a tick cannot walk a year of minutes
-    // synchronously; the documented consequence is that the COUNT degrades —
-    // and the direction of the degradation is the whole point.
+    // The backward scan is capped, so the COUNT degrades — in this direction.
     const to = Date.parse("2026-06-15T09:00:00.000Z");
     const stale = to - 90 * DAY;
     const result = readCronCursor(
@@ -215,14 +176,11 @@ describe("a device clock that steps", () => {
     expect(result.elements[0]?.occurredAt).toBe(to);
     expect(result.skipped).toBeGreaterThan(0);
     expect(result.skipped).toBeLessThanOrEqual(trueMissed);
-    // The horizon, not an arbitrary number, is what bounds it: 31 days of
-    // daily fires minus the one delivered.
     expect(result.skipped).toBe(Math.floor(SCAN_HORIZON_MS / DAY) - 1);
   });
 
   it("fires nothing while the clock is rewound behind the committed position", async () => {
-    // NTP correcting a clock that had run fast. Every minute in the rewound
-    // span was already swept once; sweeping it again is the double fire.
+    // NTP correcting a fast clock: re-sweeping a rewound minute is the bug.
     const store = new MemoryCursorStore();
     const ref = "clock/minutely";
     const dev = device(store);
@@ -236,15 +194,12 @@ describe("a device clock that steps", () => {
     const committed = storedPosition(store, ref);
     expect(committed).toBe(Date.parse("2026-06-15T09:05:00.000Z"));
 
-    // Rewind three minutes and re-tick every minute the rewind re-crosses.
     await forEachSequentially([2, 3, 4, 5], (n) =>
       dev.tickAt(Date.parse("2026-06-15T09:00:00.000Z") + n * MINUTE)
     );
 
-    // NO DOUBLE FIRE: not one of the re-crossed minutes is delivered again…
     expect(dev.fires).toHaveLength(5);
-    // …and NO DRIFT: the rewind does not drag the committed position backward,
-    // which is what would make the next real minute look like a fresh window.
+    // …and NO DRIFT: a dragged-back position reopens the next real minute.
     expect(storedPosition(store, ref)).toBe(committed);
   });
 
@@ -266,16 +221,12 @@ describe("a device clock that steps", () => {
       "2026-06-15T09:05:00.000Z",
       "2026-06-15T09:06:00.000Z",
     ]);
-    // The recovery window is (09:05, 09:06] — the rewind did not turn it into
-    // a four-minute catch-up, so no phantom missed run is reported.
     expect((dev.fires[1] as TriggerCursorFireInput).skipped).toBe(0);
   });
 
   it("does not double-fire when ticks arrive slightly SHORT of a minute", async () => {
-    // A drifting monotonic timer (and the shape a leap-second smear produces):
-    // wakeups land at 59.9s intervals, so the same wall minute is observed
-    // twice in a row. `floorMinute` plus the engine's last-processed-minute
-    // guard are what must absorb it.
+    // Wakeups at 59.9s see the same wall minute twice, which `floorMinute` and
+    // the last-minute guard absorb.
     const store = new MemoryCursorStore();
     const ref = "clock/minutely";
     const dev = device(store);
@@ -291,16 +242,11 @@ describe("a device clock that steps", () => {
 
     const keys = firedKeys(dev.fires, "Etc/UTC");
     expect(new Set(keys).size).toBe(keys.length);
-    // 40 wakeups at 59.9s cover the 40 wall minutes 09:00…09:39 — each read
-    // twice by some pair of adjacent wakeups, each delivered ONCE.
     expect(keys).toHaveLength(40);
     expect(dev.fires.every((fire) => fire.skipped === 0)).toBe(true);
   });
 
   it("survives a seeded jitter walk without a repeat, a phantom, or a backward position", async () => {
-    // The generator the hand-written cases above cannot be: a day of wakeups
-    // whose deltas are mostly a minute but occasionally a stall, a sleep, or a
-    // correction in either direction.
     const store = new MemoryCursorStore();
     const ref = "clock/quarterly";
     const dev = device(store);
@@ -310,9 +256,6 @@ describe("a device clock that steps", () => {
       automationRow(ref, "0,15,30,45 * * * *", "Etc/UTC")
     );
 
-    // The whole walk is drawn UP FRONT so the corpus is a value the failure
-    // output can be replayed from, and so the ticks are a sequence rather than
-    // a loop that interleaves generation with I/O.
     const rng = seededRandom(ADVERSITY_SEED);
     let clock = start;
     const walk = Array.from({ length: 400 }, () => {
@@ -336,21 +279,15 @@ describe("a device clock that steps", () => {
       if (position !== undefined) positions.push(position);
     });
 
-    // NO DOUBLE FIRE across the whole walk.
     const keys = firedKeys(dev.fires, "Etc/UTC");
     expect(new Set(keys).size).toBe(keys.length);
-    // The walk is only meaningful if it actually delivered a corpus.
     expect(keys.length).toBeGreaterThan(20);
-    // NO DRIFT, twice over: the committed position never moves backward…
     const monotone = positions.every(
       (position, index) =>
         index === 0 || position >= (positions[index - 1] as number)
     );
     expect(monotone).toBe(true);
-    // …and never points past the furthest instant the clock ever showed.
     expect(Math.max(...positions)).toBeLessThanOrEqual(floorMinute(highWater));
-    // Every delivered instant is a real match of the schedule — a corrected
-    // clock must never manufacture a fire on a minute the expression excludes.
     const offSchedule = dev.fires.filter(
       (fire) => new Date(fire.element.occurredAt).getUTCMinutes() % 15 !== 0
     );
@@ -364,11 +301,8 @@ describe("two devices that disagree about now", () => {
   });
 
   it("fires each due wall minute exactly once across a skewed pair sharing one cursor", async () => {
-    // One vault, one cursor row, two schedulers whose clocks are 90 seconds
-    // apart — the shape a resident desktop plus a second host produces, and
-    // the one a single-process test cannot express at all. The window is
-    // half-open on the committed position, so the pair must partition the
-    // minutes between them rather than both claiming any.
+    // Two schedulers 90s apart over one cursor row. The window is half-open on
+    // the committed position, so the pair must partition the minutes.
     const store = new MemoryCursorStore();
     const ref = "clock/quarterly";
     const expr = "0,15,30,45 * * * *";
@@ -390,10 +324,7 @@ describe("two devices that disagree about now", () => {
     });
 
     const keys = firedKeys([...ahead.fires, ...behind.fires], "Etc/UTC");
-    // NO DOUBLE FIRE across the pair: the union of both logs has no repeat.
     expect(new Set(keys).size).toBe(keys.length);
-    // NO SILENT SKIP: every quarter-hour the pair swept is present exactly
-    // once, wherever it was delivered from.
     const expected = dueInstants(
       [{ expr, timeZone: "Etc/UTC" }],
       new Date(start),
@@ -401,24 +332,17 @@ describe("two devices that disagree about now", () => {
     ).map((instant) => wallClockMinuteKey(instant, "Etc/UTC"));
     expect([...keys].sort()).toStrictEqual([...expected].sort());
 
-    // THE LAW THIS PAIR ACTUALLY STATES: the FURTHEST-AHEAD clock owns the
-    // schedule. The lagging device's window is inverted (`from` > `to`) on
-    // every tick, which reads as nothing due — so it never re-delivers what
-    // the leader already committed, and never delivers anything of its own.
-    // Asserted rather than shrugged at, because the member-visible
-    // consequence is real (a skewed host fires everything 90s early) and
-    // because a future "let the lagging device sweep too" change would turn
-    // this exact configuration into a double fire.
+    // THE LAW THIS PAIR STATES: the FURTHEST-AHEAD clock owns the schedule, so
+    // the lagging device's window is inverted and it delivers nothing. Asserted
+    // because a "let the lagging device sweep too" change would turn this exact
+    // configuration into a double fire.
     expect(behind.fires).toStrictEqual([]);
     expect(ahead.fires.length).toBeGreaterThan(0);
   });
 
   it("hands the schedule to the lagging device when the leader stops, without a repeat or a hole", async () => {
-    // The failover the law above makes necessary: the ahead device is the one
-    // firing everything, so what happens when it goes away is not a detail.
-    // The lagging device must resume from the SHARED committed position —
-    // re-delivering the leader's last minutes would be the double fire, and
-    // waiting out its own lag before starting would be the hole.
+    // Failover: the lagging device resumes from the SHARED committed position —
+    // replaying is the double fire, waiting out its lag is the hole.
     const store = new MemoryCursorStore();
     const ref = "clock/quarterly";
     const expr = "0,15,30,45 * * * *";
@@ -434,7 +358,6 @@ describe("two devices that disagree about now", () => {
     const minutes = Array.from({ length: 180 }, (_unused, index) => index + 1);
     await forEachSequentially(minutes, async (n) => {
       const instant = start + n * MINUTE;
-      // The leader is unplugged at the handover minute and never ticks again.
       if (n < HANDOVER) await leader.tickAt(instant);
       await follower.tickAt(instant);
     });
@@ -442,9 +365,7 @@ describe("two devices that disagree about now", () => {
 
     const leaderKeys = firedKeys(leader.fires, "Etc/UTC");
     const followerKeys = firedKeys(follower.fires, "Etc/UTC");
-    // NO DOUBLE FIRE across the handover: the two logs are disjoint.
     expect(leaderKeys.some((key) => followerKeys.includes(key))).toBe(false);
-    // NO SILENT SKIP: the union is still every quarter-hour of the span.
     const expected = dueInstants(
       [{ expr, timeZone: "Etc/UTC" }],
       new Date(start),
@@ -453,12 +374,8 @@ describe("two devices that disagree about now", () => {
     expect([...leaderKeys, ...followerKeys].sort()).toStrictEqual(
       [...expected].sort()
     );
-    // Both halves of the handover happened — a green from an empty follower
-    // would prove nothing about failover.
     expect(leaderKeys.length).toBeGreaterThan(0);
     expect(followerKeys.length).toBeGreaterThan(0);
-    // The follower picks up where the leader stopped rather than replaying it:
-    // its first delivery is strictly later than the leader's last.
     const lastLed = Math.max(
       ...leader.fires.map((fire) => fire.element.occurredAt)
     );
@@ -475,11 +392,9 @@ describe("a schedule whose timezone changes underneath it", () => {
   });
 
   /**
-   * The gateway-wide default (docs/cron-timezone.md, tier 2) is read on every
-   * register/reconcile, so a Settings change re-resolves the zone without a
-   * restart. The cursor row survives that re-resolution — it stores an
-   * absolute millisecond position, which means the change moves the WALL
-   * MINUTE the schedule matches while leaving the position where it was.
+   * The gateway default is re-read on every register/reconcile, and the cursor
+   * stores an ABSOLUTE position — so a zone change moves the wall minute the
+   * schedule matches while leaving the position where it was.
    */
   it("never re-delivers a wall minute already passed when the default zone moves west", async () => {
     const store = new MemoryCursorStore();
@@ -505,18 +420,13 @@ describe("a schedule whose timezone changes underneath it", () => {
       await flushMacrotasks();
     };
 
-    // Fires at 09:00 UTC.
     await tick("2026-06-15T09:00:00.000Z");
     expect(fires).toHaveLength(1);
 
-    // The member moves the gateway default two hours west; re-registering is
-    // what a Settings write does.
     zone.value = "Etc/GMT+2"; // UTC−02:00
     await engine.register(row);
 
-    // 09:00 in the new zone is 11:00 UTC — later today. It fires, and it is a
-    // DIFFERENT wall-clock minute, so this is the new schedule rather than a
-    // repeat of the old one.
+    // A DIFFERENT wall-clock minute: a new schedule, not a repeat.
     const afterNine = Array.from({ length: 180 }, (_unused, index) =>
       new Date(
         Date.parse("2026-06-15T09:00:00.000Z") + (index + 1) * MINUTE
@@ -529,25 +439,20 @@ describe("a schedule whose timezone changes underneath it", () => {
         (fires[1] as TriggerCursorFireInput).element.occurredAt
       ).toISOString()
     ).toBe("2026-06-15T11:00:00.000Z");
-    // NO DOUBLE FIRE, stated where it is meaningful: no ABSOLUTE minute is
-    // delivered twice, and the two deliveries are two distinct civil minutes
-    // in the zone each was scheduled under.
+    // NO DOUBLE FIRE where it is meaningful: no ABSOLUTE minute twice.
     expect(new Set(fires.map((fire) => fire.element.occurredAt)).size).toBe(2);
     expect(
       wallClockMinuteKey(new Date(fires[0]!.element.occurredAt), "Etc/UTC")
     ).not.toBe(
       wallClockMinuteKey(new Date(fires[1]!.element.occurredAt), "Etc/GMT+2")
     );
-    // NO PHANTOM MISS: a zone change is not a scheduler gap.
     expect((fires[1] as TriggerCursorFireInput).skipped).toBe(0);
     expect((fires[1] as TriggerCursorFireInput).gapReason).toBeUndefined();
   });
 
   it("skips the day rather than back-firing when the zone moves east past the committed position", async () => {
-    // The mirror case: the new zone's 09:00 already happened this morning. The
-    // half-open window is what refuses it — a scheduler that re-derived "the
-    // last matching minute" without consulting the cursor would fire an
-    // automation for a time that is already in the past.
+    // The mirror case: the half-open window refuses a new zone's 09:00 that has
+    // already passed, which a re-derived "last matching minute" would fire.
     const store = new MemoryCursorStore();
     const ref = "clock/daily";
     const committed = Date.parse("2026-06-15T09:00:00.000Z");
@@ -559,7 +464,6 @@ describe("a schedule whose timezone changes underneath it", () => {
       updatedAt: committed,
     });
 
-    // 09:00 in Asia/Kolkata (+05:30) is 03:30 UTC — behind the position.
     const sameDay = readCronCursor(
       [{ expr: "0 9 * * *", timeZone: "Asia/Kolkata" }],
       cursorAt(committed),
@@ -568,7 +472,6 @@ describe("a schedule whose timezone changes underneath it", () => {
     expect(sameDay.elements).toStrictEqual([]);
     expect(sameDay.skipped).toBe(0);
 
-    // Tomorrow's 03:30 UTC is delivered normally, exactly once.
     const nextDay = readCronCursor(
       [{ expr: "0 9 * * *", timeZone: "Asia/Kolkata" }],
       cursorAt(Date.parse("2026-06-15T23:59:00.000Z")),
@@ -583,9 +486,8 @@ describe("a schedule whose timezone changes underneath it", () => {
   });
 
   it("dedupes per schedule zone when two triggers on one automation disagree about the zone", () => {
-    // One automation, two cron triggers, two zones that name the SAME absolute
-    // minute. `dueInstants` keys its dedupe per matching schedule's zone, so
-    // the shared instant must still be one due instant, not two.
+    // `dueInstants` dedupes per matching schedule's zone, so two zones naming
+    // one absolute minute must still be one due instant.
     const shared = dueInstants(
       [
         { expr: "0 9 * * *", timeZone: "Etc/UTC" },

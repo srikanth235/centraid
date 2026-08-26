@@ -1,17 +1,5 @@
-// The ONE notification day context earns (#834): an inner-circle person's
-// birthday, at a lead the member chose, deep-linking to that person.
-//
-// WHY THIS ONE AND NOTHING ELSE. Existing ≠ visible ≠ notifying. A birthday is
-// the rare fact that is worthless the day after and cannot be rescheduled, and
-// the member has already said who matters by STARRING them — so the vault's
-// starred flag is the whole permission model. Everyone else's birthday stays a
-// ribbon on the day, and there is no notification for a due task, an overdue
-// pile, a shared vault or anything that counts.
-//
-// Pure and I/O-free: which birthdays notify, when, and what the notification
-// says are facts about the rows plus the clock plus the member's lead — so
-// they are functions here, and `notifications-core.ts` is the shell that
-// schedules whatever this returns.
+// The one notification day context earns (#834): an inner-circle person's
+// birthday. Starred is the whole permission model. Pure; `notifications-core.ts` schedules this.
 import {
   BIRTHDAY_LEAD_DEFAULT_DAYS,
   BIRTHDAY_LEADS,
@@ -24,37 +12,29 @@ export {
   BIRTHDAY_LEADS,
 } from "@centraid/blueprints/apps/agenda/day-context-copy";
 
-/** One person the phone may notify about. */
 export interface BirthdayPerson {
   partyId: string;
   name: string;
-  /** `YYYY-MM-DD` or the year-less `--MM-DD` the vault also writes. */
+  /** `YYYY-MM-DD` or year-less `--MM-DD`. */
   birthDate: string;
-  /** The owner starred them. The ONLY reason a birthday notifies. */
+  /** Owner starred them — the only reason a birthday notifies. */
   inner: boolean;
 }
 
-/** One scheduled local notification, ready for `scheduleNotificationAsync`. */
 export interface BirthdayNotification {
-  /** Stable per person per year, so a re-run never notifies twice. */
+  /** Stable per person per year — a re-run never notifies twice. */
   key: string;
   title: string;
   body: string;
-  /** When the phone should show it — the member's lead ahead of the day. */
   at: Date;
-  /** The birthday itself, `YYYY-MM-DD`. */
   day: string;
   partyId: string;
-  /** The deep link the tap follows: the person, not a list. */
   url: string;
 }
 
 const DAY_MS = 86_400_000;
-/** How far ahead the phone looks. A year covers every birthday exactly once,
- *  and the delivery ledger is what stops a second pass repeating one. */
 const HORIZON_DAYS = 400;
-/** The hour a birthday notification lands, local. Not midnight: a fact about
- *  a whole day has no moment, and 09:00 is when a member can act on it. */
+/** Local hour. A whole-day fact has no moment; 09:00 is when a member can act. */
 const NOTIFY_HOUR = 9;
 
 const WEEKDAYS = [
@@ -75,14 +55,12 @@ function dayKeyOf(date: Date): string {
   ].join("-");
 }
 
-/** The `MM-DD` a birth date recurs on, or null when it carries none. */
 export function monthDayOf(birthDate: string): string | null {
   if (birthDate.length < 5) return null;
   const tail = birthDate.slice(-5);
   return /^\d{2}-\d{2}$/u.test(tail) ? tail : null;
 }
 
-/** The label for a lead in days, as the picker spells it. */
 export function leadLabel(days: number): string {
   return (
     BIRTHDAY_LEADS.find((lead) => lead.days === days)?.label ?? `${days} days`
@@ -90,16 +68,15 @@ export function leadLabel(days: number): string {
 }
 
 /**
- * The next occurrence of an annual `MM-DD` on or after `from`, or null when
- * the date does not exist in either candidate year — a 29 February birthday is
- * simply absent in a non-leap year rather than silently rounded onto 1 March.
+ * Next `MM-DD` on or after `from`. 29 February is absent in a non-leap year
+ * rather than rounded onto 1 March.
  */
 export function nextOccurrence(monthDay: string, from: Date): Date | null {
   const month = Number(monthDay.slice(0, 2)) - 1;
   const day = Number(monthDay.slice(3));
   for (const year of [from.getFullYear(), from.getFullYear() + 1]) {
     const candidate = new Date(year, month, day);
-    // A rolled date (31 April → 1 May, 29 Feb → 1 Mar) is not this birthday.
+    // Rolled date (31 April → 1 May, 29 Feb → 1 Mar) is not this birthday.
     if (candidate.getMonth() !== month || candidate.getDate() !== day) continue;
     if (dayKeyOf(candidate) >= dayKeyOf(from)) return candidate;
   }
@@ -107,12 +84,8 @@ export function nextOccurrence(monthDay: string, from: Date): Date | null {
 }
 
 /**
- * What the phone should schedule.
- *
- * NEVER FOR ANYONE BUT THE INNER CIRCLE — the filter is the first line, and it
- * is the whole rule. A lead that would land in the past is dropped rather than
- * fired late: a reminder about a birthday that has already happened is noise,
- * and the ribbon on the day is what remains true.
+ * NEVER anyone but the inner circle. A lead that would land in the past is
+ * dropped, not fired late.
  */
 export function planBirthdayNotifications(input: {
   people: readonly BirthdayPerson[];

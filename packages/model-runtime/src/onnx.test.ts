@@ -75,8 +75,9 @@ describe(resolveRuntimeModule, () => {
 });
 
 /*
- * #846 P9. This entry resolution used to be `createRequire(...).resolve(...)`,
- * and `node:module` is refused by every sandbox lane — a `createRequire` in
+ * This entry resolution is hand-rolled rather than
+ * `createRequire(...).resolve(...)` (#846), because `node:module` is refused by
+ * every sandbox lane — a `createRequire` in
  * the graph resolves through Node's own loader and skips the lane's hooks, so
  * one builtin re-opens everything the lane closed. Hand-rolling the narrow
  * part of the algorithm these packages need is what lets a recognition bundle

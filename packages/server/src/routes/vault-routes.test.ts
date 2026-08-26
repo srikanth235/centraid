@@ -4,7 +4,7 @@ import http from "node:http";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-// The outbox edit-before-send route slice (issue #308 A5 UI slice):
+// The outbox edit-before-send route slice (#308 A5 UI slice):
 // approve-with-edit rebuilds the gmail.send wire request server-side from
 // the edited artifact, an unsupported verb 4xx's instead of silently
 // dropping the edit, shape-drifted artifacts are refused, and a
@@ -670,13 +670,13 @@ describe("vault-routes", () => {
 
   // The owner-only tier writer uses this route. Two things must hold: the
   // write reaches the mirror the
-  // runtime gate reads, and the standing "enrichment isn't running" card that
-  // described the OLD tier is retired — a card left asserting a setting the
+  // runtime gate reads, and the standing "enrichment isn't running" card goes
+  // away with the tier it describes — a card left asserting a setting the
   // owner has just changed is a second silent lie.
   test("the enrichment tier route writes the mirror the gate reads and retires the stale refusal card", async () => {
     const { base, plane } = await setup();
     // Start both domains at `device` (a fresh vault's bootstrap default is
-    // `gateway` since issue #712 C5 — lower them explicitly so the PUT below
+    // `gateway` since #712 C5 — lower them explicitly so the PUT below
     // has a real change to make, same as an owner who narrowed the tier
     // once already).
     const patch: Partial<Record<"photos" | "docs", "device">> = {

@@ -5,7 +5,7 @@
 // before committing, the Compare dialog needs every preset's baseline. These
 // knob values are host-independent (only the derived memory cap / core count
 // vary with the machine), so mirroring them is faithful. Keep in sync with the
-// gateway table if the presets ever change (issue #528 follow-up).
+// gateway table if the presets ever change (#528 follow-up).
 
 import { formatMbAsGb } from "./resource-summary.js";
 

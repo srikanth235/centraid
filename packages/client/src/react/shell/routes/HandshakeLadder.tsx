@@ -8,7 +8,7 @@ import type {
 
 import styles from "./HandshakeLadder.module.css";
 
-// The connectivity-test "handshake ladder" (issue #382 design doc) — the
+// The connectivity-test "handshake ladder" (#382 design doc) — the
 // signature moment of ConnectFlow's test step, also reused standalone by the
 // switcher's "Test connection…" action on an already-registered gateway.
 // A vertical staged checklist; each stage's row is CSS-`animation-delay`

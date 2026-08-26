@@ -1,16 +1,3 @@
-// The view pair — `List` / `Grid`, on the toolbar row above the shelf strip.
-//
-// THE HANDOFF DRAWS IT AS WORDS, not as two icon squares: `densBtns:
-// [['list','List'],['grid','Grid']]` inside a `densWrapStyle` track, at the
-// trailing edge of the `barRow` that sits between the frame's app bar and the
-// strip. A segmented control changes what you LOOK AT, never what happens
-// (`segTrack`/`segItem` in the system's own control recipes) — which is why it
-// is a track of quiet words and never takes the fill a commit takes.
-//
-// Two words also say what two glyphs only imply. A four-square and a
-// three-line icon are a convention a member has to already know; "List" and
-// "Grid" are the two things the set can be, spelled out, in the 38px the
-// handoff gives each of them.
 import type { ReactNode } from "react";
 
 import type { AppState } from "../types.ts";
@@ -30,11 +17,7 @@ export function ViewToggle({
   onSelectView: (view: AppState["view"]) => void;
 }): ReactNode {
   return (
-    // A `<fieldset>`, which IS the element behind `role="group"` — the a11y
-    // profile prefers the element to the attribute, and the kit's row block
-    // makes the same call. These stay two aria-pressed buttons rather than
-    // radios: they are two ways of looking at one set, so the pressed state is
-    // what carries the choice.
+    // fieldset IS role="group" per the a11y profile; aria-pressed buttons, never radios.
     <fieldset aria-label="View" className={styles.track}>
       {VIEWS.map((entry) => (
         <button

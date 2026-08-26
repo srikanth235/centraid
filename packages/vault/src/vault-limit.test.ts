@@ -1,4 +1,4 @@
-// The vault.db size ladder (issue #659 L3), mirroring journal-limit's shape:
+// The vault.db size ladder (#659), mirroring journal-limit's shape:
 // no limit set behaves exactly like the pre-ladder daily gate, and an
 // over-limit file narrows one rung per sweep down to a hard floor.
 

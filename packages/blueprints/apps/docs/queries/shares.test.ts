@@ -1,4 +1,4 @@
-// Who a document is shared with (issue #821), as the drive and search
+// Who a document is shared with (#821), as the drive and search
 // projections ship it.
 //
 // Three rules are load-bearing here, and each one is a sentence a member would

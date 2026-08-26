@@ -4,12 +4,10 @@ import type { ShellRoute } from "../../app-shell-context.js";
 import type { ConfirmOpts } from "./confirm.js";
 import type { ShellMenuAnchor } from "./contextMenu.js";
 
-// The cross-cutting action surface the route wrappers consume — the React
-// equivalent of the vanilla ShellContext's action entries. Navigation is NOT
-// here (routes get `nav` from ShellApp); this is for the overlay/imperative
-// actions (toast, context menus, previews) that a screen fires
-// but doesn't own. App.tsx provides the implementations; they're ported from
-// the vanilla cardsMod/autoMod one cluster at a time.
+// The cross-cutting action surface the route wrappers consume. Navigation is
+// NOT here (routes get `nav` from ShellApp); this is for the overlay/imperative
+// actions (toast, context menus, previews) that a screen fires but doesn't own.
+// App.tsx provides the implementations.
 export interface ShellActions {
   showToast: (message: string) => void;
   /** ⌘K command palette. */

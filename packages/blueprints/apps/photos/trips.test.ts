@@ -1,4 +1,4 @@
-// What a trip is CALLED, and the line drawn across it (issue #816).
+// What a trip is CALLED, and the line drawn across it (#816).
 //
 // The vault owns whether a run of days is a trip at all
 // (`packages/vault/src/enrich/memories.test.ts`); nothing here re-tests that.

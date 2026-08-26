@@ -1,15 +1,8 @@
 /*
- * Devices → people (issue #726).
- *
- * Every enrollment carries an `ownerId` — it is a schema invariant, not an
- * optional column — so this grouping is total by construction and there is no
- * "Unassigned" bucket to fall into. A vault has exactly one owner, and a
- * device caller sees only vaults its own owner owns (topology hiding), so
- * every row this grouping ever sees belongs to the SAME person — the caller.
- * When a device names a person the roster call didn't return (a roster
- * surface the gateway doesn't expose, or a refresh race), the group is still
- * that person: the label rides along on the device row, and their vaults are
- * read back off the bindings they inherited.
+ * Devices → people (#726). Every enrollment carries an `ownerId` (schema
+ * invariant): grouping is total, no "Unassigned" bucket. A device caller sees
+ * only its owner's vaults, so every row is the caller; a device naming a
+ * person the roster missed keeps that person (label rides the row).
  */
 
 import { isRevokedDevice } from "../../device-roster.js";
@@ -21,35 +14,26 @@ import type {
 } from "../../gateway-client.js";
 
 /**
- * One physical device, with every enrollment it holds folded in.
- *
- * The devices route returns a row per (device, VAULT) enrollment, so a browser
- * paired into multiple vaults came back twice. Rendered raw that reads as two
- * devices — the card counted "4 devices" for two — and each copy carried a
- * button labelled "Revoke device" that only dropped one vault. The user thinks
- * in hardware, so the row is hardware and `enrollmentIds` carries what revoking
- * it has to remove.
+ * One physical device with all enrollments folded in: the route returns one
+ * row per (device, VAULT), which reads as two devices and revokes one vault.
  */
 export interface GroupedDevice extends CentraidGatewayDevice {
-  /** Every enrollment row this device holds; revoking the device drops all. */
   enrollmentIds: string[];
-  /** The vaults it reaches, in the order the gateway returned them. */
   vaults: GatewayDeviceVault[];
 }
 
 export interface OwnerGroup {
   ownerId: string;
   label: string;
-  /** The vaults this person owns. */
   vaults: GatewayOwnerVault[];
   devices: GroupedDevice[];
-  /** Tombstoned bindings — kept so past attribution still resolves. */
+  /** Tombstoned bindings — past attribution still resolves. */
   revoked: GroupedDevice[];
   /** Holds the device making this request. */
   isSelf: boolean;
 }
 
-/** Fold a person's enrollment rows into one row per `endpointId`. */
+/** Fold a person's rows into one per `endpointId`. */
 function mergeByEndpoint(
   rows: readonly CentraidGatewayDevice[]
 ): GroupedDevice[] {
@@ -72,21 +56,19 @@ function mergeByEndpoint(
     if (!seen.vaults.some((held) => held.vaultId === vault.vaultId)) {
       seen.vaults.push(vault);
     }
-    // One enrollment row marked as this device makes the whole device that.
+    // Any row marked current makes the whole device current.
     if (row.current === true) seen.current = true;
   }
   return [...merged.values()];
 }
 
-/** Vaults read back off inherited bindings, for an owner the roster didn't list. */
+/** Vaults off inherited bindings for an owner the roster didn't list. */
 function vaultsFromDevices(
   devices: readonly GroupedDevice[]
 ): GatewayOwnerVault[] {
   const byVault = new Map<string, GatewayOwnerVault>();
   for (const device of devices) {
     if (isRevokedDevice(device)) continue;
-    // Read every vault the merged device reaches, not just the one its first
-    // enrollment row happened to name.
     for (const vault of device.vaults) {
       if (!byVault.has(vault.vaultId)) byVault.set(vault.vaultId, vault);
     }
@@ -94,7 +76,7 @@ function vaultsFromDevices(
   return [...byVault.values()];
 }
 
-/** One group per person: the roster's owner, plus anyone only devices name. */
+/** One group per person: roster owners plus anyone only devices name. */
 export function groupDevicesByOwner(
   devices: readonly CentraidGatewayDevice[],
   owners: readonly GatewayOwner[]
@@ -136,9 +118,7 @@ export function groupDevicesByOwner(
     }
   }
 
-  // You first — it is the group whose devices you must never misidentify —
-  // then everyone else alphabetically. In practice there is only ever one
-  // group (#726: a device caller sees only its own owner's roster row).
+  // You first, then alphabetical; in practice one group (#726).
   return [...groups.values()].sort((a, b) =>
     a.isSelf === b.isSelf ? a.label.localeCompare(b.label) : a.isSelf ? -1 : 1
   );

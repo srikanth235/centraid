@@ -18,38 +18,18 @@ import type {
 } from "../../lib/enrichment";
 import SettingsSection from "./SettingsSection";
 
-// Settings → Enrichment (issue #807, Wave 6) — what the phone can SAY about
-// the effective enrichment policy, which is: what it is, and nothing else.
-//
-// READ ONLY, DELIBERATELY. Editing the policy cascade means choosing a scope,
-// a capability, an engine profile, and (for anything that leaves the member's
-// own machines) answering an egress consent question. That ceremony is a
-// desktop surface in this wave; a phone toggle that wrote one level of it
-// would be the member changing a rule they cannot see the cascade for.
-//
-// WHY IT IS HERE ANYWAY. "Which of my photos and documents does Centraid look
-// at, with what, and where does that work happen" is a question a member asks
-// on the device the photographs were taken on. Answering it read-only costs
-// nothing and closes the gap where the phone knew less about the vault than
-// the vault did.
-//
-// EVERY WORD BELOW IS THE GATEWAY'S ANSWER. The rows render
-// `GET /_vault/enrich/effective` joined to the listed engine profiles; when
-// the gateway cannot be reached the section says so (docs/mobile-offline.md's
-// rule: an unavailable state, never a fabricated one), because a policy read
-// from a cache is a claim about what is happening right now that nothing
-// re-checked.
+// Settings → Enrichment (#807): read-only statement of the effective policy —
+// what it is, nothing else. Editing (scope/capability/engine/egress-consent
+// cascade) is a desktop surface this wave. Every word is the gateway's answer:
+// GET /_vault/enrich/effective joined to engine profiles; an unreachable gateway
+// says so (mobile-offline.md: unavailable state, never cached/un-rechecked).
 
-/** Member-facing name of each domain. */
 const DOMAIN_LABELS: Readonly<Record<EnrichDomain, string>> = {
   docs: "Documents",
   photos: "Photos",
 };
 
-/**
- * Member-facing name of each capability. The registry's ids are contract keys
- * (`ocr`, `doc-entities`); nobody's settings screen should show them.
- */
+/** Member-facing names; registry ids are contract keys. */
 const CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   "doc-entities": "Names, dates and amounts",
   "doc-filing": "Filing suggestions",
@@ -62,22 +42,14 @@ const CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   transcript: "Video and audio transcripts",
 };
 
-/**
- * Where the work happens, in the member's words. The axis is the engine's
- * computed egress class (`packages/server/src/enrich/engine-profiles.ts`) —
- * the member's own gateway is inside their trust domain, a provider is not.
- */
+/** Where work runs, member's words (engine egress class axis). */
 const EGRESS_WORDS: Readonly<Record<EnrichEgressClass, string>> = {
   gateway: "on your gateway",
   "on-device": "on this device",
   provider: "sent to a provider",
 };
 
-/**
- * The same axis as a CEILING, used only when the gateway named a profile it
- * did not list: the ceiling is the most the runtime would permit, so it is
- * worded as a limit rather than as a fact about where work runs.
- */
+/** Ceiling wording, only for an unlisted profile: a limit, not a fact. */
 const CEILING_WORDS: Readonly<Record<EnrichEgressCeiling, string>> = {
   gateway: "no further than your gateway",
   off: "nothing runs",
@@ -85,7 +57,6 @@ const CEILING_WORDS: Readonly<Record<EnrichEgressCeiling, string>> = {
   provider: "may be sent to a provider",
 };
 
-/** When the work is offered, in the member's words. */
 const TRIGGER_WORDS: Readonly<Record<EnrichTrigger, string>> = {
   "on-demand": "when you ask",
   "on-ingest": "as items arrive",
@@ -100,15 +71,10 @@ type Load =
   | { kind: "unavailable"; reason: string };
 
 export interface EnrichmentSectionProps {
-  /**
-   * The read behind the section. Defaults to the gateway client; a caller
-   * passes its own only in tests, which is why there is no other prop — every
-   * word on screen comes from what this returns.
-   */
+  /** Defaults to the gateway client; test-only override. */
   read?: () => Promise<EnrichCapabilityState[]>;
 }
 
-/** The one line under a capability's name: what it does, and where. */
 function describeState(state: EnrichCapabilityState): string {
   const { effective, profile } = state;
   if (!effective) return "No policy your gateway can honour — this stays off.";

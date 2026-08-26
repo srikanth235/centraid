@@ -1,5 +1,5 @@
 /*
- * Opt-in live smoke for issue #567 acceptance. It exercises the two
+ * Opt-in live smoke for #567 acceptance. It exercises the two
  * requested registry kinds through the same `runTurn` entry point as product
  * surfaces. CI does not run it because it requires locally-authenticated CLIs
  * and incurs one tiny provider turn per harness.

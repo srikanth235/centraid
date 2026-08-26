@@ -1,4 +1,4 @@
-// Version history (Docs handoff Part 2 §10; issue #821) — "every change is a
+// Version history (Docs handoff Part 2 §10; #821) — "every change is a
 // version and nothing is ever overwritten."
 //
 // The chain is REAL: `core.link` revises edges off this device's replica,

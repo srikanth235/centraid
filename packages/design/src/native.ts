@@ -5,9 +5,8 @@
 // color-mix(), oklch(), stylesheet parser, or runtime override layer in the
 // mobile path.
 //
-// `toNativeTheme` used to take an accent key, because an owner could retune
-// the product accent to one of five hues. The Binding Layer removed that
-// choice at the root: the accent is ink, so there is nothing to pick.
+// `toNativeTheme` takes no accent key: the accent is ink, so there is no
+// product accent to pick.
 
 import { borders } from "./borders";
 import { rgbaHex } from "./color";

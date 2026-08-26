@@ -1,13 +1,8 @@
-// Consent memory for the install-grant top-up (issue #308 A3/A4).
-//
-// Two facts the #306 top-up forgot, made durable:
-//   - the owner's "no": `consent_scope_tombstone` rows survive revocation,
-//     so a mount/sync/publish can never silently re-mint a scope the owner
-//     took away (A4). Only an explicit owner approval clears one.
-//   - the last consent's extent: an app whose manifest widens beyond what
-//     was ever consented gets a `consent_scope_request` blocking item, not
-//     an auto-grant (A3) — agents author their own manifests, so the
-//     top-up must not be steerable by the actor it contains.
+// Consent memory for the install-grant top-up (#308 A3/A4): tombstone rows
+// survive revocation (only an explicit owner approval clears one), and a
+// manifest widened beyond what was ever consented gets a blocking
+// `consent_scope_request`, not an auto-grant — the top-up cannot be steered
+// by the actor it contains.
 
 import type { VaultDb } from "./db.js";
 import type { FilterClause } from "./gateway/types.js";
@@ -23,11 +18,10 @@ export interface ScopeTriple {
   fieldMask?: string[];
 }
 
-/** The grantee key mirrors consent_access_grant's two planes. */
 export interface GranteeKey {
-  /** consent_app.app_id (row uuid) — the app plane. */
+  /** consent_app.app_id (row uuid). */
   appId?: string;
-  /** core_party.party_id — the agent plane. */
+  /** core_party.party_id. */
   granteePartyId?: string;
 }
 
@@ -60,7 +54,7 @@ function granteeClause(grantee: GranteeKey): { where: string; param: string } {
   throw new Error("a scope tombstone needs an app or a grantee party");
 }
 
-/** Record the owner's revocation per scope triple, deduped. */
+/** Record the owner's revocation per scope triple. */
 export function writeScopeTombstones(
   db: VaultDb,
   grantee: GranteeKey,
@@ -133,18 +127,10 @@ export function listScopeTombstones(
 }
 
 /**
- * An explicit owner approval clears the tombstones that approval COVERS —
- * and only those. The direction matters: approving schema-wide `core` read
- * withdraws every narrower `core.*` read "no", but approving one anchored
- * `core.core_task` read must NOT erase a schema-wide `core` read refusal
- * (issue #541 review). Erasing it would put the owner back in front of an ask
- * they already refused on the next mount — exactly the nagging A4 exists to
- * end.
- *
- * The surviving broad tombstone costs the approved scope nothing: the grant
- * this approval mints covers it, so `missingScopes` never asks for it again.
- * That is why a covered sub-extent is not carved out of the tombstone — the
- * row shape has no "everything except" and it would buy nothing.
+ * Approval clears only the tombstones it COVERS (#541 review): an anchored
+ * approval must not erase a schema-wide refusal — the owner would be asked
+ * again on the next mount. The surviving broad tombstone costs nothing; the
+ * minted grant covers it.
  */
 export function clearScopeTombstones(
   db: VaultDb,
@@ -172,7 +158,7 @@ export function clearAllScopeTombstones(
     .run(param);
 }
 
-/** Has the owner EVER consented to this grantee (any grant, any status)? */
+/** Has the owner EVER consented to this grantee (any grant)? */
 export function hasGrantHistory(db: VaultDb, grantee: GranteeKey): boolean {
   const column = grantee.appId ? "app_id" : "grantee_party_id";
   const param = grantee.appId ?? grantee.granteePartyId;
@@ -185,11 +171,8 @@ export function hasGrantHistory(db: VaultDb, grantee: GranteeKey): boolean {
   return row !== undefined;
 }
 
-/**
- * Park a widened manifest as the app's ONE open request. A re-publish
- * replaces the open request's scope set (the manifest is the source of
- * truth for what is being asked); deciding closes it.
- */
+/** Park a widened manifest as the app's ONE open request; a re-publish
+ *  replaces it; deciding closes it. */
 export function openScopeRequest(
   db: VaultDb,
   input: {

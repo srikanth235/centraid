@@ -1,10 +1,7 @@
 /*
- * Turn harness launch/session failures into owner-actionable messages.
- *
- * AUTH_REQUIRED (-32000) is the common case. Many agents instead fail
- * session/new with Internal error (-32603) or a stderr line about login —
- * goose is the documented example. This module keeps that taxonomy out of
- * the turn orchestrator.
+ * Harness failures → owner-actionable messages. AUTH_REQUIRED (-32000) common,
+ * but agents often fail session/new with Internal error (-32603) or stderr
+ * login lines (goose). Taxonomy stays out of the turn orchestrator.
  */
 
 import { RequestError } from "@agentclientprotocol/sdk";
@@ -14,30 +11,16 @@ import type { HarnessFailureClass } from "@centraid/server/engine";
 import { AUTH_REQUIRED_CODE } from "./connection.js";
 import type { AcpTurnConfig } from "./types.js";
 
+/** Owned by @centraid/server/engine; re-exported, never re-declared. */
 export { type HarnessFailureClass } from "@centraid/server/engine";
-
-/**
- * The taxonomy is owned by `@centraid/server/engine` (the `TurnStreamEvent`
- * contract the breakers key off). Re-exported, never re-declared — two copies
- * of the union is how the classifier and the harness drift apart.
- */
 
 /** ACP JSON-RPC "Internal error" — often a stand-in for "not configured". */
 const INTERNAL_ERROR_CODE = -32603;
 
-/**
- * JSON-RPC error codes that mean "provider said slow down / you are out of
- * budget". -32029 is the code harnesses in this space use for rate limits (the
- * scripted fixture mirrors it); 429 shows up when an adapter forwards the
- * HTTP status verbatim as the RPC code.
- */
+/** Provider slow-down: -32029 harness convention; 429 forwarded verbatim. */
 const QUOTA_ERROR_CODES = new Set([-32029, 429, -429]);
 
-/**
- * Errors this client itself authors when a bounded stage runs out of time.
- * These are structured signals — the stage name is in the string BECAUSE we
- * put it there — so they outrank any keyword scan of harness output.
- */
+/** Client-authored timeouts; the stage name is ours, so they outrank keyword scans. */
 const OWN_WEDGE = /idle watchdog timed out/iu;
 const OWN_STAGE_TIMEOUT = /^ACP (?<stage>.+?) timed out after \d+ms/iu;
 const INIT_STAGES =
@@ -71,10 +54,6 @@ export function authRequiredMessage(config: AcpTurnConfig): string {
   return `${label} isn’t signed in, so it refused to start a session.${hint}`;
 }
 
-/**
- * Best-effort classification of a turn failure into a human message.
- * Prefer specific install/login hints over raw RPC strings.
- */
 export function classifyHarnessFailure(
   err: unknown,
   stderr: string,
@@ -96,10 +75,8 @@ export function classifyHarnessFailureDetail(
     return { failureClass: "auth", message: authRequiredMessage(config) };
   }
 
-  // A structured quota code beats the auth-ish heuristics below: rate-limit
-  // stderr routinely mentions "provider" or "api key", which would otherwise
-  // send a throttled harness down the "you are not signed in" path and tell the
-  // owner to re-authenticate something that is working.
+  // Structured quota beats auth heuristics: throttled stderr says "api key"
+  // and would misroute to re-auth advice.
   if (err instanceof RequestError && QUOTA_ERROR_CODES.has(err.code)) {
     const tail = stderr.trim() ? `\n${stderr.trim().slice(-2000)}` : "";
     return { failureClass: "quota", message: `${err.message}${tail}` };
@@ -141,17 +118,9 @@ export function classifyHarnessFailureDetail(
 }
 
 /**
- * Classification precedence, strongest evidence first:
- *
- *   1. structured RPC error codes (the ACP peer told us in the protocol),
- *   2. errors this client authored (stage timeouts, the idle watchdog),
- *   3. keywords in the error MESSAGE,
- *   4. keywords in stderr.
- *
- * Order matters: a crashed harness whose stderr happens to mention "timeout"
- * used to be classified `timeout`, and the timeout breaker tripped for a
- * crash. stderr is the weakest signal because it is unstructured vendor
- * output, so it is only consulted when nothing else decided.
+ * Precedence, strongest first: RPC codes, client-authored errors, message
+ * keywords, stderr. A crash whose stderr says "timeout" must not trip the
+ * timeout breaker.
  */
 function failureClassOf(
   err: unknown,

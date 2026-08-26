@@ -1,19 +1,5 @@
-/*
- * Shared infrastructure for the renderer-side gateway HTTP client
- * (issue #141). The data-plane methods (`gateway-client.ts`) and the
- * editing/lifecycle methods (`gateway-client-editing.ts`) both build on
- * this: auth resolution + caching, the bearer-header helper, the fetch
- * wrapper, and the JSON/error reader. Kept in its own dependency-free
- * module so the two consumers don't form an import cycle.
- *
- * Thin-client pivot: the renderer talks to the active gateway directly
- * over HTTP with a Bearer token. Main owns the credential — it reads the
- * active gateway's `{ baseUrl, token }` from keychain-backed settings and
- * hands it over once via `getGatewayAuth()`; we cache it and refresh on
- * gateway switch. Local embedded gateway answers on loopback; a remote
- * one on its URL — identical wire protocol (the local server emits CORS
- * for the `file://` renderer origin).
- */
+/* Renderer-side gateway HTTP client (#141). Own module so the data-plane
+ * and editing clients do not form an import cycle. */
 
 import { GatewayClientError, href, VAULT_HEADER } from "./gateway-auth.js";
 import type { GatewayAuth } from "./gateway-auth.js";
@@ -42,11 +28,7 @@ let cachedClientSessionId: string | undefined;
 
 export const CLIENT_SESSION_HEADER = "x-centraid-client-session";
 
-/**
- * Per-tab/window ceremony binding. It is not an authentication secret, but
- * it never enters an OAuth URL: the gateway records it beside state and
- * requires the same renderer to courier the callback fragment.
- */
+/** Per-tab ceremony binding. Never an OAuth URL: the gateway records it beside state. */
 export function clientSessionId(): string {
   if (cachedClientSessionId) return cachedClientSessionId;
   const storageKey = "centraid.oauth.client-session.v1";
@@ -57,7 +39,7 @@ export function clientSessionId(): string {
       return saved;
     }
   } catch {
-    // Storage can be denied; the in-memory binding still protects this tab.
+    // sessionStorage denied — in-memory binding still protects this tab.
   }
   const bytes = new Uint8Array(32);
   globalThis.crypto.getRandomValues(bytes);
@@ -67,7 +49,7 @@ export function clientSessionId(): string {
   try {
     window.sessionStorage.setItem(storageKey, cachedClientSessionId);
   } catch {
-    // In-memory fallback above is intentional.
+    // sessionStorage denied — in-memory id already set.
   }
   return cachedClientSessionId;
 }
@@ -83,18 +65,12 @@ export function auth(): Promise<GatewayAuth> {
   return cachedAuth;
 }
 
-/** Drop the cached auth so the next call re-reads it from main. */
 export function resetGatewayAuthCache(): void {
   cachedAuth = undefined;
 }
 
-// Self-invalidate when the active gateway flips — the URL + token change,
-// so the next request must re-resolve. Registered once at module load;
-// `window.CentraidApi` is always present before renderer scripts run.
 window.CentraidApi.onGatewayChanged(() => resetGatewayAuthCache());
-// A vault switch (issue #289) keeps the gateway but changes the addressed
-// vault — the URL + token are unchanged, only the `x-centraid-vault` header,
-// so re-resolving auth is all that's needed (no wholesale reload).
+// Vault switch (#289) keeps the gateway; only `x-centraid-vault` changes.
 window.CentraidApi.onVaultChanged?.(() => resetGatewayAuthCache());
 
 export async function doFetch(
@@ -102,10 +78,6 @@ export async function doFetch(
   pathname: string,
   init: RequestInit
 ): Promise<Response> {
-  // Stamp the addressed vault on every request (issue #289). The caller
-  // resolved `auth()` just above, so the cached promise is settled — read
-  // the vault id off it and add the header unless the caller set one. This
-  // one choke point saves threading the id through every call site.
   const finalInit = await withVaultHeader(init);
   try {
     const gatewayAuth = await auth();
@@ -142,13 +114,7 @@ async function withVaultHeader(init: RequestInit): Promise<RequestInit> {
   return { ...init, headers };
 }
 
-/**
- * A body that isn't JSON means something other than the gateway answered —
- * a captive portal, a stale service-worker shell, a proxy error page. The raw
- * body is diagnostic, never user-facing (onboarding run B3 leaked
- * `returned non-JSON: <!doctype html>…` into the Gateway screen), so it goes
- * to the console and the thrown message stays in plain words.
- */
+/** Non-JSON body is not the gateway. Raw body is diagnostic, never user-facing. */
 export function nonJsonError(
   op: string,
   status: number,

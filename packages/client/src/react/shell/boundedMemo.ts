@@ -1,4 +1,4 @@
-// A bounded, string-keyed memo (issue #659). The transcript re-derives every
+// A bounded, string-keyed memo (#659). The transcript re-derives every
 // finished answer's HTML on every streamed token, so the same markdown was
 // re-parsed hundreds of times per turn. Memoizing the pure text→HTML step
 // makes the re-derivation free AND makes the resulting string reference-stable,

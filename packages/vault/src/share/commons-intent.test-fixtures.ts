@@ -1,4 +1,4 @@
-// Shared seats for the issue #731 intent-lifecycle suites (stale-context
+// Shared seats for the #731 intent-lifecycle suites (stale-context
 // scoping in commons-stale-lifecycle.test.ts, parked-intent expiry/cancel
 // in commons-intent-lifecycle.test.ts). Three real on-disk vaults — steward Priya plus
 // members Bob and Cara — so the intervening ops that make a composed intent

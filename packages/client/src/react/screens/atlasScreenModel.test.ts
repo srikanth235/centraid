@@ -27,7 +27,7 @@ import {
   tableCaption,
 } from "./atlasScreenModel.js";
 
-// The Data route's sentences (issue #765). Every one of them is a claim about
+// The Data route's sentences (#765). Every one of them is a claim about
 // the vault, so each is tested for what it says AND for what it refuses to say
 // when the payload cannot support it.
 

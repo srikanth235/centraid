@@ -1,26 +1,14 @@
 // @vitest-environment jsdom
-// The stage: the viewer, the slideshow and the editor (v4 handoff §7.1-§7.4).
+// Stage rules for viewer + slideshow + editor (v4 handoff §7.1-§7.4), asserted
+// as rules, not pixel snapshots: --stage is one value in BOTH themes; the
+// spacer beside the flexible title does not flex; actions go icon-only below
+// 840px OF BAR; the zoom readout is exact; `Save as a new photograph` is the
+// ONE filled element and a disabled commit is not filled.
 //
-// Five rules the handoff states as rules, asserted as rules — not as pixel
-// snapshots, which would go stale the moment a padding moved:
-//
-//   1. the stage is `--stage` in BOTH themes, and nothing in these three
-//      stylesheets can fork it per theme;
-//   2. the spacer beside the flexible title does not flex;
-//   3. the actions go icon-only below 840px OF BAR, not below a viewport;
-//   4. the zoom readout is exact;
-//   5. the editor's `Save as a new photograph` is the ONE filled element, and
-//      a disabled commit is not filled.
-//
-// jsdom rather than the node environment because the app's own modules reach
-// the kit (`fmtBytes`, staging) at import time, and the kit is a browser
-// module. The components are rendered to STATIC markup all the same: they are
-// pure views over their props here, so the markup is the behaviour, and a
-// server render keeps the assertions free of act() scheduling noise.
-//
-// App sources are loaded by file URL, like every other blueprint-app fixture
-// in this directory: `src/` is its own tsconfig rootDir, so the types the
-// assertions need are declared locally rather than imported across it.
+// jsdom because app modules reach the browser kit (fmtBytes, staging) at
+// import time. App sources load by file URL (`src/` is its own tsconfig
+// rootDir, so types are declared locally); components render to STATIC markup
+// — pure views over props, so markup is the behaviour.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -176,8 +164,6 @@ describe("the stage stands on --stage, in both themes", () => {
       "background: var(--stage)"
     );
     expect(rule(SLIDESHOW_CSS, ".stage")).toContain("background: var(--stage)");
-    // Ink and hairlines come from the same family, so the ground is never
-    // paired with page-ramp ink.
     expect(rule(LIGHTBOX_CSS, ".lightbox")).toContain("color: var(--on-stage)");
     expect(rule(SLIDESHOW_CSS, ".stage")).toContain("color: var(--on-stage)");
   });
@@ -193,8 +179,6 @@ describe("the stage stands on --stage, in both themes", () => {
   });
 
   it("gives the three stage stylesheets no way to fork per theme", () => {
-    // A `[data-theme]` or `prefers-color-scheme` selector in any of them would
-    // reintroduce exactly the split the shared role exists to remove.
     for (const sheet of [LIGHTBOX_CSS, SLIDESHOW_CSS, EDITOR_CSS]) {
       expect(sheet).not.toContain("data-theme");
       expect(sheet).not.toContain("prefers-color-scheme");
@@ -208,8 +192,6 @@ describe("the stage stands on --stage, in both themes", () => {
     ] as const) {
       const ring = rule(sheet, selector);
       expect(ring).toContain("var(--focus-ring-color)");
-      // The inner gap opens on the stage, not on `--bg` (paper), which is
-      // what the contract's own --focus-ring would have used.
       expect(ring).toContain("var(--stage)");
       expect(ring).not.toContain("currentColor");
     }
@@ -221,8 +203,6 @@ describe("the top bar's flexible title", () => {
     const heading = rule(LIGHTBOX_CSS, ".heading");
     expect(heading).toContain("flex: 1");
     expect(heading).toContain("min-inline-size: 0");
-    // THE RULE: a growable spacer beside a `flex: 1` heading splits the slack
-    // with it, and the title then truncates with empty space beside it.
     const spacer = rule(LIGHTBOX_CSS, ".spacer");
     expect(spacer).toContain("flex: none");
     expect(spacer).not.toMatch(/flex:\s*1/u);
@@ -236,8 +216,8 @@ describe("the top bar's flexible title", () => {
 });
 
 describe("labels are a function of bar width, not of surface", () => {
-  // The copy action's caption is per-destination (issue #726): the caller
-  // resolves the sole other writable scope and hands `Copy to ⟨label⟩` in.
+  // #726: the copy action's caption is per-destination — the caller resolves
+  // the sole other writable scope and hands `Copy to ⟨label⟩` in.
   const specs: ActionSpec[] = [
     { id: "favorite", icon: Mark },
     { id: "copy", icon: Mark, label: "Copy to Family" },
@@ -251,8 +231,6 @@ describe("labels are a function of bar width, not of surface", () => {
     expect(labelsVisible(1420)).toBe(true);
     expect(labelsVisible(839)).toBe(false);
     expect(labelsVisible(390)).toBe(false);
-    // Zero is "not measured yet"; an unmeasured bar starts icon-only rather
-    // than flashing six labels and taking them away.
     expect(labelsVisible(0)).toBe(false);
   });
 
@@ -264,9 +242,7 @@ describe("labels are a function of bar width, not of surface", () => {
 
   it("keeps every icon-only control named below it", () => {
     const html = bar(false);
-    // No visible text at all…
     expect(html).not.toContain(">Copy to Family<");
-    // …but both names still reach a screen reader AND a hovering pointer.
     expect(html).toContain('aria-label="Copy to Family"');
     expect(html).toContain('title="Copy to Family"');
     expect([...html.matchAll(/aria-label="/gu)]).toHaveLength(2);
@@ -292,8 +268,6 @@ describe("labels are a function of bar width, not of surface", () => {
   });
 
   it("names the copy action as a destination, never as a bare verb (#726)", () => {
-    // The resting caption; Lightbox overrides it with `Copy to ⟨label⟩` when
-    // exactly one other writable scope is mounted (sharing.ts).
     expect(ACTION_LABELS.copy).toBe("Copy to another place");
     expect(VIEWER_ACTIONS).toStrictEqual([
       "favorite",
@@ -364,10 +338,8 @@ describe("the editor's commit", () => {
     expect(SAVE_AS_NEW).toBe("Save as a new photograph");
     expect(html).toContain(SAVE_AS_NEW);
     expect(html).toContain(SAVE_AS_NEW_EXPLANATION);
-    // BESIDE the control, not in a confirmation afterwards — and now in the
-    // SAME wrapping bar as the tools (proto 4617-4630), with the explanation
-    // between the tools and the commit, so the sentence is the last thing read
-    // before the press. Cancel stands before Save (proto 2891-2906).
+    // BESIDE the control, in the SAME bar as the tools (proto 4617-4630);
+    // Cancel stands before Save (proto 2891-2906).
     expect(html.indexOf(SAVE_AS_NEW_EXPLANATION)).toBeLessThan(
       html.indexOf(SAVE_AS_NEW)
     );
@@ -378,7 +350,6 @@ describe("the editor's commit", () => {
   });
 
   it("is the ONE element in the view that carries the filled class", () => {
-    // Find the class the commit wears, then count every element wearing it.
     const before = html.slice(0, html.indexOf(SAVE_AS_NEW));
     const commitClass = [...before.matchAll(/class="(?<name>[^"]+)"/gu)].at(-1)
       ?.groups?.name;
@@ -411,15 +382,13 @@ describe("the editor's commit", () => {
       "Straighten −1°",
       "Original",
       "Square",
-      // Spaced, and in the mono face, exactly as the handoff writes it
-      // (proto 4621, 4624).
+      // Spaced and mono-faced exactly as the handoff writes it (proto 4621,
+      // 4624).
       "3 : 2",
       "Reset",
     ]) {
       expect(html).toContain(label);
     }
-    // Nothing that would touch the original's bytes, and nothing that trashes
-    // it in the same gesture as the save.
     expect(html).not.toContain("trash");
   });
 
@@ -427,9 +396,7 @@ describe("the editor's commit", () => {
     expect(ratioValue("Original")).toBeNull();
     expect(ratioValue("Square")).toBe(1);
     expect(ratioValue("3:2")).toBe(1.5);
-    // A square out of a 2:1 frame takes the full height and half the width.
     expect(centredCrop(2, 1)).toStrictEqual({ x: 0.25, y: 0, w: 0.5, h: 1 });
-    // …and out of a 1:2 frame, the full width and half the height.
     expect(centredCrop(0.5, 1)).toStrictEqual({ x: 0, y: 0.25, w: 1, h: 0.5 });
   });
 });
@@ -490,12 +457,7 @@ describe("what the info panel says a photograph's place means", () => {
     expect(scopeMeaning(true)).toBe(
       "reachable by nothing. Copy it somewhere shared to let someone see it."
     );
-    // There are two consequences, not three: where a share GOES is a pointer
-    // the member owns, never a third kind of place, so a photograph sitting
-    // in the destination reads like a photograph in any other shared place.
     expect(scopeMeaning(false)).toContain("stops being shared");
-    // A solo mount says nothing, and the member's-own meaning is the truthful
-    // default there — one library is reachable by nothing.
     expect(scopeMeaning(undefined)).toBe(scopeMeaning(true));
   });
 
@@ -530,9 +492,6 @@ describe("video playback is honest, not double-transported", () => {
   });
 
   it("names the video status line ahead of the custody story", () => {
-    // Video takes precedence even over remote-only custody: the native
-    // transport is already streaming the display copy, which is what is
-    // actually true on screen right now.
     expect(originStatus(video, "home-gateway")?.text).toBe(
       "Video · playing from the display copy on this device"
     );
@@ -555,16 +514,11 @@ describe("video playback is honest, not double-transported", () => {
         onLoadOriginal: () => {},
       })
     );
-    // The platform transport: exactly one <video>, carrying `controls`.
     const videoTags = [...html.matchAll(/<video\b[^>]*>/gu)];
     expect(videoTags).toHaveLength(1);
     expect(videoTags[0]?.[0]).toContain("controls");
-    // No hand-rolled second transport riding along beside it — the play
-    // button and the determinate `<progress>` track this file used to draw
-    // over the native scrubber, both gone for video specifically.
     expect(html).not.toContain('aria-label="Play"');
     expect(html).not.toContain("<progress");
-    // The kind label still reaches the member, composed from the record.
     expect(html).toContain("video · 4K · 0:24");
   });
 

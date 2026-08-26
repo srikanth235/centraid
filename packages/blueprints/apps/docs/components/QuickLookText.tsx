@@ -1,20 +1,5 @@
-// TEXT, ON PAPER, ON THE STAGE (Docs spec §6.1's `readBlock`, §1.8's rule).
-//
-// "The reading view and editor render on paper, capped at a 34em measure —
-// text never goes on the near-black stage." (§1.8, verbatim.) Both halves of
-// that sentence are kept here: the sheet below is PAPER — `--bg`, `--text`,
-// the app's declared reading register, 34em of measure — and the near-black
-// around it is the theater the sheet is standing on, exactly as the handoff's
-// own `docsStage` stands its ruled page on `#0B0B0B`.
-//
-// THIS REPLACED A ROUTE. Opening a text document used to leave the drive for a
-// full screen of its own, which meant text was the one kind you could not step
-// through with the arrows, could not see the properties of without going
-// somewhere else, and had to back out of rather than close. The sheet is the
-// same sheet; what it gained is the stage around it.
-//
-// NOT A MARKDOWN RENDERER, deliberately — a heading and a paragraph are the
-// two shapes §6.1 names, and half-rendered structure reads worse than none.
+// TEXT ON PAPER ON THE STAGE (Docs spec §1.8/§6.1): the sheet is PAPER, the
+// near-black around it the theater. NOT A ROUTE. NOT A MARKDOWN RENDERER.
 import { useEffect, useMemo, useState } from "react";
 
 import { loadBlobText } from "../blob-text.ts";
@@ -46,9 +31,8 @@ function blocksOf(body: string): Block[] {
 }
 
 export function QuickLookText({ doc }: { doc: DriveDoc }) {
-  // The inline `data:` branch is synchronous, so it is decoded during the
-  // first render; the effect below owns only the async blob-door read. Same
-  // split (and same CSP reason) as the editor's.
+  // The inline `data:` branch decodes synchronously during first render;
+  // the effect below owns only the async blob-door read.
   const inline = useMemo<{ state: LoadState; text: string } | null>(() => {
     const uri = doc.content_uri;
     if (typeof uri !== "string" || !uri.startsWith("data:")) return null;
@@ -90,9 +74,7 @@ export function QuickLookText({ doc }: { doc: DriveDoc }) {
         {loadState === "loading" ? (
           <p className={styles.readStatus}>Loading…</p>
         ) : loadState === "error" ? (
-          // A refusal, not a blank page: the bytes are somewhere this surface
-          // could not reach, and the member is owed that sentence rather than
-          // an empty measure they read as an empty document.
+          // A refusal, not a blank page: the member is owed that sentence.
           <p className={styles.readFailed}>
             This document&rsquo;s text could not be fetched.
           </p>

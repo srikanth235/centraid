@@ -32,13 +32,10 @@ import {
 } from "./connectorPlatform.js";
 import type { ProviderCapabilitiesDTO } from "./connectorPlatform.js";
 
-// Connectors data layer (issue #304 renderer half; screen now lives on the
-// primary Connectors sidebar route): maps the gateway's broker-owned OAuth /
-// BYO-client connections surface (`gateway-client-connections.ts`) onto the
-// screen's own DTOs, and hosts
-// the one piece of policy that doesn't belong in a pure screen component —
-// confirm-gating the destructive detach action, mirroring how SettingsRoute
-// gates vault deletion (`deleteVault`) with the same `confirm` action.
+// Connectors data layer (#304 renderer half): maps the gateway's OAuth /
+// BYO-client connections surface onto the screen's DTOs, and hosts
+// confirm-gating of the destructive detach (mirroring SettingsRoute's
+// vault-deletion gating).
 
 const STATUS_TO_HEALTH: Record<ConnectionEntry["status"], ConnectionHealth> = {
   active: "ok",
@@ -145,8 +142,8 @@ export async function loadConnectionProvidersData(): Promise<
 }
 
 /**
- * Tool descriptors for the assistant — only healthy connections; never
- * includes secret cells. Consumes the same list DTOs as the Connectors UI.
+ * Tool descriptors for the assistant — healthy connections only; never secret
+ * cells. Consumes the same list DTOs as the Connectors UI.
  */
 export async function loadConnectorToolDescriptors(): Promise<
   ReturnType<typeof toolDescriptorsFromHealthyConnections>
@@ -204,18 +201,10 @@ export async function loadLinkedSyncsForConnection(
 }
 
 /**
- * The syncs actually ATTACHED to the connections on this page — the installed
- * pull automations, joined back to the connection each one rides.
- *
- * The per-connection `loadLinkedSyncsForConnection` above answers a different
- * question (what a connector COULD sync, installed or not) and re-reads the
- * catalog every call; the page's own second section is about what is already
- * running, so it starts from the automation list and takes the connections it
- * was handed rather than re-listing them.
- *
- * An automation whose connector binding matches no live connection is dropped:
- * a sync row that named a connection the page is not showing would be a row
- * with nothing above it to explain it.
+ * Syncs actually ATTACHED to this page's connections, joined to the connection
+ * each rides — distinct from `loadLinkedSyncsForConnection` (what a connector
+ * COULD sync). Starts from the automation list; automations bound to no live
+ * connection are dropped.
  */
 export async function loadAttachedSyncsData(
   connections: readonly ConnectionRowDTO[]
@@ -239,8 +228,8 @@ export async function loadAttachedSyncsData(
       (t): t is { kind: "cron"; expr: string; tz?: string } => t.kind === "cron"
     );
     out.push({
-      // A schedule is what makes a sync a sync; one without a cron trigger runs
-      // when something else asks it to, and says so rather than reading blank.
+      // A schedule makes a sync a sync; without a cron trigger say "On demand"
+      // rather than reading blank.
       cadence: cron
         ? describeCron(cron.expr, resolveCronTimezone(cron.tz))
         : "On demand",
@@ -289,9 +278,8 @@ export async function installSyncForConnection(input: {
 }
 
 /** Attach a BYO credential for one connector kind — creates the `(kind,
- *  label)` connection row if it doesn't exist yet (issue #304's
- *  `sync.configure_credential`). Returns `connectionId` so oauth2 can
- *  immediately start the browser authorize step. */
+ *  label)` connection row if absent (#304's `sync.configure_credential`).
+ *  Returns `connectionId` so oauth2 can start the authorize step at once. */
 export async function submitConnectionForm(
   input: ConnectionFormInput
 ): Promise<{ connectionId: string; status: string }> {
@@ -356,20 +344,13 @@ export async function completeAssistReturnLink(
 }
 
 /**
- * Remove is a real, irreversible delete (issue #304's missing renderer
- * half — `sync.remove_connection`, distinct from the credential-only detach
- * `configure_credential({cred_kind:'none'})` performs): it rides the same
- * promise-based confirm dialog the Vaults page uses before deleting a vault.
- * Still exported/named `makeDetachConnection` — `SettingsRoute.tsx` (owned
- * by another in-flight change in this tree) imports it under that name and
- * wires it to the screen's `detachConnection` prop; renaming either would
- * require touching that file, so the behavior changed here instead of the
- * name.
+ * Remove is a real, irreversible delete (#304's `sync.remove_connection`,
+ * distinct from the credential-only detach). Named `makeDetachConnection`
+ * because `SettingsRoute.tsx` imports that name.
  *
- * The server may refuse (409: undecided outbox items, or receipted sync
- * history it won't shred) — that refusal is a real `GatewayClientError`
- * whose `message` IS the server's own reason, so it reaches the screen's
- * `showToast` unchanged instead of a generic "request failed".
+ * A server refusal (undecided outbox items, receipted sync history) arrives
+ * as `GatewayClientError` whose message IS the server's reason — it reaches
+ * the screen's `showToast` unchanged.
  */
 export function makeDetachConnection(
   confirm: (opts: {

@@ -1,4 +1,4 @@
-// Blob custody end-to-end (issue #296): staging → command claim → derived
+// Blob custody end-to-end (#296): staging → command claim → derived
 // egress rule → lifecycle. The invariants under test are the issue's spine:
 // the journal never swallows bytes again, identity is the raw-bytes sha,
 // extracted text feeds the PARENT's search row, trash still renders, and
@@ -119,7 +119,7 @@ describe("flow", () => {
     });
     expect(second.existingContentId).toBe(a.content_id);
     // A second document over the same bytes still dedupes the CONTENT — it's a
-    // brand-new document, but wraps the identical content item (issue #352).
+    // brand-new document, but wraps the identical content item (#352).
     const b = executed<{ content_id: string; deduped: number }>(
       invoke("core.add_document", {
         staged_sha: second.sha256,
@@ -311,7 +311,7 @@ describe("flow", () => {
     );
     executed(invoke("core.trash_document", { document_id: doc.document_id }));
     // Ripen the trash, then sweep — the DOCUMENT purges (content is untouched
-    // while it lives, issue #352), which in turn releases its exclusively-
+    // while it lives, #352), which in turn releases its exclusively-
     // owned content since nothing else rents it.
     db.vault
       .prepare("UPDATE core_document SET purge_at = ? WHERE document_id = ?")

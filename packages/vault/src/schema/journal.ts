@@ -1,4 +1,5 @@
-// journal.db DDL — the append-only audit stream, split out of vault.db per
+// journal.db DDL — the append-only audit stream, held in its own database
+// apart from vault.db per
 // §03 "Physical layout — two files": it grows orders of magnitude faster than
 // the model, never rolls back domain writes, and keeping it out of the vault
 // keeps the sovereign asset permanently small.

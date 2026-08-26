@@ -1,4 +1,4 @@
-// Geometry for the Devices place (issue #765, spec §7).
+// Geometry for the Devices place (#765, spec §7).
 //
 // The page itself is only a scroll column of kit blocks — everything with an
 // opinion about type or edge lives in those blocks. What is left here is the

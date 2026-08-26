@@ -1,4 +1,4 @@
-// The outbox (issue #306 decision 3): every external write is an ARTIFACT,
+// The outbox (#306 decision 3): every external write is an ARTIFACT,
 // not an approval. An automation or connector STAGES the rendered thing
 // itself — recipient/subject/body, an event payload, an API call — as an
 // inert row; the owner decides on the thing, not on "automation X requests
@@ -18,9 +18,9 @@
 //
 // `request_json` carries `{{connection:…}}` placeholders, never tokens —
 // injection happens executor-side toward the connection's `allowed_hosts`
-// pin (issue #304 invariants, unchanged).
+// pin (#304 invariants, unchanged).
 //
-// The graph joins (issue #310 S2): `target` stays the wire-level address the
+// The graph joins (#310): `target` stays the wire-level address the
 // standing-grant key needs, but it is not an entity — so an item also
 // carries typed refs the graph can walk. `(target_type, target_id)` is
 // the canonical row the write is ABOUT (the invoice being sent, the event

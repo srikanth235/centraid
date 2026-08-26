@@ -3,7 +3,7 @@
 // base extends HTMLElement at module scope — a DOM has to exist to import it.)
 //
 // The editor's meta line has to be true about lineage, not decorative
-// (issue #711). An edited copy is dated the day it was SAVED, so the only
+// (#711). An edited copy is dated the day it was SAVED, so the only
 // thing that can honestly place it in time is its recorded source — and when
 // there is no source, or the source is not loaded, the line must say so
 // rather than reading a save date back as a capture date.
@@ -81,12 +81,12 @@ describe(editorSourceLine, () => {
   });
 });
 
-// PER-COPY PROVENANCE (issue #712 P6a). The panel's one prose sentence about
-// where the original lives used to be three `if`s and a trailing `return`, and
-// that trailing branch fired for three different worlds — `local-only`,
-// `pending-offsite`, and NO custody row at all. The last is the defect being
-// pinned here: with the gateway's blob sweep not yet run there is no fact to
-// report, and the panel asserted a location anyway.
+// PER-COPY PROVENANCE (#712). The panel's one prose sentence about
+// where the original lives gives each custody state its own answer. A trailing
+// `return` catching three different worlds — `local-only`, `pending-offsite`,
+// and NO custody row at all — is the defect pinned here: with the gateway's
+// blob sweep not yet run there is no fact to report, and the panel must not
+// assert a location anyway.
 describe(originParagraph, () => {
   const GATEWAY = "the gateway";
 
@@ -122,7 +122,7 @@ describe(originParagraph, () => {
   test("no custody row claims no location", () => {
     const unknown = originParagraph(asset({ asset_id: "a1" }), GATEWAY);
     expect(unknown).toContain("has not been checked yet");
-    // The bug: the absent-row case used to borrow local-only's sentence.
+    // The bug guarded: the absent-row case borrowing local-only's sentence.
     expect(unknown).not.toContain("The original is on this device");
   });
 });

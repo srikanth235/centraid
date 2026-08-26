@@ -1,5 +1,5 @@
 /**
- * Renderer leak budgets (issue #842, W3.5).
+ * Renderer leak budgets (#842).
  *
  * A leak lane needs an objective threshold, and "the number looked stable" is
  * not one. Every ceiling below is derived from ONE argument, stated once here

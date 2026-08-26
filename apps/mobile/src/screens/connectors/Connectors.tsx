@@ -1,33 +1,6 @@
-// CONNECTORS — what is allowed to reach outside this vault (#765, spec §4).
-//
-// The page is a consent surface, and it is deliberately dull: a list of
-// connections, the state each one is in, and the one verb that state permits.
-// Colour is spent only on `net`, and only on the metadata of a connection that
-// has stopped working — the connection's NAME stays primary ink, because the
-// thing is not the problem, its credential is.
-//
-// TWO VERBS ARE WITHHELD, ON PURPOSE.
-// The reference gives this bar `Add a connection` (filled) and `Catalog`
-// (quiet), and gives its empty state `Open the catalog`. Neither exists on a
-// phone: adding a connection means configuring a credential, which is either
-// the BYO wizard (typing an OAuth client id and secret registered on the
-// provider's console — a desktop act) or the Assist onboarding flow, and
-// mobile has neither screen; the provider catalog itself
-// (`GET /_vault/connections/providers`) has no mobile client, and `lib/` is
-// not this screen's to grow. A bar verb that opened nothing, or a catalog
-// rendered from strings this app invented, would both be worse than a bar with
-// no verbs — this page's whole claim is that it tells the truth about reach.
-// When mobile grows a catalog read, the verbs land here and nowhere else.
-//
-// ATTACHED DATA SYNCS IS OMITTED, ON PURPOSE.
-// The reference's second section lists per-connection syncs. The gateway
-// serves no such plane: the connections routes carry connections and their
-// health (`packages/server/src/routes/connections-routes.ts`), and a "sync"
-// is an automation grown from a pull blueprint whose rows
-// (`lib/automations.ts`) carry no connection handle to join on. Rendering the
-// section from a name-matching guess would put a claim about what leaves this
-// vault on screen that nothing verified. The section's explanatory note goes
-// with it — a sentence defining an object the page does not show is furniture.
+// CONNECTORS — what is allowed to reach outside this vault (#765, spec §4). Consent surface: one verb per state. `net` only on a broken connection's metadata — the NAME stays primary ink (the credential is the problem).
+// TWO VERBS ARE WITHHELD, ON PURPOSE: no BYO wizard or Assist onboarding on phone, no mobile catalog client. A verb that opened nothing would be worse than a bar with no verbs.
+// ATTACHED DATA SYNCS IS OMITTED, ON PURPOSE: the gateway serves no such plane; do not invent it from a name-matching guess.
 
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
@@ -70,17 +43,14 @@ import { styles } from "./Connectors.styles";
 import { useConnectors } from "./useConnectors";
 import type { ConnectorsController } from "./useConnectors";
 
-/** The reference's own error copy: what failed, what is safe, one way forward. */
 const ERROR_EYEBROW = "THIS PAGE COULD NOT LOAD";
 const ERROR_TITLE = CONNECTORS_ERROR_TITLE;
 const ERROR_BODY = CONNECTORS_ERROR_BODY;
 const ERROR_RETRY = RETRY_ACTION;
 
-/** The empty state, in the routine register — nothing connected is healthy. */
 const EMPTY_TITLE = CONNECTORS_EMPTY_TITLE;
 const EMPTY_BODY = CONNECTORS_EMPTY_BODY;
 
-/** Why a skeleton, said once, under the skeleton. */
 const LOADING_NOTE = SKELETON_NOTE;
 
 function ConnectorsBody({
@@ -121,9 +91,6 @@ function ConnectorsBody({
     );
 
   if (state === "empty")
-    // No action: the reference's `Open the catalog` has nothing to open here
-    // (see the file header). The sentence still says what a connector is and
-    // that revoking one lives on this page, which is the part that matters.
     return <EmptyBlock body={EMPTY_BODY} routine title={EMPTY_TITLE} />;
 
   const full = state === "full";
@@ -174,12 +141,7 @@ function ConnectorsBody({
 }
 
 /**
- * The gate, above the page. Split from `ConnectorsPlace` rather than checked
- * inside it so a gateway with connectors switched off never mounts
- * `useConnectors` — the hook would read routes this gateway does not serve and
- * dress a 404 as a page error. `undefined` is unknown, not off: no gateway has
- * answered yet, and the page's own error state already covers one that will
- * not talk.
+ * Gate above the page so a connectors-off gateway never mounts `useConnectors` (that would dress a 404 as a page error). `undefined` is unknown, not off.
  */
 export default function ConnectorsScreen(
   props: ConnectorsScreenProps
@@ -208,9 +170,7 @@ function ConnectorsPlace({
     }),
     [colors]
   );
-  // The clock is the one the read landed at (see `useConnectors`), so every
-  // relative phrase on the page agrees, and none of them ages without a
-  // re-read behind it.
+  // Clock is the one the read landed at (`useConnectors`) — relative phrases agree and do not age without a re-read.
   const health = healthLineFor(
     page.state,
     connectorsHealth(page.connections, page.now)
@@ -223,10 +183,7 @@ function ConnectorsPlace({
         <View style={styles.head}>
           <HomeKey onPress={() => navigation.goBack()} variant="leave" />
           <View style={styles.headBar}>
-            {/* No verbs — see the file header. The gating rule the caller
-                would apply (commit hidden on loading AND error, quiet verb
-                hidden on loading) is therefore vacuous here rather than
-                absent: there is nothing to hide. */}
+            {/* No verbs — see the file header. */}
             <PlaceHeader title="Connectors" />
           </View>
         </View>

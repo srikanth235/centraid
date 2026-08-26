@@ -1,4 +1,4 @@
-// Public surface of the conversation-band archival engine (issue #438).
+// Public surface of the conversation-band archival engine (#438).
 export { runConversationArchival } from "./engine.js";
 export { readArchivedConversationSegment } from "./segment.js";
 export {

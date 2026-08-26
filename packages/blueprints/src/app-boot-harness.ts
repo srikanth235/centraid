@@ -1,7 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit cohesive jsdom boot harness; the fetch/module shims, .module.css-as-JS rewrite, and per-app boot assertions must move together to mirror the shell bundle path
-/* oxlint-disable typescript-eslint/ban-ts-comment -- the package tsconfig has
-   no DOM lib (this "src" is node-side); this harness drives the browser apps
-   under jsdom, so DOM globals are runtime-real but invisible to tsc. */
+/* oxlint-disable typescript-eslint/ban-ts-comment -- no DOM lib in this
+   node-side tsconfig, but jsdom makes DOM globals runtime-real here. */
 // @ts-nocheck
 import { execFileSync } from "node:child_process";
 import {
@@ -28,61 +27,30 @@ import {
   projectPendingWrite,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
-// Boots a blueprint app the way the v0 client does: its query-free `Root`,
-// the real kit, the workspace React runtime, and a mocked `window.centraid`
-// vault. The retired served adapter and its vendored React copy are not part
-// of this path.
+// Boots a blueprint app the way the v0 client does. THREE constraints; break
+// one and the gate passes while the app is broken:
 //
-// Typechecking and root lint cover these modules, but neither executes their
-// browser startup. Without this behavioral harness, a rendering crash reaches
-// a human first.
-//
-// THREE constraints, each verified empirically. Break one and the gate passes
-// while the app is broken:
-//
-//  1. Errors MUST be trapped on `process`, not `window`. Boot calls `refresh()`
-//     without awaiting, so a throw inside becomes a NODE unhandled rejection:
-//     jsdom never fires window 'unhandledrejection' for it, and vitest prints
-//     it WITHOUT failing the test. (Proven by injecting a throw into refresh.)
-//  2. ONE app per process, and ONE module import per process. Apps install
-//     resize/interval timers that outlive a test and would then observe another
-//     app's DOM; and locker/people call `customElements.define()` at module
-//     scope, so a second import of any app.js in the same process throws
-//     "already defined". Hence one `<app>.test.ts` file each — vitest's default
-//     forks pool isolates per FILE, not per test.
-//  3. The apps' consent paths are driven by re-reading, not re-importing. Every
-//     app re-runs `refresh()` on window 'focus', so flipping the mock and
-//     dispatching focus walks granted → denied → granted on a single instance.
-//
-// Agenda and Photos boot populated replica fixtures and are the apps held to
-// the live-read journey (`expectLive`). Agenda's pending-chip assertions
-// consume the production intent-invalidation derivation, so the harness cannot
-// invent a terminal browser signal that the real coordinator would never
-// publish.
+//  1. Errors trap on `process`, not `window`: boot's un-awaited `refresh()`
+//     throws a NODE rejection, which vitest prints WITHOUT failing.
+//  2. ONE app and ONE module import per process — timers outlive tests and
+//     `customElements.define()` runs at module scope. Hence one
+//     `<app>.test.ts` each; the forks pool isolates per FILE.
+//  3. Consent paths re-read, never re-import: flip the mock, dispatch 'focus'.
 
-// Resolved from this module's own path, not process.cwd(): cwd differs
-// between a root-run vitest (repo root) and a package-run vitest (this
-// package's dir), but the file's own location never does.
+// From this module's own path, not process.cwd().
 const PKG = path.resolve(import.meta.dirname, "..");
 
-// The harness compiles the same TS/TSX source the client bundles, using the
-// normal React automatic runtime. The esbuild CLI is used because its JS API
-// refuses to load under the jsdom environment (realm-split Uint8Array trips
-// its TextEncoder startup invariant).
+// The CLI, not esbuild's JS API: the API refuses to load under jsdom.
 const ESBUILD_BIN = path.resolve(PKG, "../..", "node_modules/.bin/esbuild");
 
-// The intent-invalidation derivation is the client's (packages/client/src/
-// replica/intent-invalidations.ts). It is loaded BY PATH rather than as
-// `@centraid/client/replica/intent-invalidations` because `@centraid/client`
-// already depends on `@centraid/blueprints`: declaring the reverse edge — even
-// as a devDependency — would make Turbo's topological `^build` graph cyclic.
+// BY PATH, not by specifier: `@centraid/client` already depends on this
+// package, so the reverse edge would make Turbo's `^build` graph cyclic.
 const { replicaIntentInvalidations } = await import(
   pathToFileURL(
     path.resolve(PKG, "../client/src/replica/intent-invalidations.ts")
   ).href
 );
 
-// Loader by extension for the client-bundled source graph.
 function loaderForExt(rel: string): "jsx" | "tsx" | "ts" {
   if (rel.endsWith(".tsx")) return "tsx";
   if (rel.endsWith(".ts")) return "ts";
@@ -100,16 +68,7 @@ function transformInlineSource(source: string, rel = "app.tsx"): string {
   );
   return (
     code
-      // A `*.module.css` import resolves to JS: a style-injecting module that
-      // default-exports the class map. Vite/Vitest, however, owns the
-      // `.module.css` extension and would run its own CSS-modules transform
-      // over the harness's compiled JS (see compileModuleCss) — garbage-parsing
-      // it and handing the app a bogus class map with none of the `<style
-      // data-centraid-css-module>` injection. So the harness serves that JS
-      // from a sibling `*.module.css.js` file (written in beforeAll) and
-      // rewrites every relative `*.module.css` import specifier to match — the
-      // `.js` tail is what keeps Vite from hijacking it. Behaviour matches the
-      // shell bundle; only the scratch filename differs from the app source.
+      // The `.js` tail stops Vitest re-transforming compiled CSS-module JS.
       .replace(
         /(?<quote>["'])(?<spec>(?:\.\.?\/)[^"']*\.module\.css)\k<quote>/gu,
         (_m, quote: string, spec: string) => `${quote}${spec}.js${quote}`
@@ -117,12 +76,6 @@ function transformInlineSource(source: string, rel = "app.tsx"): string {
   );
 }
 
-// Compile a `*.module.css` to the style-injecting, class-map-exporting JS
-// module each shell's bundler produces for it. Mirrored minimally via the
-// esbuild CLI — esbuild's JS API refuses to load under jsdom (see the note
-// above transformInlineSource), but the CLI is a subprocess and is unaffected.
-// The CLI emits the JS class-map module and the compiled CSS as two files into
-// a temp outdir; we compose the module body from both.
 function compileModuleCss(
   absFile: string,
   appRoot: string,
@@ -182,12 +135,8 @@ const AGENDA_EVENT_ID = "event-airplane";
 const AGENDA_INTENT_ID = "intent-airplane-cancel";
 const AGENDA_TITLE = "Airplane-mode planning";
 
-/**
- * The one action this journey drives, declared the way the app declares it
- * (apps/agenda/pending-projection.ts) rather than re-derived: the harness must
- * project a cancel exactly as production does, or the chip it asserts on is a
- * chip nothing in the product would ever paint.
- */
+// The app's own declaration, never re-derived: a hand-rolled projection
+// asserts on a chip nothing in the product would paint.
 const AGENDA_PENDING_PROJECTION = definePendingProjection({
   appId: "agenda",
   actions: {
@@ -196,7 +145,6 @@ const AGENDA_PENDING_PROJECTION = definePendingProjection({
   },
 });
 
-/** Populated, clone-safe rows shaped exactly like each app's local query. */
 function replicaFixture(app: string): unknown {
   if (app === "agenda") {
     return {
@@ -249,15 +197,9 @@ function replicaFixture(app: string): unknown {
   return {};
 }
 
-// Handler dirs are node-side modules dispatched by the gateway, never imported
-// by the page — don't copy them into the boot scratch tree. `queries` stays
-// out too: the boot entry is app-root.tsx (the query-free Root), so the graph
-// never reaches a query module. Only the app-inline descriptor imports queries.
+// Node-side modules the page never imports; the boot entry is app-root.tsx.
 const NON_UI_DIRS = new Set(["queries", "actions", "automations"]);
 
-/** All browser-source files of an app, as relative posix paths: `.js`/`.jsx`
- * and their TS counterparts `.ts`/`.tsx`, plus `*.module.css` (a CSS module is
- * imported by the page as JS — see compileModuleCss). */
 function collectSources(root: string, rel = ""): string[] {
   const out: string[] = [];
   for (const e of readdirSync(path.join(root, rel), { withFileTypes: true })) {
@@ -277,30 +219,13 @@ function collectSources(root: string, rel = ""): string[] {
   return out;
 }
 
-/** Lets a test settle an app's un-awaited `refresh()` and its timers. Use this
- * only where the assertion needs a QUIET window (proving something did NOT
- * happen, or did not happen twice); for "X must appear", use waitFor. */
+/** Only for assertions needing a QUIET window; for "X appears", use waitFor. */
 const settle = () =>
   new Promise((resolve) => {
     setTimeout(resolve, 80);
   });
 
-/**
- * Polls until `predicate` holds, then returns; throws naming `what` on timeout.
- *
- * Boot calls `refresh()` without awaiting and the apps paint through React's
- * async scheduler, so the DOM that a fixed sleep observes is a guess. Measured:
- * a shelf rendered from the local replica lands 4 event-loop turns (~4ms) after
- * its module import resolves locally — 20× inside the old fixed 80ms settle —
- * yet the loaded CI runner still queried a null node and failed the `check`
- * job. Dropping settle
- * to 1ms reproduces that exact failure locally, confirming a race rather than a
- * budget. So poll for the precondition instead of guessing at it.
- *
- * 4s ceiling: an order of magnitude above any observed individual wait and
- * comfortably inside the per-test budget, so a genuine regression still fails
- * with THIS message rather than vitest's opaque test timeout.
- */
+// Poll, never sleep: a fixed settle is a guess a loaded CI runner loses.
 async function waitFor(
   predicate: () => boolean,
   what: string,
@@ -319,30 +244,15 @@ async function waitFor(
   return waitNext();
 }
 
-// The single boot journey runs the app's real esbuild transform + jsdom render
-// plus the remaining fixed settle windows; the slowest app lands ~1.5s locally
-// now that the appear-assertions poll (waitFor) instead of sleeping.
-// The affected-package gate runs every package at once; Photos has crossed 8s
-// under that CPU contention even though it remains sub-3s alone. Keep a
-// bounded 20s journey budget rather than turning scheduler load into a false
-// failure or blanketing every importer with a package-wide timeout.
+// Per-journey, not package-wide: CPU contention triples the slowest app.
 const BOOT_TEST_TIMEOUT_MS = 60_000;
 
-// The inline chrome (Chrome.tsx) mounts its consent notice — a `.kit-banner`
-// carrying `id="consentBanner"` — when the vault denies a read, and unmounts it
-// when the vault grants again. (The retired served islands kept a persistent
-// element and toggled `hidden`; the inline tree mounts/unmounts instead, so
-// "shown" is "present and not hidden".)
+// Chrome.tsx mounts and unmounts the notice rather than toggling `hidden`.
 function consentBannerShown(): boolean {
   const banner = document.querySelector<HTMLElement>("#consentBanner");
   return banner !== null && banner.hidden === false;
 }
 
-/**
- * Mirror one source tree into the boot scratch dir the way the client bundles
- * it: TypeScript stripped, CSS modules compiled to their class-map JS,
- * everything else copied verbatim.
- */
 function mirrorSources(srcRoot: string, destRoot: string): void {
   mkdirSync(destRoot, { recursive: true });
   for (const rel of collectSources(srcRoot)) {
@@ -380,7 +290,6 @@ export function describeAppBoot(
     const intervals: unknown[] = [];
     const push = (e: unknown) => errors.push(e);
 
-    /** Fails with the app's own error, not a downstream assertion. */
     const expectNoErrors = (phase: string) => {
       expect(
         errors,
@@ -390,14 +299,8 @@ export function describeAppBoot(
 
     beforeAll(() => {
       originalFetch = globalThis.fetch;
-      // Inside the package, not os.tmpdir(): vite resolves the dynamic import
-      // below and refuses to load a module outside the project root.
-      // Each app gets its own scratch ROOT, laid out like `apps/` itself:
-      // `<root>/<app>` beside `<root>/_shared`. An app importing a cross-app
-      // module by its real specifier (`../_shared/…`, issue #599) then resolves
-      // exactly as it does in a shell bundle — and because the shared copy lives
-      // inside the app's own root, two app-boot files running in parallel never
-      // write the same path.
+      // Inside the package, not os.tmpdir(): vite refuses a module outside the
+      // project root. Laid out like `apps/` so `../_shared` resolves normally.
       bootRoot = path.join(PKG, ".app-boot", app);
       rmSync(bootRoot, { recursive: true, force: true });
       dir = path.join(bootRoot, app);
@@ -410,8 +313,7 @@ export function describeAppBoot(
       process.on("unhandledRejection", push);
       process.on("uncaughtException", push);
 
-      // Apps set an every-second TOTP/clock interval; left running it keeps the
-      // worker alive past the suite.
+      // Apps set a per-second interval that would keep the worker alive.
       const realSetInterval = globalThis.setInterval;
       globalThis.setInterval = (...args: unknown[]) => {
         const id = realSetInterval(...args);
@@ -444,9 +346,7 @@ export function describeAppBoot(
       async () => {
         document.body.innerHTML = '<div id="appRoot"></div>';
         if (app === "agenda") {
-          // The Schedule view renders the populated fixture independent of the
-          // machine's current month, which keeps this browser journey
-          // deterministic. The knob is the app's own `appDefaultView`.
+          // Schedule renders the fixture regardless of the machine's month.
           document.documentElement.dataset.appDefaultView = "schedule";
         }
         const granted = options.expectLive ? replicaFixture(app) : {};
@@ -465,12 +365,7 @@ export function describeAppBoot(
           networkCalls.push(args[0]);
           throw new Error("synthetic airplane mode");
         };
-        /**
-         * Re-project the queued cancel through the PRODUCTION projection and
-         * push the decorated row down the live read, exactly as the replica
-         * composition would. The row keeps its place on the agenda: a held
-         * cancellation is a designed state, not a disappearance.
-         */
+        // The row keeps its place: a held cancellation is a designed state.
         const updateAgendaOverlay = (
           intentState: "queued" | "parked" | "denied"
         ): void => {
@@ -515,15 +410,8 @@ export function describeAppBoot(
             input?: Record<string, unknown>;
           }) => {
             readCalls += 1;
-            // Agenda asks a SECOND question on this screen (#834): the
-            // `day-context` projection, which answers a different shape from
-            // the calendar read this fixture stands for. Handing it the
-            // calendar payload would be a fiction no gateway performs — a
-            // query answering another query's rows — so it gets its own
-            // shaped answer here. It is empty on purpose: what this journey
-            // proves is that the grid still draws when nothing decorates it,
-            // and the decorations themselves are pinned by behaviour in
-            // apps/agenda/day-context.test.ts.
+            // Agenda's second question (#834) answers a different shape, so it
+            // gets its own answer; empty on purpose.
             if (app === "agenda" && request?.query === "day-context") {
               return Promise.resolve({
                 birthdays: [],
@@ -568,10 +456,7 @@ export function describeAppBoot(
           },
         };
 
-        // The frame's contribution channel (Photos v4 §3), recorded rather
-        // than rendered. The client hands every inline app one of these, so
-        // the harness must too — an app that contributes to a bar that isn't
-        // there is exactly the crash this journey exists to catch.
+        // The client hands every inline app one of these, so the harness must.
         const contributed: {
           appBar: Record<string, unknown> | null;
           band: Record<string, unknown> | null;
@@ -592,14 +477,8 @@ export function describeAppBoot(
           },
         };
 
-        /**
-         * The terminal owner decision, delivered the way the real coordinator
-         * delivers it: the overlay row is re-decorated AND the client's own
-         * intent-invalidation derivation names which shapes went stale. Using
-         * the production derivation is the point — a hand-rolled doorbell
-         * would prove the harness can invalidate, not that the app is wired to
-         * the signal it will actually receive.
-         */
+        // The real coordinator's delivery: a hand-rolled doorbell would prove
+        // only that the harness can invalidate.
         const emitAgendaIntentState = (
           intentState: "parked" | "denied"
         ): void => {
@@ -675,9 +554,7 @@ export function describeAppBoot(
               "the Agenda event's detail panel to open"
             );
             askToCancel()?.click();
-            // waitFor lands the write; settle then holds a QUIET window so the
-            // exactly-one assertion below proves no second dispatch came out
-            // of the re-render, rather than merely not having arrived yet.
+            // settle holds a QUIET window: exactly-one, not not-yet-arrived.
             await waitFor(
               () => writeCalls.length > 0,
               "Agenda's cancel ask to reach the vault"
@@ -707,8 +584,7 @@ export function describeAppBoot(
             ).toBe("cancel asked");
             expect(document.body.textContent).toContain(AGENDA_TITLE);
 
-            // Reconnect admission PARKS the exact queued intent: the event
-            // stays canonical and the chip stays until a terminal decision.
+            // Reconnect PARKS the queued intent; the chip stays until terminal.
             Object.defineProperty(window.navigator, "onLine", {
               configurable: true,
               value: true,
@@ -719,8 +595,7 @@ export function describeAppBoot(
               document.querySelector(".kit-pending-chip")?.textContent
             ).toBe("cancel asked");
 
-            // A denial is durable attention state: the row and its explanation
-            // stay until the member edits, retries, or discards it.
+            // A denial is durable attention state until the member acts on it.
             emitAgendaIntentState("denied");
             await waitFor(
               () =>
@@ -729,8 +604,7 @@ export function describeAppBoot(
               "Agenda's denied chip to persist on the exact outcome"
             );
             expect(document.body.textContent).toContain(AGENDA_TITLE);
-            // The doorbell is trailing-debounced, so this is polled rather
-            // than read on the frame the chip settled on.
+            // The doorbell is trailing-debounced, so poll rather than read.
             await waitFor(
               () => readCalls > bootReads,
               "the outbox state change to invalidate the composed replica read"
@@ -760,18 +634,13 @@ export function describeAppBoot(
             ).toBeTruthy();
             expect(tile?.querySelector("img")?.alt).toBe(PHOTO_TITLE);
 
-            // Photos is a ROUTE INSIDE THE FRAME (v4 §3): it draws no app bar
-            // of its own, it contributes one. A mount that painted a grid but
-            // contributed nothing would leave the frame showing a bare bar,
-            // which is the failure this asserts against.
+            // Photos contributes an app bar rather than drawing one.
             await waitFor(
               () => contributed.appBar !== null,
               "Photos to contribute the frame's app bar"
             );
             expect(contributed.appBar?.title).toBe("Photos");
             expect(String(contributed.appBar?.count)).toContain("1");
-            // …and it claims the compact band with its own five destinations,
-            // so the frame renders exactly one band (§3.1).
             const claimed = (contributed.band ?? {}).destinations as
               | { id: string }[]
               | undefined;
@@ -782,8 +651,6 @@ export function describeAppBoot(
               "search",
             ]);
 
-            // The app draws no chrome of its own inside the pane: no
-            // hamburger, no in-pane search field in a header, no zoom pair.
             expect(document.querySelector("#hamburgerBtn")).toBeNull();
             expect(document.querySelector("#zoomInBtn")).toBeNull();
             expect(document.querySelector("#sidebarMount")).toBeNull();
@@ -814,9 +681,8 @@ export function describeAppBoot(
             `${app} ignored a re-granted live replica value`
           ).toBe(false);
 
-          // A replacement live read can fail before it registers any upstream
-          // dependency. The app must release that dead subscription and let a
-          // later compatibility doorbell retry it.
+          // A replacement read can fail before registering a dependency; the
+          // app must release the dead subscription and retry.
           const beforeFailure = readCalls;
           nextReadError = new Error("synthetic initial replica read failure");
           if (app === "photos") {
@@ -854,9 +720,7 @@ export function describeAppBoot(
           return;
         }
 
-        // Revoke: every app clears its board and the inline Chrome renders its
-        // consent notice in its place. Required, not optional — a guarded check
-        // would silently skip the only assertion proving the denied read landed.
+        // Never guard this: it is the only assertion proving the denial landed.
         response = DENIED;
         window.dispatchEvent(new Event("focus"));
 
@@ -870,7 +734,6 @@ export function describeAppBoot(
           `${app} hid its consent banner while denied`
         ).toBe(true);
 
-        // Re-grant: the consent banner unmounts and the board renders again.
         response = {};
         window.dispatchEvent(new Event("focus"));
         await waitFor(

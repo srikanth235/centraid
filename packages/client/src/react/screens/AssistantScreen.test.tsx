@@ -494,7 +494,7 @@ describe("AssistantScreen suite", () => {
       });
     });
 
-    // Long-transcript windowing (issue #659). The control is the safety
+    // Long-transcript windowing (#659). The control is the safety
     // property: history is deferred, never dropped, and the reader is told how
     // much is above them.
     describe("transcript windowing (#659)", () => {
@@ -833,7 +833,7 @@ describe("AssistantScreen suite", () => {
         await Promise.resolve();
       });
       await flush();
-      // A rejected switch used to leave every picker disabled for good.
+      // A rejected switch must not leave every picker disabled for good.
       expect(props.onSetHarness).toHaveBeenCalledWith("copilot");
       expect(
         el.querySelector<HTMLSelectElement>(

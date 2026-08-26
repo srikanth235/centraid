@@ -1,11 +1,4 @@
-// The owner's SQL surface (vault assistant): a read-only SELECT over the
-// WHOLE canonical model in one statement — joins, window functions, and
-// recursive CTEs over core_link included. Single-tenant by construction:
-// only the owner-device credential reaches this op (the gateway refuses
-// everything else), so consent scoping does not apply — the remaining
-// guards are operational (read-only execution, one statement, a row cap),
-// and every run is still receipted so "what did my assistant look at" has
-// an answer.
+// Owner SQL: one read-only SELECT over the whole canonical model. Only the owner-device credential reaches this op, so consent scoping does not apply — remaining guards are operational (query_only, one statement, row cap), and every run is receipted.
 
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -15,16 +8,12 @@ import { registerContentTextFn } from "../schema/fts.js";
 import { isSealedValue, SEALED_PLACEHOLDER } from "../schema/sealed.js";
 import { GatewayError } from "./types.js";
 
-/** Default and hard-max rows returned to the caller. */
 export const VAULT_SQL_DEFAULT_ROWS = 200;
 export const VAULT_SQL_MAX_ROWS = 1000;
 
 export interface VaultSqlRequest {
-  /** One read-only statement: SELECT, WITH … SELECT, or EXPLAIN. */
   sql: string;
-  /** Rows returned (default 200, capped at 1000). Excess is truncated. */
   maxRows?: number;
-  /** Receipt purpose tag. Defaults to `owner-assistant`. */
   purpose?: string;
 }
 
@@ -42,13 +31,7 @@ export type VaultSqlResult = VaultSqlRows & { receiptId: string };
 const COMMENT_RE = /\/\*[\s\S]*?\*\//gu;
 const LINE_COMMENT_RE = /--[^\n]*/gu;
 
-/**
- * Lexical gate: one statement, read-shaped. Execution enforcement is
- * `PRAGMA query_only` on the dedicated connection — this check exists so a
- * write attempt fails with a clear refusal instead of a low-level SQLite
- * error, and so the `:memory:` fallback (tests share the main handle,
- * where query_only cannot be toggled) still refuses writes outright.
- */
+/** Lexical gate so a write fails clearly, and so `:memory:` (shared main handle; query_only cannot be toggled) still refuses writes. */
 export function readOnlySqlRefusal(sql: string): string | undefined {
   const stripped = sql
     .replace(COMMENT_RE, " ")
@@ -64,10 +47,7 @@ export function readOnlySqlRefusal(sql: string): string | undefined {
   if (first !== "SELECT" && first !== "WITH" && first !== "EXPLAIN") {
     return "only SELECT / WITH … SELECT / EXPLAIN are allowed here";
   }
-  // The :memory: fallback runs on the writable main handle, so the lexical
-  // gate is the only wall there: keep the write/DDL keyword screen for that
-  // path. `replace(...)` the FUNCTION stays usable — only `REPLACE INTO`
-  // (statement position handled by the first-token check) would write.
+  // `:memory:` shares the writable main handle — this keyword screen is the only wall there. `replace(...)` the function stays usable; only `REPLACE INTO` would write (first-token check).
   if (
     /\b(?:insert\s+into|update\s+\w+\s+set|delete\s+from|attach|detach|vacuum|reindex|pragma)\b/iu.test(
       stripped
@@ -78,12 +58,7 @@ export function readOnlySqlRefusal(sql: string): string | undefined {
   return undefined;
 }
 
-/**
- * Run one read-only statement against vault.db. On a real (on-disk) vault
- * this opens a dedicated `query_only` connection per call — writes fail at
- * execution no matter what the text sneaks past the lexical gate. The
- * in-memory vault (tests) shares the main handle and leans on the gate.
- */
+/** Dedicated `query_only` connection per on-disk call. In-memory vaults share the main handle and lean on the lexical gate. */
 export function runReadOnlySql(
   db: VaultDb,
   sql: string,
@@ -100,24 +75,18 @@ export function runReadOnlySql(
   try {
     if (dedicated) {
       conn.exec("PRAGMA query_only = ON");
-      // The FTS index (and any query touching canonical bodies) calls
-      // vault_content_text(); the fresh connection needs it registered.
+      // Fresh connection: FTS / canonical bodies call vault_content_text().
       registerContentTextFn(conn);
     }
     const started = Date.now();
-    // Put the cap in SQLite's execution plan, not after `.all()`: slicing a
-    // million-row result in JavaScript still pays the unbounded memory/time
-    // cost and defeats the agent-query guardrail. One look-ahead row preserves
-    // honest `truncated` reporting without materializing the full result.
+    // Cap in SQLite's plan, not after `.all()` — slicing in JS still pays unbounded memory. One look-ahead row keeps `truncated` honest.
     const executable = /^\s*EXPLAIN\b/iu.test(sql)
       ? sql
       : `SELECT * FROM (${sql.replace(/;+\s*$/u, "")}) AS centraid_bounded_query LIMIT ${cap + 1}`;
     const all = conn.prepare(executable).all() as Record<string, unknown>[];
     const durationMs = Date.now() - started;
     const rows = all.slice(0, cap);
-    // Sealed cells are ciphertext at rest, so nothing here CAN leak — this
-    // pass just keeps the assistant's transcripts readable: any sealed wire
-    // value (however aliased or CONCAT'd) shows as the placeholder.
+    // Ciphertext at rest cannot leak; rewrite sealed wire values (aliased or CONCAT'd) to the placeholder so transcripts stay readable.
     for (const row of rows) {
       for (const [k, v] of Object.entries(row)) {
         if (isSealedValue(v)) row[k] = SEALED_PLACEHOLDER;

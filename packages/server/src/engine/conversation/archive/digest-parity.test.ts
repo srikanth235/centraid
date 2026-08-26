@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-// Digest parity (issue #438 decision 5): the numbers Insights reports must be
+// Digest parity (#438 decision 5): the numbers Insights reports must be
 // identical before archive (all live run_summary rows) and after archive+prune
 // (live rows + conversation_digest rollups), driven through the REAL
 // InsightsStore over the same journal handle. `recent` is live-only by design,

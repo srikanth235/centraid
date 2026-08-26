@@ -1,4 +1,4 @@
-/* Boot-time storage characterization for issue #456 M3. */
+/* Boot-time storage characterization for #456 M3. */
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
