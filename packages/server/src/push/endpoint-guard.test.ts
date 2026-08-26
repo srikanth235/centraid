@@ -36,14 +36,18 @@ describe("assertPublicPushEndpoint (issue #865)", () => {
   });
 
   it("accepts a public https endpoint that resolves to public addresses", async () => {
-    const spy = lookup().mockResolvedValue([
-      { address: "93.184.216.34", family: 4 },
-      { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
-    ] as never);
+    let lookedUp: unknown;
+    lookup().mockImplementation((async (host: string, options: unknown) => {
+      lookedUp = [host, options];
+      return [
+        { address: "93.184.216.34", family: 4 },
+        { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
+      ];
+    }) as never);
     await expect(
       assertPublicPushEndpoint("https://push.example.com/subscribe/abc")
     ).resolves.toBeUndefined();
-    expect(spy).toHaveBeenCalledWith("push.example.com", { all: true });
+    expect(lookedUp).toStrictEqual(["push.example.com", { all: true }]);
   });
 
   it("refuses a hostname that resolves to loopback or RFC1918 space", async () => {

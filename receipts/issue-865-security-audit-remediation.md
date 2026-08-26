@@ -358,6 +358,9 @@ re-audited so `refresh_capability` is named as a must-carry sealed cell on
 the already-walked `sync.connection_credential` table, `portability.test.ts`
 pins that `SELECT *` still emits it, and `schema-export-fingerprint.json`
 takes the new schema hash.
+The hygiene ratchet is down-only: four new `toHaveBeenCalled*` sites
+(F5 DNS lookup, F6 `openPath`, two F3 pre-Google refusals) were rewritten
+to captured arguments / `mock.calls` length so the budget stays 788.
 
 ## Session
 

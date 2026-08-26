@@ -26,9 +26,9 @@ describe("openAppFolder (issue #865)", () => {
     const openPath = vi.fn<() => Promise<string>>(async () => "");
     const result = await openAppFolder({ id: "notes" }, deps({ openPath }));
     expect(result).toStrictEqual({ ok: true });
-    expect(openPath).toHaveBeenCalledExactlyOnceWith(
-      "/code-store/active-main/apps/notes"
-    );
+    expect(openPath.mock.calls).toStrictEqual([
+      ["/code-store/active-main/apps/notes"],
+    ]);
   });
 
   it("surfaces shell.openPath's resolved error string", async () => {

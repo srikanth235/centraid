@@ -414,7 +414,11 @@ describe("index", () => {
     });
 
     test("refresh without a capability is refused before Google is called (issue #865)", async () => {
-      const upstream = vi.fn<typeof fetch>();
+      let googleCalls = 0;
+      const upstream = vi.fn<typeof fetch>(async () => {
+        googleCalls += 1;
+        return new Response("must-not-run");
+      });
       const response = await refreshRequest(
         { provider: "google", refresh_token: "1//stolen" },
         upstream as typeof fetch
@@ -423,11 +427,15 @@ describe("index", () => {
       await expect(response.json()).resolves.toStrictEqual({
         error: "missing_capability",
       });
-      expect(upstream).toHaveBeenCalledTimes(0);
+      expect(googleCalls).toBe(0);
     });
 
     test("a wrong or foreign-token capability is refused before Google is called", async () => {
-      const upstream = vi.fn<typeof fetch>();
+      let googleCalls = 0;
+      const upstream = vi.fn<typeof fetch>(async () => {
+        googleCalls += 1;
+        return new Response("must-not-run");
+      });
       const wrong = await refreshRequest(
         {
           provider: "google",
@@ -459,7 +467,7 @@ describe("index", () => {
       await expect(mismatched.json()).resolves.toStrictEqual({
         error: "invalid_capability",
       });
-      expect(upstream).toHaveBeenCalledTimes(0);
+      expect(googleCalls).toBe(0);
     });
 
     test("the exchange-minted capability redeems its own token, and a rotated token returns re-minted", async () => {
