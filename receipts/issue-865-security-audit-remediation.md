@@ -204,6 +204,12 @@ symmetric transport contract.
   `touch()` cannot persist `NaN` as `expires_at`.
 - **Re-pin `packages/vault/src/schema/sealed.ts` in the classification ratchet.**
   One governed fingerprint is re-pinned by #865. packages/vault/src/schema/sealed.ts: refresh_capability joins the sealed-column registry so the Assist HMAC rides the same six enforcement points as the refresh token it authenticates. That is a classification expansion, not a weakening — one file gained a sealed column it did not have, no quality lost a gate, no gate lost its evidence, and the remaining governed fingerprints are unmoved.
+- **Re-audit export completeness for `refresh_capability`.** The column is a
+  sealed cell on the already-walked `sync.connection_credential` table, so
+  `exportVault`'s `SELECT *` carries it with no adapter. The schema/export
+  ratchet still requires the owner file (`portable-export.ts`) and
+  `tests/schema-export-fingerprint.json` to move with the schema, and a
+  round-trip test so a future column-list walk cannot drop it silently.
 
 ## Evidence
 
@@ -332,8 +338,11 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
 - packages/tunnel/src/index.ts
 - packages/tunnel/data-plane/src/http_plane.rs
 - packages/test-kit/src/year3-vault.ts
+- packages/vault/src/gateway/portable-export.ts
+- packages/vault/src/gateway/portability.test.ts
 - scripts/corpora/schema-epoch-census.json
 - tests/quality/classification-ratchet.json
+- tests/schema-export-fingerprint.json
 - SECURITY.md
 - CHANGELOG.md
 - docs/oauth-assist.md
@@ -344,6 +353,11 @@ the manifest move with the ladder), and the year-3 sealed canary fixture seeds
 the new sealed column so the T3 canary's declared-vs-sentinel sets match.
 The Stryker seed range was re-anchored once more when worker.ts gained its
 file-size waiver line at the head of the file.
+The schema/export ratchet moves with rung five: `portable-export.ts` is
+re-audited so `refresh_capability` is named as a must-carry sealed cell on
+the already-walked `sync.connection_credential` table, `portability.test.ts`
+pins that `SELECT *` still emits it, and `schema-export-fingerprint.json`
+takes the new schema hash.
 
 ## Session
 
