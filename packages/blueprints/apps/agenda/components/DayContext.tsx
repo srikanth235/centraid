@@ -1,12 +1,5 @@
-// The day-context layers, drawn: the rail's three switches, the day ribbon,
-// and the collapsed due-task shelf.
-//
-// NONE OF THIS IS A CALENDAR AND NONE OF IT IS AN EVENT. A layer has no hue
-// dot — the dot is the calendars' content marker, and giving one to a layer
-// would say "this is a fourth calendar you can write to", which is exactly
-// what a layer is not. The ribbon and the shelf are drawn in the annotation
-// register on a dotted rule so they read as decoration on the day rather than
-// as another row competing with a meeting.
+// Day-context layers — none of this is a calendar or an event; a layer gets
+// no hue dot.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
@@ -32,11 +25,7 @@ export interface LayerTogglesProps {
   onToggle: (id: LayerId) => void;
 }
 
-/**
- * The rail's third section. Three switches and one sentence: a member may
- * reasonably read three toggles under Calendars as three more calendars, so
- * the section says once what they are.
- */
+/** Three toggles could read as three calendars; one sentence says what they are. */
 export function LayerToggles(props: LayerTogglesProps): ReactNode {
   return (
     <>
@@ -64,10 +53,7 @@ export interface DayRibbonProps {
   facts: readonly RibbonFact[];
 }
 
-/**
- * A day's costless facts, on one line. Several collapse into a count rather
- * than spelling three names into a month cell that has room for one.
- */
+/** A day's costless facts on one line; several collapse into a count. */
 export function DayRibbon(props: DayRibbonProps): ReactNode {
   if (props.facts.length === 0) return null;
   const label = ribbonLabel(props.facts);
@@ -92,20 +78,12 @@ export interface DayShelfProps {
   tasks: readonly DueTask[];
   open: boolean;
   onToggle: (dayKey: string) => void;
-  /** Hand this task to Tasks. Absent where the host offers no way to leave
-   *  this app — and then no row is drawn as a control, because an affordance
-   *  that cannot act is the thing this product refuses. */
+  /** Hand this task to Tasks; absent where the host offers no way out. */
   onOpenTask?: (taskId: string) => void;
 }
 
-/**
- * The due-task shelf: `3 due`, collapsed, toggleable per day.
- *
- * NEVER GRID CHIPS. A due date has no time cost, so it does not get grid
- * shape; it sits above the day's first hour as one collapsed line, and the
- * member opens it when they want the names. Tap-through leaves for Tasks —
- * Agenda shows the fact and never edits it.
- */
+/** Due-task shelf: `3 due`, collapsed, toggleable. NEVER GRID CHIPS (no time
+ *  cost → no grid shape); tap-through leaves for Tasks. */
 export function DayShelf(props: DayShelfProps): ReactNode {
   if (props.count === 0) return null;
   return (

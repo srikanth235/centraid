@@ -1,7 +1,6 @@
-// ConversationStore item rows: message_in landing at ordinal 0, the
-// openItem/closeItem lifecycle, the 64 KiB raw-envelope cap, and attachment
-// rows hanging off a message_in item. Conversation / turn / search behaviour
-// stays in store.test.ts; shared fixtures in store-test-fixtures.ts.
+// ConversationStore item rows: message_in at ordinal 0, the openItem/
+// closeItem lifecycle, the 64 KiB raw-envelope cap, attachments.
+// Conversation / turn / search behaviour stays in store.test.ts.
 
 import type { StatementSync } from "node:sqlite";
 
@@ -100,8 +99,7 @@ describe("ConversationStore — items + message_in", () => {
       triggerKind: "interactive",
       startedAt: 0,
     });
-    // The ACP envelope around a whole-file read: identifiers plus megabytes of
-    // content, written once at open and once at close.
+    // ACP envelope around a whole-file read, written at open and at close.
     const huge = JSON.stringify({
       toolCallId: "call-9",
       stopReason: "end_turn",
@@ -129,8 +127,7 @@ describe("ConversationStore — items + message_in", () => {
     const [item] = store.listItems("t");
     const raw = item?.rawJson ?? "";
     expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(64 * 1024);
-    // Stop-reason / callId forensics survive; the payload that blew the cap
-    // does not, and the row says so rather than pretending to be complete.
+    // Forensics survive; the payload does not — flagged via rawTruncated.
     expect(JSON.parse(raw)).toMatchObject({
       toolCallId: "call-9",
       stopReason: "end_turn",
@@ -231,12 +228,10 @@ describe("ConversationStore — attachments", () => {
   });
 });
 
-// Issue #659 G5: these are the conversation-wide batched reads that stand in
-// for one items query per turn and one attachments query per message. The law
-// is that they return exactly what the per-row reads return, and that their
-// statement count does not grow with the number of turns.
+// #659 G5: conversation-wide batched reads must return what the per-row reads
+// return, with statement count not growing with turns.
 describe("ConversationStore — conversation-wide batched reads (#659 G5)", () => {
-  /** A provider that counts every executed read, so "N+1" is measurable. */
+  /** Counts every executed read, so "N+1" is measurable. */
   function countingProvider(): {
     provider: DatabaseProvider;
     reads: () => number;
@@ -312,7 +307,7 @@ describe("ConversationStore — conversation-wide batched reads (#659 G5)", () =
         store.listItems(turn.turnId)
       );
     }
-    // No stray turns in the batch beyond the ones the conversation owns.
+    // No stray turns beyond those the conversation owns.
     expect([...batchedItems.keys()].sort()).toStrictEqual(
       turns.map((t) => t.turnId).sort()
     );
@@ -346,10 +341,8 @@ describe("ConversationStore — conversation-wide batched reads (#659 G5)", () =
   });
 });
 
-// Issue #659 G5: the first cut of the transcript cap was `ORDER BY seq ASC
-// LIMIT ?`, which returns the OLDEST N. Paginating with it would have shown a
-// reader the beginning of their conversation and hidden the recent part — the
-// same failure mode as the slow load it was meant to replace, but silent.
+// #659 G5: a first cap cut of `ORDER BY seq ASC LIMIT ?` returns the OLDEST
+// N — paginating with it would silently hide the recent part of the thread.
 describe("ConversationStore — transcript window (#659 G5)", () => {
   function seedTurns(store: ConversationStore, count: number): string {
     const c = store.createConversation({ kind: "chat", userId: "u1" });
@@ -389,13 +382,12 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     const store = newStore();
     const conversationId = seedTurns(store, 23);
 
-    // Collect the pages, then assert on them — the walk itself makes no
-    // assertions, so nothing here depends on a branch being taken.
+    // Collect the pages, then assert: the walk itself makes no assertions.
     const pageSeqs: number[][] = [];
     let cursor: number | undefined;
     let exhausted = false;
-    // The bound is the termination guard: if paging ever fails to reach the
-    // oldest turn, `exhausted` stays false and the assertion below says so.
+    // Termination guard: if paging never reaches the oldest turn, `exhausted`
+    // stays false and fails below.
     for (let guard = 0; guard < 10 && !exhausted; guard += 1) {
       const page: TurnWindow = store.listTurnWindow(conversationId, {
         limit: 5,
@@ -407,10 +399,8 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     }
     expect(exhausted).toBe(true);
 
-    // Exact page boundaries: strictly backwards, contiguous within a page, and
-    // 5+5+5+5+3. This subsumes the old per-page "older than its cursor" check
-    // and is stronger — it pins WHICH turns each page held, not just that the
-    // maximum moved down.
+    // Exact page boundaries — pins WHICH turns each page held, not just that
+    // the maximum moved down.
     expect(pageSeqs).toStrictEqual([
       [18, 19, 20, 21, 22],
       [13, 14, 15, 16, 17],
@@ -419,7 +409,7 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
       [0, 1, 2],
     ]);
 
-    // Every turn exactly once, in order: no gaps and no repeats.
+    // Every turn exactly once: no gaps, no repeats.
     const seen = pageSeqs.toReversed().flat();
     expect(seen).toStrictEqual(Array.from({ length: 23 }, (_, i) => i));
     expect(new Set(seen).size).toBe(23);
@@ -446,13 +436,13 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     expect(oneShort.turns.map((t) => t.seq)).toStrictEqual([1, 2, 3]);
     expect(oneShort.hasMore).toBe(true);
 
-    // A window larger than the whole thread is also the end of it.
+    // A larger-than-thread window is also the end of it.
     const whole = store.listTurnWindow(conversationId, { limit: 500 });
     expect(whole.turns).toHaveLength(10);
     expect(whole.hasMore).toBe(false);
     expect(whole.oldestSeq).toBe(0);
 
-    // And an empty conversation reports no more and no cursor.
+    // Empty conversation: no more, no cursor.
     const empty = store.createConversation({ kind: "chat", userId: "u1" });
     const none = store.listTurnWindow(empty.id);
     expect(none.turns).toStrictEqual([]);
@@ -461,17 +451,14 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     store.close();
   });
 
-  // Every binding shape of the three windowed statements, in one place.
-  // `listTurnsWindow` and the two range-scoped reads bind a value TWICE per
-  // nullable filter; a wrong argument count throws "column index out of range"
-  // only on the paths that actually reach the statement, so an unwindowed-only
-  // test would have missed it. This is the regression that shipped: numbered
-  // `?N` placeholders bound positionally work on Node 22 and throw on Node 24.
+  // Every binding shape of the three windowed statements in one place:
+  // nullable filters bind a value TWICE per filter, and numbered `?N`
+  // placeholders bound positionally work on Node 22 but throw on Node 24.
   it("binds every window and range shape without a parameter mismatch", () => {
     const store = newStore();
     const conversationId = seedTurns(store, 8);
 
-    // listTurnsWindow — cursor absent, cursor present, and limit at the cap.
+    // listTurnsWindow — cursor absent, present, and limit at the cap.
     expect(() => store.listTurnWindow(conversationId)).not.toThrow();
     expect(() =>
       store.listTurnWindow(conversationId, { limit: 3 })
@@ -479,14 +466,13 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
     expect(() =>
       store.listTurnWindow(conversationId, { limit: 3, beforeSeq: 5 })
     ).not.toThrow();
-    // …and the unwindowed listTurns, which now routes through the same SQL.
+    // …and the unwindowed listTurns, same SQL now.
     expect(store.listTurns(conversationId).map((t) => t.seq)).toStrictEqual([
       0, 1, 2, 3, 4, 5, 6, 7,
     ]);
 
-    // The two range reads: no bounds, both bounds, and each bound alone —
-    // the partial shapes are expressible even though `seqRangeOf` never emits
-    // them, so they are bound and must not throw.
+    // The two range reads: both bounds and each bound alone — shapes
+    // `seqRangeOf` never emits, but must not throw.
     const ranges = [
       {},
       { fromSeq: 2, toSeq: 5 },
@@ -500,7 +486,7 @@ describe("ConversationStore — transcript window (#659 G5)", () => {
       ).not.toThrow();
     }
 
-    // And the bounds actually filter, rather than being silently ignored.
+    // The bounds actually filter, not silently ignored.
     expect(store.listItemsByTurn(conversationId, {}).size).toBe(8);
     expect(
       store.listItemsByTurn(conversationId, { fromSeq: 2, toSeq: 5 }).size

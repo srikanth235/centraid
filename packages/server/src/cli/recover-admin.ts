@@ -1,29 +1,17 @@
 /*
- * `centraid-gateway recover` (#439) — the CLI shell over the
- * service-layer `recover()` verb (`backup/recover.ts`). Headless Linux daemon
- * installs recover this way, and it is the blank-machine e2e harness: a fresh
- * data dir plus NOTHING but the recovery kit and the provider api-key.
+ * `centraid-gateway recover` (#439) — CLI shell over the service-layer
+ * `recover()` verb (`backup/recover.ts`); also the blank-machine e2e harness.
  *
  *   centraid-gateway recover --kit <file> --password-file <file>
  *                            --api-key <key> --data-dir <dir>
  *                            [--at <iso-time>] [--full] [--vault <id>] [--yes]
  *
- * Unlike `backup …`, recover needs NO daemon config file: the provider
- * addressing lives in the kit and the api-key is passed in. It prints the
- * "found your vault" facts (size / as-of / provider / cost class) to stderr,
- * gates a metered-egress home behind `--yes` (the same rule the restore
- * gate uses — PROTOCOL.md's `restoreCostClass`), streams phase progress to
- * stderr, and writes the JSON completion report to stdout. It refuses to touch
- * a vault root a live gateway holds. The restore is LAZY by default (defers
- * every blob the provider's attested inventory holds); `--full` materializes
- * every blob. `--at` is point-in-time recovery (#408).
- *
- * The recovered gateway's keyring lands under `<data-dir>/keys/`, fenced
- * backup state lands in `gateway.db`, and the vault lands under
- * `<data-dir>/vault/<vaultId>/`; the quarantine marker fires the first time
- * the daemon mounts it. Resuming BACKUPS
- * (not restore) still needs a `backup` config block pointing at the same
- * provider + api-key — a separate operator step this command reminds them of.
+ * No daemon config needed. Prints the "found your vault" facts to stderr,
+ * gates metered-egress homes behind `--yes` (PROTOCOL.md restoreCostClass),
+ * streams phase progress to stderr, JSON report to stdout, and refuses a vault
+ * root a live gateway holds. LAZY by default; `--full` materializes every
+ * blob; `--at` is point-in-time recovery (#408). Resuming BACKUPS still needs
+ * a `backup` config block — a separate operator step this command reminds of.
  */
 
 import { readFileSync } from "node:fs";
@@ -170,8 +158,8 @@ export async function commandRecover(
       );
     }
 
-    // Discovery + the "found your vault" card + the metered-egress gate — all
-    // BEFORE any restore work, and the provider client is reused by recover().
+    // Discovery + facts card + metered-egress gate all BEFORE any restore;
+    // the provider client is reused by recover().
     let discovery: RecoveryDiscovery;
     try {
       discovery = await discoverRecovery({
@@ -225,11 +213,8 @@ export async function commandRecover(
 
     printJson(report);
 
-    // Adopt-time reconcile (#439). Recovery SUCCEEDED for everything
-    // else, so this never fails the command (no non-zero exit) — a lost blob is
-    // not a reason to abandon a recovered vault. But LOST bytes are surfaced as a
-    // prominent CRITICAL block so an operator cannot miss them; a re-pin is a
-    // quieter FYI (the byte is back, it will re-upload on the next backup).
+    // Adopt-time reconcile (#439): never fails the command, but LOST bytes
+    // surface as a prominent CRITICAL block; re-pins are a quieter FYI.
     const rec = report.reconcile;
     if (rec.lost.length > 0) {
       process.stderr.write(

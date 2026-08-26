@@ -1,19 +1,7 @@
 /*
- * The ONE executor of the sharing plane's effect outbox (#750
- * abstraction 2): per-kind handlers over one queue, one retry policy, and one
- * place that decides what "discharged" means.
- *
- * ONE HANDLER (#825, ruling G-copy). There is no peer transport to select
- * between — no `deliverGiveOverPeer`, no background blob pull, no relayed
- * refusal — and every `deliver-give` is a same-owner placement whose two
- * vaults are open in this process. What is left is the retry policy around
- * one vault call.
- *
- * The handler never throws for a vault condition: a vault this gateway cannot
- * open right now is a RETRY, and the durable row is what makes the next tick's
- * attempt the same obligation rather than a new one. `runShareEffect` is also
- * called INLINE by the edge route, so the common case still answers the owner
- * synchronously while the outbox covers the case where it could not act.
+ * The ONE executor of the sharing plane's effect outbox (#750): one retry
+ * policy around one vault call. A vault this gateway cannot open right now
+ * is a RETRY, never a throw.
  */
 
 import { moveOutOfVault, shareItemsToVault } from "@centraid/vault";
@@ -45,10 +33,8 @@ export type ShareEffectOutcome =
       state: "retry";
       reason: string;
       /**
-       * True when THIS gateway could not act (a vault call threw, a vault not
-       * open here) rather than the edge simply not having completed. The edge
-       * route answers 202 for a fault and 200 otherwise, which is the
-       * distinction the wire contract has always drawn.
+       * True when THIS gateway could not act: the edge route answers 202
+       * for a fault, 200 otherwise.
        */
       fault: boolean;
     }
@@ -61,8 +47,7 @@ export function runShareEffect(
   const row = readEdgeRow(deps.db, effect.edgeId);
   if (!row) return { state: "abandoned", reason: "no such edge" };
   const facts = edgeFactsOf(row);
-  // Terminal already (completed by an earlier attempt, revoked by its owner)
-  // — the obligation is discharged, not retried.
+  // Terminal already — the obligation is discharged, not retried.
   if (isTerminalEdgeStatus(row.status)) return { state: "done" };
   const origin = deps.vaultFor(row.origin_vault_id);
   if (!origin) {

@@ -17,18 +17,10 @@ export interface AppearanceController {
   setPrefs: (patch: Partial<AppearancePrefs>) => void;
 }
 
-// The local cache key. Bumped for #608 group P: the previous cache shape
-// carries `bgL: 5` and `accent: 'teal'` on every save, the two inline
-// overrides that outrank the active theme. A cached blob in that shape cannot
-// be told apart from an owner who deliberately moved those knobs, so the
-// honest read is to start the new shape clean — the
-// gateway-backed prefs reconcile right after first paint either way.
+// Key bumped #608 group P: old inline overrides read as deliberate picks.
 const CACHE_KEY = "appearance.v2";
 
-// Live appearance state. The local Store value is the fast-paint cache
-// (applied synchronously so the first paint wears the user's theme); the
-// gateway is the source of truth and reconciles after mount. setPrefs writes
-// through: state + Store + <html> + fire-and-forget gateway mirror.
+// Store = fast-paint cache; setPrefs writes through to state, Store, <html>, gateway.
 export function useAppearance(): AppearanceController {
   const [prefs, setPrefs] = useState<AppearancePrefs>(() => {
     const cached = {
@@ -38,14 +30,11 @@ export function useAppearance(): AppearanceController {
     return { ...cached, theme: resolveThemeMode(cached.themeMode) };
   });
 
-  // Apply on mount + whenever prefs change, so <html> tracks state.
   useEffect(() => {
     applyPrefsToDocument(prefs);
   }, [prefs]);
 
-  // `system` is a standing mode, not a one-shot snap: follow the OS while it
-  // is selected. Re-subscribing on mode change keeps the listener off the
-  // event loop entirely for the explicit light/dark picks.
+  // `system` follows the OS; re-subscribing on mode change drops the listener for explicit picks.
   const mode = prefs.themeMode;
   useEffect(() => {
     if (mode !== "system" || typeof matchMedia !== "function") return;
@@ -62,8 +51,7 @@ export function useAppearance(): AppearanceController {
     return () => mq.removeEventListener("change", sync);
   }, [mode]);
 
-  // Reconcile from the gateway once after first paint (silent on failure — the
-  // local cache stands in when the gateway is unreachable).
+  // Gateway reconcile, once after first paint.
   const reconciled = useRef(false);
   useEffect(() => {
     if (reconciled.current) return;
@@ -89,8 +77,6 @@ export function useAppearance(): AppearanceController {
   }, []);
 
   const updatePrefs = useCallback((patch: Partial<AppearancePrefs>) => {
-    // A mode change re-resolves the applied theme, so callers set the intent
-    // and never have to keep the two fields in step themselves.
     const resolved =
       patch.themeMode === undefined
         ? patch

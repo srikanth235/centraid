@@ -19,31 +19,24 @@ export const DEFAULT_TRIGGER_CATCH_UP_CAP = 50;
 export type CursorSourceKind = Trigger["kind"];
 
 export interface CursorElement {
-  /**
-   * Stable source-native position/id for this element. It must be unique per
-   * DELIVERY OCCURRENCE, not merely per source row: the host derives its
-   * idempotency run id from it, so a re-delivery of the same row (a condition
-   * row that left the window and re-entered) needs a position of its own.
-   */
+  /** Stable source-native id; unique per DELIVERY OCCURRENCE (idempotency). */
   position: string;
   occurredAt: number;
   payload?: unknown;
   /**
-   * The source position committed once THIS element is acknowledged. Readers
-   * that can express a per-element watermark set it; it lets the engine
-   * truncate an over-long read without ever committing past what it delivered.
+   * Position committed once THIS element is acknowledged; enables safe
+   * truncation.
    */
   positionJson?: string;
 }
 
 export interface CursorReadResult {
   /**
-   * Ordered elements after the supplied cursor, oldest first. A reader must
-   * not return more than `limit`; the surplus belongs to the next read, and
-   * `positionJson` must never point past the last element returned here.
+   * Ordered elements after the supplied cursor, oldest first; never past
+   * `limit`.
    */
   elements: CursorElement[];
-  /** Serialized next source position. Undefined preserves the current one. */
+  /** Serialized next source position; undefined preserves the current one. */
   positionJson?: string;
   skipped?: number;
   windowFrom?: number;
@@ -105,10 +98,7 @@ export interface VaultCursorEngineOptions {
   fireCursor?: (input: TriggerCursorFireInput) => void | Promise<void>;
   /** Read non-cron sources. */
   readCursor?: (input: TriggerCursorReadInput) => Promise<CursorReadResult>;
-  /**
-   * Legacy condition/data callback. Retained only for injected schedulers;
-   * production uses readCursor + fireCursor.
-   */
+  /** Legacy condition/data callback; retained only for injected schedulers. */
   evaluate?: (ref: string, triggerIndex: number) => void | Promise<void>;
   store?: CursorStore | AutomationTriggerStore;
   now?: () => Date;
@@ -118,10 +108,8 @@ export interface VaultCursorEngineOptions {
   onDormancyChange?: (dormant: boolean, at: Date) => void | Promise<void>;
   catchUpCap?: number;
   /**
-   * Gateway-wide default cron timezone (#570 tier 2). Read on each
-   * register/reconcile so a prefs change applies on the next reconcile without
-   * restarting the engine. Absent or invalid → host-local for triggers that
-   * also omit `tz`.
+   * Gateway default cron timezone (#570 tier 2); re-read each
+   * register/reconcile; absent/invalid → host-local.
    */
   defaultCronTimeZone?: () => string | undefined;
 }
@@ -137,22 +125,15 @@ export interface CursorRegistration {
   triggerIndex: number;
   trigger: Trigger;
   /**
-   * Every cron schedule this registration fires (cron registrations only).
-   * Each entry carries the expression plus the zone resolved at registration
-   * time (trigger `tz` → gateway default → host-local).
+   * Every cron schedule this registration fires, zones resolved at
+   * registration time.
    */
   cronSchedules?: readonly CronSchedule[];
 }
 
 /**
- * The cursor registrations one automation contributes — one per trigger,
- * EXCEPT cron: every cron trigger collapses into a single registration held at
- * the first cron index. An automation declaring both a daily 08:00 expression
- * and a half-hourly one is one schedule with two expressions, so 08:00 fires
- * it exactly once.
- *
- * `defaultTimeZone` is the gateway-wide default (tier 2). Per-trigger `tz`
- * wins when set; absent both tiers, schedules match host-local.
+ * Cursor registrations one automation contributes — one per trigger, EXCEPT
+ * cron: all cron triggers collapse into the first cron index's registration.
  */
 export function registrationsFor(
   row: Row,

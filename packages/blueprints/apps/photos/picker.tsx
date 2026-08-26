@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
 
-// The album picker ("Add photos" from inside an album). Owns its own small
-// state (which album, which ids are picked) — nothing outside the picker
-// region ever reads `pickerAlbum`/`pickerPicked`.
+// The album picker ("Add photos" inside an album).
 import { PickerView } from "./components/Picker.tsx";
 import { $ } from "./dom.ts";
 import { submitPicker as runSubmitPicker } from "./picker-actions.ts";
@@ -25,9 +23,7 @@ export function createPicker({
 }) {
   let pickerAlbum: Album | null = null;
   const pickerPicked = new Set<string>();
-  // The panel goes BUSY rather than the commit turning into a progress bar
-  // (§14): the geometry stands still, the counts ride the frame's one status
-  // line, and a second click cannot start a second pass.
+  // BUSY panel, not a progress bar (§14); a second click starts nothing.
   let pickerBusy = false;
 
   function closePicker() {
@@ -57,8 +53,7 @@ export function createPicker({
   function renderPicker() {
     if (!pickerAlbum) return;
     const album = pickerAlbum;
-    // Albums are own-scope (#599), so the picker offers own-scope photos:
-    // an audience's asset id cannot be added to a collection in another scope.
+    // Own-scope photos only (#599).
     const candidates = getAssets().filter(
       (a) => !(a.album_ids ?? []).includes(album.album_id)
     );
@@ -90,17 +85,8 @@ export function createPicker({
     $("picker").hidden = false;
   }
 
-  // A plain native listener directly on `#picker` (which doubles as this
-  // region's React root container, `pickerRoot` above) — a nested tile's
-  // `onClick` can't reliably shield itself from this via `stopPropagation()`:
-  // React's own delegated listener lives on this SAME node and is registered
-  // *before* this one (`createRoot()` runs ahead of `createPicker()` in
-  // app.tsx's Boot section), so this raw listener always fires, in full,
-  // before — or regardless of — anything a descendant's synthetic handler
-  // does. That closed the picker on every tile pick instead of just backdrop
-  // clicks. Gating on `e.target === e.currentTarget` sidesteps the whole
-  // ordering question: only a click landing on the backdrop itself (never a
-  // descendant) closes it, same fix as the lightbox's identical setup.
+  // Raw `#picker` listener (also the React root): React's delegated listener
+  // registers there first, so descendant stopPropagation() cannot shield it.
   $("picker").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closePicker();
   });

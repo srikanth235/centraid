@@ -1,17 +1,9 @@
-// People's read layer on the phone: the local replica, entity by entity,
-// projected into the same row shapes the web query emitters serve
-// (`people-model.ts` names the mirrors). The shape every native read layer
-// here takes — several
-// `useReplicaQuery(appId, request)` calls, one combined state, one memoized
-// projection.
+// People's read layer on the phone: local replica queries projected into the
+// row shapes the web query emitters serve (`people-model.ts` names mirrors).
 //
-// THE SHARING PLANE IS KEPT OUT OF THE COMBINED STATE. People's `share.*`
-// scopes deny independently (they may be parked for the owner's approval on an
-// existing vault), and a denial must degrade the LINK FACTS to absent — null,
-// drawing nothing — rather than carding the whole roster as an error
-// (decisions.md #821 L-read). So the share reads' errors are consumed here,
-// turned into `null` row sets for the projection, and never surface as the
-// screen's own error.
+// THE SHARING PLANE STAYS OUT OF THE COMBINED STATE: `share.*` scopes deny
+// independently, so a denial degrades LINK FACTS to absent rather than
+// carding the whole roster as an error (decisions.md #821 L-read).
 
 import { useMemo } from "react";
 
@@ -36,8 +28,7 @@ import { projectShareLinks } from "./people-share-model";
 
 const APP = "people";
 
-/** A share-plane read's rows, or null while the read has not honestly
- *  answered — loading and denial both draw as ABSENT, never as "nobody". */
+/** Share rows, or null while unanswered — loading and denial draw ABSENT, never "nobody". */
 function shareRows(state: ReplicaQueryState): Row[] | null {
   if (state.error) return null;
   if (state.loading) return null;
@@ -54,11 +45,8 @@ export interface PeopleData extends RosterProjection {
   dashboard: DashboardData;
 }
 
-/**
- * The roster window, the trash shelf, the keep-in-touch summary and the
- * searchable note texts — one hook, because all three destinations live on
- * one screen and share every underlying read.
- */
+/** Roster window, trash shelf, keep-in-touch and note search in one hook:
+ * one screen, shared underlying reads. */
 export function usePeople(): PeopleData {
   const profiles = useReplicaQuery(
     APP,
@@ -226,21 +214,14 @@ export interface PersonData {
   error?: string;
   connection: ReplicaQueryState["connection"];
   unavailableReason?: string;
-  /** Null past the loading gate means the id no longer resolves to a live
-   *  person (trashed or merged away in the meantime). */
+  /** Null past loading = the id no longer resolves (trashed or merged away). */
   person: PersonDetail | null;
-  /** The roster window this person was found in. The grant dashboard hands it
-   *  to the share sheet as the audience list: People is where a party id has
-   *  a name (#825), and it is already in hand here — a second read of the
-   *  same rows would be the same window twice. */
+  /** The roster window found in; handed to the share sheet as audience list (#825). */
   roster: readonly PersonRow[];
 }
 
-/**
- * One person in full. Rides on `usePeople()`'s window for identity, star and
- * cadence, and adds the per-person tables: channels, notes, interactions and
- * the sharing plane (which degrades to absent, per the module head).
- */
+/** One person in full: rides `usePeople()`'s window for identity, star and
+ * cadence, plus per-person tables. */
 export function usePerson(partyId: string): PersonData {
   const people = usePeople();
   const channels = useReplicaQuery(
@@ -309,11 +290,9 @@ export function usePerson(partyId: string): PersonData {
     )
   );
 
-  // The sharing plane's two tables — each degrades to absent on its own, and
-  // `projectShareLinks` nulls the whole answer when either is missing. There
-  // is no commons-grant join beside them and no `shared_with_them` projection
-  // (#825); standing grants are read live from the grant plane by
-  // `PersonGrants.tsx`.
+  // Sharing plane tables: each degrades alone; `projectShareLinks` nulls when
+  // either is missing. No commons-grant join (#825); standing grants read
+  // live in `PersonGrants.tsx`.
   const bindings = useReplicaQuery(
     APP,
     useMemo(() => ({ entity: "share.party_vault_binding" }), [])

@@ -1,11 +1,8 @@
-// Share-target ingest core, kept free of React and native modules so the
-// vitest rig can drive it with fake producers and a fake share intent. The hook in `ShareIntentIngest.tsx` is a thin wrapper that
-// wires the real producers, `expo-file-system`, `Alert`, and reset in.
+// React-free share-ingest core; `ShareIntentIngest.tsx` wires real producers.
 
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
 import type { DeviceMediaInput } from "../../lib/upload/media-producer";
 
-/** A shared file as expo-share-intent hands it to us (structural subset). */
 export interface SharedIntentFileLike {
   path: string;
   mimeType: string;
@@ -16,17 +13,13 @@ export interface SharedIntentFileLike {
   duration?: number | null;
 }
 
-/** The shape we read off `useShareIntentContext().shareIntent`. */
 export interface SharedIntentLike {
   files?: SharedIntentFileLike[] | null;
   text?: string | null;
   webUrl?: string | null;
 }
 
-// The producer input carries the #431 flag: share-container copies are
-// ephemeral app-group files, so they must be deleted once the upload settles.
-// The flag is optional on the producer input the upload-queue agent owns; until
-// that lands it is simply ignored, so passing it now is forward-compatible.
+// #431: optional until the upload-queue agent's input carries the flag.
 type MediaProducerInput = DeviceMediaInput & {
   deleteSourceAfterSettle?: boolean;
 };
@@ -50,9 +43,7 @@ export interface ShareIngestPorts {
     gatewayBase: string,
     input: DocumentProducerInput
   ) => Promise<unknown>;
-  /** Plaintext size when the share intent did not carry one. */
   fileSize: (path: string) => number;
-  /** Clear the latched share intent so it cannot re-fire. */
   reset: () => void;
   alert: (title: string, message: string) => void;
 }
@@ -64,9 +55,7 @@ function mediaKind(mimeType: string): DeviceMediaInput["kind"] {
 }
 
 function isDeviceMedia(mimeType: string): boolean {
-  // Audio is a first-class media kind end-to-end (media.add_asset accepts
-  // 'audio', backupDeviceMedia skips derivatives for it), so shared audio goes
-  // through the media producer rather than the docs shape (#431).
+  // #431: shared audio goes through the media producer.
   return (
     mimeType.startsWith("image/") ||
     mimeType.startsWith("video/") ||
@@ -75,11 +64,8 @@ function isDeviceMedia(mimeType: string): boolean {
 }
 
 /**
- * Route each user-confirmed shared file to its producer, then ALWAYS reset the
- * share intent. Text and URL shares bypass this file-only core and open the
- * preview-first Capture screen in `ShareIntentIngest.tsx`. The durable queue
- * owns anything enqueued, so resetting on error only prevents an infinite
- * re-fire.
+ * Route each confirmed file to its producer, then ALWAYS reset — the durable
+ * queue owns anything enqueued, so resetting on error only prevents re-fire.
  */
 export async function processShareIntent(
   ports: ShareIngestPorts,
@@ -137,11 +123,7 @@ export async function processShareIntent(
   }
 }
 
-/**
- * Re-entrancy guard: a re-render (or a second intent) while an ingest is still
- * in flight must not start a second pass over the same files (#431 test).
- * The hook holds one gate across renders via a ref.
- */
+/** Re-entrancy guard (#431 test): no second pass while ingest is in flight. */
 export class ShareIntentGate {
   private running = false;
   async run(task: () => Promise<void>): Promise<void> {

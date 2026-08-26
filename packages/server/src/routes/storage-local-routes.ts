@@ -1,32 +1,8 @@
 /*
- * The LOCAL-disk half of the storage surface (#544), split out of
- * `storage-routes.ts` so that file stays about provider CONNECTIONS:
- *
- *   GET     /centraid/_gateway/storage/local   — footprint by component for
- *                                                every mounted vault plus the
- *                                                gateway-level dirs, the
- *                                                volume's free/total, and the
- *                                                current limit evaluation.
- *                                                Served from
- *                                                `LocalUsageScanner`'s TTL
- *                                                cache; `?refresh=1` re-walks
- *                                                inline (the page's Rescan
- *                                                button, never its poll — the
- *                                                walk covers the blob CAS).
- *   GET|PUT /centraid/_gateway/storage/limits  — the owner's disk budget
- *                                                (warn-only) and ledger
- *                                                archive limit. PUT takes a
- *                                                partial patch; `null` clears
- *                                                either limit; a value below
- *                                                the usable floor is a typed
- *                                                400.
- *
- * `tryStorageLocalRoutes` returns `false` for anything else, so the caller
- * falls through to the connection routes — same dispatch contract every
- * `RouteHandler` in this directory follows. Both dependencies are OPTIONAL:
- * an embed or test built without them answers 503 ("this gateway cannot
- * measure itself") rather than 404, because "not wired" and "no such route"
- * are different facts and a client should be able to tell them apart.
+ * The LOCAL-disk half of the storage surface (#544). GET .../storage/local
+ * serves usage + limit evaluation (`?refresh=1` re-walks inline); GET|PUT
+ * .../storage/limits manages the owner's warn-only limits. Other paths return
+ * `false`; optional deps answer 503 when absent, never 404.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -84,9 +60,6 @@ async function handleLocal(
     const force = url.searchParams.get("refresh") === "1";
     const report = await deps.localUsage.report({ force });
     const limits = await currentLimits(deps);
-    // The evaluation rides the report rather than being left to the client:
-    // a limit shown beside a total it wasn't evaluated against is worse than
-    // no limit shown, and only one side should own the thresholds.
     return sendJson(res, 200, {
       ...report,
       limits,
@@ -136,7 +109,7 @@ async function handleLimits(
   }
 }
 
-/** `false` when the path belongs to another handler in the storage family. */
+/** `false` when the path belongs to another storage handler. */
 export async function tryStorageLocalRoutes(
   url: URL,
   req: IncomingMessage,

@@ -1,11 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit the outbox lifecycle is one closed set — stage/decide/record_result validate each other’s risk + state invariants (#306)
-// The outbox commands (#306): external writes as artifacts. `stage`
-// is risk low — the item is INERT, nothing leaves the vault; `decide` is the
-// owner's act on the thing itself (send / edit-then-send / discard /
-// always-allow); `record_result` is the executor's receipt of one drain.
-// The read-only ceiling on connector fires (#304) stands untouched:
-// the only path from an outbox row to the network is the gateway-side
-// executor draining APPROVED items via the `allowWrites` lane.
+// The outbox commands (#306): external writes as artifacts. `stage` is INERT;
+// `decide` is the owner's act on the thing itself; `record_result` is one
+// drain's receipt. The read-only ceiling on connector fires (#304) stands.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -65,9 +61,8 @@ const STAGE: CommandDefinition = {
       artifact: { type: "object" },
       request: REQUEST_SCHEMA,
       // Graph joins (#310): the canonical row this write is ABOUT
-      // (both-or-neither), and the resolved destination person. `target`
-      // stays the wire address the grant key needs; these are the typed refs
-      // an agent can walk.
+      // (both-or-neither) + resolved destination person; typed refs an
+      // agent can walk.
       subject_type: { type: "string", minLength: 1 },
       subject_id: { type: "string", minLength: 1 },
       recipient_party_id: { type: "string", minLength: 1 },
@@ -160,9 +155,9 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
   } else {
     recipientPartyId = partyForAddress(ctx, input.target);
   }
-  // Standing grants (#306 decision 3, phase 3): a live
-  // (actor, verb, target) rule approves the item at staging time — it still
-  // drains through the executor and lands in the review feed, never silently.
+  // Standing grants (#306 phase 3): a live (actor, verb, target) rule
+  // approves at staging time — still drains through the executor, never
+  // silently.
   const grant = ctx.db
     .prepare(
       `SELECT grant_id FROM outbox_grant
@@ -223,8 +218,7 @@ const DECIDE: CommandDefinition = {
     properties: {
       item_id: { type: "string", minLength: 1 },
       decision: { type: "string", enum: ["approve", "discard"] },
-      // Edit-then-send is free — the artifact is a row, not a frozen
-      // invocation. Both halves replace together or not at all.
+      // Edit-then-send is free — both halves replace together or not at all.
       artifact: { type: "object" },
       request: REQUEST_SCHEMA,
       // "Always allow this actor this kind of write to this target": mints
@@ -275,10 +269,9 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
     always_allow?: boolean;
     note?: string;
   };
-  // The outbox's whole justification is that the owner approves THE THING
-  // ITSELF — an edit that replaces only the human-readable artifact while
-  // the original request goes on the wire breaks that quietly (#308
-  // A5). Both halves replace together or the edit is refused.
+  // The owner approves THE THING ITSELF — an edit replacing only the
+  // human-readable artifact while the original request goes on the wire
+  // breaks that quietly (#308 A5). Both halves replace together or refused.
   if ((input.artifact === undefined) !== (input.request === undefined)) {
     throw new Error(
       "an edited outbox item replaces artifact and request TOGETHER — editing one half lets the approved artifact diverge from the wire request (issue #308 A5)"
@@ -416,10 +409,8 @@ function recordResult(ctx: HandlerCtx): Record<string, unknown> {
       input.item_id
     );
   ctx.wrote("outbox.item", input.item_id);
-  // The drain is not the end of the story (#310): a sent
-  // message-shaped artifact becomes a canonical social_message, so the
-  // owner's own outbound acts are graph facts — not JSON stranded in
-  // result_json until a provider sync happens to re-import them.
+  // A sent message-shaped artifact becomes a canonical social_message
+  // (#310) — not JSON stranded in result_json until a provider re-import.
   let messageId: string | null = null;
   if (input.disposition === "sent") {
     messageId = publishSentMessage(ctx, input.item_id);
@@ -444,14 +435,11 @@ function recordResult(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /**
- * Publish one drained, message-shaped outbox item into the social spine:
- * body → sha-deduped core.content_item (the note/message mechanism), thread
- * per (connection, target) so repeated sends to one address converse,
- * participants = owner + resolved recipient (party if known, wire handle
- * otherwise — never a duplicate person per channel), message with
- * external_id `outbox:<item_id>` so a replayed record_result finds the row
- * it already published. Returns null for non-message artifacts (no `body`
- * or `text` string) — a calendar payload is not a message.
+ * Publish one drained, message-shaped item into the social spine:
+ * sha-deduped body content, thread per (connection, target), participants =
+ * owner + resolved recipient (never a duplicate person per channel),
+ * external_id `outbox:<item_id>` so a replay finds the published row.
+ * Returns null for non-message artifacts (no `body`/`text` string).
  */
 function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
   const item = ctx.db
@@ -635,9 +623,8 @@ const REVOKE_GRANT: CommandDefinition = {
       .prepare("UPDATE outbox_grant SET revoked_at = ? WHERE grant_id = ?")
       .run(ctx.now, input.grant_id);
     ctx.wrote("outbox.grant", input.grant_id);
-    // Items the grant auto-approved but the executor has not yet drained
-    // park back to pending (#308): revoking the rule withdraws the
-    // consent it minted, not just future matches. Drained items are history.
+    // Undrained approved items park back to pending (#308): revoking the
+    // rule withdraws the consent it minted, not just future matches.
     const undrained = ctx.db
       .prepare(
         `SELECT item_id FROM outbox_item WHERE grant_id = ? AND status = 'approved'`
@@ -664,11 +651,10 @@ const REVOKE_GRANT: CommandDefinition = {
   },
 };
 
-// Approval staleness (#308): consent to THE THING is not consent to
-// any future moment. The executor calls this when an approved item has sat
-// undrained past the staleness window — the item parks back to pending and
-// the owner decides again with the delay in view. Owner-plane only, like
-// `record_result`: the executor rides the host's owner credential.
+// Approval staleness (#308): consent to THE THING is not consent to any
+// future moment. Called when an approved item has sat undrained past the
+// staleness window — it parks back to pending and the owner decides again
+// with the delay in view. Owner-plane only, like `record_result`.
 const REPARK: CommandDefinition = {
   name: "outbox.repark",
   ownerSchema: "outbox",
@@ -733,7 +719,7 @@ const REPARK: CommandDefinition = {
 /**
  * Owner-only commands enforced in the handler: a schema-wide `act` grant on
  * `outbox` lets an actor STAGE, never decide/drain — the asymmetry is the
- * consent story, structurally.
+ * consent story.
  */
 function requireOwner(ctx: HandlerCtx, refusal: string): void {
   if (ctx.identity.kind !== "owner-device") throw new Error(refusal);

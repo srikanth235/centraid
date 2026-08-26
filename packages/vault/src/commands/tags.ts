@@ -1,18 +1,8 @@
-// Generic tagging (core §01, #274's "folders-scheme tags" comment):
-// owner-driven, free-form labels on top of the same SKOS mechanism the
-// enrichment pipeline uses for classification (core_concept /
-// core_concept_scheme) and core_tag itself. Distinct from core.collection
-// (an ordered, owner-curated container — "Paris trip" holding specific
-// items) and from social.circle (an audience) — a tag is neither ordered
-// nor a container, just a cross-cutting label a projection can filter by.
-//
-// One well-known scheme per vault, `centraid:tags:v1`, found by its unique
-// `uri` rather than a hardcoded id — every projection that tags anything
-// shares the same scheme, same posture as attachments sharing one
-// core_content_item pool. The scheme reaches tasks, notes, documents and
-// media assets through that one mechanism — no new table, no second scheme
-// (#352): a `favorite` column or a parallel tags table would violate the
-// "one judgment, one mechanism" rule.
+// Generic tagging (core §01, #274, #352): owner-driven free-form labels over
+// the same SKOS mechanism the enrichment pipeline uses — one well-known scheme
+// per vault (`centraid:tags:v1`), so tasks/notes/documents/media share one
+// tagging mechanism. No `favorite` column, no parallel table: "one judgment,
+// one mechanism".
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -20,12 +10,8 @@ import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 const TAGS_SCHEME_URI = "centraid:tags:v1";
 
 /**
- * The entities a projection may tag: logical name → primary-key column,
- * plus whether the table has a `deleted_at` lifecycle to respect (tasks
- * don't soft-delete; notes/documents/media assets do). Same allow-list
- * posture as attachments.ts's SUBJECT_PK: the physical table is the logical
- * name with the dot underscored, so this doubles as a guard against an
- * unknown subject_type ever reaching raw SQL.
+ * Taggable entities: logical name → primary-key column, plus `live` when the
+ * table has a `deleted_at` lifecycle. Doubles as an allow-list guard on raw SQL.
  */
 const SUBJECT_PK: Record<string, { pk: string; live?: boolean }> = {
   "knowledge.note": { pk: "note_id", live: true },
@@ -34,7 +20,7 @@ const SUBJECT_PK: Record<string, { pk: string; live?: boolean }> = {
   "media.asset": { pk: "asset_id", live: true },
 };
 
-/** A tag's display label → its notation: lowercased, collapsed whitespace, trimmed. */
+/** Display label → notation: lowercased, whitespace collapsed, trimmed. */
 function notationOf(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/gu, " ");
 }
@@ -150,9 +136,8 @@ function tagItem(ctx: HandlerCtx): Record<string, unknown> {
   const schemeId = findOrCreateTagsScheme(ctx);
   const conceptId = findOrCreateConcept(ctx, schemeId, input.label);
 
-  // Idempotent: retagging with the same label just returns the existing
-  // edge (core_tag's UNIQUE(target_type, target_id, concept_id) — the same
-  // "attach again, no duplicate" posture as core.attach's dedup).
+  // Idempotent: same label returns the existing edge (core_tag's
+  // UNIQUE(target_type, target_id, concept_id), as in core.attach's dedup).
   const existingTag = ctx.db
     .prepare(
       "SELECT tag_id FROM core_tag WHERE target_type = ? AND target_id = ? AND concept_id = ?"
@@ -165,8 +150,7 @@ function tagItem(ctx: HandlerCtx): Record<string, unknown> {
   }
 
   // Owner-asserted: a party, no confidence — the exact inverse of an
-  // enrichment-derived tag (confidence, no party), per the derived-data
-  // contract enrich-publishers.ts documents.
+  // enrichment-derived tag (per the derived-data contract).
   const tagId = ctx.newId();
   ctx.db
     .prepare(

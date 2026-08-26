@@ -1,24 +1,11 @@
 /**
- * Photo search as a vault projection (#352): the FTS5 index
- * inside the vault matches titles/captions on core.content_item — the same
- * field media.update_asset writes a caption to (Lightbox.jsx's caption
- * field) — so the app never pulls the whole library to grep it in memory.
- * Unlike the library query's windowed recency slice, a search reaches the
- * WHOLE live library: only the matched content ids' assets get read, never
- * a table scan. Trashed photos can't match at all — a soft-deleted content
- * item falls out of the index, mirroring the library query's live-only
- * asset shelf.
+ * Photo search as a vault projection (#352): the in-vault FTS5 index matches
+ * titles/captions on core.content_item. Only matched content ids' live assets
+ * are read, never a table scan; trashed items fall out of the index.
  *
- * The row shape mirrors queries/library.js's `join()` output row-for-row
- * (place/tags/custody_state included, via the same queries/_shared.js
- * helpers — phase 3/4) so a hit can render straight into the existing grid
- * components without a second mapping layer. Album-NAME matching (typing
- * "vacation" to surface everything in the Vacation album) deliberately
- * stays a client-side concern in app.jsx — the album list is already fully
- * loaded, so there is no vault round trip worth adding for it.
- *
- * A consent denial is a first-class outcome, not an error: the UI renders
- * it as the "ask the owner for access" state.
+ * Row shape mirrors queries/library.js's `join()` output row-for-row so hits
+ * render straight into the existing grid; album-name matching stays
+ * client-side. Consent denial is a first-class outcome.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
@@ -75,9 +62,8 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     ];
     if (contentIds.length === 0) return { assets: [] };
 
-    // Only the matched content ids' LIVE assets — the search never widens
-    // into a table scan, and a trashed asset over matched bytes stays out
-    // (re-uploading it is the restore path, same as the library query).
+    // Only matched content ids' LIVE assets — a trashed asset stays out
+    // (re-upload is the restore path).
     const liveAssets = await ctx.vault.read({
       entity: "media.asset",
       where: [
@@ -141,8 +127,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
             name: place.name,
             lat: place.lat,
             lng: place.lng,
-            // Same shape the library projection ships — a search hit's place
-            // phrases exactly like the same photograph's does in the grid.
+            // Library projection shape: identical phrasing as the grid.
             kind: place.kind,
             gazetteer: place.gazetteer,
           }

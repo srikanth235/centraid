@@ -1,11 +1,5 @@
-// The "corrupt EXIF" trap (#721). blob.test.ts proves the happy
-// path once, inline; this file is the adversary — every shape a real spool
-// actually receives that is NOT a clean camera JPEG: a truncated upload, a
-// foreign byte-order marker, an offset a bit-flip sent past EOF, an entry
-// count no buffer could back, a dead-clock epoch-zero timestamp, and a JPEG
-// with no EXIF at all. `extractBlobMeta`'s own header promises degradation
-// to "a blob with no metadata", never a throw — this file is what holds it
-// to that promise, one corrupt shape at a time.
+// The "corrupt EXIF" trap (#721): holds `extractBlobMeta` to its promise —
+// degrade to "a blob with no metadata", never throw.
 
 import { describe, expect, test } from "vitest";
 
@@ -40,12 +34,8 @@ describe("adversarial EXIF parsing", () => {
   });
 
   test("an entry-count overflow never throws, and does not cost the real entry its data", () => {
-    // Unlike the variants above, the first (real, correctly laid out) IFD0
-    // entry survives an inflated entry COUNT — only the fictitious extras
-    // past it are ever attempted, and the bounds check stops the walk before
-    // any of those reads memory outside the buffer. The honest outcome here
-    // is "still parses", not "loses the tag" — a stricter and more useful
-    // guarantee than merely not crashing.
+    // The real first IFD0 entry survives the inflated count; only the
+    // fictitious extras past it are attempted, bounds-checked.
     let meta: ReturnType<typeof extractBlobMeta> | undefined;
     expect(() => {
       meta = extractBlobMeta(entryCountOverflowJpeg(), "image/jpeg");
@@ -55,15 +45,12 @@ describe("adversarial EXIF parsing", () => {
 
   test("an epoch-zero DateTimeOriginal is reported honestly, not swallowed as absence", () => {
     const meta = extractBlobMeta(epochZeroDateTimeJpeg(), "image/jpeg");
-    // A camera with a dead clock really does write this — the parser must
-    // not special-case it into "no data", the one thing genuine absence and
-    // a real epoch-zero timestamp must never look alike as.
+    // A dead camera clock really writes this — never special-cased into absence.
     expect(meta.captured_at).toBe("1970-01-01T00:00:00");
   });
 
   test("every corrupt variant stays throw-free with GPS retained AND stripped", () => {
-    // keepLocation walks a second code path (has_location / lat / lon) inside
-    // the same try/catch — both gate settings must survive every variant.
+    // keepLocation walks a second code path inside the same try/catch.
     for (const bytes of [
       validExifJpeg(),
       truncatedApp1Jpeg(),

@@ -6,12 +6,10 @@ import type { Page } from "@playwright/test";
 
 import { installHarnessControlTransport } from "./control-transport.js";
 
-// Docs north-star journey (byte-bearing, docs/apps/docs-scenarios.md, #781):
-// a member uploads a real file through the visible product control, the
-// bytes stage into the gateway CAS through the authed blob door, and both
-// the document row and its exact bytes survive a full PWA reload. The
-// harness gateway, vault, staging routes, and inline Docs bundle are all
-// real; only the iroh wire is adapted (control-transport.ts).
+// Docs north-star journey (#781, docs/apps/docs-scenarios.md): real upload
+// through the product control, bytes staged into the gateway CAS, row and
+// exact bytes survive a full PWA reload. Only the iroh wire is adapted
+// (control-transport.ts); everything else in the harness is real.
 
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
@@ -24,9 +22,9 @@ const DOC_BODY =
   "Lease renewal notes: the deposit clause moved to §4.\n\nKeep the signed copy with the 2026 tax folder.";
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
-  // Re-click until the palette actually opens: right after a reload the Search
-  // button can paint before its React listener attaches, and a click that
-  // lands in that window is silently lost.
+  // Re-click until the palette actually opens: after a reload the Search
+  // button can paint before its React listener attaches, and that click is
+  // silently lost.
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
     .poll(
@@ -128,14 +126,9 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
   test.setTimeout(180_000);
   await connectPwa(page);
   await openFirstParty(page, "Docs");
-  // The inline replica session bootstraps asynchronously after the app
-  // mounts; a write issued before that throws ReplicaRebootstrapRequired and
-  // the one-shot UI upload would land in the "could not read" failure arm.
-  // Prove write readiness first with a probe the vault deterministically
-  // REFUSES (an unstaged sha fails add_document's staged_or_owned
-  // precondition): any accepted status — the refusal, or the durable queue's
-  // own in-flight — means the intent rail is up without minting any document.
-  // Same readiness-poll shape as the pending-overlay journey's writes.
+  // The replica session bootstraps asynchronously; an early write throws
+  // ReplicaRebootstrapRequired. Probe with a write the vault REFUSES (unstaged
+  // sha): any accepted status means the intent rail is up, no doc minted.
   await expect
     .poll(
       () =>
@@ -155,9 +148,8 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
     )
     .not.toBe("replica-not-ready");
 
-  // Upload through the product's own control: the hidden file input the
-  // toolbar Upload button drives. Staging (sha preflight + authed POST to
-  // /_vault/blobs) and core.add_document both run for real.
+  // Through the product's own hidden file input; staging and add_document
+  // run for real.
   await page.locator('input[aria-label="Upload files"]').setInputFiles({
     name: DOC_TITLE,
     mimeType: "text/plain",
@@ -167,8 +159,7 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
     page.getByRole("button", { name: `Select ${DOC_TITLE}` })
   ).toBeVisible({ timeout: 30_000 });
 
-  // The document is a vault row, not browser state: it must come back after
-  // a full reload of the PWA shell.
+  // A vault row, not browser state: it must come back after a full reload.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
   await openFirstParty(page, "Docs");
@@ -176,9 +167,7 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
     page.getByRole("button", { name: `Select ${DOC_TITLE}` })
   ).toBeVisible({ timeout: 30_000 });
 
-  // Byte-bearing proof: the exact uploaded bytes come back down on demand
-  // through the authed product transport — CAS staging really deduplicated
-  // into a canonical content item this document points at.
+  // Byte proof: exact bytes return on demand via the authed transport.
   type DriveDoc = {
     title: string;
     content_uri?: string | null;
@@ -193,7 +182,7 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
   const uploaded = drive.documents.filter(
     (d: DriveDoc) => d.title === DOC_TITLE
   );
-  // Exactly one document: re-running the upload path must not have minted two.
+  // Re-running the upload path must not mint two.
   expect(uploaded).toHaveLength(1);
   expect(uploaded[0]!.byte_size).toBe(Buffer.byteLength(DOC_BODY, "utf8"));
   const contentUri = uploaded[0]!.content_uri;
@@ -202,7 +191,7 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
     if (uri.startsWith("data:")) {
       const response = await fetch(uri).catch(() => null);
       if (response) return response.text();
-      // The app CSP can refuse fetching data: URIs — decode inline instead.
+      // The app CSP can refuse data: URIs — decode inline.
       const comma = uri.indexOf(",");
       const meta = uri.slice(0, comma);
       const payload = uri.slice(comma + 1);
@@ -220,9 +209,7 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
   }, contentUri!);
   expect(roundTrip).toBe(DOC_BODY);
 
-  // Opening the document lands on the Quick look stage — Docs' only viewer
-  // since #819 deleted the reading route — and paints the exact body through
-  // the inline shell's authenticated blob primitive.
+  // Quick look — Docs' only viewer since #819 deleted the reading route.
   await page
     .getByRole("button", { name: `Preview ${DOC_TITLE}` })
     .first()

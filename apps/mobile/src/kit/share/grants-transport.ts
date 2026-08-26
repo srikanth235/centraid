@@ -4,27 +4,14 @@ import type {
   GrantWireCalls,
 } from "@centraid/blueprints/apps/_shared/grant-door";
 import type { GrantRequest } from "@centraid/blueprints/apps/_shared/grant-plane";
-// The NATIVE seat's transport into the grant plane (#825) —
-// `packages/server/src/routes/grant-routes.ts`, reached the same way
-// `lib/replica/links-transport.ts` reaches `/links`.
-//
-// This module is the whole of the seat difference. Native holds an authed base
-// URL and can call the gateway directly, where the web blueprint kit must go
-// through the shell's bridge; everything downstream of that — parsing, the
-// refusal contract, what "already shared" means, what a revoke says — is
-// `@centraid/blueprints/apps/_shared/grant-door`, shared with the web seat, so
-// the two seats cannot drift into two readings of one answer.
-//
-// Paths come from `@centraid/core/protocol`; no literal lives here.
+// The NATIVE seat's transport into the grant plane (#825); parsing and the
+// refusal contract stay in the shared grant-door. Paths come from
+// `@centraid/core/protocol`; no literal lives here.
 import { ROUTES, vaultGrantRevokePath } from "@centraid/core/protocol";
 
 import { apiHeaders } from "../../lib/gateway";
 
-/**
- * One grant-plane answer. A refused call rejects with the route's OWN message
- * so the sheet prints it verbatim — `subject_not_offerable` names the
- * capabilities that subject does answer, and no local paraphrase can.
- */
+/** Refusals reject with the route's own message, verbatim. */
 async function grantJson(response: Response, op: string): Promise<unknown> {
   const text = await response.text();
   let parsed: unknown;
@@ -77,9 +64,7 @@ export function nativeGrantCalls(baseUrl: string): GrantWireCalls {
     async forParty(partyId) {
       const op = "read what this person can reach";
       const response = await get(grantsUrl(baseUrl, { partyId }));
-      // `audience_not_found` is a real answer — this vault knows no such
-      // person — and letting it throw would make it arrive wearing "shares
-      // could not be read", which is a different sentence entirely.
+      // `audience_not_found` is a real answer, not a failure.
       if (response.status === 404) return undefined;
       return grantJson(response, op);
     },
@@ -88,9 +73,7 @@ export function nativeGrantCalls(baseUrl: string): GrantWireCalls {
       const response = await get(
         grantsUrl(baseUrl, { audienceKind: kind, audienceId: id })
       );
-      // An audience the vault has no record of is a real answer, distinct from
-      // an audience with nothing shared — so it comes back as `undefined`
-      // rather than as a thrown transport failure.
+      // An unknown audience is a real answer, so it comes back as `undefined`.
       if (response.status === 404) return undefined;
       return grantJson(response, op);
     },

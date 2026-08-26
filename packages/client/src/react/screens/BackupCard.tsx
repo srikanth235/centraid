@@ -33,15 +33,10 @@ import buttonCss from "../ui/Button.module.css";
 import styles from "./BackupCard.module.css";
 import gwStyles from "./GatewayScreen.module.css";
 
-// Gateway → Backups: the owner surface over the offsite backup engine. This
-// card now renders EXACTLY the five metrics of the §6 contract (#436)
-// via `BackupHealthMetrics` — Freshness, Recovery window, Privacy, Cost, Exit —
-// computed ONCE from `computeStorageMetrics`. Everything that is not one of
-// the five (the raw custody clocks, the manual back-up/verify triggers,
-// per-vault policy + the provider inventory) lives behind the collapsed
-// "Diagnostics" disclosure. The recovery-kit
-// gate stays on the primary surface: it is Privacy/Exit-adjacent and blocking-
-// critical — losing the seal key makes every offsite byte unrecoverable.
+// Gateway → Backups: renders EXACTLY the §6 contract's five metrics (#436)
+// via `BackupHealthMetrics`; everything else lives behind the collapsed
+// "Diagnostics" disclosure. The recovery-kit gate stays primary — losing the
+// seal key makes every offsite byte unrecoverable.
 
 export interface BackupVaultStatusDTO {
   vaultId: string;
@@ -51,7 +46,7 @@ export interface BackupVaultStatusDTO {
   lastWalDrainAt?: string;
   lastError?: string;
   running?: boolean;
-  /** Required on the v0 wire; optional here so a loading fixture can stay terse. */
+  /** Required on the v0 wire; optional here for terse fixtures. */
   policy?: BackupPolicyDTO;
   destination?: BackupDestinationDTO;
   pendingOffsite?: { count: number; bytes: number };
@@ -68,11 +63,8 @@ export interface BackupStatusDTO {
   configured: boolean;
   provider?: string;
   vaults: BackupVaultStatusDTO[];
-  /** Optional so a pre-wave-4 fixture / stub still type-checks; treated as
-   *  "never confirmed" when absent. */
   recoveryKit?: RecoveryKitStatusDTO;
-  /** Provider-declared retention + restore-egress promises (#436) — feeds
-   *  the Recovery-window and Exit metrics. Absent ⇒ those degrade to neutral. */
+  /** Provider retention + restore-egress promises (#436); absent ⇒ neutral. */
   home?: GatewayHomeDiscoveryDTO;
 }
 
@@ -80,8 +72,7 @@ export interface BackupCardProps {
   /** Live clock (parent ticks it) — drives the humanized ages. */
   now: number;
   loadStatus: () => Promise<BackupStatusDTO>;
-  /** Aggregate provider-reported usage (the Cost metric's source) — `null`
-   *  before the first poll. */
+  /** Provider-reported usage (Cost metric source); null before first poll. */
   loadUsage?: () => Promise<UsageInput | null>;
   streamCustody?: (onChange: () => void, signal: AbortSignal) => Promise<void>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
@@ -96,32 +87,28 @@ export interface BackupCardProps {
   onExportRecoveryKit?: (input: {
     password: string;
   }) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
-  /** Verifies the re-selected wrapped file, password, and explicit loss consent. */
+  /** Verifies the re-selected wrapped file, password, and loss consent. */
   onConfirmRecoveryKit: (input: {
     kit: unknown;
     password: string;
     lossConsent: true;
   }) => Promise<{ confirmedAt: number }>;
-  /** Optional setup destination for hosts that expose backup configuration. */
   onOpenSettings?: () => void;
-  /** The paired-device roster (#708 A2's device list) — absent only
-   *  when a caller has no device plane to offer (older embed). */
+  /** Paired-device roster (#708 A2); absent only when the caller has no
+   *  device plane to offer. */
   loadDevices?: () => Promise<CentraidGatewayDevice[]>;
   /**
-   * Restore from an offsite copy. Absent today on every host — restore is
-   * still a gateway-side/CLI recovery act (docs/recovery/backup-restore.md),
-   * not a wired client action — so the control renders disabled with that
-   * reason rather than being hidden (#708 A2: never buried).
+   * Restore from an offsite copy. Absent today everywhere — restore is a
+   * gateway-side/CLI act (docs/recovery/backup-restore.md) — so render
+   * disabled WITH THAT REASON, never hidden (#708 A2).
    */
   onRestore?: () => void;
   readOnly?: boolean;
 }
 
-/** Regular refresh cadence — matches useGatewayHealth's poll order of
- *  magnitude; a manual refresh also fires right after "Back up now". */
+/** Matches useGatewayHealth's poll magnitude. */
 const POLL_MS = 10_000;
-/** A short follow-up poll after triggering a run — local backups of a
- *  small vault often land well inside this window. */
+/** Follow-up poll after a run; small backups often land inside it. */
 const FOLLOWUP_MS = 1500;
 
 function ageLabel(iso: string | undefined, now: number): string {
@@ -225,10 +212,7 @@ export default function BackupCard({
   const [runError, setRunError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
 
-  // Guards the two async setState paths (the interval poll and the
-  // post-run follow-up) against firing after unmount — the follow-up in
-  // particular is a bare `setTimeout` outside the effect below, so it
-  // needs its own cleanup rather than relying on an effect's teardown.
+  // Guards poll + follow-up `setTimeout` against post-unmount setState.
   const mountedRef = useRef(true);
   const followupTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
@@ -251,7 +235,7 @@ export default function BackupCard({
           if (mountedRef.current) setUsage(u);
         })
         .catch(() => {
-          // Usage is best-effort — the Cost metric falls back to unmetered/zero.
+          // Best-effort — Cost falls back to unmetered/zero.
         });
     }
   }, [loadStatus, loadUsage]);
@@ -259,7 +243,7 @@ export default function BackupCard({
   useEffect(() => {
     mountedRef.current = true;
     refresh();
-    // Suspended while the tab is hidden and caught up on return (#659).
+    // Suspended while the tab is hidden, caught up on return (#659).
     const stop = startVisibilityTicker(refresh, POLL_MS);
     return () => {
       mountedRef.current = false;
@@ -273,7 +257,7 @@ export default function BackupCard({
     if (!streamCustody) return;
     const controller = new AbortController();
     void streamCustody(refresh, controller.signal).catch(() => {
-      // The regular poll remains the transport-independent fallback.
+      // The regular poll is the transport-independent fallback.
     });
     return () => controller.abort();
   }, [refresh, streamCustody]);
@@ -321,17 +305,11 @@ export default function BackupCard({
     (status?.configured ?? false) ||
     (status?.vaults.some((v) => v.lastBackupAt) ?? false);
   const clocks = metrics?.freshness.clocks;
-  // The headline the whole screen leads with (#708) — computed from
-  // the SAME `metrics` every other readout on this surface reads, so it can
-  // never disagree with the five-metric health block below it.
+  // The headline (#708) — same `metrics` source as every other readout.
   const lossSummary =
     status && metrics ? deriveLossSummary(status, metrics) : null;
 
-  // WHEN IT LAST RAN IS THE META, because that is the question the section
-  // answers at a glance; the provider is who holds it, which only matters once
-  // the answer to "when" is not "never". The newest of the vault clocks, so a
-  // gateway holding several vaults reports the freshest copy rather than an
-  // arbitrary first one.
+  // WHEN IT LAST RAN IS THE META; newest vault clock = freshest copy.
   const lastRunAt = (status?.vaults ?? [])
     .map((vault) => (vault.lastBackupAt ? Date.parse(vault.lastBackupAt) : NaN))
     .filter((at) => Number.isFinite(at))
@@ -348,11 +326,8 @@ export default function BackupCard({
 
   return (
     <>
-      {/* The section head sits ABOVE the container, over its own hairline
-          (binding layer v11): a head inside the border reads as a caption on
-          the card rather than as the name of this stretch of the page. When it
-          last ran is a fact, so it is stated in the meta; Manage is a verb
-          about this section, so it is the head's quiet action. */}
+      {/* Head sits ABOVE the container (binding layer v11); when it last ran
+          is a fact in the meta; Manage is this section's verb. */}
       <SectionBlock
         label="Backups"
         meta={headMeta}
@@ -366,15 +341,9 @@ export default function BackupCard({
             }
           : {})}
       />
-      {/* THE FOUR ANSWERS FIRST, then the diagnosis. When it last ran, how
-          often it runs, whether the copies can be opened, and who has one —
-          stated as rows before any panel, so a gateway with no backups reads as
-          four facts rather than as one sentence and a lot of border. */}
+      {/* THE FOUR ANSWERS FIRST, then the diagnosis. */}
       {status ? (
-        // `onRunNow` follows the same rule as the diagnostics disclosure
-        // below: a run verb needs a destination to run to. Withheld until one
-        // is configured, so the row states the fact ("No backup has ever run")
-        // without offering a button that can only come back with an error.
+        // A run verb needs a destination: withheld until configured.
         <BackupSummaryRows
           status={status}
           now={now}
@@ -420,11 +389,8 @@ export default function BackupCard({
                 />
               )}
 
-              {/* NOTHING TO DIAGNOSE UNTIL THERE IS A DESTINATION. Verify and
-                  Back up now both act on a configured backup; offered before
-                  one exists they can only fail, and a disclosure holding two
-                  buttons that are guaranteed to error is worse than no
-                  disclosure. The explainer above already says what to do. */}
+              {/* NOTHING TO DIAGNOSE UNTIL THERE IS A DESTINATION — offered
+                  earlier they can only fail. */}
               {readOnly || !status.configured ? null : (
                 <details
                   className={styles.diagnostics}
@@ -525,10 +491,8 @@ export default function BackupCard({
           ) : (
             <>
               {lossSummary ? <BackupLossSummary summary={lossSummary} /> : null}
-              {/* NO BARE "Not backed up offsite yet." LINE HERE. The summary
-                  rows above say it four ways, each with the consequence
-                  attached; a bare repeat costs a line and carries no
-                  information. */}
+              {/* NO BARE "Not backed up offsite yet." LINE — the summary rows
+                  above say it four ways, each with the consequence attached. */}
               {readOnly ? null : (
                 <RecoveryKitGate
                   configured={status.configured}

@@ -1,24 +1,9 @@
-// Coalesce a burst of "state changed, re-project" calls into at most one run
-// per animation frame (#659).
-//
-// The assistant stream fires an event per token. Re-projecting the WHOLE
-// transcript per event and pushing it into React synchronously would make a
-// 900-token answer do 900 full projections and 900 renders — work the display
-// can never show, since it only paints ~60 times a second. Batching bounds that
-// to one projection per frame while keeping the last write visible: the batched
-// callback reads live state when it runs, so nothing is ever dropped, only
-// skipped ahead of.
-//
-// `flush` exists for the moments where a frame of latency is wrong: a terminal
-// event (turn finished, thread switched) should land before the next paint, and
-// tests want a deterministic seam instead of a real frame.
+// At most one run per animation frame (#659); `flush` covers terminal events
+// and tests.
 
 export interface FrameBatch {
-  /** Ask for a run on the next frame; repeated calls before it coalesce. */
   schedule: () => void;
-  /** Run now if one is pending, cancelling the scheduled frame. */
   flush: () => void;
-  /** Drop a pending run without executing it (teardown). */
   cancel: () => void;
 }
 
@@ -27,10 +12,6 @@ export interface FrameScheduler {
   cancel: (handle: number) => void;
 }
 
-/**
- * The platform scheduler: `requestAnimationFrame` where it exists, and a
- * timer everywhere else (jsdom, a hidden tab whose rAF is suspended, SSR).
- */
 export function defaultFrameScheduler(): FrameScheduler {
   if (typeof requestAnimationFrame === "function") {
     return {
@@ -44,7 +25,6 @@ export function defaultFrameScheduler(): FrameScheduler {
   };
 }
 
-/** Batch calls to `run` to at most one per frame. */
 export function createFrameBatch(
   run: () => void,
   scheduler: FrameScheduler = defaultFrameScheduler()

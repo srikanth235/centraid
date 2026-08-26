@@ -11,15 +11,10 @@ import { planNotifications } from "./notifications-plan";
 import type { MobileNotificationsPull } from "./notifications-plan";
 
 const DELIVERED_KEYS = "centraid:delivered-reminder-keys:v1";
-/** Birthdays this device has already SCHEDULED. Separate from the reminder
- *  ledger because these are future-dated: the entry is written when the OS
- *  accepts the trigger, not when the banner appears (#834). */
+/** Written when the OS accepts the future-dated trigger, not on banner display (#834). */
 const SCHEDULED_BIRTHDAY_KEYS = "centraid:scheduled-birthday-keys:v1";
 const DELIVERED_NOTIFICATION_KEYS = "centraid:delivered-notification-keys:v1";
-/**
- * Separate from the ledger on purpose: a *quiet* Notifications seeds an empty ledger,
- * and an empty ledger must not read as "never seeded" on the next pass.
- */
+/** A quiet pull seeds an empty ledger; empty must not read as "never seeded". */
 const SEEDED_NOTIFICATION_LEDGER =
   "centraid:delivered-notification-keys:seeded:v1";
 
@@ -103,10 +98,7 @@ export async function installNotificationCategories(): Promise<void> {
   ]);
 }
 
-/**
- * Notifications itself is the contextual owner gesture for notification consent.
- * Boot/background paths only inspect existing permission and never prompt.
- */
+/** The OS prompt is the one contextual consent gesture; boot/background paths never prompt. */
 export async function requestNotificationPermission(): Promise<boolean> {
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
@@ -114,14 +106,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return (await Notifications.requestPermissionsAsync()).granted;
 }
 
-/**
- * Compose decision/high-severity Notifications notifications only after local fetch.
- *
- * The decisions (seed vs notify, foreground vs background) live in
- * `planNotifications`; this function is the I/O shell. `appState` is
- * injected so the rule is testable without RN's native module — RN's own
- * `AppState` satisfies the shape, and is the default.
- */
+/** I/O shell — seed/notify and foreground/background decisions live in `planNotifications`; `appState` injected for testability. */
 export async function syncNotifications(
   baseUrl: string,
   vaultId: string,
@@ -150,7 +135,7 @@ export async function syncNotifications(
           (value): value is string => typeof value === "string"
         );
     } catch {
-      // Device bookkeeping is disposable; the authenticated Notifications pull is truth.
+      // Device bookkeeping is disposable; the authenticated pull is truth.
     }
   }
   const plan = planNotifications({
@@ -188,16 +173,11 @@ export async function syncNotifications(
 }
 
 /**
- * Schedule the inner-circle birthday notifications (#834).
- *
- * REMINDER DELIVERY IS THE PHONE'S ALONE, and this is the one notification day
- * context earns. The decision — who, when, and what it says — lives entirely
- * in `planBirthdayNotifications`; this is the I/O shell, and the people it
- * plans over are read by the caller off the agenda replica (`day-context.ts`)
- * so nothing here reaches the network.
- *
- * Future-dated triggers, so the ledger records what has been SCHEDULED rather
- * than what has been shown; a re-run therefore never doubles a banner.
+ * Birthday delivery is the phone's alone. Planning lives entirely in
+ * `planBirthdayNotifications` (people come from the agenda replica — nothing
+ * here reaches the network); this is the I/O shell. Triggers are future-dated,
+ * so the ledger records what has been SCHEDULED and a re-run never doubles a
+ * banner (#834).
  */
 export async function scheduleBirthdayNotifications(
   people: readonly BirthdayPerson[],
@@ -241,8 +221,7 @@ export async function scheduleBirthdayNotifications(
     )
   );
   for (const row of plan) scheduled.add(row.key);
-  // Bound the ledger: a key names one person in one year, so the oldest
-  // entries are birthdays long past.
+  // A key names one person-year, so the oldest entries are birthdays long past.
   await AsyncStorage.setItem(
     SCHEDULED_BIRTHDAY_KEYS,
     JSON.stringify([...scheduled].slice(-2_000))
@@ -250,10 +229,7 @@ export async function scheduleBirthdayNotifications(
   return plan.length;
 }
 
-/**
- * After a content-free remote wake, pull due rows over the authenticated local
- * channel and schedule content-bearing OS notifications on the device.
- */
+/** After a content-free wake, pull due rows over the authenticated channel and schedule OS notifications. */
 export async function syncDueNotifications(
   baseUrl: string,
   vaultId: string
@@ -275,7 +251,7 @@ export async function syncDueNotifications(
           (value): value is string => typeof value === "string"
         );
     } catch {
-      // Delivery bookkeeping is a bounded cache; due state is canonical.
+      // Bounded cache; due state is canonical.
     }
   }
   const delivered = new Set(deliveredValues);
@@ -291,8 +267,8 @@ export async function syncDueNotifications(
     )
   );
   for (const reminder of pending) delivered.add(reminder.key);
-  // Bound device bookkeeping; stale duplicates after a very long horizon are
-  // harmless because completed/cancelled rows no longer appear as due.
+  // Stale duplicates after a long horizon are harmless: completed/cancelled
+  // rows never reappear as due.
   await AsyncStorage.setItem(
     DELIVERED_KEYS,
     JSON.stringify([...delivered].slice(-2_000))

@@ -1,20 +1,7 @@
 /*
- * The ⌘K palette's empty-state source (#708 §A, last item): before any
- * query, the palette shows RECENTS (recently opened/edited vault objects)
- * rather than a blank void. Reuses the same replica session as
- * `paletteEntitySearch.ts` — `session.read` instead of `session.search`,
- * ordered by each entity's edit-time column instead of matched against a
- * query term — and the same `EntityTarget` catalog, so the two sources can
- * never disagree about which app owns which entity/kind/icon.
- *
- * `schedule.task` carries no `recentField` (see `paletteEntitySearch.ts`) and
- * is excluded here rather than approximated — a member's tasks simply don't
- * appear in Recents until the schema grows an edit-time column.
- *
- * Suggestion chips (also part of the empty state) are derived from the same
- * fetch — one label per app, in recency order — rather than a second
- * round-trip: "recently touched" objects are exactly the vocabulary a member
- * is likeliest to search for next.
+ * The ⌘K palette's empty-state source (#708 §A): RECENTS before any query.
+ * Reuses `paletteEntitySearch.ts`'s session + EntityTarget catalog so the two
+ * sources never disagree; `schedule.task` (no recentField) is excluded.
  */
 
 import {
@@ -27,11 +14,11 @@ import type { EntityTarget, PaletteEntityHit } from "./paletteEntitySearch.js";
 export type PaletteRecentHit = PaletteEntityHit;
 
 export interface PaletteRecents {
-  /** Cached recents, most-recently-touched first (`[]` until a fetch settles). */
+  /** Cached recents, most-recent first (`[]` until a fetch settles). */
   items: () => PaletteRecentHit[];
   /** One example query per app, drawn from the same cache. */
   suggestions: () => string[];
-  /** Fetch once (idempotent past the first call, like the search sources' cache). */
+  /** Fetch once; idempotent past the first call. */
   ensure: () => void;
   reset: () => void;
   setOnResults: (fn: (() => void) | null) => void;
@@ -101,8 +88,7 @@ export async function fetchPaletteRecents(): Promise<PaletteRecentHit[]> {
     .map(({ recentAt: _recentAt, ...hit }) => hit);
 }
 
-/** One label per app (in the order recents already carries — most recent
- *  first), capped — the vault's own vocabulary as example queries. */
+/** One label per app (recency order), capped — examples from vault vocabulary. */
 export function suggestionsFromRecents(
   hits: readonly PaletteRecentHit[]
 ): string[] {

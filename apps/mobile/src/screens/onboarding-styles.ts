@@ -1,26 +1,17 @@
-// Palette and stylesheet for the first-run onboarding flow (screens/Onboarding).
-// Split out for the same reason onboarding-art.tsx is: the flow file has to stay
-// under the repo file-size limit, and a StyleSheet has no logic worth keeping
-// next to the steps it dresses.
-//
-// Onboarding is always dark, independent of the OS theme — Settings' own
-// ColorSwatchRow is the surface that follows the OS scheme. "Dark-fixed" means
-// we pin the *scheme*, not that we opt out of the token contract (#686): the
-// palette below is the resolved dark theme, so onboarding drifts with the
-// design system instead of against it.
+// Onboarding palette/styles (screens/Onboarding). Always dark: "dark-fixed"
+// pins the *scheme* (#686).
 
 import { StyleSheet } from "react-native";
 
 import { borders, family, radii, t } from "../kit/theme";
-// Straight from the pure resolver, not the theme barrel: this runs at module
-// scope, and the barrel drags in React/RN-only surface that screens' tests mock.
+// Pure resolver, not barrel: runs at module scope; barrel drags RN-only
+// surfaces that tests mock.
 import { resolveTheme } from "../kit/theme/resolve";
 
 const dark = resolveTheme("dark").colors;
 
-// #686 waiver: the one value the token contract has no answer for.
-// `viewfinder` must be true black — it is the hole the camera preview renders
-// into, and any tinted ground would show as a halo around the video frame.
+// #686 waiver (no token answer exists): `viewfinder` must be true black —
+// tint would halo the camera preview.
 const WAIVED = {
   viewfinder: "#000",
 } as const;
@@ -42,14 +33,12 @@ export const C = {
 export const AVATAR = 52;
 const SWATCH = 34;
 
-// Named because the flow's hero-fitting arithmetic has to subtract exactly what
-// the layout spends (see Onboarding). Keeping the numbers here means the
-// stylesheet and that arithmetic can never drift apart.
+// Hero-fitting arithmetic (see Onboarding) subtracts this.
 /** `styles.scroll` padding. */
 export const PAD_TOP = 20;
 export const PAD_BOTTOM = 34;
 export const PAD_H = 26;
-/** `styles.hero` paddingVertical — counted on both sides by the caller. */
+/** `styles.hero` paddingVertical; caller counts both sides. */
 export const HERO_GAP = 18;
 
 export const styles = StyleSheet.create({
@@ -153,8 +142,7 @@ export const styles = StyleSheet.create({
     fontSize: t("body").fontSize,
   },
   safe: { backgroundColor: C.bg, flex: 1 },
-  /** The pairing step's primary action — deliberately taller and heavier than
-   *  `primary`, because it is the way in rather than one option among two. */
+  /** Pairing step's primary action — taller than `primary`. */
   scanBtn: {
     alignItems: "center",
     backgroundColor: C.brand,

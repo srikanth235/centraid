@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-// The leaf-route data pattern: each screen fetches its data over IPC, shows a
-// loading line, then the screen (or an error line). The effect tracks mount so
-// a navigation mid-flight drops the in-flight result rather than setting state
-// on an unmounted screen.
-
 export type AsyncState<T> =
   | { status: "loading" }
   | { status: "error"; error: string }
@@ -18,14 +13,8 @@ function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
 }
 
 export interface AsyncDataOptions {
-  /**
-   * Keep the last settled data on screen while a deps change refetches,
-   * instead of reporting `loading`. Routes whose deps double as a refresh
-   * doorbell (Notifications: SSE bumps a tick) need this — reporting `loading` swaps
-   * the whole screen for a spinner, UNMOUNTING it and discarding whatever the
-   * owner was in the middle of. Off by default: a route whose deps change
-   * means "show something else" still wants its loading line.
-   */
+  /** Keep settled data visible while a deps-change refetch runs, not a
+   *  spinner swap (SSE tick doorbells). Off by default. */
   keepPreviousData?: boolean;
 }
 
@@ -34,9 +23,7 @@ export function useAsyncData<T>(
   deps: readonly unknown[] = EMPTY_DEPS,
   options: AsyncDataOptions = {}
 ): AsyncState<T> {
-  // The settled result is stamped with the deps it was fetched for; a deps
-  // change therefore reads as `loading` during render, without an effect having
-  // to push a synchronous `setState({status:'loading'})` first.
+  // Stamped with fetch-time deps; a change reads as loading during render.
   const [settled, setSettled] = useState<{
     deps: readonly unknown[];
     state: AsyncState<T>;
@@ -45,9 +32,7 @@ export function useAsyncData<T>(
   const depsRef = useRef(deps);
   const depsKey = JSON.stringify(deps);
 
-  // Refresh the values after every commit. The fetching effect only depends on
-  // the stable, value-based dependency signature, so inline loader callbacks
-  // do not refetch merely because rendering allocated a new function.
+  // Refreshed every commit; fetching keys on the value signature only.
   useEffect(() => {
     loadRef.current = load;
     depsRef.current = deps;

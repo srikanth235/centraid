@@ -1,18 +1,5 @@
-// Centraid — shared design system.
-// Single source of truth for colors, typography, spacing, density,
-// tile-finishes, icons, and built-in app metadata.
-//
-// Three direct lowerings of the one contract:
-//   - Desktop/web shell — CSS vars via `toCss()`, injected at boot.
-//   - Blueprint apps    — CSS vars via `toBlueprintCss()`, served to the
-//                         sandboxed app surface.
-//   - Expo mobile       — concrete typed values via `toNativeTheme()`; its
-//                         adapter only maps Expo font names and RN tracking.
-//
-// There is no copied theme or platform-specific token registry. A value is
-// either canonical here, or it is a renderer concern at one adapter boundary.
-//
-// Canonical design document: DESIGN.md (repo root).
+// Centraid — shared design system: single source of truth for colors,
+// typography, spacing, density, tiles, icons, app metadata (DESIGN.md).
 
 export {
   APP_HUES,
@@ -58,16 +45,13 @@ export {
   STAGE_LINE,
 } from "./themes";
 
-// Contrast/oklab maths lives behind the `@centraid/design/oklab` subpath, NOT
-// this barrel: it is measurement machinery, not a token, and `packages/client`
-// re-exports this index — pulling one more module through it trips the
-// 100-module barrel ceiling. See react/shell/routes/builder/
-// BuilderCode.tokens.test.ts for the consumer.
+// Contrast/oklab maths lives behind `@centraid/design/oklab`, NOT this barrel:
+// client re-exports this index, and one more module trips the barrel ceiling
+// (BuilderCode.tokens.test.ts).
 export type { Theme, ThemeName, ThemePreset } from "./themes";
 
-// The product mark, which is INK: the shell spends no hue, so every colour on
-// screen provably belongs to an app. `BRAND_DARK` is the same mark on the
-// dark ramp; both are exported from the themes barrel above.
+// The product mark is INK: the shell spends no hue, so every colour
+// provably belongs to an app.
 
 export {
   DEFAULT_DENSITY_TIER,
@@ -159,9 +143,8 @@ export type {
 export { nativeButtonStyle } from "./recipes/native";
 export type { NativeButtonStyle } from "./recipes/native";
 
-// Blueprint-app ("field notebook") token layer — a separate design
-// language for the sandboxed blueprint apps, not a variant of `toCss()`'s
-// desktop theme. See src/blueprint.ts for the rationale.
+// Blueprint-app ("field notebook") token layer — a separate design language;
+// see src/blueprint.ts.
 export { toBlueprintCss } from "./blueprint";
 export { toNativeTheme } from "./native";
 export type {

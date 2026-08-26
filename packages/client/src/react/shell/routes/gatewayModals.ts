@@ -1,24 +1,17 @@
 import type { CentraidRedeemGatewayPairingResult } from "../../../centraid-api.js";
 
-// Gateway I/O for the "Add gateway" flow (#376), mirroring vaultModals.ts's
-// split: chrome (GatewayModal / GatewayPairingForm) is React, the gateway I/O
-// lives here so it's plain-async-function testable. Three credential shapes,
-// one result type — GatewayPairingForm builds the input from whatever the user
-// filled in and doesn't need to know the wire details. A one-time ticket is
-// the only connection shape; it is redeemed over iroh.
+// Gateway I/O for "Add gateway" (#376); a redeemed iroh ticket is the only shape.
 
 export interface GatewayConnectSuccess {
   ok: true;
-  /** Vault name the pairing resolved, for "Connected to X" copy. */
   label: string;
   gatewayId: string;
   vaultId?: string;
-  /** Every vault enrolled by the redeemed ticket. */
   vaultIds: string[];
 }
 export interface GatewayConnectFailure {
   ok: false;
-  /** Already run through `friendlyGatewayError` — safe to show as-is. */
+  /** Safe to show as-is. */
   message: string;
 }
 export type GatewayConnectResult =
@@ -32,9 +25,6 @@ export type GatewayPairingInput = {
   rememberDevice?: boolean;
 };
 
-// Copy for `redeemGatewayPairing`'s stable error codes (centraid-api.d.ts).
-// Anything not in this map (or the raw `addGateway` throw path) falls back to
-// the server-supplied message, which is itself written to be shown as-is.
 const FRIENDLY_ERRORS: Record<string, string> = {
   invalid_ticket:
     "That pairing code isn't valid — double-check you copied the whole thing.",
@@ -44,7 +34,6 @@ const FRIENDLY_ERRORS: Record<string, string> = {
   bad_response: "The host sent back something unexpected — try again.",
 };
 
-/** Map a stable error code to friendly copy; falls back to the raw message. */
 export function friendlyGatewayError(error: string, message: string): string {
   return FRIENDLY_ERRORS[error] ?? message;
 }
@@ -65,13 +54,7 @@ function foldRedeemResult(
   return { message: friendlyGatewayError(res.error, res.message), ok: false };
 }
 
-/**
- * Redeem a pairing ticket — the only way to add a gateway (#505;
- * there is no manual URL add). The ceremony enrolls this device's iroh
- * identity and switches the active gateway + vault as a side effect. Never
- * throws — the `redeemGatewayPairing` IPC already resolves failures as
- * `{ok:false}`.
- */
+/** The only add-gateway path (#505) — redeem a pairing ticket. Never throws. */
 export async function connectGateway(
   input: GatewayPairingInput
 ): Promise<GatewayConnectResult> {

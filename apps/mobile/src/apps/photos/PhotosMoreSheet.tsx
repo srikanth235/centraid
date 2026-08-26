@@ -1,18 +1,6 @@
-// The More sheet (Photos v4 handoff §3.1, §H).
-//
-// The band is capped at five destinations, so the shelves that do not fit live
-// here: today that is Backup alone — every browsing shelf (Favorites, Places,
-// Duplicates, Trash) is a section of Collections instead. Import is the one
-// handoff row this sheet still does NOT carry — see the comment on
-// `PHOTOS_MORE_ROWS` (photos-band.ts) for why a missing row beats a lying one.
-//
-// **Tile size** does NOT belong here. It lives in the Library's own header
-// menu (`photos-library-menu.ts`, drawn as an anchored card by
-// `kit/components/AnchoredMenu.tsx`), opened from the round control beside
-// Select on `PhotosHome`'s header — beside the other things that shape what
-// the grid shows (the filter), which this sheet has no opinion about at all.
-// This sheet has exactly one job: Backup, a cross-stack link that menu has no
-// reason to carry.
+// The More sheet (Photos v4 handoff §3.1, §H): the band caps at five
+// destinations, so only Backup lives here. NO import row (see photos-band.ts);
+// tile size belongs to the Library header menu, not this sheet.
 
 import React, { useMemo } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
@@ -32,18 +20,9 @@ export interface PhotosMoreSheetProps {
 }
 
 /*
- * NO META MAP HERE.
- *
- * This file derives no live counts. Favourites, trash, duplicate clusters,
- * places and shared are sections of Collections, where the counts are stated
- * beside the same shelves, over the shelf's own covers. Reading the timeline,
- * the place table and the share target here to repeat those mono figures would
- * be two places that have to agree about what a duplicate cluster is.
- *
- * Backup, the one row left, deliberately carries no meta: the figure it would
- * show comes from a network round trip and a durable-queue read this sheet has
- * no business making, and a placeholder number is the lie the meta map existed
- * to avoid.
+ * NO META MAP HERE: no live counts derived in this file. Collections states
+ * counts beside the same shelves; Backup deliberately carries no meta — its
+ * figure needs a network round trip this sheet must not make.
  */
 
 export default function PhotosMoreSheet({

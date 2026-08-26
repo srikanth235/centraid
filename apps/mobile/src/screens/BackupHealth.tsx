@@ -1,36 +1,13 @@
 // THE BACKUP SURFACE — a FRAME screen, beside Phone storage (#712).
-//
-// NOTHING PHOTOS-SHAPED BELONGS HERE:
-//
-//   * the chrome is the Settings back-chevron header, the same pattern
-//     `PhoneStorage.tsx` uses one row above it — never `PhotosScreen`'s
-//     claimed band.
-//   * no `useAutomaticPhotoBackup`. The sweep that ENQUEUES newly-taken
-//     camera-roll photographs belongs to Photos and runs there
-//     (`PhotosHome`); mounting it here too would be a second sweep over one
-//     queue. This screen carries the frame's half: the DURABLE QUEUE's own
-//     state, and the policy that governs whether it may drain at all.
-//   * no tile-legend for Photos' custody mark — that is a sentence about a
-//     mark in the Photos grid, and `kit`/`screens` may not import an app
-//     (`scripts/check-import-boundaries.ts`). The custody vocabulary is
-//     taught here in the frame's own words: the rollup's buckets are named
-//     and explained under "Where your originals are".
-//
-// Photos reaches it by deep link — the More sheet's "Backup" row resolves to
-// `{ screen: "Settings", params: { screen: "BackupHealth" } }` — so there is
-// exactly one Backup surface on the phone, not one per app.
-//
-// EVERY NUMBER ON THIS SCREEN IS READ, NEVER INVENTED (#712). Two sources,
-// and the screen is explicit about which is speaking:
-//
-//   * the DURABLE QUEUE on this phone (`kit/transfer/transfer-queue.ts`) —
-//     what this device is still carrying, and what refused. Fail-closed: an
-//     unreadable ledger is its own verdict, never "healthy".
-//   * the gateway's CUSTODY ROLLUP (`kit/storage/custody-status.ts`, over
-//     `blob.custody_rollup`) — where the originals are, and how much of the
-//     local tier is provably safe to release. Until the sweep has run there is
-//     nothing to report, and this screen says "not yet computed" rather than
-//     printing zeroes as facts.
+// NOTHING PHOTOS-SHAPED BELONGS HERE: no `useAutomaticPhotoBackup` (the
+// enqueue sweep belongs to Photos; mounting it here too would double-sweep one
+// queue) and no Photos custody-mark legend (`kit`/`screens` may not import an
+// app — scripts/check-import-boundaries.ts). Reached by deep link from the
+// More sheet: exactly ONE Backup surface on the phone.
+// EVERY NUMBER IS READ, NEVER INVENTED (#712): the DURABLE QUEUE
+// (kit/transfer/transfer-queue.ts — fail-closed; an unreadable ledger is its
+// own verdict, never "healthy") and the gateway CUSTODY ROLLUP
+// (kit/storage/custody-status.ts — "not yet computed" until the sweep runs).
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -96,10 +73,8 @@ const EMPTY_QUEUE: TransferQueueCounts = {
   readable: true,
 };
 
-// A one-shot read of an EXTERNAL system, kept outside the component so the
-// effect that calls it stays a plain external read rather than an in-body state
-// update — the same reason `readPendingUploads` lived out here before it moved
-// into the frame's `readTransferQueue`.
+// One-shot external read, kept outside the component so the effect stays a
+// plain read rather than an in-body state update.
 function readQueueInto(
   gatewayBase: string,
   apply: (counts: TransferQueueCounts) => void
@@ -117,8 +92,8 @@ export default function BackupHealth({
   const [policy, setPolicy] = useState<TransferPolicy>(DEFAULT_TRANSFER_POLICY);
   const [consent, setConsent] = useState<BackupConsentRecord>();
   const [queue, setQueue] = useState<TransferQueueCounts>(EMPTY_QUEUE);
-  // `undefined` while nothing has been read; `null` when the read FAILED. The
-  // two are different sentences and neither is a zeroed fold.
+  // `undefined` while nothing has been read; `null` when the read FAILED —
+  // different sentences, neither a zeroed fold.
   const [custody, setCustody] = useState<CustodyStatus | null>();
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string>();
   const [backingUp, setBackingUp] = useState(false);
@@ -154,8 +129,8 @@ export default function BackupHealth({
     if (!online) return;
     void readCustodyStatus(gatewayBase)
       .then(setCustody)
-      // A failed read is `null`, which the surface states as "could not be
-      // read" — never a fold of zeroes, which would read as an empty library.
+      // A failed read is `null`, stated as "could not be read" — never a
+      // fold of zeroes, which would read as an empty library.
       .catch(() => setCustody(null));
   }, [gatewayBase, online]);
   useEffect(reread, [reread]);
@@ -174,10 +149,8 @@ export default function BackupHealth({
     ]);
   };
 
-  // THE ONE COMMIT ON THIS SURFACE (§18). It drains the durable queue through
-  // the frame's own lock and policy gate — the same drain a foreground event
-  // schedules — and reports the exact count, because a control the member
-  // pressed owes them an answer (fallible-action contract).
+  // THE ONE COMMIT ON THIS SURFACE (§18): drains the durable queue through the
+  // frame's own lock + policy gate and reports the exact count.
   const backUpNow = (): void => {
     setBackingUp(true);
     void drainUploadQueueNow(session)
@@ -256,8 +229,8 @@ export default function BackupHealth({
           </View>
         ) : null}
         {/* THE VERDICT (#712): complete · pending · failing · unreadable.
-            Only `failing` takes the `net` rule, and it takes it as an EDGE and
-            ink — never a fill, never a red plate (§18). */}
+            Only `failing` takes the `net` rule — as an EDGE, never a fill
+            or a red plate (§18). */}
         <View
           style={[
             styles.hero,
@@ -294,11 +267,9 @@ export default function BackupHealth({
           <Text style={[styles.meta, { color: colors.textSoft }]}>
             {verdict.detail}
           </Text>
-          {/* EXACTLY ONE FILLED CONTROL ON THE SURFACE (§18), and which one it
-              is depends on what the member has been asked. While the consent
-              question is still open THAT is the commit, and "Back up now" is
-              outlined beside it; once it is answered, this is the only thing
-              on the screen that moves bytes, so this is the filled one. */}
+          {/* EXACTLY ONE FILLED CONTROL ON THE SURFACE (§18); while the
+              consent question is open THAT is the commit, and once answered
+              this is the only thing that moves bytes. */}
           <View style={styles.actions}>
             <Pressable
               accessibilityLabel="Back up now"
@@ -337,9 +308,7 @@ export default function BackupHealth({
           ) : null}
         </View>
 
-        {/* THE CONSENT MOMENT, or the state it left behind. A device that has
-            not answered sees the question; a device that has sees what it is
-            doing and how to stop. Never both. */}
+        {/* THE CONSENT MOMENT, or the state it left behind. Never both. */}
         {consented ? (
           <View
             style={[
@@ -358,8 +327,8 @@ export default function BackupHealth({
               this device drains that queue under the rules below.
             </Text>
             <View style={styles.actions}>
-              {/* Outlined, never filled: stopping is not the commit this
-                  surface is for, and it is not destructive either (§18). */}
+              {/* Outlined, never filled: stopping is not this surface's
+                  commit, and not destructive either (§18). */}
               <Pressable
                 accessibilityLabel={STOP_BACKING_UP_ACTION}
                 accessibilityRole="button"
@@ -395,7 +364,7 @@ export default function BackupHealth({
                   styles.fact,
                   { borderBottomColor: colors.line },
                   // The egress fact takes a 2px `net` rule on its leading edge
-                  // and nothing else — never a fill, never a red dot.
+                  // and nothing else — never a fill.
                   fact.net
                     ? { borderLeftColor: colors.net, ...styles.factFlagged }
                     : null,
@@ -453,14 +422,9 @@ export default function BackupHealth({
         </Text>
         {TRANSFER_POLICY_SWITCHES.map((rule) => {
           const inert = rule.inert(policy);
-          // THE REFUSAL GRAMMAR, RENDERED (#712). Four of these five
-          // switches go inert depending on the other four, and until now the
-          // screen said nothing about why — a member who turned on "Wi-Fi
-          // only" watched two rules below it fade with no account given, which
-          // is the half of docs/blueprint-seats.md "Shared engines" 5 that
-          // nothing checked. `transfer-policy.ts` owns the words (they are
-          // part of the switch's own shape, so a sixth rule cannot arrive
-          // without one); this only places them.
+          // THE REFUSAL GRAMMAR, RENDERED (#712): four of the five switches go
+          // inert depending on the other four; transfer-policy.ts owns the
+          // inertReason words, this only places them.
           const inertReason = inert ? rule.inertReason(policy) : undefined;
           return (
             <View

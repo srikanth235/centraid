@@ -1,19 +1,6 @@
-// The Docs read layer (#821) — the drive, projected from this device's
-// consent-shaped replica, exactly the entity set the `docs` manifest's read
-// scopes grant (packages/blueprints/apps/docs/app.json).
-//
-// Same shape as `usePeople`: one `useReplicaQuery` per entity, one combined
-// honesty state, one memoized pure projection (`docs-projection.ts`). Two
-// deliberate splits in the honesty accounting:
-//
-//   * SHARES ARE DECORATION, NEVER A FAILED DRIVE. Docs' `share.*`/`core.party`
-//     scopes are newer than the app, so on an existing vault they can be
-//     parked for approval; a denied share read must not take the drive down.
-//     Their errors resolve to `shared_with: null` on every row ("we cannot
-//     see" — a different fact from "shared with nobody"), mirroring the web
-//     query's own graceful denial (queries/_shared.ts).
-//   * CUSTODY is decoration on the same argument: a row without a custody
-//     answer renders no mark rather than blocking the drive.
+// Docs read layer (#821): the drive from this device's replica, same shape
+// as `usePeople`. SHARES ARE DECORATION, NEVER A FAILED DRIVE — denied share
+// reads resolve to `shared_with: null` per row; CUSTODY likewise decorates.
 
 import { useCallback, useMemo } from "react";
 
@@ -48,7 +35,6 @@ export interface UseDocsResult extends DriveProjection {
   connection: ReplicaQueryState["connection"];
   error?: string;
   unavailableReason?: string;
-  /** The gateway is out of reach — the replica's own verdict, never invented. */
   offline: boolean;
   refresh: () => Promise<void>;
 }
@@ -59,7 +45,7 @@ export function useDocs(): UseDocsResult {
   const tags = useDocsEntity("core.tag");
   const concepts = useDocsEntity("core.concept");
   const schemes = useDocsEntity("core.concept_scheme");
-  // Decoration reads — see the header for why these never fail the drive.
+  // Decoration reads — never fail the drive; see header.
   const custody = useDocsEntity("blob.custody_state");
   const grants = useDocsEntity("share.circle_grant");
   const circles = useDocsEntity("social.circle");
@@ -119,8 +105,8 @@ export function useDocs(): UseDocsResult {
     ]
   );
 
-  // A plain function — react-compiler memoizes the hook result; a manual
-  // dependency list over eleven query objects would only get stale.
+  // Plain function: react-compiler memoizes the hook result; a manual
+  // dependency list over eleven query objects would only go stale.
   const refresh = async (): Promise<void> => {
     await Promise.all([
       documents.refresh(),
@@ -150,13 +136,7 @@ export function useDocs(): UseDocsResult {
   };
 }
 
-/**
- * One document, off the same replica projection — reads are list-shaped on
- * this seat (there is no per-document query in the manifest), so a single
- * document is a selector over the drive. The sibling's document screens
- * (Read, Viewer, Versions, Properties) should take this rather than re-run
- * their own joins.
- */
+/** One document = a selector over the list-shaped drive; siblings take this. */
 export interface UseDocumentResult {
   doc: MobileDriveDoc | undefined;
   loading: boolean;
@@ -182,12 +162,7 @@ export function useDocument(documentId: string): UseDocumentResult {
   };
 }
 
-/**
- * One write door for every Docs action — `session.write` plus the kit's
- * outcome surfacing (executed / parked→Approvals / queued / refused), exactly
- * the TasksHome shape. Returns the result on a continuable outcome and
- * `undefined` otherwise, so callers can chain optimistic follow-ups.
- */
+/** Sole Docs write door (`session.write` + outcome surfacing); result only on continuable outcomes. */
 export type DocsWrite = (
   action: string,
   input: Record<string, ReplicaValue>

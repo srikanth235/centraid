@@ -1,9 +1,4 @@
-// The consent / explanation panel (v9 §8–9, #765).
-//
-// Eyebrow, title, body (optionally rule-quoted), a fact list on a fixed key
-// column, and at most two actions — one filled and one outlined. `tone="net"`
-// is the error state on every one of the six ops routes: a net BORDER, never
-// a net fill.
+// Consent/explanation panel (v9 §8–9, #765). `tone="net"`: net BORDER, never a net fill.
 import type { JSX } from "react";
 
 import type {
@@ -18,14 +13,10 @@ import { cx } from "./cx.js";
 
 import styles from "./PanelBlock.module.css";
 
-/** A fact is `key` (the displayed word, in the fixed column) + `value`; the
- *  `mono` and `net` registers are documented in the shared contract. */
 export type PanelFact = PanelFactData;
 
-/** The one promoted fact — display type over a qualifier line. */
 export type PanelFigure = PanelFigureData;
 
-/** The panel's own verb: the shared data plus this kit's click handler. */
 export interface PanelAction extends PanelActionData {
   onClick: () => void;
 }
@@ -34,23 +25,16 @@ export interface PanelBlockProps {
   eyebrow?: string;
   title?: string;
   body?: string;
-  /** Draw the body as a quotation — indented behind a rule. Staged writes are
-   *  quoted because the words are somebody else's. */
+  /** Draw the body as a quotation behind a rule. */
   quote?: boolean;
-  /**
-   * Promote ONE fact to display type. A page whose whole question is "did this
-   * cost $2 or $200" answers it in the type scale or it does not answer it.
-   * At most one per view, on the same grounds as the one filled commit.
-   */
+  /** Promote ONE fact to display type. */
   figure?: PanelFigure;
   facts?: readonly PanelFact[];
-  /** Edge tone. `net` and `seam` colour the border and the eyebrow, never a
-   *  fill — see `PanelTone` for what each one means. */
+  /** Edge tone; `net`/`seam` never fill. */
   tone?: PanelTone;
-  /** Drop the 62ch reading cap — a panel that is the whole view. */
+  /** Drop the 62ch reading cap. */
   wide?: boolean;
-  /** The panel's own action. Filled ONLY when this panel carries the view's
-   *  one commit; outlined otherwise, and outlined in `--net` when dangerous. */
+  /** Filled only for the view's one commit. */
   action?: PanelAction;
   action2?: PanelAction;
   className?: string;
@@ -106,10 +90,7 @@ export default function PanelBlock({
                 data-net={fact.net ? "true" : undefined}
               >
                 {fact.value}
-                {/* The caveat belongs to THIS number, so it sits under it — a
-                    footnote at the foot of the panel is a caveat the reader has
-                    to match back up to the figure it qualifies. It leaves the
-                    numeric register: a caveat is a sentence, not a value. */}
+                {/* The caveat belongs to THIS number. */}
                 {fact.note ? (
                   <span className={styles.factNote}>{fact.note}</span>
                 ) : null}

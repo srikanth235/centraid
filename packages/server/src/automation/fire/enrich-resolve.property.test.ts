@@ -1,24 +1,10 @@
 /*
- * Adversarial properties over the policy cascade's resolver (#839).
- *
- * `enrich-resolve.ts` states four things in prose that nothing checked over
- * arbitrary input: most-specific-wins is per FIELD, a rule may never move the
- * egress ceiling, an unstated policy fails closed, and a mis-keyed chain is
- * ignored rather than trusted. Each of those is a safety claim — the ceiling
- * one is the whole safety argument of #807 Wave 2 — so each gets a property
- * with an INDEPENDENT oracle here rather than an example that re-walks the
- * implementation's own loop.
- *
- * WHAT THE CONTRACT DOES AND DOES NOT PROMISE ABOUT ORDER. The header says
- * `rules` is "the chain for ONE capability, least-specific first". So the fold
- * IS order-sensitive by design (last non-null write wins) and this file pins
- * that direction explicitly — a reversed chain must resolve to the other
- * answer, not to the same one. What it is order-INSENSITIVE about is foreign
- * capabilities: a rule naming another capability changes nothing from any
- * position. Specificity is carried by ARRAY POSITION alone: `rule.scope` is
- * never read by the resolver, so a chain whose scope types disagree with its
- * order still folds by order. That is pinned below too, because it is the
- * sharp edge a caller assembling a chain by hand would cut themselves on.
+ * Adversarial properties for the policy resolver (#839): each safety claim in
+ * `enrich-resolve.ts`'s prose — per-field most-specific-wins, never raising the
+ * egress ceiling, fail-closed on unstated policy, mis-keyed chains ignored —
+ * is checked against an INDEPENDENT oracle, not a re-walk of the implementation.
+ * Order: the fold is last-non-null-write over ARRAY POSITION (`rule.scope` is
+ * never read); foreign capabilities change nothing from any position.
  */
 
 import { describe, expect, test } from "vitest";
@@ -51,9 +37,8 @@ import type { EnrichEgressCeiling } from "./enrich-resolve.js";
 const CAPABILITIES = ["faces", "captions", "trips"] as const;
 
 /**
- * The ceiling ladder, least to most reaching. Derived here from the vault's own
- * class list rather than from `EGRESS_RANK` (which is module-private): the
- * oracle must not be able to inherit the implementation's mistake.
+ * Ceiling ladder from the vault's class list, NOT `EGRESS_RANK` (module-private):
+ * the oracle must not inherit the implementation's mistake.
  */
 const CEILING_LADDER: readonly EnrichEgressCeiling[] = [
   "off",
@@ -90,8 +75,7 @@ const arbTier: fc.Arbitrary<EnrichTier | undefined> = fc.constantFrom<
 >(...ENRICH_TIERS, undefined);
 
 /**
- * The independent oracle: fold the chain the way the module DOC describes,
- * written from the prose rather than from the code — last non-null write per
+ * Independent oracle: fold per the module DOC's prose — last non-null write per
  * field, foreign capabilities skipped, base from the tier alone.
  */
 function expectedFold(
@@ -148,8 +132,7 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("a rule that pins ONE field leaves the other two on the level below it", () => {
-      // The per-FIELD claim's teeth: a collection that only pins a profile must
-      // keep the vault's enabled/trigger answers, not reset them to the base.
+      // A profile-only pin keeps the vault's enabled/trigger answers, not resets.
       fc.assert(
         fc.property(
           fc.constantFrom(...ENRICH_TRIGGERS),
@@ -246,8 +229,8 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("a profile-pinning rule cannot widen what the vault's tier allows", () => {
-      // The named attack from the module header: a member pins a provider-backed
-      // profile onto one album. The profile CHANGES; what it may reach does not.
+      // The named attack: a provider-backed profile pinned onto one album —
+      // the profile CHANGES; what it may reach does not.
       fc.assert(
         fc.property(
           fc.string({ minLength: 1, maxLength: 16 }),
@@ -282,9 +265,8 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("egressWithinCeiling is monotone in both arguments over the ladder", () => {
-      // The ceiling is only ever a narrowing: raising the ceiling can only ever
-      // admit more, and raising the class can only ever admit less. A rank table
-      // that stopped being a total order would break exactly here.
+      // Narrowing only: a higher ceiling admits more, a higher class admits less;
+      // a rank table that stopped being a total order would break exactly here.
       fc.assert(
         fc.property(
           fc.nat({ max: CEILING_LADDER.length - 1 }),
@@ -300,9 +282,8 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
             ] as EnrichEgressClass;
             const lower = CEILING_LADDER[lo] as EnrichEgressCeiling;
             const higher = CEILING_LADDER[hi] as EnrichEgressCeiling;
-            // Monotone: admitted under the lower ceiling ⇒ admitted under the
-            // higher one. Stated as an implication so the assertion is
-            // unconditional and the counterexample prints both ceilings.
+            // Stated as an implication so the assertion stays unconditional and
+            // the counterexample prints both ceilings.
             expect(
               !egressWithinCeiling(egress, lower) ||
                 egressWithinCeiling(egress, higher),
@@ -349,8 +330,8 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("an unreadable tier WITH rules falls back to the most conservative base", () => {
-      // Header contract: disabled, `on-device` ceiling. Rules may then enable
-      // the capability — never past a device-local engine.
+      // Header contract: disabled, `on-device` ceiling; rules may enable,
+      // never past a device-local engine.
       fc.assert(
         fc.property(
           fc.array(arbRule(fc.constant("faces")), {
@@ -373,8 +354,8 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("tier `off` disables regardless of any rule that tries to enable", () => {
-      // `off` is the absence of a lane: rules may flip `enabled`, but the
-      // ceiling stays `off`, so nothing the gate can run fits inside it.
+      // `off` is the absence of a lane: rules may flip `enabled`, but nothing
+      // the gate can run fits an `off` ceiling.
       fc.assert(
         fc.property(
           fc.array(arbRule(fc.constant("faces")), { maxLength: 6 }),
@@ -510,10 +491,9 @@ describe("enrichment policy cascade — resolver properties (#839 G10)", () => {
     });
 
     test("specificity is ARRAY POSITION, not `rule.scope` — the resolver never reads the scope", () => {
-      // A caller that hands over a chain sorted most-specific-first gets the
-      // LEAST specific answer. Pinned deliberately: the store guarantees the
-      // order (`readEnrichPolicyRuleChain`), the resolver trusts it, and this is
-      // the seam where a hand-assembled chain silently inverts.
+      // Pinned: the store guarantees chain order (`readEnrichPolicyRuleChain`),
+      // the resolver trusts it — a hand-assembled most-specific-first chain
+      // silently inverts here.
       fc.assert(
         fc.property(
           fc.string({ minLength: 1, maxLength: 8 }),

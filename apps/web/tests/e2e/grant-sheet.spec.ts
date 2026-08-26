@@ -6,22 +6,13 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// The GRANT SHEET in a real browser (#825).
-//
-// This spec proves the kit ALONE, with no app around it: it mounts the shipped
-// component itself, over the shipped design tokens and the
-// shipped `kit.css`, with the grant plane stubbed at the ONE seam the kit was
-// built to take: its `door`. That is deliberately the whole point of the seam.
-// What a browser proves here that a jsdom suite cannot: the sheet's real
-// `<dialog>` paints, the tokens resolve, the segmented capability picker and
-// the outlined destructive control render as the recipes say, and the
-// destructive confirm reads in its own words.
-//
-// The capture is the UI-impact evidence (#825).
+// The GRANT SHEET in a real browser (#825): proves the kit ALONE — the
+// shipped component over shipped tokens + `kit.css`, grant plane stubbed
+// at its ONE seam (`door`). The capture is the UI-impact evidence (#825).
 
 declare global {
   interface Window {
-    /** What the harness collected from the sheet's one feedback channel. */
+    /** What the harness collected from the sheet's feedback channel. */
     __grantStatus: string[];
   }
 }
@@ -37,10 +28,8 @@ const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-grant-sheet.png";
 
 /**
- * The harness entry. It imports the SHIPPED sheet — nothing is reimplemented
- * here — and hands it a door whose answers cover the three states the sheet
- * has to tell apart: a delivered grant, one still waiting on an invitation,
- * and one addressed to no vault at all.
+ * The harness entry: imports the SHIPPED sheet, with a door covering the
+ * three delivery states.
  */
 const ENTRY = `
 import { createElement } from "react";
@@ -115,7 +104,7 @@ createRoot(document.getElementById("root")).render(
 );
 `;
 
-/** Bundle the shipped sheet, its CSS module included, for the browser. */
+/** Bundle the shipped sheet, CSS module included, for the browser. */
 async function bundleSheet(): Promise<{ js: string; css: string }> {
   const result = await build({
     stdin: {
@@ -126,9 +115,7 @@ async function bundleSheet(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Never written (`write: false`), but esbuild needs a path to name the
-    // sheet's CSS-module output against — the class map and the stylesheet are
-    // two halves of one build.
+    // Never written, but esbuild needs a path to name the CSS-module output against.
     outdir: path.join(here, ".grant-sheet-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -166,12 +153,9 @@ test("the grant sheet draws audience-first over the shipped tokens", async ({
   await expect(page.getByText("What", { exact: true })).toBeVisible();
   await expect(page.getByText("Access", { exact: true })).toBeVisible();
 
-  // `edit` is drawn because the declared registry answers it for a document.
   await expect(page.getByRole("button", { name: "Can edit" })).toBeVisible();
 
-  // Three delivery states, three sentences — absent is never empty. And the
-  // reach line reports the channel the read actually answered: a person this
-  // vault reaches is never told sharing sends an invitation first.
+  // Three delivery states, three sentences — absent is never empty.
   await expect(page.getByText("Delivered")).toBeVisible();
   await expect(page.getByText("Invitation pending")).toBeVisible();
   await expect(page.getByText("Not sent yet")).toBeVisible();
@@ -184,22 +168,20 @@ test("the grant sheet draws audience-first over the shipped tokens", async ({
     fullPage: true,
   });
 
-  // Revoking asks first, in the honest best-effort words: a removal crossing
-  // to someone else's vault is REQUESTED, never guaranteed.
+  // Revoking asks first: a cross-vault removal is REQUESTED, never guaranteed.
   await page.getByRole("button", { name: "Revoke" }).first().click();
   await expect(page.getByText("Stop sharing with Priya?")).toBeVisible();
   await expect(
     page.getByText("their vault is asked to remove its copy", { exact: false })
   ).toBeVisible();
 
-  // Destructive is OUTLINED in `--net`; the filled primary is gone from this
-  // view entirely, so nothing in it competes with the consequence.
+  // Destructive is OUTLINED in `--net`; nothing filled competes with it here.
   const confirm = page.getByRole("button", { name: "Revoke", exact: true });
   await expect(confirm).toHaveClass(/destructive/u);
   await expect(page.locator("button.kit-btn.primary")).toHaveCount(0);
 
   await confirm.click();
-  // The route's derived sentence reaches the host's status line verbatim.
+  // The route's derived sentence reaches the status line verbatim.
   await expect
     .poll(() => page.evaluate(() => window.__grantStatus))
     .toStrictEqual([

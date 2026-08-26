@@ -4642,6 +4642,202 @@ Files changed (full inventory):
 - `packages/vault/src/share/read-closure.ts`
 - `tests/comment-density-ratchet.json`
 
+
+### Wave 8 — compression sweep, 160 untouched over-cap files + completion pass (2026-08-26)
+
+Eight worker sub-agents on ownership-disjoint 20-file batches (worklist: the
+1,114 eligible over-cap files, 160 heaviest never touched by waves 1–7), then a
+four-worker completion pass over the 43 files whose first-pass scanners
+under-read the official metric — completion workers measured with the repo's
+own `measureFile`, eliminating drift. All 43 landed ≤14% officially.
+
+| figure | after Wave 7 | after Wave 8 |
+| --- | --- | --- |
+| global character share | 13.87% | **13.28%** |
+| global line density | 7.74% | **7.36%** |
+| files over 15% cap | 1,199 | **1,040** |
+
+Verification (all green before commit):
+
+```
+node scripts/comment-only-diff.mjs HEAD   # 160 changed file(s) — all comment-only
+bun run format && bun run format:check    # proof re-run green
+bun run lint                              # clean
+node scripts/check-comment-density-ratchet.mjs --write && node scripts/check-comment-density-ratchet.mjs
+# ok — no pin rose, no unpinned file over cap
+```
+
+Allowlist rulings (0 accepted). Nominated but unnecessary: catalog.ts,
+scaffold-types.ts, ChipsBlock.tsx, gateway-paths.ts (all landed under cap on
+the official metric after the completion pass).
+
+Residues above 13% are honest floors per worker adjudication (prohibitions,
+issue-referenced constraints, protected pragmas, tiny-file arithmetic).
+
+Files changed (full inventory):
+
+- `apps/desktop/src/main/gateway-paths.ts`
+- `apps/desktop/src/main/gateway-secrets.ts`
+- `apps/desktop/src/main/gateway-store-core.ts`
+- `apps/desktop/tests/e2e/docs-drive.spec.ts`
+- `apps/desktop/tests/e2e/settings-enrichment.spec.ts`
+- `apps/mobile/src/apps/agenda/useAgenda.ts`
+- `apps/mobile/src/apps/docs/useDocs.ts`
+- `apps/mobile/src/apps/people/PeopleKit.tsx`
+- `apps/mobile/src/apps/people/PersonGrants.test.tsx`
+- `apps/mobile/src/apps/people/usePeople.ts`
+- `apps/mobile/src/apps/photos/DuplicatesShelf.tsx`
+- `apps/mobile/src/apps/photos/PhotoShareChoice.tsx`
+- `apps/mobile/src/apps/photos/PhotosMoreSheet.test.tsx`
+- `apps/mobile/src/apps/photos/PhotosMoreSheet.tsx`
+- `apps/mobile/src/apps/photos/ScrubRail.tsx`
+- `apps/mobile/src/apps/photos/photos-vaults.ts`
+- `apps/mobile/src/apps/photos/search-hits.test.ts`
+- `apps/mobile/src/apps/photos/tile-overlays.test.ts`
+- `apps/mobile/src/apps/tasks/TasksHome.tsx`
+- `apps/mobile/src/apps/tasks/useTasks.ts`
+- `apps/mobile/src/kit/components/ConsentGate.tsx`
+- `apps/mobile/src/kit/components/HealthLine.tsx`
+- `apps/mobile/src/kit/components/OutOfRoom.tsx`
+- `apps/mobile/src/kit/hooks/share-ingest.ts`
+- `apps/mobile/src/kit/share/grants-transport.ts`
+- `apps/mobile/src/kit/theme/appearance.ts`
+- `apps/mobile/src/kit/transfer/transfer-policy.test.ts`
+- `apps/mobile/src/lib/coalesce.ts`
+- `apps/mobile/src/lib/notifications-core.ts`
+- `apps/mobile/src/lib/notifications-plan.ts`
+- `apps/mobile/src/lib/upload/enqueue.ts`
+- `apps/mobile/src/lib/upload/expo-native.ts`
+- `apps/mobile/src/lib/upload/gateway-client.ts`
+- `apps/mobile/src/lib/upload/media-producer.ts`
+- `apps/mobile/src/screens/BackupHealth.tsx`
+- `apps/mobile/src/screens/Onboarding.tsx`
+- `apps/mobile/src/screens/devices/useDevices.ts`
+- `apps/mobile/src/screens/home/SearchOverlay.test.tsx`
+- `apps/mobile/src/screens/onboarding-styles.ts`
+- `apps/mobile/src/screens/scan-consent.test.ts`
+- `apps/mobile/src/screens/settings/BandSection.tsx`
+- `apps/web/tests/e2e/accessibility.spec.ts`
+- `apps/web/tests/e2e/docs-drive.spec.ts`
+- `apps/web/tests/e2e/docs-grant.spec.ts`
+- `apps/web/tests/e2e/grant-sheet.spec.ts`
+- `apps/web/tests/e2e/people-grants.spec.ts`
+- `packages/blueprints/apps/agenda/components/DayContext.tsx`
+- `packages/blueprints/apps/agenda/queries/search.ts`
+- `packages/blueprints/apps/docs/components/QuickLookText.tsx`
+- `packages/blueprints/apps/docs/components/StorageRoute.tsx`
+- `packages/blueprints/apps/docs/components/ViewToggle.tsx`
+- `packages/blueprints/apps/locker/Chrome.tsx`
+- `packages/blueprints/apps/locker/queries/items.ts`
+- `packages/blueprints/apps/notes/components/Library.tsx`
+- `packages/blueprints/apps/people/Chrome.tsx`
+- `packages/blueprints/apps/people/components/MergeRoute.tsx`
+- `packages/blueprints/apps/people/components/TouchRoute.tsx`
+- `packages/blueprints/apps/photos/actions/upload.ts`
+- `packages/blueprints/apps/photos/components/EmptyTrash.tsx`
+- `packages/blueprints/apps/photos/components/EnrichmentConsent.tsx`
+- `packages/blueprints/apps/photos/components/People.test.tsx`
+- `packages/blueprints/apps/photos/components/Permission.tsx`
+- `packages/blueprints/apps/photos/components/ShelfStrip.tsx`
+- `packages/blueprints/apps/photos/components/Slideshow.tsx`
+- `packages/blueprints/apps/photos/nav-rail.test.ts`
+- `packages/blueprints/apps/photos/picker.tsx`
+- `packages/blueprints/apps/photos/queries/search.ts`
+- `packages/blueprints/apps/tasks/app-inline.tsx`
+- `packages/blueprints/apps/tasks/components/Screens.tsx`
+- `packages/blueprints/apps/tasks/components/TaskRow.tsx`
+- `packages/blueprints/apps/tasks/queries/board.ts`
+- `packages/blueprints/src/app-meta.ts`
+- `packages/blueprints/src/photos-layout.test.ts`
+- `packages/blueprints/src/photos-readonly-album.test.ts`
+- `packages/blueprints/src/photos-tile.test.ts`
+- `packages/blueprints/src/scaffold-types.ts`
+- `packages/blueprints/src/token-purity.test.ts`
+- `packages/client/src/code-highlight.ts`
+- `packages/client/src/conversation-routes.ts`
+- `packages/client/src/gateway-client-push.ts`
+- `packages/client/src/react/screens/AtlasRelationsTab.test.tsx`
+- `packages/client/src/react/screens/BackupCard.tsx`
+- `packages/client/src/react/screens/DeviceOwnerGroup.tsx`
+- `packages/client/src/react/screens/DeviceRow.tsx`
+- `packages/client/src/react/screens/FirstRunGate.tsx`
+- `packages/client/src/react/screens/SettingsProfileScreen.tsx`
+- `packages/client/src/react/screens/assistantDrafts.ts`
+- `packages/client/src/react/shell/CapabilityWall.tsx`
+- `packages/client/src/react/shell/appearance.test.ts`
+- `packages/client/src/react/shell/frameBatch.ts`
+- `packages/client/src/react/shell/routes/PairDeviceModal.tsx`
+- `packages/client/src/react/shell/routes/ScopePicker.tsx`
+- `packages/client/src/react/shell/routes/automationCompileData.ts`
+- `packages/client/src/react/shell/routes/gatewayModals.ts`
+- `packages/client/src/react/shell/routes/paletteConversationSearch.ts`
+- `packages/client/src/react/shell/routes/paletteRecents.ts`
+- `packages/client/src/react/shell/routes/visibility-ticker.ts`
+- `packages/client/src/react/shell/useAppearance.ts`
+- `packages/client/src/react/shell/useAsyncData.ts`
+- `packages/client/src/react/ui/ChipsBlock.tsx`
+- `packages/client/src/react/ui/PanelBlock.tsx`
+- `packages/client/src/replica/windowed-bootstrap.ts`
+- `packages/core/src/time/recurrence-collapse.ts`
+- `packages/design/src/blocks/index.ts`
+- `packages/design/src/identity.test.ts`
+- `packages/design/src/index.ts`
+- `packages/design/src/kit-css.test.ts`
+- `packages/design/src/oklab.test.ts`
+- `packages/design/src/themes/themes.test.ts`
+- `packages/model-runtime/src/gazetteer.test.ts`
+- `packages/server/src/acp/backends/acp/backend.model-usage.test.ts`
+- `packages/server/src/acp/backends/acp/probe-capabilities.ts`
+- `packages/server/src/acp/low-priority.ts`
+- `packages/server/src/automation/fire/cron-match.ts`
+- `packages/server/src/automation/fire/cursor-engine-support.ts`
+- `packages/server/src/automation/fire/enrich-engine-selection.test.ts`
+- `packages/server/src/automation/fire/enrich-gate.test.ts`
+- `packages/server/src/automation/fire/enrich-resolve.property.test.ts`
+- `packages/server/src/automation/handler/ctx.ts`
+- `packages/server/src/automation/manifest/ref.ts`
+- `packages/server/src/backup/backup-cas-reconciliation.ts`
+- `packages/server/src/cli/doctor.ts`
+- `packages/server/src/cli/recover-admin.ts`
+- `packages/server/src/engine/conversation/provider-egress-consent.ts`
+- `packages/server/src/engine/conversation/store-items.test.ts`
+- `packages/server/src/engine/data/log-store.ts`
+- `packages/server/src/engine/http/turn-replay.ts`
+- `packages/server/src/engine/pricing/catalog.ts`
+- `packages/server/src/engine/pricing/filter.ts`
+- `packages/server/src/preview/thumbhash.ts`
+- `packages/server/src/routes/commons-recovery-routes.ts`
+- `packages/server/src/routes/enrich-profiles-routes.ts`
+- `packages/server/src/routes/logs-routes.ts`
+- `packages/server/src/routes/sse-cap.ts`
+- `packages/server/src/routes/storage-local-routes.ts`
+- `packages/server/src/serve/enrollment-store.ts`
+- `packages/server/src/serve/experimental-features.ts`
+- `packages/server/src/serve/gateway-performance.ts`
+- `packages/server/src/serve/group-commit-queue.ts`
+- `packages/server/src/serve/notifications-events.ts`
+- `packages/server/src/serve/peer-give.test-fixtures.ts`
+- `packages/server/src/serve/peer-link-tickets.ts`
+- `packages/server/src/serve/pricing-warmer.ts`
+- `packages/server/src/serve/share-effect-executor.ts`
+- `packages/server/src/serve/share-outbox-obligation.contract.test.ts`
+- `packages/server/src/serve/vault-directory-store.ts`
+- `packages/tunnel/src/peer-budget.ts`
+- `packages/tunnel/src/peer-connection.ts`
+- `packages/tunnel/src/wire-conformance.contract.test.ts`
+- `packages/tunnel/src/wire-properties.test.ts`
+- `packages/vault/src/blob/disk-full.integration.test.ts`
+- `packages/vault/src/blob/exif-adversarial.test.ts`
+- `packages/vault/src/commands/annotations.ts`
+- `packages/vault/src/commands/entity-revisions.ts`
+- `packages/vault/src/commands/outbox.ts`
+- `packages/vault/src/commands/tags.ts`
+- `packages/vault/src/enrich/similarity.ts`
+- `packages/vault/src/gateway/portability.ts`
+- `packages/vault/src/grant/subject-registry.ts`
+- `packages/vault/src/install-memory.ts`
+- `tests/comment-density-ratchet.json`
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->

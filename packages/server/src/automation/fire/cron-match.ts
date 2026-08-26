@@ -1,29 +1,8 @@
 /**
- * Minute-resolution cron matcher for the in-process scheduler (#149).
- *
- * Salvaged from the deleted OS scheduler's field expansion. Supports the
- * numeric 5-field grammar the automation scaffolder emits and the manifest
- * validator accepts:
- *
- *   - `*` / `?`     → any value (`?` is treated as `*`)
- *   - `N`           → a single value
- *   - `A-B`         → an inclusive range
- *   - `A,B,C`       → a list (each part is itself any of these forms)
- *   - `*\/N`        → every Nth value across the field's full range
- *   - `A-B/N`       → every Nth value across a sub-range
- *
- * Standard Vixie day-of-month / day-of-week OR semantics: when both fields
- * are restricted, the date matches if EITHER matches; when one is `*`, only
- * the other constrains. `dow` accepts `0` and `7` for Sunday.
- *
- * Any field the matcher can't read (e.g. weekday names like `MON`) yields a
- * non-match for that field, so an unparseable expression simply never fires
- * rather than firing at the wrong time — fail-safe by construction.
- *
- * Matching is against wall-clock fields in `timeZone` when provided (IANA),
- * otherwise the *host local* wall clock (launchd/systemd inheritance, issue
- * #570). DST gap minutes never exist as wall-clock fields → they never match
- * (skip). Overlap minutes are deduped by wall-clock key in the cursor reader.
+ * Numeric 5-field cron matcher (#149): wildcards, values, ranges, lists, steps.
+ * Vixie dom/dow OR semantics when both fields restricted; unparseable fields
+ * never match — fail-safe.
+ * Wall-clock + DST semantics: docs/cron-timezone.md.
  */
 import { wallClockFields } from "../cron-timezone.js";
 

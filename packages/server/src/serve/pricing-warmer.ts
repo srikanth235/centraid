@@ -1,17 +1,5 @@
-/*
- * Pricing catalog warmer (#445).
- *
- * The app-engine pricing seam ships a committed LiteLLM snapshot so costing
- * works offline from process start. This warmer overlays a FRESH table: it
- * fetches LiteLLM's canonical catalog, filters it through the shared
- * `filterLiteLLM` (identical to the snapshot's build), and hands it to
- * `setPricingCatalog`. The filtered table is cached to disk beside
- * `model-catalog.json` so a restart is instantly current without a refetch,
- * mirroring the storage-usage poller's TTL + stale-while-revalidate contract.
- *
- * Failure is always non-fatal: a refused/oversized/timed-out fetch keeps the
- * last-good disk table, or the bundled snapshot — a price is never invented.
- */
+// Pricing warmer (#445): fetch LiteLLM, filter, overlay the snapshot,
+// cache to disk — failure non-fatal, never invent a price.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -21,10 +9,9 @@ import type { PricingCatalog } from "@centraid/server/engine";
 
 const LITELLM_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
-/** Refresh the disk table once it's older than this. Coarse by design. */
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
-/** Upstream is ~1.6 MB; cap well above that but bounded so a bad URL can't OOM. */
+/** ~1.6 MB upstream; bounded so a bad URL can't OOM. */
 const MAX_BYTES = 8 * 1024 * 1024;
 
 interface DiskCache {
@@ -38,7 +25,7 @@ interface WarmerLogger {
 }
 
 export interface PricingWarmerOptions {
-  /** Disk cache path (`model-pricing.json`). Omit for in-memory-only refresh. */
+  /** Disk cache path; omit for memory-only refresh. */
   cacheFile?: string;
   ttlMs?: number;
   now?: () => number;
@@ -63,15 +50,7 @@ export class PricingWarmer {
     if (opts.logger) this.logger = opts.logger;
   }
 
-  /**
-   * Boot: seed the in-memory catalog from a fresh-enough disk cache, then kick
-   * a background refresh when the cache is stale/absent. Never throws.
-   *
-   * The live network refresh is gated on a configured `cacheFile`: a host
-   * that pins a persistence path opts into fresh pricing; a warmer with
-   * nowhere to cache stands on the bundled snapshot and never touches the
-   * network, so tests that build a gateway make no external calls.
-   */
+  /** Seed from fresh-enough disk cache, background-refresh stale; never throws; no `cacheFile` → no network. */
   async boot(): Promise<void> {
     if (!this.cacheFile) return;
     const disk = await this.readDisk();
@@ -84,7 +63,7 @@ export class PricingWarmer {
     }
   }
 
-  /** Fetch + filter + overlay + persist. Concurrent calls collapse to one. */
+  /** Fetch + filter + overlay + persist; collapses concurrent calls. */
   async refresh(): Promise<void> {
     if (this.refreshing) return;
     this.refreshing = true;
@@ -100,7 +79,7 @@ export class PricingWarmer {
       });
       this.logger?.info(`pricing catalog refreshed: ${count} models`);
     } catch (error) {
-      // Keep last-good (disk table) or the bundled snapshot — never a guess.
+      // Keep last-good or bundled snapshot — never a guess.
       this.logger?.warn(
         `pricing catalog refresh failed: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -135,7 +114,7 @@ export class PricingWarmer {
       if (parsed?.models && Object.keys(parsed.models).length > 0)
         return parsed;
     } catch {
-      // No cache yet / unreadable — fall through to the bundled snapshot.
+      // No/unreadable cache — fall through to the bundled snapshot.
     }
     return undefined;
   }

@@ -1,25 +1,16 @@
 /*
- * WHICH ENGINE RUNS (#807) — selection as policy.
+ * WHICH ENGINE RUNS (#807) — selection as policy. The engine profile decides
+ * the variant; the manifest's `delegateStep` DECLARES a delegate variant
+ * exists. Four laws pinned here:
  *
- * The policy cascade's engine profile decides which variant runs, and the
- * manifest's `delegateStep` block is the capability's DECLARATION that a
- * delegate variant exists at all. These tests pin the four laws that split
- * keeps:
+ *   1. BACK-COMPAT: no rules and no profiles → fires exactly as before.
+ *   2. SELECTION: a delegate profile selects the delegate variant, binding
+ *      carried into the fire, dispatch surface included.
+ *   3. REFUSAL: delegate with no model anywhere → refused before dispatch.
+ *   4. INERTNESS: no declared delegate variant → untouched by a delegate
+ *      profile, nothing silently reaches a provider.
  *
- *   1. BACK-COMPAT. A vault with no rules and no profiles fires exactly what
- *      it fired before: the deterministic variant, no delegate model.
- *   2. SELECTION. A delegate profile selects the delegate variant and carries
- *      the member's binding — model, pins, prompt revision — into the fire,
- *      including onto the dispatch surface the model turn runs against.
- *   3. THE PINNED-MODEL REFUSAL SURVIVES. A delegate variant with no model
- *      anywhere is refused before a dispatch surface is ever opened.
- *   4. INERTNESS. A capability whose handler declares no delegate variant is
- *      untouched by a delegate profile — it runs its deterministic engine, it
- *      does not crash, and nothing silently reaches a provider.
- *
- * The gate itself is not re-tested here (`enrich-gate.test.ts` owns it); every
- * cascade below is already an allowed one, because engine selection is read
- * only after the gate said yes.
+ * Gate owned by `enrich-gate.test.ts`; every cascade below is allowed.
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -80,8 +71,7 @@ function cascade(
     ],
     egressForProfile: () =>
       engine?.kind === "delegate" ? "provider" : "gateway",
-    // The gate's provider question, already answered: this wave is about what
-    // runs once it has been, not about asking it again.
+    // The gate's provider question, already answered.
     egressConsent: () => ({
       capability: request.capability,
       egress: "provider",
@@ -188,9 +178,8 @@ describe("engine-profile selection on the fire path", () => {
   });
 
   it("[law 1] a member's per-recipe delegate pin still selects the delegate variant", async () => {
-    // The manifest switch (`lifecycle-automation-routes.ts`) writes
-    // `selected: "delegate"` into the manifest. A built-in profile — the
-    // answer a vault that has chosen nothing gives — must not revoke it.
+    // The manifest switch writes `selected: "delegate"`; a built-in profile
+    // must not revoke it.
     const { outcome } = await fire({
       manifest: manifest({
         enrich: {
@@ -230,7 +219,7 @@ describe("engine-profile selection on the fire path", () => {
       delegateConfigPins: { thought_level: "high" },
       promptRev: "ocr-v1",
     });
-    // And the turn itself runs on the member's binding, not the ambient one.
+    // The turn itself runs on the member's binding, not the ambient one.
     expect(opened[0]?.model).toBe("owner/pin");
     expect(opened[0]?.configPins).toStrictEqual({ thought_level: "high" });
   });
@@ -267,10 +256,9 @@ describe("engine-profile selection on the fire path", () => {
   });
 
   it("[law 4] a delegate profile is inert for a capability whose handler has no delegate variant", async () => {
-    // Embeddings declare no `delegateStep`: a future engine may be SELECTED
-    // for them (`capabilityAllowsDelegate("embed-text")` is true), but this
-    // build ships no delegate code path, so the selection must change
-    // nothing rather than half-run or throw.
+    // Embeddings declare no `delegateStep`: selection may still pick a
+    // delegate engine, but this build ships no delegate code path — the
+    // selection must change nothing.
     const { outcome, opened, logs } = await fire({
       manifest: manifest({
         enrich: { domain: "docs", capability: "embed-text", lane: "device" },
@@ -283,15 +271,11 @@ describe("engine-profile selection on the fire path", () => {
     });
 
     expect(outcome.ok).toBe(true);
-    // No `variant`, no `delegateModel`, no `profileId` — the input is
-    // untouched, which is what "byte-identical" means for a handler that
-    // never heard of profiles.
+    // No `variant`, no `delegateModel`, no `profileId` — input untouched.
     expect(injectedInput(outcome)).toBeNull();
-    // Nor did the profile's model reach the dispatch surface: the turn this
-    // handler never takes stays bound to the fire's own engine.
     expect(opened).toHaveLength(1);
     expect(opened[0]?.model).toBeUndefined();
-    // And the choice is stated rather than silently dropped.
+    // The choice is stated, not silently dropped.
     expect(
       logs.some((line) => line.includes("declares no delegate variant"))
     ).toBe(true);

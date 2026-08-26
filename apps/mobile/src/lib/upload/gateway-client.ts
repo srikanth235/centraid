@@ -1,11 +1,5 @@
-// Client for the gateway's direct-transfer door (#414/#416), served by
-// `packages/server/src/routes/blob-routes.ts` over
-// `packages/vault/src/blob/direct-transfers.ts`.
-//
-// The device identity the gateway gates on (`AUTHED_DEVICE_HEADER`) is stamped
-// server-side from the paired tunnel — it is never sent from here. A tunnel is
-// required only for begin/recordPart/complete; the bytes themselves go
-// device→S3 on presigned URLs and need no tunnel at all.
+// Direct-transfer client (#414/#416); identity is stamped server-side from
+// the tunnel, never sent here.
 
 export interface MultipartPartReceipt {
   partNumber: number;
@@ -31,23 +25,18 @@ export interface DirectBeginInput {
 
 export interface DirectBeginResult {
   sessionId?: string;
-  /** D10 dedupe: the gateway already holds these bytes; transfer nothing. */
+  /** D10 dedupe: the gateway already holds these bytes. */
   alreadyPresent: boolean;
   custody: string;
-  /** Raw per-blob content key. Response-only — never persisted, never in a URL. */
+  /** Raw content key — response-only; never persisted, never in a URL. */
   keyBase64: string;
   completedParts: MultipartPartReceipt[];
-  /**
-   * Present iff `alreadyPresent`: the gateway's AUTHORITATIVE settlement. The
-   * client persists this verbatim and never fabricates a `casAck` — a
-   * synthesized `replicated` would let free-up-space delete an original whose
-   * bytes are not actually offsite yet.
-   */
+  /** Authoritative settlement iff `alreadyPresent`; persist verbatim,
+   *  NEVER fabricate a `casAck`. */
   settlement?: SettlementReceipt;
   upload?: DirectUploadPlan;
 }
 
-/** The settlement receipt: `{...staged, casAck: 'replicated', custody: 'remote-only'}`. */
 export interface SettlementReceipt extends Record<string, unknown> {
   casAck?: string;
   custody?: string;
@@ -75,7 +64,7 @@ export class DirectTransferError extends Error {
     this.name = "DirectTransferError";
   }
 
-  /** 4xx other than 408/429 will not fix itself by retrying the same bytes. */
+  /** 4xx other than 408/429 will not fix itself by retrying. */
   get terminal(): boolean {
     return (
       this.status >= 400 &&
@@ -89,7 +78,6 @@ export class DirectTransferError extends Error {
 export interface DirectTransferClientOptions {
   gatewayBaseUrl: string;
   fetchImpl?: typeof fetch;
-  /** Extra request headers (e.g. `Authorization` in manual dev-URL mode). */
   headers?: () => Record<string, string>;
 }
 
@@ -124,8 +112,6 @@ export function httpDirectTransferClient(
   }
 
   return {
-    // 200 when alreadyPresent, 201 otherwise; both are `ok`, and the body's
-    // own `alreadyPresent` is the signal we act on.
     begin: (input) =>
       send<DirectBeginResult>("/centraid/_vault/blobs/direct", "POST", input),
     recordPart: async (sessionId, partNumber, etag) => {

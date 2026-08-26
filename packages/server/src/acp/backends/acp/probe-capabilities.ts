@@ -1,9 +1,7 @@
 /*
- * Probe an ACP harness for the capabilities Settings and pre-send checks need.
- *
- * Launches the harness the same way a turn would, runs `initialize` (+ a
- * session/new when possible), then tears down. Results are pure data —
- * no stream events. Used by the harness-status route and vault preflight.
+ * Probe an ACP harness for the capabilities Settings and pre-send checks
+ * need: launch like a turn, run `initialize` (+ session/new when possible),
+ * then tear down.
  */
 
 import { spawn } from "node:child_process";
@@ -49,15 +47,11 @@ export interface AcpHarnessCapabilities {
   mcpAcp: boolean;
   /** Harness exposes a model config option we can pin. */
   modelConfigurable: boolean;
-  /** Full config option surface observed on session/new. */
+  /** Full config option surface seen on session/new. */
   configOptions: AcpConfigOptionSnapshot[];
-  /**
-   * The bounded diagnostic prompt actually ran (it is opt-in — see
-   * `probeLivePrompt`). When false the three `*Observed` flags below mean
-   * "not observed", never "unsupported".
-   */
+  /** Opt-in diagnostic prompt ran; false ⇒ "not observed", not "unsupported". */
   livePromptProbed: boolean;
-  /** Optional ACP signals observed during the bounded diagnostic prompt. */
+  /** Seen during the diagnostic prompt. */
   usageUpdateObserved: boolean;
   configOptionUpdateObserved: boolean;
   locationsObserved: boolean;
@@ -66,15 +60,11 @@ export interface AcpHarnessCapabilities {
   promptImage: boolean;
   promptAudio: boolean;
   promptEmbeddedContext: boolean;
-  /** Epoch milliseconds when this evidence was collected. */
+  /** Epoch ms of collection. */
   probedAt: number;
-  /**
-   * Set by the capabilities cache when a snapshot has outlived its TTL: the
-   * data is still displayable, but its verdicts (notably `authRequired`) are
-   * no longer evidence of the CURRENT state.
-   */
+  /** Past TTL: verdicts are not evidence of the CURRENT state. */
   stale?: boolean;
-  /** Human reason when `reachable` is false. */
+  /** Why `reachable` is false. */
   reason?: string;
 }
 
@@ -155,8 +145,8 @@ function snapshotConfigOptions(
 }
 
 /**
- * Spawn → initialize → optional session/new → teardown. Bounded so a wedged
- * harness can't hang Settings forever.
+ * Spawn → initialize → optional session/new → teardown; bounded so a wedged
+ * harness can't hang Settings.
  */
 export async function probeAcpCapabilities(
   config: AcpTurnConfig,
@@ -256,15 +246,8 @@ export async function probeAcpCapabilities(
       caps.modelConfigurable = offered.models.length > 0;
       caps.configOptions = snapshotConfigOptions(configOptions);
 
-      // `config_option_update`, context usage and tool locations are optional
-      // runtime signals rather than initialize capabilities — the only way to
-      // observe them is to run a real turn, which costs the owner a live
-      // provider request. So this diagnostic prompt is OPT-IN
-      // (`probeLivePrompt`): the explicit Settings refresh and the
-      // `probe-all-harnesses` evidence dump ask for it; readiness checks that
-      // only need reachability/auth never do. Without it the three
-      // `*Observed` flags stay false, which reads as "not observed", not
-      // "unsupported".
+      // Optional runtime signals observable only by a real turn — hence the
+      // OPT-IN diagnostic prompt; without it these stay "not observed".
       const sessionId =
         typeof created.sessionId === "string" ? created.sessionId : undefined;
       if (sessionId && opts?.probeLivePrompt === true) {
@@ -273,10 +256,8 @@ export async function probeAcpCapabilities(
           (entry) => entry.value === offered.currentValue
         );
         if (model?.type === "select" && current) {
-          // Re-apply the observed value rather than selecting an arbitrary
-          // alternative. Some native agents persist config-option changes
-          // globally, so a diagnostics refresh must never move the owner's
-          // default model or choose a provider for which they have no key.
+          // Re-apply the observed value: some agents persist config-option
+          // changes globally — never move the owner's default.
           await conn
             .request(methods.agent.session.setConfigOption, {
               sessionId,

@@ -1,16 +1,6 @@
 /*
- * Async conversation search source for the ⌘K palette (#420).
- *
- * The palette's `buildPaletteGroups` is synchronous — it's re-run on every
- * keystroke and again whenever the palette's injected `refresh()` fires. FTS
- * conversation search is a server round-trip, so this source bridges the two:
- * `results(query)` reads a synchronous cache (empty while a fetch is in
- * flight), and `ensure(query)` schedules a debounced fetch that, on arrival,
- * fills the cache and calls `onResults()` — which the shell wires to the
- * palette's `refresh()`, re-running `buildPaletteGroups` so the hits appear.
- *
- * Kept framework-free and dependency-injected (the `search` fn + `onResults`
- * callback) so it's unit-testable with fake timers and a stub searcher.
+ * Async FTS bridge for the synchronous ⌘K palette (#420): results() reads a
+ * sync cache; ensure() debounces fetches into it and fires onResults().
  */
 
 export interface PaletteConversationHit {
@@ -20,15 +10,11 @@ export interface PaletteConversationHit {
 }
 
 export interface PaletteConversationSearch {
-  /** Cached hits for the trimmed query (`[]` until a fetch settles). */
+  /** Cached hits for the trimmed query. */
   results: (query: string) => PaletteConversationHit[];
-  /** Schedule a debounced FTS fetch for `query` unless already cached/in-flight. */
   ensure: (query: string) => void;
-  /** Drop the cache + any pending fetch (call when the palette closes). */
   reset: () => void;
-  /** Rebind the "hits landed" callback. The palette's `refresh()` only exists
-   *  once the palette has mounted, which is after the source is created — the
-   *  shell hands it over here instead of the source reaching for it. */
+  /** Rebind the "hits landed" callback; refresh() exists only post-mount. */
   setOnResults: (fn: (() => void) | null) => void;
 }
 
@@ -62,8 +48,7 @@ export function createPaletteConversationSearch(
         cache.set(key, hits);
       })
       .catch(() => {
-        // A failed search caches empty so we don't hammer a broken endpoint;
-        // the next distinct query still tries.
+        // Cache empty so a broken endpoint isn't hammered.
         cache.set(key, []);
       })
       .finally(() => {

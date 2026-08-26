@@ -6,19 +6,10 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// PEOPLE'S PERSON SCREEN AS THE GRANT DASHBOARD, in a real browser (#825).
-//
-// The shipped section is mounted over the shipped design tokens and the
-// shipped `kit.css`, with the grant plane stubbed at the ONE seam it was built
-// to take: its `door`. Nothing is reimplemented here.
-//
-// What a browser proves that a jsdom suite cannot: the section, its rows and
-// the destructive confirm paint at the app's own recipes, the reach line reads
-// as an invitation opportunity rather than an error, and `Share` on a person
-// this vault has NEVER REACHED is one gesture — no link ceremony is drawn
-// anywhere in the flow, which is the acceptance item this spec settles.
-//
-// The capture is the People UI-impact evidence (#825).
+// PEOPLE'S PERSON SCREEN AS THE GRANT DASHBOARD, in a real browser (#825):
+// shipped section, grant plane stubbed at its `door` seam. A browser proves
+// what jsdom cannot: recipes paint, "not reached" reads as an opportunity,
+// Share on a never-reached person is ONE GESTURE, no link ceremony.
 
 declare global {
   interface Window {
@@ -37,12 +28,8 @@ const SECTION = path.join(
 const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-people-grants.png";
 
-/**
- * The harness entry. It imports the SHIPPED section and hands it a door whose
- * answers cover the two states this screen has to tell apart on one person: a
- * grant already delivered, and one still parked waiting for the invitation the
- * grant itself minted.
- */
+/** Harness entry: the SHIPPED section with a door stubbing delivered vs
+ *  parked-awaiting-invitation grants. */
 const ENTRY = `
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -124,9 +111,8 @@ async function bundleSection(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Never written (`write: false`), but esbuild needs a path to name the CSS
-    // module output against — the class map and the stylesheet are two halves
-    // of one build.
+    // Never written (`write: false`); esbuild needs a path to name the CSS
+    // output against.
     outdir: path.join(here, ".people-grants-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -156,13 +142,11 @@ test("the person screen lists live grants and shares in one gesture", async ({
   );
   await page.addScriptTag({ content: js });
 
-  // Every live grant reaching this party, each with its own delivery state.
   await expect(page.getByText("Shared with them")).toBeVisible();
   await expect(page.getByText("Delivered")).toBeVisible();
   await expect(page.getByText("Invitation pending")).toBeVisible();
 
-  // Never reached is an OPPORTUNITY, in the kit's words — not an error, and
-  // not a link ceremony standing in the way.
+  // Not reached is an OPPORTUNITY, not an error or a link ceremony.
   await expect(
     page.getByText("Not reached yet · Sharing sends an invitation first.")
   ).toBeVisible();
@@ -173,8 +157,7 @@ test("the person screen lists live grants and shares in one gesture", async ({
     fullPage: true,
   });
 
-  // ONE GESTURE: Share opens the sheet already on this person, and its own
-  // Share sends the grant. Nothing between the two asks for a link first.
+  // ONE GESTURE: Share opens the sheet already on this person.
   await page
     .getByRole("button", { name: "Share", exact: true })
     .first()
@@ -188,8 +171,7 @@ test("the person screen lists live grants and shares in one gesture", async ({
     .poll(() => page.evaluate(() => window.__peopleStatus))
     .toStrictEqual(["Priya can see it"]);
 
-  // Revoking asks first, in the honest best-effort words, and then reports the
-  // route's own derived sentence verbatim.
+  // Revoke asks first, then reports the route's own derived sentence verbatim.
   await page.getByRole("button", { name: "Revoke document" }).click();
   await expect(page.getByText("Stop sharing with Priya?")).toBeVisible();
   await expect(

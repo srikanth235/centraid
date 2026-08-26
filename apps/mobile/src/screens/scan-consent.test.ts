@@ -1,8 +1,5 @@
-// The capture-time OCR consent latch (#712). Mirrors
-// `kit/transfer/transfer-consent.test.ts`'s shape: the gate is tested as a
-// predicate, because if `scanOcrExtractionAllowed` can ever say yes to a
-// device that never answered, no amount of screen review makes the product
-// honest about what a scan does.
+// Capture-time OCR consent latch (#712), tested as a predicate: it must never
+// say yes to a device that never answered.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -14,11 +11,7 @@ import {
 
 const mocks = vi.hoisted(() => ({ cache: new Map<string, unknown>() }));
 
-// AsyncStorage is a native module; the durable mirror is stood in for so the
-// pure latch logic runs under node — same technique
-// transfer-consent.test.ts uses. Exposed via `mocks.cache` (rather than a
-// closed-over local) so `beforeEach` below can clear it between tests —
-// `answerScanOcrConsent` writes straight through the real module under test.
+// AsyncStorage stubbed; `mocks.cache` is module-level for `beforeEach`.
 vi.mock(import("../storage") as Promise<unknown>, () => {
   const cache = mocks.cache;
   return {
@@ -36,11 +29,7 @@ vi.mock(import("../storage") as Promise<unknown>, () => {
 
 describe("the latch", () => {
   it("is device state, under the frame's namespace and not an app's", () => {
-    // Two phones, two answers — the same reasoning `transfer-consent.ts`'s
-    // `BACKUP_CONSENT_KEY` documents, restated for OCR: a key under `docs.`
-    // would invite syncing an answer through the vault, so a new phone would
-    // start extracting text from every scan on the strength of an answer
-    // given on a different one.
+    // A `docs.` key would sync the answer across devices via the vault.
     expect(SCAN_OCR_CONSENT_KEY).toBe("frame.scanOcrConsent");
   });
 });
@@ -84,9 +73,7 @@ describe(answerScanOcrConsent, () => {
 });
 
 describe(hydrateScanOcrConsent, () => {
-  // Cleared here rather than module-wide: this is the one describe block
-  // whose first case depends on a truly unanswered cache, and earlier
-  // blocks above it answer the latch as part of their own assertions.
+  // Cleared here: earlier blocks answer the latch.
   beforeEach(() => {
     mocks.cache.clear();
   });

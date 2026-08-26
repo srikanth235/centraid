@@ -8,7 +8,6 @@ import {
   toRemoteShape,
 } from "./appearance.js";
 
-/** Force `prefers-color-scheme` for the `system` mode tests. */
 function stubScheme(light: boolean): void {
   vi.stubGlobal(
     "matchMedia",
@@ -26,10 +25,8 @@ describe("appearance prefs", () => {
     const got = pickAppearance({
       theme: "dark",
       cards: "elevated",
-      // Retired in #608 — a gateway still holding one must not resurrect it.
+      // Retired #608 / #707 — must read as noise, not resurrect as a pref.
       surfaceTemp: "warm",
-      // Retired in #707: the shell spends no hue, so an accent a previous
-      // build stored is read as noise rather than resurrected as a pref.
       accentKey: "rose",
       bgL: 22,
       bogus: "nope",
@@ -46,27 +43,20 @@ describe("appearance prefs", () => {
   });
 
   it("drops a stored theme naming a preset this build no longer registers", () => {
-    // #608 O — the twelve-preset registry was cut to two. A profile holding
-    // `theme: 'monokai'` must degrade to DEFAULT_PREFS.theme with no error and
-    // no migration step.
+    // #608 O — presets cut to two; degrade silently.
     expect(pickAppearance({ theme: "monokai" })).toStrictEqual({});
   });
 
   it("defaults to following the OS, not to dark", () => {
-    // A member who has never opened Settings gets the theme their machine is
-    // already in. While this was `dark`, first run could not be light on any
-    // device — which made the grammar matrix's `sh-light-first-run` reference
-    // state unreachable in the shipping product.
+    // First run follows the OS; `dark` made light first run unreachable.
     expect(DEFAULT_PREFS.themeMode).toBe("system");
-    // `theme` is only the RESOLVED name; `useAppearance` re-derives it on mount
-    // and on every OS flip while the mode stays `system`. Under a test
-    // environment with no `matchMedia`, resolving falls back to dark.
+    // `theme` re-derived on mount/OS flip; no matchMedia → dark.
     expect(["light", "dark"]).toContain(DEFAULT_PREFS.theme);
   });
 
   it("re-resolves the applied theme when the stored mode is `system`", () => {
     stubScheme(true);
-    // The resolved `theme` it was saved with may be stale, so the mode wins.
+    // The saved `theme` may be stale; the mode wins.
     expect(
       pickAppearance({ themeMode: "system", theme: "dark" })
     ).toStrictEqual({ themeMode: "system", theme: "light" });
@@ -99,15 +89,13 @@ describe("appearance prefs", () => {
     });
     const html = document.documentElement;
     expect(html.dataset.theme).toBe("light");
-    // Dark has exactly one ramp now, so nothing writes a surface temperature.
+    // Nothing writes a surface temperature.
     expect(html.dataset.surfaceTemp).toBeUndefined();
   });
 
   describe("the theme block is the only colour authority", () => {
-    // #608 P — inline styles on <html> outrank every [data-theme='…'] block,
-    // so writing the pref layer's accent and lightness unconditionally meant a
-    // theme's own values could never render. #707 removed both overrides
-    // outright: applying prefs may not touch a single custom property.
+    // #608 P / #707 — applying prefs may not touch a single custom property;
+    // inline styles once outranked every theme block.
     it("writes no inline colour of any kind", () => {
       applyPrefsToDocument({ ...DEFAULT_PREFS, theme: "light" });
       applyPrefsToDocument(DEFAULT_PREFS);

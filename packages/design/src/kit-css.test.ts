@@ -3,10 +3,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-// The hand-authored stylesheet the element layer renders against
-// (`@centraid/design/kit.css`, loaded once by the shell route host). Read by
-// path rather than imported: this is a Node suite over the sheet's text, and
-// nothing in the token layer may pull a stylesheet into its module graph.
+// Read by path, not imported: the token layer must not pull kit.css into its
+// module graph.
 const KIT_CSS = readFileSync(
   path.resolve(import.meta.dirname, "elements/kit.css"),
   "utf8"
@@ -21,11 +19,7 @@ describe("element stylesheet contract", () => {
   });
 
   it("styles only the Ask surface that still exists", () => {
-    // There is no served assistant plane (#799). The inline panel
-    // (`packages/client/src/react/blueprints/kit-ask-inline.ts`) is the only
-    // Ask surface kit.css dresses, and it emits exactly these classes — there
-    // is no overlay, model picker, history drawer, suggestion chip or
-    // proposed-action card, so the sheet must not carry rules for them.
+    // No served assistant plane (#799); retired classes must not return.
     for (const live of [
       ".kit-ask-btn",
       ".kit-ask-panel",
@@ -57,9 +51,7 @@ describe("element stylesheet contract", () => {
   });
 
   it("carries no custom-element host rules — the elements are gone", () => {
-    // #799 deleted the last four `kit-*` custom elements and the `KitElement`
-    // base, so their `display: contents` host neutralisers styled tags
-    // nothing constructs any more.
+    // #799 deleted the last `kit-*` custom elements and the KitElement base.
     for (const tag of [
       "kit-avatar,",
       "kit-meter,",
@@ -68,11 +60,8 @@ describe("element stylesheet contract", () => {
     ]) {
       expect(KIT_CSS, tag).not.toContain(tag);
     }
-    // `[data-kit-host]` survives them, but only as a marker an app sets by
-    // hand (Locker's overlay layer) — nothing stamps it at runtime.
+    // `[data-kit-host]` survives as a hand-set marker only (Locker's overlay).
     expect(KIT_CSS).toContain("[data-kit-host] {");
-    // The classes those elements rendered INTO survive — React blocks and
-    // `feedback.ts` emit them directly now.
     expect(KIT_CSS).toContain(".kit-avatar {");
     expect(KIT_CSS).toContain(".kit-bar-fill {");
     expect(KIT_CSS).toContain(".kit-skeleton {");
@@ -82,11 +71,8 @@ describe("element stylesheet contract", () => {
     expect(KIT_CSS).toMatch(
       /\.kit-btn:hover[^{]*:not\(\.primary\):not\(\.destructive\)/u
     );
-    // `prefers-reduced-motion` is honoured in ONE global rule (toCss()'s
-    // emitted sheet, packages/design/src/css.ts) — kit.css itself declares no
-    // per-component `@media` copy of its own (#708 §"One motion and
-    // feedback grammar"). Explanatory comments in kit.css mention the term in
-    // prose, so this checks for a live media rule, not the bare substring.
+    // `prefers-reduced-motion` lives in ONE global rule (css.ts, #708):
+    // match live media rules, not prose mentions in comments.
     expect(KIT_CSS).not.toContain("@media (prefers-reduced-motion");
     expect(KIT_CSS).toContain(".kit-btn:focus-visible");
   });
@@ -102,7 +88,6 @@ describe("element stylesheet contract", () => {
     expect(KIT_CSS).toContain(".kit-status-line {");
     expect(KIT_CSS).toContain(".kit-status-line-track");
     expect(KIT_CSS).toContain(".kit-status-line-fill");
-    // Loading is determinate-only with static skeletons — no shimmer sweep.
     expect(KIT_CSS).not.toContain("kit-sweep");
   });
 });

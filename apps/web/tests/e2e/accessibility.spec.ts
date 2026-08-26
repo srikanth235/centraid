@@ -1,18 +1,7 @@
-// Web accessibility browser lane (#781, closing a #587 D21 gap).
-//
-// The repo's other accessibility owners are static scanners —
-// scripts/accessibility-contract.test.mjs greps source for pinned aria
-// attributes and scripts/lint-aria-labels.mjs walks JSX text — so neither asks
-// a real browser what the accessibility tree actually contains. This spec runs
-// axe-core (WCAG 2.0/2.1 A + AA rulesets) inside the same Chromium
-// harness the other web e2e journeys use, against the two highest-traffic web
-// surfaces: the cold connect screen (the first thing every web user sees) and
-// the connected Home shell (the springboard every session lands on, #708).
-//
-// A violation fails with axe's own description, impact, and the offending
-// selectors, so the failure names what broke without a debugger. The mobile
-// device-side lane (RN accessibility tree on a booted simulator) is NOT this
-// spec's claim and stays tracked in the #781 follow-up issue.
+// Web accessibility browser lane (#781, closing #587 D21): static scanners
+// never see the live tree; axe-core (WCAG A/AA) runs in the shared Chromium
+// harness against the cold connect screen and connected Home shell (#708).
+// The mobile device-side lane is NOT this spec's claim (#781 follow-up).
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
@@ -24,11 +13,10 @@ const ADMIN_TOKEN = "centraid-web-e2e-token";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
 const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
 
-// WCAG A + AA — the axe tag set that maps to a testable standard, rather than
-// axe's "best-practice" opinions, which would make the gate assert taste.
+// WCAG A + AA — a testable standard, not axe's "best-practice" opinions.
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
-/** Render axe violations so the assertion failure is readable on its own. */
+/** Render violations so the assertion failure is readable on its own. */
 function describeViolations(
   violations: Array<{
     id: string;
@@ -120,8 +108,7 @@ test("the cold connect screen has no WCAG A/AA violations", async ({
   page,
 }) => {
   await page.goto("/");
-  // The connect heading + pairing-ticket textbox are the cold screen's whole
-  // contract; scan only once it is actually the screen under test.
+  // Scan only once heading + textbox are up.
   await page.getByRole("textbox").first().waitFor();
 
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
@@ -134,9 +121,7 @@ test("the cold connect screen has no WCAG A/AA violations", async ({
 test("the connected Home shell has no WCAG A/AA violations", async ({
   page,
 }) => {
-  // Same connected-session bootstrap as web-pwa.spec.ts: cookie control
-  // session from the mock gateway, then a stored connection + completed
-  // onboarding so the reload lands on Home rather than the connect screen.
+  // Same connected-session bootstrap as web-pwa.spec.ts.
   await connectPwa(page);
 
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
@@ -156,9 +141,7 @@ test("a first-party blueprint has no WCAG A/AA violations in its real renderer",
     page.getByRole("heading", { name: "Docs" }).first()
   ).toBeVisible();
 
-  // Apps render as inline routes in the shell document, with no served-app
-  // iframe (#799), so a plain page scan reaches the actual Docs tree
-  // alongside its hosting shell — no frame traversal, and nothing to exclude.
+  // Inline routes, no served-app iframe (#799): plain scan reaches the real Docs tree.
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   expect(
     results.violations,

@@ -1,16 +1,10 @@
-// Dependency-free fenced-code syntax highlighter (#420). A tiny
-// hand-rolled scanner with no npm dependency. The rich-answer renderer
-// (assistant-rich.ts) calls it from its code-block path.
+// Dependency-free fenced-code syntax highlighter (#420).
 //
-// SECURITY: the scanner is escape-by-default. Every character of the source is
-// emitted through `esc()` (HTML-escaped) and the ONLY markup it ever adds is a
-// fixed set of `<span class="hl…">` wrappers with static class names. Untrusted
-// model code can never inject markup. `highlightCode` returns HTML whose
-// `textContent` equals the original source, so the copy button still works.
-//
-// Coverage: js/ts/jsx/tsx, json, python, sql, bash/shell, html, css, rust, go.
-// An unknown language returns `null` — the caller falls back to a plain,
-// escaped `<pre>` (graceful degradation, never a throw).
+// SECURITY: escape-by-default. Every character of the source is emitted through
+// `esc()` and the ONLY markup added is a fixed set of `<span class="hl…">`
+// wrappers with static class names — untrusted model code can never inject
+// markup. An unknown language returns `null`; the caller falls back to a plain
+// escaped `<pre>`.
 
 /** Internal scanner config for one language (opaque to callers). */
 export interface HighlightLangConfig {
@@ -59,11 +53,6 @@ const GO_KW =
   if import interface map package range return select struct switch type var true false nil iota`);
 const CSS_KW = KW("");
 
-/**
- * Per-language scanner config. `line`/`block` are comment markers, `strings`
- * the string delimiters, `kw` the keyword set, `ci` case-insensitivity for the
- * keyword match (SQL), `dollar` a shell `$VAR` pass.
- */
 const LANGS: Record<string, HighlightLangConfig | undefined> = {
   js: { line: "//", block: ["/*", "*/"], strings: `"'\``, kw: JS_KW },
   json: { strings: '"', kw: KW("true false null") },
@@ -76,7 +65,7 @@ const LANGS: Record<string, HighlightLangConfig | undefined> = {
   go: { line: "//", block: ["/*", "*/"], strings: `"\``, kw: GO_KW },
 };
 
-/** Alias map → canonical config key. Unknown languages resolve to `undefined`. */
+/** Alias map; unknown languages resolve to `undefined`. */
 const ALIAS: Record<string, string | undefined> = {
   js: "js",
   javascript: "js",
@@ -109,7 +98,7 @@ const ALIAS: Record<string, string | undefined> = {
   golang: "go",
 };
 
-/** Resolve a fenced-code language tag to a scanner config, or null when unknown. */
+/** Language tag → scanner config, or null when unknown. */
 export function configFor(
   lang: string | undefined
 ): HighlightLangConfig | null {
@@ -122,9 +111,8 @@ const isIdent = (c: string): boolean => /[\w$]/u.test(c);
 const isDigit = (c: string): boolean => c >= "0" && c <= "9";
 
 /**
- * Highlight `code` for a known `lang` as an HTML string (escaped text + `hl…`
- * spans), or `null` when the language is unknown so the caller can fall back to
- * a plain escaped `<pre>`. Escape-by-default; never throws.
+ * Escaped text + `hl…` spans, or null for an unknown lang so the caller can
+ * fall back to a plain escaped `<pre>`. Escape-by-default; never throws.
  */
 export function highlightCode(code: string, lang?: string): string | null {
   const cfg = configFor(lang);
@@ -139,7 +127,6 @@ export function highlightCode(code: string, lang?: string): string | null {
 
   while (i < n) {
     const c = src.charAt(i);
-    // Comments — line then block.
     if (cfg.line && matchAt(cfg.line)) {
       let j = src.indexOf("\n", i);
       if (j < 0) j = n;
@@ -155,7 +142,6 @@ export function highlightCode(code: string, lang?: string): string | null {
       i = j;
       continue;
     }
-    // Strings — including python triple-quotes and escape-aware single/double.
     if (cfg.strings && cfg.strings.includes(c)) {
       const triple = cfg.triple && src.startsWith(c + c + c, i);
       const delim = triple ? c + c + c : c;
@@ -176,7 +162,6 @@ export function highlightCode(code: string, lang?: string): string | null {
       i = Math.min(j, n);
       continue;
     }
-    // Shell variables ($VAR / ${VAR}).
     if (
       cfg.dollar &&
       c === "$" &&
@@ -192,7 +177,6 @@ export function highlightCode(code: string, lang?: string): string | null {
       i = j;
       continue;
     }
-    // Numbers (leading digit; a dotted/hex/exponent run).
     if (isDigit(c) || (c === "." && isDigit(src.charAt(i + 1)))) {
       let j = i;
       while (j < n && /[0-9a-fA-FxXbBoO._+-]/u.test(src.charAt(j))) {
@@ -208,7 +192,6 @@ export function highlightCode(code: string, lang?: string): string | null {
       i = j;
       continue;
     }
-    // Identifiers / keywords.
     if (isIdentStart(c)) {
       let j = i + 1;
       while (j < n && isIdent(src.charAt(j))) j += 1;
@@ -218,7 +201,6 @@ export function highlightCode(code: string, lang?: string): string | null {
       i = j;
       continue;
     }
-    // Anything else — one escaped char.
     out += esc(c);
     i += 1;
   }
