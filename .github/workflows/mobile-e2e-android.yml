@@ -1,0 +1,209 @@
+# Focused Android mobile-e2e lane — extracted from the `mobile-e2e-android` job
+# of e2e.yml (one deliberate delta: the Maestro CLI is version-pinned here, as
+# the iOS job already was) so it can be dispatched and iterated on
+# independently while another lane of work owns e2e.yml. Deliberately NO
+# schedule: the nightly still runs this job once, from e2e.yml (`suite: all`),
+# so nothing double-runs and the two copies cannot race each other on a
+# schedule. The apk / AVD action-caches ARE shared between both copies — they
+# are content-addressed on the native fingerprint, so a hit from either copy is
+# valid for the other.
+#
+# Retirement rule: once the fix this file exists to land is green here AND in
+# the e2e.yml nightly, delete this file rather than maintaining two copies of
+# the job. Do not edit one copy's steps without the other.
+name: mobile-e2e-android
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-e2e-android-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-e2e-android:
+    runs-on: ubuntu-latest
+    # 120, not the iOS job's 60: this lane can pay a cold-cache gradle build
+    # (~21 min, #535) before any flow runs, and swiftshader software rendering
+    # makes each journey slower than the hardware-accelerated iOS simulator.
+    # Raised from 90 when #781 added the three experience probes to this lane.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      # ubuntu-latest exposes /dev/kvm; enable it so the x86_64 emulator gets
+      # hardware acceleration. macos-15 runners have no Hypervisor.framework
+      # (HVF error: HV_UNSUPPORTED), so the Android emulator could not boot there
+      # at all — this lane was dead, not slow. This is why the job is on Linux.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # Pin the build JDK to 17 so gradle (via `expo run:android`) is stable and
+      # the fingerprint's jdk<hash> component does not drift with runner images.
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      # Fingerprint the Android native build inputs — same mechanism as the iOS
+      # job (apps/mobile/scripts/native-fingerprint.mjs). Keyed so a JS-only
+      # commit reuses the cached .apk while any native-input change rebuilds it.
+      # The Android build toolchain (Gradle/AGP/NDK/compileSdk) lives in the
+      # tracked android/ gradle files, which the fingerprint already hashes; the
+      # host JDK is folded in separately (jdk<hash>), mirroring iOS's xc<hash>.
+      - name: Fingerprint the Android native build inputs
+        id: native_android
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          fp="$(node scripts/native-fingerprint.mjs android)"
+          test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
+          jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+          echo "Android native fingerprint: fp=$fp jdk=$jdk"
+      - name: Install Maestro CLI
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Build mobile workspace (host, before emulator)
+        run: bun run turbo run build --filter=@centraid/mobile...
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      - name: Start Metro
+        working-directory: apps/mobile
+        run: |
+          CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro-android.log 2>&1 &
+          for attempt in {1..90}; do
+            if curl -fsS http://127.0.0.1:8081/status; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-metro-android.log
+          exit 1
+      # Restore the built Android dev-client .apk. Same all-or-nothing, split
+      # restore/save rationale as the iOS job: the emulator action's script runs
+      # the build, so a cache HIT skips gradle entirely and just adb-installs the
+      # banked apk. No restore-keys — a partial match would install a stale apk.
+      - name: Restore the built Android app
+        id: android_app
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+      # AVD snapshot caching — the reactivecircus best practice. The first run
+      # boots a clean emulator once and banks a booted-state snapshot; every
+      # later run resumes from it in seconds instead of a ~40s cold boot. It also
+      # removes the first-boot Pixel Launcher race that ANR'd under the software
+      # GPU and stole the window from Maestro (#535): a resumed launcher is
+      # already settled. The key pins every AVD-shaping input — bump the trailing
+      # -vN to invalidate after an emulator/image bump. Distinct from the apk
+      # cache (different key, different path); both can hit independently.
+      - name: AVD cache
+        id: avd_cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Create AVD + snapshot (cache miss only)
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          # Every AVD-shaping input below MUST match the test step's, or the
+          # cached snapshot will not load. `disable-animations: false` here so the
+          # setting is not baked wrong into the snapshot (reactivecircus pattern).
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+      - name: Set up Android SDK + emulator
+        id: emu
+        # v2.38.0 — prior pin 1dcd009…dd was a typo/orphan SHA (#535 F6).
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          # Read inside the action's script to branch build-vs-install. The apk
+          # lives under $HOME so it carries from the restore step into the
+          # action's shell (same runner, same home).
+          ANDROID_CACHE_HIT: ${{ steps.android_app.outputs.cache-hit }}
+        with:
+          api-level: 34
+          # x86_64 (not arm64-v8a) so /dev/kvm on the Linux runner accelerates it.
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          # Match the snapshot-gen step's AVD shape exactly (or the cached
+          # snapshot will not load). 4 GB / 4 cores on the 16 GB / 4-vCPU runner
+          # gives the app real headroom, so the launcher is far less likely to
+          # ANR under Metro + app load.
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          # `-no-snapshot-save`: boot FROM the cached snapshot but do not re-bank
+          # it, so a test run never rewrites the clean cached snapshot.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          disable-animations: true
+          # The action executes `script:` via dash; a multi-line if/else with
+          # comments and non-ASCII chars tripped its parser (#535). Keep this a
+          # single line that hands off to a committed bash file instead.
+          script: bash apps/mobile/scripts/android-emulator-e2e.sh
+      # Mirrors the iOS job's identical step. The harness already rm -rf's this
+      # directory in a finally, so this is belt-and-braces against a run that
+      # dies before the finally — but it was iOS-only, which meant an Android
+      # crash mid-pairing could ship pairing diagnostics in the runs/ artifact.
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
+      # Bank the apk even if a later flow failed — the artifact is the product of
+      # the fingerprinted inputs regardless of whether Maestro passed (see iOS).
+      # Guarded on the build having actually produced an apk, so a cache-hit run
+      # does not re-save what it just restored and a run that died before the
+      # build cannot cache an empty directory.
+      - name: Save the built Android app
+        if: always() && steps.emu.outputs.built == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-mobile-android
+          path: artifacts/
+          retention-days: 7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-debug-mobile-android-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 7
+          if-no-files-found: ignore
