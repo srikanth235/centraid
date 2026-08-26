@@ -1,5 +1,5 @@
 // People shell frame (#821): content is flex:1 ABOVE the claimed band + Home
-// capsule, so no pushed screen dead-ends.
+// capsule; no pushed screen dead-ends.
 
 import { useNavigation } from "@react-navigation/native";
 import React, { useMemo } from "react";
@@ -16,7 +16,7 @@ export interface PeopleScreenProps {
   /** Which destination this surface sits under. */
   current: PeopleBandKey;
   children: React.ReactNode;
-  /** Hide the band while a modal sheet owns the foot. */
+  /** Hidden while a modal sheet owns the foot. */
   bandHidden?: boolean;
 }
 
@@ -32,7 +32,7 @@ export default function PeopleScreen({
   const styles = useMemo(() => makeStyles(), []);
 
   const onDestination = (key: PeopleBandKey): void => {
-    // POP, never push — destinations live on PeopleHome.
+    // POP to PeopleHome, never push.
     navigation.popTo("PeopleHome", { destination: key });
   };
 

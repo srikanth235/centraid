@@ -1,11 +1,10 @@
-// Storage rollup (#711), loaded LAZILY; MULTI-SCOPE (#599): every mounted
-// scope is asked — one that cannot answer is NAMED (`unread`), never empty.
+// Storage rollup (#711), lazy; MULTI-SCOPE (#599): every mounted scope is
+// asked — an unanswerable one is NAMED (`unread`), never empty.
 import { mountedScopes } from "../_shared/scope-kit.ts";
 import type { StorageRollup } from "./queries/storage.ts";
 import { custodyFacts } from "./storage-model.ts";
 import type { CustodyFacts, ScopeRollup } from "./storage-model.ts";
 
-/** What `queries/storage.ts` answers. */
 interface StorageData {
   rollup?: StorageRollup;
 }

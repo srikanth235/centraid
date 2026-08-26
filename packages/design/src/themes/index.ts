@@ -28,7 +28,7 @@ export {
 
 export { darkTheme, lightTheme } from "./centraid";
 
-// INVARIANT (#608): registry key must equal its `kind`; test-pinned.
+// INVARIANT #608: registry key must equal its kind; test-pinned.
 export const themes = {
   light: lightTheme,
   dark: darkTheme,

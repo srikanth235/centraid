@@ -1,9 +1,6 @@
-// The ORIGIN half of a share (#726): read a closure, write nothing — no
-// owner-side transaction or recovery machinery. The result is `WireClosure`
-// (plain JSON, closure.ts), so the audience half can be local or behind a
-// tunnel. ONE closure covers a SET of items: pooled row tables mean re-imported
-// photographs yield one content item, and an album's entries and cover resolve
-// to the same rows.
+// ORIGIN half of a share (#726): read a closure, write nothing — result is
+// `WireClosure` (closure.ts). ONE closure covers a SET of items: pooled row
+// tables mean re-imported photographs yield one content item.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -73,11 +70,10 @@ function draft(): ClosureDraft {
 }
 
 /**
- * Pool one content item, its derivatives, and the CAS addresses they rent.
- * Inline bodies ride the row; only blob-backed items earn a manifest entry
- * (same rule as `liveBlobShas`). Returns false when the origin lacks the row:
- * a fact for a Tally receipt (bytes may be released), an error when asked
- * for by name.
+ * Pool one content item, its derivatives, and their CAS addresses (only
+ * blob-backed items earn a manifest entry, same rule as `liveBlobShas`).
+ * False when the origin lacks the row — a fact for a Tally receipt; an error
+ * when asked for by name.
  */
 function poolContent(
   origin: DatabaseSync,
@@ -137,10 +133,9 @@ function absent(itemType: ShareableItemType, itemId: string): VaultShareError {
 }
 
 /**
- * Strip `latitude`/`longitude` from EXIF per the ORIGIN's own
- * `media.location` policy (threat 8), mirroring how projection-ingest.ts
- * gates re-derivation at the audience. Boolean `has_location` survives;
- * unparseable JSON passes through unchanged.
+ * Strip `latitude`/`longitude` from EXIF per the ORIGIN's `media.location`
+ * policy (threat 8), mirroring projection-ingest.ts. Boolean `has_location`
+ * survives; unparseable JSON passes through unchanged.
  */
 function stripGpsFromExif(exifJson: string | null): string | null {
   if (exifJson === null) return null;
@@ -344,18 +339,16 @@ export interface ReadShareClosureInput {
   /** Row ids in the ORIGIN vault. Repeats collapse to one item. */
   itemIds: readonly string[];
   /**
-   * True when the audience is NOT this owner's own vault (#726 P3 threat 8):
-   * gates the ORIGIN's `media.location` policy against `exif_json`. A
-   * same-owner edge moves the owner's own data — left exactly as ingested.
-   * Defaults false; only a caller that judged the edge cross-owner (the
-   * gateway's `judgeEdgeCrossing`) opts in.
+   * True only for a cross-owner edge (#726 P3 threat 8): gates the ORIGIN's
+   * `media.location` policy against `exif_json`. Same-owner edges move data
+   * exactly as ingested. Defaults false; only `judgeEdgeCrossing` opts in.
    */
   crossOwner?: boolean;
 }
 
 /**
- * Resolve everything a share of `itemIds` needs. READ-ONLY: an unknown item
- * is refused with nothing placed anywhere and no owner-side transaction.
+ * Resolve everything a share of `itemIds` needs. READ-ONLY: an unknown item is
+ * refused with nothing placed anywhere.
  */
 export function readShareClosure(
   origin: DatabaseSync,

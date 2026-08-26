@@ -1,5 +1,5 @@
-// Docs §1.7: current tab = 2px INK bar + 500 weight — never a fill or app
-// hue. Hidden on compact when the band owns nav; sidebar carries no copy.
+// Docs §1.7: tab = 2px INK bar + 500 weight — never a fill/hue; hidden on
+// compact when the band owns nav.
 import { DSHELVES, stripShelf } from "../shelves.ts";
 import type { Shelf, ShelfId } from "../shelves.ts";
 

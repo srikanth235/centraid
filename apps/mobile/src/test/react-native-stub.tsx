@@ -1,17 +1,14 @@
-// One React Native stub for every kit-block test (#765). Spread it:
-//
+// One RN stub for every kit-block test (#765); spread it:
 //   vi.mock(import("react-native"), async () =>
 //     (await import("../../test/react-native-stub")).reactNativeStub());
-//
-// Theme NOT stubbed: tests assert the real lowered token. Style rides a
-// serialized `data-style` attribute.
+// Theme NOT stubbed: tests assert the real lowered token; style rides `data-style`.
 
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 
 type Props = Record<string, unknown> & { children?: React.ReactNode };
 
-/** Collapse RN array/nested style to what the renderer applies. */
+/** Collapse RN array/nested style to applied values. */
 export function flattenStyle(style: unknown): Record<string, unknown> {
   if (!style) return {};
   if (Array.isArray(style)) {
@@ -24,7 +21,7 @@ export function flattenStyle(style: unknown): Record<string, unknown> {
   return {};
 }
 
-/** A rendered node's flattened style, read off `data-style`. */
+/** Node's flattened style, read off `data-style`. */
 export function styleOf(
   node: HTMLElement | null | undefined
 ): Record<string, unknown> {
@@ -61,8 +58,7 @@ function domProps(props: Props): Props {
     ...(typeof accessibilityLabel === "string"
       ? { "aria-label": accessibilityLabel }
       : {}),
-    // Surfaced for assertions; distinguishes identical verbs for a screen
-    // reader; invisible on screen.
+    // For assertions; invisible on screen.
     ...(typeof accessibilityHint === "string"
       ? { "data-hint": accessibilityHint }
       : {}),
@@ -107,7 +103,7 @@ const noopAnimation = {
   reset: () => undefined,
 };
 
-/** The stubbed module object; spread into the factory above. */
+/** Stubbed module object; spread into the factory above. */
 export function reactNativeStub(): Record<string, unknown> {
   const Animated = {
     View: (props: Props) => host("div", props),
@@ -166,7 +162,7 @@ export function asyncStorageStub(): { default: Record<string, unknown> } {
   };
 }
 
-/** `react-native-svg`, for a block that reaches the icon set. */
+/** `react-native-svg`, for blocks reaching the icon set. */
 export function svgStub(): Record<string, unknown> {
   const glyph = (props: Props) =>
     React.createElement("svg", { "data-glyph": true }, props.children);
@@ -195,7 +191,7 @@ export function mountBlock(node: React.ReactNode): {
   };
 }
 
-/** Every rendered node of one stubbed primitive, in document order. */
+/** Rendered nodes of one stubbed primitive, document order. */
 export function nodesOf(container: HTMLElement, tag: string): HTMLElement[] {
   return [...container.querySelectorAll(tag)] as HTMLElement[];
 }

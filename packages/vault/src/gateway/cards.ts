@@ -1,8 +1,6 @@
-// Card resolver (#272): turns (type, id) refs into minimal renderable cards so apps DISPLAY foreign
-// entities without read scope on them; shapes register engine-side next to the entity registry —
-// apps never learn foreign schemas, dangling refs handled in one place, cards are live.
-// Resolvable-if-linked: a LIVE link touching the ref authorizes rendering the far end; else
-// per-ref 'denied'; the batch is receipted either way.
+// Card resolver (#272): turns (type, id) refs into minimal renderable cards so apps DISPLAY
+// foreign entities without read scope on them; resolvable-if-linked — a LIVE link touching the
+// ref authorizes rendering the far end, else per-ref denied; the batch is receipted either way.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -36,7 +34,7 @@ export interface ResolveResult {
 /** Hard cap per call — refs render in lists, not bulk exports. */
 const MAX_REFS = 100;
 
-/** One SELECT per carded entity; uncurated entities resolve existence + status only. */
+/** One SELECT per carded entity; uncurated resolve existence + status only. */
 const CARD_SQL: Record<string, string> = {
   "core.party": `SELECT display_name AS title, kind AS subtitle, avatar_content_id AS thumb, 0 AS trashed
                    FROM core_party WHERE party_id = ?`,
@@ -115,8 +113,8 @@ function pkColumn(vault: DatabaseSync, physical: string): string {
   return rows.find((r) => r.pk === 1)?.name ?? "rowid";
 }
 
-/** LIVE link touches this ref AND the caller reads the other endpoint. Entity-level in v0 —
- * the far row filter is not re-evaluated per row; resolutions are receipted. */
+/** LIVE link touches this ref AND caller reads the far endpoint. Entity-level in v0 —
+ * the far-row filter is not re-evaluated per row; resolutions are receipted. */
 function linkedAndVisible(
   vault: DatabaseSync,
   identity: Identity,

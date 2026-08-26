@@ -1,13 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-// Expo config — single-sources version + native build numbers (#468); app.json cannot drift.
+// Single-sources version + native build numbers (#468); app.json cannot drift.
 import type { ExpoConfig, ConfigContext } from "expo/config";
 
-// Node require only: extensionless TS import fails on CI, import.meta dies under Expo's eval.
+// Node require only — extensionless TS fails on CI; import.meta dies under Expo eval.
 import { nativeBuildNumber } from "./src/version-core.cjs";
 
-// Version from @centraid/mobile's package.json (#501); cwd candidates cover gradle and root.
+// Version of @centraid/mobile (#501); cwd candidates cover gradle + root.
 function readMobilePackageVersion(): string {
   const candidates = [
     path.join(process.cwd(), "package.json"),
@@ -84,9 +84,9 @@ export default function createExpoConfig({
         backgroundColor: "#3EC8B4",
       },
     },
-    // Bare workflow needs a concrete runtime version; VERSION ties OTA to the store version.
+    // Bare workflow needs a concrete runtime version; VERSION ties OTA to it.
     runtimeVersion: VERSION,
-    // Store-only updates (#501): OTA lane off until a real Expo project id is enrolled.
+    // Store-only updates (#501): OTA off until a real Expo project id is enrolled.
     updates: EAS_PROJECT_ID
       ? {
           enabled: true,
@@ -145,13 +145,12 @@ export default function createExpoConfig({
         },
       ],
       "expo-video",
-      // Photos' real map (#816): MapKit iOS + MapLibre/OpenFreeMap Android; no location permission —
-      // "where have I been", never "where am I".
+      // Photos' map (#816): MapKit iOS + MapLibre/OpenFreeMap Android; NO location permission.
       "expo-maps",
       [
         "@maplibre/maplibre-react-native",
         {
-          // Stated plugin default: `google` would pull Play Services back in.
+          // Plugin default; `google` would pull Play Services back in.
           android: { locationEngine: "default" },
         },
       ],

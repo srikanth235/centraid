@@ -1,5 +1,5 @@
-// Runs-per-day bars (#765 §9): the chart carries ONE image-role label; each
-// column labels itself for touch. Failed cap wears `net` ink, rest tertiary.
+// Runs-per-day bars (#765 §9): ONE image-role label; each column labels itself
+// for touch. Failed cap wears `net` ink, rest tertiary.
 
 import React, { useMemo } from "react";
 import { View } from "react-native";
@@ -16,7 +16,7 @@ export interface BarsBlockProps {
   axis: readonly string[];
   /** Peak-day note — the only magnitude ever stated. */
   note?: string;
-  /** Outcome words — both as a pair, or no legend row. */
+  /** Both as a pair, or no legend row. */
   legendSucceeded?: string;
   legendFailed?: string;
   /** Whole chart in one sentence. */
@@ -32,7 +32,7 @@ export default function BarsBlock({
   accessibilityLabel,
 }: BarsBlockProps): React.JSX.Element {
   const { colors } = useTheme();
-  // Guard, not fold: caller decides days-per-column; sampling hid spikes (#775).
+  // Guard, not fold: caller decides days-per-column (#775).
   const columns = useMemo(() => barColumns(data, MAX_COLUMNS), [data]);
   const gap = useMemo(() => ({ gap: columnGap(columns.length) }), [columns]);
   const ink = useMemo(

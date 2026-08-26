@@ -1,6 +1,5 @@
-// Resolves every icon name literal in the mobile source against the real
-// resolver: a missing alias is a render crash. Computed names escape; keep
-// call sites literal.
+// Every icon literal must resolve — a missing alias is a render crash.
+// Computed names escape; keep call sites literal.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -35,7 +34,7 @@ describe("icon call sites", () => {
           if (match.groups?.name) used.add(match.groups.name);
     }
 
-    // A pattern gone quiet must fail loudly here.
+    // Fail loudly if a pattern goes quiet.
     expect(used.size).toBeGreaterThan(40);
 
     const unresolved: string[] = [];

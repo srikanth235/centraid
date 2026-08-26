@@ -1,6 +1,5 @@
-// Search (v12 handoff § Screens 3): the field first, then the SAME chips and
-// rows as the roster (applyRosterFilter/Row) — one definition of "starred and
-// overdue". Gate on `status`, NOT `loading`; `unreachable` draws nothing.
+// Search (v12 handoff): same chips/rows as the roster. Gate on `status`,
+// NOT `loading`; `unreachable` draws nothing.
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
@@ -74,8 +73,7 @@ export function SearchRoute(props: SearchRouteProps): ReactNode {
           value={props.term}
           aria-label={FIELDS.searchPlaceholder}
           placeholder={FIELDS.searchPlaceholder}
-          // Callback ref: `ref={props.inputRef}` would read later `props.…`
-          // as ref access (react-compiler `Refs`).
+          // Callback ref: direct `ref={props.inputRef}` trips react-compiler `Refs`.
           ref={(el) => {
             props.inputRef(el);
           }}

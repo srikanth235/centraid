@@ -1,10 +1,7 @@
-// Cron tz resolution (#570): trigger tz → gateway pref → host-local; never
-// hardcode geography. DST (docs/cron-timezone.md): spring-forward gaps never
-// fire; fall-back overlap fires each wall-clock minute once.
+// Cron tz (#570): trigger tz → gateway pref → host-local; DST: docs/cron-timezone.md.
 
 import { isIanaTimeZone, wallWeekday, zonedParts } from "@centraid/core/time";
 
-/** Gateway-wide default cron timezone pref key. */
 export const CRON_DEFAULT_TIMEZONE_PREF = "automation.cron.defaultTimezone";
 
 export type WallClockFields = {
@@ -17,7 +14,6 @@ export type WallClockFields = {
   readonly weekday: number;
 };
 
-/** Non-empty IANA zone this runtime's `Intl` knows. */
 export function isValidIanaTimeZone(name: string): boolean {
   if (typeof name !== "string") return false;
   const trimmed = name.trim();
@@ -39,7 +35,7 @@ export function resolveCronTimezone(
   return undefined;
 }
 
-/** Absent tz keeps Date getters — byte-identical to pre-#570 matching. */
+/** Absent tz keeps Date getters (pre-#570). */
 export function wallClockFields(
   date: Date,
   timeZone?: string

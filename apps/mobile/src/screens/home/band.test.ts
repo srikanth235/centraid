@@ -1,6 +1,5 @@
-// Mobile band contract (Binding Layer, invariant 1): FRAME destinations only,
-// never more than five plus More. HomeBand renders every tab through one
-// component, so these pure checks prove the real touch floor.
+// Band contract (Binding Layer invariant 1): FRAME destinations only, max
+// five plus More; these checks pin the real touch floor.
 
 import { describe, expect, it } from "vitest";
 
@@ -30,7 +29,7 @@ describe("the mobile band", () => {
 
   it("holds at most 5 destinations, Home included", () => {
     expect(bandTabs(DEFAULT_PLACE_PINS)).toHaveLength(4);
-    // HomeBand adds standing More outside this list.
+    // Standing More sits outside this list.
     expect(bandTabs(DEFAULT_PLACE_PINS).length + 1).toBe(5);
     // Pinning every place still caps at five; rest overflows to More.
     expect(bandTabs(ALL_PLACE_IDS)).toHaveLength(MAX_BAND_TABS);

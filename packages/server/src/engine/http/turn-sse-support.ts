@@ -27,7 +27,7 @@ export function parseTurnAttachmentRefs(raw: unknown): TurnAttachmentRef[] {
   });
 }
 
-/** Realpath owner-selected extra roots; persisting them is the consent receipt against later symlink widening. */
+/** Realpath owner-selected extra roots; persisting them is the consent receipt against symlink widening. */
 export async function parseAdditionalDirectories(
   raw: unknown
 ): Promise<string[]> {
@@ -81,7 +81,7 @@ export function resolveTurnAttachments(
   );
 }
 
-/** Keep only refs naming a real CAS file; size receipts must match stored bytes so forged/stale refs never ride. */
+/** Keep only refs naming a real CAS file; size receipts must match stored bytes. */
 export function validateTurnAttachmentRefs(
   conversationStore: ConversationHistoryStore | undefined,
   appId: string,
@@ -103,8 +103,7 @@ export function validateTurnAttachmentRefs(
 
 /**
  * Serialize work on `(appId, conversationId)`; each caller awaits the previous
- * tail. The lock map is per-runtime, not module-level: two gateways can share
- * an `appId` (#113).
+ * tail. The lock map is per-runtime, not module-level (#113).
  */
 export async function withConversationLock<T>(
   conversationLocks: Map<string, Promise<void>>,
@@ -118,7 +117,7 @@ export async function withConversationLock<T>(
   const next = new Promise<void>((resolve) => {
     release = resolve;
   });
-  // Chained tail (previous → next): newer callers await everything ahead of them; identity lets cleanup know nobody queued after.
+  // Chained tail (previous → next): newer callers await everything ahead of them; identity tells cleanup nobody queued after.
   const chained = previous.then(() => next);
   conversationLocks.set(key, chained);
   await previous;

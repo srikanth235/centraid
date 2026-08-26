@@ -1,4 +1,4 @@
-// SSE-drop catch-up (#420): poll turn-settle until the turn lands, then reload.
+// SSE-drop catch-up (#420): poll settle until the turn lands; reload.
 
 export interface CatchUpStatus {
   turnCount: number;
@@ -6,7 +6,7 @@ export interface CatchUpStatus {
 }
 
 export interface CatchUpOptions {
-  /** Count observed BEFORE the dropped send. */
+  /** Turn count before the dropped send. */
   baselineTurnCount: number;
   getStatus: () => Promise<CatchUpStatus>;
   isCancelled?: () => boolean;

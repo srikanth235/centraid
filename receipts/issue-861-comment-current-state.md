@@ -4586,6 +4586,62 @@ Files changed (full inventory):
 - `packages/vault/src/share/read-closure.ts`
 - `tests/comment-density-ratchet.json`
 
+
+### Wave 7 completion pass — the 28 files still over cap (2026-08-26)
+
+Three finisher workers re-cut every Wave 7 file the official metric still
+measured above 15% (28 at dispatch, including `tasks/frame.tsx` and
+`Details.tsx` restored from HEAD earlier — both properly swept this time,
+JSX containers kept). All landed below cap; none required an allowlist entry.
+
+| figure | after Wave 7 | after completion |
+| --- | --- | --- |
+| global character share | 13.90% | **13.87%** |
+| global line density | 7.75% | **7.74%** |
+| files over 15% cap | 1,227 | **1,199** |
+
+Verification (all green before commit):
+
+```
+node scripts/comment-only-diff.mjs HEAD   # 28 changed file(s) — all comment-only
+bun run format && bun run format:check    # proof re-run green
+bun run lint                              # clean
+node scripts/check-comment-density-ratchet.mjs --write && node scripts/check-comment-density-ratchet.mjs
+# ok — no pin rose, no unpinned file over cap
+```
+
+Files changed (full inventory):
+
+- `apps/mobile/app.config.ts`
+- `apps/mobile/src/apps/people/PeopleScreen.tsx`
+- `apps/mobile/src/kit/components/BarsBlock.tsx`
+- `apps/mobile/src/kit/components/icon-resolver.sweep.test.ts`
+- `apps/mobile/src/kit/transfer/transfer-queue.ts`
+- `apps/mobile/src/screens/home/band.test.ts`
+- `apps/mobile/src/test/react-native-stub.tsx`
+- `packages/blueprints/apps/_shared/ScopeChips.tsx`
+- `packages/blueprints/apps/_shared/face-crop.ts`
+- `packages/blueprints/apps/docs/components/Details.tsx`
+- `packages/blueprints/apps/docs/components/ShelfStrip.tsx`
+- `packages/blueprints/apps/people/components/SearchRoute.tsx`
+- `packages/blueprints/apps/photos/components/MoreSheet.tsx`
+- `packages/blueprints/apps/photos/custody-store.ts`
+- `packages/blueprints/apps/tasks/frame.tsx`
+- `packages/client/src/react/screens/StartupErrorScreen.tsx`
+- `packages/client/src/react/screens/device-errors.ts`
+- `packages/client/src/react/shell/routes/assistantCatchUp.ts`
+- `packages/design/src/eleven-px-floor.test.ts`
+- `packages/design/src/themes/index.ts`
+- `packages/server/src/automation/cron-timezone.ts`
+- `packages/server/src/automation/handler/audit.ts`
+- `packages/server/src/backup/backup-health.ts`
+- `packages/server/src/cli/device-admin.ts`
+- `packages/server/src/engine/http/turn-sse-support.ts`
+- `packages/vault/src/gateway/cards.ts`
+- `packages/vault/src/ingest/payload-schemas.ts`
+- `packages/vault/src/share/read-closure.ts`
+- `tests/comment-density-ratchet.json`
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->

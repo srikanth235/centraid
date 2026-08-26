@@ -14,9 +14,9 @@ import { resolveItemCost } from "@centraid/server/engine";
 
 import type { HistoryConfig } from "../manifest/manifest.js";
 
-/** Live run-stream sink (#158), wired by the host to its `runId`-keyed bus;
- *  unwired it's a no-op (the durable ledger still records every node). Every
- *  emit is guarded — a wedged sink must never fail the handler. */
+/** Live run-stream sink (#158), host-wired to its `runId` bus; unwired = no-op
+ *  (ledger still records all nodes). Every emit is guarded — a wedged
+ *  sink must never fail the handler. */
 export type RunEventSink = (ev: AutomationTurnStreamEvent) => void;
 export const noopRunEventSink: RunEventSink = () => undefined;
 
@@ -52,8 +52,7 @@ export interface RunRef {
   output?: unknown;
 }
 
-/** Project a `turns` row into the handler-facing `ctx.runs` ref
- *  (`automationRef` is the automation's stable id, not a conversation id). */
+/** Project a `turns` row into the handler-facing `ctx.runs` ref; `automationRef` is the automation's stable id, not a conversation id. */
 export function rowToRunRef(
   row: Turn,
   automationRef: string,
@@ -132,14 +131,14 @@ export interface OpenRunNodeArgs {
   emit: RunEventSink;
   runId: string;
   ordinal: number;
-  /** Stable harness-native correlation key for overlapping tool calls. */
+  /** Harness-native correlation key for overlapping tool calls. */
   callId?: string;
   batchId?: number;
   kind: ItemKind;
   /** Tool name or `'delegate'`. */
   name?: string;
   args?: unknown;
-  /** Lossless harness event envelope, when one exists. */
+  /** Lossless harness event envelope, if any. */
   rawJson?: string;
   started: number;
 }
@@ -183,7 +182,7 @@ export function openRunNode(args: OpenRunNodeArgs): string {
   return nodeId;
 }
 
-/** Map a chat `usage` event (#158) onto `closeRunNode`'s token/model fields; `{}` when none observed. */
+/** Map a turn-stream `usage` event (#158) onto `closeRunNode`'s token/model fields; `{}` when none observed. */
 export function usageCloseFields(
   usage: Extract<TurnStreamEvent, { type: "usage" }> | undefined
 ): Partial<CloseRunNodeArgs> {
@@ -220,10 +219,10 @@ export interface CloseRunNodeArgs {
   callId?: string;
   ok: boolean;
   result?: unknown;
-  /** Lossless harness completion envelope, when one exists. */
+  /** Lossless harness completion envelope, if any. */
   rawJson?: string;
   error?: string;
-  /** Child turn id for an item that spawned one. Dormant — no current producer. */
+  /** Child turn id for an item that spawned one. Dormant: no producer. */
   childTurnId?: string;
   started: number;
   ended: number;
@@ -238,7 +237,7 @@ export interface CloseRunNodeArgs {
   costSource?: "harness" | "estimated";
 }
 
-/** Settle an open node: ledger write AND `item.end`. Bus carries untruncated
+/** Settle an open node: ledger write AND `item.end`. Bus gets untruncated
  *  values (ephemeral); the ledger keeps the capped copies. */
 export function closeRunNode(args: CloseRunNodeArgs): void {
   const durationMs = args.ended - args.started;

@@ -1,7 +1,5 @@
-// READOUT of lib/upload/native-queue.ts's sqlite ledger (#711): the
-// member-facing counts, one place so screens cannot disagree. FAILS CLOSED —
-// an unreadable ledger returns zeroed counts + readable:false, never a
-// fabricated total.
+// Member-facing readout of native-queue.ts's ledger (#711), one place so
+// screens cannot disagree. FAILS CLOSED: unreadable → zeroed + readable:false.
 
 import { authHeader } from "../../lib/gateway";
 import { UploadQueue } from "../../lib/upload/native-queue";

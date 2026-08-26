@@ -1,5 +1,4 @@
-// Crop math (#711): CSS-scale the tile source image by bbox fractions —
-// no new blob variant.
+// Crop math (#711): CSS-scale the tile image by bbox fractions; no new blob variant.
 export interface FaceBBox {
   x: number;
   y: number;
@@ -14,10 +13,9 @@ export interface FaceCropStyle {
   top: number;
 }
 
-// 1.6x covers snug detector boxes (clipped forehead/chin).
+// 1.6x covers snug detector boxes.
 const CROP_MARGIN = 1.6;
 
-/** Centres the bbox in a `boxPx` square; null when dishonest. */
 export function faceCropStyle(
   bbox: FaceBBox | null | undefined,
   imgW: number | null | undefined,

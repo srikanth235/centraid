@@ -1,5 +1,5 @@
-// Overflow sheet for shelves off the band (§3.1/§15). Import deliberately
-// absent — app bar owns the filled verb.
+// Overflow sheet for shelves off the band (§3.1/§15); no icon import — the
+// app bar owns the filled verb.
 import { MORE_DESTINATIONS } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";
 
@@ -17,8 +17,7 @@ export function MoreSheet({
   onClose: () => void;
 }) {
   return (
-    // <dialog open>, never showModal(): a modal takes the top layer over
-    // the frame chrome.
+    // Never showModal(): a modal takes the top layer over frame chrome.
     <dialog open className={styles.sheet} aria-label="More in Photos">
       <div className={styles.grabber} aria-hidden="true" />
       <nav className={styles.rows}>

@@ -1,6 +1,5 @@
-// The 11px floor (#708), enforced on emitted CSS (toCss) and native lowering
-// (toNativeTheme): sizes parsed OUT of the --t-<role> font shorthand,
-// rem→px via REM_BASE_PX so FLOOR stays a real 11px under any root.
+// The 11px floor (#708), enforced on emitted CSS and native lowering; sizes
+// parsed OUT of the --t-<role> font shorthand.
 import { describe, expect, test } from "vitest";
 
 import { toCss } from "./css.js";
@@ -11,8 +10,8 @@ const FLOOR = 11;
 
 const remToPx = (rem: string): number => Number(rem) * REM_BASE_PX;
 
-/** Sizes parsed from each `--t-<role>` font shorthand — deliberately NOT
- *  from `--t-<role>-size`, a different property this test must not lean on. */
+/** Sizes parsed from each `--t-<role>` font shorthand — never from
+ *  `--t-<role>-size`, a different property. */
 function shorthandSizesFromCss(css: string): Record<string, number> {
   const sizes: Record<string, number> = {};
   const re =

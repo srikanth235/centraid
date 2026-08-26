@@ -1,6 +1,5 @@
-// Scope selector (#599); writes go through write-target.ts. Scope `color`
-// stays OUT of chip fill — kit.css owns selected; labels are scope names,
-// never storage names.
+// Scope selector (#599); writes go through write-target.ts. Kit.css owns
+// selected fill; labels are scope names, never storage names.
 import type { InlineScope } from "../inline-types.ts";
 
 import styles from "./ScopeChips.module.css";

@@ -1,7 +1,4 @@
-/*
- * Gateway device-screen refusals in plain words (#726): decode codes out
- * of the thrown message rather than parse HTTP bodies per screen.
- */
+// Device-screen refusals in plain words (#726), decoded from thrown messages.
 
 const PAIR_ERRORS: readonly (readonly [string, string])[] = [
   [
@@ -38,7 +35,7 @@ export function pairErrorMessage(err: unknown): string {
 const LAST_DEVICE_CODE = "last_device_confirmation_required";
 const LAST_DEVICE_VAULT = /for\s+\\?"(?<vault>[^"\\]+)\\?";\s+type/u;
 
-/** Vault that would lose its last live device, else `undefined`. */
+/** Vault losing its last live device, else `undefined`. */
 export function lastDeviceVault(err: unknown): string | undefined {
   const raw = err instanceof Error ? err.message : String(err);
   if (!raw.includes(LAST_DEVICE_CODE)) return undefined;

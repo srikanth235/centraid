@@ -1,11 +1,8 @@
 /*
  * `centraid-gateway pair` / `centraid-gateway devices` — device enrollment
- * administration (#289). Pair reaches the running loopback daemon through
- * the host-custody bearer and receives a one-line ticket (gateway identity
- * pin + relay hint + one-time secret, short TTL); desktop / PWA paste it,
- * phones scan `pair --qr`. Offline mutations take gateway.db's exclusive
- * lock, refusing while the daemon runs. Tickets redeem only through the
- * iroh ceremony.
+ * administration (#289). Pair mints a one-line ticket via the daemon's
+ * host-custody bearer; offline mutations take gateway.db's exclusive lock,
+ * refusing while the daemon runs. Tickets redeem only through the iroh ceremony.
  *
  * governance: allow-repo-hygiene file-size-limit (#608) cohesive device-admin command family shares parsing, host-custody auth, and output contracts
  */
@@ -41,15 +38,15 @@ interface DeviceArgs {
   vault?: string;
   label?: string;
   ttlMinutes?: number;
-  /** Existing owner (id or exact label) to mint the invitation for. */
+  /** Existing owner (id or exact label) for the invitation. */
   owner?: string;
   /** New person; stopped-daemon `devices add` lane only. */
   newOwner?: string;
   /** Vault name required to confirm a last-device revoke. */
   confirmLastDevice?: string;
-  /** Machine-readable JSON instead of human text (#382, `pair` only). */
+  /** JSON instead of human text (#382, `pair` only). */
   json?: boolean;
-  /** Human mode: also print a terminal QR of the ticket. */
+  /** Also print a terminal QR of the ticket. */
   qr?: boolean;
   positional: string[];
 }
@@ -119,8 +116,8 @@ function parseDeviceArgs(
 }
 
 /**
- * Resolve `--vault` (name or id) against the registry; no selector defaults
- * to the owner's PERSONAL vault, never the household vault.
+ * Resolve `--vault` (name or id); no selector defaults to the owner's
+ * PERSONAL vault, never the household vault.
  */
 function resolveVault(
   registry: VaultRegistry,
@@ -145,10 +142,10 @@ export async function commandPair(
   fail: (msg: string, code?: number) => never,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
-  // Pre-scan for `--json` so it governs the whole run, even arg-parse failures.
+  // Pre-scan for `--json`: it governs the whole run, even arg-parse failures.
   const json = args.includes("--json");
-  // TS's never-return narrowing (used on parsed.dataDir below) only kicks in
-  // when the call-derived const is annotated.
+  // TS's never-return narrowing (used on parsed.dataDir below) needs this
+  // call-derived const annotated.
   const localFail: Fail = jsonFail(json, fail);
   await runJson(json, fail, async () => {
     const parsed = parseDeviceArgs(args, localFail);
@@ -165,7 +162,7 @@ export async function commandPair(
     }
     const baseUrl = `http://127.0.0.1:${port}`;
     // `endpointTicket` is auth-gated on `/_gateway/info` (#568): present the
-    // landlord bearer first, or an anonymous GET looks like "iroh not ready".
+    // landlord bearer first, else an anonymous GET looks like "iroh not ready".
     const endpointSecret = daemonKeyStore(
       daemonLayoutFor(config.dataDir).keysDir
     ).load("endpoint-key.bin");
@@ -192,7 +189,7 @@ export async function commandPair(
       localFail(`daemon at ${baseUrl} owns a different data directory`, 1);
     }
     // An unauthenticated handshake drops the ticket silently (#603): report
-    // the pinned-bearer mismatch instead of a fake "endpoint not ready".
+    // the pinned-bearer mismatch, not a fake "endpoint not ready".
     if (handshake.info.authenticated === false) {
       localFail(
         `daemon at ${baseUrl} rejected this CLI's credential. It was started with a pinned ` +
@@ -384,7 +381,7 @@ export async function commandDevices(
         const vault = resolveVault(registry, parsed.vault, fail);
         // `--owner` binds an existing person; `--new-owner` creates one; with
         // neither, default to the VAULT's owner — an unowned vault falls back
-        // to the device becoming its own owner (#599 Decision 4, #726).
+        // to the device owning itself (#599 Decision 4, #726).
         const owner =
           parsed.owner === undefined
             ? undefined
@@ -438,20 +435,19 @@ export async function commandDevices(
         (row) => row.enrollmentId === target || row.endpointId === target
       );
     if (candidates.length === 0) fail(`no enrollment matches "${target}"`, 1);
-    // Revocation is also a vault-local data erasure boundary: an offline
-    // intent outcome is device-scoped and must not survive unpairing.
+    // Revocation is also a vault-local data erasure boundary: device-scoped
+    // intent outcomes must not survive unpairing.
     const cleanupRegistry = openVaultRegistry({
       rootDir: layout.vaultDir,
-      // Without the daemon's protector every sealkey fails to unwrap, the
-      // mount lands in `failedMountsByDir`, and this loop would silently skip
-      // the erasure revocation exists to perform (#568).
+      // Without the daemon's protector every sealkey fails to unwrap, mounts
+      // land in `failedMountsByDir`, silently skipping the erasure (#568).
       keyStore: daemonKeyStore(layout.keysDir),
       logger: quietLogger,
       enableWalShipper: false,
     });
     try {
-      // Revoking the owner's last live device strands their vaults behind
-      // filesystem-only recovery — demand typed confirmation.
+      // Revoking the owner's last live device strands vaults behind
+      // filesystem-only recovery; demand typed confirmation.
       const liveEndpointsOf = (ownerId: string): Set<string> =>
         new Set(
           devices
