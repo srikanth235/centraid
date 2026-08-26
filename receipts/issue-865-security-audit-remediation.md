@@ -352,6 +352,14 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
 - SECURITY.md
 - CHANGELOG.md
 - docs/oauth-assist.md
+- deny.toml
+- scripts/security/rust-supply-chain.mjs
+- packages/tunnel/data-plane/Cargo.toml
+- packages/tunnel/data-plane/Cargo.lock
+- packages/tunnel/native/Cargo.toml
+- packages/tunnel/native/Cargo.lock
+- apps/web/iroh-wasm/Cargo.toml
+- apps/web/iroh-wasm/Cargo.lock
 
 Gate-corpus follow-ons forced by the new schema rung and the worker.ts edit:
 `schema-epoch-census.json` grows to ladderLength 5 (the growth-guard demands
@@ -375,6 +383,14 @@ stubbed at `getReport`/`writeReport` rather than replaced with `undefined`.
 `redactLaunchArgs` — install.ts must not import `node:worker_threads` to
 detect that, or the real module is cached and a tainted graph can import
 it past the hook. `process.kill` lets signal `0` through.
+- **Rust supply-chain (run 32845713089).** `h2` 0.4.15 is RUSTSEC-2026-0258
+  (upgrade to ≥0.4.16) — lockfiles move to 0.4.19. Yanked `spin` and unsound
+  `lru` 0.18.1 move with them. First-party crates declare `license = "MIT"`
+  (the repo licence) so cargo-deny stops treating them as unlicensed.
+  `paste` and `atomic-polyfill` are unmaintained iroh transitives with no
+  successor iroh has switched to; they are named on `deny.toml`
+  `[advisories].ignore` and on `cargo audit --ignore`, not dropped from the
+  gate.
 
 ## Session
 
