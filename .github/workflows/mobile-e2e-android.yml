@@ -32,6 +32,14 @@ jobs:
     # Raised from 90 when #781 added the three experience probes to this lane.
     timeout-minutes: 120
     steps:
+      # W6.3 egress ratchet: a NEW workflow that runs dependency code must carry
+      # harden-runner as its first step. `audit` (the sanctioned learning mode,
+      # same as soak-weekly) because this job talks to many emulator/gradle/
+      # Maestro/Metro endpoints whose allowlist is not yet learned; flip to
+      # `block` with `allowed-endpoints` once one green run has reported them.
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:

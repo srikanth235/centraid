@@ -31,6 +31,7 @@ Issue: https://github.com/srikanth235/centraid/issues/870 — `mobile-e2e-androi
 ## Decisions
 
 - Dispatch-only rather than adding a schedule or push trigger: the nightly already runs this job from `e2e.yml`; a second scheduled copy would double-run a 2-hour lane and race the shared caches for no extra signal.
+- The new workflow carries `step-security/harden-runner` (`egress-policy: audit`) as its first step, per the W6.3 egress ratchet's new-workflow rule (`lint:ci-egress`); `audit` rather than `block` because the emulator/gradle/Maestro/Metro endpoint allowlist is not yet learned.
 
 ## Verification
 
