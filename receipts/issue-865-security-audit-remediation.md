@@ -85,15 +85,18 @@ reconnect note instead of redeeming anonymously.
 `packages/server/src/engine/sandbox/install.ts`. Alongside the existing
 revocations: `process.kill`/`process.abort` throw the lane's `denied(...)` error
 (worker threads share the gateway PID; `worker.terminate()` cannot save a
-SIGKILL'd host), `process.report` is defined non-writable as `undefined` so
-`getReport()` can never leak the real OS environ around the frozen `env`
-(Node internals read this property under `--report-on-uncaught-exception`;
-no current gateway or Electron launch flag sets that, so undefined stays
-correct; a future report-flagged lane would need a stub), and
-`argv`/`execArgv` are frozen to empty arrays inside worker threads only
-(`isMainThread` guard keeps the vitest harness's own argv intact). No lane
-needs `process.kill` — the only subprocess lane shells out through the
-allowlisted `child_process` builtin.
+SIGKILL'd host), `process.report.getReport`/`writeReport` are stubbed so they cannot leak
+the real OS environ around the frozen `env` (the host object is kept —
+Electron's crash reporter reads `process.report`, and replacing it with
+`undefined` hung handler workers). `argv`/`execArgv` are emptied in place
+when the worker runner asks (`redactLaunchArgs`), not by importing
+`node:worker_threads` to detect the thread (that cached the real module
+and let a tainted graph import it from cache). `process.kill` still
+refuses lethal signals; signal `0` (existence probe) is passed through
+because Node/Electron worker internals use it. `process.abort` throws
+the lane's `denied(...)`. No lane needs lethal `process.kill` — the only
+subprocess lane shells out through the allowlisted `child_process`
+builtin.
 
 ### F5 — SSRF: push-wake endpoints + runner pin bypass
 
@@ -323,6 +326,9 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
 - packages/server/src/engine/sandbox/install.ts
 - packages/server/src/engine/sandbox/install.test.ts
 - packages/server/src/engine/sandbox/sandbox-escape.test.ts
+- packages/server/src/engine/sandbox/boot.ts
+- packages/server/src/engine/worker/runner.ts
+- packages/server/src/automation/worker/runner.ts
 - packages/vault/src/ingest/mbox.ts
 - packages/vault/src/ingest/mbox-attachments.test.ts
 - packages/vault/src/commands/sync.ts
@@ -364,10 +370,11 @@ to captured arguments / `mock.calls` length so the budget stays 788.
 F4's new `process.kill`/`abort`/`report`/`argv` revocations are each
 try/caught: a frozen property (Electron workers) must not abort sandbox
 install, which takes the handler worker down with it. `process.report` is
-stubbed at `getReport` rather than replaced with `undefined` — Electron's
-crash reporter reads the property, and wiping it hung handler settlement
-in the Linux desktop e2e lane (notes/people/photos/tasks). `argv`/`execArgv`
-are emptied in place for the same reason.
+stubbed at `getReport`/`writeReport` rather than replaced with `undefined`.
+`argv`/`execArgv` are emptied only when the worker runner passes
+`redactLaunchArgs` — install.ts must not import `node:worker_threads` to
+detect that, or the real module is cached and a tainted graph can import
+it past the hook. `process.kill` lets signal `0` through.
 
 ## Session
 

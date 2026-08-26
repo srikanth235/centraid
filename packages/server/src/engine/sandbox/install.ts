@@ -60,7 +60,6 @@
 import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { isMainThread } from "node:worker_threads";
 
 import { denied } from "./denied.js";
 import { setConfinedReadRoots } from "./fs-guard.js";
@@ -109,7 +108,10 @@ let installed: SandboxHandle | undefined;
  * DIFFERENT policy throws — silently re-pointing a live sandbox at another
  * lane would be a containment bug wearing a convenience API.
  */
-export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
+export function installWorkerSandbox(
+  policy: SandboxPolicy,
+  options?: { redactLaunchArgs?: boolean }
+): SandboxHandle {
   if (installed) {
     if (installed.policy.lane !== policy.lane) {
       throw denied(
@@ -188,7 +190,7 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
     },
   });
 
-  revokeAmbientAuthority(policy);
+  revokeAmbientAuthority(policy, options?.redactLaunchArgs === true);
 
   installed = {
     policy,
@@ -212,7 +214,10 @@ export function resetWorkerSandboxForTests(): void {
   installed = undefined;
 }
 
-function revokeAmbientAuthority(policy: SandboxPolicy): void {
+function revokeAmbientAuthority(
+  policy: SandboxPolicy,
+  redactLaunchArgs: boolean
+): void {
   if (policy.network === "denied") {
     const revoke = (name: string) => () => {
       throw denied(
@@ -286,23 +291,28 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
   // these properties. Throwing here would abort sandbox install and take
   // down the handler worker — a louder failure than leaving a revoked
   // method in place.
-  const revokeProcessMethod = (name: "kill" | "abort", message: string) => {
-    try {
-      proc[name] = () => {
-        throw denied(message);
-      };
-    } catch {
-      /* already non-writable */
-    }
-  };
-  revokeProcessMethod(
-    "kill",
-    "process.kill is revoked; worker threads share the gateway's PID, so a signal from an untrusted handler kills the whole gateway"
-  );
-  revokeProcessMethod(
-    "abort",
-    "process.abort is revoked; it crashes the shared gateway process, not just this handler's thread"
-  );
+  // Keep signal 0 (existence probe) — Node and Electron worker internals use
+  // it. Lethal signals from an untrusted handler still die here.
+  const originalKill = process.kill.bind(process);
+  try {
+    proc.kill = (pid: number, signal?: string | number) => {
+      if (signal === 0) return originalKill(pid, 0);
+      throw denied(
+        "process.kill is revoked; worker threads share the gateway's PID, so a signal from an untrusted handler kills the whole gateway"
+      );
+    };
+  } catch {
+    /* already non-writable */
+  }
+  try {
+    proc.abort = () => {
+      throw denied(
+        "process.abort is revoked; it crashes the shared gateway process, not just this handler's thread"
+      );
+    };
+  } catch {
+    /* already non-writable */
+  }
 
   // `process.report.getReport()` reads the REAL OS environ at call time (#865),
   // straight past the frozen-empty `process.env` above, and would hand a
@@ -312,15 +322,13 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
   // stub getReport instead. Never throw — a failed install is a dead worker.
   revokeDiagnosticReport(proc);
 
-  // argv and execArgv echo how the gateway was launched (#865). Each thread
-  // owns its own copy of these properties, so mutating them here cannot touch
-  // the host process. Empty in place rather than replacing the property:
-  // Electron's worker bootstrap keeps identity-stable argv arrays, and
-  // defineProperty-replacing them hung handler dispatch in desktop e2e
-  // (notes/people/photos/tasks write settlement never returned).
-  // Only inside real worker threads: this file also installs in-process
-  // under the test harness (`isMainThread`), and there argv is the harness.
-  if (!isMainThread) {
+  // argv and execArgv echo how the gateway was launched (#865). Emptyed in
+  // place, and only when the worker runner asked — this file also installs
+  // in-process under the vitest harness, where argv is the harness's own
+  // command line. Do not import `node:worker_threads` to detect that: loading
+  // it here caches the real module in the worker, and a tainted handler
+  // graph can then `import "node:worker_threads"` from cache past the hook.
+  if (redactLaunchArgs) {
     for (const name of ["argv", "execArgv"] as const) {
       const current = proc[name];
       if (Array.isArray(current)) current.length = 0;

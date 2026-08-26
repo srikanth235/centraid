@@ -532,7 +532,9 @@ function execute(request: WorkerRequest): void {
             : request.sandboxLane === "media-transcode"
               ? sandboxApi.mediaTranscodePolicy(roots)
               : sandboxApi.automationHandlerPolicy();
-        const sandbox = sandboxApi.installWorkerSandbox(policy);
+        const sandbox = sandboxApi.installWorkerSandbox(policy, {
+          redactLaunchArgs: true,
+        });
         sandbox.taint(pathToFileURL(req.handlerFile).href);
       }
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {

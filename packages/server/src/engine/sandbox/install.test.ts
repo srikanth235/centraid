@@ -133,6 +133,8 @@ describe("ambient-authority revocation", () => {
     expect(() => proc.kill(process.pid, "SIGKILL")).toThrow(
       /share the gateway's PID/u
     );
+    // Existence probes (signal 0) stay live — worker internals use them.
+    expect(() => proc.kill(process.pid, 0)).not.toThrow();
     expect(() => proc.abort()).toThrow(SandboxDeniedError);
     expect(() => proc.abort()).toThrow(/crashes the shared gateway process/u);
     // Stub getReport on the host object rather than wiping `process.report`:
