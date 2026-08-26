@@ -3957,7 +3957,9 @@ Eligible over-cap files after Wave 4 (allowlist / schema / classification
 excluded): regenerate from `measureTree` sorted by chars-over-cap. Then:
 
 1. Further sweep waves (~150 files x 8 agents) until the remaining worklist is
-   small enough for a residue re-pass.
+   small enough for a residue re-pass — continued under
+   [#874](https://github.com/srikanth235/centraid/issues/874), the successor
+   umbrella carrying this phase's remaining scope.
 2. Residue re-pass: files that stopped at honest floors >13% — allowlist vs
    deeper cuts.
 3. Schema wave (root-owned): over-cap files under `packages/vault/src/schema/`
