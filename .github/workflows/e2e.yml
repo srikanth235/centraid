@@ -555,6 +555,17 @@ jobs:
           done
           cat /tmp/centraid-metro-android.log
           exit 1
+      # #870 — the dev client loads whatever this manifest's launchAsset names.
+      # A launchAsset of /.expo/.virtual-metro-entry.bundle (Expo's fallback
+      # when it cannot resolve the workspace entry) serves a 1-module stub and
+      # every journey times out on a blank app. Print it so the CI manifest can
+      # be compared with a known-good local one.
+      - name: Probe the dev-client manifest
+        run: |
+          curl -fsS -H "expo-platform: android" \
+            -H "Accept: application/expo+json,application/json" \
+            http://127.0.0.1:8081/ | head -c 1500
+          echo
       # Restore the built Android dev-client .apk. Same all-or-nothing, split
       # restore/save rationale as the iOS job: the emulator action's script runs
       # the build, so a cache HIT skips gradle entirely and just adb-installs the
