@@ -1,10 +1,4 @@
-// THE BAND CAN BE CLAIMED AND HANDED BACK (issue #712 E3).
-//
-// `setBandOwner` had no caller on either client: the frame honoured a
-// preference the member had no way to express. These assert the latch itself —
-// the key namespace it now shares with the web shell, that a write survives a
-// relaunch, and that it is keyed PER APP rather than being Photos behaviour
-// wearing a general name.
+// Band claim/hand-back latch (#712): shared web-shell key namespace, survives relaunch, keyed per app.
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,9 +13,6 @@ import {
   writeBandOwner,
 } from "./band-owner";
 
-// A REAL in-memory device store, not a stubbed-out one. The claim under test
-// is that the answer OUTLIVES the process, and a mock whose `getItem` always
-// returns null can only ever prove that nothing crashed.
 const device = new Map<string, string>();
 vi.mock(
   import("@react-native-async-storage/async-storage"),
@@ -42,8 +33,7 @@ vi.mock(
     }) as never
 );
 
-/** What a surface would paint right now — the store's warm cache, read the
- *  way the hook's own hydrate leaves it. */
+/** The store's warm cache, as the hook's hydrate leaves it. */
 const currentOwner = (appId: string): BandOwner =>
   asBandOwner(Store.get(bandOwnerKey(appId), DEFAULT_BAND_OWNER));
 
@@ -53,8 +43,6 @@ const raw = (appId: string): Promise<string | null> =>
 describe("the band-owner latch", () => {
   beforeEach(async () => {
     await AsyncStorage.clear();
-    // The Store keeps a synchronous in-memory cache; a fresh hydrate per test
-    // is what a relaunch does.
     await Promise.all(
       ["photos", "docs", "notes"].map((app) =>
         Store.hydrate(bandOwnerKey(app), DEFAULT_BAND_OWNER)
@@ -63,10 +51,8 @@ describe("the band-owner latch", () => {
   });
 
   it("shares the web shell's key namespace, not a Photos-owned one", () => {
-    // The reconciliation itself (see band-owner.ts's header): mobile used to
-    // spell this `photos.bandOwner.<appId>` from inside the Photos app, which
-    // meant the frame could not read its own preference without importing an
-    // app — a boundary `scripts/check-import-boundaries.ts` forbids.
+    // Photos-owned keys would force the frame to import an app — a boundary
+    // check-import-boundaries.ts forbids.
     expect(bandOwnerKey("photos")).toBe("shell.bandOwner.photos");
     expect(bandOwnerKey("docs")).toBe("shell.bandOwner.docs");
   });
@@ -86,8 +72,6 @@ describe("the band-owner latch", () => {
   it("survives a relaunch — the answer is written, not held in memory", async () => {
     writeBandOwner("photos", "host");
     await expect(raw("photos")).resolves.toBe('"host"');
-    // A relaunch: the in-memory cache is gone and the value is re-hydrated
-    // from device storage, which is the only place it could have survived.
     await expect(
       Store.hydrate(bandOwnerKey("photos"), DEFAULT_BAND_OWNER)
     ).resolves.toBe("host");
@@ -95,10 +79,7 @@ describe("the band-owner latch", () => {
   });
 
   it("is keyed per app — one answer says nothing about the next app", async () => {
-    // SHELL BEHAVIOUR, NOT PHOTOS BEHAVIOUR. The latch takes an `appId` and
-    // says nothing about which apps claim a band, so `notes` below is an
-    // arbitrary id standing in for the next app that claims — which is the
-    // guarantee the latch makes and the reason it takes an `appId` at all.
+    // SHELL behaviour: `notes` is an arbitrary next claiming app — why the latch takes an appId.
     writeBandOwner("photos", "host");
     await Store.hydrate(bandOwnerKey("docs"), DEFAULT_BAND_OWNER);
     expect(currentOwner("docs")).toBe("app");
@@ -112,12 +93,7 @@ describe("the band-owner latch", () => {
   });
 
   it("names the claiming apps the settings list offers", () => {
-    // A limitation stated rather than hidden: mobile has no channel a frame
-    // could ask "who has claimed", so the roster is hand-maintained. This
-    // fails the moment it drifts without someone deciding to — Docs and
-    // People joined when their v12 phone builds landed their bands (#821),
-    // Agenda and Tasks when theirs did (#834). Notes rebuilt in the same wave
-    // and is absent on purpose: its cover claims no band.
+    // Hand-maintained roster (no "who claimed" channel); notes absent — claims no band.
     expect(BAND_CLAIMING_APPS.map((app) => app.id)).toStrictEqual([
       "photos",
       "docs",

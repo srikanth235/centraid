@@ -1,4 +1,4 @@
-// The Folders shelf (handoff Part 2 §2; issue #821).
+// The Folders shelf (handoff Part 2 §2; #821).
 //
 // "A folder is a label on the document, not a place it sits" — the copy says
 // it out loud in the status line and the caption. Three blocks:

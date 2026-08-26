@@ -6,31 +6,12 @@ import { build } from "esbuild";
 
 import { metrics, toBlueprintCss } from "@centraid/design";
 
-// THE APP NAVIGATION RAIL, in a real browser (#835).
-//
-// Four of the handoff's definition-of-done items are LAYOUT and FOCUS claims
-// that jsdom cannot settle, because jsdom runs no layout and resolves no media
-// query. Each of them is a promise about what happens at a real width:
-//
-//   * "at 1090 the rail holds its width and the grid reflows" — the whole
-//     reason the rail is `flex: none` and the scroller carries `min-width: 0`.
-//     Get either wrong and the column is squeezed off the leading edge at
-//     exactly the seat the rail exists to serve.
-//   * "the rail and the content column scroll independently; neither scrolls
-//     the other" — the difference between a rail and the strip it replaces.
-//   * "one tab stop into the rail" — a roving tabindex is invisible to a
-//     DOM-shape assertion but obvious to a browser walking the tab order.
-//   * the pointer row rung — `--h-app-rail-row` is emitted touch-first and
-//     stepped down under `(pointer: fine)`, which only a real media query
-//     resolves.
-//
-// The harness mounts the SHIPPED `NavRail` and the SHIPPED row tables of both
-// apps; nothing about the rail is reimplemented here. It needs no gateway and
-// no vault — the rail is a pure function of a shelf table and a counts map,
-// which is what makes it cheap to photograph honestly. Same shape
-// `docs-grant.spec.ts` uses for the grant kit.
-//
-// The capture is the #835 UI-impact evidence.
+// THE APP NAVIGATION RAIL, in a real browser (#835). Four handoff
+// definition-of-done items are LAYOUT/FOCUS claims jsdom cannot settle:
+// 1090 rail-width hold + grid reflow, independent rail/content scrolling,
+// one tab stop into the rail, the `(pointer: fine)` row rung. Mounts the
+// SHIPPED NavRail and row tables — nothing reimplemented. This capture is
+// the #835 UI-impact evidence.
 
 const here = import.meta.dirname;
 const REPO_ROOT = path.resolve(here, "../../../..");
@@ -157,9 +138,7 @@ async function bundleRail(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Never written (`write: false`), but esbuild needs a path to name the
-    // CSS-module output against — the class map and the stylesheet are two
-    // halves of one build.
+    // Never written (`write: false`); esbuild needs a path to name the CSS-module output against.
     outdir: path.join(here, ".app-navigation-rail-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -211,15 +190,13 @@ test("the app rail holds its width, scrolls itself, and is one tab stop", async 
   await expect(photos).toBeVisible();
   await expect(docs).toBeVisible();
 
-  // ── The rail is exactly the token, on both apps, and it is not resizable by
-  // the content beside it.
+  // ── The rail is exactly the token on both apps, not resizable by adjacent content.
   const widthOf = async (nav: typeof photos): Promise<number> =>
     (await nav.boundingBox())?.width ?? 0;
   expect(await widthOf(photos)).toBe(metrics.appRail);
   expect(await widthOf(docs)).toBe(metrics.appRail);
 
-  // ── The pointer row rung, resolved by a real `(pointer: fine)` query rather
-  // than assumed. A coarse surface would keep the 44 floor.
+  // ── Pointer row rung via a real `(pointer: fine)` query; coarse keeps the 44 floor.
   const rowHeight = await page
     .getByRole("navigation", { name: "Photos" })
     .getByRole("button", { name: /Library/u })
@@ -227,9 +204,7 @@ test("the app rail holds its width, scrolls itself, and is one tab stop", async 
     .evaluate((el) => el.getBoundingClientRect().height);
   expect(Math.round(rowHeight)).toBe(metrics.appRailRow);
 
-  // ── Where the member is standing, on both spines at once: inside an album
-  // **Albums** is current, and inside a folder that folder is — with *Folders*
-  // still a reachable row above it rather than a second lit one.
+  // ── Where the member is standing, on both spines at once.
   await expect(photos.locator('[aria-current="page"]')).toHaveText(/Albums/u);
   await expect(docs.locator('[aria-current="page"]')).toHaveText(/Property/u);
   await expect(docs.locator('[aria-current="page"]')).toHaveCount(1);
@@ -252,8 +227,7 @@ test("the app rail holds its width, scrolls itself, and is one tab stop", async 
   expect(packed).toBeLessThan(wide);
   await page.setViewportSize({ height: 900, width: 1420 });
 
-  // ── THE RAIL AND THE CONTENT COLUMN SCROLL INDEPENDENTLY. Scrolling the set
-  // must not carry the spine that indexes it, in either direction.
+  // ── THE RAIL AND THE CONTENT COLUMN SCROLL INDEPENDENTLY, either direction.
   const scroller = page.locator('#photos [data-scroller="Photos"]');
   await scroller.evaluate((el) => {
     el.scrollTop = 400;
@@ -261,15 +235,12 @@ test("the app rail holds its width, scrolls itself, and is one tab stop", async 
   expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   expect(await photos.evaluate((el) => el.scrollTop)).toBe(0);
 
-  // ── ONE TAB STOP INTO THE RAIL, then up/down through the rows. Two presses
-  // from the control before it must land past the whole rail, not on its
-  // second row.
+  // ── ONE TAB STOP INTO THE RAIL, then up/down through the rows.
   await page.locator("#before").focus();
   await page.keyboard.press("Tab");
   const entered = await page.evaluate(
     () => document.activeElement?.textContent ?? ""
   );
-  // Tabbing in lands on WHERE YOU ARE, not the head of the list.
   expect(entered).toContain("Albums");
   await page.keyboard.press("Tab");
   expect(

@@ -1,4 +1,4 @@
-// The share-time place choice (issue #816).
+// The share-time place choice (#816).
 //
 // Two claims live here. The first is ordinary: the option list is what a sheet
 // should show, and the default is the safe rung. The second is the one this
@@ -124,7 +124,7 @@ describe("the Home-relative rung never leaves the device", () => {
   it("is exactly what the member's own screen would have said", () => {
     // The assertion below is only meaningful while the private ladder still
     // produces this phrase for this input. Stated here so a change that
-    // retired the rung would fail loudly rather than quietly making the
+    // retires the rung fails loudly rather than quietly making the
     // suppression test pass for the wrong reason.
     expect(relativePhrase(UP_THE_VALLEY.lat!, UP_THE_VALLEY.lng!, [HOME])).toBe(
       "3.5 km NE of Home"

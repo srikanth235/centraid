@@ -80,7 +80,7 @@ describe("addressedGatewayAuth", () => {
     vaultStatus.mockRejectedValue(new Error("offline"));
     const gatewayAuth = await offline.addressedGatewayAuth();
     expect(gatewayAuth.vaultId).toBe("vault-7");
-    // And it is a real identity, not the protocol error Home used to hit.
+    // And it is a real identity, not a protocol error.
     expect(offline.replicaIdentityForGatewayAuth(gatewayAuth)).toStrictEqual({
       gatewayId: "url:https://gateway.example/",
       vaultId: "vault-7",

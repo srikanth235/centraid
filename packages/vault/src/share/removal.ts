@@ -1,4 +1,4 @@
-// Removing a projection — the unshare half of share-by-placement (issue #599
+// Removing a projection — the unshare half of share-by-placement (#599
 // decision 11).
 //
 // Unshare deletes the projected rows in the AUDIENCE vault and nothing else.

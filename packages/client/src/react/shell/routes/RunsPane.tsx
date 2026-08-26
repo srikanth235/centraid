@@ -10,11 +10,10 @@ import { postStatus } from "../statusChannel.js";
 
 import styles from "./RunsPane.module.css";
 
-// The per-order run-history list inside the app-settings popover — the React
-// successor to app-appview.ts's `loadRunsInto`/`renderRunRow`. Newest first;
-// each row shows outcome + when + duration + summary and a pin toggle (pinned
-// runs double as replay fixtures). Rendered into the host div AppSettingsPanel
-// hands `onMountRuns`.
+// The per-order run-history list inside the app-settings popover. Newest
+// first; each row shows outcome + when + duration + summary and a pin toggle
+// (pinned runs double as replay fixtures). Rendered into the host div
+// AppSettingsPanel hands `onMountRuns`.
 export default function RunsPane({
   automationId,
 }: {

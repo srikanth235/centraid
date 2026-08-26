@@ -1,4 +1,4 @@
-// The frame every Tasks surface sits in (Tasks spec §2; issue #834) — the same
+// The frame every Tasks surface sits in (Tasks spec §2; #834) — the same
 // shell shape `PhotosScreen.tsx` and `DocsScreen.tsx` proved: a screen that
 // wraps itself in it cannot forget the band, cannot forget the Home capsule,
 // and cannot forget to reserve the band's height out of its own content.

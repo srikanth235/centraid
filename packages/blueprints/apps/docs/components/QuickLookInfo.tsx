@@ -1,21 +1,6 @@
-// THE STAGE'S PROPERTIES PANEL (§7's `vInfo`/`vMeaning`/`vFacts`).
-//
-// It is a panel BESIDE the document and never a sheet over it, because the
-// question it answers — "what am I looking at" — is asked WHILE looking, and
-// closing the thing you are asking about to go and read about it is the one
-// move a viewer must not force.
-//
-// TWO REGISTERS, IN THIS ORDER, and the order is the point. The MEANING rows
-// come first: a key, a value, and a note saying what the value means — what a
-// folder is, where the bytes are. The FACTS come second: a flat key/value
-// ledger with no notes, because a size does not need explaining. A panel that
-// mixed them would read as a form; this one reads as an answer followed by its
-// receipts.
-//
-// The rail stands ON THE STAGE, not on paper. Photos' info rail is paper
-// because every row there is an editable field; here only the title is, so the
-// panel keeps the ground the document is standing on and the handoff's own
-// `vInfoStyle` — no background of its own, one hairline seam.
+// Stage properties panel (§7 vInfo/vMeaning/vFacts): BESIDE the document, never
+// a sheet over it — asked while looking. Meaning rows first, flat facts second.
+// Stands ON the stage (only the title editable): no paper background, one seam.
 import type { ReactNode } from "react";
 
 import { STAGE_PROPS } from "../document-copy.ts";
@@ -26,7 +11,6 @@ import { Icon } from "./Shared.tsx";
 
 import styles from "./QuickLook.module.css";
 
-/** One meaning row: what it is called, what it says, and what that means. */
 function Meaning({
   label,
   note,
@@ -55,17 +39,13 @@ export function QuickLookInfo({
   folderName: (id: string | null | undefined) => string;
   /** Closes the panel, not the stage — the document stays open behind it. */
   onClose: () => void;
-  /** Absent where the shelf cannot write (trash): the title then draws as a
-   *  plain value, with no dashed rule promising an edit that would be refused. */
+  /** Absent where the shelf cannot write (trash): plain title, no edit promise. */
   onRename?: () => void;
 }) {
   const m = typeMeta(doc.media_type, doc.title);
   const custody = custodyMeta(doc.custody_state);
 
-  // The flat ledger. Every entry is a fact THIS projection carries — the
-  // handoff's `Versions` and `Contents` rows are withheld because the drive
-  // row has no version count and no read date on it, and a panel that guessed
-  // at either would be the screen inventing provenance.
+  // Withholds Versions/Contents rows: guessing them invents provenance.
   const facts: [string, string][] = [
     ["Kind", m.name],
     ["Size", fmtBytes(doc.byte_size)],
@@ -91,10 +71,7 @@ export function QuickLookInfo({
         <dl className={styles.meanings}>
           <Meaning label={STAGE_PROPS.title}>
             {onRename ? (
-              // The dashed rule is the panel's way of saying "this is editable
-              // in place" without a pencil on every row (§7.2's caption rule,
-              // which Photos' info rail keeps too). It is a real control: it
-              // fires the same rename the row menu fires.
+              // Dashed rule = editable in place (§7.2); fires the row-menu rename.
               <button
                 type="button"
                 className={styles.editable}

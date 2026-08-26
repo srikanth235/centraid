@@ -1,4 +1,4 @@
-// One transcript message + its hover action bar (issue #420, Wave 1). Split out
+// One transcript message + its hover action bar (#420). Split out
 // of AssistantScreen so that screen stays under the file-size cap while gaining
 // copy / feedback / regenerate / retry / retry-pager / timestamp affordances.
 
@@ -72,7 +72,7 @@ export interface MessageCallbacks {
   onPagerNav: (messageIndex: number, delta: number) => void;
 }
 
-/** A collapsible streaming reasoning row (issue #420, Wave 2). Open while the
+/** A collapsible streaming reasoning row (#420). Open while the
  *  model reasons, auto-collapses once the answer starts, expandable after. */
 function ThinkingRow({
   text,
@@ -112,9 +112,9 @@ function ThinkingRow({
  *  the bytes land — an unsized `<img>` reflows the transcript as it decodes. */
 const ATTACHMENT_THUMB_PX = 96;
 
-/** An inline image-attachment thumbnail (issue #420, Wave 2). Fetches the bytes
+/** An inline image-attachment thumbnail (#420). Fetches the bytes
  *  auth-aware into an object URL owned by the client's shared attachment cache
- *  (issue #659) — scrolling a thumbnail out of view and back must not
+ *  (#659) — scrolling a thumbnail out of view and back must not
  *  re-download it, so nothing here revokes. */
 function AttachmentImage({
   attachment,
@@ -406,7 +406,7 @@ function MessageRow({
     );
   }
   if (m.streaming) {
-    // Reconnect catch-up (issue #420): the stream dropped mid-turn; we poll the
+    // Reconnect catch-up (#420): the stream dropped mid-turn; we poll the
     // ledger and reload once the turn settles. Show a quiet "catching up" hint
     // rather than a hard error while we wait.
     if (m.catchingUp) {
@@ -447,7 +447,7 @@ function MessageRow({
 }
 
 /**
- * Memoized (issue #659). A transcript is re-rendered on every streamed token
+ * Memoized (#659). A transcript is re-rendered on every streamed token
  * and every keystroke in the composer, but a row only changes when its own DTO
  * does. The projections that feed this hand back the PREVIOUS object when the
  * derived value is unchanged (assistantProjection.ts, automationLiveMessages),

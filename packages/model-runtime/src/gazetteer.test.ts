@@ -1,10 +1,6 @@
 /*
- * The bundled gazetteer, pinned against the data actually committed (#816).
- *
- * The Tahoe expectations below are the real answers for the seeded roll's
- * coordinates, computed from the committed table rather than guessed at: they
- * are what a member will see, so a regeneration of the dataset that moves them
- * is a product change and has to be read as one.
+ * Pinned against the committed data (#816): the Tahoe expectations are computed
+ * from the table — moving them is a product change.
  */
 import { describe, expect, it } from "vitest";
 
@@ -52,17 +48,12 @@ describe("finding the nearest settlement", () => {
     expect(hit?.admin).toBe("CA");
     expect(hit?.country).toBe("US");
     expect(hit?.displayName).toBe("Truckee, CA");
-    // ~18 km up the road, which is exactly the case the 50 km radius exists
-    // for: nobody would call the river bend a town, and everybody who drove
-    // there would call it near Truckee.
+    // ~18 km up the road — exactly the case the 50 km radius exists for.
     expect(hit?.distanceKm).toBeCloseTo(18.1, 1);
   });
 
   it("names both lake-shore coordinates after South Lake Tahoe", () => {
-    // Tahoe City is NOT in this dataset — its population is under 15,000 — so
-    // South Lake Tahoe (pop. ~21k) is the nearest settlement to the west shore
-    // even though Tahoe City is nearer on a map. That is a limit of a
-    // 15,000-person table, stated here rather than discovered later.
+    // Tahoe City is NOT in this dataset (pop < 15,000) though nearer on a map.
     const west = nearestSettlement(SEEDED.westShore.lat, SEEDED.westShore.lng);
     expect(west?.displayName).toBe("South Lake Tahoe, CA");
     expect(west?.distanceKm).toBeCloseTo(13.6, 1);
@@ -88,7 +79,6 @@ describe("finding the nearest settlement", () => {
   });
 
   it("honours a tighter radius than the default", () => {
-    // Truckee is 18 km from the river bend, so a 10 km radius must decline.
     expect(
       nearestSettlement(SEEDED.truckeeRiver.lat, SEEDED.truckeeRiver.lng, 10)
     ).toBeNull();
@@ -99,8 +89,7 @@ describe("finding the nearest settlement", () => {
   });
 
   it("prints no state code outside the United States", () => {
-    // Kyoto: the dataset stores no admin code for a non-US row, and the phrase
-    // is the bare settlement name rather than "Kyoto, 22".
+    // Non-US rows store no admin code; the phrase stays bare.
     const hit = nearestSettlement(35.0116, 135.768);
     expect(hit?.name).toBe("Kyoto");
     expect(hit?.admin).toBe("");
@@ -109,20 +98,16 @@ describe("finding the nearest settlement", () => {
   });
 
   it("works beside the antimeridian, where a longitude window would not", () => {
-    // Suva sits at 178.4°E. A lookup from just across the line at 179.9°E must
-    // still find things: the search windows latitude only, for this reason.
+    // The search windows latitude only — lookups across the line still hit.
     const hit = nearestSettlement(-18.1, 178.44);
     expect(hit?.name).toBe("Suva");
   });
 
   it("breaks a near-tie toward the settlement more readers would know", () => {
-    // Reno (pop. ~225k) and Sparks (~90k) sit 5.3 km apart. On the line between
-    // them, 0.52 km nearer Sparks, the two are equidistant as far as a phrase
-    // is concerned and the recognisable name wins.
+    // On the Reno–Sparks line the recognisable name wins; past the tie band,
+    // the arithmetic is left alone — population breaks ties, not distance.
     const nearTie = nearestSettlement(39.5328, -119.7805);
     expect(nearTie?.name).toBe("Reno");
-    // Genuinely nearer Sparks — 2.1 km, past the tie band — and the arithmetic
-    // is left alone. Population breaks ties; it does not outrank distance.
     const clearlySparks = nearestSettlement(39.5335, -119.7713);
     expect(clearlySparks?.name).toBe("Sparks");
   });

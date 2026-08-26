@@ -1,8 +1,8 @@
 /*
- * Device-key allowlist for the phone tunnel (issue #263).
+ * Device-key allowlist for the phone tunnel (#263).
  *
- * Replaces bearer-token pairing at the transport: a device is authorized by
- * its iroh EndpointId (ed25519 public key), named, and revocable. Persisted
+ * A device is authorized at the transport by its iroh EndpointId (ed25519
+ * public key), named, and revocable — never by a bearer token. Persisted
  * as a small JSON file (mode 0600, atomic rename on write) — the same v0
  * on-disk posture (mode 0600, atomic replace) the gateway uses for its other
  * small control files (e.g. `devices.json`).

@@ -1,45 +1,24 @@
-/*
- * Signed route assertions (issue #726 P3 decision 4).
- *
- * When a gateway's endpoint keypair rotates or a vault moves hosts, every
- * peer's cached route goes stale. Rather than a directory or a re-run of the
- * ceremony, the moving side pushes a signed statement to each known link:
- * "vault V is now reachable at endpoint E via these relays, as of T". The
- * receiver verifies it against the STORED vault public key — the identity it
- * recorded at link time — so a route can only be moved by the vault that owns
- * it, and never by whoever happens to hold the current EndpointId.
- *
- * The signed bytes are a length-framed, domain-separated string rather than
- * JSON: two JSON serializers disagree about key order and number formatting,
- * and a signature is only as good as the exactness of what it covers.
- */
-
 import { verifyVaultIdentitySignature } from "@centraid/vault";
 
-/** Domain separator — a signature here can never be replayed elsewhere. */
 const ASSERTION_DOMAIN = "centraid/link-route/1";
 
-/** A relay hint is a URL; a newline in one would blur the framing below. */
 const HINT_FORBIDDEN = /[\n\r]/u;
 
-/** Assertions from the future are refused rather than trusted (clock skew). */
 export const MAX_ASSERTION_SKEW_MS = 5 * 60 * 1000;
 
 export interface RouteClaim {
   vaultId: string;
-  /** Route cache only — an EndpointId is never an identity (decision 1). */
+  /** Cache only — an EndpointId is never an identity (decision 1). */
   endpointId: string;
   relayHints: string[];
-  /** Epoch ms; also the replay ordering key on the receiving side. */
   ts: number;
 }
 
 export interface RouteAssertion extends RouteClaim {
-  /** Base64 Ed25519 signature over `routeAssertionBytes(claim)`. */
   signature: string;
 }
 
-/** The exact bytes both sides sign and verify. Order and framing are the contract. */
+/** The exact bytes both sides sign; order and framing are the contract. */
 export function routeAssertionBytes(claim: RouteClaim): Buffer {
   return Buffer.from(
     [
@@ -65,10 +44,6 @@ function readHints(value: unknown): string[] | undefined {
   return hints;
 }
 
-/**
- * Parse an assertion off the wire. Total: a malformed body is `undefined`, a
- * state for the caller to name — never an exception.
- */
 export function parseRouteAssertion(raw: unknown): RouteAssertion | undefined {
   if (raw === null || typeof raw !== "object") return undefined;
   const body = raw as Record<string, unknown>;
@@ -85,11 +60,7 @@ export function parseRouteAssertion(raw: unknown): RouteAssertion | undefined {
   return { vaultId, endpointId, relayHints, ts, signature };
 }
 
-/**
- * Verify against the public key RECORDED FOR THAT VAULT at link time. An
- * assertion signed with any other key — including one offered in the same
- * request — fails: a peer cannot re-key itself by asserting.
- */
+/** Signed route assertion (#726 P3 decision 4): verified against the key RECORDED FOR THAT VAULT at link time — a peer cannot re-key itself by asserting. */
 export function verifyRouteAssertion(
   assertion: RouteAssertion,
   storedPeerPublicKeyBase64: string,
@@ -112,7 +83,6 @@ export function verifyRouteAssertion(
       signature
     );
   } catch {
-    // A structurally invalid key or signature is a refusal, not a crash.
     return false;
   }
 }

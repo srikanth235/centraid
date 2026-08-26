@@ -1,34 +1,4 @@
-// Semantic photo search over HTTP (issue #721 E3) — the owner's query plane
-// onto `enrich_embedding`.
-//
-//   POST /centraid/_vault/enrich/semantic-search
-//        body {query: string, limit?: number}
-//     -> 200 {status:"ok", model, hits:[{assetId, contentId, score}]}
-//     -> 200 {status:"unavailable", reason}
-//
-// THE WIRE SHAPE IS A CONTRACT. The mobile Photos surface renders exactly
-// these field names; changing one is a protocol change, not a rename (see
-// docs/protocol.md C1 — the two-contract rule).
-//
-// `unavailable` IS A 200. A gateway whose embed-text automation cannot run, or
-// whose index is still empty,
-// is not broken and its member is not looking at an error — they are looking
-// at a capability that is not switched on here. Only a malformed request (400)
-// or a genuinely failed embed (500) leaves the 2xx band. This is "derived data enriches, it never gates" spelled as a status
-// code: no photo surface may show a failure because the index is cold.
-//
-// OWNER-ONLY, BY CONSTRUCTION. Like the import and blob routes, this handler
-// works through `plane.ownerCredential` and nothing else — there is no app or
-// device credential path into it, and the constrained-Companion allowlist
-// (`serve/companion-access.ts`) does not name this path, so a paired companion
-// device cannot reach it. Semantic search reads across the whole library at
-// once; that is an owner capability, not an app-grantable scope.
-//
-// MOUNTING. `/centraid/_vault/enrich/semantic-search` is DEEPER than the
-// owner's enrichment-settings surface at `/centraid/_vault/enrich` and than
-// the generic `_vault` handler, and `createRoutePrefixDispatch` runs the most
-// specific match first — so this route is reached before either, and the
-// settings surface keeps its own path untouched.
+// Semantic photo search (#721). Wire field names are a protocol contract. `unavailable` is 200.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -39,7 +9,6 @@ import { readJson, sendError, sendJson } from "./route-helpers.js";
 
 export const SEMANTIC_SEARCH_PATH = "/centraid/_vault/enrich/semantic-search";
 
-/** A query is a phrase, not a document — a text encoder's window is small. */
 const MAX_QUERY_CHARS = 512;
 
 export interface EnrichSearchRouteOptions {
@@ -118,10 +87,6 @@ export function makeEnrichSearchRouteHandler(
       });
       return sendJson(res, 200, outcome);
     } catch (error) {
-      // The one genuine failure: a configured service that ran and refused
-      // the query (crashed, produced garbage). That is an operator fault the
-      // surface must be able to report, so it does NOT masquerade as
-      // `unavailable` — an owner who set this up deserves to know it broke.
       return sendError(res, error);
     }
   };

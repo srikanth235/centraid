@@ -1,5 +1,5 @@
 /**
- * IndexedDB replica identity inventory (issue #545 B8).
+ * IndexedDB replica identity inventory (#545).
  */
 
 import { IDBFactory } from "fake-indexeddb";

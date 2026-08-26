@@ -40,8 +40,8 @@ import styles from "./AutomationThreadScreen.module.css";
 // asks questions ABOUT those runs.
 //
 // What deliberately is NOT here, and why:
-//   - compile turns: they are the compiler's working, not executions. They
-//     used to sit in this list as "Compile" cards among real runs.
+//   - compile turns: they are the compiler's working, not executions, so they
+//     are no part of this list of real runs.
 //   - "Retry compile": compiling is the compiler's job; the plan banner links
 //     there instead of doing it from here.
 //   - "Apply to future runs": a reply that silently rewrote the standing
@@ -545,7 +545,7 @@ function nodeIconFor(run: ThreadRunDTO): IconName {
 // summary is the message body, and a quiet footer carries the telemetry. A
 // failed run speaks as an error you can retry in place; either way "Details"
 // opens the full step-by-step run-view. This is the compact register turned
-// into a conversation, over the same `ThreadRunDTO` (issue #539).
+// into a conversation, over the same `ThreadRunDTO` (#539).
 function RunTurn({
   run,
   tokens,
@@ -786,9 +786,9 @@ function RunTurn({
  *
  * A `ready` plan is silent: a working automation should not carry a status
  * bar. Compiling, failed, and never-compiled each explain what that means for
- * the runs below, and hand off to the compiler. This replaced a "Retry
- * compile" button that let you kick the compiler from the surface that has no
- * way to show you whether it worked.
+ * the runs below, and hand off to the compiler. There is no "Retry compile"
+ * button: it would kick the compiler from the surface that has no way to show
+ * you whether it worked.
  */
 function PlanBanner({
   plan,
@@ -1184,9 +1184,9 @@ export default function AutomationThreadScreen({
    * Join a running turn's live stream, rejoining with backoff when the join is
    * refused or the stream drops with the turn still open (the gateway's
    * subscriber cap answers 503; a restart or proxy idle timeout just closes
-   * the socket). The old 2s poll this replaced is gone, so without a rejoin a
-   * still-running turn would spin "Working through your instructions…" until
-   * the reader navigated away and back. Bounded: after the last delay the turn
+   * the socket). Nothing polls behind this, so without a rejoin a still-running
+   * turn would spin "Working through your instructions…" until the reader
+   * navigated away and back. Bounded: after the last delay the turn
    * is marked lost and the reader gets an explicit Reconnect.
    */
   const watchNativeTurn = useCallback(

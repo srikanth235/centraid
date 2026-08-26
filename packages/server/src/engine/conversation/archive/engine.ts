@@ -1,4 +1,4 @@
-// The conversation-band archival engine entry (issue #438). One idempotent,
+// The conversation-band archival engine entry (#438). One idempotent,
 // bounded call runs BOTH phases each invocation:
 //   Phase A — archive: seal cold turn-ranges into the vault blob CAS, index them
 //             in conversation_archive, fold their rollups into conversation_digest.

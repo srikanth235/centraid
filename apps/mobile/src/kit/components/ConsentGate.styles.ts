@@ -1,5 +1,5 @@
-// Geometry and type for the §8 consent gate (issue #712 C1). COLOURLESS on
-// purpose, like EnrichmentConsent.styles.ts before it: every colour comes
+// Geometry and type for the §8 consent gate (#712). COLOURLESS on
+// purpose, like EnrichmentConsent.styles.ts: every colour comes
 // from `useTheme()` at the call site, so one sheet serves light and dark.
 
 import { StyleSheet } from "react-native";

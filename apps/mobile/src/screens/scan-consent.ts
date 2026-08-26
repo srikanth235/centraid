@@ -1,34 +1,20 @@
-// THE CAPTURE-TIME OCR CONSENT LATCH (issue #712 C3) — the second instance
-// of the frame's per-device consent moment, mirroring
-// `kit/transfer/transfer-consent.ts`'s BACKUP latch: asked once per device,
-// remembered, revocable.
-//
-// Scan.tsx used to call `extract()` unconditionally the moment a photograph
-// was captured or chosen — device `recognizeText` first, then, silently on
-// failure, a gateway HTTP fallback. No consent moment existed: a member
-// never chose whether their scan's bytes could leave the phone. This latch
-// closes that gap. `undefined` (never asked) refuses extraction exactly as
-// `"not-now"` does — an unanswered question is not a yes, the same rule
-// `automaticTransferAllowed` holds for backup.
-//
-// PER DEVICE, deliberately, same reasoning as the backup latch: "may this
-// phone extract text from what it scans" has one answer per device, and
-// syncing it through the vault would have a new phone inherit an answer it
-// was never asked.
+// Capture-time OCR consent latch (#712), mirroring the transfer-consent backup
+// latch: per device, remembered, revocable. Scan.tsx reaches `extract()` only
+// through this gate; `undefined` refuses like `"not-now"` — unanswered is not yes.
+// Per device on purpose: vault sync would inherit an answer never asked.
 import { Store } from "../storage";
 
-/** Member-device state, not vault state — see the header. */
+/** Member-device state, never vault state. */
 export const SCAN_OCR_CONSENT_KEY = "frame.scanOcrConsent";
 
 export type ScanOcrConsentAnswer = "on-device" | "not-now";
 
 export interface ScanOcrConsentRecord {
   answer: ScanOcrConsentAnswer;
-  /** When it was answered. Shown back to the member; never used as a gate. */
+  /** Shown back to the member; never a gate. */
   at: string;
 }
 
-/** Read the latch. `undefined` means the question has not been asked yet. */
 export async function hydrateScanOcrConsent(): Promise<
   ScanOcrConsentRecord | undefined
 > {
@@ -38,8 +24,6 @@ export async function hydrateScanOcrConsent(): Promise<
   );
 }
 
-/** Record an answer and hand it back, so a caller can hold it in state.
- *  Callable again later with either answer — the latch is revocable. */
 export function answerScanOcrConsent(
   answer: ScanOcrConsentAnswer
 ): ScanOcrConsentRecord {
@@ -49,9 +33,8 @@ export function answerScanOcrConsent(
 }
 
 /**
- * THE GATE. `extract()` in Scan.tsx is reachable only when this is true.
- * `undefined` — a device that has never seen the panel — is refused exactly
- * as `"not-now"` is: asked once, not assumed once.
+ * THE GATE: `extract()` in Scan.tsx is reachable only when this returns true;
+ * `undefined` is refused exactly as `"not-now"` is.
  */
 export function scanOcrExtractionAllowed(
   consent: ScanOcrConsentRecord | undefined

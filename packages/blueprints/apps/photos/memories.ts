@@ -1,18 +1,6 @@
-// The memories strip's cards (v4 handoff §4.6). Pure over what the store
-// already holds — no reads, no writes, no DOM — so the orchestrator hands it
-// data and gets cards back.
-//
-// Album membership is computed against OWN-SCOPE assets only: an album id
-// minted in one scope means nothing in another, and matching it over the
-// merged list would let a colliding id pull a stranger's photograph into the
-// member's album (issue #599).
-//
-// A TRIP CARD IS TITLED, not measured (issue #816). The vault's own hint is
-// `"3-day trip"`, which is a fact about a calendar rather than a memory; the
-// ladder in `trips.ts` turns it into "Weekend in South Lake Tahoe, CA" when the
-// members carry a name worth printing, and leaves the hint alone when they do
-// not. Same module titles the phone's Memories screen, so the two surfaces say
-// the same sentence about the same trip.
+// Memories strip cards. Pure: data in, cards out.
+// Album membership is OWN-SCOPE only (#599); trips are TITLED via
+// trips.ts's ladder, not measured (#816).
 import { resolveHomeKey, tripFacts } from "./trips.ts";
 import type { TripMember } from "./trips.ts";
 import type {
@@ -23,14 +11,9 @@ import type {
   MemoryRow,
 } from "./types.ts";
 
-/** At most six cards — the strip is a head, not a second timeline. */
 const LIMIT = 6;
 
-/**
- * One trip member, as `trips.ts` wants it: when it was taken, in whose zone,
- * and where. An asset with no place contributes neither a day vote nor a route
- * point and is still a photograph in the trip — see `TripMember`.
- */
+/** Trip member as `trips.ts` wants it; a place-less asset still counts. */
 function tripMemberOf(asset: Asset): TripMember {
   const offset = asset.tz_offset_min;
   return {
@@ -48,12 +31,7 @@ function tripMemberOf(asset: Asset): TripMember {
   };
 }
 
-/**
- * The home place, resolved over the WHOLE loaded library rather than one
- * trip's members: the modal place of a trip is where the member went, and
- * calling that home would read every away day as a day at home. The tagged
- * `kind = 'home'` place wins when there is one, which is the vault's own rule.
- */
+/** Resolve home over the WHOLE library, not one trip's members; tagged 'home' wins. */
 function homeKeyOf(ownAssets: readonly Asset[]): string | null {
   const tagged = ownAssets.flatMap((asset) =>
     asset.place?.kind === "home" ? [asset.place.place_id] : []
@@ -61,11 +39,7 @@ function homeKeyOf(ownAssets: readonly Asset[]): string | null {
   return resolveHomeKey(ownAssets.map(tripMemberOf), tagged);
 }
 
-/**
- * Each album's live count and its cover's bytes, computed off the loaded
- * window. The Albums card grid and the memories strip both need this and must
- * never disagree about a cover or a count, which is why it is one function.
- */
+/** Single count/cover source — grid and strip must never disagree. */
 export function enrichAlbums(
   albums: readonly Album[],
   ownAssets: readonly Asset[]
@@ -94,7 +68,7 @@ export function buildMemories({
   memoryMembers,
   onOpen,
 }: {
-  /** The member's own photographs, used only to resolve projected members. */
+  /** Member's own photographs; only used to resolve projected members. */
   ownAssets: readonly Asset[];
   memories: readonly MemoryRow[];
   memoryMembers: readonly MemoryMemberRow[];
@@ -107,8 +81,7 @@ export function buildMemories({
     if (list) list.push(member);
     else membersByMemory.set(member.memory_id, [member]);
   }
-  // Computed once for the whole strip, not once per trip: it reads every loaded
-  // asset, and a strip of six cards would otherwise walk the library six times.
+  // Once for the whole strip, not once per trip.
   const homeKey = memories.some((memory) => memory.kind === "trip")
     ? homeKeyOf(ownAssets)
     : null;
@@ -122,8 +95,7 @@ export function buildMemories({
         });
       const cover = members[0];
       if (!cover) return null;
-      // A trip is titled through the ladder and carries its own route; every
-      // other kind keeps exactly the contract it had.
+      // Trips title through the ladder; others keep their contract.
       const trip =
         memory.kind === "trip"
           ? tripFacts({

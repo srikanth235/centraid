@@ -1,10 +1,10 @@
-// The portable bundle's human-readable adapters (issue #630): the same vault
+// The portable bundle's human-readable adapters (#630): the same vault
 // truths re-spelled in formats other software already reads — ICS for events,
 // vCard for people, CSV for transactions, a Markdown directory for notes.
 // Adapters are CONVENIENCE COPIES, never the restore source: the canonical
 // JSON-LD in `portable-export.ts` is the artifact a restore reads, so an
 // adapter may flatten or omit (and these do) without costing the owner data.
-// Split from `portable-export.ts` so that file stays the completeness owner —
+// Kept out of `portable-export.ts` so that file stays the completeness owner —
 // the canonical walk, the manifest, and the schema/export audit ledger.
 
 import type { VaultDb } from "../db.js";

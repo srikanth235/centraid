@@ -1,23 +1,8 @@
-// The seat Agenda's vault-IO suites drive, shared by `logic.test.ts` and
-// `logic-search.test.ts` (#839 W2-1).
-//
-// A RECORDING FAKE, NOT A MOCK. The frame, the gateway and the repaint entry
-// point are small objects that accumulate what a member would actually
-// experience — the sentence now on the frame's one status line and every
-// sentence before it, the typed commands and reads that reached the gateway,
-// and one snapshot per repaint of the guest lists and search rows that paint
-// would show. Suites assert that accumulated state, so a case fails when the
-// OUTCOME is wrong (the wrong sentence, a guest row that never moved, a window
-// re-read that should not have happened) rather than when the call that
-// produced it is spelled differently.
-//
-// NODE, NOT JSDOM, and deliberately so: both suites are mutation seeds
-// (`stryker.agenda.config.mjs`), and Stryker's vitest runner reports "No tests
-// were executed" for a jsdom project — a suite under the `@vitest-environment
-// jsdom` docblock defends nothing in the mutation lane. The browser surface
-// this module touches is one `querySelector` plus `textContent`/`hidden`, and
-// `window.centraid`; both are stood up by hand here, so anything the module
-// reaches for beyond them fails in the suite rather than silently working.
+// Agenda vault-IO fixtures (#839 W2-1): a RECORDING FAKE, not a mock — frame,
+// gateway and repaint entry points accumulate what a member would experience;
+// suites assert that state, so cases fail on wrong outcome, not call spelling.
+// NODE, not jsdom: Stryker's runner executes no tests under a jsdom project.
+// The browser surface here is hand-stood-up querySelector + window.centraid.
 import { onTestFinished } from "vitest";
 
 import type { InlineFrame, InlineStatusAction } from "../inline-types.ts";
@@ -78,7 +63,7 @@ function mountBanner(present = true): void {
 export type WriteFn = (opts: WriteOpts) => Promise<unknown>;
 export type ReadFn = (opts: ReadOpts) => Promise<unknown>;
 
-/** What the frame's ONE status line reads, and the door it offers beside it. */
+/** Frame status line: text + action door. */
 export interface StatusLine {
   text: string;
   action: InlineStatusAction | null;
@@ -86,9 +71,7 @@ export interface StatusLine {
 
 /** What one repaint would put in front of the member. */
 export interface Paint {
-  /** The answer each guest's row carries, per event in the loaded window. */
   partstats: (string | undefined)[][];
-  /** The events the search pane lists, or null while no query is live. */
   results: string[] | null;
 }
 
@@ -96,17 +79,12 @@ export interface Harness {
   state: AppState;
   data: AppData;
   logic: ReturnType<typeof createLogic>;
-  /** The status line as it reads now, or null while it carries nothing. */
   status: () => StatusLine | null;
   /** Every sentence the status line has carried, oldest first. */
   statusTexts: string[];
-  /** Every typed command that reached the gateway, in order. */
   sent: WriteOpts[];
-  /** Every read the app asked the gateway for, in order. */
   asked: ReadOpts[];
-  /** One entry per repaint, holding what that paint would show. */
   paints: Paint[];
-  /** How many times the app re-read its window from the vault. */
   reloads: () => number;
   banner: () => { text: string; hidden: boolean };
 }
@@ -116,7 +94,7 @@ export interface HarnessOver {
   data?: Partial<AppData>;
   write?: WriteFn;
   read?: ReadFn;
-  /** Withhold the frame's notice banner, as a served mount does. */
+  /** Withhold the notice banner, as a served mount does. */
   banner?: boolean;
 }
 

@@ -1,30 +1,11 @@
-// The picker, phone-shaped (Photos v4 handoff §10, proto:4278-4290).
+// The picker, phone-shaped (Photos v4 §10). Pushed screen, not a modal card.
 //
-// "A centred dialog on desktop and the PWA, a full screen on the phone"
-// (proto:3963) — so on this surface it is a pushed screen, not a modal card,
-// and it keeps the band like every other non-lightbox surface (§F).
+// 1. ITS SELECTION IS ITS OWN SET — no `selection` to `PhotosScreen`; the
+//    five-target bar belongs to the library, not "add these to an album".
+// 2. ADDING REFERS, copies nothing — the web picker's sentence, verbatim.
 //
-// TWO RULES THE PROTOTYPE IS EMPHATIC ABOUT, both structural rather than
-// cosmetic:
-//
-//   1. ITS SELECTION IS ITS OWN SET, not the timeline's. That is why this
-//      screen passes NO `selection` to `PhotosScreen`: the five-target
-//      selection bar belongs to the library's selection, and letting the
-//      picker drive it would put Trash and Copy-to-⟨vault⟩ under a choice that
-//      means "add these to an album". The picked set lives here and dies here.
-//   2. ADDING MOVES AND COPIES NOTHING. An album REFERS to a photograph where
-//      it already lives. The sentence is the web picker's own
-//      (`components/Picker.tsx`), verbatim, so the two clients cannot promise
-//      a member two different things about their photographs.
-//
-// WHY THERE IS NO SEARCH FIELD. proto:4282 draws one ("Search the library to
-// narrow this"). The only search this app has on the phone is the gateway's
-// index (`session.search`, see `PhotosSearch.tsx`), which is online-only and
-// has a genuine unreachable state — §9's rule is that search "will not pretend
-// to have looked". A field in a picker that silently matches nothing while the
-// gateway is unreachable is exactly that pretence, and the unreachable state is
-// a surface of its own. The field is omitted rather than faked; add it when the
-// picker can carry that state honestly.
+// No search field: phone search is gateway-only (`PhotosSearch.tsx`) and
+// has a genuine unreachable state. A silent miss is pretence (§9).
 
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -49,10 +30,8 @@ import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
-/** The web picker's own sentence (`components/Picker.tsx`), verbatim. */
 const REFERS_NOT_COPIES = "An album refers to a photograph where it lives.";
 
-/** The web picker's empty copy, verbatim. */
 const NOTHING_LEFT = "Everything in your library is already in this album.";
 
 export default function PhotoPicker({
@@ -88,9 +67,7 @@ export default function PhotoPicker({
       ),
     [albumId, entries.rows]
   );
-  // Candidates are the photographs the album does not already refer to. A
-  // trashed photograph is not offered: adding one would put a reference to a
-  // photograph the member deleted into an album they are curating.
+  // Trashed photographs are not offered: adding would put a deleted reference into a curated album.
   const candidates = useMemo(
     () =>
       timeline.assets.filter(
@@ -104,9 +81,6 @@ export default function PhotoPicker({
   const sections = useMemo(() => sectionPhotoAssets(candidates), [candidates]);
   const chosen = vaultAssets(candidates, picked);
 
-  // WHY THE ADD MAY BE REFUSED, in the member's words. Each of the three is a
-  // different truth and each is actionable differently, so none of them is
-  // collapsed into a generic "cannot add".
   const blockedReason = session
     ? album === undefined
       ? "This album is not in the copy this device holds yet."
@@ -124,8 +98,7 @@ export default function PhotoPicker({
   const add = (): void => {
     if (!canAdd || !session) return;
     setAdding(true);
-    // The new references land after the album's existing ones, so the member's
-    // own ordering is preserved rather than reshuffled by an add.
+    // New references land after existing ones so the member's ordering is preserved.
     const firstPosition = entries.rows.filter(
       (row) => String(row.collection_id) === albumId
     ).length;
@@ -139,9 +112,7 @@ export default function PhotoPicker({
   };
 
   return (
-    // The picker passes NO selection to the shell: its picked set is its own
-    // (proto:3963), and the band's five-target selection bar belongs to the
-    // library's selection, not to this one.
+    // No `selection` to the shell — this picked set is its own (proto:3963).
     <PhotosScreen current="collections">
       <View style={styles.header}>
         <Pressable
@@ -161,9 +132,7 @@ export default function PhotoPicker({
               : `${picked.size} chosen · nothing has been added yet`}
           </Text>
         </View>
-        {/* The ONE filled element on this screen (§18) — and it stops being
-            filled the moment it cannot fire, rather than offering a commit
-            that would be refused. */}
+        {/* The one filled element (§18) — unfilled the moment it cannot fire. */}
         <Pressable
           accessibilityLabel={`Add ${picked.size} to ${albumTitle}`}
           accessibilityRole="button"
@@ -192,8 +161,7 @@ export default function PhotoPicker({
         </Pressable>
       </View>
       <ReplicaStatusBar />
-      {/* The refusal, STATED — in `net` mono, on the surface, once. Never a
-          hint alone (§1). */}
+      {/* Refusal stated in `net` mono, once. Never a hint alone (§1). */}
       {blockedReason ? (
         <Text style={[styles.reason, { color: colors.net }]}>
           {blockedReason}
@@ -205,10 +173,7 @@ export default function PhotoPicker({
           sections={sections}
           selection={picked}
           onSelectionChange={setPicked}
-          // Picking is the only thing this screen does, so a tap on a tile
-          // toggles it rather than opening it. `PhotoTimeline` opens on tap
-          // only while nothing is selected; routing `onOpen` to the same
-          // toggle makes the first tap pick, exactly as every later one does.
+          // Tap toggles; `PhotoTimeline` opens on tap only while nothing is selected.
           onOpen={(asset) =>
             setPicked((current) => new Set([...current, asset.id]))
           }

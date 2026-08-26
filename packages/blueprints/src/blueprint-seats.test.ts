@@ -1,19 +1,8 @@
 /*
- * Docs/blueprint-seats.md decisions S1/S2/S5, checked mechanically:
- *
- *   - S1/S2 machine-readable split — every bundled UI app declares an
- *     `app.json#seats` block, and the record-only class (`byteBearing:
- *     false`) never imports the custody vocabulary or the transfer engine.
- *     This is a TRIPWIRE, not a proof: it greps source text for a handful
- *     of literal names (`local-only`, `remote-only`, `backupState`, and any
- *     import path containing `kit/transfer`). A determined author could
- *     dodge it with an alias or a computed string — the point is to catch
- *     the ordinary "I copy-pasted from Photos" mistake, not a sabotage
- *     attempt.
- *   - S5 — Locker is the one app that declares `disabledOn: ["viewer"]`
- *     today; this file also documents Tally's byte-bearing EDGE (receipt
- *     photos are byte-bearing even though Tally's own class is record-only)
- *     since a JSON-adjacent comment isn't possible inside app.json itself.
+ * Checks docs/blueprint-seats.md S1/S2/S5. S1/S2: record-only apps never name
+ * custody vocabulary nor import `kit/transfer` — a tripwire grep, not a proof.
+ * S5: Locker alone is disabledOn ["viewer"]. Tally's byte-bearing EDGE (receipt
+ * photos) lives here; app.json takes no comments.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -45,9 +34,6 @@ function readSeats(id: string): SeatsBlock | undefined {
   return raw.seats;
 }
 
-// Every TypeScript/TSX source file under an app's own directory (not its
-// node_modules, not its dist) — the same universe a "did you import the
-// wrong thing" grep should cover.
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -62,10 +48,7 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
-// The custody vocabulary (docs/blueprint-seats.md "Byte custody
-// vocabulary") a record-only app has no business naming, plus the one
-// shared engine path (`kit/transfer`, owned by another agent — see this
-// file's sibling receipt) that only a byte-bearing app should import.
+// Record-only apps must never name these.
 const CUSTODY_TERMS = ["local-only", "remote-only", "backupState"] as const;
 const TRANSFER_IMPORT_RE = /kit\/transfer/u;
 
@@ -87,9 +70,7 @@ describe("blueprint seats (docs/blueprint-seats.md S1/S2/S5)", () => {
 
   it("classes every app exactly as docs/blueprint-seats.md's north-star table", () => {
     const byId = Object.fromEntries(ids.map((id) => [id, readSeats(id)]));
-    // The doc's "Two classes of blueprint" table, id-for-id. A mismatch here
-    // means either the doc or an app.json drifted — fix whichever is wrong
-    // in the same PR (docs/blueprint-seats.md's own preamble).
+    // Doc table, id-for-id; fix whichever drifted, same PR.
     const expectedByteBearing: Record<string, boolean> = {
       photos: true,
       docs: true,
@@ -98,11 +79,7 @@ describe("blueprint seats (docs/blueprint-seats.md S1/S2/S5)", () => {
       tasks: false,
       people: false,
       locker: true,
-      // Tally is record-only in class, but its mobile origin act (receipt
-      // photo) is byte-bearing AT THAT ONE EDGE — the north-star table's own
-      // footnote. `byteBearing` here is the app-wide class flag, so it's
-      // `false`; the edge is instead visible as `originActs: ["camera"]`
-      // with no matching custody machinery elsewhere in the app.
+      // Byte-bearing at one edge only (`originActs: ["camera"]`).
       tally: false,
     };
     for (const [id, expected] of Object.entries(expectedByteBearing)) {

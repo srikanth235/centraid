@@ -21,27 +21,17 @@ import type { BearingLayout, ViewTransform } from "./atlasOrreryGeometry.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
-// The orrery's inline-SVG chart body (issue #441 B2) — a presentational leaf of
-// AtlasRelationsTab. It draws the graticule, pack sectors, FK edge layer, the
-// authored-link overlay, the brass centre plate, and the clickable kind nodes
-// from fully-computed geometry handed down as props. All layout maths and the
-// anti-hairball invariant live in atlasOrreryGeometry.ts; all state and the
-// re-centre animation live in the parent. This component is stateless.
+// Orrery inline-SVG chart body (#441): stateless leaf. Geometry + invariants
+// live in atlasOrreryGeometry.ts; state + animation in the parent.
 
-/** The current hover/focus readout target — a discriminated union shared with
- *  the parent and the side panel so both light up the same element. */
+/** Hover/focus readout target — parent + side panel light the same element. */
 export type Readout =
   | { kind: "idle" }
   | { kind: "node"; node: AtlasGraphNode; hop: number | null }
   | { kind: "edge"; edge: AtlasFkEdge };
 
-/**
- * A question-chip highlight — a lens the parent computes ("what's connected
- * here?", "…heaviest?", "…unused?") and the chart applies through the SAME dim/
- * hot machinery hover uses: lit nodes/edges stay bright, the rest dims. It never
- * changes geometry, and hover always wins over it (a live readout overrides the
- * question so the two never fight for the same element).
- */
+/** Question-chip highlight: applied via the same dim/hot machinery as hover;
+ *  never changes geometry, and a live readout wins over it. */
 export interface AtlasHighlight {
   /** Physical table names to keep lit; every other node dims. */
   lit: ReadonlySet<string>;
@@ -69,24 +59,19 @@ export interface AtlasOrreryChartProps {
   hops: Map<string, number | null>;
   rows: Map<string, number>;
   packs: readonly string[];
-  /** At the `everything` detail level, each node gains a small second label
-   *  line under its friendly name carrying its physical SQL table name — the
-   *  machine truth surfaced. Off at every other level. */
+  /** At the `everything` level only: a small second label with the physical
+   *  SQL table name under the friendly name. */
   showPhysical: boolean;
   overlayArcs: readonly { id: string; d: string }[];
   readout: Readout;
-  /** The active question-chip highlight, or `null` when no question is toggled.
-   *  Applied only while nothing is hovered — a live readout takes precedence. */
+  /** Active question-chip highlight, or `null`; applied only while idle. */
   highlight: AtlasHighlight | null;
-  /** The pan/zoom camera. Applied to the single viewport `<g>` that wraps every
-   *  layer; it never changes the geometry beneath (see `ViewTransform`). */
+  /** Pan/zoom camera for the single viewport `<g>`; never changes geometry. */
   view: ViewTransform;
-  /** Native wheel handler (see the effect below for why it is not a JSX prop):
-   *  React registers `wheel` as a passive root listener, so `preventDefault`
-   *  only bites when attached with `{ passive: false }` ourselves. */
+  /** Native wheel handler (see effect below): React binds `wheel` as passive,
+   *  so `preventDefault` needs our own `{ passive: false }` listener. */
   onWheel: (ev: WheelEvent) => void;
-  /** Pointer-drag pan bookkeeping lives in the parent (it also owns the click
-   *  suppression guard), so these just forward the raw pointer events. */
+  /** Pointer-drag pan bookkeeping lives in the parent; these forward raw events. */
   onPointerDown: (ev: PointerEvent<SVGSVGElement>) => void;
   onPointerMove: (ev: PointerEvent<SVGSVGElement>) => void;
   onPointerUp: (ev: PointerEvent<SVGSVGElement>) => void;
@@ -123,20 +108,15 @@ export default function AtlasOrreryChart({
   onReadout,
   onRecenter,
 }: AtlasOrreryChartProps): JSX.Element {
-  // Unique per-mount prefix for the dial's <textPath> arc ids — two mounted
-  // orreries (tests, previews) must never share element ids.
+  // Unique per-mount prefix: two mounted orreries must not share element ids.
   const uid = useId();
 
-  // A question highlight only bites while nothing is hovered — a live readout
-  // (hover/focus) overrides it, so the two lensing systems never fight over the
-  // same node. When active, non-lit nodes/edges dim and lit ones read as `hot`.
+  // A live readout (hover/focus) overrides a question highlight — the two
+  // lensing systems never fight over the same node.
   const questionActive = highlight != null && readout.kind === "idle";
 
-  // Wheel-to-zoom must call preventDefault to stop the page scrolling under a
-  // zoom gesture, but React attaches `wheel` to the root as a PASSIVE listener,
-  // where preventDefault is inert. So we bind it natively with
-  // `{ passive: false }` on the svg element. This is the one imperative seam in
-  // an otherwise declarative, stateless leaf — no render state is held.
+  // The one imperative seam in an otherwise declarative leaf: React attaches
+  // `wheel` to the root as PASSIVE, where preventDefault is inert.
   const svgRef = useRef<SVGSVGElement | null>(null);
   useEffect(() => {
     const el = svgRef.current;
@@ -159,11 +139,8 @@ export default function AtlasOrreryChart({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      {/* The single viewport lens: every layer below rides this
-          `translate(x y) scale(k)` camera, so pan/zoom moves the whole chart as
-          one rigid body. Nothing inside recomputes from `view` — bearings,
-          rings and edge paths stay in fixed viewBox space (the camera invariant
-          in atlasOrreryGeometry.ts). */}
+      {/* Single viewport lens: layers ride it as one rigid body; nothing
+          inside recomputes from `view` (camera invariant). */}
       <g
         data-testid="atlas-viewport"
         transform={`translate(${view.x.toFixed(3)} ${view.y.toFixed(3)}) scale(${view.k.toFixed(4)})`}
@@ -198,10 +175,7 @@ export default function AtlasOrreryChart({
           ))}
         </g>
 
-        {/* the dial — per-pack sector arcs, boundary ticks, curved pack names.
-          Bearings are fixed, so this bezel never moves when you re-centre; a
-          sector whose kinds are all hidden (unreached machinery) stays in
-          place but dims — the compass never lies about empty space. */}
+        {/* the dial — fixed bearings; empty sectors dim in place. */}
         <g className={styles.dial}>
           {layout.sectors.map((s) => {
             const flip = sectorFlipped(s.midDeg);
@@ -209,9 +183,7 @@ export default function AtlasOrreryChart({
             const pad = Math.min(2.4, s.spanDeg * 0.16);
             const tickIn = polar(s.startDeg, ORRERY.dialTickIn);
             const tickOut = polar(s.startDeg, ORRERY.dialTickOut);
-            // The label arc is deliberately wider than the sector (centred on
-            // midDeg) so a long pack name over a one-kind sector isn't clipped
-            // by textPath's path-length cutoff.
+            // Label arc wider than the sector so textPath doesn't clip long names.
             const labelR = flip ? ORRERY.sectorLabelR + 7 : ORRERY.sectorLabelR;
             const hot = readout.kind === "node" && readout.node.pack === s.pack;
             const empty =
@@ -258,9 +230,7 @@ export default function AtlasOrreryChart({
           })}
         </g>
 
-        {/* FK edges — pack-neutral, weighted by fill; ghosts dotted. The layer
-            dims whenever anything is lensed — a hover readout OR an active
-            question — leaving only the `hot` edges bright. */}
+        {/* FK edges — fill-weighted, ghosts dotted; dims when anything is lensed. */}
         <g
           className={cx(
             styles.edges,
@@ -365,12 +335,10 @@ export default function AtlasOrreryChart({
           const b = ((bearing % 360) + 360) % 360;
           const flip = b > 90 && b < 270;
           const big = (rows.get(n.physical) ?? 0) > 4000;
-          // Label stagger: adjacent kinds in a pack alternate between two radial
-          // distances so dense sectors stay legible.
+          // Label stagger keeps dense sectors legible.
           const labelGap =
             layout.labelTier.get(n.physical) === 1 ? nr + 14 : nr + 5;
-          // Reveal choreography: rings bloom outward, sweeping clockwise from
-          // 12 o'clock within each ring.
+          // Reveal: rings bloom outward, clockwise from 12 o'clock per ring.
           const dly =
             (hop === null ? 4 : hop) * 110 + (((b + 90) % 360) / 360) * 220;
           const lit =
@@ -381,8 +349,7 @@ export default function AtlasOrreryChart({
               (readout.edge.fromTable === n.physical ||
                 readout.edge.toTable === n.physical)) ||
             lit;
-          // A question dims every node it does not light; hover never dims nodes
-          // (only its edge layer), so `nodeDim` is a question-only state.
+          // Hover never dims nodes; `dim` is question-only.
           const dim = questionActive && !lit;
           const display = n.friendly ?? n.label;
           return (
@@ -441,9 +408,7 @@ export default function AtlasOrreryChart({
               >
                 {display}
               </text>
-              {/* the raw SQL name, surfaced only at the `everything` level as a
-                  small second line under the friendly name — the machine truth,
-                  never conflated with the human label above it */}
+              {/* Raw SQL name, `everything` level only — machine truth. */}
               {showPhysical ? (
                 <text
                   className={styles.nodeSubLabel}

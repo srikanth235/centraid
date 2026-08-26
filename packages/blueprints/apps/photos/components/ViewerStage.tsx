@@ -1,17 +1,7 @@
-// The stage itself (v4 handoff §7.1): the photograph, the two step controls,
-// the zoom control, the per-kind transport and the stage's own status line.
-//
-// WHAT "FIT" MEANS. The media carries three things at once: the asset's
-// `aspect-ratio` (from the RECORD, so the box is right before the bytes
-// arrive), a PREFERRED width of `targetHeight × ratio`, and
-// `max-width/max-height: 100%`. The preference says which way the photograph
-// would like to be bound; the two maxima are what make "fit" mean fit on a
-// 390px portrait screen as well as in a 1420px window. Zoomed, the maxima come
-// off and the wrap clips instead — that is the whole difference between the
-// two states.
-//
-// PREV / NEXT MIRROR. Both are placed with `inset-inline-start/end`, so under
-// RTL "previous" sits where the reading eye expects it without a second rule.
+// The stage (v4 §7.1). FIT: aspect-ratio from the RECORD, preferred width
+// `targetHeight × ratio`, `max-width/max-height: 100%`. Zoomed, maxima come
+// off and the wrap clips. Prev/next use `inset-inline-*` so RTL needs no
+// second rule.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
@@ -40,16 +30,14 @@ import {
 
 import styles from "./Lightbox.module.css";
 
-/** The wrap's live pixel height — what the preferred width is derived from. */
 function useStageHeight(): [(el: HTMLDivElement | null) => void, number] {
   const [height, setHeight] = useState(0);
   const observer = useRef<ResizeObserver | null>(null);
   const ref = useCallback((el: HTMLDivElement | null) => {
     observer.current?.disconnect();
     if (!el) return;
-    // A host with no ResizeObserver (the jsdom boot test) simply never
-    // measures, and the media falls back to its two maxima — which is the
-    // correct answer there rather than a thrown error.
+    // jsdom has no ResizeObserver: never measure; the two maxima are the
+    // correct fit there rather than a thrown error.
     if (typeof ResizeObserver !== "function") return;
     observer.current = new ResizeObserver((entries) => {
       setHeight(entries[0]?.contentRect.height ?? 0);
@@ -61,7 +49,6 @@ function useStageHeight(): [(el: HTMLDivElement | null) => void, number] {
   return [ref, height];
 }
 
-/** The zoom state, as one value plus its pan offset. */
 interface Zoom {
   scale: number;
   x: number;
@@ -70,10 +57,8 @@ interface Zoom {
 const FIT_ZOOM: Zoom = { scale: FIT, x: 0, y: 0 };
 
 /**
- * The media element. Every branch names the scope its bytes live in
- * (issue #599): the viewer steps through a MERGED list, and content ids are
- * per-scope, so an unstamped reference renders the wrong photograph rather
- * than failing.
+ * Every branch stamps the scope its bytes live in (#599): the viewer steps
+ * a merged list, and content ids are per-scope.
  */
 function Media({
   asset,
@@ -87,17 +72,14 @@ function Media({
   onDims: (w: number, h: number) => void;
 }) {
   const scope = scopeAttr(asset.scope_id);
-  // Has the photograph actually painted? The stage is remounted per asset
-  // (`key={asset.asset_id}` in Lightbox), so this resets on its own — there is
-  // no stale-true to clear when stepping to the next frame.
+  // Remounted per asset (`key={asset.asset_id}` in Lightbox) — no stale-true.
   const [painted, setPainted] = useState(false);
   const contentSrc = safeMediaUrl(asset.content_uri);
   const posterSrc = safeMediaUrl(asset.poster_uri);
   const ratio = assetRatio(asset);
   const zoomed = isZoomed(zoom.scale);
-  // The preference only exists once the wrap has been measured. Before that
-  // the two maxima are the whole constraint, which is a correct fit, not a
-  // placeholder — so nothing reflows when the measurement lands.
+  // Preference only after the wrap is measured. Before that the two maxima
+  // are a correct fit — nothing reflows when the measurement lands.
   const box = {
     aspectRatio: String(ratio),
     ...(stageHeight > 0 && !zoomed
@@ -129,10 +111,7 @@ function Media({
           preload="metadata"
           aria-label={displayText(asset.title ?? "Audio")}
         >
-          {/* The vault has no caption sidecar for media assets yet, so there
-              is nothing to point `src` at — this is the wiring point for when
-              it does. Muting instead would be dishonest: this is a real
-              player the member presses play on. */}
+          {/* No caption sidecar yet — leave the track empty. Do not mute this player. */}
           <track kind="captions" />
         </audio>
       </div>
@@ -145,25 +124,7 @@ function Media({
       (asset.width == null || asset.height == null);
     return (
       <>
-        {/* THE STAGE HOLDS ITS GEOMETRY FROM RECORD TO BYTES (§14) — the tile's
-            own rule, which the stage did not keep. Before it paints, an `<img>`
-            is not a neutral empty box: a `/centraid/_vault/blobs/…` path is
-            unauthorized until the shell's observer swaps it, so the FIRST load
-            reliably fails, and the element presents that failure as the broken
-            glyph plus the alt string set in prose across the stage.
-
-            The alt text is the accessible NAME, not a caption to paint, and
-            `color: transparent` only silences half of it — the glyph is
-            replaced content and survives. So the skeleton is its own element
-            and the image waits at `.loading` until it has pixels: `--skel` at
-            the exact box the photograph is about to occupy, so nothing
-            reflows when the bytes land.
-
-            Static, deliberately. `--skel` is the system's "before its bytes
-            arrive" ground and it does not shimmer — "loading is
-            determinate-only with static skeletons; a shimmer is
-            attention-seeking about work the product can simply describe"
-            (DESIGN.md). The stage's status line is where description goes. */}
+        {/* Geometry from record to bytes (§14). Image stays `.loading` until it has pixels so a failed first blob load cannot paint the broken glyph + alt. `--skel` is static (DESIGN.md). */}
         {painted ? null : (
           <div className={styles.skeleton} style={box} aria-hidden="true" />
         )}
@@ -209,8 +170,7 @@ function Media({
       </>
     );
   }
-  // No paintable source. The box is still the right box: a tile — and a stage
-  // — holds its geometry from record to bytes to failure (§14).
+  // No paintable source. The box is still the right box (§14).
   return (
     <div className={styles.absent} style={box}>
       <span className={styles.absentLine}>on the gateway</span>
@@ -218,8 +178,6 @@ function Media({
   );
 }
 
-/** The zoom control (§7.1): a `fit` chip with a `+`, or the full ladder plus
- *  an exact readout. Two states of one control, never two controls. */
 function ZoomControl({
   scale,
   onZoom,
@@ -272,31 +230,11 @@ function ZoomControl({
   );
 }
 
-/**
- * The video's micro-caps kind label (§7.1): `video · 4K · 0:24`. Rendered
- * beside the zoom control rather than inside a transport, because video has
- * none here — see the Transport doc comment for why.
- */
 function VideoKindLabel({ asset }: { asset: Asset }) {
   return <span className={styles.transportKind}>{videoKindLabel(asset)}</span>;
 }
 
-/**
- * The transport (§7.1): play, a determinate track, position / duration in
- * mono, and a micro-caps kind label — for a LIVE PHOTO OR AN AUDIO SCAN.
- *
- * VIDEO DOES NOT GET ONE. It used to: a hand-rolled play button and a
- * `<progress>` sat over the native `<video controls>`, and the hand-rolled
- * one's `elapsed` was hard-coded to `0` with a play button that had no
- * handler — two transports, one of them permanently frozen at 0:00, which is
- * exactly the kind of "looks interactive, isn't" the member notices first.
- * The platform's own scrubber is accessible, already wired to the element it
- * controls, and free; a hand-rolled one only earns its place back if it does
- * something the native one cannot (frame-accurate scrubbing, custom chrome
- * matching a design the native control can't skin, etc.) — nothing here does,
- * so video renders through `VideoKindLabel` instead and leaves the actual
- * transport to the browser.
- */
+/** Live photo / audio only. Do not overlay a hand-rolled transport on `<video controls>`. */
 export function Transport({ asset }: { asset: Asset }) {
   const kind = transportKind(asset);
   if (!kind || kind === "video") return null;
@@ -307,10 +245,7 @@ export function Transport({ asset }: { asset: Asset }) {
       <button type="button" className={styles.transportPlay} aria-label="Play">
         <PlayIcon size={16} />
       </button>
-      {/* DETERMINATE BY CONSTRUCTION (§14). A real `<progress>` with a value
-          and a max, not a div wearing `role="progressbar"` — the element
-          cannot express the indeterminate state this app never wants, and its
-          own semantics come free. */}
+      {/* Determinate by construction (§14): a real `<progress>`, never a div `role="progressbar"`. */}
       <progress
         className={styles.track}
         aria-label="Position"
@@ -325,11 +260,7 @@ export function Transport({ asset }: { asset: Asset }) {
   );
 }
 
-/**
- * The stage's own status line (§7.1). It says what is true about the BYTES,
- * and where there is something to do about it the verb is an inline text
- * action — never a button that starts a metered download on its own.
- */
+/** Verb is an inline text action — never a button that starts a metered download on its own. */
 export function StageStatus({
   status,
   onAction,
@@ -374,9 +305,8 @@ export function ViewerStage({
   const [wrapRef, stageHeight] = useStageHeight();
   const [zoom, setZoom] = useState<Zoom>(FIT_ZOOM);
   const drag = useRef<{ x: number; y: number } | null>(null);
-  // A new photograph is always shown at fit. Adjusted during the render that
-  // first sees a new asset_id rather than from an effect, so the incoming
-  // photograph is never painted for a frame at the outgoing one's zoom.
+  // Reset during the render that first sees a new asset_id, not an effect —
+  // the incoming photograph must not paint a frame at the outgoing zoom.
   const [zoomFor, setZoomFor] = useState(asset.asset_id);
   if (zoomFor !== asset.asset_id) {
     setZoomFor(asset.asset_id);

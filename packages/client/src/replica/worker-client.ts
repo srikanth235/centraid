@@ -221,7 +221,7 @@ export class ReplicaWorkerClient implements ReplicaStore {
         resolve: resolve as (value: unknown) => void,
         reject,
       });
-      // eslint-disable-next-line unicorn/require-post-message-target-origin -- (#406) Worker.postMessage has no targetOrigin overload; governance: allow-no-unjustified-suppressions Web Worker API false positive
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- (#406) Worker.postMessage has no targetOrigin overload; governance: allow-no-unjustified-suppressions Web Worker API false positive
       this.#worker.postMessage({ id, op, payload } as ReplicaWorkerRequest);
     });
   }

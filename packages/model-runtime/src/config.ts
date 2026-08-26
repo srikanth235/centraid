@@ -12,7 +12,7 @@ const packageDir = path.resolve(import.meta.dirname, "..");
  * handler resolves the same directory when it runs from a vault code store.
  */
 /**
- * Host-planted runtime directory, read BEFORE the environment (#846 P9).
+ * Host-planted runtime directory, read BEFORE the environment (#846).
  *
  * A sandboxed automation handler has no `process.env` — every lane replaces it
  * with a frozen empty object — so the override below is unreadable from inside

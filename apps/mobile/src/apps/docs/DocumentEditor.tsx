@@ -1,4 +1,4 @@
-// The editor (Docs handoff Part 2 §9; issue #821) — "the hardest screen in
+// The editor (Docs handoff Part 2 §9; #821) — "the hardest screen in
 // the app. A write has seven visible outcomes and the member must always know
 // which one is showing."
 //

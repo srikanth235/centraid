@@ -8,30 +8,12 @@ import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import SettingsSection from "./SettingsSection";
 
-// HANDING THE BAND BACK, ON THE PHONE (issue #712 E3).
-//
-// `useBandOwner` shipped on both clients with a `setBandOwner` nothing called:
-// a first-party route could CLAIM the phone's bottom band and the member had
-// no way to take it back. This is the writer.
-//
-// WHY FRAME SETTINGS HERE, WHEN WEB PUTS IT IN THE APP BAR. The two surfaces
-// are not the same shape, and the honest answer differs with them:
-//
-//   * On web the frame keeps an app bar above every inline app, with the
-//     frame's own affordances already in it, so a per-app toggle sits exactly
-//     where the member is looking and costs nothing.
-//   * On the phone the claimed band IS the chrome. Its only frame-owned slot
-//     is the 52pt capsule, and the tab group beside it is already at the
-//     five-destination cap that exists precisely because a sixth target goes
-//     under 44pt (`BAND_MAX_DESTINATIONS`). There is no slot to put this in
-//     that does not either take a target below the floor or hide the control
-//     behind a gesture nobody discovers.
-//
-// So the phone takes the alternative the brief names: one frame-Settings list
-// of the apps that can claim a band. It stays PER APP — one row per app, one
-// stored answer per app — because that is what `useBandOwner` is: a member who
-// wants the frame's band back in Photos has said nothing about the next app
-// that claims. The list is a list of rows, not a global switch.
+// Hands the band back on the phone (#712): the writer for the unused
+// `setBandOwner` claim. Rows stay PER APP — one stored answer per app;
+// reclaiming the band in Photos says nothing about the next app that claims.
+// Web puts its toggle in the per-app app bar; the phone has no frame slot
+// left (the tab group is at the BAND_MAX_DESTINATIONS cap), so frame Settings
+// hosts this list.
 
 function BandRow({ app }: { app: BandClaimingApp }): React.JSX.Element {
   const { colors } = useTheme();

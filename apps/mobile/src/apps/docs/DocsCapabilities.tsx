@@ -1,4 +1,4 @@
-// What Docs may read (Docs handoff Part 2 §12; issue #821) — "four
+// What Docs may read (Docs handoff Part 2 §12; #821) — "four
 // capabilities, four separate consents, all off by default. A consent that
 // enables more than it names is not consent."
 //

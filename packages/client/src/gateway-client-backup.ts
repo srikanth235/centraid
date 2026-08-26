@@ -1,10 +1,6 @@
 /*
- * Renderer-side client for the offsite backup engine's HTTP surface
- * (`GET /centraid/_gateway/backup`, `POST /centraid/_gateway/backup/run`,
- * `POST /centraid/_gateway/backup/kit-confirmed` —
- * `packages/server/src/routes/backup-routes.ts`, issue #351's last
- * workstream; wave 4 adds the recovery-kit confirmation gate). Backs the
- * Gateway page's Backup card.
+ * Renderer-side client for the offsite backup HTTP surface
+ * (`packages/server/src/routes/backup-routes.ts`, #351).
  */
 
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
@@ -24,11 +20,9 @@ export interface GatewayBackupPolicyDTO {
 }
 
 /**
- * Owner-editable policy keys (issue #436 §4). `casAck` and `storageClass` are
- * deliberately NOT editable: `casAck`'s field survives on the read DTO for the
- * wire declaration (always defaults to 'receipt'), and store-class vocabulary
- * is gateway-internal — neither round-trips as an owner-settable value. The
- * gateway's `POLICY_KEYS` allow-list is the authority; this type mirrors it.
+ * Owner-editable keys (#436). `casAck` and `storageClass` are not:
+ * `casAck` survives on the read DTO as a wire declaration (always
+ * 'receipt'); store-class vocabulary is gateway-internal.
  */
 export type GatewayBackupPolicyPatchDTO = {
   [K in keyof Omit<GatewayBackupPolicyDTO, "casAck" | "storageClass">]?:
@@ -111,7 +105,6 @@ export interface GatewayProviderPolicyStatusDTO {
   errorCode?: string;
 }
 
-/** One vault's backup state, as `_gateway/backup` reports it. */
 export interface GatewayBackupVaultDTO {
   vaultId: string;
   name?: string;
@@ -127,19 +120,12 @@ export interface GatewayBackupVaultDTO {
   reconciliation?: GatewayBackupReconciliationDTO;
 }
 
-/**
- * Recovery-kit confirmation gate (issue #351 wave 4 / #367) — deliberately
- * generic, not backup-card-specific: issue #367 reuses this same
- * `{confirmedAt}` shape to gate the S3-storage enable flow.
- */
+/** Recovery-kit gate (#351 / #367) — same `{confirmedAt}` shape gates S3 enable. */
 export interface GatewayRecoveryKitStatusDTO {
-  /** Epoch SECONDS the operator last confirmed, or `null` if never. */
+  /** Epoch seconds, or `null` if never. */
   confirmedAt: number | null;
 }
 
-/** The provider's retention promise (discovery `backup.retention`) — the
- *  Recovery-window metric's source (#436 §6). Structural subset of
- *  `@centraid/backup`'s `Retention` (drops `neverPruneNewest`, always true). */
 export type GatewayRetentionDTO =
   | {
       kind: "ladder";
@@ -149,8 +135,6 @@ export type GatewayRetentionDTO =
     }
   | { kind: "none" };
 
-/** The home bundle's provider-declared promises for the five-metric contract
- *  (#436 §6): Recovery window (`retention`) and Exit (`restoreCostClass`). */
 export interface GatewayHomeDiscoveryDTO {
   retention: GatewayRetentionDTO;
   restoreCostClass: "free-egress" | "metered-egress";
@@ -161,13 +145,10 @@ export interface GatewayBackupStatusDTO {
   provider?: string;
   vaults: GatewayBackupVaultDTO[];
   recoveryKit: GatewayRecoveryKitStatusDTO;
-  /** Provider-declared retention + restore-egress promises; absent when backup
-   *  isn't configured or discovery couldn't be read (metrics degrade). */
+  /** Absent when backup isn't configured or discovery couldn't be read. */
   home?: GatewayHomeDiscoveryDTO;
 }
 
-/** Backup status for every mounted vault — `{configured: false, vaults: []}`
- *  when the gateway has no `backup` block. */
 export async function getGatewayBackupStatus(): Promise<GatewayBackupStatusDTO> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_gateway/backup", {
@@ -177,7 +158,6 @@ export async function getGatewayBackupStatus(): Promise<GatewayBackupStatusDTO> 
   return readJson<GatewayBackupStatusDTO>(res, "gateway backup status");
 }
 
-/** Replace the supplied fields in one vault's unified backup/bytes policy. */
 export async function updateGatewayBackupPolicy(
   vaultId: string,
   patch: GatewayBackupPolicyPatchDTO
@@ -200,17 +180,10 @@ export async function updateGatewayBackupPolicy(
 
 export interface GatewayBackupRunResultDTO {
   accepted: boolean;
-  /** A run was already in flight — this POST didn't enqueue a second one. */
   alreadyRunning?: boolean;
 }
 
-/**
- * Trigger an immediate backup of every mounted vault (the Gateway page's
- * "Back up now"). Resolves as soon as the gateway ACCEPTS the request
- * (HTTP 202) — the run itself happens in the background; poll
- * `getGatewayBackupStatus` to see it land. Rejects with a
- * `GatewayClientError` (code `'conflict'`) if backup isn't configured.
- */
+/** Resolves on HTTP 202; poll `getGatewayBackupStatus` for landing. */
 export async function runGatewayBackupNow(): Promise<GatewayBackupRunResultDTO> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_gateway/backup/run", {
@@ -220,7 +193,6 @@ export async function runGatewayBackupNow(): Promise<GatewayBackupRunResultDTO> 
   return readJson<GatewayBackupRunResultDTO>(res, "run gateway backup");
 }
 
-/** Trigger an integrity verification of the newest snapshot for every backed-up vault. */
 export async function verifyGatewayBackupsNow(): Promise<GatewayBackupRunResultDTO> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_gateway/backup/verify", {
@@ -230,7 +202,6 @@ export async function verifyGatewayBackupsNow(): Promise<GatewayBackupRunResultD
   return readJson<GatewayBackupRunResultDTO>(res, "verify gateway backups");
 }
 
-/** Cross-check provider-attested inventory against a raw bucket LIST for one vault. */
 export async function verifyGatewayBackupBucket(vaultId: string): Promise<{
   vaultId: string;
   reconciliation: GatewayBackupReconciliationDTO;
@@ -247,15 +218,7 @@ export async function verifyGatewayBackupBucket(vaultId: string): Promise<{
   }>(res, "verify backup inventory against bucket");
 }
 
-/**
- * Confirm the operator has exported and safely stored the recovery kit
- * (the Gateway page's "I've saved my recovery kit" button). Unlike
- * `GatewayRecoveryKitStatusDTO.confirmedAt` (which can be `null` — never
- * confirmed), this POST always stamps the current clock, so the response's
- * `confirmedAt` is always a number. Rejects with a `GatewayClientError`
- * (code `'conflict'`) if backup isn't configured — there's no keyring to
- * have exported a kit from.
- */
+/** Always stamps the current clock. Rejects `'conflict'` if backup isn't configured. */
 export async function confirmGatewayRecoveryKit(input: {
   kit: unknown;
   password: string;

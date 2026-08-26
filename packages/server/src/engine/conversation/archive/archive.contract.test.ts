@@ -1,4 +1,4 @@
-// Conversation-band archival engine (issue #438): custody-gated prune,
+// Conversation-band archival engine (#438): custody-gated prune,
 // segment round-trip, and page reclamation. Selector-edge cases live in
 // selector.test.ts; shared fixtures in test-fixtures.ts.
 

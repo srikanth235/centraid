@@ -1,24 +1,16 @@
-// Owner flags (issue #274): one judgment, one mechanism. An owner judgment
-// about an entity — starred today, more flags later — is entity-scoped
-// meaning, so it lives in the universal classification join: one flags-scheme
-// tag on the CANONICAL entity, never a per-domain boolean column. A column
-// silently discards what the tag keeps for free (who flagged, when, and
-// UNIQUE(target,concept) integrity). The scheme bootstraps on first use
-// exactly like the folders scheme; `starred` carries "Favorite" as a SKOS
-// altLabel, resolving the star/favorite synonymy the app silos never did.
-//
-// Not a command pack: these are the shared mechanism the domain packs
-// (documents, social, media) write through, the way knowledge.ts borrows
-// releaseContentIfUnreferenced from media.ts.
+// Owner flags (#274): an owner judgment about an entity is entity-scoped
+// meaning → one flags-scheme tag on the CANONICAL entity in the universal
+// classification join, never a per-domain boolean column (a column discards
+// who flagged, when, UNIQUE integrity). Shared mechanism, not a command pack;
+// bootstraps like folders; "Favorite" rides along as a SKOS altLabel.
 
 import type { DatabaseSync } from "node:sqlite";
 
 import type { HandlerCtx } from "../gateway/types.js";
 
-// An https URI, not a urn: one — flag SQL fragments interpolate into
-// condition SQL, where `:flags` would read as a named parameter (the
-// issue-258 colon-literal trap); `https://` survives because no parameter
-// name can start with a slash.
+// An https URI, not a urn: flag SQL fragments interpolate into condition SQL,
+// where `:flags` reads as a named parameter (#258 colon-literal trap); no
+// parameter name can start with a slash.
 export const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 
 export const STARRED_NOTATION = "starred";
@@ -33,13 +25,9 @@ function actorPartyId(ctx: HandlerCtx): string {
   return owner.owner_party_id;
 }
 
-/**
- * What flagging needs when it runs OUTSIDE the command pipeline (issue #721):
- * the import spine's publishers hold a raw `DatabaseSync` and a provenance
- * collector, never a `HandlerCtx`. `actorPartyId` is a thunk on purpose — a
- * vault with no owner must still be able to CLEAR a flag, so the party is
- * resolved only on the path that actually writes one.
- */
+/** What flagging needs OUTSIDE the command pipeline (#721): publishers hold a
+ *  raw DatabaseSync, not a HandlerCtx. actorPartyId is a thunk so an ownerless
+ *  vault can still CLEAR a flag (party resolved only where written). */
 export interface FlagWriteDeps {
   vault: DatabaseSync;
   now: string;
@@ -83,10 +71,8 @@ function starredConceptIdTx(deps: FlagWriteDeps): string {
   return conceptId;
 }
 
-/**
- * Set or clear the starred flag on a canonical entity. Delete-then-insert:
- * idempotent, and re-starring refreshes who starred and when.
- */
+/** Set/clear `starred`; delete-then-insert keeps it idempotent and refreshes
+ *  who-starred-when on re-star. */
 export function setStarredTx(
   deps: FlagWriteDeps,
   targetType: string,
@@ -134,8 +120,8 @@ export function setStarred(
 
 /**
  * Condition fragment: a live starred tag exists on (targetType, targetIdSql).
- * targetIdSql is a SQL expression (a named parameter or subquery), never
- * caller data.
+ * targetIdSql is a SQL expression (named parameter or subquery), never caller
+ * data.
  */
 export function starredExistsSql(
   targetType: string,

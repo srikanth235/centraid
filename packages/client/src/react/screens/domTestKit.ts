@@ -9,7 +9,7 @@
  * subsequent `input` event reads as a genuine user edit.
  *
  * Ten-odd screen tests carry their own copy of this; they should migrate here
- * (issue #573 follow-up) rather than each maintaining a subtly different one.
+ * (#573 follow-up) rather than each maintaining a subtly different one.
  */
 
 import { act } from "react";

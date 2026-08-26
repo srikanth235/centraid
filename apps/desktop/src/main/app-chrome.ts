@@ -1,5 +1,5 @@
 /*
- * Application menu, tray, and deep-link scaffolding (issue #468 K14).
+ * Application menu, tray, and deep-link scaffolding (#468).
  * Registers centraid:// as the default protocol; tray shows gateway status.
  */
 

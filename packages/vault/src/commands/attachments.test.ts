@@ -91,7 +91,7 @@ describe("attachments", () => {
     expect(content.media_type).toBe("image/png");
     expect(content.title).toBe("preview.png");
     expect(content.byte_size).toBeGreaterThan(0);
-    // Binary bytes spill to the CAS (issue #296): the row keeps the address,
+    // Binary bytes spill to the CAS (#296): the row keeps the address,
     // custody keeps the bytes, and the sha is of the RAW bytes.
     expect(content.content_uri).toMatch(/^blob:sha256-[0-9a-f]{64}$/u);
     const sha = content.content_uri.slice("blob:sha256-".length);

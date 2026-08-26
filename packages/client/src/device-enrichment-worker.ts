@@ -1,4 +1,4 @@
-// Opt-in idle-device queue runner (issue #414 D11). The gateway remains the
+// Opt-in idle-device queue runner (#414). The gateway remains the
 // authority for enrollment and TTL leases; this browser host proves current
 // charging/network state, computes one bounded job, contributes derivatives,
 // then completes (or releases) the token-bound lease.
@@ -22,7 +22,7 @@ import type {
 const POLL_INTERVAL_MS = 5 * 60 * 1_000;
 const DRAIN_INTERVAL_MS = 1_000;
 const INITIAL_DELAY_MS = 10_000;
-// The device lane's leaseable work (narrowed by issue #724): model-shaped
+// The device lane's leaseable work (narrowed by #724): model-shaped
 // capabilities — transcription, OCR, embedding — moved to the gateway's
 // self-contained recognition automations, so a browser is asked only for what its own platform
 // already does. The host advertisement stays authoritative on top of this

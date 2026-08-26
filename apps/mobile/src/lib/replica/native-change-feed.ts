@@ -243,9 +243,9 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
   /**
    * Write the resume cursor at most once per quiet window.
    *
-   * A busy delta batch advances the cursor once per change, and every advance
-   * used to be its own AsyncStorage write — a disk write per row for work whose
-   * only consumer is the next cold start. Only the newest cursor matters, and
+   * A busy delta batch advances the cursor once per change, and an AsyncStorage
+   * write per advance is a disk write per row for work whose only consumer is
+   * the next cold start. Only the newest cursor matters, and
    * losing an unwritten one costs a replay, not data, so the write is debounced
    * and flushed when the app goes away.
    */

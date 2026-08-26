@@ -1,14 +1,7 @@
-// What People contributes to the FRAME (v12 handoff § Screens, § Navigation).
-//
-// The contribution SHAPE is `_shared/app-frame.tsx`, the same module Docs and
-// Photos fill in. This file is what People puts in it: the title, the count
-// and the one or two verbs each screen carries — and nothing about how any of
-// them look, because the bar is the frame's.
-//
-// ONE FILLED CONTROL PER VIEW. `Add` is the roster's commit and takes the
-// fill; `Trash` beside it is an outline, and every nested screen's verb is an
-// outline too, because the filled element on those screens is their own
-// commit further down the page.
+// What People puts in the frame's bar: the title, the count and the verbs per
+// screen (shape is `_shared/app-frame.tsx`). ONE FILLED CONTROL PER VIEW:
+// `Add` takes the fill; Trash and every nested screen's verb are outlines —
+// the filled element there is their own commit further down the page.
 import type { ReactNode } from "react";
 
 import { countLabel } from "../_shared/app-frame.tsx";
@@ -33,8 +26,7 @@ import type { ShelfId } from "./shelves.ts";
 
 export interface AppBarState extends AppBarBase {
   shelf: ShelfId;
-  /** The open person's name — a nested screen carries the person's OWN title,
-   *  not the app's, because the person is what it is about. */
+  /** The open person's name — a nested screen carries the person's OWN title, not the app's. */
   personName?: string;
   /** Compose a new person. Only the roster has it. */
   onAdd?: () => void;
@@ -42,10 +34,7 @@ export interface AppBarState extends AppBarBase {
   onTrash?: () => void;
   /** Edit the open person. Only the person screen has it. */
   onEdit?: () => void;
-  /** `<k> of <m> linked` — the roster's meta on a pointer surface, present
-   *  only while the sharing plane answered. It REPLACES the people count
-   *  rather than standing beside it: the bar carries one meta, and the linked
-   *  pair already names the total. */
+  /** `<k> of <m> linked` — roster meta on a pointer surface, only while the sharing plane answered. REPLACES the people count: the bar carries one meta and the linked pair already names the total. */
   linkedMeta?: string;
 }
 
@@ -61,8 +50,7 @@ export function barTitle(state: AppBarState): string {
   return APP_TITLE;
 }
 
-/** The bar's count, in the words the product uses. `null` contributes nothing
- *  rather than a zero the view had to invent. */
+/** The bar's count, in the product's words. `null` contributes nothing rather than an invented zero. */
 export function barCount(state: AppBarState): ReactNode {
   if (state.linkedMeta) return state.linkedMeta;
   if (state.count === null) return undefined;
@@ -96,12 +84,9 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
 }
 
 /**
- * The compact band claim — People's three destinations (handoff deviation 2).
- *
- * NO `More`. The frame offers the sixth slot only when an app gives it
- * something to open, and People has three destinations and no overflow: a More
- * tab that opened an empty sheet would be a destination naming nothing. That
- * is why this builds the claim directly instead of going through
+ * Compact band claim — People's three destinations (handoff deviation 2). NO
+ * `More`: the frame offers the sixth slot only when an app has something to
+ * open, and People has no overflow. Builds the claim directly instead of using
  * `_shared/app-frame.tsx`'s four-argument helper, whose last argument is the
  * More handler.
  */

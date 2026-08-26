@@ -1,64 +1,11 @@
 /*
- * Gateway-level storage-connection routes (issue #367 §C1) — CRUD over
- * `StorageConnectionStore` plus a real signed connectivity probe and a
- * per-vault replication-status read. Owner-facing, same bearer gate as
- * health/diagnostics/backup (mounted in `extraHandlers`, `build-gateway.ts`).
- * Section D (a later agent) builds the Settings UI screen against this
- * exact contract:
+ * Gateway-level storage-connection routes (#367): CRUD over
+ * `StorageConnectionStore`, a real signed connectivity probe, and per-vault
+ * replication, usage, local-footprint and limit reads. Owner-facing, behind
+ * the same bearer gate as health/diagnostics/backup.
  *
- *   GET    /centraid/_gateway/storage/connections           — list (never carries secrets)
- *   POST   /centraid/_gateway/storage/connections            — create; body = CreateStorageConnectionInput
- *                                                              (no bypass); 409
- *                                                              `recovery_kit_not_confirmed` when the
- *                                                              recovery kit hasn't been confirmed, unless
- *                                                              complete; 400 `provider_not_home_profile`
- *                                                              when the provider isn't a home bundle (#436 §1);
- *                                                              409 `already_exists` if a home connection is
- *                                                              already configured (#436 §7)
- *   PATCH  /centraid/_gateway/storage/connections/<id>       — update; body = partial CreateStorageConnectionInput
- *   DELETE /centraid/_gateway/storage/connections/<id>       — delete
- *   POST   /centraid/_gateway/storage/connections/<id>/test  — real signed HEAD probe against a freshly granted
- *                                                              bucket, plus the provider's home-profile status
- *   GET    /centraid/_gateway/storage/status                 — per-vault replication progress: configured,
- *                                                              replicated/backlog (count + bytes), a `custody`
- *                                                              block carrying the whole `blob.custody_rollup`
- *                                                              projection (issue #712 B3 — `computedAt`, which
- *                                                              is `null` until the sweep has run, plus every
- *                                                              bucket including `freeable` and
- *                                                              `local-unproven`), lastSweep,
- *                                                              throttleBytesPerSec, and (issue #405 §7) a
- *                                                              `cache` block making the bounded storage tier
- *                                                              visible: spool occupancy vs. budget
- *                                                              (`budgetBytes` is `null` when the tier is
- *                                                              unlimited — no disk to measure), the
- *                                                              process-lifetime hit-rate counters
- *                                                              (localHits / readThroughs / rangedRemoteReads —
- *                                                              raw counts, the UI derives the ratio), bytes
- *                                                              served local vs. remote, and eviction /
- *                                                              backpressure tallies. Counters reset on gateway
- *                                                              restart (process-lifetime, not durable).
- *   GET    /centraid/_gateway/storage/usage                  — per-connection usage (issue #367 §D1): a
- *                                                              provider-kind connection's cached
- *                                                              `centraid-storage-provider/1` usage report
- *                                                              alongside the locally-computed replicated byte
- *                                                              count (custody's own ground truth) — visible
- *                                                              drift between the two is an integrity signal,
- *                                                              not noise.
- *   GET    /centraid/_gateway/storage/local                  — LOCAL disk footprint by component (issue
- *                                                              #544): per-vault ledger / vault-db /
- *                                                              attachments / apps / code plus the
- *                                                              gateway-level backup, logs, templates and
- *                                                              storage dirs, the volume's free/total, and
- *                                                              the current limit evaluation. Served from
- *                                                              `LocalUsageScanner`'s TTL cache; `?refresh=1`
- *                                                              re-walks inline.
- *   GET|PUT /centraid/_gateway/storage/limits                — the owner's disk budget (warn-only) and
- *                                                              ledger archive limit (issue #544). PUT takes
- *                                                              a partial patch; `null` clears either limit.
- *
- * Every response mirrors `StorageConnectionRecord` — `id, kind, name,
- * createdAt, updatedAt`, plus `baseUrl/targetId`. NEVER a credential field,
- * sealed or not.
+ * Every response mirrors `StorageConnectionRecord` and NEVER carries a
+ * credential field, sealed or not.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -100,17 +47,12 @@ export interface StorageRouteDeps extends StorageLocalRouteDeps {
   storageConnections: StorageConnectionStore;
   recoveryKit: RecoveryKitStateStore;
   vaults: VaultRegistry;
-  /** Provider usage cache (issue #367 §D1) — backs `GET storage/usage`. */
   storageUsage: StorageUsagePoller;
-  /** Re-arm the WAL clock immediately when a live backup backend changes. */
   onConnectionsChanged?: () => Promise<void> | void;
 }
 
-/** Sum of a connection's local custody bytes across every vault whose
- *  `blob_store.connectionId` points at it — `replicated` + `remote-only`
- *  (bytes custody has actually confirmed are off-box), deliberately NOT
- *  `local-only` (not yet replicated, so not a fair comparison against a
- *  provider's own "bytes stored" figure). */
+/** `local-only` is excluded: unreplicated bytes would not compare fairly
+ *  against a provider's own figure. */
 function localReplicatedBytesByConnection(
   vaults: VaultRegistry
 ): Map<string, number> {
@@ -145,10 +87,8 @@ function sendConnectionError(res: ServerResponse, err: unknown): true {
   return sendError(res, err);
 }
 
-/** Real connectivity probe: one signed HEAD against a synthetic key — a 404 IS
- *  success (proves auth + reachability, not object existence). Also reads the
- *  provider's home-profile status (issue #436 §1) and folds it into the detail
- *  so the Test action shows whether this provider is a full home bundle. */
+/** One signed HEAD against a synthetic key: a 404 IS success, proving auth and
+ *  reachability rather than object existence. Folds in home-profile status (#436). */
 async function probeConnection(
   store: StorageConnectionStore,
   id: string
@@ -161,9 +101,8 @@ async function probeConnection(
   const probeKey = "0".repeat(64);
   try {
     const apiKey = await store.resolveProviderApiKey(id);
-    // Home-profile status first: a non-home provider is a hard failure (a
-    // home connection requires the full bundle), reported with the exact
-    // missing capabilities rather than a generic reachability error.
+    // First: a non-home provider is a hard failure, named capability by
+    // capability rather than as a generic reachability error.
     const profile = await fetchProviderProfileStatus(
       connection.baseUrl,
       apiKey
@@ -221,21 +160,17 @@ function storageStatus(plane: StoragePlane) {
   const sweep = plane.db.blobs.sweepStatus();
   const metrics = plane.db.blobs.metrics();
   const outbox = plane.db.blobTransfers.status();
-  // The ROLLUP, read (never recomputed) here — the standing blob sweep owns
-  // rebuilding it (`gateway.ts` → `refreshCustodyRollup`), and a route that
-  // rebuilt a whole-library projection per request would be O(vault-size) on
-  // the request path. `computedAt: null` travels as null and MUST reach the
-  // client as null: it is the difference between "nothing is freeable" and
-  // "nobody has looked yet", and a client that renders zeroes for the second
-  // tells an owner their library is safe on the strength of an unrun sweep.
+  // READ, never recomputed: the standing blob sweep owns rebuilding it, and a
+  // per-request rebuild would be O(vault-size) on the request path.
+  // `computedAt: null` MUST reach the client as null — it separates "nothing is
+  // freeable" from "nobody has looked yet".
   const rollup = custodyRollup(plane.db.vault);
   return {
     vaultId: plane.boot.vaultId,
     name: plane.name,
     configured: settings.kind === "s3",
     ...(settings.connectionId ? { connectionId: settings.connectionId } : {}),
-    // `remote-only` is confirmed provider custody and therefore ackable;
-    // pending-offsite/outbox is the only undrained state (#414).
+    // `remote-only` is confirmed custody; only pending-offsite is undrained (#414).
     replicated: {
       count: counts.replicated + counts["remote-only"],
       bytes: bytes.replicated + bytes["remote-only"],
@@ -248,12 +183,10 @@ function storageStatus(plane: StoragePlane) {
       lastError: outbox.lastError,
     },
     localOnly: { count: counts["local-only"], bytes: bytes["local-only"] },
-    // Every number a storage/backup surface prints traces to one of these
-    // buckets (issue #712 B3) — `freeable` and `local-unproven` above all,
-    // which are the only two in this repo that license, or refuse, releasing a
-    // local copy. The five custody-state buckets ride along so a client never
-    // has to reconcile this block against the `replicated`/`localOnly` pairs
-    // above, which are the same arithmetic from `blob_custody_state`.
+    // Every storage number traces to one of these buckets (#712); `freeable`
+    // and `local-unproven` are the only two that license or refuse releasing a
+    // local copy. The custody-state buckets ride along so a client never has to
+    // reconcile this block against the pairs above.
     custody: { computedAt: rollup.computedAt, buckets: rollup.buckets },
     casAck: policy.casAck,
     outboxBudgetBytes: policy.outboxBudgetBytes,
@@ -383,9 +316,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
       }
     }
 
-    // Local footprint + the owner's limits (issue #544) — same prefix, but a
-    // different question (this machine's disk, not the provider's), so they
-    // live in their own module.
+    // A different question (this machine's disk, not the provider's), so it
+    // lives in its own module (#544).
     if (await tryStorageLocalRoutes(url, req, res, deps)) return true;
 
     if (url.pathname === CONNECTIONS_PATH) {
@@ -409,8 +341,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
             });
           }
           const body = raw as unknown as CreateStorageConnectionInput;
-          // Every connection is a home CAS bundle now (#436 §2/§7), so the
-          // recovery-kit gate always applies before the first remote custody.
+          // Every connection is a home CAS bundle (#436), so the recovery-kit
+          // gate always applies before the first remote custody.
           const status = await deps.recoveryKit.status();
           const recoveryKitConfirmed = status.confirmedAt !== null;
           if (!recoveryKitConfirmed) {
@@ -421,9 +353,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
                 "export, re-select, and verify the recovery kit before enabling a remote storage tier",
             });
           }
-          // Home-profile gate (#436 §1): only a provider advertising the
-          // `home` profile can back a Centraid home connection. Throws a typed
-          // `provider_not_home_profile` StorageConnectionError → 400.
+          // Only a `home`-profile provider may back a home connection (#436);
+          // throws `provider_not_home_profile` → 400.
           await assertProviderHomeProfile(body.baseUrl, body.apiKey);
           const connection = await deps.storageConnections.create(body);
           await deps.onConnectionsChanged?.();

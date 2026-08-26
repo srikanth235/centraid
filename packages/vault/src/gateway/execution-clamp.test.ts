@@ -1,4 +1,4 @@
-// The execution clamp (issue #541): a host-owned, per-execution attenuation of
+// The execution clamp (#541): a host-owned, per-execution attenuation of
 // an automation's durable grant. It may only ever NARROW what the owner
 // granted — every declared restriction bites, none of them is dropped because
 // another scope happened to sort first.

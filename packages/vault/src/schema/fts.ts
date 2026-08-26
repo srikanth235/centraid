@@ -81,7 +81,7 @@ const SPECS: readonly FtsEntitySpec[] = [
   },
   {
     // Documents are searched under their OWN identity, not the raw content
-    // item (issue #352): title lives on core_document, body decodes through
+    // item (#352): title lives on core_document, body decodes through
     // whichever content item is current. blob.ts overrides this spec's
     // triggers to be derivative-aware (extracted PDF/scan text wins over the
     // raw decode), same as it always did for the parent row.
@@ -120,7 +120,7 @@ const SPECS: readonly FtsEntitySpec[] = [
     ],
   },
   {
-    // Owner memos (issue #274): the running note about a person, the remark
+    // Owner memos (#274): the running note about a person, the remark
     // on a workout — annotations on canonical entities, searchable as text.
     entity: "knowledge.annotation",
     idColumn: "annotation_id",
@@ -166,9 +166,9 @@ const SPECS: readonly FtsEntitySpec[] = [
     columns: [{ name: "role", kind: "column" }],
   },
   {
-    // The locker's non-secret face (issue #310 C6): title, username, url.
+    // The locker's non-secret face (#310): title, username, url.
     // Sealed columns structurally cannot feed the index — the gate below
-    // throws at DDL-build time (issue #293) — and `notes` stays out
+    // throws at DDL-build time (#293) — and `notes` stays out
     // deliberately: it routinely carries recovery codes.
     entity: "locker.item",
     idColumn: "item_id",
@@ -180,7 +180,7 @@ const SPECS: readonly FtsEntitySpec[] = [
     deletedColumn: "deleted_at",
   },
   {
-    // "That dinner at Olive we split" is a search question (issue #310 C6).
+    // "That dinner at Olive we split" is a search question (#310).
     entity: "tally.expense",
     idColumn: "expense_id",
     columns: [{ name: "description", kind: "column" }],
@@ -233,7 +233,7 @@ export const SEARCHABLE: Readonly<Record<string, SearchableEntity>> =
   );
 
 /**
- * Per-document index budget (issue #367 §E3): a body can be arbitrarily
+ * Per-document index budget (#367): a body can be arbitrarily
  * large (a pasted transcript, an imported email, an extracted PDF's text
  * layer), but the FTS shadow tables are a SEARCH index, not a second copy
  * of the canonical bytes — the canonical body/derivative stays complete and
@@ -274,7 +274,7 @@ function valueExpr(column: FtsColumn, prefix: string): string {
 }
 
 /**
- * The structural FTS gate (issue #293): a sealed column can never feed a
+ * The structural FTS gate (#293): a sealed column can never feed a
  * text index, whatever a spec declares — the throw happens at DDL-build
  * time, so a bad declaration fails the migration, not the audit.
  */
@@ -340,10 +340,10 @@ function entityDdl(spec: FtsEntitySpec): string {
   ];
   const insertColumns = insertColumnsOf(spec);
   const insertRow = `INSERT INTO ${fts}(${insertColumns}) SELECT ${valuesOf(spec, "new")}${liveGuardOf(spec, "new")};`;
-  // detail= tuning (issue #367 §E3): left at the FTS5 default, detail=full.
+  // detail= tuning (#367): left at the FTS5 default, detail=full.
   // detail=column/none shrink the index by dropping per-term POSITION data,
   // but snippet()/highlight() degrade to whole-column matches without it —
-  // the owner-facing search surface (issue #274) uses snippet() for match
+  // the owner-facing search surface (#274) uses snippet() for match
   // context, so that quality loss isn't free. The size problem detail=
   // would address is now handled at the source instead: the per-document
   // budget above bounds how much text ever reaches the index, and journal
@@ -381,7 +381,7 @@ const SPEC_BY_ENTITY: ReadonlyMap<string, FtsEntitySpec> = new Map(
 );
 
 /**
- * Rebuild path (issue #367 §E3): the index is derived and rebuildable — if
+ * Rebuild path (#367): the index is derived and rebuildable — if
  * `FTS_BODY_INDEX_BUDGET_CHARS` (or a spec) changes, existing indexed rows
  * still carry the OLD truncation, since FTS5's own `('rebuild')` command
  * only re-derives the internal index structures from what fts5 itself

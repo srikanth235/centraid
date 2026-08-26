@@ -1,28 +1,14 @@
 /*
- * `POST /centraid/_gateway/edges` — the cross-vault share/move plane (#726
- * P2). Succeeds `placement_intents`/`/placements` outright (pre-1.0, no
- * dual write, no COMPAT shim): one edge covers a SET of items — three
- * photographs sharing one edge project through ONE reconcile pass — where
- * a placement covered exactly one.
- *
- * SAME-OWNER ONLY since #825. Placing between the vaults one person holds
- * (Work→Personal) is what this route is for; giving a copy to ANOTHER
- * person's vault retired with copy-as-share (ruling G-copy) and is refused
- * here with the grant plane named in the copy. Whether a pair may be crossed
- * at all is still not decided here: `serve/link-crossing.ts` is the one
- * answerer (D3), and an unauthorized pair answers `not_found` — topology
- * hiding, you learn nothing about a vault you cannot reach.
- *
- * Since #750 this route hand-writes no status at all. It records the edge,
- * asks the reducer to `begin` (which durably enqueues ONE `deliver-give`
- * effect), and runs that effect inline so the owner still gets the answer
- * synchronously.
- *
- * GET lists by OWNER, not by device (#750 abstraction 5): authority is the
- * owner's, so every device of one owner sees the same edges.
- * `createdByDevice` remains on the wire as provenance.
- *
- * The retired live/lend mode is intentionally not accepted here (#731).
+ * `POST /centraid/_gateway/edges` — cross-vault share/move plane (#726 P2).
+ * Replaces `placement_intents`/`/placements` outright (pre-1.0): one edge
+ * covers a SET of items through ONE reconcile pass. SAME-OWNER ONLY since
+ * #825 (ruling G-copy) — copies to another person's vault are refused;
+ * sharing is a standing grant on `/centraid/_vault/grants`. Whether a pair
+ * may be crossed is decided ONLY by `serve/link-crossing.ts` (D3);
+ * unauthorized pairs answer `not_found` — topology hiding. Since #750 the
+ * route hand-writes no status (reducer `begin` enqueues ONE `deliver-give`
+ * effect, run inline for a synchronous answer). GET lists by OWNER;
+ * `createdByDevice` stays as provenance. Live/lend not accepted (#731).
  */
 
 import type { IncomingMessage } from "node:http";
@@ -113,11 +99,8 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    // The ACTING owner must own the origin outright — an edge only ever
-    // leaves a vault you own. That is a fact about the caller, not about the
-    // pair, so it stays here; whether the PAIR may be crossed at all is the
-    // one answerer's question (`judgeEdgeCrossing`), same for a vault on this
-    // machine and a vault across the world.
+    // The ACTING owner must own the origin — an edge only leaves a vault you
+    // own; whether the PAIR may cross is `judgeEdgeCrossing`'s question alone.
     const owners = deps.enrollments.owners;
     if (owners.ownerOf(input.originVaultId) !== owner.ownerId)
       return sendJson(res, 404, { error: "not_found" });
@@ -126,17 +109,12 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
       input.originVaultId,
       input.audienceVaultId
     );
-    // No link, no information: a stranger's vault id, an unapproved link, and
-    // a revoked one all leave the same trace.
+    // No link, no information: all three refusals leave the same trace.
     if (crossing.state === "not_found")
       return sendJson(res, 404, { error: "not_found" });
-    // COPY-AS-SHARE RETIRED (#825, ruling G-copy). `judgeEdgeCrossing`
-    // answering `linked` always means a CROSS-owner pair, and handing another
-    // person a copy is no longer a verb this product has: a share is a
-    // standing grant now, and the grant plane — not this route — is what
-    // carries a subject to somebody else's vault. Refused cleanly rather than
-    // hidden: the caller has a legitimate, approved relationship with that
-    // vault, and the copy says where the gesture went instead.
+    // COPY-AS-SHARE RETIRED (#825, ruling G-copy): `linked` always means a
+    // cross-owner pair, and a copy is no longer a verb — refused cleanly,
+    // not hidden: the caller has an approved relationship with that vault.
     if (crossing.state === "linked")
       return sendJson(res, 400, {
         error: "cross_owner_give_retired",
@@ -144,9 +122,7 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
           "giving a copy to another person's vault has been replaced by sharing — grant them the album, folder or document instead",
       });
 
-    // Only the SAME-OWNER pair survives the refusal above, so both vaults are
-    // on this machine by construction: the remote lane this route used to
-    // carry left with copy-as-share.
+    // Both vaults are on this machine by construction (#825).
     const origin = deps.vaultFor(input.originVaultId);
     const audience = deps.vaultFor(input.audienceVaultId);
     if (!origin || !audience) return sendJson(res, 404, { error: "not_found" });
@@ -170,9 +146,7 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
       outcome
     );
     const settled = readEdgeRow(deps.gatewayDatabase, row.edge_id) ?? row;
-    // 202 is "this gateway could not act" — a vault call that threw, or a
-    // vault that is not open here. Any other outcome is a 200 answer about
-    // the edge, exactly as before.
+    // 202 = this gateway could not act (vault call threw, vault not open here).
     return sendJson(
       res,
       outcome.state === "retry" && outcome.fault ? 202 : 200,
@@ -199,8 +173,8 @@ function insertOrRead(
   input: EdgeInput
 ): EdgeRow {
   const now = new Date().toISOString();
-  // The fixed item set a snapshot copies — validated on the way in, parsed
-  // (never cast) on the way out (`serve/share-scope.ts`).
+  // Validated on the way in, parsed (never cast) on the way out
+  // (`serve/share-scope.ts`).
   const scopeJson = JSON.stringify(input.itemIds);
   db.run(
     `INSERT INTO share_edges
@@ -251,7 +225,7 @@ function edgeWire(
     originVaultId: row.origin_vault_id,
     audienceVaultId: row.audience_vault_id,
     verbs: row.verbs,
-    /** Provenance: which device acted, now that listing is by owner (#750). */
+    /** Provenance (#750). */
     createdByDevice: row.created_by_device,
     ...(row.target_item_ids_json
       ? { targetItemIds: parseTargetItemIds(row.target_item_ids_json) }
@@ -303,8 +277,7 @@ function parseInput(body: Record<string, unknown>): EdgeInput {
     mode,
     kind,
     itemType,
-    // The same total validator the stored scope is read back through — one
-    // definition of "a scope", at the wire door and at the audit door alike.
+    // Same total validator the stored scope is read back through.
     itemIds: validateItemIds(body.itemIds),
     verbs: "read",
   };

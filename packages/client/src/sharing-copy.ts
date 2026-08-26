@@ -1,4 +1,4 @@
-// Sharing's cross-surface copy (issue #805, slice C).
+// Sharing's cross-surface copy (#805).
 //
 // The desktop People panel (`react/screens/SharingCard.tsx`, `LinkRow.tsx`,
 // `SharingRecoveryRows.tsx`) and mobile's `screens/Sharing.tsx` +

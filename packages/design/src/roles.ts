@@ -32,10 +32,11 @@ import { fontStacks, type, typeKeyToKebab } from "./typography";
 
 export type Profile = "blueprint" | "native" | "shell";
 /**
- * The contracted lowering surfaces. Four, not five: #799 retired the served
- * blueprint plane, so `BS` (`kit-served` into an `iframe-webview`) has no
- * renderer, no capture lane, and no row in `tests/design-grammar-matrix.json`.
- * A blueprint app now paints one way — inline, in the shell's own document.
+ * The contracted lowering surfaces. Four, not five: there is no served
+ * blueprint plane (#799), so `BS` (`kit-served` into an `iframe-webview`) has
+ * no renderer, no capture lane, and no row in
+ * `tests/design-grammar-matrix.json`. A blueprint app paints one way — inline,
+ * in the shell's own document.
  */
 export type Surface = "BI" | "MO" | "SH" | "SH-c";
 export type RoleCategory =

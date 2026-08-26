@@ -80,7 +80,7 @@ describe("native Photos timeline model", () => {
         }),
       ]
     );
-    // The second copy must not be dropped (the old indexOf(-1) bug), and both
+    // The second copy must not be dropped (an `indexOf` miss drops it), and both
     // localIds must survive so free-up-space can reach every device original.
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ source: "merged", localId: "local-a" });
@@ -175,7 +175,7 @@ describe("native Photos timeline model", () => {
     expect(rows[0]).toMatchObject({ id: "still", liveVideoUri: "motion.mov" });
   });
 
-  // Issue #724 B2(a): the same collapse a device Live Photo gets must also
+  // #724(a): the same collapse a device Live Photo gets must also
   // apply to a Takeout-imported capture group (`takeout:<hash>`,
   // `takeout-sidecar.ts`'s `pairingKey`) — `mergePhotoAssets` folds groups by
   // `captureGroupId` alone, with no branch on WHICH prefix minted it, so this

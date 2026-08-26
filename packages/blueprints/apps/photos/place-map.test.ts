@@ -18,7 +18,7 @@ import {
 
 const BOX = { width: 600, height: 360 };
 
-/** The seeded Tahoe roll, which is also what the shelf renders. */
+/** The Tahoe roll the shelf renders. */
 const TAHOE: PlacePoint[] = [
   { key: "home", lat: 37.4419, lng: -122.143, count: 4, name: "37.4419" },
   { key: "city", lat: 37.7955, lng: -122.3937, count: 3, name: "37.7955" },
@@ -37,16 +37,13 @@ describe("projecting places into a drawing box", () => {
       expect(pin.y).toBeGreaterThanOrEqual(0);
       expect(pin.y).toBeLessThanOrEqual(BOX.height);
     }
-    // Merging moves photographs between pins; it must never drop one.
+    // Merging may move photographs between pins but must never drop one.
     expect(pins.reduce((sum, pin) => sum + pin.count, 0)).toBe(12);
     expect(pins.reduce((sum, pin) => sum + pin.places, 0)).toBe(TAHOE.length);
   });
 
   it("merges or separates by the DRAWING, not by the data", () => {
-    // The three Tahoe places sit within ~5km of each other. On a map wide
-    // enough to also hold the Bay Area they are one dot, and on a map of the
-    // lake alone they are three — same coordinates, different question. This
-    // is the whole reason merging happens in pixels.
+    // Same coordinates, two questions: merging happens in pixels, not data.
     const trip = projectPlaces(TAHOE, BOX);
     const lakeOnly = projectPlaces(TAHOE.slice(2), BOX);
     expect(trip.pins).toHaveLength(3);
@@ -60,9 +57,7 @@ describe("projecting places into a drawing box", () => {
     );
     const ridge = pins.get("ridge")!;
     const home = pins.get("home")!;
-    // Tahoe is north of the Bay Area, so it must sit higher on the page —
-    // the sign error this catches produces a map that looks fine and is
-    // upside down.
+    // North sits higher; a sign error here draws a plausible upside-down map.
     expect(ridge.y).toBeLessThan(home.y);
     // Tahoe is east of the Bay Area (-120.1 > -122.1).
     expect(ridge.x).toBeGreaterThan(home.x);
@@ -74,8 +69,7 @@ describe("projecting places into a drawing box", () => {
     );
     const home = pins.get("home")!;
     const city = pins.get("city")!;
-    // Ground truth between Palo Alto and the city: latitude degrees for the
-    // vertical, cosine-corrected longitude for the horizontal.
+    // Ground truth: dLat vertical, cosine-corrected dLng horizontal.
     const dLat = 37.7955 - 37.4419;
     const dLng = (-122.3937 - -122.143) * Math.cos((38.22 * Math.PI) / 180);
     const drawnRatio = Math.abs((city.x - home.x) / (city.y - home.y));
@@ -83,8 +77,7 @@ describe("projecting places into a drawing box", () => {
   });
 
   it("corrects longitude for latitude", () => {
-    // One degree each way at 60°N, where a longitude degree is half a
-    // latitude degree. Uncorrected, these would draw as a square.
+    // 60°N: a longitude degree is half a latitude degree; uncorrected, square.
     const square: PlacePoint[] = [
       { key: "a", lat: 59.5, lng: 0, count: 1, name: null },
       { key: "b", lat: 60.5, lng: 0, count: 1, name: null },
@@ -103,7 +96,7 @@ describe("projecting places into a drawing box", () => {
   });
 
   it("merges places that would collide, keeping the biggest one's name", () => {
-    // Two rows in the ledger ~11m apart: one dot on any map holding a trip.
+    // Two ledger rows ~11m apart: one dot on any trip-scale map.
     const twins: PlacePoint[] = [
       { key: "small", lat: 39.0021, lng: -120.1131, count: 1, name: "small" },
       { key: "big", lat: 39.0022, lng: -120.1132, count: 9, name: "big" },
@@ -112,8 +105,7 @@ describe("projecting places into a drawing box", () => {
     const { pins } = projectPlaces(twins, BOX);
     expect(pins).toHaveLength(2);
     const merged = pins.find((pin) => pin.places === 2)!;
-    // The surviving name is the one with the photographs behind it, not
-    // whichever was read first.
+    // The surviving name is the one with the photographs behind it.
     expect(merged.name).toBe("big");
     expect(merged.key).toBe("big");
     expect(merged.count).toBe(10);
@@ -154,9 +146,7 @@ describe("projecting places into a drawing box", () => {
     const { scale, pins } = projectPlaces(TAHOE, BOX);
     const home = pins.find((pin) => pin.key === "home")!;
     const ridge = pins.find((pin) => pin.key === "ridge")!;
-    // Palo Alto to the west shore is ~215km; check the bar's km-per-pixel
-    // against that known distance rather than against the projection's own
-    // arithmetic, which would only prove it agrees with itself.
+    // ~215km ground truth, not the projection's own arithmetic.
     const drawnPx = Math.hypot(ridge.x - home.x, ridge.y - home.y);
     const kmPerPx = scale.km / scale.px;
     expect(drawnPx * kmPerPx).toBeGreaterThan(180);
@@ -170,8 +160,7 @@ describe("projecting places into a drawing box", () => {
 });
 
 describe("what a pin stands for at the scale being drawn", () => {
-  // Two places 200m apart on one street, and two rows the place ledger cannot
-  // tell apart (~14m, the identity rung's own resolution).
+  // Two places 200m apart, and two rows ~14m apart (the identity rung).
   const STREET: PlacePoint[] = [
     { key: "north", lat: 39.0018, lng: -120, count: 3, name: "North" },
     { key: "south", lat: 39, lng: -120, count: 1, name: "South" },
@@ -185,8 +174,7 @@ describe("what a pin stands for at the scale being drawn", () => {
     lng: -120,
     kmPerPx,
   });
-  // Deliberately smaller than any pin this product draws, so what these cases
-  // measure is the TIER floor rather than the drawing's own overlap rule.
+  // Smaller than any drawn pin: measures the tier floor, not overlap.
   const DOT = { ...BOX, mergeDistance: 4 };
 
   it("climbs the ladder as the ground each pixel covers grows", () => {
@@ -201,9 +189,7 @@ describe("what a pin stands for at the scale being drawn", () => {
   });
 
   it("keeps one street two spots and makes it one city", () => {
-    // The same two places, the same tiny merge distance, two scales. At 2m to
-    // the pixel they are 100px apart and stay two; at 20m to the pixel the
-    // tier's 1km floor says a town is one pin and they become one.
+    // Same places, two scales: 2m/px keeps two pins; 20m/px + 1km floor → one.
     const spots = projectPlaces(STREET, { ...DOT, camera: at(0.002) });
     const cities = projectPlaces(STREET, { ...DOT, camera: at(0.02) });
     expect(spots.tier).toBe("spots");
@@ -214,9 +200,7 @@ describe("what a pin stands for at the scale being drawn", () => {
   });
 
   it("never splits two places the ledger itself cannot tell apart", () => {
-    // Zoomed to half a metre per pixel these two rows sit 28px apart, which
-    // any pixel rule would happily draw as two pins claiming a precision the
-    // ~11m place identity does not have. The tier's 50m floor refuses.
+    // 28px apart at 0.5m/px — pixel rules would over-split; the 50m floor refuses.
     const { pins, tier } = projectPlaces(TWINS, {
       ...DOT,
       camera: at(0.0005, 39.0021),
@@ -227,11 +211,8 @@ describe("what a pin stands for at the scale being drawn", () => {
   });
 
   it("groups identically in any box, so the phone and the browser agree", () => {
-    // The whole point of stating the camera: at one scale the distance
-    // between two pins is a property of the ground, not of the plate. A
-    // 390pt phone map and a 640px web figure must therefore merge the same
-    // places — otherwise "the two surfaces agree" is a convention rather
-    // than arithmetic.
+    // Stating the camera makes pin distance ground-truth, not plate-size:
+    // phone and web must merge identically.
     const camera = at(0.02);
     const phone = projectPlaces(STREET, {
       width: 358,
@@ -264,9 +245,7 @@ describe("what a pin stands for at the scale being drawn", () => {
   });
 
   it("lets the drawing win while the pins are the wider fact", () => {
-    // At trip scale a 76px photograph is far wider than a 25km floor; at
-    // street scale the floor is wider than any pin. The threshold is whichever
-    // is larger, which is what makes the swap automatic.
+    // Threshold is max(pin width, floor), which makes the swap automatic.
     expect(tierMergeDistance("countries", 0.5, 76)).toBe(76);
     expect(tierMergeDistance("spots", 0.0005, 76)).toBe(100);
   });
@@ -276,8 +255,7 @@ describe("handing a basemap a viewport", () => {
   it("reads a scale off the slice of latitude a viewport shows", () => {
     // 1° of latitude down a 400px map is 111.32km over 400px.
     expect(kmPerPxForSpan(1, 400)).toBeCloseTo(0.2783, 4);
-    // Sign-free: MapKit reports a delta and MapLibre a pair of bounds, and
-    // subtracting the pair the other way round must not invert the map.
+    // MapKit delta vs MapLibre bounds pair: either order, same scale.
     expect(kmPerPxForSpan(-1, 400)).toBe(kmPerPxForSpan(1, 400));
   });
 
@@ -290,8 +268,7 @@ describe("handing a basemap a viewport", () => {
       1,
       6
     );
-    // Round trip through the two conversions: a fitted camera asked for a
-    // zoom, then read back off the viewport that zoom produces.
+    // Round trip: fitted camera → zoom → viewport back to scale.
     const camera = fitCamera(TAHOE, BOX)!;
     const zoom = tileZoomFor(camera);
     const metresPerPx =
@@ -300,8 +277,7 @@ describe("handing a basemap a viewport", () => {
   });
 
   it("refuses a zoom no tile pyramid has", () => {
-    // A basemap that has not reported its viewport yet hands over nothing;
-    // the opening zoom is clamped rather than infinite.
+    // No reported viewport yet: clamp rather than return infinity.
     expect(tileZoomFor({ lat: 39, lng: -120, kmPerPx: 0 })).toBe(20);
     expect(tileZoomFor({ lat: 39, lng: -120, kmPerPx: 10_000 })).toBe(0);
   });
@@ -309,9 +285,8 @@ describe("handing a basemap a viewport", () => {
 
 describe("finding the pin under a finger", () => {
   it("answers with the place a tapped coordinate belongs to", () => {
-    // What the phone does on a real basemap: the SDK reports the coordinate
-    // that was tapped, and the projection — not the SDK's own marker events,
-    // which need iOS 18 — decides which pin that is.
+    // SDK reports the tapped coordinate; projection (not iOS-18 marker
+    // events) picks the pin.
     const box = { width: 360, height: 360, mergeDistance: 76 };
     const camera = fitCamera(TAHOE, box)!;
     const { pins } = projectPlaces(TAHOE, { ...box, camera });
@@ -321,9 +296,8 @@ describe("finding the pin under a finger", () => {
   });
 
   it("puts a pin back on the ground it came from", () => {
-    // What a basemap needs: markers are anchored to coordinates, not to a box,
-    // so a pin's pixel has to convert back exactly. A drift here would slide
-    // every photograph off the place it was taken at as the member zooms.
+    // Pixel↔ground must round-trip exactly or photographs slide off their
+    // places while zooming.
     const box = { width: 360, height: 420, mergeDistance: 76 };
     const camera = fitCamera(TAHOE, box)!;
     const { pins } = projectPlaces(TAHOE, { ...box, camera });
@@ -333,7 +307,7 @@ describe("finding the pin under a finger", () => {
       expect(again.x).toBeCloseTo(pin.x, 9);
       expect(again.y).toBeCloseTo(pin.y, 9);
     }
-    // And the pin that opens "ridge" sits on ridge's own coordinates.
+    // The pin that opens "ridge" sits on ridge's own coordinates.
     const ridge = pins.find((pin) => pin.key === "ridge")!;
     const where = coordAt(camera, box, ridge.x, ridge.y);
     expect(where.lat).toBeCloseTo(TAHOE[2]!.lat, 9);
@@ -381,9 +355,7 @@ describe("choosing a graticule step", () => {
 
 describe("the photograph a pin is drawn as", () => {
   it("keeps the picture from the place most of the photographs came from", () => {
-    // Two places close enough to be one dot. The surviving thumb has to be
-    // the busy place's, or a merged pin shows a picture from the corner of
-    // itself that almost nothing was taken in.
+    // One dot: the surviving thumb must be the busy place's.
     const { pins } = projectPlaces(
       [
         {
@@ -426,8 +398,7 @@ describe("deciding whether a place has a name worth printing", () => {
   });
 
   it("refuses a coordinate wearing a name's clothes", () => {
-    // The default label until a gazetteer is installed. Printing it beside a
-    // pin looks like an answer and is not one.
+    // Gazetteer-less default label; printed beside a pin it looks like an answer.
     expect(readableName("37.4419, -122.1430")).toBeNull();
     expect(readableName("39.0021,-120.1131")).toBeNull();
   });

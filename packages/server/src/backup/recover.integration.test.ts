@@ -283,7 +283,7 @@ describe("backup/recover", () => {
       KIT_PASSWORD
     );
     // T1: erase through the product HTTP route before recovering on machine B.
-    // This chains the two formerly separate tests and proves route auth,
+    // This chains both halves in one run and proves route auth,
     // recovery-kit confirmation, state cascade, and key destruction together.
     const gatewayDataDir = await tempDir("recover-a-gateway");
     const gatewayDatabase = GatewayDatabase.open(gatewayDataDir);

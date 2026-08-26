@@ -1,34 +1,10 @@
-// Emptying the trash (v4 handoff §4.5 / proto:4800-4803) — the one thing this
-// app does that a member cannot take back.
-//
-// NO UNDO GRAMMAR HERE. Every other batch in this app narrates through
-// `notice(summary, undoFn)`; this one must never pass that second argument,
-// because there is nothing on the other side of it. The word "Undo" appearing
-// once beside a permanent deletion would be worse than no narration at all.
-// The confirmation is the whole safety story, and it happens BEFORE this
-// module is ever called (components/EmptyTrash.tsx).
-//
-// ORDER MATTERS. `media_asset.source_asset_id` (issue #711) is a real
-// FK: the vault refuses to purge a photograph while an edited copy still
-// names it as its source, because NULLing the copy's lineage would forge
-// "camera original" and cascading would destroy a photograph the member never
-// trashed. So a trash holding both an edit and its original must purge the
-// edit FIRST — `emptyTrashOrder` is that ordering, and without it a member
-// would have to press the control twice for no reason they could see.
+// Emptying trash (§4.5 / proto:4800-4803) — the one irreversible batch.
+// NO UNDO GRAMMAR: never pass `notice`'s second argument. Confirmation happens BEFORE this module (`EmptyTrash.tsx`).
+// ORDER MATTERS: `source_asset_id` is a real FK (#711) — purge derived copies FIRST or the vault refuses the original.
 import { act, narrate, notice } from "./outcomes.ts";
 import type { Asset } from "./types.ts";
 
-/**
- * The trash, ordered so a derived copy is always purged before the source it
- * names. Stable: assets with no lineage among the set keep the shelf's own
- * order (newest trashed first).
- *
- * Depth-first over the lineage edges, with a `visiting` guard so a cycle —
- * which the schema's `source_asset_id <> asset_id` CHECK cannot fully rule
- * out across two rows — degrades to "some order" rather than a stack
- * overflow. A cycle would make one of the pair unpurgeable, and the vault
- * says so; it must not make the whole control hang.
- */
+/** Derived copy before the source it names. `visiting` so a two-row cycle degrades to some order rather than hanging. */
 export function emptyTrashOrder(trash: readonly Asset[]): Asset[] {
   const byId = new Map(trash.map((asset) => [asset.asset_id, asset]));
   const done = new Set<string>();
@@ -37,7 +13,6 @@ export function emptyTrashOrder(trash: readonly Asset[]): Asset[] {
   const visit = (asset: Asset): void => {
     if (done.has(asset.asset_id) || visiting.has(asset.asset_id)) return;
     visiting.add(asset.asset_id);
-    // Everything in this set that was derived FROM this asset goes first.
     for (const candidate of trash) {
       if (candidate.source_asset_id === asset.asset_id) visit(candidate);
     }
@@ -49,10 +24,9 @@ export function emptyTrashOrder(trash: readonly Asset[]): Asset[] {
   return ordered;
 }
 
-/** How the run went, in the numbers the summary sentence is built from. */
 export interface EmptyTrashResult {
   purged: number;
-  /** Refused by the vault — a lineage still points at them, most often. */
+  /** Vault refused — a lineage still points at them, most often. */
   kept: number;
   queued: number;
 }
@@ -62,14 +36,7 @@ export interface EmptyTrashCallbacks {
   setBusy?: (on: boolean) => void;
 }
 
-/**
- * Delete every photograph in `trash` forever, serially, narrating exact
- * progress on the frame's one status line (§14 — counts, never a spinner).
- *
- * Serial by contract, like every other batch here: each `purge-asset` is a
- * separate consent-checked invocation, and the vault's lineage refusal
- * depends on the previous one having landed.
- */
+/** Serial `purge-asset` — lineage refusal depends on the previous one having landed. */
 export async function runEmptyTrash(
   trash: readonly Asset[],
   { refresh, setBusy }: EmptyTrashCallbacks
@@ -103,13 +70,11 @@ export async function runEmptyTrash(
   setBusy?.(false);
   await refresh();
   notice(emptyTrashSummary(result));
-  // The last refusal's own words, after the summary — a member who kept two
-  // photographs deserves the vault's reason, not just the count.
+  // Last refusal's own words after the summary — the vault's reason, not just the count.
   if (lastBad) narrate(lastBad);
   return result;
 }
 
-/** The summary sentence. Never carries an Undo — there is nothing to undo. */
 export function emptyTrashSummary(result: EmptyTrashResult): string {
   const parts: string[] = [];
   if (result.purged > 0) {

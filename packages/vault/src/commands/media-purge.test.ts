@@ -1,5 +1,5 @@
 // `media.purge_asset` — the one owner-driven hard delete in the media pack
-// (issue #711). It destroys member data with no undo, so its guards are what
+// (#711). It destroys member data with no undo, so its guards are what
 // this file is about: only the trash may be purged, only a caller the grant
 // lets act may purge it, and nothing may be left pointing at the row
 // afterwards. Kept out of media.test.ts because those are library-loop tests
@@ -135,7 +135,7 @@ describe("media: purge_asset", () => {
         asset.asset_id
       )
     ).toBe(0);
-    // A link onto a purged row END-DATES rather than dangling (issue #272).
+    // A link onto a purged row END-DATES rather than dangling (#272).
     const link = db.vault
       .prepare("SELECT valid_to FROM core_link WHERE link_id = 'link-1'")
       .get() as { valid_to: string | null };

@@ -1,15 +1,5 @@
-// People's chrome as JSX — a ROUTE INSIDE THE FRAME (issue #505 inline path).
-//
-// The chrome owns GEOMETRY: the destination strip, the two trust banners, the
-// one scroll host and the content column the handoff caps at 760px. What
-// stands inside each region is the orchestrator's decision and arrives as a
-// slot, the same shape `docs/Chrome.tsx` uses — so the box and the screens can
-// be reasoned about independently.
-//
-// THERE IS NO SIDEBAR AND NO TOPBAR. Navigation belongs to the band (compact)
-// or to the strip in this row (pointer), and the title, the count and the
-// app's two verbs are the FRAME's app bar — an app that drew its own header
-// would be a second chrome inside the first.
+// People's chrome (#505): owns frame geometry; contents arrive as slots.
+// Nav is band/strip, never sidebar/topbar.
 import type { ReactNode } from "react";
 
 import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
@@ -20,19 +10,14 @@ import type { Shelf, ShelfId } from "./shelves.ts";
 import styles from "./Chrome.module.css";
 
 export interface ChromeSlots {
-  /** The current screen's body. One route at a time; the chrome never stacks
-   *  two. */
   scroll: ReactNode;
-  /** Modal confirms and any other overlay the route opened. */
   overlays: ReactNode;
 }
 
 export interface ChromeProps {
   shelf: ShelfId;
-  /** The compact form factor, measured on this pane's own width. */
   narrow: boolean;
-  /** The band claim was honoured, so the strip would be a second copy of the
-   *  same three destinations and is not drawn. */
+  /** Strip would duplicate the band's destinations. */
   bandOwned: boolean;
   consent: { message: string } | null;
   onSelectShelf: (id: ShelfId) => void;
@@ -41,8 +26,7 @@ export interface ChromeProps {
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
-  // A callback ref read off `props` taints every later `props.*` read for the
-  // React compiler, so it comes off first as a plain local (#573).
+  // A callback ref off `props` taints React-compiler reads (#573).
   const { rootRef } = props;
   const current = originShelf(props.shelf);
   const shellClass = [styles.appRoot, props.consent ? styles.denied : ""]
@@ -60,17 +44,14 @@ export function Chrome(props: ChromeProps): ReactNode {
     >
       <div className={styles.main}>
         {props.consent ? (
-          // `id="consentBanner"` is the hook `onFocusRefresh` reads to detect a
-          // denied→recovered state and bypass its 30s focus throttle. Without
-          // it a refocus after a grant would be throttled and never retry.
+          // onFocusRefresh reads id="consentBanner" past its throttle.
           <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
             <strong>{CONSENT_TITLE}</strong>{" "}
             <span>{props.consent.message}</span>
             <VaultAccessButton />
           </div>
         ) : null}
-        {/* Driven imperatively by logic.ts (`notice` / `readFailed`) — rendered
-            once and never reconciled, so those DOM writes are never clobbered. */}
+        {/* Driven imperatively by logic.ts (`notice`/`readFailed`); rendered once, never reconciled. */}
         <output
           id="noticeBanner"
           className={`kit-banner notice ${styles.banner}`}

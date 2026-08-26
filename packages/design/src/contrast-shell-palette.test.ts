@@ -1,16 +1,6 @@
-// The palette hues as TEXT, measured on the SHELL's surfaces (#686).
-//
-// `contrast.test.ts` already pins `--c-<name>-text` — but only off
-// `toBlueprintCss()`, whose dark ramp is anchored at `--bg-l: 10%` and whose
-// only measurable surfaces are the card and the recessed track. The shell is a
-// different emitter with a different ramp (`--bg-l: 5%`) and two more surfaces
-// (`--bg`, `--bg-app`), and packages/client paints these rungs on all four.
-//
-// A floor held on one emitter says nothing about the other, which is exactly
-// how the raw fills survived in ~30 client `color:` sites: as ink on the
-// shell's own surfaces they measure 2.04–5.03:1 on light and 3.12–8.44:1 on
-// dark — 17 of 32 cells below AA, every hue failing on at least one theme, and
-// amber missing even the 3:1 non-text floor that an icon glyph owes.
+// Palette hues as TEXT on the SHELL's surfaces (#686). `contrast.test.ts`
+// pins `--c-*-text` off `toBlueprintCss()` (`--bg-l: 10%`); the shell
+// emitter ramps at `--bg-l: 5%` with two more surfaces.
 
 import { describe, expect, test } from "vitest";
 
@@ -27,22 +17,12 @@ import { palette, paletteDark } from "./palette.js";
 
 const AA_BODY = 4.5;
 
-/** Every opaque surface the shell can paint a foreground on. There is no
- *  per-app surface tone axis — one page, for the shell and every app in
- *  it. */
 const SURFACE_NAMES = ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"] as const;
 
-/** A palette ink is almost never on a bare surface — it sits on a weak wash of
- *  its own FILL (a chip, a badge, an identity tile), which has already walked
- *  the background toward the ink. These are the strengths packages/client
- *  actually paints under a rebound `--c-*-text`; 16% is the ceiling, and the
- *  one 18% site (`ApprovalsScreen.noticeTile`) was brought back to 12% because
- *  indigo and violet fell to 4.44 / 4.49 there. Raising any of these past 16%
- *  spends contrast the solve did not buy — that is what this list pins. */
+/** Past 16% spends contrast the solve did not buy. */
 const WASHES = [0.06, 0.07, 0.08, 0.1, 0.12, 0.14, 0.16] as const;
 
-/** Past this a rung has stopped being its hue and become near-black (light) or
- *  near-white (dark) — the failure mode of "darken until it passes". */
+/** Past this a rung has become near-black/near-white — "darken until it passes". */
 const RECOGNISABLE = 12;
 
 describe("palette-hue-as-text on the shell surfaces", () => {
@@ -52,10 +32,6 @@ describe("palette-hue-as-text on the shell surfaces", () => {
 
   describe.each([
     ["light", light, palette],
-    // Each theme is measured against ITS OWN identity ring: the dark ring sits
-    // at `oklch(0.72 …)` and the light one at `oklch(0.50 …)`, so comparing a
-    // dark rung to a light fill would measure the ring's own lightness step
-    // rather than the solve.
     ["dark", dark, paletteDark],
   ] as const)("%s", (theme, tokens, ring) => {
     const scope = {};
@@ -64,8 +40,6 @@ describe("palette-hue-as-text on the shell surfaces", () => {
     );
 
     test(`${theme}: every shell surface resolves to a measurable colour`, () => {
-      // An unresolved `var()` would silently make every ratio below a
-      // no-op — this is the guard that the substitution actually landed.
       expect(surfaces).toHaveLength(SURFACE_NAMES.length);
       for (const surface of surfaces) {
         expect(surface, `${theme} surface`).toMatch(/^(?:#|rgba?\(|hsla?\()/u);
@@ -99,9 +73,7 @@ describe("palette-hue-as-text on the shell surfaces", () => {
     );
 
     test(`${theme}: the rung is its fill's hue, moved only in lightness`, () => {
-      // Re-measured off THIS emitter for the same reason the floors are: the
-      // moment a solve is allowed to desaturate, eight hues converge on one
-      // grey that clears every floor and codes nothing.
+      // Desaturating to pass would converge eight hues on one grey.
       for (const [name, fillHex] of Object.entries(ring)) {
         const ink = evalColorMix(
           resolveVars(tokens[`--c-${name}-text`] ?? "", scope)
@@ -126,9 +98,6 @@ describe("palette-hue-as-text on the shell surfaces", () => {
     });
 
     test(`${theme}: the rung is legible against the fill it replaces`, () => {
-      // The pairing that reads worst in practice: an ink label beside its own
-      // saturated dot or bar. Not an AA site (the dot is non-text), but if the
-      // two collapse, the label stops looking like the same state as the dot.
       for (const [name, fillHex] of Object.entries(ring)) {
         const ink = evalColorMix(
           resolveVars(tokens[`--c-${name}-text`] ?? "", scope)

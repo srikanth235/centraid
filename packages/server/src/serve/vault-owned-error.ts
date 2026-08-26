@@ -1,7 +1,5 @@
 /*
- * Split out of `enrollment-store.ts` (one class per file —
- * `max-classes-per-file`): enrolling into a vault someone else owns is
- * refused, never a transfer.
+ * Enrolling into a vault someone else owns is refused, never a transfer.
  */
 
 export class VaultOwnedError extends Error {

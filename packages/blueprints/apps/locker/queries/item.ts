@@ -1,7 +1,7 @@
 /**
  * One item's full fields for the detail pane — the ONLY query that returns
  * secrets (password, card number, CVV, OTP seed, note body), and only for the
- * single item the owner opened. Secrets are SEALED columns (issue #293): the
+ * single item the owner opened. Secrets are SEALED columns (#293): the
  * read shows placeholders, so this query is where the app exercises its
  * `reveal` scope — one reveal per open, receipted per item by the vault, the
  * "item usage" audit trail. Carries the item's tags and its favorite star so
@@ -65,7 +65,7 @@ export default async function itemHandler({
     });
     const row = ((res.rows ?? []) as unknown as FullRow[])[0];
     if (!row) return { item: null };
-    // The reveal (issue #293): swap the sealed placeholders for plaintext —
+    // The reveal (#293): swap the sealed placeholders for plaintext —
     // consent-checked under the app's `reveal` scope, receipted per open.
     try {
       const revealed = (await ctx.vault.reveal({

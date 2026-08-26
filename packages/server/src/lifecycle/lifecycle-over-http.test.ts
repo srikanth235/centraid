@@ -1,22 +1,7 @@
 import crypto from "node:crypto";
-/*
- * Gateway-owned app lifecycle over HTTP (issue #141, Phase 2). The
- * deterministic lifecycle — clone / install / update-meta / automation
- * create+toggle+delete — lives in the gateway, so the renderer states
- * intent and the gateway does the work (scaffolders, webhook minting,
- * session writes, publish). This boots a real git-store gateway and drives
- * those endpoints end to end:
- *
- *   - a create stages a draft (no `main` entry, registered) and
- *     `publish:true` lands it on `main`;
- *   - automation create mints a webhook secret (returned once) and the
- *     toggled/deleted automation flows through publish.
- *
- * The blank-app scaffold route (`POST /centraid/_apps`) retired with the
- * served-app plane in #799, so the shared session/publish laws below are
- * driven through the automation create that still rides the same
- * `prepareLifecycleSession` + `stageAndMaybePublish` path.
- */
+// Lifecycle over HTTP (#141). No blank-app scaffold (`POST /centraid/_apps`,
+// #799) — session/publish laws ride automation create on the same
+// `prepareLifecycleSession` + `stageAndMaybePublish` path.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -27,7 +12,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "../serve/serve.ts";
 import type { GatewayServeHandle } from "../serve/serve.ts";
-// lifecycle-routes is exercised through serve() HTTP paths below (#545 B7).
+// lifecycle-routes is exercised through serve() HTTP paths below (#545).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -37,7 +22,7 @@ function pathsUnder(dir: string): GatewayPaths {
     vaultDir: path.join(dir, "vault"),
   };
 }
-/** The ACTIVE vault's per-app data dir (#280 — apps live inside the vault). */
+/** Active vault's per-app data dir (#280). */
 function vaultAppsDir(): string {
   const vaultId = handle.vaults.current().boot.vaultId;
   return path.join(dataDir, "vault", vaultId, "apps");
@@ -59,7 +44,6 @@ async function listApps(): Promise<
   }>;
 }
 
-/** Create a code-store app the only way left: as an automation app. */
 async function createApp(
   body: Record<string, unknown>
 ): Promise<{ status: number; json: Record<string, unknown> }> {
@@ -113,11 +97,7 @@ describe("lifecycle-over-http scenarios", () => {
   });
 
   test("a bundled app is installed in place, not cloned (issue #434)", async () => {
-    // Under the app-store model a bundled blueprint app installs in place and
-    // serves from the shipped package — cloning it (forking into the git code
-    // store) is exactly the per-vault copy the model removes, so it is refused
-    // and the caller is directed to _install. (Automation templates aren't
-    // bundled app ids, so they still clone — see clone-over-http.test.ts.)
+    // Bundled apps install in place; clone is refused (#434).
     const clone = await fetch(`${handle.url}/centraid/_apps/_clone`, {
       method: "POST",
       headers: auth({ "Content-Type": "application/json" }),
@@ -125,8 +105,6 @@ describe("lifecycle-over-http scenarios", () => {
     });
     expect(clone.status).toBe(409);
 
-    // Install lands it on `main`'s listing immediately, keeping its own id and
-    // writing nothing to git (full coverage in install-over-http.test.ts).
     const res = await fetch(`${handle.url}/centraid/_apps/_install`, {
       method: "POST",
       headers: auth({ "Content-Type": "application/json" }),
@@ -165,13 +143,11 @@ describe("lifecycle-over-http scenarios", () => {
     expect(body.webhook!.secret.length).toBeGreaterThan(0);
     expect(body.webhook!.url).toMatch(/\/_centraid-hook\//u);
 
-    // The app is on `main`, marked as an automation app.
     const row = (await listApps()).find((a) => a.id === "inbound");
     expect(row?.kind).toBe("automation");
   });
 
   test("automation set-enabled then delete flows through publish", async () => {
-    // Create disabled, then enable.
     await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: auth({ "Content-Type": "application/json" }),
@@ -195,13 +171,10 @@ describe("lifecycle-over-http scenarios", () => {
     );
     expect(enable.status).toBe(200);
 
-    // Seed the app's data dir so the delete has real per-app data to tear
-    // down (data.sqlite + run ledgers), not just the code on `main`.
     const dataAppDir = path.join(vaultAppsDir(), "digest");
     await fs.mkdir(dataAppDir, { recursive: true });
     await fs.writeFile(path.join(dataAppDir, "data.sqlite"), "rows");
 
-    // Delete the whole automation app — it disappears from `main`.
     const del = await fetch(
       `${handle.url}/centraid/_automations?ref=${encodeURIComponent("digest/digest")}&publish=true`,
       { method: "DELETE", headers: auth() }
@@ -211,16 +184,12 @@ describe("lifecycle-over-http scenarios", () => {
     expect(delBody.deletedApp).toBe(true);
     expect((await listApps()).some((a) => a.id === "digest")).toBe(false);
 
-    // Finding A regression: the data dir is gone too — and NOT resurrected.
-    // The old code called `ensureRegistered` after `deleteApp`, re-creating
-    // the registry entry + data dir for the app just deleted; the fix
-    // deregisters + cleans the data dir instead.
+    // Delete must not resurrect the data dir via `ensureRegistered`.
     await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/u);
   });
 
   test("DELETE /_apps/<id> tears down the app data dir, not just the code", async () => {
     await createApp({ id: "shelf", name: "Shelf", publish: true });
-    // Seed the app's data dir (data.sqlite + ledgers live under appsDir).
     const dataAppDir = path.join(vaultAppsDir(), "shelf");
     await fs.mkdir(dataAppDir, { recursive: true });
     await fs.writeFile(path.join(dataAppDir, "data.sqlite"), "rows");
@@ -232,22 +201,16 @@ describe("lifecycle-over-http scenarios", () => {
     expect(del.status).toBe(200);
     expect((await listApps()).some((a) => a.id === "shelf")).toBe(false);
 
-    // Finding A regression: the wrapper dir under appsDir is removed, so a
-    // recreated `shelf` cannot inherit stale rows/history.
     await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/u);
   });
 
   test("DELETE /_apps/<id> deletes a never-published draft without a no_changes error", async () => {
-    // Stage-only create: the draft is registered but never landed on `main`,
-    // so it has no code subtree there.
     const staged = await createApp({ id: "scratch", name: "Scratch" });
     expect(staged.status).toBe(201);
-    // Seed the draft's data dir the way ensureRegistered would.
     const dataAppDir = path.join(vaultAppsDir(), "scratch");
     await fs.mkdir(dataAppDir, { recursive: true });
     await fs.writeFile(path.join(dataAppDir, "data.sqlite"), "rows");
 
-    // Delete must succeed (idempotent) even though there's nothing on `main`.
     const del = await fetch(`${handle.url}/centraid/_apps/scratch`, {
       method: "DELETE",
       headers: auth(),
@@ -259,10 +222,8 @@ describe("lifecycle-over-http scenarios", () => {
     };
     expect(body.deleted).toBe(true);
     expect(body.codeRemoved).toBe(false);
-    // The teardown still ran: registry/data dir are cleaned.
     await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/u);
 
-    // A second DELETE of the same id is a clean no-op, not a failure.
     const again = await fetch(`${handle.url}/centraid/_apps/scratch`, {
       method: "DELETE",
       headers: auth(),
@@ -271,9 +232,6 @@ describe("lifecycle-over-http scenarios", () => {
   });
 
   test("a one-shot publish (no sessionId) closes its lifecycle session — no orphan worktree", async () => {
-    // Scaffold + publish without supplying a sessionId: the gateway defaults to
-    // `lifecycle-<id>`. That session is a one-shot — it must be closed once the
-    // baseline lands, not left dangling (clone/create both ride this path).
     const res = await createApp({
       id: "ledger",
       name: "Ledger",
@@ -285,8 +243,6 @@ describe("lifecycle-over-http scenarios", () => {
   });
 
   test("an explicit (renderer) editing session is preserved across a publish", async () => {
-    // The renderer passes its persistent `desktop-<id>` session; it must stay
-    // open after publish so further edits keep staging into it.
     await fetch(`${handle.url}/centraid/_apps/_sessions`, {
       method: "POST",
       headers: auth({ "Content-Type": "application/json" }),
@@ -303,9 +259,6 @@ describe("lifecycle-over-http scenarios", () => {
   });
 
   test("a one-shot publish opens fresh off main even when a stale lifecycle session orphan exists", async () => {
-    // Simulate the pre-fix leak: a prior one-shot left `lifecycle-relics`
-    // branched off an empty `main`, then `relics` got published + deleted, so
-    // current `main` differs from that orphan's base.
     await fetch(`${handle.url}/centraid/_apps/_sessions`, {
       method: "POST",
       headers: auth({ "Content-Type": "application/json" }),
@@ -313,8 +266,6 @@ describe("lifecycle-over-http scenarios", () => {
     });
     await expect(listSessions()).resolves.toContain("lifecycle-relics");
 
-    // Now create `relics` for real via the defaulting path. Pre-fix this hit
-    // `session_exists` and reused the stale worktree; post-fix it opens fresh.
     const res = await createApp({
       id: "relics",
       name: "Relics",

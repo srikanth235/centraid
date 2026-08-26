@@ -1,25 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit cohesive agenda projection query; the event/calendar/proposal SELECTs and their row shaping are one read path against the vault
-/**
- * The agenda projection: non-cancelled canonical events, plus the calendars
- * a proposal could land on. Everything comes from the vault — this app holds
- * no rows of its own.
- *
- * Input (all optional): `{ from, to }` ISO instants. Without them the window
- * is the start of today forward (the list view's "upcoming"); the month and
- * week views pass the visible range so past periods render too. Events are
- * fetched from a few weeks before `from` so multi-day events that began
- * earlier but span into the window still arrive; the in-memory filter below
- * re-applies the true lower bound against each event's end.
- *
- * A consent denial is a first-class outcome, not an error: the UI renders it
- * as the "ask the owner for access" state, receipt id included.
- *
- * The fleet's ONE `({ query, ctx })` handler: the range arrives as URL params
- * under the legacy `query` name (not `input`).
- */
+// Agenda projection: non-cancelled canonical events plus candidate calendars.
+// `{ from, to }` optional (default: today forward); events fetched from
+// BEFORE `from` so multi-day spans arrive — the filter below re-applies the
+// true lower bound.
 
-/** Raw core.event row shape as the vault projects it (the fields this query
- *  reads; unread columns ride the index signature). */
 interface RawEvent {
   event_id: string;
   status?: string;
@@ -95,8 +79,6 @@ interface RecurrenceOverride {
   reminders?: { minutes_before: number }[];
   attendee_party_ids?: string[];
 }
-/** An event enriched with its calendar edge, guests, attachments and the
- *  recurrence-instance markers the projection layers on. */
 interface EventRow extends RawEvent {
   calendar_id?: string | null;
   conferencing_uri?: string | null;
@@ -108,18 +90,12 @@ interface EventRow extends RawEvent {
   /** The ONE member-facing recurrence sentence; never the rule (#834). */
   recurrence_summary?: string | null;
 }
-/**
- * Group the owner's attachments for one subject type into a map keyed by
- * target_id, each value a UI-ready list joined to its content item. This is
- * the shared attachment-projection shape every app copies — polymorphic edges
- * in core.attachment, bytes in core.content_item.
- */
 function attachmentsBySubject(
   subjectType: string,
   attachments: RawAttachment[],
   contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
-  // Blob-backed bytes serve as same-origin URLs (issue #296).
+  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -146,14 +122,7 @@ function attachmentsBySubject(
   return bySubject;
 }
 
-/**
- * Group `schedule_attendee` rows into a map keyed by event_id, each value the
- * UI-ready guest list the EventDrawer renders: `{ party_id, name, partstat,
- * is_you }`, with the caller ("you") first so its RSVP-controls row leads the
- * Guests section. `nameById` resolves display names from the joined
- * `core_party` rows; `mePartyId` is the vault's owner party, so `is_you`
- * marks the one guest who gets the Going/Maybe/Decline controls.
- */
+// "You" sorts FIRST so RSVP controls lead; mePartyId must be the owner party.
 function attendeesByEvent(
   attendees: RawAttendee[],
   nameById: Map<string, unknown>,
@@ -181,40 +150,27 @@ function attendeesByEvent(
   return byEvent;
 }
 
-// How far back of `from` the dtstart filter reaches so still-running
-// multi-day events are not cut off at the window edge.
+// Reach back past `from` so still-running multi-day events are not cut off.
 const SPAN_BUFFER_MS = 31 * 24 * 60 * 60 * 1000;
 
-// The open-ended "upcoming" (schedule) view has no `to`, so recurring series
-// were expanded a full YEAR out on every load, nav and doorbell (issue #404).
-// A quarter is generous forward runway for a list; the month/week views pass
-// their own bounded `to` and are unaffected. expandRrule's per-series
-// maxInstances still backstops a runaway DAILY rule regardless.
+// Ceiling for the open-ended view (no `to`): stops a series expanding a full
+// YEAR per load/nav/doorbell (#404). Month/week views pass their own `to`.
 const DEFAULT_EXPAND_MS = 120 * 24 * 60 * 60 * 1000;
 
-// Hard ceiling on the recurring anchors pulled — a vault has no upper bound,
-// and this read cannot be date-bounded (a series anchors in the past), so cap
-// the row count rather than walk the whole table.
+// Series anchors live in the past; cap rows instead of walking unbounded.
 const RECURRING_ANCHOR_CAP = 1000;
-/** One visible range cannot make first paint read an unbounded event table. */
+/** One visible range must not make first paint read an unbounded table. */
 const EVENT_WINDOW_CAP = 2000;
 
-// Global ceiling on materialized instances across ALL series for one read —
-// keeps a handful of dense rules from ballooning the payload.
+// Across ALL series per read.
 const MAX_TOTAL_INSTANCES = 1500;
 
-// Memoize each series' occurrence starts across navs/doorbells, keyed by the
-// series identity + range. A nav back to a month already visited, or a
-// doorbell that touched an unrelated table, then reuses the expansion instead
-// of re-walking the rule. Bounded LRU so it can't grow without limit.
+// Bounded LRU reused across navs/doorbells.
 const EXPANSION_CACHE = new Map<string, RecurrenceInstance[]>();
 const EXPANSION_CACHE_MAX = 500;
 
-/**
- * Duration between dtstart and dtend preserving floating/all-day wall clocks.
- * `Date.parse` on bare wall strings is host-TZ dependent and must not be used
- * for non-zoned series when deriving instance ends.
- */
+// Preserves floating/all-day wall clocks: `Date.parse` on bare wall strings is
+// host-TZ dependent and MUST NOT be used for non-zoned series.
 function eventDurationMs(ev: RawEvent): number {
   if (!ev.dtend) return 0;
   const semantics = ev.recurrence_semantics ?? "zoned";
@@ -222,8 +178,7 @@ function eventDurationMs(ev: RawEvent): number {
     const delta = Date.parse(ev.dtend) - Date.parse(ev.dtstart);
     return Number.isFinite(delta) ? delta : 0;
   }
-  // Wall strings share a comparable lexicographic / civil-time layout; parse
-  // as UTC components so the delta is timezone-independent.
+  // Parse wall strings as UTC components so the delta is TZ-independent.
   const start = Date.parse(
     ev.dtstart.includes("T") ? `${ev.dtstart}Z` : `${ev.dtstart}T00:00:00Z`
   );
@@ -263,15 +218,8 @@ function cachedInstances(
   return instances;
 }
 
-/**
- * Materialize each recurring event's occurrences inside `[rangeFrom,
- * rangeTo)` into instance rows — same shape as the anchor, dtstart/dtend
- * shifted, `event_id` UNCHANGED (reschedule/cancel/RSVP/attach all still
- * target the one canonical series row; there is no per-instance identity
- * yet, only per-instance rendering) plus `is_recurrence_instance` and
- * `instance_key` for the UI to key list rendering on since several
- * instances now share one `event_id`.
- */
+// Instance rows keep `event_id` UNCHANGED — reschedule/cancel/RSVP/attach still
+// target the one canonical series row; the UI keys on `instance_key`.
 function expandRecurringEvents(
   rows: EventRow[],
   rangeFrom: string | Date,
@@ -279,11 +227,9 @@ function expandRecurringEvents(
   time: TimeApi,
   exceptions: StoredRecurrenceException[]
 ): EventRow[] {
-  // `rangeFrom`/`rangeTo` arrive as ISO strings from the caller; expandRrule
-  // (and the memo key) compare via `.getTime()`, so normalize to Date once
-  // here. (Passing the raw strings threw `String.getTime is not a function`,
-  // which the outer catch silently turned into an empty agenda whenever a
-  // recurring series existed — issue #404.)
+  // Normalize to Date once: expandRrule and the memo key compare via
+  // `.getTime()`, and raw strings throw into the outer catch, which silently
+  // becomes an empty agenda whenever a recurring series exists (#404).
   const fromDate = rangeFrom instanceof Date ? rangeFrom : new Date(rangeFrom);
   const toDate = rangeTo instanceof Date ? rangeTo : new Date(rangeTo);
   const out: EventRow[] = [];
@@ -296,8 +242,8 @@ function expandRecurringEvents(
       });
       continue;
     }
-    // Unsupported FREQ (parseRrule → null → empty expand) keeps the anchor so
-    // a free-text RRULE mistake does not erase the event from the agenda.
+    // Unsupported FREQ keeps the anchor: a free-text RRULE mistake must not
+    // erase the event from the agenda.
     const durationMs = eventDurationMs(ev);
     const eventExceptions = exceptions.filter(
       (exception) => exception.target_id === ev.event_id
@@ -403,16 +349,9 @@ function expandRecurringEvents(
   return out;
 }
 
-/**
- * The member-facing recurrence sentence for a series, or `null` for a one-off.
- *
- * It is a two-line call through `ctx.time` rather than a module of its own on
- * purpose: the grammar lives in `@centraid/core/time` and is shared with
- * Tasks, so anything more here would be the second summariser the product
- * forbids. An older gateway exposes the vault surface without the time helper
- * (see the `timeApi` note below); there the field is simply absent, which the
- * UI reads as "no summary to show" rather than falling back to the rule.
- */
+// Two-line call through `ctx.time` on purpose: grammar shared with Tasks;
+// anything more is the second summariser the product forbids. Older gateway
+// reads as "no summary", never the rule.
 function recurrenceSummary(
   ctx: HandlerArgs["ctx"],
   rrule: string | null | undefined
@@ -434,11 +373,8 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     const fromLower = Number.isNaN(fromMs)
       ? from
       : new Date(fromMs - SPAN_BUFFER_MS).toISOString();
-    // A recurring series is one row anchored (maybe years) in the past — the
-    // dtstart>=fromLower filter below would drop it even though its next
-    // occurrence lands inside the visible window. It is fetched separately,
-    // unbounded by date, and merged before the range check happens on
-    // per-instance dtstarts instead of the anchor's.
+    // A recurring series anchors years in the past, so the dtstart>=fromLower
+    // filter would drop it; fetch separately, merge before the range check.
     const where: VaultWhere[] = [
       { column: "status", op: "ne", value: "cancelled" },
       { column: "dtstart", op: "gte", value: fromLower },
@@ -458,7 +394,6 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
           { column: "status", op: "ne", value: "cancelled" },
           { column: "rrule", op: "not-null" },
         ],
-        // Cannot date-bound (a series anchors in the past); cap the row count.
         orderBy: { column: "dtstart", dir: "desc" },
         limit: RECURRING_ANCHOR_CAP,
         purpose,
@@ -475,12 +410,8 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
       return { events: [], calendars: calendars.rows ?? [] };
     }
     const eventIds = windowed.map((e) => e.event_id);
-    // Joins are `in`-bounded by the windowed events (issue #264) — the
-    // event→calendar edge in schedule.event_ext (the UI colors and filters
-    // by calendar, so each event carries its calendar_id), the attachment
-    // edges, and the guest list (schedule.attendee, joined to core.party for
-    // names below). The owner's own party comes from core.vault so a guest
-    // that IS you gets the RSVP controls (issue #337).
+    // Every join is `in`-bounded by the windowed events (#264). The owner's own
+    // party comes from core.vault so a guest that IS you gets RSVP controls (#337).
     const [exts, attachments, attendeesRes, vaultRes, exceptionsRes] =
       await Promise.all([
         ctx.vault.read({
@@ -514,7 +445,6 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     const attendeeRows = (attendeesRes.rows ?? []) as unknown as RawAttendee[];
     const mePartyId =
       ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
-    // One bounded pull resolves only the guests' display names.
     const attendeePartyIds = [
       ...new Set(attendeeRows.map((a) => a.party_id)),
     ].filter(Boolean);
@@ -534,7 +464,6 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
       partyNameById,
       mePartyId
     );
-    // One bounded pull covers only the bytes those attachments reference.
     const attachmentRows = (attachments.rows ??
       []) as unknown as RawAttachment[];
     const contentIds = [
@@ -573,25 +502,16 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
           (ext?.reminders_json as string | null | undefined) ?? null,
         attachments: attByEvent.get(e.event_id) ?? [],
         attendees: guestsByEvent.get(e.event_id) ?? [],
-        // THE ONE SUMMARISER, RESOLVED SERVER-SIDE (#834). A raw RRULE is a
-        // machine string; the member-facing sentence is `ctx.time`'s and is
-        // shared with Tasks, so neither app can grow a second grammar. The
-        // row carries the sentence and never the rule, which is what makes
-        // "no raw rule reaches a surface" checkable at the boundary rather
-        // than trusted in every renderer.
+        // THE ONE SUMMARISER, RESOLVED SERVER-SIDE (#834): the row carries the
+        // sentence and never the raw rule.
         recurrence_summary: recurrenceSummary(ctx, e.rrule),
       };
     });
-    // Open-ended "upcoming" (no `to`) still needs a real ceiling to expand
-    // against — a bounded forward window (issue #404) keeps a doorbell from
-    // re-expanding a year of a DAILY series; the month/week views pass their
-    // own tighter `to`. expandRrule's own maxInstances backstops it regardless.
+    // Open-ended "upcoming" still needs a ceiling to expand against, or a
+    // doorbell re-expands a year of a DAILY series (#404).
     const expandTo = to ?? new Date(fromMs + DEFAULT_EXPAND_MS).toISOString();
-    // A desktop can temporarily be attached to an older gateway while the
-    // host upgrades. Those gateways expose the vault read surface but not the
-    // shared time helper yet. Keep ordinary events visible and leave a
-    // recurring anchor intact instead of turning the whole agenda into the
-    // misleading "No vault access" error.
+    // An older gateway lacks the time helper: keep ordinary events visible and
+    // the anchor intact rather than fail the whole agenda.
     const timeApi = ctx.time as TimeApi | undefined;
     const rows = (
       timeApi
@@ -609,9 +529,8 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
           }))
     )
       .filter((e) => {
-        // True lower bound: keep anything still running at `from`. Only
-        // meaningful for the non-recurring set — a recurrence instance's
-        // dtstart already sits inside [fromLower, expandTo) by construction.
+        // True lower bound: keep anything still running at `from`; recurrence
+        // instances are already in-range by construction.
         if (e.is_recurrence_instance || e.rrule) return true;
         const endMs = new Date(e.dtend ?? e.dtstart).getTime();
         return Number.isNaN(endMs) || Number.isNaN(fromMs) || endMs >= fromMs;

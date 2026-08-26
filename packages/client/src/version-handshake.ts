@@ -1,5 +1,5 @@
 /*
- * Version handshake (issue #289 decision 8 / #468 K10 / #504 / #512).
+ * Version handshake (#289 decision 8 / #468 K10 / #504 / #512).
  *
  * Re-exports the pure wire core from `@centraid/core/protocol` so desktop + web
  * share one product + protocol source with the gateway and CLI.

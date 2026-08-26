@@ -1,5 +1,5 @@
 /**
- * Search overlay's pure grouping + empty-state logic (issue #708, mobile
+ * Search overlay's pure grouping + empty-state logic (#708, mobile
  * close-out). No React/replica involved — see the module header for why.
  */
 import { describe, expect, it } from "vitest";

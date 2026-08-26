@@ -1,9 +1,8 @@
-// The eligibility predicate, the delete-time revalidation, and (issue #712,
-// B3) the rollup-fed OFFER. The module moved from `apps/photos/` to `kit/` in
-// that pass and the fixture moved with it: it is built from the structural
-// `FreeUpAsset` this module declares, not from Photos' `PhotoAsset`, because
-// `kit/` may not import an app — and the shape is exactly what an app has to
-// satisfy to take part.
+// The eligibility predicate, the delete-time revalidation, and the rollup-fed
+// OFFER (#712). The fixture is built from the structural `FreeUpAsset` this
+// module declares, not from Photos' `PhotoAsset`, because `kit/` may not
+// import an app — and the shape is exactly what an app has to satisfy to take
+// part.
 import { describe, expect, test } from "vitest";
 
 import {

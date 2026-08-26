@@ -1,4 +1,4 @@
-// The raster preview codec (issue #405 §2): decode → area-average downscale →
+// The raster preview codec (#405): decode → area-average downscale →
 // JPEG re-encode. Fixtures are synthesized with the SAME libraries the codec
 // decodes with (jpeg-js / pngjs), so these are true round-trips — encode a
 // known-size image, run it through the codec, decode the result and assert the

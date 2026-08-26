@@ -1,15 +1,7 @@
 /*
- * `GET /centraid/_gateway/info` — gateway identity + version handshake
- * (issue #289 / #504).
- *
- * The one route a client reads BEFORE trusting anything else about a
- * gateway: software version + schema epoch (exact-match or refuse in v0),
- * capability map (C1), and for device-scoped transports, which vaults the
- * calling device may address. Health polling hits it every few seconds, so
- * it also carries the server-reported runtime clock (`startedAt` /
- * `uptimeMs`).
- *
- * `instanceId` is a per-process UUID, independent of the stable EndpointId.
+ * `GET /centraid/_gateway/info` — identity + version handshake (#289/#504).
+ * Read BEFORE trusting a gateway: schema epoch (exact-match or refuse in v0),
+ * capabilities (C1), device vault addressing, runtime clock.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -24,32 +16,15 @@ import { sendJson } from "./route-helpers.js";
 const INFO_PATH = ROUTES.gatewayInfo;
 
 export interface GatewayInfoRouteOptions {
-  /** Ephemeral identity for this running process. */
   instanceId: string;
-  /** Optional capability overrides (tests / reduced surfaces). */
   capabilities?: GatewayCapabilities;
-  /** Stable identity can be derived before the endpoint joins the network. */
   endpointId?: () => string | undefined;
-  /**
-   * Current relay/address data — a dial ticket for this gateway's iroh
-   * endpoint. Served ONLY to a caller that presented a valid credential
-   * (issue #568 item C).
-   *
-   * The route itself is public because a client must read the version /
-   * schema handshake before it can pair, and `isLoopbackRequest` is not a
-   * substitute for authentication: a browser fetch to `http://127.0.0.1:<port>`
-   * from any page the owner happens to visit is a loopback socket, needs no
-   * preflight for a plain GET, and `decideCors` answers it `*`.
-   */
+  /** Dial ticket — served ONLY with a valid credential (#568); the route
+   *  itself is public and loopback origin is NOT authentication. */
   endpointTicket?: () => string | undefined;
 }
 
-/**
- * Did the HTTP layer resolve a credential for this request? `publicPaths`
- * skips the 401, not the evaluation — `AUTHED_PLANE_HEADER` is stamped by
- * `startRuntimeHttpServer` and stripped from every inbound request first,
- * so a client cannot forge it.
- */
+/** `AUTHED_PLANE_HEADER` is stamped server-side and stripped inbound: unforgable. */
 function isAuthenticated(req: IncomingMessage): boolean {
   return typeof req.headers[AUTHED_PLANE_HEADER] === "string";
 }
@@ -57,8 +32,7 @@ function isAuthenticated(req: IncomingMessage): boolean {
 export function makeGatewayInfoRouteHandler(
   options: GatewayInfoRouteOptions
 ): RouteHandler {
-  // The factory runs once inside buildGateway, so this IS process start
-  // for the serving gateway.
+  // Factory runs once inside buildGateway: process start.
   const startedAt = Date.now();
   return async (
     req: IncomingMessage,
@@ -73,9 +47,8 @@ export function makeGatewayInfoRouteHandler(
       });
     }
     const endpointId = options.endpointId?.();
-    // Reported on the payload (issue #603): an anonymous caller silently loses
-    // `endpointTicket`, and without this flag a bearer mismatch is
-    // indistinguishable from an endpoint that has not come up yet.
+    // Reported on the payload (#603): a lost ticket must not read like
+    // "endpoint not yet up".
     const authenticated = isAuthenticated(req);
     const endpointTicket = authenticated
       ? options.endpointTicket?.()

@@ -10,7 +10,7 @@
  * error taxonomy and the wire types. Native code composes these over an
  * op-sqlite driver and an `expo/fetch` change feed.
  */
-/* eslint-disable oxc/no-barrel-file -- (#419) intentional @centraid/client/replica/native public subpath; governance: allow-no-unjustified-suppressions stable cross-platform API boundary */
+/* oxlint-disable oxc/no-barrel-file -- (#419) intentional @centraid/client/replica/native public subpath; governance: allow-no-unjustified-suppressions stable cross-platform API boundary */
 export * from "./coordinator.js";
 export * from "./digest.js";
 export * from "./errors.js";

@@ -62,7 +62,7 @@ describe("screens/ResourceModeCard", () => {
     btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   }
 
-  // The mode chips are native radios inside styled <label>s (issue #573): the
+  // The mode chips are native radios inside styled <label>s (#573): the
   // <input> carries the checked state, the wrapping <label> the visible text.
   function radioByText(el: HTMLElement, text: string): HTMLInputElement {
     const label = [...el.querySelectorAll("label")].find((l) =>
@@ -239,7 +239,6 @@ describe("screens/ResourceModeCard", () => {
       expect(body?.textContent).toContain("2 × 1280 MB");
       expect(body?.textContent).toContain("every 5 min");
 
-      // The close button dismisses it.
       const close = dialog?.querySelector(
         '[aria-label="Close"]'
       ) as HTMLButtonElement;

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * SSE streaming for automation runs (issue #158): the
+ * SSE streaming for automation runs (#158): the
  * `GET /centraid/_automations/turn/events?turnId=` endpoint. Drives
  * `makeAutomationsRouteHandler` with a mock streaming req/res, a real
  * per-app run ledger over a tempdir, and a `RunEventBus` for the live path.

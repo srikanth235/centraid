@@ -1,4 +1,4 @@
-// The shape the scope registry produces (issue #726: ownership replaces
+// The shape the scope registry produces (#726: ownership replaces
 // roles) — kept apart from `useOwnerScopes.ts` because that module reaches
 // the gateway client (which binds `window.CentraidApi` at import time); a
 // screen that only needs the TYPE should not have to stand up a host bridge

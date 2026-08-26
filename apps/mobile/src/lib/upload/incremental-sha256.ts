@@ -1,4 +1,4 @@
-// Incremental SHA-256 for React Native (#419 M0.4).
+// Incremental SHA-256 for React Native (#419.4).
 //
 // A port of `packages/vault/src/blob/incremental-sha256.ts` onto Uint8Array:
 // that module is Buffer-based and pulls in node builtins, so it cannot be

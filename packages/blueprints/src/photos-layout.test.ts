@@ -1,7 +1,6 @@
-// The v4 justified-row packing math (design_handoff_photos §4.1-4.2,
-// apps/photos/layout.ts). Pure and DOM-free, so this is straight behavioural
-// coverage of `justify()` and the tile-size rung table — no app boot harness
-// needed. Loaded by file URL like the other blueprint-app fixtures.
+// v4 justified-row packing math (design_handoff_photos §4.1-4.2,
+// apps/photos/layout.ts). Pure and DOM-free: straight coverage of `justify()`
+// and the tile-size rung table, no app boot harness.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -67,22 +66,17 @@ describe("Photos justified packing (v4 §4.1)", () => {
   });
 
   it("fills every full row's content width exactly, edge to edge", () => {
-    // 12 assorted-aspect photos at a normal container width — several rows
-    // will close before the list runs out, leaving no trailing partial row.
     const assets = Array.from({ length: 12 }, (_, i) =>
       photo(`a${i}`, 400 + (i % 5) * 60, 300)
     );
     const rows = justify(assets, 1000, 176);
     expect(rows.length).toBeGreaterThan(1);
-    // Every row except possibly the last must fill the container exactly.
     for (const row of rows.slice(0, -1)) {
       expect(rowSpan(row, GAP)).toBe(1000);
     }
   });
 
   it("caps the trailing partial row at targetHeight * 1.25 without stretching it", () => {
-    // A single wide-ish photo, nowhere near enough to fill 1200px at 176px
-    // tall — it must stay short rather than being stretched to fill the row.
     const rows = justify([photo("solo", 400, 300)], 1200, 176);
     expect(rows).toHaveLength(1);
     const [row] = rows;
@@ -93,10 +87,8 @@ describe("Photos justified packing (v4 §4.1)", () => {
   });
 
   it("does not stretch a trailing row that is a hair short of full", () => {
-    // Four 4:3 photos at targetHeight 176 sum to just under a 1000px row —
-    // never crosses the close-row threshold, so it falls to the last-row
-    // branch, but its "natural" stretch height is close to (and below) the
-    // 1.25x cap, so the whole row is used at that height.
+    // Four 4:3 photos sum just under a full 1000px row: last-row branch,
+    // natural stretch height near (and below) the 1.25x cap.
     const assets = [
       photo("a", 400, 300),
       photo("b", 400, 300),
@@ -141,10 +133,8 @@ describe("Photos justified packing (v4 §4.1)", () => {
 
   describe("gap arithmetic", () => {
     it("fills the row exactly with a single closing tile (no interior gap to subtract)", () => {
-      // A single very wide tile whose aspect ratio alone crosses the
-      // close-row threshold — a genuine one-tile FULL row, not the trailing
-      // partial branch. With one tile there is no interior gap, so the row
-      // must still land on the container width exactly.
+      // One wide tile crossing the close-row threshold: a genuine one-tile
+      // FULL row; no interior gap, so the span must land on 800 exactly.
       const rows = justify([photo("wide", 4000, 400)], 800, 176, 2);
       expect(rows).toHaveLength(1);
       expect(rows[0]).toHaveLength(1);
@@ -152,9 +142,7 @@ describe("Photos justified packing (v4 §4.1)", () => {
     });
 
     it("packs a two-tile row exactly, gap subtracted once", () => {
-      // Two square photos: sum(ar) = 2, closing once 2 * targetHeight
-      // crosses (width - gap*1) + targetHeight*0.28. At width 300 the row
-      // closes exactly after the second tile (not before, not later).
+      // Two squares: the row closes exactly after the second tile at 300.
       const assets = [photo("a", 300, 300), photo("b", 300, 300)];
       const rows = justify(assets, 300, 176, 2);
       expect(rows).toHaveLength(1);
@@ -163,9 +151,8 @@ describe("Photos justified packing (v4 §4.1)", () => {
     });
 
     it("packs many full rows exactly with gaps subtracted (n-1) times each", () => {
-      // 17 square photos at width 1200 close every 8th tile (uniform aspect
-      // ratio repeats the same arithmetic each row), leaving one full row,
-      // one more full row, and a genuine one-tile trailing remainder.
+      // 17 squares at 1200: uniform aspect closes every 8th tile; full rows
+      // plus a genuine one-tile trailing remainder.
       const assets = Array.from({ length: 17 }, (_, i) =>
         photo(`m${i}`, 300, 300)
       );
@@ -198,8 +185,7 @@ describe("Photos justified packing (v4 §4.1)", () => {
     const first = justify(assets, 1100, 176);
     const second = justify(assets, 1100, 176);
     expect(second).toStrictEqual(first);
-    // Re-run with fresh (structurally identical, not same-reference) input
-    // objects too — no incidental hidden state keyed on object identity.
+    // Fresh structurally identical clones: no hidden state keyed on identity.
     const clones = assets.map((a) => ({ ...a }));
     const third = justify(clones, 1100, 176);
     expect(third.map((r) => r.map((t) => [t.width, t.height]))).toStrictEqual(
@@ -217,8 +203,6 @@ describe("Photos justified packing (v4 §4.1)", () => {
     for (const row of rows.slice(0, -1)) {
       expect(rowSpan(row, GAP)).toBe(1000);
     }
-    // Every row's height should be in the ballpark of the target — full
-    // rows land close to it, the trailing row is capped at 1.25x.
     for (const row of rows) {
       for (const tile of row) {
         expect(tile.height).toBeLessThanOrEqual(targetHeight * 1.25 + 1);
@@ -248,9 +232,8 @@ describe("Photos tile-size rungs (v4 §4.2)", () => {
       expect(rungHeight(rung, "desktop")).toBe(RUNGS[rung]!.desktop);
       expect(rungHeight(rung, "phone")).toBe(RUNGS[rung]!.phone);
     }
-    // The same index means two different pixel heights on the two surfaces
-    // (except where the table coincidentally matched, which it never does
-    // here) — proving the index, not a pixel value, is what's persisted.
+    // Same index, different pixel heights per surface: the index, not a
+    // pixel value, is what persists.
     expect(rungHeight(DEFAULT_RUNG, "desktop")).not.toBe(
       rungHeight(DEFAULT_RUNG, "phone")
     );

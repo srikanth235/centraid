@@ -18,7 +18,7 @@
 // interface below is a GLOBAL — visible unqualified from every app/handler,
 // and `interface Window` merges into the DOM lib's global Window.
 
-// ---------- Typed-command outcome ----------
+// ────────── Typed-command outcome ──────────
 
 /** Terminal states a vault write settles into (the element layer's `outcomeMessage`). */
 type VaultOutcomeStatus =
@@ -47,7 +47,7 @@ interface VaultOutcome {
   code?: string;
 }
 
-// ---------- ctx.vault (handler side) ----------
+// ────────── ctx.vault (handler side) ──────────
 
 /** A single `where` clause for a `ctx.vault.read`. `value` is omitted for the
  *  valueless operators (`is-null` / `not-null`), hence optional. */
@@ -93,7 +93,7 @@ interface VaultInvokeRequest {
   purpose: string;
 }
 
-/** The card resolver (issue #272): (type, id) refs → renderable cards. */
+/** The card resolver (#272): (type, id) refs → renderable cards. */
 interface VaultResolveRequest {
   refs: Array<{ type: string; id: string }>;
   purpose: string;
@@ -226,7 +226,7 @@ interface HandlerArgs {
   params?: Record<string, string>;
 }
 
-// ---------- window.centraid (page side) ----------
+// ────────── window.centraid (page side) ──────────
 
 /**
  * A change-feed event (the element layer's `onDataChange`). A non-empty `tables` list must
@@ -241,7 +241,7 @@ interface CentraidChangeDetail {
   intentState?: string;
   ts?: number;
   /**
-   * Which mounted scope burst (issue #599). A multi-scope app refetches ONLY
+   * Which mounted scope burst (#599). A multi-scope app refetches ONLY
    * this scope; absent means "the ambient one" (single-scope surfaces). The
    * shell also fires `{source: 'scope-added', scope}` when an audience scope
    * hydrates after first paint.
@@ -250,7 +250,7 @@ interface CentraidChangeDetail {
 }
 
 /**
- * One mounted scope of a multi-scope app (issue #599) — the member's own
+ * One mounted scope of a multi-scope app (#599) — the member's own
  * library or a shared audience. `label` is the only scope string an app may
  * render; `canWrite` is the shell's already-resolved answer to "may this member
  * add here?", so apps disable rather than guess. Structurally identical to
@@ -261,7 +261,7 @@ interface CentraidScope {
   id: string;
   label: string;
   /** The member's own vault? The "somewhere other than my own" marker is
-   *  exactly `personal === false` (issue #711 item H). */
+   *  exactly `personal === false` (#711). */
   personal?: boolean;
   color?: string;
   icon?: string;
@@ -269,7 +269,7 @@ interface CentraidScope {
 }
 
 /** One durable member command waiting on (or settled by) its Commons steward.
- *  Its statuses are the pending-write outbox's own words (issue #750): one
+ *  Its statuses are the pending-write outbox's own words (#750): one
  *  intent grammar across every surface that renders in-flight writes. */
 interface CentraidCommonsIntent {
   intentId: string;
@@ -299,7 +299,7 @@ interface CentraidClient {
   appId?: string;
   /**
    * Every scope this app is mounted over, primary (the member's own) FIRST
-   * (issue #599). Absent on single-scope hosts (the served bridge, the visual
+   * (#599). Absent on single-scope hosts (the served bridge, the visual
    * harness mock); the SAME array grows in place as audiences hydrate, so read
    * it fresh rather than caching a snapshot.
    */
@@ -312,7 +312,7 @@ interface CentraidClient {
     scope?: string;
   }) => Promise<T>;
   /**
-   * Fan one query across scopes (issue #599). Settled per scope — one audience
+   * Fan one query across scopes (#599). Settled per scope — one audience
    * failing never sinks the others — so it resolves with an answer per scope
    * and never rejects. `scopes` restricts the fan-out (e.g. "Show more" hits
    * only the horizon scopes). Absent on single-scope hosts.
@@ -445,7 +445,7 @@ interface CentraidClient {
     itemType: string;
     itemId: string;
   }) => Promise<{ retained: boolean; grantIds: string[] }>;
-  /** The household's cross-vault links (#726 P6) — candidate share
+  /** The household's cross-vault links (#726) — candidate share
    *  destinations beyond the member's own mounted scopes, co-hosted and
    *  remote alike (D3: locality is routing, not semantics). */
   links?: () => Promise<

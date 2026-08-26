@@ -8,9 +8,8 @@ export interface IconProps {
   size?: number;
   /**
    * Stroke/fill color. Defaults to `currentColor` so the glyph inherits the
-   * surrounding CSS `color` — matching the vanilla renderer's `Icon[name]()`
-   * output exactly. Mobile passes an explicit color; on the web we lean on
-   * inheritance.
+   * surrounding CSS `color`. Mobile passes an explicit color; on the web we
+   * lean on inheritance.
    */
   color?: string;
   strokeWidth?: number;
@@ -18,9 +17,9 @@ export interface IconProps {
 
 /**
  * Line icon, mirroring the mobile `<Icon>` API. Path data is the single
- * source of truth in @centraid/design, so desktop + mobile draw the
- * same glyphs. Emits the identical SVG shape the vanilla `icons.ts` wrapper
- * produces, so a React-drawn icon and a leftover vanilla one are pixel-equal.
+ * source of truth in @centraid/design, so desktop + mobile draw the same
+ * glyphs. Emits the same SVG shape `iconSvg()` builds as a string — keep the
+ * two in step so a component-drawn icon and a string-built one are pixel-equal.
  */
 export default function Icon({
   name,

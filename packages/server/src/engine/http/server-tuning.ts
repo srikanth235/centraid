@@ -21,7 +21,7 @@ export const GATEWAY_MAX_CONNECTIONS = 256;
  */
 export const GATEWAY_SHUTDOWN_GRACE_MS = 2_000;
 
-/** Shared low-RAM listener policy for the API and dedicated PWA origins (#456 R3). */
+/** Shared low-RAM listener policy for the API and dedicated PWA origins (#456). */
 export function tuneGatewayHttpServer(server: http.Server): void {
   // Health pollers and interactive clients reuse one socket across ordinary
   // think time instead of reconnecting against Node's 5 s default.

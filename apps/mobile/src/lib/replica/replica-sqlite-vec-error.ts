@@ -1,6 +1,6 @@
 /**
- * Thrown when the op-sqlite build was compiled without sqlite-vec (issue
- * #721's B4 follow-on: vector search over photo embeddings). Mirrors
+ * Thrown when the op-sqlite build was compiled without sqlite-vec (#721:
+ * vector search over photo embeddings). Mirrors
  * `ReplicaFts5UnavailableError` — same shape, same reason a build can be
  * missing the extension (the compile-time define op-sqlite only turns on
  * when it finds `"op-sqlite": { "sqliteVec": true }` in the package.json it

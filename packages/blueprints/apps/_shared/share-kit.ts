@@ -1,22 +1,14 @@
 import type { InlineScope } from "../inline-types.ts";
-// Commons picks PEOPLE. A second vault owned by the same person is never a
-// member: it syncs through that owner's own topology, outside this roster.
-// Locality remains routing, not product semantics.
+// Commons picks PEOPLE: an own second vault is never a member.
 import { mountedScopes } from "./scope-kit.ts";
 
-/** One person a share could include. Deliberately carries no locality kind. */
 export interface ShareDestination {
   id: string;
   label: string;
-  /** Explicit identity for a person, including someone who has not joined. */
   partyId?: string;
-  /** Absent until an invited person creates and joins with a vault. */
   vaultId?: string;
 }
 
-/** A person from the member's own People directory. The host joins this
- * identity to a linked vault when one exists; an absent vault is a real
- * invitation target, not an error or an invented staging location. */
 export interface ShareTarget {
   partyId: string;
   label: string;
@@ -35,9 +27,7 @@ export interface ShareMemberSelection {
   capability: "read" | "read+write";
 }
 
-/** Turn the independently selected capability on each person row into the
- * exact Commons member array. In particular, an invitation never gets a
- * synthetic vault id. */
+/** An invitation never gets a synthetic vault id. */
 export function selectedShareMembers(
   destinations: readonly ShareDestination[],
   selections: Readonly<Record<string, "read" | "read+write">>
@@ -45,9 +35,7 @@ export function selectedShareMembers(
   return destinations.flatMap((destination) => {
     const capability = selections[destination.id];
     if (!capability) return [];
-    // A person queued offline carries an overlay id that no vault has ever
-    // settled. Sharing to it would name an identity that does not exist yet,
-    // so the row is dropped from the member array rather than sent.
+    // Unsettled ids are dropped, not sent.
     if (destination.partyId && isPendingPartyId(destination.partyId)) return [];
     return [
       {
@@ -87,9 +75,7 @@ export async function loadShareCircles(): Promise<ShareCircle[]> {
   }
 }
 
-/** A `window.centraid.links()` row. The label rides ALONG the destination
- *  contract (#750) — it is the linked vault's own name, resolved from the
- *  vault directory by the gateway, not something this sheet reconstructs. */
+/** `label`: the linked vault's own name, from the gateway (#750). */
 export interface LinkRow {
   linkId: string;
   vaultId: string;
@@ -98,21 +84,11 @@ export interface LinkRow {
   label?: string | null;
 }
 
-/**
- * The human label for a linked vault: the one the LINK carries, resolved from
- * the gateway's vault directory. A truncated vault id is NOT a fallback — an
- * id is not a name, and printing one only ever looked like one. When the
- * directory genuinely holds no name, say so plainly instead. (A vault this
- * member has mounted never reaches here: `linkedDestinations` excludes it, so
- * it is listed once, under its own scope name.)
- */
+/** A truncated vault id is not a fallback — an id is not a name. */
 function linkLabel(link: LinkRow): string {
   return link.label?.trim() ? link.label.trim() : "Linked vault";
 }
 
-/** Every APPROVED, non-mounted linked vault — the "linked people" half of
- *  the destination list. Already-mounted destinations (the member's own
- *  vaults) are excluded so nothing appears twice. */
 export function linkedDestinations(
   links: readonly LinkRow[],
   scopes: readonly InlineScope[]
@@ -128,9 +104,7 @@ export function linkedDestinations(
     }));
 }
 
-/** People-directory targets, preserving invited people whose identity has no
- * vault binding yet. A linked vault already mounted as an own destination is
- * omitted so the same destination never appears twice. */
+/** Keeps vault-less invitees; drops mounted ones (no duplicates). */
 export function peopleDestinations(
   people: readonly ShareTarget[],
   scopes: readonly InlineScope[]
@@ -152,16 +126,12 @@ export function peopleDestinations(
   });
 }
 
-/** An offline write projects a synthetic `pending:<intentId>:<suffix>` id
- * before any vault settles it. Such an id names nobody, so it can never stand
- * in for a person's identity in a share. */
+/** Names nobody until a vault settles it. */
 export function isPendingPartyId(partyId: string): boolean {
   return partyId.startsWith("pending:");
 }
 
-/** The destination for a person just minted from the sheet itself. The id is
- * synthesized exactly as `peopleDestinations` does for a person with no vault
- * binding, so a later roster reload replaces the row instead of doubling it. */
+/** Id shape must match `peopleDestinations` or a reload doubles the row. */
 export function quickAddedDestination(
   partyId: string,
   label: string
@@ -169,10 +139,6 @@ export function quickAddedDestination(
   return { id: `party:${partyId}`, label, partyId };
 }
 
-/** Append a freshly added person to the listed destinations. Someone already
- * on the list keeps their existing row — the same dedupe-by-party rule
- * `peopleDestinations` applies, so adding a name that is already there is a
- * no-op rather than a second identical person. */
 export function withQuickAddedPerson(
   destinations: readonly ShareDestination[],
   added: ShareDestination
@@ -184,11 +150,7 @@ export function withQuickAddedPerson(
   return duplicate ? [...destinations] : [...destinations, added];
 }
 
-/** Destinations whose label looks like the name being typed, so the sheet can
- * ask "did you mean this person?" before minting a second identity for them.
- * Matching is deliberately loose — equality, or either name containing the
- * other — because a roster spells people out ("Asha Rao") more often than the
- * person typing does. An empty name asks nothing. */
+/** Loose on purpose: rosters spell names out; typists don't. */
 export function nearNameMatches(
   destinations: readonly ShareDestination[],
   name: string
@@ -202,19 +164,8 @@ export function nearNameMatches(
   });
 }
 
-/**
- * The people roster, read STRICTLY: a read that FAILED throws rather than
- * answering the empty roster. The forgiving `loadShareDestinations` below is
- * right for the commons sheet, which draws its own destination list and can
- * live with a thinner one; it is wrong for a host that must decide between
- * "there is nobody to share with" and "we could not find out" — those are
- * different sentences, and a caller handed `[]` cannot tell them apart.
- *
- * The link surface is still the fallback for a host that has no `shareTargets`
- * bridge AT ALL — that is feature detection, not failure. A People read that
- * threw is failure, and is reported as such rather than quietly demoted to the
- * older surface.
- */
+/** Strict: a failed read throws rather than answering empty. The link
+ *  fallback is feature detection, never failure handling. */
 export async function readShareDestinations(
   scopes: readonly InlineScope[] = mountedScopes()
 ): Promise<ShareDestination[]> {
@@ -224,19 +175,12 @@ export async function readShareDestinations(
   return linkedDestinations((await window.centraid.links?.()) ?? [], scopes);
 }
 
-/** Named circles, read strictly — see `readShareDestinations`. A host with no
- *  circles bridge has genuinely no named circles; a failing one throws. */
 export async function readShareCircles(): Promise<ShareCircle[]> {
   if (!window.centraid.shareCircles) return [];
   return await window.centraid.shareCircles();
 }
 
-/**
- * Load the people roster live. Never throws: a transient People read falls
- * back to approved links, and a host with neither answers an empty roster.
- * The commons ShareSheet's read — a host that must distinguish an unreadable
- * roster from an empty one wants `readShareDestinations` instead.
- */
+/** Never throws — cf. `readShareDestinations`. */
 export async function loadShareDestinations(
   _currentScopeId: string | null | undefined,
   scopes: readonly InlineScope[] = mountedScopes()
@@ -245,8 +189,7 @@ export async function loadShareDestinations(
     try {
       return peopleDestinations(await window.centraid.shareTargets(), scopes);
     } catch {
-      // Fall through to the older link-only surface. A transient People read
-      // must not make an already-linked destination disappear.
+      // A transient read must not hide a linked destination.
     }
   }
   let links: LinkRow[] = [];
@@ -258,11 +201,6 @@ export async function loadShareDestinations(
   return linkedDestinations(links, scopes);
 }
 
-/**
- * Why *Share…* cannot even open, or null when it can. Distinct from a
- * per-destination refusal (nowhere to write) — this is "there is nobody to
- * ask at all".
- */
 export function shareBlockedReason(
   destinations: readonly ShareDestination[]
 ): string | null {

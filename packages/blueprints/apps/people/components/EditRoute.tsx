@@ -1,26 +1,7 @@
-// Edit / New person (v12 handoff § 8) — one form, written as one commit.
-//
-// `new` and `edit` DRAW THE SAME FORM. The mode only names the screen and
-// decides which write `app-root.tsx` sends; a screen that grew a second layout
-// for a draft with no `party_id` would be two forms to keep in step.
-//
-// THE HANDOFF'S `Vaults` SECTION IS ABSENT, along with its composer and its
-// empty line: People READS the sharing plane and writes none of it, so this
-// form has nothing to write there (people-copy.ts holds the whole withheld
-// set). The vault link is drawn where it is read — the roster's ring and the
-// person screen's two sections.
-//
-// THE `Never` CHIP IS THE ZERO, and it writes the zero: the vault floors
-// `cadence_days` at 0 and both commands type it with a minimum of 0, so the
-// chip and the row agree about what "never" means.
-//
-// THE SWATCHES WRITE WHAT THE AVATAR READS. `PersonAvatar` resolves a person
-// with no stored colour to `var(--c-<hue>)`, so a chosen swatch stores that
-// same expression rather than a hex: a hex is one theme's ring frozen into the
-// vault, and the ring moves between light and dark (`identityInk` in
-// `@centraid/design` exists because of exactly that). A person carrying a
-// legacy hex therefore matches no swatch — honest, rather than a swatch
-// claiming a colour it did not write.
+// Edit / New person (v12 § 8): `new`/`edit` draw the SAME form; mode only names
+// the screen. Vaults section withheld (people-copy.ts) — People reads sharing,
+// writes none. `Never` chip writes zero (floored everywhere); swatches store
+// `var(--c-<hue>)`, never hex: legacy hexes match no swatch.
 import type { ReactNode } from "react";
 
 import { IDENTITY_HUE_KEYS } from "@centraid/design";
@@ -41,19 +22,13 @@ import { ChipRow, Commits, Field, SkeletonBlock } from "./Shared.tsx";
 import styles from "./EditRoute.module.css";
 import shared from "./shared.module.css";
 
-// The eight identity hues in wheel order, from the design system rather than
-// a local wheel — the same list every avatar draws from.
 const HUE_KEYS = IDENTITY_HUE_KEYS;
 
-/** The stored value for a hue, and the fill the swatch paints: one expression,
- *  so the disc on this screen and the disc in every row cannot disagree. */
 function hueValue(key: ColorKey): string {
   return `var(--c-${key})`;
 }
 
-/** `Never` · `7 days` · `14 days` · … — every chip past the zero takes its
- *  label from `format.ts`, so the cadence reads the same word here as it does
- *  on the person screen. */
+/** Labels from format.ts: cadence reads the same word as the person screen. */
 const CADENCE_OPTIONS = CADENCE_CHIPS.map((days) => ({
   id: String(days),
   label: days === 0 ? CADENCE_NEVER : agoLabel(days),
@@ -61,8 +36,7 @@ const CADENCE_OPTIONS = CADENCE_CHIPS.map((days) => ({
 
 export function EditRoute(props: EditRouteProps): ReactNode {
   const draft = props.draft;
-  // A draft the orchestrator has not built yet is the same state as a read in
-  // flight: the skeleton, never an empty form that could be saved over.
+  // Unbuilt draft == read in flight: skeleton, never a saveable empty form.
   if (props.loading || !draft) {
     return (
       <SkeletonBlock>
@@ -86,8 +60,7 @@ export function EditRoute(props: EditRouteProps): ReactNode {
       />
 
       <span className={shared.fieldLabel}>{FIELDS.colour}</span>
-      {/* A `<fieldset>` rather than a div carrying `role="group"`, the same way
-          `ChipRow` groups its own choice: the grouping is native. */}
+      {/* Native `<fieldset>` grouping, like ChipRow's own choice. */}
       <fieldset className={styles.swatches} aria-label={FIELDS.colour}>
         {HUE_KEYS.map((key) => {
           const value = hueValue(key);

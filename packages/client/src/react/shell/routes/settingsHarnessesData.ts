@@ -10,38 +10,14 @@ import type {
   ModelSubsystem,
 } from "../../screen-contracts.js";
 
-// Harness console data. Centraid runs the user's installed
-// harness CLIs in place; the gateway reports which are runnable on its
-// host. This maps that snapshot into the HarnessesStatusDTO the
-// SettingsHarnessesScreen renders.
-//
-// The snapshot is a LIST (`{ harnesses: [...] }`), one entry per harness kind the
-// gateway registers — it used to be `codex*`/`claude*` field pairs matched
-// against a local 2-row table, which meant a harness the gateway grew was
-// invisible here until this file was edited too. Nothing below enumerates
-// harness kinds locally any more: the gateway's list drives the cards, the
-// model-prefs read, and the pickers alike.
-//
-// Model selection moved off desktop-local settings and onto the gateway
-// prefs store (`GET/PUT /_centraid-user/prefs`) so every client sharing a
-// gateway sees the same picks. Keys are `model.<harnessKind>.<slot>` where
-// `<slot>` is `default` (the harness's own default) or one of the
-// `ModelSubsystem`s (`assistant` | `ask` | `builder` | `automations`). A
-// missing/empty value falls through to the next tier server-side.
-//
-// Harness selection is per subsystem the same way: `harness.<subsystem>` pins
-// one register to a harness, and `harness.kind` is the DEFAULT harness
-// every unpinned subsystem inherits. Same fall-through rule — a
-// missing/empty pin resolves server-side, so this module only ever sends
-// explicit pins and deletes.
+// Harness console: map the gateway's `{ harnesses: [...] }` list into
+// HarnessesStatusDTO. Never enumerate kinds locally — a new gateway harness
+// must still render. Prefs: `model.<kind>.<slot>`, `harness.<subsystem>`,
+// `harness.kind` default. Empty pins fall through server-side.
 
 type Snap = Awaited<ReturnType<typeof getHarnessesStatus>>;
 
-/**
- * Resolve stale/open harness preference strings onto a harness actually reported
- * by this gateway. Settings still renders every open kind from the wire; turn
- * pickers must not POST a kind absent from that same snapshot.
- */
+/** Map a stored pin onto a kind this gateway actually reported. */
 export function resolveReportedHarnessKind(
   status: HarnessesStatusDTO,
   requested: HarnessKind | null | undefined,
@@ -65,12 +41,7 @@ export function resolveReportedHarnessKind(
   );
 }
 
-/**
- * Card accents, keyed by the kinds this build happens to recognise. Purely
- * cosmetic — a harness whose kind is missing here (a newer gateway's) still
- * renders, just on the neutral accent. This map must never gate what the
- * console shows; the gateway's list is the source of truth for that.
- */
+/** Cosmetic only — never gate which harnesses render. Unknown kinds get the default. */
 const ACCENT_BY_KIND: Record<string, string> = {
   codex: "var(--c-teal)",
   "claude-code": "var(--c-violet)",
@@ -92,7 +63,6 @@ const ACCENT_BY_KIND: Record<string, string> = {
 };
 const DEFAULT_ACCENT = "var(--c-slate)";
 
-/** The harness every unpinned subsystem falls back to when prefs name none. */
 const FALLBACK_KIND: HarnessKind = "codex";
 
 const SUBSYSTEMS: readonly ModelSubsystem[] = [
@@ -117,10 +87,6 @@ function configPrefKey(
   return `config.${kind}.${slot}.${category}`;
 }
 
-/**
- * The per-subsystem harness pin shares the canonical harness namespace; the
- * daemon config seeder writes only its declared launch keys.
- */
 function harnessPrefKey(subsystem: ModelSubsystem): string {
   return `harness.${subsystem}`;
 }
@@ -129,23 +95,18 @@ function harnessLadderPrefKey(subsystem: ModelSubsystem): string {
   return `harness.ladder.${subsystem}`;
 }
 
-/** Pull the explicit `harness.<subsystem>` pins out of the raw prefs snapshot. */
 function readHarnessPrefs(
   prefs: Record<string, unknown>
 ): Partial<Record<ModelSubsystem, HarnessKind>> {
   const byKey: Partial<Record<ModelSubsystem, HarnessKind>> = {};
   for (const s of SUBSYSTEMS) {
     const v = prefs[harnessPrefKey(s)];
-    // Any non-empty string counts as a pin. This used to check against a
-    // closed pair, which would have silently dropped a pin onto a harness
-    // kind this build predates — the gateway is what resolves a pin, and it
-    // treats an unknown one as "inherit" anyway.
+    // Any non-empty string is a pin. A closed set would drop future kinds.
     if (typeof v === "string" && v) byKey[s] = v;
   }
   return byKey;
 }
 
-/** Read ordered ladder membership written as an array (or legacy JSON text). */
 function readHarnessLadderPrefs(
   prefs: Record<string, unknown>
 ): Partial<Record<ModelSubsystem, HarnessKind[]>> {
@@ -172,11 +133,7 @@ function readHarnessLadderPrefs(
   return byKey;
 }
 
-/**
- * Pull every `model.<kind>.<slot>` string out of the raw prefs snapshot, for
- * each kind the gateway reported. Driven by the gateway's list rather than a
- * local table so a new harness's saved models are read, not stranded.
- */
+/** Driven by the gateway's list — a new harness's saved models must still read. */
 function readModelPrefs(
   prefs: Record<string, unknown>,
   kinds: readonly HarnessKind[]
@@ -242,11 +199,6 @@ function readConfigPrefs(
   return { defaultByKind, subsystemByKind };
 }
 
-/**
- * One wire entry → one card. Every displayed string comes from the gateway
- * (`label`, `version`, `hint`), so a harness kind this build has never heard of
- * still renders a complete, honest card — only the accent falls back.
- */
 function capabilityChips(
   caps: CentraidHarnessStatusEntry["capabilities"]
 ): string[] {
@@ -288,8 +240,7 @@ function toCard(
     connected: entry.available,
     sessionReady:
       entry.available && caps?.reachable === true && caps.authRequired !== true,
-    // Installed, but the gateway has not (yet) reported capabilities for it.
-    // That is silence, not a refusal — see `sessionProbePending`.
+    // Silence, not refusal — capabilities not reported yet.
     ...(entry.available && caps === undefined
       ? { sessionProbePending: true }
       : {}),
@@ -319,9 +270,6 @@ function toCard(
       ? { supportsAttachments: true }
       : {}),
     ...(caps?.usageUpdateObserved ? { supportsContext: true } : {}),
-    // The gateway's install hint IS the "why not" for an unavailable harness —
-    // more useful than the old locally-composed "<bin> not found on PATH",
-    // which this client could only write for binaries it knew about.
     subtitle: entry.available
       ? (entry.version ?? `${entry.label} · detected`)
       : (entry.hint ?? `${entry.label} CLI not found`),
@@ -384,8 +332,7 @@ export async function loadHarnesses(opts?: {
     getUserPrefs().catch(() => ({}) as Record<string, unknown>),
   ]);
   const kindRaw = prefs["harness.kind"];
-  // Trust the persisted kind as-is (the gateway validated it on write and
-  // resolves it on read); only an absent/blank value falls back.
+  // Trust the persisted kind; only absent/blank falls back.
   const selectedKind =
     typeof kindRaw === "string" && kindRaw
       ? (kindRaw as HarnessKind)
@@ -408,13 +355,8 @@ export async function loadHarnesses(opts?: {
 }
 
 /**
- * ONE writer for every pick on this page, and the reason it exists is honesty:
- * these were `void saveUserPrefs(...)` calls, so a gateway that refused a model
- * or an effort left the pick sitting on screen as though it had been kept.
- *
- * The resolved value is the GATEWAY'S OWN TEXT when it refused and `null` when
- * it wrote — not a boolean. Settings restores the previous pick and puts that
- * text on the status line, so what is displayed is what the gateway holds.
+ * One writer. Refusal returns the gateway's own text; success is `null`.
+ * Never `void saveUserPrefs` — a refused pick must not sit as if kept.
  */
 export type PrefWriteResult = string | null;
 
@@ -429,18 +371,13 @@ async function writePrefs(
   }
 }
 
-/** Switch the DEFAULT harness — the harness every unpinned subsystem inherits. */
 export async function activateHarness(
   kind: HarnessKind
 ): Promise<PrefWriteResult> {
   return writePrefs({ "harness.kind": kind });
 }
 
-/**
- * Pin one subsystem to a harness ('' clears the key, so the subsystem
- * inherits the default harness again — the same `'' → null` delete convention
- * the model setters use).
- */
+/** `''` clears the pin (`'' → null`) so the subsystem inherits the default. */
 export async function setSubsystemHarness(
   subsystem: ModelSubsystem,
   kind: HarnessKind | ""
@@ -457,7 +394,6 @@ export async function setSubsystemHarnessLadder(
   });
 }
 
-/** Persist this harness's default model ('' clears the key, falling through to the harness default). */
 export async function setHarnessModel(
   kind: HarnessKind,
   modelId: string
@@ -465,7 +401,6 @@ export async function setHarnessModel(
   return writePrefs({ [modelPrefKey(kind, "default")]: modelId || null });
 }
 
-/** Persist this harness's per-subsystem model override ('' clears the key, falling through to the default model). */
 export async function setSubsystemModel(
   kind: HarnessKind,
   subsystem: ModelSubsystem,

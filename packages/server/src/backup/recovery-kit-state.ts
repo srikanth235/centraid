@@ -1,4 +1,4 @@
-/* Gateway-wide recovery-kit fingerprint/confirmation row (issue #555). */
+/* Gateway-wide recovery-kit fingerprint/confirmation row (#555). */
 import { GatewayDatabase } from "../serve/gateway-db.js";
 
 export interface RecoveryKitState {

@@ -84,7 +84,7 @@ describe(scaffoldAppFiles, () => {
         requires: { tools?: unknown; harness?: unknown; model?: unknown };
       }
     ).requires;
-    // ctx.tool was removed (issue #484) — no tools allowlist is scaffolded.
+    // No tools allowlist is scaffolded — there is no `ctx.tool` rail (#484).
     expect(reqs.tools).toBeUndefined();
     expect(reqs.harness).toBeUndefined();
     expect(reqs.model).toBeUndefined();

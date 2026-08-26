@@ -1,30 +1,8 @@
-/*
- * What an ACP session advertises about itself, and the category-keyed
- * configuration pins we apply to it.
- *
- * Session wire shapes (verified against the public ACP spec):
- *   - handshake: `initialize` { protocolVersion: 1, clientCapabilities,
- *     clientInfo } → { protocolVersion, agentCapabilities: { loadSession,
- *     promptCapabilities }, ... }.
- *   - session: `session/new` { cwd, mcpServers } → { sessionId };
- *     `session/load` { sessionId, cwd, mcpServers } replays history via
- *     `session/update` then resolves null (only when the harness advertised
- *     `loadSession`).
- *
- * Config selection (verified against the pinned `@agentclientprotocol/sdk` 1.3.0's
- * generated schema, not guessed): ACP has no per-prompt model field. A harness
- * instead advertises `configOptions` on the `session/new` / `session/load`
- * RESULT, and the client pins one with the `session/set_config_option`
- * request `{ sessionId, configId, value }`
- * (`AGENT_METHODS.session_set_config_option`). The model selector is the
- * option whose `id` is `"model"` or whose `category` is `"model"`; its
- * `options` are `{ value, name }` pairs (or groups of them) carrying CONCRETE
- * provider model ids. We only ever echo values the harness itself offered, so
- * no provider ids are hardcoded here. Options are identified by semantic
- * `category`, never adapter-specific ids (`reasoning_effort` vs `effort`).
- * When the harness advertises no requested category, or offers nothing matching
- * the request, we emit a `notice` rather than silently ignoring the pin.
- */
+// ACP has no per-prompt model field: a harness advertises `configOptions` and
+// the client pins one through `session/set_config_option`. Three rules govern
+// this file — only values the harness offered are echoed, so no provider id is
+// hardcoded; options are found by semantic `category`, never adapter ids; and a
+// request the harness cannot honour emits a `notice` rather than being dropped.
 
 import { methods } from "@agentclientprotocol/sdk";
 import type {
@@ -46,9 +24,7 @@ import type {
 
 import type { TurnStreamEvent } from "@centraid/server/engine";
 
-/** Wire method for pinning a session config option (e.g. the model). */
 export const SET_CONFIG_OPTION = methods.agent.session.setConfigOption;
-/** Wire method for selecting a session mode (e.g. claude's `bypassPermissions`). */
 export const SET_MODE = methods.agent.session.setMode;
 
 export type {
@@ -57,21 +33,18 @@ export type {
   SessionModeState,
 } from "@agentclientprotocol/sdk";
 
-/** SDK response types that carry a config-option snapshot. */
 export type SessionConfigResponse =
   | NewSessionResponse
   | LoadSessionResponse
   | ResumeSessionResponse
   | SetSessionConfigOptionResponse;
 
-/** SDK-owned built-in request pairing, usable through timeout decorators. */
 export type AcpBuiltinRequest = <Method extends AgentRequestMethod>(
   method: Method,
   params: AgentRequestParamsByMethod[Method],
   options?: SendRequestOptions
 ) => Promise<AgentRequestResponsesByMethod[Method]>;
 
-/** True when the harness advertises a structured session capability object. */
 export function hasSessionCapability(
   caps: SessionCapabilities | undefined,
   key: keyof SessionCapabilities
@@ -88,16 +61,7 @@ export function readConfigOptions(
   return result?.configOptions ?? [];
 }
 
-/**
- * Read a `config_option_update` session notification.
- *
- * Schema-verified against `@agentclientprotocol/sdk`'s generated
- * `ConfigOptionUpdate`: the notification carries exactly one field,
- * `configOptions`, documented as "The full set of configuration options and
- * their current values". There is NO singular option shape in the schema, so
- * the result REPLACES the tracked set — an option missing from an update is
- * gone, not retained from an earlier snapshot.
- */
+/** The FULL option set: an update replaces the tracked one, never merges. */
 export function readConfigOptionUpdate(
   params: SessionNotification
 ): SessionConfigOption[] | undefined {
@@ -106,7 +70,6 @@ export function readConfigOptionUpdate(
   return update.configOptions;
 }
 
-/** The `currentValue` the session advertises for one semantic category. */
 export function readCurrentConfigValue(
   options: SessionConfigOption[],
   category: string
@@ -117,7 +80,6 @@ export function readCurrentConfigValue(
     : undefined;
 }
 
-/** Does the harness advertise `modeId` among its available session modes? */
 export function modeAvailable(
   modes: SessionModeState | undefined,
   modeId: string
@@ -127,13 +89,10 @@ export function modeAvailable(
   return modes.availableModes.some((mode) => mode.id === modeId);
 }
 
-/** One concrete value the harness offers on a select config option. */
 export type OfferedConfigValue = SessionConfigSelectOption;
 
-/** Semantic alias for model catalog callers, sourced from the SDK schema. */
 export type OfferedModel = SessionConfigSelectOption;
 
-/** Find one config selector by ACP semantic category. */
 export function findConfigOption(
   options: SessionConfigOption[],
   category: string
@@ -141,14 +100,11 @@ export function findConfigOption(
   return options.find(
     (option) =>
       option.category === category ||
-      // ACP's model option historically shipped with id="model" before the
-      // semantic category field became universal. This is the one spec-level
-      // compatibility alias; thought_level remains category-only.
+      // The one spec-level compatibility alias; thought_level is category-only.
       (category === "model" && option.id === "model")
   );
 }
 
-/** Flatten `SessionConfigSelectOptions` — either a flat list or groups of one. */
 export function flattenSelectOptions(
   raw: SessionConfigSelectOptions
 ): OfferedConfigValue[] {
@@ -163,17 +119,7 @@ export function flattenSelectOptions(
   return out;
 }
 
-/**
- * The concrete models a harness advertises on its `model` config option, plus
- * the option's `currentValue` (its own default selection). Empty when the
- * harness exposes no model selector — which is how a kind that picks its own
- * model per session yields an empty catalog rather than a fabricated one.
- *
- * This is the enumeration counterpart to `pinModel`: same option lookup, but
- * it reports the whole offered set instead of matching one request against it.
- * Both stay here so "what is the model option, and what does it offer" lives
- * in exactly one place.
- */
+/** Empty when the harness exposes no model selector, never fabricated. */
 export function readOfferedModels(configOptions: SessionConfigOption[]): {
   models: OfferedConfigValue[];
   currentValue?: string;
@@ -186,12 +132,8 @@ export function readOfferedModels(configOptions: SessionConfigOption[]): {
   };
 }
 
-/**
- * Match a requested model against what the harness offers. Exact `value` wins,
- * then a case-insensitive `name`, then a substring on either — so a
- * capability-tier alias like `opus` still finds `claude-opus-4-5-20251101`
- * without this module ever naming a concrete model id.
- */
+/** Exact, then case-insensitive, then substring — so a tier alias resolves
+ *  without this module naming a concrete model id. */
 function matchModelValue(
   offered: OfferedConfigValue[],
   wanted: string
@@ -212,11 +154,6 @@ function matchModelValue(
   return partial?.value;
 }
 
-/**
- * Pin the caller's model through `session/set_config_option`, and report the
- * model actually in effect (for the usage stamp). Emits a `notice` when the
- * harness exposes no model selector or offers nothing matching.
- */
 export async function pinModel(args: {
   request: AcpBuiltinRequest;
   emit: (event: TurnStreamEvent) => void;
@@ -232,8 +169,6 @@ export async function pinModel(args: {
   if (!args.requested) return current;
 
   if (!option || option.type !== "select") {
-    // User explicitly picked a model — surface as warn so the composer notice
-    // is hard to miss (model switch reliability).
     args.emit({
       type: "notice",
       level: "warn",
@@ -266,9 +201,8 @@ export async function pinModel(args: {
       configId: option.id,
       value,
     });
-    // D4 confirmation: a RESOLVED `session/set_config_option` IS the harness
-    // confirming the pin — the spec's result echo is optional. Only an echo
-    // that CONTRADICTS the request leaves the active value unknown.
+    // A resolved RPC IS confirmation — the echo is optional. Only an echo that
+    // CONTRADICTS the request leaves the active value unknown.
     const echoed = readCurrentConfigValue(readConfigOptions(result), "model");
     if (echoed !== undefined && echoed !== value) {
       args.emit({
@@ -283,8 +217,7 @@ export async function pinModel(args: {
     }
     return value;
   } catch {
-    // The harness rejected the pin (stale option list, provider hiccup). The
-    // turn is still runnable on its default — say so instead of failing it.
+    // The turn is still runnable on the default — say so, do not fail it.
     args.emit({
       type: "notice",
       level: "warn",
@@ -297,11 +230,8 @@ export async function pinModel(args: {
   }
 }
 
-/**
- * Pin ACP's well-known `thought_level` category after the model. Values are
- * adapter vocabulary and therefore exact/case-insensitive only — unlike model
- * aliases, effort values are never substring-translated.
- */
+/** Pinned after the model. Effort values are adapter vocabulary: never
+ *  substring-translated like model aliases. */
 export async function pinThoughtLevel(args: {
   request: AcpBuiltinRequest;
   emit: (event: TurnStreamEvent) => void;
@@ -347,8 +277,7 @@ export async function pinThoughtLevel(args: {
       configId: option.id,
       value: selected,
     });
-    // Same D4 rule as `pinModel`: the resolved RPC confirms the request; only
-    // a contradicting echo makes the active value unknown.
+    // Same rule as `pinModel`: only a contradicting echo makes it unknown.
     const echoed = readCurrentConfigValue(
       readConfigOptions(result),
       "thought_level"

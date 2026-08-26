@@ -1,12 +1,6 @@
-// Direct sub-path imports avoid the package's barrel index.js which
-// re-exports every weight (some of which Metro fails to resolve).
-//
-// The Binding Layer's ONE face, two weights (400 / 600): Instrument Sans for
-// every product role. The reading serif and numeric face are withdrawn, so
-// this list must stay two files — a face loaded here that the
-// ramp cannot name is exactly the divergence from the shared registry that the
-// native adapter prevents. Code surfaces use the PLATFORM monospace
-// (see kit/theme/index.ts#family), which loads nothing.
+// Direct sub-path imports: the barrel re-exports weights Metro cannot resolve.
+// Stay at Instrument Sans 400 / 600 — a face the ramp cannot name diverges
+// from the shared registry.
 import InstrumentSans_400Regular from "@expo-google-fonts/instrument-sans/400Regular/InstrumentSans_400Regular.ttf";
 import InstrumentSans_600SemiBold from "@expo-google-fonts/instrument-sans/600SemiBold/InstrumentSans_600SemiBold.ttf";
 import { NavigationContainer } from "@react-navigation/native";
@@ -27,9 +21,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
-// Every screen here is reached only through a `component=` prop on a
-// navigator, and each one's module body is evaluated on first navigation
-// rather than at app start — see `lazy-screens.tsx` for why.
+// Lazy screens: evaluated on first navigation, not at app start.
 import {
   AssistantScreen,
   AssistantFullScreen,
@@ -83,22 +75,15 @@ import { MOBILE_COMPATIBILITY_WALL_COPY } from "./src/lib/replica/mobile-gateway
 import { useUploadReconciliation } from "./src/lib/upload/boot";
 import { rootNavigationRef } from "./src/navigation";
 import type { RootStackParamList } from "./src/navigation";
-// Only the two screens that can be on screen at first paint are imported
-// eagerly: Home is the initial route of the root stack, Onboarding is what the
-// tree renders instead when the profile says the user has not been through it.
 import HomeScreen from "./src/screens/Home";
 import OnboardingScreen from "./src/screens/Onboarding";
 
-// Held until the profile prefs say onboarding vs app — see the comment on the
-// `onboarded === null` gate in App() for why fonts are deliberately *not* part
-// of this condition any more.
+// Fonts are not part of this hold — see the `onboarded === null` gate.
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* noop */
 });
 
-// Surface scheduled notifications even when the app is foregrounded —
-// otherwise the OS swallows them silently, which is confusing for things
-// like Focus timers and Hydrate reminders. See issue #14 (Phase C bridges).
+// Foregrounded notifications must still surface — the OS otherwise swallows them (#14).
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -110,14 +95,7 @@ Notifications.setNotificationHandler({
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 
-// Presenting an app cover: an edge-to-edge full-screen modal that cross-fades in
-// (`fade`). `fullScreenModal` (not `modal`) so the cover truly covers the screen —
-// the plain `modal` presentation is the native iOS card sheet (rounded top, inset,
-// parent receding behind), which is what gives the interactive pull-down but never
-// fills the screen. A cover has no native pull-down then; it exits via the in-app
-// leave key. A true zoom-out-of-the-tile transition isn't expressible on
-// native-stack, which only takes fixed animation presets. Headers stay hidden —
-// each screen draws its own bar.
+// `fullScreenModal`, not `modal` — the iOS card sheet never fills the screen.
 const COVER_OPTIONS = {
   animation: "fade",
   presentation: "fullScreenModal",
@@ -129,12 +107,7 @@ function UploadReconciliation(): null {
   return null;
 }
 
-/**
- * Surfaces ReplicaProvider.error when the session fails to open (issue #468 K2).
- * The "never paired yet" case is expected — Home already invites pairing — so it
- * is suppressed here; only a genuine open failure raises the red bar. The top
- * inset keeps that bar clear of the status bar instead of bleeding under it.
- */
+/** Suppress the expected unpaired message; only a genuine open failure raises the bar. */
 function ReplicaErrorBanner(): React.JSX.Element | null {
   const { compatibility, error, ready } = useReplica();
   const { colors } = useTheme();
@@ -230,39 +203,25 @@ function ReplicaCompatibilityGate({
 }
 
 export default function App(): React.JSX.Element | null {
-  // The device-local Appearance preference (System/Light/Dark) folds over the OS
-  // scheme here so the nav container theme + status bar follow it, matching the
-  // per-screen `useTheme()` override (src/kit/theme/appearance.ts).
   const scheme = resolveScheme(useAppearance(), useColorScheme());
   const { colors } = resolveTheme(scheme);
-  // `null` while the profile prefs hydrate; then true/false gates onboarding.
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
-  // The return tuple is deliberately dropped: nothing gates on it any more (see
-  // the tradeoff note below the effects). `useFonts` still re-renders this
-  // component when the faces land, which is what swaps the system fallback out.
+  // Tuple dropped on purpose — splash does not wait on fonts (see `onReady`).
   useFonts({
     InstrumentSans_400Regular,
     InstrumentSans_600SemiBold,
   });
 
   useEffect(() => {
-    // The appearance read must not sit behind the profile read, or first paint
-    // waits on two round trips to AsyncStorage instead of one.
+    // Do not sequence appearance behind profile — first paint would wait on two trips.
     void hydrateAppearance();
     void hydrateProfile().then(() => setOnboarded(isOnboarded()));
-    // expo-image ships with no ceiling on its in-memory bitmap cache, so a long
-    // scroll through the photo grid otherwise holds every decoded thumbnail
-    // alive. From an effect rather than module scope: it touches a native
-    // module, and nothing before first paint depends on it.
+    // From an effect: touches a native module; nothing before first paint depends on it.
     configurePhotoImageCache();
   }, []);
 
-  // Deliberate tradeoff (#659 M3): the splash lifts as soon as the profile has
-  // hydrated, *without* waiting on the three font faces. Text therefore paints in
-  // the system font for the frame or two before `useFonts` resolves and
-  // re-renders. The alternative — the previous `!fontsLoaded` gate — held a
-  // blank screen for the whole font load on every cold start, which is a far
-  // more expensive way to avoid a brief typeface swap.
+  // #659: lift splash on profile hydrate, not fonts — a `!fontsLoaded` gate
+  // blanks every cold start to avoid a brief typeface swap.
   const onReady = useCallback(async () => {
     if (onboarded !== null) {
       await SplashScreen.hideAsync().catch(() => {
@@ -275,8 +234,6 @@ export default function App(): React.JSX.Element | null {
     void onReady();
   }, [onReady]);
 
-  // The one gate that survives: it decides onboarding vs app, so there is no
-  // correct tree to render before it resolves.
   if (onboarded === null) {
     return null;
   }
@@ -284,11 +241,7 @@ export default function App(): React.JSX.Element | null {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        {/* Seeded with the insets the native side already measured at launch,
-            so the first frame is laid out correctly instead of at zero until
-            the first JS layout pass reports back. NOTE: this alone does NOT
-            fix the cover screens' top inset — that was measured and it does
-            not; see `kit/components/TopSafeArea.tsx`. */}
+        {/* Does not fix cover-screen top inset — use TopSafeArea. */}
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           <View
             style={{ backgroundColor: colors.bg, flex: 1 }}
@@ -303,9 +256,7 @@ export default function App(): React.JSX.Element | null {
                     <UploadReconciliation />
                     <ShareIntentIngest />
                     <NotificationCoordinator />
-                    {/* The replica error banner is only meaningful inside the app
-                      shell — during onboarding the user hasn't paired yet, so a
-                      "couldn't open replica" banner would just be noise. */}
+                    {/* Onboarding has not paired yet — a replica-open banner is noise. */}
                     {onboarded ? <ReplicaErrorBanner /> : null}
                     {onboarded ? (
                       <NavigationContainer
@@ -316,10 +267,7 @@ export default function App(): React.JSX.Element | null {
                         <StatusBar
                           style={scheme === "dark" ? "light" : "dark"}
                         />
-                        {/* One boundary for every lazily-evaluated screen. The
-                          fallback is a bare themed fill rather than a spinner:
-                          module evaluation is sub-frame in the common case, so
-                          a spinner would only ever register as a flash. */}
+                        {/* Bare fill, not a spinner — lazy eval is sub-frame. */}
                         <React.Suspense
                           fallback={
                             <View
@@ -329,9 +277,7 @@ export default function App(): React.JSX.Element | null {
                         >
                           <RootStack.Navigator
                             screenOptions={{ headerShown: false }}
-                            // `selection` haptic when a cover opens — preserves the
-                            // vocabulary the old tabPress listener gave.
-                            // `closing` guards it to the open transition, not dismissal.
+                            // Haptic on cover open only — not dismissal.
                             screenListeners={{
                               transitionStart: (e) => {
                                 if (!e.data.closing)
@@ -459,10 +405,7 @@ export default function App(): React.JSX.Element | null {
                 </ReplicaProvider>
               </AppLockProvider>
             </ShareIntentProvider>
-            {/* Last child so its absolute readout sits above the navigator.
-              Renders nothing, installs nothing and schedules nothing outside a
-              `__DEV__` build that a probe has explicitly armed — see
-              src/kit/perf/FrameProbe.tsx. */}
+            {/* Last child so the readout sits above the navigator. */}
             <FrameProbe />
             <StatusLine />
           </View>

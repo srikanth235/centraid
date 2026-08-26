@@ -1,5 +1,5 @@
 /*
- * Named gateway/vault key custody (issue #555).
+ * Named gateway/vault key custody (#555).
  *
  * A KeyStore file is never a bare secret. Every backend writes the same
  * self-describing envelope so custody can move between host and OS wrappers
@@ -102,7 +102,7 @@ export class KeyStoreError extends Error {
  * vaultless gateway creates `keys/` only when the endpoint identity is
  * actually requested.
  */
-/* eslint-disable max-classes-per-file -- the typed custody error is colocated with the KeyStore boundary that throws it (#555) */
+/* oxlint-disable max-classes-per-file -- the typed custody error is colocated with the KeyStore boundary that throws it (#555) */
 export class KeyStore {
   readonly dir: string;
   private readonly protector: KeyProtector | undefined;

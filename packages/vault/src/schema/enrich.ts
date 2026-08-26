@@ -1,10 +1,10 @@
-// Enrichment schema (issue #299, v10): what the enrichment spine adds to the
+// Enrichment schema (#299, v10): what the enrichment spine adds to the
 // model. Deliberately small — derived data lands in tables the ontology
 // already has (knowledge_annotation, core_tag, media_face_region,
 // core_content_derivative); this migration only adds what no existing table
 // carries:
 //
-//   - `media_asset_phash` — the Tier-0 perceptual hash (issue #299 §2),
+//   - `media_asset_phash` — the Tier-0 perceptual hash (#299),
 //     producer-agnostic like thumbs: the client canvas computes a dHash
 //     today, a server codec plug-in may later. Near-duplicate detection is
 //     then plain SQL over `vault_hamming`. The issue sketched a column on
@@ -12,12 +12,12 @@
 //     SQLite's ADD COLUMN cannot be written re-runnably (the migration
 //     ladder's de-facto contract — see the v8 rebuild) and a rebuild would
 //     cross media_face_region's live FK. Same queries, one JOIN.
-//   - `enrich_embedding` — the additive vector index (issue #299 phase 5).
+//   - `enrich_embedding` — the additive vector index (#299).
 //     One row per (entity, model); vectors are little-endian float32 BLOBs.
 //     Nothing else depends on it: FTS over captions is the primary search
 //     plane, embeddings only ever add recall.
 //
-//     MODEL IDENTITY CARRIES VERSION (issue #721 E1). `model` is the string
+//     MODEL IDENTITY CARRIES VERSION (#721). `model` is the string
 //     `"<name>@<version>"` — see `enrich/model-id.ts` for the make/parse/
 //     compare helpers and the full argument. The consequence for this DDL is
 //     that a model upgrade is a BACKFILL, never a migration: re-derive the
@@ -35,7 +35,7 @@
 //     to re-key. Different bytes are a different content row with its own
 //     derivation. The only thing that invalidates an embedding is the model
 //     changing, and the key above records exactly that.
-//   - `enrich_derivation` — the provenance stamp (issue #724 W2): which
+//   - `enrich_derivation` — the provenance stamp (#724): which
 //     capability ran, under which model, over which target's which variant,
 //     and when. It stores no derived VALUE — the value lands in the table the
 //     ontology already has (knowledge_annotation, core_tag,
@@ -56,7 +56,7 @@
 //     ONE STAMP PER (target_type, target_id, variant, profile), enforced by
 //     UNIQUE and written by `enrich/derivation.ts`'s upsert. Two stamps for one
 //     target's variant are a CONFLICT within a profile and normal ACROSS
-//     profiles (issue #807): a member may keep the built-in OCR result and an
+//     profiles (#807): a member may keep the built-in OCR result and an
 //     LLM profile's result for the same page, and which one an app reads is a
 //     policy question answered by `enrich/derivation.ts`'s
 //     `preferredDerivation`, not by the key refusing to hold both. Re-running
@@ -80,18 +80,18 @@
 //     `payload_json` is an OPTIONAL, small, JSON-valid echo of what was
 //     derived — a region count, a confidence, the variant's byte size — for
 //     the operator reading a stuck library, never a second copy of the data.
-//   - `enrich_request` — the on-demand priority queue (issue #299 phase 5):
+//   - `enrich_request` — the on-demand priority queue (#299):
 //     a search that found nothing, or an owner opening an unenriched item,
 //     records what was wanted; enrichers drain this queue before the backlog.
-//     `reason` widened with `manual` (issue #352 phase 3/4): an owner-driven
+//     `reason` widened with `manual` (#352 phase 3/4): an owner-driven
 //     "detect faces now" gesture from an app is neither a search miss nor a
 //     passive on-view — it is an explicit ask. Widened again with `projected`
-//     (issue #726): a row that arrived over a share edge is re-registered by
+//     (#726): a row that arrived over a share edge is re-registered by
 //     the audience's own ingest door (share/projection-ingest.ts), and that
 //     signal is neither an owner ask nor a member gesture — it is the vault
 //     saying "this item is new HERE". Naming it is what keeps `manual` an
 //     owner's word.
-//   - `media_asset_phash.cluster_id` (issue #352 phase 3/4): a rebuildable
+//   - `media_asset_phash.cluster_id` (#352 phase 3/4): a rebuildable
 //     near-duplicate-cluster projection over the Tier-0 phash sidecar — the
 //     standing sweep (gateway/duties.ts via enrich/clusters.ts) groups LIVE
 //     assets whose phash hamming distance is <= 6 and stamps the group's
@@ -108,7 +108,7 @@
 //     updateEnrichSettings on every owner change, seeded at bootstrap and
 //     backfilled below for vaults that predate this table.
 //
-//     TIER RENAME (issue #712 C5): `off|local|model` became
+//     TIER RENAME (#712): `off|local|model` became
 //     `off|device|gateway` — see `packages/server/src/automation/fire/enrich-gate.ts`
 //     for the axis and `packages/vault/src/enrich/policy.ts` for the
 //     COMPAT read-time mapping of legacy stored values. The CHECK below
@@ -120,7 +120,7 @@
 //     forever — only application code translates it. Nothing in this
 //     runtime writes the legacy tokens; the CHECK simply refuses to be the
 //     thing that turns an old row unreadable.
-//   - `enrich_policy_rule` — the scoped policy cascade (issue #807). The tier
+//   - `enrich_policy_rule` — the scoped policy cascade (#807). The tier
 //     mirror above answers ONE question per domain ("how far may photos
 //     enrichment run"), which cannot say "faces on for Photos but off for the
 //     Screenshots album" or "built-in OCR everywhere except this folder". This
@@ -133,19 +133,19 @@
 //     accessors that answered "may this run" would be a second policy path.
 //     The tier mirror stays authoritative until that resolver absorbs it.
 //   - `enrich_consent` — egress consent, keyed capability × egress class
-//     (issue #807), ORTHOGONAL to the cascade above. Policy selects an engine;
+//     (#807), ORTHOGONAL to the cascade above. Policy selects an engine;
 //     this says whether that engine's egress class was ever agreed to, so a
 //     per-item "use provider X just this once" override can never widen egress
 //     by itself. Egress class is a fact about the ENGINE (`on-device` — the
 //     member's own devices; `gateway` — their own infrastructure; `provider` —
 //     a third party), the same axis `enrich-gate.ts` documents.
 //   - the `vision` and `doctype` concept schemes — machine-tag vocabularies
-//     (issue #299 §4). Concepts are created on demand by the tag publisher.
+//     (#299). Concepts are created on demand by the tag publisher.
 //     Fresh vaults seed the schemes at bootstrap; the guarded inserts below
 //     backfill vaults that already have an owner (`core_vault` row) — on a
 //     fresh, not-yet-bootstrapped file they insert nothing, so bootstrap
 //     and `importVaultExport` never collide with them.
-//   - `media_memory` / `media_memory_member` (issue #724 W7, "Memories v0"):
+//   - `media_memory` / `media_memory_member` (#724 W7, "Memories v0"):
 //     a second REBUILDABLE PROJECTION beside the phash cluster_id above, same
 //     mold exactly — recomputed wholesale by the standing sweep
 //     (`enrich/memories.ts`'s `rebuildMemories`, invoked from
@@ -193,7 +193,7 @@
 //     part of any id or equality check — it is an audit timestamp, stamped
 //     from the sweep's injected clock, and stability tests hold it fixed
 //     across runs precisely because it carries no grouping information.
-//   - `media_face_cluster` (issue #724 W5, "Faces"): the THIRD rebuildable
+//   - `media_face_cluster` (#724 W5, "Faces"): the THIRD rebuildable
 //     projection in this file, same mold as the two above — recomputed
 //     wholesale by `enrich/face-clusters.ts` on the standing sweep, derived,
 //     never authored, safe to drop and rebuild from `media_face_region` +

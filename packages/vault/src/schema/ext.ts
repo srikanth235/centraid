@@ -1,4 +1,4 @@
-// The ext band (issue #286 phase 2): app-declared extension tables that live
+// The ext band (#286): app-declared extension tables that live
 // INSIDE vault.db — physical `ext_<app>_<table>` — for shapes the canonical
 // ontology genuinely doesn't cover (Lane 2 of the two-lane rule; Lane 1 is
 // mapping onto the ontology). The gateway applies the DDL from the app's
@@ -50,7 +50,7 @@ export interface ExtTableSpec {
   /** Text columns to FTS5-index (opt-in search). */
   searchable?: string[];
   /**
-   * Text columns holding secret material (issue #298 item 9): declared here,
+   * Text columns holding secret material (#298): declared here,
    * enforced by the SAME chokepoints as canonical sealed columns — ciphertext
    * at rest via the seal sweep, placeholder in every default read, plaintext
    * only under the `reveal` verb, hash tokens in the journal, and never FTS

@@ -1,23 +1,10 @@
-/*
- * App identity and metadata edits over a file map (issue #141).
- *
- * The gateway's code store tracks files, not directories, and app code is
- * edited over HTTP — so the rename/description path can't write to a
- * directory. It produces a **file map** (`{path, content}[]`) the caller PUTs
- * into a git-store session and publishes. These pure builders back
- * `POST /centraid/_apps/<id>/meta`.
- */
-
 import { applyManifestName } from "./app-rewrites.js";
 import { AppScaffoldError } from "./scaffold-types.js";
 import type { ScaffoldFile } from "./scaffold-types.js";
 
-// A plain filesystem-safe slug. Automation apps are marked by the
-// manifest's `kind` field, not a dotted `auto.` id prefix (issue #98), so
-// no dot is allowed — a tree-traversing `..` is impossible by construction.
+// Dot-free slug; automation apps are manifest-`kind`-marked, not `auto.`-prefixed (#98).
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
-/** Validate an app id against centraid's reserved-prefix and shape rules. */
 export function validateAppId(id: string): void {
   if (id.startsWith("_") || !ID_RE.test(id)) {
     throw new AppScaffoldError(
@@ -27,17 +14,7 @@ export function validateAppId(id: string): void {
   }
 }
 
-/**
- * Apply a `{name?, description?}` patch over an app's current draft
- * files (issue #141), returning ONLY the files that changed (app.json
- * plus, on rename, any automations/<id>/automation.json#name).
- *
- * - Empty/whitespace `name` is rejected (name is mandatory).
- * - Empty/whitespace `description` clears the field.
- * - `existingNames` is the set of sibling apps (id + display name, e.g.
- *   from `listAppsWithMeta()`) for the case-insensitive duplicate-name
- *   guard; the app's own id is excluded by the caller or by id match.
- */
+/** Apply a `{name?, description?}` patch (#141); return ONLY changed files. */
 export function updateAppMetaFiles(
   current: ScaffoldFile[],
   id: string,
@@ -84,9 +61,7 @@ export function updateAppMetaFiles(
   const changed: ScaffoldFile[] = [
     { path: "app.json", content: JSON.stringify(parsed, null, 2) + "\n" },
   ];
-  // Propagate the rename to the Automations row title so it doesn't drift
-  // from app.json#name. The rename path leaves `generated.{by,at}` alone
-  // (clone-only).
+  // Renames propagate; `generated.{by,at}` is clone-only (#141).
   if (renameTo !== undefined) {
     for (const f of current) {
       if (!/^automations\/[^/]+\/automation\.json$/u.test(f.path)) continue;

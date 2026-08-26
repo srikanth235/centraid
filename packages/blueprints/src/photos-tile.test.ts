@@ -1,21 +1,11 @@
 // @vitest-environment jsdom
-// The Tile, the four overlay slots, and every state a tile can be in (v4
-// handoff §2.4, §4.3, §4.4, §14).
-//
-// Rendered to static markup rather than driven in jsdom, like photos-frame:
-// the tile is a pure view over its props (its ONE piece of internal state is
-// seeded from the record and overridable through `state`), so the markup IS
-// the behaviour, and a server render keeps the assertions free of act()
-// scheduling noise.
-//
-// The assertions deliberately key on `data-tile-state`, inline geometry, aria
-// labels and visible copy — never on a CSS-module class name, which is hashed
-// at build time and would make this a test of the bundler.
-//
-// jsdom, not node: the tile's imports reach the shared kit's custom-element
-// base through `format.ts`, and `class X extends HTMLElement` is evaluated at
-// module load. The render itself is still `renderToStaticMarkup` — no DOM is
-// driven here.
+// The Tile, its four overlay slots, and every state a tile can be in
+// (v4 handoff §2.4, §4.3, §4.4, §14). Rendered to static markup rather than
+// driven in jsdom (like photos-frame): the tile is a pure view over its props,
+// so the markup IS the behaviour. Assertions key on `data-tile-state`, inline
+// geometry, aria labels and visible copy — NEVER on a hashed CSS-module class
+// name. jsdom, not node: the shared kit's custom-element base is evaluated at
+// module load through `format.ts`; the render itself stays `renderToStaticMarkup`.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -45,7 +35,7 @@ interface Scope {
   id: string;
   label: string;
   canWrite: boolean;
-  /** The founding marker — `false` is "somewhere other than my own" (§H). */
+  /** `false` is "somewhere other than my own" (§H). */
   personal?: boolean;
   color?: string;
 }
@@ -155,18 +145,16 @@ function tile(over: Partial<TileProps> = {}): string {
   );
 }
 
-/** The tile's direct children, as tag+attribute heads — enough to count the
- *  overlay slots without depending on a hashed class name. */
+/** The tile's direct children as tag+attribute heads — counts overlay slots
+ *  without a hashed class name. */
 function slotCount(markup: string): number {
-  // One outer <div>; every direct child is a <button> or a <span>/<div>.
   const inner = markup.replace(/^<div[^>]*>/u, "").replace(/<\/div>$/u, "");
   return [...inner.matchAll(/<(?:button|span|div)\b/gu)].length;
 }
 
 describe("the Tile's four overlay slots (§4.4)", () => {
   it("carries NOTHING but the media and the selection slot on a plain tile", () => {
-    // No vault, no duration, no state to explain: a content-led surface with
-    // no chrome is exactly the media plus the one control.
+    // Content-led: the media plus the one control, no chrome.
     expect(slotCount(tile())).toBe(2);
   });
 
@@ -182,11 +170,10 @@ describe("the Tile's four overlay slots (§4.4)", () => {
   it("draws the kind slot from rung S up, and never on a still", () => {
     const clip = photo({ media_type: "video/mp4", duration_s: 8 });
     expect(tile({ asset: clip, rung: 1 })).toContain("0:08");
-    // XS is below the gate: the slot is not a badge every tile must carry.
+    // XS is below the gate: not every tile carries the slot.
     expect(tile({ asset: clip, rung: 0 })).not.toContain("0:08");
     expect(showsKindSlot(0)).toBe(false);
     expect(showsKindSlot(1)).toBe(true);
-    // A still has nothing to say here, so it says nothing.
     expect(kindLabel(photo())).toBeNull();
     expect(kindLabel(photo({ kind: "live" }))).toBe("live");
   });
@@ -200,7 +187,7 @@ describe("the Tile's four overlay slots (§4.4)", () => {
 
   it("lets the state slot carry Trash's purge countdown, media first", () => {
     expect(tile({ note: "purges in 12 days" })).toContain("purges in 12 days");
-    // "could not decode" matters more than a deadline, so the media wins.
+    // "could not decode" matters more than a deadline.
     const both = tile({ state: "failed", note: "purges in 12 days" });
     expect(both).toContain("could not decode");
     expect(both).not.toContain("purges in 12 days");
@@ -220,16 +207,14 @@ describe("the vault slot fires on the record, never on a name (§4.4, §H)", () 
 
   it("leaves the member's own vault the UNMARKED default", () => {
     expect(vaultMarker(scope("own", "Home", true))).toBeNull();
-    // A solo mount, and any scope the host did not answer for, is unmarked:
-    // the distinction does not apply to one library, and a badge on every
-    // tile would be noise.
+    // A solo mount and any scope the host did not answer for stay unmarked —
+    // a badge on every tile would be noise.
     expect(vaultMarker(scope("", "Library"))).toBeNull();
     expect(vaultMarker(undefined)).toBeNull();
   });
 
   it("is derived from `personal`, so renaming a vault cannot change it", () => {
-    // The owner renamed the shared place to something that reads personal,
-    // and renamed their own vault "Sharing". Neither move touches the marker.
+    // Neither rename touches the marker; it derives from `personal`.
     expect(vaultMarker(scope("shr", "My own things", false))).not.toBeNull();
     expect(vaultMarker(scope("own", "Sharing", true))).toBeNull();
   });
@@ -240,7 +225,6 @@ describe("the vault slot fires on the record, never on a name (§4.4, §H)", () 
     expect(showsVaultInitial(2)).toBe(true);
     expect(tile({ vaultMark: mark, rung: 1 })).not.toContain(">S<");
     expect(tile({ vaultMark: mark, rung: 3 })).toContain(">S<");
-    // And it says which vault out loud, for a member who cannot see a hue.
     expect(tile({ vaultMark: mark })).toContain("Cove · in Sharing");
   });
 
@@ -256,21 +240,17 @@ describe("a tile holds its geometry from record to bytes to failure (§14)", () 
   const box = 'style="width:264px;height:176px"';
 
   it("paints the skeleton at the EXACT geometry, before any bytes", () => {
-    // `pending` is the state a row with a paintable source starts in, and the
-    // box it occupies is already the box the photograph will occupy — which is
-    // what "nothing reflows" means.
+    // The skeleton already occupies the box the photograph will — no reflow.
     expect(initialMediaState(photo())).toBe("pending");
     const pending = tile();
     expect(pending).toContain(box);
     expect(pending).toContain('data-tile-state="pending"');
-    // A skeleton explains nothing, because there is nothing to explain yet.
     expect(pending).not.toContain("on the gateway");
     expect(pending).not.toContain("could not decode");
   });
 
   it("says `on the gateway` from the FIRST frame when nothing is local", () => {
-    // Not after a failed fetch, and never as a grey square with no words: a
-    // grey mosaic with no explanation is a bug.
+    // From the FIRST frame — never a grey square with no words.
     expect(initialMediaState(offloaded())).toBe("gateway");
     const away = tile({ asset: offloaded() });
     expect(away).toContain(box);
@@ -283,7 +263,6 @@ describe("a tile holds its geometry from record to bytes to failure (§14)", () 
     expect(failed).toContain(box);
     expect(failed).toContain('data-tile-state="failed"');
     expect(failed).toContain("could not decode");
-    // Same box as the pending tile, to the pixel.
     expect(failed.match(/style="[^"]*"/u)?.[0]).toBe(
       tile().match(/style="[^"]*"/u)?.[0]
     );
@@ -333,8 +312,7 @@ describe("the timeline the tiles sit in (§4.3, §4.5, §4.6)", () => {
   it("carries a scrub rail labelled by month, reachable by pointer", () => {
     const markup = timeline();
     expect(markup).toContain('aria-label="Scrub by month"');
-    // Every tick is a real button with a real name — nothing here is
-    // drag-only, on any surface.
+    // Every tick is a real button with a real name — never drag-only.
     expect(markup).toMatch(/aria-label="\w+ 2026"/u);
   });
 
@@ -350,8 +328,8 @@ describe("grouping and labels (§4.3)", () => {
   let seq = 0;
   const aug = (day: string, over: Partial<Asset> = {}): Asset =>
     photo({
-      // A counter, not a draw: an id only has to be unique inside one case,
-      // and an unseeded random one would make a failure unreproducible.
+      // Counter id: unique inside one case; unseeded randomness would make
+      // a failure unreproducible.
       asset_id: `${day}-${(seq += 1)}`,
       taken_at: `2026-08-${day}T12:00:00`,
       ...over,
@@ -371,8 +349,7 @@ describe("grouping and labels (§4.3)", () => {
     expect(
       dayMeta([aug("14", { place: lyme }), aug("14", { place: lyme })])
     ).toBe("2 · Lyme Regis");
-    // Two places is no place: guessing one would be a lie about where the
-    // member was.
+    // Two places is no place: guessing one would be a lie.
     expect(
       dayMeta([
         aug("14", { place: lyme }),

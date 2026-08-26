@@ -1,29 +1,10 @@
-// Pins the people roster's defects from issue #711, plus the re-homed
-// consent gate from issue #712 C2. People moved off the band and behind
-// Collections/the Library shelf list later in #712 — see `PhotosScreen`'s
-// stub below — but the claims this file pins about the grid itself did not
-// change:
-//
-//  - a party with no display_name still shows, as "Unnamed" — never dropped
-//    from the grid (README:217, proto:3760)
-//  - tapping a person card opens THAT PERSON'S PHOTOGRAPHS
-//    (`PhotoStateView`, mode "person"), never `FaceReview` — the previous
-//    `PhotosCollectionsView` behaviour this screen replaced always opened
-//    Face review regardless of which person card was tapped, which is
-//    exactly the "labelled destination opens something else" bug this issue
-//    is about
-//  - the face-detection consent gate now lives in THIS view's empty state
-//    (moved off PhotosLibrary's footer row + modal), and only while the
-//    question is still open — an empty-and-answered roster falls back to the
-//    plain "no people yet" copy rather than re-asking
-//
-// Also checks the unmatched-faces note substitutes the LIVE count for the
-// mock's 54, and keeps the exact proto:4433 sentence around it.
-//
-// `kit/components/ConsentGate` is stubbed rather than rendered for real: its
-// own rendering contract (facts, egress disclosure, one filled element) is
-// pinned by `EnrichmentConsent.test.tsx`, so this file only needs to prove
-// PhotosPeopleView wires the right copy/handlers/gating into it.
+// Pins #711 people-roster defects plus #712's re-homed consent gate: a party
+// without display_name still shows as "Unnamed" (README:217, proto:3760); card
+// taps open THAT PERSON'S photographs (`PhotoStateView`, mode "person"), never
+// `FaceReview`; the consent gate lives in THIS view's empty state only while
+// unanswered; the unmatched-faces note substitutes the LIVE count for the
+// mock's 54 (proto:4433 sentence). `kit/components/ConsentGate` is stubbed —
+// its own contract is pinned by EnrichmentConsent.test.tsx.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -52,8 +33,7 @@ const mocks = vi.hoisted(() => ({
     textFaint: "#mock-text-faint",
   },
   postStatus: vi.fn<(message: string) => void>(),
-  // `enrich.policy`'s photos row — `device`, which this build must refuse
-  // because it has no device-side faces producer.
+  // `enrich.policy`'s photos row: tier `device`, refused by this build.
   policies: [{ domain: "photos", tier: "device" }] as Array<{
     domain: string;
     tier: string;
@@ -63,8 +43,8 @@ const mocks = vi.hoisted(() => ({
       async () => ({ status: "executed" })
     ),
   },
-  // party "p2" has no display_name/name at all — the unnamed case. Both p1
-  // and p2 have at least one confirmed face so both must render.
+  // p2 has no display_name — the unnamed case; p1 and p2 both have ≥1
+  // confirmed face so both must render.
   faces: [
     {
       region_id: "f1",
@@ -93,9 +73,7 @@ const mocks = vi.hoisted(() => ({
       confirmed_by_party_id: undefined,
       review_state: "proposed",
     },
-    // Answered without being confirmed (issue #712): the member reviewed this
-    // face and deliberately left it unnamed. It is nobody's card AND nobody's
-    // backlog — before `review_state` the note counted it as still waiting.
+    // Answered without confirmation (#712): nobody's card, nobody's backlog.
     {
       region_id: "f5",
       asset_id: "a5",
@@ -228,9 +206,8 @@ vi.mock(
   () =>
     ({
       surfaceWriteFailure: vi.fn<(error: unknown, title?: string) => void>(),
-      // The mapping from a write result to a boolean is `write-outcome`'s own
-      // contract, pinned elsewhere; this view only needs "executed" to read
-      // as success.
+      // result→boolean mapping is pinned by `write-outcome` itself; only
+      // "executed" must read as success here.
       surfaceWriteOutcome: (result: { status: string }) =>
         result.status === "executed",
     }) as unknown as Partial<WriteOutcomeModule>
@@ -244,12 +221,9 @@ vi.mock(
     }) as unknown as Partial<StatusLineModule>
 );
 
-// The shell (issue #712): PhotosPeopleView now draws the band via
-// `PhotosScreen`, which pulls in react-navigation, the band-owner hook and
-// the whole band/selection-bar tree — none of which this file's claims are
-// about. Stubbed to a passthrough of its children, same reasoning as the
-// `ConsentGate` stub below: this file proves PhotosPeopleView's OWN grid/card/
-// gate behaviour, and `PhotosScreen.test.tsx` already owns the shell's.
+// PhotosScreen pulls in react-navigation, the band-owner hook and the band/
+// selection-bar tree — none of this file's claims. Stubbed to a children
+// passthrough; `PhotosScreen.test.tsx` owns the shell's behaviour.
 vi.mock(import("./PhotosScreen"), async () => {
   const ReactModule = await import("react");
   return {
@@ -258,9 +232,8 @@ vi.mock(import("./PhotosScreen"), async () => {
   } as never;
 });
 
-// A stub, not the real renderer (see the file header): exposes just enough
-// of the gate's surface — the two answers and a domain marker — for this
-// file to prove PhotosPeopleView wires the right handlers and gating logic.
+// A stub, not the real renderer (see header): the two answers + a domain
+// marker, enough to prove wiring of handlers and gating.
 vi.mock(import("../../kit/components/ConsentGate"), async () => {
   const ReactModule = await import("react");
   return {

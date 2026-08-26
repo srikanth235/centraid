@@ -1,7 +1,6 @@
 /*
  * automationContextPreamble: standing-instruction assembly for automation
- * turns. Split from interactive-automation-turn.test.ts (repo-hygiene
- * 500-line cap) — this file owns the preamble module's tests.
+ * turns. This file owns the preamble module's tests.
  */
 
 import { describe, expect, it } from "vitest";
@@ -69,7 +68,7 @@ describe(automationContextPreamble, () => {
 
   it("quotes prior-run output as delimited untrusted data, not as system prompt", () => {
     // A webhook/Gmail-triggered run's summary is attacker-influenced text
-    // (issue #541 review): it must land inside a labelled fence, with any
+    // (#541 review): it must land inside a labelled fence, with any
     // fence-forging sequence of its own defused.
     const text = automationContextPreamble(
       row("/tmp/automation"),

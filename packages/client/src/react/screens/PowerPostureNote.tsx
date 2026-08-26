@@ -5,7 +5,7 @@ import type { PowerContextState } from "./resource-summary.js";
 
 import styles from "./GatewayScreen.module.css";
 
-// Power-context posture note on the Resource card (issue #528 Phase D). Battery
+// Power-context posture note on the Resource card (#528). Battery
 // and thermal chrome render ONLY when the gateway host actually has a battery;
 // a mains/server host shows a server-relevant fact (CPU steal) or nothing. The
 // copy is always attributed to the gateway's HOST, never the browser/phone

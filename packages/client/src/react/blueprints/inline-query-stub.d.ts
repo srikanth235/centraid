@@ -1,5 +1,5 @@
 // Type stub for blueprint `queries/<name>` modules under the client tsconfig
-// (issue #505). Query sources are authored against the blueprints ambients
+// (#505). Query sources are authored against the blueprints ambients
 // (HandlerArgs, ctx.vault), so a `paths` mapping in packages/client/tsconfig.json
 // redirects `@centraid/blueprints/apps/*/queries/*` here — tsc sees the run
 // contract, while vitest/Vite resolve the real source at run time (they don't

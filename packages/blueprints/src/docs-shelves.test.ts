@@ -357,8 +357,8 @@ describe("docs view copy", () => {
 
     it("shows AT MOST ONE thing, in the spec's order", () => {
       // Every rung below is true at once. The ladder must pick exactly one,
-      // and it must pick the highest — this is the case that used to put
-      // three marks on one row.
+      // and it must pick the highest — three marks on one row is exactly the
+      // failure this case guards.
       const all = {
         cannotRender: true,
         offline: true,

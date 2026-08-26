@@ -1,18 +1,7 @@
 /*
- * Experimental feature gate — the v0 early-feedback door.
- *
- * Automations and connectors ship in the release binary but are OFF by
- * default: a gateway that has not opted in does not advertise their
- * capabilities, does not mount their routes, and does not start their
- * background work. Turning a feature off later leaves its durable data
- * (automation definitions, connector credentials, run history) intact —
- * the gate hides surface, it never deletes state.
- *
- * Resolution mirrors Resource mode (#521/#528): operator env wins, then the
- * durable gateway prefs the shell writes, then the host's build option, else
- * off. `CENTRAID_EXPERIMENTAL`, when SET, is authoritative for every feature
- * (listed → on, unlisted → off) — the same "env wins over both" contract as
- * `CENTRAID_RESOURCE_MODE`. Changes apply on the next serve boot.
+ * Experimental gate — OFF unless opted in; hides surface, never deletes
+ * state. Resolution mirrors Resource mode (#521/#528): env > durable prefs >
+ * host option > off; a SET `CENTRAID_EXPERIMENTAL` is authoritative.
  */
 
 export type ExperimentalFeature = "automations" | "connectors";
@@ -22,7 +11,7 @@ export const EXPERIMENTAL_FEATURES: readonly ExperimentalFeature[] = [
   "connectors",
 ] as const;
 
-/** Device-prefs keys — runtime wins (docs/config-ownership.md). */
+/** Pref keys — runtime wins (docs/config-ownership.md). */
 export const EXPERIMENTAL_FEATURE_PREF_KEYS: Record<
   ExperimentalFeature,
   string
@@ -33,15 +22,11 @@ export const EXPERIMENTAL_FEATURE_PREF_KEYS: Record<
 
 export const EXPERIMENTAL_ENV_VAR = "CENTRAID_EXPERIMENTAL";
 
-/** The resolved per-feature gate the rest of boot reads. */
 export type ExperimentalFeatureSet = Record<ExperimentalFeature, boolean>;
 
 export interface ExperimentalResolution {
   features: ExperimentalFeatureSet;
-  /**
-   * Env tokens that named no known feature — surfaced so boot can log a
-   * warning instead of silently ignoring a typo'd `CENTRAID_EXPERIMENTAL`.
-   */
+  /** Surfaced so boot can log typos. */
   unknownEnvTokens: string[];
 }
 
@@ -49,11 +34,6 @@ function isExperimentalFeature(value: string): value is ExperimentalFeature {
   return (EXPERIMENTAL_FEATURES as readonly string[]).includes(value);
 }
 
-/**
- * Resolve the effective experimental gate. Per feature: env (when the var is
- * set at all) > durable prefs (boolean, garbage dropped) > host option >
- * off. Off is the v0 default — a fresh gateway exposes neither surface.
- */
 export function resolveExperimentalFeatures(input: {
   env?: NodeJS.ProcessEnv;
   prefs?: Record<string, unknown>;

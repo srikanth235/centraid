@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
 /*
  * End-to-end smoke test for the centraid CLI bin, invoked as a subprocess
- * (using the built dist/cli/centraid-cli.js). The `sql` subcommands died
- * with the per-app data.sqlite (issue #286 phase 2); what remains is the
- * builder-session helper surface (`preview snapshot`) and its exit codes.
+ * (using the built dist/cli/centraid-cli.js). The surface is the
+ * builder-session helper (`preview snapshot`) and its exit codes; there are
+ * no `sql` subcommands (#286).
  *
  * The test depends on a prior `bun run build` for this package; turbo
  * configures `test` to run after `build` so the dist file exists.

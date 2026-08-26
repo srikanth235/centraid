@@ -484,7 +484,7 @@ ${touchUpdatedAt("people_profile", "profile_id")}
         )
         .run()
     ).toThrow(/CHECK/u);
-    // people_profile.cadence_days floors at 0, not 1 (issue #821): zero is the
+    // people_profile.cadence_days floors at 0, not 1 (#821): zero is the
     // storable "never reach out", negative days are still refused.
     const now = new Date().toISOString();
     db.vault

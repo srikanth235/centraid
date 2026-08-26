@@ -1,14 +1,8 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-/*
- * The experimental gate over a REAL boot (v0 early feedback). The unit suite
- * beside this one pins the resolver's precedence; this one pins what a client
- * actually observes: with the gate off the automations and connectors
- * surfaces are absent from the C1 handshake AND unroutable, and with the gate
- * on the same URLs answer. A durable `gateway.experimental.*` pref written
- * through the prefs API boots the surface enabled on the next serve, which is
- * how the shell's toggle works — the gate is read once per boot.
- */
+// Gate over a REAL boot: gate off → surfaces absent from the handshake AND
+// unroutable; a durable pref boots the surface on the next serve (read once
+// per boot).
 import path from "node:path";
 
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
@@ -29,13 +23,8 @@ import type {
 import { serve } from "./serve.ts";
 import type { GatewayServeHandle, ServeOptions } from "./serve.ts";
 
-/**
- * The URLs each feature's gate owns — reachable only while that feature is on.
- *
- * `Record<ExperimentalFeature, …>` is exhaustive by type: a feature added to
- * the registry does not compile here until it says what it mounts, so a new
- * gate cannot ship advertising a capability whose surface nothing checks.
- */
+/** URLs each feature's gate owns. Exhaustive by type: a new feature fails to
+ * compile until it declares what it mounts. */
 const GATED_SURFACES: Record<ExperimentalFeature, readonly string[]> = {
   automations: [
     "/centraid/_automations",
@@ -44,8 +33,7 @@ const GATED_SURFACES: Record<ExperimentalFeature, readonly string[]> = {
   connectors: [ROUTES.vaultConnections, ROUTES.vaultOAuthCallback],
 };
 
-/** Exactly one feature on. Full (not `Partial`) so a third feature breaks the
- *  build here rather than being quietly left off. */
+/** Full (not `Partial`) so a third feature breaks the build here. */
 function onlyGateOpen(open: ExperimentalFeature): ExperimentalFeatureSet {
   return {
     automations: open === "automations",
@@ -88,15 +76,13 @@ async function status(pathname: string): Promise<number> {
   return res.status;
 }
 
-/** What a client can see about the gates from one boot. */
 interface GateObservation {
   gateOpen: ExperimentalFeature;
   advertises: Record<string, unknown>;
   mounts: Record<string, boolean>;
 }
 
-/** Boot with exactly one gate open, and record both halves of what that gate
- *  is supposed to control: the handshake, and which surfaces are owned. */
+/** Boot with exactly one gate open; record handshake + mounted surfaces. */
 async function observeGate(
   open: ExperimentalFeature
 ): Promise<GateObservation> {
@@ -113,9 +99,7 @@ async function observeGate(
       EXPERIMENTAL_FEATURES.map((feature) => [feature, caps[feature]] as const)
     ),
     gateOpen: open,
-    // 404 is the mounted-ness signal: an unmounted family is owned by nothing,
-    // while a mounted route answers on its own terms — 200, or a refusal it
-    // authored itself.
+    // 404 is the mounted-ness signal; a mounted route answers on its own terms.
     mounts: Object.fromEntries(
       probes.map((surface, index) => [surface, codes[index] !== 404] as const)
     ),
@@ -151,18 +135,11 @@ describe("experimental-gating scenarios", () => {
   });
 
   /*
-   * The law the scenarios below each prove one half of: the handshake and the
-   * router must agree, per feature, in both directions. A capability
-   * advertised over a surface that was deleted is the shape of the #765
-   * regression — the client mounts a place whose routes 404 — and a surface
-   * mounted under no capability is a feature shipping in the dark.
-   *
-   * Enumerated over the registry rather than the two names we happen to have,
-   * so a third experiment inherits the law instead of needing a new test.
+   * Law: the handshake and the router must agree, per feature, in both
+   * directions (#765 regression shape). Enumerated over the registry so a
+   * third experiment inherits the law instead of needing a new test.
    */
   test("[law:experimental-gate-parity] a feature is advertised exactly when its own surface is mounted", async () => {
-    // One boot per feature, keyed by a full `Record<ExperimentalFeature, …>`
-    // so a third experiment does not compile until it is observed here too.
     const observed: Record<ExperimentalFeature, GateObservation> = {
       automations: await observeGate("automations"),
       connectors: await observeGate("connectors"),
@@ -196,7 +173,7 @@ describe("experimental-gating scenarios", () => {
     await expect(
       status("/centraid/_insights/summary?windowDays=30")
     ).resolves.toBe(404);
-    // The apps family shares the same registration and must stay reachable.
+    // _apps shares the registration and must stay reachable.
     await expect(status("/centraid/_apps/_sessions")).resolves.not.toBe(404);
   });
 
@@ -217,8 +194,7 @@ describe("experimental-gating scenarios", () => {
   test("the connections route and OAuth callback answer once opted in", async () => {
     await boot({ experimental: { connectors: true } });
     await expect(status(ROUTES.vaultConnections)).resolves.toBe(200);
-    // No `state` capability on the query: the route owns the request and
-    // refuses it, which is what proves it is mounted at all.
+    // No `state` on the query: the route's own refusal proves it is mounted.
     await expect(status(ROUTES.vaultOAuthCallback)).resolves.not.toBe(404);
   });
 
@@ -230,8 +206,7 @@ describe("experimental-gating scenarios", () => {
       body: "{}",
     });
     expect(res.status).toBe(404);
-    // The ingress handler's own 404 carries this body; the host chain's does
-    // not. Off means the trigger route never sees the request.
+    // The ingress handler's 404 carries this body; the host chain's does not.
     await expect(res.json()).resolves.not.toMatchObject({
       error: "unknown webhook",
     });

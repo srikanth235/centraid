@@ -1,21 +1,7 @@
-// Runtime schema gate for ingest publisher payloads (issue #374 Tier 3).
-// Every DECLARED command's input runs through gateway/json-schema.ts's
-// validateJson before it reaches SQLite (execution.ts ~line 316) — the
-// staging spine's publishers (publishers.ts, enrich-publishers.ts) were the
-// one write path that skipped it: `payload as unknown as X` is a
-// compile-time cast only. Today's parsers (csv.ts et al.) happen to produce
-// well-typed values, so nothing exploits the gap yet — but a future
-// connector that stages a decimal-STRING amount would sail past TypeScript
-// straight into a STRICT column with no runtime backstop. assertPayload
-// closes that by running the SAME validator every command uses, so no
-// publisher is exempt by omission.
-//
-// Schemas here are intentionally permissive: they assert the primitive
-// shapes the publishers actually read off the payload (notably: numeric
-// fields like amounts/confidences must be `number`, not a numeric string),
-// and required-ness matches the payload interfaces. `additionalProperties`
-// is left unset (permissive) everywhere — no publisher rejects a payload for
-// carrying an extra field.
+// Runtime schema gate for ingest publishers (#374 Tier 3): they were the write
+// path skipping validateJson — a cast is compile-time only, so a decimal-STRING
+// amount would land in a STRICT column with no backstop; assertPayload runs the
+// SAME validator every command uses. Schemas stay permissive, primitive shapes.
 
 import { validateJson } from "../gateway/json-schema.js";
 
@@ -103,9 +89,7 @@ const SCHEMAS: Record<string, JsonSchema> = {
     properties: {
       externalId: { type: "string", minLength: 1 },
       postedAt: { type: "string", minLength: 1 },
-      // The seam this whole gate exists for: a connector that stages
-      // amountMinor as a decimal string ("19.99") must fail HERE, not land
-      // in a STRICT `amount_minor INTEGER` column as SQLite's last resort.
+      // The seam: a decimal string fails HERE, not in a STRICT column.
       amountMinor: { type: "number" },
       currency: { type: "string", minLength: 1 },
       direction: { type: "string", enum: ["debit", "credit"] },
@@ -128,10 +112,8 @@ const SCHEMAS: Record<string, JsonSchema> = {
       path: { type: "string", minLength: 1 },
     },
   },
-  // Photo-library import (issue #721). Only the fields that can never be
-  // null carry a `type`: `capturedAt`, the coordinates, `caption`,
-  // `captureGroupId` and `album` are all legitimately NULL — an archive that
-  // says nothing about a photo must publish it, not fail it.
+  // Photo import (#721): only never-null fields carry `type`; an archive
+  // silent about a photo must publish it, not fail it.
   MediaAssetPayload: {
     type: "object",
     required: [
@@ -235,10 +217,9 @@ const SCHEMAS: Record<string, JsonSchema> = {
 };
 
 /**
- * Validate `payload` against the named schema and return it typed as `T`,
- * else throw with every field-level violation — the same failure shape
- * `applyBatchTx` already catches per-row (issue #290): the row lands in
- * `failed`, the rest of the batch still publishes.
+ * Validate `payload` against the named schema, returned as `T`; else throw
+ * with every violation — the shape `applyBatchTx` catches per-row (#290):
+ * row lands in `failed`, batch still publishes.
  */
 export function assertPayload<T>(
   schemaName: keyof typeof SCHEMAS,

@@ -8,30 +8,16 @@ import SectionBlock from "../ui/SectionBlock.js";
 import controlsCss from "../styles/controls.module.css";
 import styles from "./LogsScreen.module.css";
 
-// System → Logs: the gateway's realtime diagnostics surface. Streams
-// the gateway's log lines (SSE, replay-then-live) so a user whose
-// automation/sync/outbox is misbehaving can SEE what the gateway is doing
-// without hunting for a terminal. Prop-driven like the other settings
-// screens: the transport is injected (`streamLogs` → gateway-client),
-// this file owns the view + stream lifecycle (reconnect, follow, filter).
-// Mounted from System's Logs drill-in (GatewayScreen.tsx).
-//
-// THE STREAM STAYS A STREAM (binding layer v11). The handoff draws Logs as
-// five rows, which is what a static mock of a log looks like; two thousand
-// live lines are not rows, and folding them into the row block would cost the
-// windowing, the follow-the-tail behaviour and the monospace column that makes
-// a timestamped stream scannable at all. What v11 fixes here is the FURNITURE
-// around it: the status dot, the line count and the export verb were a bespoke
-// toolbar, and are now the section head; the level filter was three hand-rolled
-// chips and is now the kit's chip group. The search box, Copy and Clear stay a
-// control row — they act on the pane below them, not on the section.
+// System → Logs: gateway realtime diagnostics (SSE, replay-then-live).
+// Prop-driven: transport injected (`streamLogs`), this file owns view +
+// stream lifecycle. The stream stays a stream (binding layer v11) — do not
+// fold two thousand live lines into the row block.
 
 export type LogLevelDTO = "info" | "warn" | "error";
 
 export interface LogEntryDTO {
-  /** Monotonic gateway sequence — the resume/dedupe cursor. */
+  /** Monotonic gateway sequence — resume/dedupe cursor. */
   seq: number;
-  /** Epoch ms the line was emitted. */
   ts: number;
   level: LogLevelDTO;
   message: string;
@@ -39,9 +25,8 @@ export interface LogEntryDTO {
 
 export interface LogsBridgeProps {
   /**
-   * Opens the gateway log stream: replays buffered lines past `after`,
-   * then live-streams until `signal` aborts. Resolves/rejects on stream
-   * close — the screen schedules the reconnect.
+   * Replay past `after`, then live-stream until `signal` aborts.
+   * Resolves/rejects on stream close — the screen schedules the reconnect.
    */
   streamLogs: (
     onEntry: (entry: LogEntryDTO) => void,
@@ -49,16 +34,12 @@ export interface LogsBridgeProps {
     after?: number
   ) => Promise<void>;
   /**
-   * A cross-link jump into a focused search — from a failing component in
-   * the Components tab, for instance. `nonce` is bumped on every jump
-   * request (even a repeat of the same text) so the effect below reapplies;
-   * the stream itself keeps running, only the search box changes.
+   * Cross-link jump. `nonce` is bumped on every jump (even a repeat of the
+   * same text) so the effect reapplies; the stream keeps running.
    */
   focusQuery?: { text: string; nonce: number };
   /**
-   * Save `/centraid/_gateway/diagnostics` through a native save dialog
-   * (issue #351). Omitted → the toolbar button doesn't render (keeps this
-   * screen usable standalone, e.g. in a future non-desktop host).
+   * Save `/centraid/_gateway/diagnostics` (#351). Omitted → no toolbar button.
    */
   onExportDiagnostics?: () => Promise<
     | { ok: true; path: string }
@@ -68,21 +49,12 @@ export interface LogsBridgeProps {
 
 type StreamStatus = "connecting" | "live" | "reconnecting";
 
-/** Client-side cap — matches the gateway ring so memory stays bounded. */
+/** Client-side cap — matches the gateway ring. */
 const MAX_ENTRIES = 2000;
 
-/**
- * How many matching lines are in the DOM at once (issue #659).
- *
- * The panel holds up to {@link MAX_ENTRIES} lines and painted every one of
- * them, so a busy gateway put two thousand flex rows on screen and re-laid all
- * of them out on every arriving line — while the viewport shows perhaps forty.
- * Only the newest window is mounted; the rest are one click away rather than
- * gone, because a filtered log you cannot scroll back through is not a log.
- */
+/** Matching lines in the DOM at once (#659). Newest window; the rest are one click away. */
 const LOG_WINDOW = 300;
 const RECONNECT_MS = 2000;
-/** "At the bottom" slack for the follow toggle, in px. */
 const FOLLOW_SLACK = 48;
 
 type LevelFilter = "all" | "warn" | "error";
@@ -106,7 +78,6 @@ function timeLabel(ts: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-/** The head's own word for the stream. Lower case, like every meta in the kit. */
 const STATUS_WORD: Record<StreamStatus, string> = {
   connecting: "connecting…",
   live: "live",
@@ -121,10 +92,8 @@ export default function LogsScreen({
   const [entries, setEntries] = useState<LogEntryDTO[]>([]);
   const [status, setStatus] = useState<StreamStatus>("connecting");
   const [filter, setFilter] = useState<LevelFilter>("all");
-  // The search box is a controlled field whose baseline is the incoming jump
-  // request: the typed value only wins while it belongs to the CURRENT nonce.
-  // A fresh jump (new nonce) therefore re-applies its text even when the text
-  // is unchanged, without an effect that would paint the stale value first.
+  // Search box baseline is the incoming jump: typed value wins only for the
+  // CURRENT nonce. A fresh jump re-applies even when the text is unchanged.
   const [typed, setTyped] = useState<{
     nonce: number | undefined;
     text: string;
@@ -144,17 +113,13 @@ export default function LogsScreen({
     | { kind: "error"; message: string }
   >({ kind: "idle" });
 
-  // The stream's resume cursor + the follow flag live in refs so the
-  // long-lived stream effect never restarts on render-state changes.
+  // Resume cursor + follow flag in refs so the stream effect never restarts on render-state.
   const lastSeqRef = useRef(0);
   const followRef = useRef(true);
   useEffect(() => {
     followRef.current = follow;
   }, [follow]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  // Guards the export flow's deferred `setExportState({kind: 'idle'})`
-  // against firing after unmount (e.g. the user leaves the Logs tab right
-  // after a successful export).
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -186,7 +151,6 @@ export default function LogsScreen({
       setStatus((s) => (s === "connecting" ? s : "reconnecting"));
       void streamLogs(
         (entry) => {
-          // First delivered line = the stream is live.
           setStatus("live");
           onEntry(entry);
         },
@@ -219,9 +183,7 @@ export default function LogsScreen({
     );
   }, [entries, filter, query]);
 
-  // Windowing (issue #659). Reading is anchored at the newest line, so the
-  // window is the TAIL of the matches; asking for more grows it a page at a
-  // time and a filter change starts over.
+  // Windowing (#659): reading is the TAIL of the matches; a filter change starts over.
   const [windowSize, setWindowSize] = useState(LOG_WINDOW);
   const [seenWindowReset, setSeenWindowReset] = useState("");
   const windowReset = `${filter} ${query}`;
@@ -235,7 +197,6 @@ export default function LogsScreen({
     [visible, windowSize, hiddenCount]
   );
 
-  // Follow: pin the viewport to the newest line unless the user scrolled up.
   useEffect(() => {
     const el = scrollRef.current;
     if (el && followRef.current) el.scrollTop = el.scrollHeight;
@@ -304,10 +265,7 @@ export default function LogsScreen({
 
   return (
     <div className={styles.wrap}>
-      {/* Whether it is connected, how much it has, and how much of it is bad —
-          the three facts the old status dot + count line carried, said in the
-          head's own meta. Export is a verb about this whole stretch, so it is
-          the head's quiet action rather than a fourth chip in a toolbar. */}
+      {/* Status, count, and errors in the section head. Export is the head's quiet action. */}
       <SectionBlock
         label="Logs"
         meta={`${STATUS_WORD[status]} · ${entries.length.toLocaleString()} line${
@@ -340,8 +298,7 @@ export default function LogsScreen({
         }))}
         onPick={(id) => setFilter(id as LevelFilter)}
       />
-      {/* These act on the PANE, not on the section — a query that narrows what
-          is drawn below it, and two verbs about what is drawn below it. */}
+      {/* Search/copy/clear act on the pane, not on the section. */}
       <div className={styles.toolbar}>
         <input
           type="search"
@@ -417,11 +374,7 @@ export default function LogsScreen({
         ) : null}
       </div>
 
-      {/* The second sentence describes a CONTROL, so it is drawn only where
-          that control is. A viewer has no export verb (GatewayScreen withholds
-          `onExportDiagnostics` for a read-only seat), and a note explaining how
-          to use a button that is not on the page is worse than no note: it
-          reads as a control the reader has failed to find. */}
+      {/* Second sentence describes a CONTROL — draw it only where that control is. */}
       <NoteBlock>
         The stream reads oldest first and takes a focus query, so a failing
         component can hand this page its own name.

@@ -6,50 +6,25 @@ import AppMarkGlyph from "../../ui/AppMark.js";
 import AppBand from "../AppBand.js";
 import { useInlineFrameChannel, useInlineFrameState } from "../inlineFrame.js";
 
-// Frame integration for an inline app (Photos v4, §3).
-//
-// Photos is a ROUTE INSIDE THE FRAME, not a standalone app: the app bar, the
-// status line and the compact band are the frame's, and the app supplies what
-// they carry. This module turns one mounted app's contributions into the slots
-// `InlineAppRoute` hands `ShellFrame` — and it is where the two conditions on a
-// band claim are enforced, because they are the FRAME's conditions:
-//
-//   1. first-party only, until submission can enforce the capsule. A vendor
-//      app that claimed the band could hide the way home.
-//   2. compact form only. Desktop keeps the leading stem instead.
-//
-// A claim that fails either test is simply not honoured — the app is never
-// told, because an app that could detect the refusal would start drawing its
-// own band again, which is the duplication this whole channel retires.
-//
-// The v9 handoff keeps the claimed band stable on compact surfaces. There is
-// no second frame action that can replace it with a different navigation model
-// while the member is inside the app.
+// Inline-app frame slots. A band claim is honoured only when first-party AND
+// compact — a refused app is never told, so it cannot draw its own band.
 
-/** The app mark leading the bar lockup. The brief's chip is 26px. */
 const MARK_SIZE = 26;
 
 export interface InlineAppFrameOpts {
   app: AppMetaResolvedType;
-  /** Re-keys the channel, so a re-mount starts from an empty bar. */
   mountKey: string;
-  /** Ships with the frame (a bundled blueprint), so it may claim the band. */
   firstParty: boolean;
-  /** The compact form factor. Layout only — never a trust boundary. */
   compact: boolean;
-  /** The capsule's one tap. */
   onHome: () => void;
 }
 
 export interface InlineAppFrameSlots {
-  /** Handed to the app's `Root`. */
   frame: InlineFrame;
   mark: ReactNode;
   title: string;
   count: ReactNode;
-  /** The app's own bar actions, or nothing. */
   actions: ReactNode;
-  /** The claimed band, or `undefined` to leave the frame's band standing. */
   band: ReactNode;
 }
 
@@ -73,9 +48,6 @@ export function useInlineAppFrame({
   const channel = useInlineFrameChannel(mountKey);
   const contributed = useInlineFrameState(channel);
 
-  // A first-party compact app's claimed band is the handoff navigation. There
-  // is no hand-back toggle on this surface, so the route cannot accidentally
-  // replace its shelves with the host launcher's different band.
   const claimable = Boolean(contributed.band) && firstParty && compact;
   const claim = claimable ? contributed.band : null;
 
@@ -87,9 +59,6 @@ export function useInlineAppFrame({
     count: contributed.appBar?.count ?? undefined,
     frame: channel.frame,
     mark: <AppMark app={app} />,
-    // The installed name until the app says otherwise: a bar that was blank
-    // until the app's first paint would flicker the one thing that says where
-    // you are.
     title: contributed.appBar?.title ?? app.name,
   };
 }

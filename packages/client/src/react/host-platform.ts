@@ -2,7 +2,7 @@
  * Which shell is hosting this React bundle (docs/platform-gating.md).
  *
  * `boot.tsx` is shared verbatim by the Electron renderer and the web PWA, and
- * first run diverges between them (issue #603): the desktop can start a fresh
+ * first run diverges between them (#603): the desktop can start a fresh
  * gateway on this machine, the browser can only join one that already exists.
  * The decision has to be synchronous — it drives the FIRST paint, before any
  * bridge round trip — so this reads a marker the two hosts differ on rather
@@ -27,8 +27,7 @@ export function isWebHost(): boolean {
  * only on request), so the seat resolves from the same first-paint host
  * marker `isWebHost()` reads above — `window.CentraidIroh`, installed by
  * the web host and never by the Electron preload. Mobile's `origin` seat
- * lives in its own bundle (`apps/mobile/src/lib/seat.ts`) since that runtime
- * never shares this module.
+ * lives in its own bundle, since that runtime never shares this module.
  *
  * Presentation only, same caveat as `isWebHost()` — never branch custody
  * logic, auth, or security on the result. The one exception this repo

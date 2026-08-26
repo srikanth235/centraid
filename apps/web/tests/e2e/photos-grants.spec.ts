@@ -6,30 +6,14 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// PHOTOS ON THE GRANT PLANE, in a real browser (#825, wave 6).
-//
-// The wave-4 spec proved the KIT. This one proves the APP: the shipped album
-// bar (`apps/photos/components/AlbumBar.tsx`) is mounted whole, over the
-// shipped tokens and `kit.css`, with nothing stubbed below the two seams the
-// app genuinely owns — the host bridge (`window.centraid`) and the frame's one
-// status line (`setStatusSink`). Everything between the member's press and the
-// grant is the shipped code path: Photos' roster mapping, the object-first
-// entry, the kit's registry read, the create call.
-//
-// What a browser proves that a jsdom suite cannot: Share is on the album bar
-// where a member would look for it, the sheet opens over THIS album with its
-// own title as the fixed subject, the capability picker draws only what the
-// gateway's registry answers for `core.collection` (view — never edit, which
-// is why album co-contribution is a deferred v1 non-goal and not a hidden
-// button), and the outcome lands on the app's status line rather than a toast.
-//
-// The capture is the #825 wave-6 UI-impact evidence.
+// PHOTOS ON THE GRANT PLANE, in a real browser (#825). Proves the APP, not the
+// kit: shipped album bar over shipped tokens, stubbed only at the host bridge
+// and status line. This is the #825 UI-impact capture.
 
 declare global {
   interface Window {
-    /** What the app's ONE status line was asked to say. */
     __photosStatus: string[];
-    /** Every grant request the host bridge was handed. */
+    /** Grant requests handed to the host bridge. */
     __photosGrants: unknown[];
   }
 }
@@ -49,10 +33,8 @@ const EVIDENCE_DIR = path.join(REPO_ROOT, "artifacts/e2e/ui-impact");
 const EVIDENCE_PNG = "issue-825-photos-album-grant.png";
 
 /**
- * The harness entry. It imports the SHIPPED album bar and the SHIPPED status
- * sink, and stubs only the host bridge — the roster Photos reads for its
- * audiences, and the grant plane the kit writes through. The registry answers
- * `view` alone for `core.collection`, which is what the gateway declares.
+ * Harness entry: SHIPPED album bar + status sink; stubs only the host bridge
+ * (registry answers `view` alone for `core.collection`).
  */
 const ENTRY = `
 import { createElement } from "react";
@@ -124,9 +106,7 @@ async function bundleBar(): Promise<{ js: string; css: string }> {
     },
     bundle: true,
     write: false,
-    // Never written (`write: false`), but esbuild needs a path to name the
-    // CSS-module output against — the class map and the stylesheet are two
-    // halves of one build.
+    // Not written (`write: false`); esbuild needs it to name CSS-module output.
     outdir: path.join(here, ".photos-grants-bundle"),
     format: "iife",
     jsx: "automatic",
@@ -156,7 +136,6 @@ test("an album shares through the one grant kit, view only", async ({
   );
   await page.addScriptTag({ content: js });
 
-  // The way in is on the album's own bar, beside Rename and Delete.
   const share = page.getByRole("button", { name: "Share", exact: true });
   await expect(share).toBeVisible();
   await share.click();
@@ -164,21 +143,18 @@ test("an album shares through the one grant kit, view only", async ({
   const dialog = page.locator("dialog.kit-modal-back");
   await expect(dialog).toBeVisible();
 
-  // OBJECT-FIRST: the album is the fixed "what", by its own title.
+  // OBJECT-FIRST: the album is the fixed subject; Photos' roster beside it.
   await expect(page.getByText("Cornwall 2024", { exact: true })).toBeVisible();
-  // The roster Photos supplied — a person, and a named circle beside them.
   const audience = page.getByRole("combobox", { name: "Person or circle" });
   await expect(audience).toHaveValue("party-priya");
   await expect(
     audience.locator("option", { hasText: "Named group · Ski trip" })
   ).toHaveCount(1);
 
-  // THE REGISTRY DECIDES THE VERBS. An album answers `view` and nothing else,
-  // so no edit control is drawn — album co-contribution is a v1 non-goal, and
-  // this is what that looks like rather than a button that would be refused.
+  // Registry decides verbs: view only — no edit control drawn.
   await expect(page.getByRole("button", { name: "Can view" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Can edit" })).toHaveCount(0);
-  // Absent is never empty: nothing standing says so in the album's own words.
+  // Absent ≠ empty: nothing shared says so in the album's own words.
   await expect(
     page.getByText("Nothing shared with Cornwall 2024 yet.")
   ).toBeVisible();
@@ -191,8 +167,7 @@ test("an album shares through the one grant kit, view only", async ({
 
   await page.locator("button.kit-btn.primary").click();
 
-  // The grant names the album as `core.collection`, with its title carried so
-  // the receiving side has a name and not an id.
+  // Grant names the album with its title carried, not just an id.
   await expect
     .poll(() => page.evaluate(() => window.__photosGrants))
     .toStrictEqual([
@@ -205,7 +180,7 @@ test("an album shares through the one grant kit, view only", async ({
         subjectLabel: "Cornwall 2024",
       },
     ]);
-  // The outcome reaches the FRAME's one status line, never a toast.
+  // Outcome reaches the frame's one status line, never a toast.
   await expect
     .poll(() => page.evaluate(() => window.__photosStatus))
     .toStrictEqual(["Priya can see it"]);

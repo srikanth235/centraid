@@ -1,10 +1,5 @@
-// One link row for Sharing.tsx. Split out to keep Sharing.tsx under the
+// One link row for Sharing.tsx, kept separate so that file stays under the
 // repo's file-size guidance.
-//
-// It carried a tap-to-cycle "Receive gives" preference until #825 (ruling
-// G-copy) retired copy-as-share: nothing arrives over a link for a preference
-// to govern, because a grant is a standing permission the audience accepts
-// through its channel invitation, not a push it pre-authorizes.
 //
 // `LinkTicketPanel` (below) is this file's one TextInput: pasting a ticket
 // someone showed you is external data, not a setting to cycle through.

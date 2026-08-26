@@ -1,9 +1,5 @@
-// Shared "never lose anything" store contract (P5, issue #630).
-//
-// A domain records its exact pre-mutation snapshot in the same transaction as
-// the canonical write. Domain-owned undo commands validate and apply snapshots
-// because only the domain knows its invariants; this module owns the common
-// durable envelope, one-shot marking, and ten-second immediate undo window.
+// "Never lose anything" (P5, #630): snapshots in the write's transaction;
+// this module owns the durable envelope and the undo window.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -11,11 +7,7 @@ import type { HandlerCtx } from "../gateway/types.js";
 
 const DEFAULT_UNDO_WINDOW_MS = 10_000;
 
-/**
- * Rows deleted by one `pruneExpiredEntityRevisions` pass (issue #659 L1).
- * Bounded like every other retention pass so a vault that has never pruned
- * does not turn its first sweep into a multi-second stall.
- */
+/** Per-pass cap (#659); bounded so a first sweep can't stall. */
 export const ENTITY_REVISION_PRUNE_CAP = 5_000;
 
 export interface EntityRevision<T = unknown> {
@@ -37,7 +29,7 @@ function actorPartyId(ctx: HandlerCtx): string | null {
   return owner?.owner_party_id ?? null;
 }
 
-/** Append a pre-mutation snapshot and return its stable undo/history id. */
+/** Append a pre-mutation snapshot; returns its stable id. */
 export function recordEntityRevision(
   ctx: HandlerCtx,
   input: {
@@ -73,7 +65,6 @@ export function recordEntityRevision(
   return { revisionId, undoUntil };
 }
 
-/** Load one unconsumed domain revision, defaulting to the newest. */
 export function loadEntityRevision<T>(
   ctx: HandlerCtx,
   input: {
@@ -125,7 +116,7 @@ export function loadEntityRevision<T>(
   };
 }
 
-/** Mark a successfully applied revision one-shot in the same transaction. */
+/** Mark one-shot applied in the apply transaction. */
 export function markEntityRevisionUndone(
   ctx: HandlerCtx,
   revisionId: string
@@ -143,27 +134,14 @@ export function markEntityRevisionUndone(
 }
 
 export interface EntityRevisionPruneResult {
-  /** Rows deleted on this pass. */
   deleted: number;
-  /** `true` when the cap stopped the pass — run it again to keep draining. */
+  /** `true` when the cap stopped the pass — run again to keep draining. */
   capped: boolean;
 }
 
 /**
- * Drop revisions whose undo window has closed (issue #659 L1).
- *
- * Every mutation in the P5 store contract writes a FULL-ROW JSON snapshot
- * here, and the only reader — `loadEntityRevision` — refuses anything with
- * `undo_until < now`. So past the ten-second window a snapshot is already
- * unreadable through the store's own API; retaining it forever grows the
- * vault (and every backup that ships it) with rows nothing can ever return.
- * Deleting exactly those rows is therefore invisible to callers: this is a
- * garbage collector, not a retention policy.
- *
- * Bounded per run (`limit`, default `ENTITY_REVISION_PRUNE_CAP`) and driven
- * by `core_entity_revision_undo_idx`, so the cost of one pass is the rows it
- * deletes rather than the size of the table. `capped` tells a sweep it has
- * more to drain.
+ * Drop revisions whose undo window closed (#659); the only reader refuses
+ * expired rows — a GC, not a retention policy. `capped` means more to drain.
  */
 export function pruneExpiredEntityRevisions(
   vault: DatabaseSync,

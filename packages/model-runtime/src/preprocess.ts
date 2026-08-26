@@ -2,15 +2,9 @@ import { pathToFileURL } from "node:url";
 
 import { resolveRuntimeModule } from "./onnx.js";
 
-// Same lazy-import seam as src/onnx.ts, for the same reason: sharp is a
-// native-addon image codec, so it lives in runtime/package.json next to
-// onnxruntime-node rather than in this workspace package's own
-// dependencies. See src/onnx.ts's header comment for the full rationale.
-
-// Minimal shape of the subset of the sharp API this file calls. sharp ships
-// its own types, but — like onnxruntime-node — it is only ever resolvable
-// from runtime/node_modules, never from this package's module graph, so we
-// declare just what we use rather than depending on @types/sharp.
+// Lazy-import seam as in src/onnx.ts: sharp is a native addon, resolvable only
+// from runtime/node_modules — so it lives in runtime/package.json and we
+// declare just the subset we use instead of depending on @types/sharp.
 export interface DecodedImage {
   /** Interleaved RGB, 8 bits per channel, no alpha. */
   data: Uint8Array;
@@ -75,10 +69,9 @@ export async function decodeImage(bytes: Uint8Array): Promise<DecodedImage> {
 }
 
 /**
- * Decodes and resizes to an exact square `size` using center-crop (matches
- * the OpenAI CLIP preprocessing pipeline: resize shortest side then center
- * crop — sharp's `fit: "cover"` with center position performs both steps in
- * one pass), returning raw interleaved RGB.
+ * Exact-square resize with center-crop (OpenAI CLIP preprocessing: sharp's
+ * `fit: "cover"` does shortest-side-resize + center-crop in one pass),
+ * returning raw interleaved RGB.
  */
 export async function decodeImageCenterCropped(
   bytes: Uint8Array,
@@ -98,7 +91,7 @@ export async function decodeImageCenterCropped(
   };
 }
 
-/** Decodes and resizes to an exact `width`x`height`, distorting aspect ratio (used for detector inputs that expect a fixed grid). */
+/** Exact width×height resize, distorting aspect (fixed-grid detector inputs). */
 export async function decodeImageResized(
   bytes: Uint8Array,
   width: number,
@@ -118,11 +111,8 @@ export async function decodeImageResized(
   };
 }
 
-/**
- * Crops a decoded image to an integer-pixel region, clamping to the image's
- * own bounds. Pure buffer indexing — no sharp round-trip needed for a crop
- * of already-decoded raw RGB.
- */
+/** Crop to an integer-pixel region, clamped to image bounds. Pure buffer
+ *  indexing — no sharp round-trip for already-decoded raw RGB. */
 export function cropImage(
   image: DecodedImage,
   region: { x: number; y: number; width: number; height: number }
@@ -170,11 +160,7 @@ export async function resizeDecodedImage(
   };
 }
 
-/**
- * ImageNet normalization (mean/std below) used by PaddleOCR's det + rec
- * preprocessing: interleaved uint8 RGB -> planar float32 CHW, scaled to
- * [0,1] then normalized per channel.
- */
+/** ImageNet normalization for PaddleOCR det+rec: uint8 RGB -> planar CHW. */
 const IMAGENET_MEAN = [0.485, 0.456, 0.406] as const;
 const IMAGENET_STD = [0.229, 0.224, 0.225] as const;
 
@@ -185,9 +171,7 @@ export function normalizeImageNet(image: DecodedImage): Float32Array {
   for (let pixel = 0; pixel < planeSize; pixel++) {
     for (let channel = 0; channel < 3; channel++) {
       const value = (data[pixel * 3 + channel] ?? 0) / 255;
-      // channel is always 0/1/2 (the inner loop bound above), so these
-      // fixed 3-element tuples are always in range despite
-      // noUncheckedIndexedAccess.
+      // channel < 3 by loop bound, so the tuples are always in range.
       out[channel * planeSize + pixel] =
         (value - (IMAGENET_MEAN[channel] as number)) /
         (IMAGENET_STD[channel] as number);
@@ -196,11 +180,8 @@ export function normalizeImageNet(image: DecodedImage): Float32Array {
   return out;
 }
 
-/**
- * OpenCV `blobFromImage(image)` parity for YuNet: interleaved RGB bytes become
- * planar BGR float32 with no scale or mean. YuNet's pinned export performs its
- * own normalization and is materially wrong when fed ImageNet-normalized RGB.
- */
+/** OpenCV blobFromImage parity for YuNet: RGB bytes -> planar BGR float32,
+ *  no scale/mean — YuNet normalizes itself; ImageNet-normalized input breaks it. */
 export function toOpenCvBgrPlanar(image: DecodedImage): Float32Array {
   const { width, height, data } = image;
   const planeSize = width * height;
@@ -226,12 +207,8 @@ export function toOpenCvRgbPlanar(image: DecodedImage): Float32Array {
   return out;
 }
 
-/**
- * CLIP normalization: interleaved uint8 RGB -> planar float32 CHW, scaled to
- * [0,1] then normalized with the published OpenAI CLIP per-channel
- * mean/std (see clip.py's `_transform`, MIT-licensed, same source as the
- * ViT-B/32 weights this service downloads — LICENSES.md).
- */
+/** CLIP normalization: uint8 RGB -> planar CHW with published OpenAI CLIP
+ *  mean/std (clip.py _transform, MIT — same source as our ViT-B/32 weights). */
 const CLIP_MEAN = [0.481_454_66, 0.457_827_5, 0.408_210_73] as const;
 const CLIP_STD = [0.268_629_54, 0.261_302_58, 0.275_777_11] as const;
 
@@ -242,9 +219,7 @@ export function normalizeClip(image: DecodedImage): Float32Array {
   for (let pixel = 0; pixel < planeSize; pixel++) {
     for (let channel = 0; channel < 3; channel++) {
       const value = (data[pixel * 3 + channel] ?? 0) / 255;
-      // channel is always 0/1/2 (the inner loop bound above), so these
-      // fixed 3-element tuples are always in range despite
-      // noUncheckedIndexedAccess.
+      // channel < 3 by loop bound, so the tuples are always in range.
       out[channel * planeSize + pixel] =
         (value - (CLIP_MEAN[channel] as number)) /
         (CLIP_STD[channel] as number);

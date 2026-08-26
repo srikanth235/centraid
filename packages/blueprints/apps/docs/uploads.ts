@@ -1,15 +1,5 @@
-// The upload RUN: what happens to a batch of files between the picker and the
-// drive. `upload.ts` beside this one owns the per-file staging primitive
-// (SHA preflight + the PDF text layer); this owns the sequence over it — the
-// size refusal, the drawn queue, the serial stage-then-commit, and the account
-// of what did not land.
-//
-// Split out of logic.ts on the exact seam versions.ts / metadata.ts /
-// popovers.ts use: a factory closing over the caller's own `state`/`act`/
-// `notice`/`render`/`refresh` rather than re-implementing any of them, so
-// every outcome still narrates in this app's voice. File-size hygiene is the
-// occasion; the reason it is a clean cut is that a batch upload is the one
-// write in this app with a lifecycle of its own.
+// The upload RUN: size refusals, the drawn queue, serial stage-then-commit,
+// and the account of what did not land (per-file staging lives in upload.ts).
 
 import { isPendingOffsite, statusLine } from "@centraid/design/elements";
 
@@ -18,7 +8,7 @@ import { folderIdFrom } from "./shelves.ts";
 import type { AppState, UploadItem } from "./types.ts";
 import { stageDocumentFile } from "./upload.ts";
 
-/** Files above this never reach the vault; the queue says so per file. */
+/** Files above this never reach the vault; the queue says so. */
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
 interface UploadsDeps {
@@ -29,7 +19,7 @@ interface UploadsDeps {
     action: string,
     input: Record<string, unknown>
   ) => Promise<VaultOutcome | undefined>;
-  /** logic.ts's own outcome phrasing — never a second copy of it. */
+  /** logic.ts's phrasing — never a second copy. */
   friendlyOutcome: (outcome: VaultOutcome | undefined) => string | null;
   notice: (text?: string) => void;
 }
@@ -42,8 +32,7 @@ export function createUploads({
   friendlyOutcome,
   notice,
 }: UploadsDeps) {
-  // Each file's bytes stage into the vault's CAS via kit stageFileBytes
-  // (issue #296); the upload action claims the returned sha — that claim is
+  // stageFileBytes (#296) stages into the vault CAS; claiming the sha is
   // the receipt.
   async function uploadFiles(fileList: FileList | File[]) {
     if (state.uploading) return;
@@ -61,11 +50,8 @@ export function createUploads({
       failures.push(`Skipped ${skipped.length} files over 512 MB.`);
 
     state.uploading = true;
-    // THE QUEUE IS DRAWN, not narrated. It used to exist only as the string
-    // "Uploading 3 of 12…" replacing itself in a notice bar: a member with one
-    // refusal in twelve files learned that three failed and never which three.
-    // Seeded with every file this call accepted plus every one it refused
-    // outright for size, so the panel accounts for what was handed to it.
+    // THE QUEUE IS DRAWN, not narrated: a notice bar cannot say WHICH files
+    // failed.
     state.uploadQueue = [
       ...accepted.map(
         (f): UploadItem => ({ name: f.name, state: "waiting" as const })
@@ -88,8 +74,6 @@ export function createUploads({
     let ok = 0;
     let parked = 0;
     let pendingOffsite = 0;
-    // The visible progress and consent outcomes are a user-selected sequence;
-    // stage and commit each file before moving to the next.
     const uploadNext = async (i: number): Promise<void> => {
       if (i >= accepted.length) return;
       const file = accepted[i]!;
@@ -126,9 +110,8 @@ export function createUploads({
     };
     await uploadNext(0);
     state.uploading = false;
-    // A CLEAN RUN CLEARS ITSELF; a run with a refusal in it does not. The
-    // panel is the only place that says WHICH file did not land and why, so it
-    // stays until the member has read it and dismissed it.
+    // A CLEAN RUN CLEARS ITSELF; a refused run stays — the panel is the only
+    // place naming what did not land.
     if (!state.uploadQueue.some((q) => q.state === "failed"))
       state.uploadQueue = [];
     render();

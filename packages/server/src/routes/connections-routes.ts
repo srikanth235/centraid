@@ -1,5 +1,5 @@
 /*
- * Connections routes (issue #304) — the owner surface over broker-carried
+ * Connections routes (#304) — the owner surface over broker-carried
  * credentials and connection health. Everything except the OAuth callback
  * is an OWNER act behind the gateway's bearer auth, executed with the
  * owner-device credential through the registered sync commands (receipted,

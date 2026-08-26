@@ -18,8 +18,7 @@ const pinsOf = (...ids: ShellPage[]): Record<string, boolean> =>
 
 describe("the launcher model", () => {
   it("is the COMPLETE set of places the shell can go", () => {
-    // The stem shows only what is pinned, so anything missing from this list
-    // is unreachable — there is no second table of destinations any more.
+    // The stem shows only what is pinned; no second destination table exists.
     const ids = LAUNCHER_DESTINATIONS.map((d) => d.id);
     expect(new Set(ids)).toStrictEqual(
       new Set([
@@ -40,24 +39,15 @@ describe("the launcher model", () => {
   });
 
   it("has no catalogue destination — first-party apps are not acquired", () => {
-    // Discover was a place you went to get what you did not have. Every bundled
-    // app is installed at vault mount (#708), so there was nothing left to get:
-    // Home's springboard opens on all eight, and the All-apps sheet arranges
-    // them. Automation templates keep their own gallery — adopting one clones
-    // into the code store, which really is an acquisition — but it is a detail
-    // route off Automations, not a standing launcher row.
+    // Bundled apps install at vault mount (#708); nothing to acquire.
     expect(LAUNCHER_DESTINATIONS.some((d) => d.label === "Discover")).toBe(
       false
     );
   });
 
   it("gives no destination an identity hue — the shell owns no colour", () => {
-    // Invariant 3. The eight identity hues belong to the eight APPS; a frame
-    // destination that borrows one (Notifications in Photos' amber, Devices in
-    // People's violet) does not extend the wheel, it retires it — a colour on
-    // screen stops meaning "an app is here". Asserted over the whole list
-    // rather than over Home alone, because the failure mode is a hue creeping
-    // back onto one row at a time.
+    // Identity hues belong to the APPS; a frame hue retires the wheel — colour
+    // stops meaning "an app is here". Asserted list-wide: hues creep one row at a time.
     for (const d of LAUNCHER_DESTINATIONS) {
       expect(Object.hasOwn(d, "colorKey"), `${d.id} declares a hue`).toBe(
         false
@@ -94,8 +84,7 @@ describe("the launcher model", () => {
   it("orders the stem by the model, not by recency", () => {
     const pins = pinsOf("settings", "assistant");
     const order = pinnedDestinations(pins, CAPABILITIES_ON).map((d) => d.id);
-    // Launcher order, regardless of the order the pins were written in: a
-    // launcher that re-sorts itself stops being a place you can point at.
+    // Model order regardless of pin-write order: no self-sorting launcher.
     expect(order).toStrictEqual(["home", "assistant", "settings"]);
   });
 
@@ -123,10 +112,9 @@ describe("the launcher model", () => {
         "starred"
       );
       const band = bandDestinations(pins, CAPABILITIES_ON);
-      // Home plus four destinations; standing More is rendered by the band.
       expect(band.items).toHaveLength(BAND_MAX_ITEMS);
       expect(band.overflow).toBe(2);
-      // Nothing is dropped — overflow accounts for every pinned destination.
+      // Nothing dropped: overflow accounts for every pinned destination.
       expect(band.items.length + band.overflow).toBe(
         pinnedDestinations(pins, CAPABILITIES_ON).length
       );
@@ -142,21 +130,18 @@ describe("the launcher model", () => {
 
   describe("the All-apps filter", () => {
     it("lists everything when the query is empty", () => {
-      // Everything the sheet can OFFER — which is every destination except
-      // the one whose surface merged into another's (v11: Copies → Vault).
+      // Every destination except the retired one (v11: Copies → Vault).
       expect(searchDestinations("  ", CAPABILITIES_ON)).toStrictEqual(
         LAUNCHER_DESTINATIONS.filter((d) => d.retired !== true)
       );
     });
 
     it("matches on the label a member actually reads, case-insensitively", () => {
-      // `insights` is the internal key; "Activity" is the word on screen.
+      // `insights` is the key; "Activity" is the word on screen.
       expect(
         searchDestinations("activity", CAPABILITIES_ON).map((d) => d.id)
       ).toStrictEqual(["insights"]);
-      // "Copies" merged into Vault and its row is retired from every view, so
-      // the word finds nothing and "Vault" finds exactly one place — never two
-      // rows offering the same surface under two names.
+      // "Copies" is retired everywhere: never two rows for one surface.
       expect(searchDestinations("COPIES", CAPABILITIES_ON)).toHaveLength(0);
       expect(
         searchDestinations("vault", CAPABILITIES_ON).map((d) => d.id)
@@ -164,18 +149,16 @@ describe("the launcher model", () => {
     });
 
     it("keeps the retired id resolvable, and out of every view", () => {
-      // The id is a PERSISTED PIN KEY: deleting the row would make a stored
-      // pin unresolvable rather than merely unshown. It stays in the complete
-      // list, points at the surviving surface, and is filtered from the views.
+      // The id is a PERSISTED PIN KEY: deleting would strand stored pins. It
+      // stays resolvable, points at the surviving surface, filtered from views.
       const retired = LAUNCHER_DESTINATIONS.find((d) => d.id === "household");
       expect(retired?.retired).toBe(true);
       expect(retired?.route).toStrictEqual({ kind: "atlas" });
       expect(
         visibleDestinations(CAPABILITIES_ON).map((d) => d.id)
       ).not.toContain("household");
-      // A pin on the retired id resolves to nothing in the stem — the same
-      // treatment a gated-off destination gets, and for the same reason: the
-      // view is filtered, the stored pin is never mutated.
+      // A pin on a retired id resolves to nothing, like a gated-off one:
+      // views filter, stored pins are never mutated.
       expect(
         pinnedDestinations(pinsOf("household"), CAPABILITIES_ON).map(
           (d) => d.id
@@ -188,9 +171,8 @@ describe("the launcher model", () => {
     });
 
     it("does not list a destination this gateway cannot serve", () => {
-      // The sheet is the complete index of the places the shell can go, so
-      // gating has to reach it too — a stem that hid Automations while the
-      // sheet still offered it would be two answers to one question.
+      // Gating must reach the sheet too: two answers to one question is worse
+      // than an honest absence.
       expect(searchDestinations("automations", CAPABILITIES_OFF)).toHaveLength(
         0
       );
@@ -202,12 +184,9 @@ describe("the launcher model", () => {
       const ids = visibleDestinations(CAPABILITIES_OFF).map((d) => d.id);
       expect(ids).not.toContain("automations");
       expect(ids).not.toContain("connectors");
-      // Analytics counts automation runs over `/centraid/_insights`, which the
-      // gateway leaves unmounted with automations off — it is an automations
-      // surface wearing another name, not a third gate.
+      // Insights is an automations surface, not a third gate.
       expect(ids).not.toContain("insights");
-      // Everything ungated is untouched: the gate withdraws two features, not
-      // a slice of the shell.
+      // Ungated destinations untouched: features withdrawn, not shell slices.
       expect(ids).toContain("home");
       expect(ids).toContain("approvals");
       expect(ids).toContain("atlas");
@@ -231,9 +210,7 @@ describe("the launcher model", () => {
     });
 
     it("filters the view, never the member's pins", () => {
-      // A gated-off feature is not the member unpinning it: the stored pin
-      // survives, so turning the experiment on later restores the launcher
-      // they arranged rather than an emptier one.
+      // A gated feature is not unpinned; re-enabling restores their launcher.
       const pins = pinsOf(...DEFAULT_PINS, "automations");
       expect(
         pinnedDestinations(pins, CAPABILITIES_OFF).map((d) => d.id)

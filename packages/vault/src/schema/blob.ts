@@ -1,4 +1,4 @@
-// Blob custody schema (issue #296, v9): the staging band bytes wait in
+// Blob custody schema (#296, v9): the staging band bytes wait in
 // before a command claims them, and the derivative registry (thumbs,
 // previews, extracted text) hanging off canonical content items.
 //
@@ -14,9 +14,9 @@
 // `text_content` so text/transcripts can feed FTS in-transaction and
 // embeddings/perceptual hashes never masquerade as rentable blob bytes
 // in-transaction — the same no-I/O constraint that keeps text/* bodies
-// inline (issue #296 §1) applies to the index feed.
+// inline (#296) applies to the index feed.
 //
-// A match inside a PDF must surface the DOCUMENT (issue #352: core_document,
+// A match inside a PDF must surface the DOCUMENT (#352: core_document,
 // not the raw content item), so extracted text feeds the OWNING document's
 // FTS row rather than a shadow row. The v2 triggers rebuilt the row from
 // `vault_content_text` alone — any title rename would clobber derivative
@@ -27,7 +27,7 @@
 //
 // Extracted text (`core_content_derivative.text_content`, async OCR/text
 // layer) is the one FTS feed with no upstream size gate of its own — the
-// per-document index budget (issue #367 §E3, `truncateForIndex`) applies
+// per-document index budget (#367 §E3, `truncateForIndex`) applies
 // here too, same as every other body-shaped column.
 
 import type { DatabaseSync } from "node:sqlite";
@@ -50,11 +50,7 @@ const DOCUMENT_BODY = (ref: string) =>
  * not COALESCEd to one winner — a recorded talk can legitimately carry BOTH
  * (a slide deck's extracted text layer alongside the speaker's transcript;
  * `derivatives.test.ts` covers exactly this), so folding in only the first
- * present would silently drop the other's words from the index. Added for
- * issue #724 W4/W6: before photo OCR and audio/video transcripts existed,
- * this content-item-generic index only ever saw `transcript` (video/audio's
- * captions, wired earlier) — `text` was absent because nothing wrote it for
- * a non-document content item yet.
+ * present would silently drop the other's words from the index (#724).
  */
 const CONTENT_ITEM_SEARCH_TEXT = (ref: string) =>
   truncateForIndex(`trim(COALESCE(${ref}."title", '') || ' ' || COALESCE(
@@ -79,7 +75,7 @@ const REFRESH_CONTENT_ITEM_FTS = (contentIdRef: string) => `
     FROM core_content_item i
    WHERE i.content_id = ${contentIdRef} AND i.deleted_at IS NULL;`;
 
-// Bounded-storage-tier cache tables (issue #405 §3/§4). Deliberately
+// Bounded-storage-tier cache tables (#405 §3/§4). Deliberately
 // SELF-CONTAINED — no FKs into the core spine, no triggers — so a test can
 // create them on a bare `:memory:` handle without the whole migration ladder,
 // and so they are pure plumbing (like `blob_staging`, NOT registered logical
@@ -103,7 +99,7 @@ const REFRESH_CONTENT_ITEM_FTS = (contentIdRef: string) => `
 //     it truly is until the next flush — acceptable, because eviction only runs
 //     at sweep boundaries (which flush first) and cache pressure, not per read.
 //     A sha with no row sorts OLDEST (never touched since it landed).
-//   The `store` column (issue #425 Wave 2) records WHICH remote store class
+//   The `store` column (#425) records WHICH remote store class
 //   actually holds a sha's replica — `cas` for originals/snapshot chunks (the
 //   default, so a provider without a `derived` grant is byte-for-byte
 //   unchanged) or `derived` for binary display derivatives (thumb/preview/
@@ -112,7 +108,7 @@ const REFRESH_CONTENT_ITEM_FTS = (contentIdRef: string) => `
 //   prefix: a derived replica missing from the derived listing is missing even
 //   if the same sha happens to sit under `cas`.
 //
-//   blob_orphan — the orphan-grace tombstone (issue #439 R4): one row per
+//   blob_orphan — the orphan-grace tombstone (#439): one row per
 //     remote sha the reconciliation sweep has FOUND orphaned (claimed by
 //     neither the live vault model nor any retained snapshot manifest), stamped
 //     with the epoch-ms instant it was FIRST observed orphaned. The client-owned
@@ -305,7 +301,7 @@ END;
 ${BLOB_CACHE_DDL}`;
 
 /**
- * Rebuild path for `fts_core_document` (issue #367 §E3) — the
+ * Rebuild path for `fts_core_document` (#367) — the
  * `core.document` counterpart to `rebuildFtsIndex` (schema/fts.ts), which
  * explicitly refuses this entity because the generic backfill doesn't know
  * about the derivative-aware body expression above. Re-derives every live

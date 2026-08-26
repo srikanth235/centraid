@@ -1,6 +1,6 @@
-// Regression net for issue #711's ReplicaStatusBar defects.
+// Regression net for ReplicaStatusBar (#711).
 //
-// Sabotage-verified: dropping the `pending.length > 0 ?` guard back to an
+// Sabotage-verified: dropping the `pending.length > 0 ?` guard for an
 // unconditional render makes the "hides the chip" test below fail — the chip
 // would stand at "Pending changes 0" forever, exactly the standing badge §18
 // forbids.

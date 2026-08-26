@@ -1,30 +1,9 @@
 /*
- * The CRON time zoo (issue #839, gap G12).
- *
- * `cron-match.test.ts` states the DST doctrine on ONE zone
- * (America/New_York) at its two pinned 2026 transitions. That is the doctrine
- * demonstrated, not the doctrine tested: a matcher that special-cased a
- * whole-hour, northern-hemisphere, positive-DST shift would pass it.
- *
- * This file re-states the same two laws from docs/cron-timezone.md § "DST
- * policy" over a zoo of adversarial zones — a negative-DST zone whose standard
- * time is the summer one, a zone whose shift is thirty minutes rather than
- * sixty, and a fixed-offset zone that must never produce either case — and
- * over a SEEDED, deterministic sample of wall minutes drawn from inside each
- * transition band, so the law is asserted about the band and not about one
- * hand-picked minute inside it.
- *
- * docs/cron-timezone.md § "DST policy":
- *   Gap (spring-forward)  → SKIP: "the minute never matches any absolute
- *                           instant, so the automation does not fire that day
- *                           for that expression."
- *   Overlap (fall-back)   → ONCE: "matching can hit both absolute minutes, but
- *                           the cursor reader dedupes by zone wall-clock key so
- *                           the automation fires once for that wall-clock
- *                           minute."
- *
- * The overlap law is where the zoo found a real defect; see the
- * "continuously-running gateway" block at the bottom of this file.
+ * The CRON time zoo (#839). `cron-match.test.ts` states the DST doctrine on one
+ * zone at two pinned transitions, which a matcher special-casing a whole-hour
+ * northern positive-DST shift would pass. This re-states the same two laws from
+ * docs/cron-timezone.md § "DST policy" (Gap → SKIP, Overlap → ONCE) over
+ * adversarial zones and a seeded sample of minutes from each band.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -37,41 +16,28 @@ import { wallClockFields, wallClockMinuteKey } from "../cron-timezone.js";
 import { dueInstants, readCronCursor } from "./cron-cursor.js";
 import { cronMatches } from "./cron-match.js";
 
-/**
- * A civil day plus the half-open wall-clock band on it that a transition makes
- * nonexistent (a gap) or repeated (an overlap). Minutes are minute-of-day, so
- * a 30-minute shift is expressible without a second shape.
- */
 type Band = {
-  /** The offset change itself, as a UTC instant. */
   readonly transitionUtc: string;
-  /** The civil date the band lies on, in the zone. */
   readonly year: number;
   readonly month: number;
   readonly day: number;
-  /** Half-open [from, to) minute-of-day range of the affected wall clock. */
   readonly fromMinute: number;
   readonly toMinute: number;
 };
 
 type ZooZone = {
   readonly zone: string;
-  /** Why this zone earns a seat — the property it adds that the others lack. */
   readonly why: string;
   readonly gap?: Band;
   readonly overlap?: Band;
 };
 
-/**
- * The zoo. Every band below was read off the runtime's own tzdata rather than
- * assumed; a zone whose rules move in a future tzdata release will fail these
- * tests loudly at the band, which is the intended signal.
- */
+/** Bands come from the runtime's own tzdata: a tzdata release that moves a
+ *  zone's rules fails loudly here. */
 const ZOO: readonly ZooZone[] = [
   {
     zone: "America/New_York",
     why: "the doctrine's pinned zone: whole-hour positive DST, both directions",
-    // docs/cron-timezone.md § "DST policy": "Spring-forward 2026-03-08".
     gap: {
       transitionUtc: "2026-03-08T07:00:00.000Z",
       year: 2026,
@@ -80,7 +46,6 @@ const ZOO: readonly ZooZone[] = [
       fromMinute: 2 * 60,
       toMinute: 3 * 60,
     },
-    // docs/cron-timezone.md § "DST policy": "Fall-back 2026-11-01".
     overlap: {
       transitionUtc: "2026-11-01T06:00:00.000Z",
       year: 2026,
@@ -136,16 +101,10 @@ const ZOO: readonly ZooZone[] = [
   },
 ];
 
-/** How many wall minutes are drawn from each band. */
 const SAMPLES_PER_BAND = 4;
 
-/**
- * Seeded so the corpus varies across bands while any single failure replays
- * forever from the failing run's own output (see @centraid/test-kit/random).
- */
 const ZOO_SEED = 839_012;
 
-/** `SAMPLES_PER_BAND` distinct minute-of-day values inside `band`. */
 function sampleMinutes(band: Band, seed: number): number[] {
   const rng = seededRandom(seed);
   const width = band.toMinute - band.fromMinute;
@@ -158,18 +117,12 @@ function sampleMinutes(band: Band, seed: number): number[] {
   return [...drawn].sort((left, right) => left - right);
 }
 
-/** A five-field expression pinned to one civil minute on one civil date. */
 function pinnedExpr(band: Band, minuteOfDay: number): string {
   const hour = Math.floor(minuteOfDay / 60);
   const minute = minuteOfDay % 60;
   return `${minute} ${hour} ${band.day} ${band.month} *`;
 }
 
-/**
- * Every absolute minute within ±20h of the transition whose wall clock in
- * `zone` satisfies `expr`. Twenty hours each way covers the whole civil day
- * around any transition in the zoo, in either hemisphere.
- */
 function absoluteMatches(zone: string, expr: string, band: Band): Date[] {
   const centre = Date.parse(band.transitionUtc);
   const out: Date[] = [];
@@ -184,7 +137,6 @@ function absoluteMatches(zone: string, expr: string, band: Band): Date[] {
   return out;
 }
 
-/** `HH:MM` of a minute-of-day, for readable failure output. */
 function hhmm(minuteOfDay: number): string {
   const hour = String(Math.floor(minuteOfDay / 60)).padStart(2, "0");
   return `${hour}:${String(minuteOfDay % 60).padStart(2, "0")}`;
@@ -206,9 +158,7 @@ const OVERLAP_ZONES = ZOO.filter((entry) => entry.overlap !== undefined);
 
 describe("cron DST zoo", () => {
   beforeEach(() => {
-    // Pinned so nothing in the matcher path can read a live wall clock and so
-    // a future `Date.now()` inside it fails deterministically rather than on
-    // the one day of the year the host is mid-transition.
+    // Pinned, so a live `Date.now()` cannot make this pass only off-transition.
     useFakeClock("2026-06-15T12:00:00.000Z");
   });
 
@@ -218,17 +168,12 @@ describe("cron DST zoo", () => {
       (_zone, entry) => {
         const band = entry.gap as Band;
         const minutes = sampleMinutes(band, ZOO_SEED);
-        // docs/cron-timezone.md § "DST policy", Gap row: "the minute never
-        // matches any absolute instant, so the automation does not fire that
-        // day for that expression."
         const firing = minutes.filter(
           (minute) =>
             absoluteMatches(entry.zone, pinnedExpr(band, minute), band).length >
             0
         );
         expect(firing.map(hhmm)).toStrictEqual([]);
-        // …and the same minutes are not merely unmatched but undeliverable:
-        // the virtual stream over the whole transition day is empty too.
         const delivered = minutes.flatMap((minute) =>
           dueInstants(
             [{ expr: pinnedExpr(band, minute), timeZone: entry.zone }],
@@ -244,9 +189,8 @@ describe("cron DST zoo", () => {
       "%s still fires the minute immediately BELOW its gap band",
       (_zone, entry) => {
         const band = entry.gap as Band;
-        // The control the gap law needs: the band's lower neighbour is an
-        // ordinary minute. Without it, "never matched" would also be satisfied
-        // by an expression the matcher simply cannot parse.
+        // The control: without an ordinary neighbouring minute, "never matched" is also
+        // satisfied by an expression the matcher cannot parse.
         const below = band.fromMinute - 1;
         const matches = absoluteMatches(
           entry.zone,
@@ -271,9 +215,7 @@ describe("cron DST zoo", () => {
       (_zone, entry) => {
         const band = entry.overlap as Band;
         const minutes = sampleMinutes(band, ZOO_SEED);
-        // docs/cron-timezone.md § "DST policy", Overlap row: "matching can hit
-        // both absolute minutes". Two is the whole point — the dedupe below is
-        // what turns two matches into one delivery.
+        // Two matches is the point — the dedupe below turns them into one delivery.
         const counts = minutes.map(
           (minute) =>
             absoluteMatches(entry.zone, pinnedExpr(band, minute), band).length
@@ -287,10 +229,8 @@ describe("cron DST zoo", () => {
       (_zone, entry) => {
         const band = entry.overlap as Band;
         const minutes = sampleMinutes(band, ZOO_SEED);
-        // The dedupe in cron-cursor.ts is keyed by `wallClockMinuteKey`. If the
-        // two copies ever keyed differently, `dueInstants` would deliver both
-        // and the Overlap row would be unimplementable — so the key collision
-        // IS the mechanism, not an incidental detail.
+        // Keyed by `wallClockMinuteKey`: if the two copies keyed differently the
+        // Overlap row would be unimplementable, so the collision IS the mechanism.
         const distinctKeysPerMinute = minutes.map((minute) => {
           const copies = absoluteMatches(
             entry.zone,
@@ -311,10 +251,7 @@ describe("cron DST zoo", () => {
         const band = entry.overlap as Band;
         const minutes = sampleMinutes(band, ZOO_SEED);
         const centre = Date.parse(band.transitionUtc);
-        // docs/cron-timezone.md § "DST policy", Overlap row: "the automation
-        // fires once for that wall-clock minute." Asserted here over ONE window
-        // spanning both copies — which is the restart-gap shape. The
-        // continuously-ticking shape is pinned separately below.
+        // One window spanning both copies — the restart-gap shape.
         const perMinute = minutes.map(
           (minute) =>
             dueInstants(
@@ -342,8 +279,6 @@ describe("cron DST zoo", () => {
           cursorAt(centre - 20 * 3_600_000),
           new Date(centre + 20 * 3_600_000)
         );
-        // A phantom "you missed a run" is the user-visible failure mode of a
-        // broken dedupe, so the count is asserted, not just the delivery.
         expect(result.elements).toHaveLength(1);
         expect(result.skipped).toBe(0);
         expect(result.gapReason).toBeUndefined();
@@ -353,9 +288,8 @@ describe("cron DST zoo", () => {
 
   describe("fixed-offset control", () => {
     it("Asia/Kolkata has neither a gap nor an overlap anywhere in 2026", () => {
-      // The zoo's control zone: every wall minute of the year exists exactly
-      // once, so a matcher bug that manufactured a gap or an overlap out of
-      // the +05:30 base offset would show up here rather than nowhere.
+      // The control zone: a matcher manufacturing a gap or overlap from the +05:30
+      // base offset shows up here.
       const fixed = ZOO.find((entry) => entry.zone === "Asia/Kolkata");
       expect(fixed?.gap).toBeUndefined();
       expect(fixed?.overlap).toBeUndefined();
@@ -389,23 +323,12 @@ describe("cron DST zoo", () => {
 
   describe("a continuously-running gateway across a fall-back", () => {
     /**
-     * REGRESSION LOCK for #846 P2, formerly a pin against docs/cron-timezone.md
-     * § "DST policy", Overlap row: "fires once for that wall-clock minute".
+     * REGRESSION LOCK (#846 P2) for the Overlap row's "fires once".
      *
-     * The dedupe that delivers that promise lives in `dueInstants`
-     * (cron-cursor.ts), and its `seen` set is local to ONE call. A gateway that
-     * is UP across the transition ticks once a minute
-     * (`setInterval(() => this.tick(), 60_000)`, cursor-engine.ts), so the two
-     * absolute minutes carrying the same wall clock landed in two DIFFERENT
-     * one-minute windows. Each deduped perfectly against itself and fired, so
-     * the automation ran TWICE — "once" held only for a window wide enough to
-     * contain both copies, i.e. after downtime, which is exactly the shape
-     * `cron-cursor.test.ts` covers and why the gap went unseen.
-     *
-     * `readCronCursor` now looks back across windows for a wall-clock minute it
-     * has already covered, and only when a schedule's zone actually fell back.
-     * This suite is the continuous-tick shape the unit tests do not have, so it
-     * is where the fix is locked.
+     * `dueInstants`' `seen` set is local to ONE call, so a gateway ticking once a
+     * minute lands the two absolute minutes sharing a wall clock in two windows,
+     * each deduping against itself and firing. `readCronCursor` therefore looks
+     * back across windows, but only when the schedule's zone actually fell back.
      */
     it.each(OVERLAP_ZONES.map((entry) => [entry.zone, entry] as const))(
       "%s fires the repeated wall minute ONCE across a continuous tick",
@@ -427,13 +350,9 @@ describe("cron DST zoo", () => {
           }
         }
 
-        // DOCUMENTED LAW: 1. OBSERVED: 1.
         expect(fires).toHaveLength(1);
-        // …and it is the EARLIER of the two absolute minutes sharing that wall
-        // clock, which is the instant the policy names: "an overlapping wall
-        // time occurs once at the earlier instant". The band is exactly one
-        // shift wide, so the earlier copy sits one shift before the offset
-        // change and the later copy sits on it — the later one is suppressed.
+        // …and it is the EARLIER copy, the instant the policy names; the band is one
+        // shift wide, so the later copy is suppressed.
         const shiftMs = (band.toMinute - band.fromMinute) * 60_000;
         expect(fires[0]).toBe(centre - shiftMs);
         expect(wallClockMinuteKey(new Date(fires[0]!), entry.zone)).toBe(
@@ -461,8 +380,6 @@ describe("cron DST zoo", () => {
             cursor = { ...cursorAt(t), positionJson: result.positionJson };
           }
         }
-        // The Gap row survives continuous ticking intact: a minute that exists
-        // in no window cannot be delivered by any number of windows.
         expect(fires).toStrictEqual([]);
       }
     );

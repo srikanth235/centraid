@@ -1,15 +1,4 @@
-/*
- * In-memory pricing catalog (issue #445).
- *
- * Seeded at import from the committed LiteLLM snapshot so lookups work with
- * zero I/O and fully offline. The gateway warmer overlays a fresher table via
- * `setPricingCatalog` once its disk-cached fetch lands; an empty overlay never
- * clobbers a good table. Lookups are always synchronous against the current
- * table — the two pricing call sites (turn-sse, recordNode) must not await.
- *
- * The snapshot is read as data (JSON), never imported as a module, so no
- * concrete model-id literal ever appears in a scanned `.ts` file.
- */
+/* No model-id literal in scanned .ts: snapshot stays JSON. Empty overlay never clobbers; lookups sync. */
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -24,23 +13,17 @@ function loadSnapshot(): PricingCatalog {
     const parsed = JSON.parse(raw) as { models?: PricingCatalog };
     return parsed.models ?? {};
   } catch {
-    // A missing/corrupt snapshot degrades to "everything unpriced" (NULL cost),
-    // never to a wrong price — the warmer can still populate a live table.
+    // Never a wrong price.
     return {};
   }
 }
 
 let catalog: PricingCatalog = loadSnapshot();
 
-/**
- * Replace the active price table (gateway warmer). Empty input is ignored so a
- * failed fetch never wipes the bundled snapshot.
- */
 export function setPricingCatalog(entries: PricingCatalog): void {
   if (entries && Object.keys(entries).length > 0) catalog = entries;
 }
 
-/** Resolve a model id against the active table, or `undefined` when unknown. */
 export function lookupEntry(
   model: string | undefined
 ): PricingEntry | undefined {

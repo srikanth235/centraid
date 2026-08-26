@@ -5,7 +5,7 @@ import { fc } from "@centraid/test-kit/fast-check";
 import { lowPriorityCommand } from "./low-priority.js";
 
 /**
- * Property defense for lowPriorityCommand (#545 D6 agent-runtime mutation seed).
+ * Property defense for lowPriorityCommand (#545).
  *
  * Model: Windows / CENTRAID_CHILD_PRIORITY=normal is identity; otherwise the
  * original bin+args appear after the nice wrapper; niceness is stringified.

@@ -1,15 +1,10 @@
 /**
- * Event search as a vault projection: the FTS5 index inside the vault does
- * the matching (summary + description), so the app never pulls the whole
- * core.event table to grep it — vault data has no upper bound. Only the
- * matched rows are joined with their calendar edge and attachments,
- * mirroring the upcoming projection's shape row-for-row so the list view
- * renders either set with the same code. Cancelled events are dropped after
- * the FTS hit — the index knows text, not status, and the agenda never
- * shows cancellations.
- *
- * A consent denial is a first-class outcome, not an error: the UI renders
- * it as the "ask the owner for access" state, receipt id included.
+ * Event search as a vault projection: the vault's FTS5 index matches, so
+ * core.event is never pulled wholesale (vault data is unbounded). Matched
+ * rows join calendar edge + attachments in the upcoming projection's shape;
+ * cancelled events drop after the hit — the index knows text, not status.
+ * Consent denial is first-class: rendered as "ask the owner for access",
+ * receipt id included.
  */
 interface RawSearchHit {
   event_id: string;
@@ -65,7 +60,7 @@ function attachmentsBySubject(
   attachments: RawAttachment[],
   contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
-  // Blob-backed bytes serve as same-origin URLs (issue #296).
+  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -120,10 +115,8 @@ function attendeesByEvent(
 }
 
 /**
- * The member-facing recurrence sentence for a series, or `null` for a one-off.
- * The grammar itself is `@centraid/core/time`'s and is shared with Tasks; this
- * is the call, not a second summariser. See the twin note in `upcoming.ts` for
- * why an older gateway simply omits the field instead of printing the rule.
+ * The member-facing recurrence sentence, or `null` for a one-off. The grammar
+ * is `@centraid/core/time`'s — this is the call, not a second summariser.
  */
 function recurrenceSummary(
   ctx: HandlerArgs["ctx"],
@@ -147,16 +140,12 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       limit: 100,
       purpose,
     });
-    // Same semantics as upcoming: cancelled events never reach the agenda.
     const hits = ((matches.rows ?? []) as unknown as RawSearchHit[]).filter(
       (e) => e.status !== "cancelled"
     );
     if (hits.length === 0) return { events: [] };
     const eventIds = hits.map((e) => e.event_id);
-    // Joins are `in`-bounded by the matched ids — the event→calendar edge
-    // in schedule.event_ext, the attachment edges, and the guest list
-    // (schedule.attendee, joined to core.party for names below); the owner's
-    // own party (core.vault) drives the `is_you` RSVP row (issue #337).
+    // Joins are `in`-bounded by the matched ids (#337 drives `is_you`).
     const [exts, attachments, attendeesRes, vaultRes] = await Promise.all([
       ctx.vault.read({
         entity: "schedule.event_ext",
@@ -200,7 +189,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       partyNameById,
       mePartyId
     );
-    // One bounded pull covers only the bytes those attachments reference.
+    // One bounded pull covers only referenced bytes.
     const attachmentRows = (attachments.rows ??
       []) as unknown as RawAttachment[];
     const contentIds = [
@@ -228,18 +217,14 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const calByEvent = new Map<string, unknown>(
       (exts.rows ?? []).map((x) => [x.event_id as string, x.calendar_id])
     );
-    // Vault order is rank order (best match first) — keep it. The UI already
-    // holds the calendars from `upcoming`, so none ride along here.
+    // Vault order is rank order (best match first) — keep it.
     const events = hits.map(({ _snippet, ...e }) => ({
       ...e,
       calendar_id: calByEvent.get(e.event_id) ?? null,
       attachments: attByEvent.get(e.event_id) ?? [],
       attendees: guestsByEvent.get(e.event_id) ?? [],
       snippet: typeof _snippet === "string" ? _snippet : "",
-      // Same row shape as `upcoming`, including the one member-facing
-      // recurrence sentence (#834): a result row and a grid row render
-      // through the same component, so a field present on one and missing
-      // from the other would be a raw rule waiting to be printed.
+      // Same row shape as `upcoming`, recurrence included (#834).
       recurrence_summary: recurrenceSummary(
         ctx,
         typeof e.rrule === "string" ? e.rrule : null

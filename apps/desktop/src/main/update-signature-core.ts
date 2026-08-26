@@ -1,23 +1,9 @@
 /*
- * W6.1 — signature custody for the auto-updater (umbrella #842).
- *
- * The updater's security property is a REFUSAL: a packaged Centraid must not
- * install a payload it cannot trace to a release key the build already trusts.
- * electron-updater checks the OS code signature on Windows and macOS, which
- * only proves "some certificate we accept signed this binary"; it says nothing
- * about *which* release produced the bytes, it is a no-op on Linux/AppImage,
- * and it is skipped entirely when the feed serves a differential block-map.
- * This module is the platform-independent half: a detached ed25519 signature
- * over a release manifest that pins every artifact's SHA-512.
- *
- * Everything here is pure over its inputs — no fs, no network, no electron —
- * so the refusal paths are unit-testable against real keys. The fetch/wiring
- * half lives in update-signature-gate.ts.
- *
- * Fail-closed by construction: `resolveUpdateTrust` returns `trusted: false`
- * for every input shape it does not positively recognise, including the
- * "no release key compiled into this build" case. A verifier that passes
- * because it never verified anything is the exact failure this guards.
+ * Updater signature custody, pure half (#842); fetching lives in
+ * update-signature-gate.ts. Trust rests on a detached ed25519 signature over a
+ * manifest pinning each artifact's SHA-512, never on OS code-signing (a no-op
+ * on AppImage, skipped for block-maps). Keep this module pure and fail-closed:
+ * an unrecognised shape is `trusted: false`.
  */
 
 import {
@@ -26,16 +12,14 @@ import {
   verify as verifySignature,
 } from "node:crypto";
 
-/** DER prefix for a SubjectPublicKeyInfo wrapping a raw 32-byte Ed25519 key. */
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 const ED25519_RAW_KEY_BYTES = 32;
 const ED25519_SIGNATURE_BYTES = 64;
 
-/** Schema tags. Bumping either is a breaking change to the signing ritual. */
 export const RELEASE_MANIFEST_SCHEMA = "centraid.release-manifest/1";
 export const RELEASE_SIGNATURE_SCHEMA = "centraid.release-signature/1";
 
-/** One artifact the release vouches for. `sha512` is base64, as electron-updater reports it. */
+/** `sha512` is base64, as electron-updater reports it. */
 export interface ReleaseArtifact {
   name: string;
   sha512: string;
@@ -50,23 +34,17 @@ export interface ReleaseManifest {
 export interface ReleaseSignature {
   schema: string;
   algorithm: string;
-  /** Short fingerprint of the signing key; see {@link keyIdFor}. */
   keyId: string;
-  /** base64 raw 64-byte Ed25519 signature over the manifest's canonical bytes. */
   signature: string;
 }
 
-/** A release key this build is willing to trust. `publicKey` is base64 raw 32 bytes. */
+/** `publicKey` is base64 raw 32 bytes. */
 export interface TrustedReleaseKey {
   keyId: string;
   publicKey: string;
 }
 
-/**
- * Why an update was refused. Every value is a distinct operator-visible cause;
- * they are never collapsed into a generic "invalid" because the operator's next
- * action differs (re-enrol a key vs. re-cut a release vs. suspect a mirror).
- */
+/** Never collapse into a generic "invalid": the operator's next action differs. */
 export type UpdateRefusalReason =
   | "no-trust-anchor"
   | "missing-manifest"
@@ -90,13 +68,8 @@ export type UpdateTrustVerdict =
   | { trusted: false; reason: UpdateRefusalReason; detail?: string };
 
 /**
- * RFC 8785-style canonical JSON: object keys sorted, no insignificant
- * whitespace. Signing the canonical form of the *parsed* document (rather than
- * the received bytes) means a re-serialising proxy or a differing newline
- * convention cannot break verification, while any change to a key, a value, or
- * the set of keys still changes the signed bytes.
- *
- * Arrays keep their order — order is meaningful and is part of what is signed.
+ * Sign the parsed document's canonical form, never the received bytes, so a
+ * re-serialising proxy cannot break verification. Array order is signed.
  */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object")
@@ -111,15 +84,7 @@ export function canonicalJson(value: unknown): string {
   return `{${parts.join(",")}}`;
 }
 
-/**
- * Short fingerprint of a release key: the first 32 hex chars of SHA-256 over
- * the raw public key bytes. Short enough to print in a refusal log, long
- * enough that picking a colliding key is not a practical attack path — and the
- * keyId is a routing hint only, never the thing that grants trust (the
- * signature check below re-derives the id from the key it actually used).
- *
- * @param publicKeyBase64 base64 of the raw 32-byte Ed25519 public key
- */
+/** A keyId is a routing hint, never the thing that grants trust. */
 export function keyIdFor(publicKeyBase64: string): string {
   const raw = Buffer.from(publicKeyBase64, "base64");
   return createHash("sha256").update(raw).digest("hex").slice(0, 32);
@@ -129,18 +94,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Parse a release manifest, rejecting anything that is not exactly the shape we
- * sign. Unknown extra keys are preserved by the caller's canonicalisation but
- * the required fields must all be present and well-typed.
- */
 export function parseReleaseManifest(text: string): ReleaseManifest | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    // Boundary: untrusted bytes off a release feed. A parse failure is a
-    // refusal cause, not an exception to propagate into the updater's event.
+    // Untrusted feed bytes: malformed is a refusal cause, never a throw.
     return null;
   }
   if (!isRecord(parsed)) return null;
@@ -158,13 +117,11 @@ export function parseReleaseManifest(text: string): ReleaseManifest | null {
   return { schema: parsed.schema, version: parsed.version, artifacts };
 }
 
-/** Parse a detached signature envelope. Returns null on any shape violation. */
 export function parseReleaseSignature(text: string): ReleaseSignature | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    // Boundary, as above.
     return null;
   }
   if (!isRecord(parsed)) return null;
@@ -181,7 +138,6 @@ export function parseReleaseSignature(text: string): ReleaseSignature | null {
   };
 }
 
-/** Build a verifiable KeyObject from a base64 raw Ed25519 public key. */
 function publicKeyFromRaw(publicKeyBase64: string) {
   const raw = Buffer.from(publicKeyBase64, "base64");
   if (raw.byteLength !== ED25519_RAW_KEY_BYTES) return null;
@@ -192,13 +148,7 @@ function publicKeyFromRaw(publicKeyBase64: string) {
   });
 }
 
-/**
- * Verify a detached signature over a manifest against the build's pinned keys.
- *
- * Trust is granted by the *cryptographic* check, not by the envelope's keyId:
- * the keyId only narrows which pinned keys to try, and when it matches none we
- * still refuse rather than fall through to "try them all".
- */
+/** A keyId matching no pinned key refuses rather than trying them all. */
 export function verifyManifestSignature(input: {
   manifest: ReleaseManifest;
   signature: ReleaseSignature;
@@ -224,8 +174,6 @@ export function verifyManifestSignature(input: {
 
   const message = Buffer.from(canonicalJson(manifest), "utf8");
   for (const candidate of candidates) {
-    // The pinned entry's keyId is advisory metadata in the build; the id we
-    // report is re-derived from the key material actually used.
     const key = publicKeyFromRaw(candidate.publicKey);
     if (key === null) continue;
     if (verifySignature(null, message, key, signatureBytes))
@@ -239,22 +187,16 @@ export function verifyManifestSignature(input: {
 }
 
 export interface UpdateTrustInput {
-  /** `app.isPackaged`. Unpackaged dev reloads its own `dist/`, not a feed. */
+  /** Unpackaged dev reloads its own `dist/`, not a feed. */
   packaged: boolean;
   trustedKeys: readonly TrustedReleaseKey[];
-  /** Version electron-updater reports for the downloaded candidate. */
   version: string;
-  /** The downloaded file and the digest electron-updater computed for it. */
   artifact: ReleaseArtifact | null;
   manifestText: string | null;
   signatureText: string | null;
 }
 
-/**
- * The whole install-time policy, as one table-shaped decision. Order matters:
- * each step is a strictly narrower claim than the one before it, so the reason
- * reported is always the *first* thing that was wrong.
- */
+/** Order matters: each step is a narrower claim, so the reason is the first thing wrong. */
 export function resolveUpdateTrust(
   input: UpdateTrustInput
 ): UpdateTrustVerdict {
@@ -306,7 +248,7 @@ export function resolveUpdateTrust(
   return verdict;
 }
 
-/** Operator-facing one-liner for the main-process log. Never prints key material. */
+/** Never prints key material. */
 export function describeUpdateVerdict(
   verdict: UpdateTrustVerdict,
   version: string

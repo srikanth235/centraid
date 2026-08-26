@@ -1,5 +1,5 @@
 /*
- * `/centraid/_gateway/owners` — the people on this gateway (issue #726).
+ * `/centraid/_gateway/owners` — the people on this gateway (#726).
  *
  * Owners are the principals device bindings attach to; a vault has exactly
  * one owner, and access IS ownership. The two removal verbs live on
@@ -15,7 +15,7 @@
  * its own owner — one owner per vault means there is no roster of other
  * people a device is entitled to. Creating or removing a person is the
  * host-custody (L0) lane; *Add someone* as a product flow mints them a vault
- * of their own in a later phase (#726 P1).
+ * of their own in a later phase (#726).
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";

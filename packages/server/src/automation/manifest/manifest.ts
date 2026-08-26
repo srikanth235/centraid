@@ -66,7 +66,7 @@ export interface ManifestRequires {
   /**
    * Sealed Locker cells this connector's `ctx.fetch` may reference (issue
    * #293 decision 8), as `locker:<item_id>:<column>` or the rotation-stable
-   * `locker:@<alias>:<column>` (issue #298 item 4). The allowlist for
+   * `locker:@<alias>:<column>` (#298). The allowlist for
    * `{{secret:…}}` placeholders — resolution rides a `reveal` grant on the
    * automation's agent; the plaintext is injected at the transport layer
    * and never enters the handler worker. Connector-only.
@@ -75,27 +75,13 @@ export interface ManifestRequires {
 }
 
 /**
- * Declares this automation an ENRICHER governed by the vault's per-domain
- * enrichment tier (`enrich_policy`). Without this block nothing on the
- * execution path can tell which owner setting an automation is subject to,
- * which is exactly why the tier went unenforced — see
- * `packages/server/src/automation/fire/enrich-gate.ts`.
- *
- * The block is a DECLARATION, not a permission: `runFire` reads the vault's
- * tier for `domain` and refuses the fire when the tier does not allow this
- * enricher's lane.
- */
-/**
- * The containment lane this automation's handler runs under (#846 P9).
+ * The containment lane this automation's handler runs under (#846).
  *
  * A DECLARATION, and one that only ever asks for MORE than the floor: the
  * floor is `automation-handler` (no filesystem, no sockets, no subprocess, no
  * native addons, empty environment) and an absent block reads as exactly that.
  * Fail-closed on purpose, the same reasoning `enrich.lane` states — a manifest
  * is harness-writable, so an omitted lane must never be the permissive one.
- *
- * Before this existed there was no way for a handler to say it needed more, so
- * the automation plane simply ran every handler with no sandbox at all.
  */
 export interface ManifestSandbox {
   /**
@@ -107,6 +93,16 @@ export interface ManifestSandbox {
   readonly lane: "model-runtime" | "media-transcode";
 }
 
+/**
+ * Declares this automation an ENRICHER governed by the vault's per-domain
+ * enrichment tier (`enrich_policy`). Without this block nothing on the
+ * execution path can tell which owner setting an automation is subject to —
+ * see `packages/server/src/automation/fire/enrich-gate.ts`.
+ *
+ * The block is a DECLARATION, not a permission: `runFire` reads the vault's
+ * tier for `domain` and refuses the fire when the tier does not allow this
+ * enricher's lane.
+ */
 export interface ManifestEnrich {
   /** Which `enrich_policy` row governs this automation. */
   readonly domain: EnrichDomain;
@@ -190,15 +186,8 @@ export interface GeneratedMeta {
 }
 
 /**
- * Trigger surface. A `cron` trigger fires on a 5-field schedule; a
- * `webhook` trigger fires on an inbound HTTP POST to a gateway route
- * (remote-gateway only — the desktop preserves the entry but never
- * registers it). An automation may carry many cron triggers but at
- * most one webhook.
- */
-/**
  * A wall-clock schedule. `expr` is the 5-field cron; optional `tz` is an IANA
- * zone name (issue #570). Absent `tz` means host-local (pre-#570 behavior),
+ * zone name (#570). Absent `tz` means host-local (pre-#570 behavior),
  * unless a gateway-wide default timezone is configured.
  */
 export type CronTrigger = {
@@ -315,6 +304,13 @@ export type EventTrigger = {
   readonly every?: string;
 };
 
+/**
+ * Trigger surface. A `cron` trigger fires on a 5-field schedule; a
+ * `webhook` trigger fires on an inbound HTTP POST to a gateway route
+ * (remote-gateway only — the desktop preserves the entry but never
+ * registers it). An automation may carry many cron triggers but at
+ * most one webhook.
+ */
 export type Trigger =
   | CronTrigger
   | WebhookTrigger
@@ -452,7 +448,7 @@ export function pendingWebhookTriggerOf(
  * older than N days, `"errors"` keep only failed runs. Default at validation
  * time is `{count: 100}`. `"all"` remains in the type as the historical wire
  * vocabulary that `applyRetention` still recognizes, but `validateHistory`
- * REJECTS it (issue #659 L9) — an automation may not declare unbounded run
+ * REJECTS it (#659) — an automation may not declare unbounded run
  * history.
  */
 export type HistoryKeep =
@@ -466,17 +462,7 @@ export interface HistoryConfig {
 }
 
 /**
- * The `automation.json` app manifest.
- *
- * `name` / `version` / `description` mirror `app.json`. `enabled` is the
- * user's on/off toggle — it lives in the manifest because the directory
- * is the only source of truth. `prompt` is the human intent the builder
- * harness translated into `handler.js`; `apps` lists the app ids this
- * automation is associated with (reverse-looked-up by the app Settings
- * screen).
- */
-/**
- * Connector declaration (issue #290 phase 4): this automation is a PUBLISHED
+ * Connector declaration (#290): this automation is a PUBLISHED
  * CONNECTOR — deterministic code syncing one external source into the vault.
  * The broker invariants hang off this block:
  *   - `ctx.delegate` is forbidden at runtime (agents write code, not data —
@@ -512,6 +498,16 @@ export interface ConnectionBinding {
   readonly label: string;
 }
 
+/**
+ * The `automation.json` app manifest.
+ *
+ * `name` / `version` / `description` mirror `app.json`. `enabled` is the
+ * user's on/off toggle — it lives in the manifest because the directory
+ * is the only source of truth. `prompt` is the human intent the builder
+ * harness translated into `handler.js`; `apps` lists the app ids this
+ * automation is associated with (reverse-looked-up by the app Settings
+ * screen).
+ */
 export interface Manifest {
   readonly name: string;
   readonly version: string;
@@ -529,7 +525,7 @@ export interface Manifest {
    */
   readonly triggers: readonly Trigger[];
   readonly requires: ManifestRequires;
-  /** Declares this automation a connector (issue #290 phase 4). */
+  /** Declares this automation a connector (#290). */
   readonly connector?: ConnectorSpec;
   /**
    * Credential bindings for non-connector automations (assistant tools /
@@ -896,13 +892,12 @@ function resolveTriggers(r: Record<string, unknown>): readonly Trigger[] {
 const DEFAULT_HISTORY_KEEP_COUNT = 100;
 
 /*
- * Retention ceilings (issue #659 L9).
+ * Retention ceilings (#659).
  *
- * `keep: "all"` was a legal manifest value meaning "never prune this
- * automation's run history". A per-minute automation writes ~500k turns a year
- * into the vault's journal, each with its items, and `applyRetention` returned
- * without doing anything — so the one declaration that most needed a bound was
- * the one that removed every bound. It is now REJECTED rather than coerced: a
+ * `keep: "all"` — "never prune this automation's run history" — is REJECTED
+ * rather than coerced. A per-minute automation writes ~500k turns a year
+ * into the vault's journal, each with its items, so the one declaration that
+ * most needs a bound is the one that would remove every bound: a
  * manifest that asks for unbounded growth is asking for something the runtime
  * will not do, and silently rewriting it to `{count: 100}` would let an author
  * keep believing their history is complete. v0 carries no back-compat
@@ -1038,7 +1033,7 @@ function validateRequires(raw: unknown): ManifestRequires {
     for (const ref of secrets) {
       // Two forms: the raw UUID (`locker:<item_id>:<column>`) or a stable
       // alias that survives delete+recreate (`locker:@<alias>:<column>`,
-      // issue #298 item 4).
+      // #298 item 4).
       if (!/^locker:(?:@[A-Za-z0-9._-]{1,64}|[^:@][^:]*):[a-z_]+$/u.test(ref)) {
         throw new ManifestError(
           "invalid_field",
@@ -1480,7 +1475,7 @@ export function validateManifest(raw: unknown): Manifest {
       "connector"
     );
   }
-  // Secrets are connector-plumbing (issue #293): only a connector's
+  // Secrets are connector-plumbing (#293): only a connector's
   // `ctx.fetch` can reference them, so a non-connector declaring them is a
   // manifest bug, not a latent capability.
   if (!connector && requires.secrets && requires.secrets.length > 0) {

@@ -1,23 +1,9 @@
 /**
- * Condition-trigger evaluation — the "time lives in the data" half of the
- * duaility trigger model.
- *
- * A condition trigger declares a consented vault read (`entity` + `where`);
- * the cursor engine reads it on the trigger's gate under the automation's
- * enrolled-agent grant, and delivers one element per row it has not seen
- * before. Dedup is by row CONTENT: each matched row is hashed whole,
- * and the set of hashes currently matching is the cursor (persisted in the
- * automation's cross-run state under a reserved key). Consequences:
- *
- *   - a row that stays matched across evaluations fires exactly once;
- *   - a row that changes (an invoice reschedule bumps `sequence`, a renewal
- *     moves `due_at`) fires again — a changed row is a new event;
- *   - a row that leaves the window and later re-enters fires again, which is
- *     what a reminder wants.
- *
- * A receipted consent deny — or any bridge error — throws, so the engine
- * records the failure against the trigger and leaves the cursor where it was;
- * failure never widens access and never advances past undelivered rows.
+ * Condition-trigger evaluation — "time lives in the data".
+ * Dedup is by row CONTENT hash; the matching-hash set is the cursor.
+ * Stays matched → fires once; changes → fires again; leave-and-reenter →
+ * fires again. Consent deny or bridge error throws: failure never widens
+ * access and never advances past undelivered rows.
  */
 
 import { createHash } from "node:crypto";
@@ -30,10 +16,9 @@ import type { CursorReadResult } from "./cursor-engine.js";
 
 /*
  * `__trigger:` stays a reserved `automation_state` key prefix: handlers share
- * that KV namespace via `ctx.state`, and the retired pre-cursor scheduler
- * persisted its watermarks there. Durable trigger positions now live in
+ * that KV namespace via `ctx.state`. Durable trigger positions live in
  * `automation_trigger_cursor` (see `cursor-engine.ts`), so nothing in this
- * module writes the prefix any more.
+ * module writes the prefix.
  */
 
 /** Cap on remembered hashes — beyond this the oldest matches re-fire. */
@@ -98,9 +83,9 @@ export async function readConditionCursor(
     .filter(({ hash }) => !seen.has(hash));
   const delivered = fresh.slice(0, options.limit);
   const deliveredHashes = new Set(delivered.map(({ hash }) => hash));
-  // The committed position advances over DELIVERED rows only: a match beyond
-  // the cap stays unseen and arrives on the next gate tick. Rows that left the
-  // window are dropped from the set, which is what makes a re-entry fire again.
+  // Committed position advances over DELIVERED rows only: a match beyond the
+  // cap stays unseen and arrives on the next gate tick. Rows that left the
+  // window drop from the set, which is what makes a re-entry fire again.
   const position = current.filter(
     (hash) => seen.has(hash) || deliveredHashes.has(hash)
   );
@@ -108,9 +93,8 @@ export async function readConditionCursor(
   return {
     elements: delivered.map(({ row, hash }) => ({
       // One position per DELIVERY OCCURRENCE, not per row content. The host
-      // derives its idempotency run id from this, so a row that leaves the
-      // window and re-enters unchanged — the documented reminder behaviour —
-      // must not collide with the run that fired the first time. Rows still
+      // derives its idempotency run id from this, so a row that leaves and
+      // re-enters unchanged must not collide with the first fire. Rows still
       // matching are suppressed by the hash set above, never by this id.
       position: `${hash}:${occurredAt}`,
       occurredAt,
@@ -141,7 +125,7 @@ function scalarPosition(positionJson: string | undefined): string | null {
   }
 }
 
-/** The feed-native watermark of one change entry, when it carries one. */
+/** Feed-native watermark of one change entry, when it carries one. */
 function changeId(change: Record<string, unknown>): string | undefined {
   for (const key of ["id", "provId", "provenanceId", "cursor"]) {
     const value = change[key];
@@ -168,8 +152,7 @@ export async function readDataCursor(
   // Pull exactly what one fire may carry. The feed's returned watermark is the
   // last row it returned, so delivering the whole pull is the ONLY way the
   // committed position stays at a delivered element; over-pulling and slicing
-  // would advance past entries no fire ever saw. A backlog beyond the cap is
-  // still durably in the journal — the next gate tick reads it.
+  // would advance past entries no fire ever saw.
   const result = await options.vault({
     op: "changes",
     payload: {
@@ -189,8 +172,8 @@ export async function readDataCursor(
     cursor?: string;
   };
   const changes = feed.changes ?? [];
-  // The bootstrap pull (no stored position) intentionally never fires: a fresh
-  // watcher reacts to what happens next, not to the whole journal.
+  // Bootstrap pull (no stored position) never fires: a fresh watcher reacts
+  // to what happens next, not to the whole journal.
   const visible = cursor === null ? [] : changes;
   return {
     elements: visible.map((change, index) => {

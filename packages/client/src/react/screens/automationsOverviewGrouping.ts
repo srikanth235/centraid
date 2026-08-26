@@ -2,8 +2,7 @@
 // stays under the repo's component-file cap and the rule stays trivially
 // unit-testable.
 //
-// The date-group helpers that used to live here (`dateGroupLabel`, `groupRuns`,
-// `runOrigin`) went with the v9 revamp (issue #765): "recent runs across
+// There are no date-group helpers here (#765): "recent runs across
 // everything" is ONE flat list in which every run states its own time, so there
 // are no day buckets to label and no origin to split out of the meta string.
 

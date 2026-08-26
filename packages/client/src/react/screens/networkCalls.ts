@@ -1,5 +1,5 @@
 /*
- * Every network call the product makes off this device (issue #708 section
+ * Every network call the product makes off this device (#708 section
  * A2's "footer naming every network call"). Hand-enumerated from the repo's
  * own threat model and design docs rather than the client's code paths,
  * because most of these calls are made gateway-side, out of this bundle's

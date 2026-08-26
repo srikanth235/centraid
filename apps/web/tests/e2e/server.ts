@@ -22,7 +22,7 @@ const pairingTickets = PairingTicketStore.open(gatewayDatabase);
 const webDeviceKey = "web-e2e-device";
 const webControlToken = "web-e2e-control-session";
 // No `initVaultName`: a fresh gateway auto-founds "Personal" at
-// construction (issue #603), and the specs address whichever vault
+// construction (#603), and the specs address whichever vault
 // `/centraid/_web/control` hands back rather than one by name.
 const handle = await serve({
   host: "127.0.0.1",
@@ -75,7 +75,7 @@ controlStore.establish({
   shellOrigin: "http://127.0.0.1:4173",
 });
 
-// No code-store fixture app is seeded. #799 retired the served-app plane, so
+// No code-store fixture app is seeded. There is no served-app plane (#799), so
 // the only openable apps are the eight bundled system apps the gateway installs
 // into every vault at mount — which is exactly what the specs drive.
 await handle.syncApps();

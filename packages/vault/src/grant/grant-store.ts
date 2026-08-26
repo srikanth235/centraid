@@ -1,22 +1,9 @@
 /*
- * The grant plane's store (issue #825). `share_grant` holds MEANING — this
- * audience may see/edit this subject — and `share_fulfillment` holds
- * MECHANISM, one row per audience vault. Nothing here delivers anything: a
- * fulfillment row is a record of where delivery stands, written by whatever
- * strategy is doing the delivering (closure reprojection for view, the
- * commons rail for edit).
- *
- * Two rules live here, at the table they constrain:
- *
- *   - The partial unique index allows ONE live grant per audience x subject.
- *     `createShareGrant` therefore reports the standing grant instead of
- *     inserting beside it or throwing: a repeated share gesture is not an
- *     error, and silently re-writing the capability of an existing grant
- *     would change what the owner decided without them saying so.
- *   - Audience rows are read LITERALLY. A party grant and a circle grant that
- *     happens to contain that party are different rows and different
- *     decisions; only `listLiveGrantsReachingParty` unions them, and it says
- *     so in its name.
+ * The grant plane's store (#825). `share_grant` holds MEANING,
+ * `share_fulfillment` MECHANISM: one row per audience vault, recording where
+ * the delivering strategy stands. Nothing here delivers. ONE live grant per
+ * audience × subject, and audience rows are read LITERALLY — a party grant and
+ * a circle grant containing that party are different decisions.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -31,18 +18,11 @@ export type ShareGrantAudienceKind = "party" | "circle";
 
 export interface ShareGrantAudience {
   kind: ShareGrantAudienceKind;
-  /** `core_party.party_id` when kind is 'party', `social_circle.circle_id`
-   *  when 'circle'. Polymorphic by kind, so the column carries no FK. */
+  /** Polymorphic by kind, so the column carries no FK. */
   id: string;
 }
 
-/**
- * Where delivery of one grant to one audience vault stands.
- *   - `awaiting_channel`: no live binding to deliver over yet.
- *   - `syncing`: the channel is open and the subject is on its way.
- *   - `delivered`: the peer holds the subject.
- *   - `remove_sent` / `removed`: revocation in flight, then acknowledged.
- */
+/** `awaiting_channel` has no live binding; `remove_sent` is revocation in flight. */
 export type ShareFulfillmentState =
   | "awaiting_channel"
   | "syncing"
@@ -58,7 +38,6 @@ export interface ShareGrantRecord {
   capability: ShareGrantCapability;
   grantedAt: string;
   revokedAt: string | null;
-  /** The owner party who granted it. */
   grantedBy: string;
   maxSizeBytes: number | null;
 }
@@ -70,13 +49,9 @@ export interface ShareFulfillmentRecord {
   updatedAt: string;
   detail: string | null;
   /**
-   * When the subject first reached this peer; `null` while it never has.
-   *
-   * Not derivable from `state`, and that is the point (#846 P1). `state` is a
-   * live freshness reading — a pass that cannot reach the peer drops a
-   * `delivered` row back to `syncing` — while this is the durable fact
-   * revocation needs: a grant that was delivered and later degraded must still
-   * ask for removal rather than settling "there was nothing to remove".
+   * When the subject FIRST reached this peer. Not derivable from `state`
+   * (#846), which degrades to `syncing` on an unreachable pass: revocation
+   * needs the durable fact or a degraded grant has "nothing to remove".
    */
   deliveredAt: string | null;
 }
@@ -91,22 +66,14 @@ export interface CreateShareGrantInput {
   maxSizeBytes?: number | null;
 }
 
-/**
- * `created` inserted a new standing grant; `exists` found one already
- * standing for this audience and subject and left it exactly as it was —
- * including its capability, which only an explicit revoke-and-regrant
- * changes.
- */
 export type CreateShareGrantResult =
   | { outcome: "created"; grantId: string; grant: ShareGrantRecord }
   | { outcome: "exists"; grantId: string; grant: ShareGrantRecord };
 
 /**
- * The #750 refusal, thrown by `createShareGrant`: no fulfillment strategy
- * answers this subject × capability pair, so recording a grant would accept a
- * gesture the vault cannot keep. Surfaces consult the subject registry BEFORE
- * drawing the verb; reaching the store with an unofferable pair is a contract
- * violation upstream, not a state this store can represent.
+ * No strategy answers this subject × capability, so the grant would accept a
+ * gesture the vault cannot keep (#750). Surfaces consult the registry BEFORE
+ * drawing the verb; arriving here is an upstream bug.
  */
 export class UnofferableSubjectError extends Error {
   readonly subjectType: string;
@@ -123,8 +90,7 @@ export class UnofferableSubjectError extends Error {
 
 export interface RevokeShareGrantResult {
   outcome: "revoked" | "already-revoked" | "absent";
-  /** Fulfillment rows standing at revocation time. Propagating a removal over
-   *  them is the delivering strategy's job, not this store's. */
+  /** Propagating removal over these is the strategy's job. */
   fulfillment: ShareFulfillmentRecord[];
 }
 
@@ -150,8 +116,7 @@ type ShareFulfillmentRow = {
   delivered_at: string | null;
 };
 
-// CHECK constraints are what make the narrowing casts below sound: no row can
-// reach these readers holding a value outside the declared vocabulary.
+// CHECK constraints make the narrowing casts below sound.
 function toGrant(row: ShareGrantRow): ShareGrantRecord {
   return {
     grantId: row.grant_id,
@@ -180,14 +145,12 @@ function toFulfillment(row: ShareFulfillmentRow): ShareFulfillmentRecord {
   };
 }
 
-/** Every column `toFulfillment` reads, in its order. */
 const FULFILLMENT_COLUMNS = `grant_id, peer_vault_id, state, updated_at,
   detail, delivered_at`;
 
 const GRANT_COLUMNS = `grant_id, audience_kind, audience_id, subject_type,
   subject_id, capability, granted_at, revoked_at, granted_by, max_size_bytes`;
 
-/** The one live grant for this audience and subject, if any. */
 export function readLiveShareGrant(
   db: DatabaseSync,
   audience: ShareGrantAudience,
@@ -206,11 +169,7 @@ export function readLiveShareGrant(
   return row ? toGrant(row) : undefined;
 }
 
-/**
- * Record a standing grant. Idempotent by the live-uniqueness rule: a second
- * share of the same subject with the same audience reports the grant already
- * standing rather than minting a rival row.
- */
+/** Idempotent: a repeat reports the standing grant, never mints a rival. */
 export function createShareGrant(
   db: DatabaseSync,
   input: CreateShareGrantInput
@@ -259,11 +218,7 @@ export function readShareGrant(
   return row ? toGrant(row) : undefined;
 }
 
-/**
- * End a standing grant. The row survives revoked — it is the record that the
- * share once stood — and the fulfillment rows are returned untouched, because
- * the removal each of them needs is a delivery act this store does not own.
- */
+/** The row survives revoked; fulfillment rows come back untouched. */
 export function revokeShareGrant(
   db: DatabaseSync,
   input: { grantId: string; revokedAt: string }
@@ -281,11 +236,7 @@ export function revokeShareGrant(
   return { outcome: "revoked", fulfillment };
 }
 
-/**
- * Grants naming this audience EXACTLY. A party audience does not pick up the
- * circle grants that happen to contain it — see
- * `listLiveGrantsReachingParty` for the union.
- */
+/** EXACTLY this audience; `listLiveGrantsReachingParty` unions kinds. */
 export function listShareGrantsForAudience(
   db: DatabaseSync,
   audience: ShareGrantAudience,
@@ -322,14 +273,8 @@ export function listShareGrantsForSubject(
 }
 
 /**
- * Does this vault know the audience at all?
- *
- * Absent-never-empty needs this: "a person this vault has never heard of" and
- * "a person nothing is shared with" both answer `grants: []` otherwise, and
- * they are different facts. The audience side CAN be checked — a party is a
- * `core_party` row and a circle is a `social_circle` row — which is exactly
- * what makes the subject side (app-polymorphic ids, no table to look in at
- * this layer) the one place the distinction cannot be drawn.
+ * Absent-never-empty needs this: "never heard of them" and "nothing shared
+ * with them" both answer `grants: []` otherwise.
  */
 export function audienceExists(
   db: DatabaseSync,
@@ -346,11 +291,7 @@ export function audienceExists(
   );
 }
 
-/**
- * The parties an audience resolves to: itself for a party, its roster for a
- * circle. A circle with no members resolves to nobody, which is the honest
- * answer — the grant stands, it simply reaches no one yet.
- */
+/** An empty circle resolves to nobody: the grant stands, reaching no one. */
 export function resolveAudienceParties(
   db: DatabaseSync,
   audience: ShareGrantAudience
@@ -366,12 +307,7 @@ export function resolveAudienceParties(
   ).map((row) => row.party_id);
 }
 
-/**
- * Every live grant that reaches this person — party grants naming them, plus
- * circle grants over a circle they are on the roster of. This is the only
- * reader that crosses audience kinds, and the one a "what can they see"
- * question should ask.
- */
+/** The ONLY reader crossing audience kinds. */
 export function listLiveGrantsReachingParty(
   db: DatabaseSync,
   partyId: string
@@ -393,11 +329,6 @@ export function listLiveGrantsReachingParty(
   ).map(toGrant);
 }
 
-/**
- * Open delivery state for one audience vault without disturbing a row that
- * already exists — the write a strategy makes when it first learns which
- * vault it will be delivering into.
- */
 export function ensureFulfillment(
   db: DatabaseSync,
   input: {
@@ -407,9 +338,7 @@ export function ensureFulfillment(
     updatedAt: string;
   }
 ): ShareFulfillmentRecord {
-  // A row opened directly AT `delivered` carries the memory from birth — the
-  // rule is that `delivered_at` is maintained wherever the state is written,
-  // never only on the transition path (#846 P1).
+  // A row opened AT `delivered` carries the memory from birth (#846).
   db.prepare(
     `INSERT INTO share_fulfillment
        (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
@@ -432,25 +361,9 @@ export function ensureFulfillment(
 }
 
 /**
- * Move one audience vault's delivery state. `detail` is replaced whenever it
- * is supplied and cleared when it is explicitly null.
- *
- * `delivered_at` is maintained here rather than by callers, because it is the
- * one fact about a row nobody may forget to write (#846 P1):
- *
- *  - moving TO `delivered` stamps it if it is not already stamped. Later
- *    re-deliveries keep the FIRST instant — the question it answers is "has
- *    this peer ever held the subject", not "when was it last refreshed",
- *    which is what `updated_at` is for;
- *  - moving to `removed` clears it, because a removal that reached terminal
- *    means the peer verifiably does not hold it any more;
- *  - every other transition — `syncing` included — leaves it alone. That is
- *    the whole fix: a reachability blip degrades the freshness reading
- *    without erasing the delivery.
- *
- * There is deliberately no caller-supplied override: the state IS the input,
- * so an escape hatch here would only be a way to write a memory that
- * contradicts it.
+ * `delivered_at` is maintained HERE, never by callers (#846): `delivered`
+ * stamps the FIRST instant, `removed` clears it, every other transition —
+ * `syncing` included — leaves it alone, so a blip cannot erase a delivery.
  */
 export function setFulfillmentState(
   db: DatabaseSync,

@@ -36,7 +36,7 @@ import {
 } from "./resource-mode.js";
 import type { RouteLatencySummary } from "./route-latency.js";
 
-/** Owner-triggered background-pause window (#528 Phase B) — in-memory only. */
+/** Owner-triggered background-pause window (#528) — in-memory only. */
 export interface BackgroundPauseState {
   paused: boolean;
   /** ISO timestamp when the pause auto-lifts; `null` when indefinite or not paused. */
@@ -124,7 +124,7 @@ export interface HealthEvent {
 }
 
 /**
- * Coarse numeric signals (issue #351 tier 3) — deliberately separate from
+ * Coarse numeric signals (#351 tier 3) — deliberately separate from
  * `ComponentHealth.detail`, which stays a plain human-readable string (an
  * existing contract kept as-is). Everything here is a raw number a
  * self-hoster's own monitoring can graph without parsing prose.
@@ -142,7 +142,7 @@ export interface HealthMetrics {
    */
   sseClients?: number;
   /**
-   * Mounted vault planes (issue #659 L8). Present so `rssBytes` has a
+   * Mounted vault planes (#659). Present so `rssBytes` has a
    * denominator: the per-plane memory RESERVATION is now flat in vault count,
    * but each mounted plane still costs real resident memory (connection state,
    * bootstrap DDL) that the pragmas do not bound. Without this, a household
@@ -159,40 +159,40 @@ export interface HealthMetrics {
   /** Boot-time durability-barrier latency for one 4 KiB write. */
   storageFsyncMs?: number;
   /**
-   * Per-route request-duration percentiles (issue #659 R5) — fixed-bucket
+   * Per-route request-duration percentiles (#659) — fixed-bucket
    * histograms, so "which route is slow on THIS gateway" is answerable from a
    * production health snapshot instead of only from a bench rig.
    */
   routeLatency?: RouteLatencySummary[];
   /**
    * Resolved hardware class (`constrained` | `standard`) and owner Resource
-   * mode (`auto` | `conserve` | `balanced` | `performance`) — issue #521.
+   * mode (`auto` | `conserve` | `balanced` | `performance`) — #521.
    * Present once `buildGateway` publishes them via the metrics source.
    */
   hardwareProfileClass?: string;
   resourceMode?: string;
   /**
-   * Machine-readable resolved Resource profile (#528 Phase A) — the host
+   * Machine-readable resolved Resource profile (#528) — the host
    * class, owner mode, detected host facts, and every resolved knob. Present
    * once `buildGateway` publishes it via the metrics source; the string
    * `hardwareProfileClass`/`resourceMode` fields above stay for compatibility.
    */
   resourceProfile?: StructuredResourceProfile;
   /**
-   * Measured per-subsystem resource ACTUALS (#528 Phase C) — replication,
+   * Measured per-subsystem resource ACTUALS (#528) — replication,
    * backup, sweep, worker-pool, and harness-run counts/bytes/busyMs, plus
    * process CPU/RSS. Honest measured proxies only (no modeled energy).
    * Present once `buildGateway` publishes it via the metrics source.
    */
   resourceUsage?: ResourceUsageActuals;
   /**
-   * Host power-context posture (#528 Phase D) — battery/mains/server, whether
+   * Host power-context posture (#528) — battery/mains/server, whether
    * background work is being courteously deferred, and why. Present once
    * `buildGateway` publishes it via the metrics source.
    */
   powerContext?: PowerContextState;
   /**
-   * Owner-triggered background-pause window (#528 Phase B). Always present;
+   * Owner-triggered background-pause window (#528). Always present;
    * `paused` is false with `until: null` when nothing is paused.
    */
   backgroundPause: BackgroundPauseState;
@@ -310,7 +310,7 @@ export class HealthRegistry {
   }
 
   /**
-   * Register the host's numeric-metrics source (issue #351 tier 3) — called
+   * Register the host's numeric-metrics source (#351 tier 3) — called
    * once at `buildGateway()` time. Only `outboxPending`/`sseClients` come
    * from here; `rssBytes`/`uptimeMs` are computed inside `snapshot()`
    * itself, needing no host wiring at all.
@@ -332,7 +332,7 @@ export class HealthRegistry {
     this.resetPerformanceMetricsSource?.();
   }
 
-  /** Runtime backpressure signal shared by every background subsystem (issue #456 A6). */
+  /** Runtime backpressure signal shared by every background subsystem (#456). */
   shouldDeferBackgroundWork(maxP99Ms = 50): boolean {
     const p99 = this.performanceMetricsSource?.().eventLoopLagP99Ms;
     const now = this.now();
@@ -365,7 +365,7 @@ export class HealthRegistry {
   }
 
   /**
-   * Owner-triggered "pause background work" control (#528 Phase B). A
+   * Owner-triggered "pause background work" control (#528). A
    * `durationMs` of `undefined` pauses indefinitely ("until I resume").
    * Callers validate the bound; this stores it verbatim. In-memory only —
    * a restart resumes normally, and this NEVER touches durable prefs or

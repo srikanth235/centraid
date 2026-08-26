@@ -1,38 +1,18 @@
 /*
- * Pure detached-gateway decisions (issue #468, H2–H7).
- *
- * The desktop gateway runs as a detached child process that outlives the UI
- * (H1). This module is Electron-free so the ownership / port / spawn-flag
- * rules unit-test without spawning anything. Impure glue (spawn, poll HTTP,
- * query gateway.db lock state) lives in `detached-gateway.ts` and
- * `local-gateway.ts`.
- *
- * H7 — crash-loop still uses {@link ./gateway-supervisor-core.ts}:
- * `recordFailure` / `loopBroken` / `backoffForAttempt` apply to detached
- * *spawn* failures the same way they applied to in-process `serve()`
- * failures. This file does not re-implement that bookkeeping; callers keep
- * using the supervisor core.
- *
- * H6 — lifecycle verbs (start / stop / status / service install) route
- * through the same bundled `centraid-gateway` CLI entry the OS service unit
- * (`dev.centraid.gateway`) uses, so the app and a terminal user share one
- * code path.
+ * Pure detached-gateway decisions (#468, H2–H7); impure glue lives in
+ * `detached-gateway.ts`. Crash-loop bookkeeping: `gateway-supervisor-core.ts`.
  */
 
-/** Stable default listen port (H4). Replaces ephemeral port:0 for bookmarks / pairing / service. */
+/** Fixed port (H4) — pairing and the service unit need one. */
 export const DEFAULT_GATEWAY_PORT = 17832;
 
-/** Outcome of the adopt-don't-kill decision (H3). */
 export type ControlDecision =
   | "own"
   | "foreign"
   | "stale-reclaim"
   | "probe-failed-refuse";
 
-/**
- * Decide from the kernel-backed gateway.db lock and a credentialed daemon
- * probe. No pid, timestamp, or stale-file heuristic participates.
- */
+/** Kernel lock + credentialed probe only; no pid or stale-file heuristics (H3). */
 export function decideControl(input: {
   lockHeld: boolean;
   credentialedProbeOk: boolean;
@@ -44,55 +24,25 @@ export function decideControl(input: {
   return "probe-failed-refuse";
 }
 
-/**
- * What `centraid-gateway lock-status` actually told us.
- *
- * The old code collapsed everything that was not parseable JSON into a
- * fail-closed `{held: true, answering: false}`, so three unrelated situations
- * produced one message that was wrong for two of them:
- *
- *   - the CLI could not even open the key store (wrong/absent wrapping key) —
- *     the lock is very likely FREE and the real problem is device credential
- *     custody;
- *   - the CLI blocked on the holder's SQLite lock and we killed it at the
- *     spawn timeout — genuinely held, by a process that is not answering
- *     *anything*, and the CLI never got far enough to report the holder pid;
- *   - the CLI answered normally.
- *
- * Fail-closed stays the safety default for all of them (never start a second
- * writer on a maybe-locked db); what changes is that the refusal now says
- * which one happened. {@link classifyLockStatus} is the pure half.
- */
+/** Keep the kinds distinct — each earns its own refusal. */
 export type LockProbe =
   | { kind: "reported"; held: boolean; answering: boolean; holderPid?: number }
   | { kind: "custody-mismatch"; detail: string }
   | { kind: "holder-unresponsive" }
   | { kind: "cli-failed"; detail: string };
 
-/** Raw `spawnSync` outcome, narrowed to what the classification needs. */
 export interface LockStatusRun {
   stdout: string;
   stderr: string;
   status: number | null;
-  /** True when the spawn hit its timeout (the CLI was killed, not finished). */
+  /** The CLI was killed, not finished. */
   timedOut: boolean;
 }
 
-/**
- * The key store throws `KeyStoreError` when an envelope will not unwrap under
- * the supplied master key, and the CLI prints the stack to stderr before
- * exiting 1. That string is the only signal the daemon boundary gives us.
- */
 const CUSTODY_ERROR_PATTERN = /KeyStoreError|unwrap|master key/iu;
 
-/**
- * Node writes its own diagnostics to the child's stderr — notably the
- * `(node:123) ExperimentalWarning: SQLite …` the gateway CLI always triggers —
- * so the first line is routinely not the failure. Skip those.
- */
 const NODE_DIAGNOSTIC_LINE = /^\(node:\d+\)/u;
 
-/** The most explanatory stderr line, preferring one that matches `prefer`. */
 function stderrDetail(
   stderr: string,
   status: number | null,
@@ -106,12 +56,6 @@ function stderrDetail(
   return preferred ?? lines[0] ?? `exit ${status ?? "unknown"}`;
 }
 
-/**
- * The CLI's `--json` line, or `undefined` when the last stdout line is not a
- * complete status object (killed mid-write, banner-only, empty). Translating a
- * parse failure into "no answer" is the recovery — the caller then reads the
- * process-level signals instead.
- */
 function parseLockStatusLine(stdout: string): LockProbe | undefined {
   const line = stdout.trim().split("\n").pop() ?? "";
   if (!line.startsWith("{")) return undefined;
@@ -143,10 +87,8 @@ function parseLockStatusLine(stdout: string): LockProbe | undefined {
   };
 }
 
-/** Pure `lock-status` outcome classification — see {@link LockProbe}. */
 export function classifyLockStatus(run: LockStatusRun): LockProbe {
-  // A complete JSON line is authoritative even if the process was later
-  // killed: the CLI writes it as its last act.
+  // Written as the CLI's last act — authoritative even if killed.
   const reported = parseLockStatusLine(run.stdout);
   if (reported) return reported;
   if (CUSTODY_ERROR_PATTERN.test(run.stderr)) {
@@ -155,8 +97,7 @@ export function classifyLockStatus(run: LockStatusRun): LockProbe {
       detail: stderrDetail(run.stderr, run.status, CUSTODY_ERROR_PATTERN),
     };
   }
-  // Timeout is checked AFTER custody: a key-store failure is instant and
-  // unambiguous, whereas the timeout only tells us the CLI never finished.
+  // After custody: a timeout only says the CLI never finished.
   if (run.timedOut) return { kind: "holder-unresponsive" };
   return {
     kind: "cli-failed",
@@ -164,12 +105,7 @@ export function classifyLockStatus(run: LockStatusRun): LockProbe {
   };
 }
 
-/**
- * Fail-closed lock view fed to {@link decideControl}. Anything we could not
- * read counts as held-and-not-answering, so an unreadable lock can never talk
- * us into spawning a second writer. The *diagnosis* is carried separately by
- * the {@link LockProbe} and surfaces in {@link describeLockRefusal}.
- */
+/** Fail-closed: an unreadable lock never permits a second writer. */
 export function lockViewFor(probe: LockProbe): {
   held: boolean;
   answering: boolean;
@@ -183,12 +119,6 @@ export function lockViewFor(probe: LockProbe): {
   };
 }
 
-/**
- * The refusal message for `probe-failed-refuse`, keyed by what actually went
- * wrong. `holderPid` is the OS-level fallback (fcntl/lsof on gateway.db) the
- * caller resolves when the CLI could not name the holder itself — which is
- * exactly the unresponsive-holder case, since the CLI blocks on the same lock.
- */
 export function describeLockRefusal(input: {
   probe: LockProbe;
   dataDir: string;
@@ -224,16 +154,7 @@ export function describeLockRefusal(input: {
   }
 }
 
-/**
- * E2 — the gateway data directory outlived this device's credentials.
- *
- * `getOrCreateGatewayWrappingKey` mints a fresh key whenever the device
- * secrets file has none, which is silently correct for a brand-new gateway and
- * silently catastrophic for an existing one: the new key cannot open the
- * envelopes already sitting in `<dataDir>/keys`. Detect that pairing here so
- * the failure reports the credential problem instead of decaying into a bogus
- * lock refusal several steps later.
- */
+/** No stored wrapping key + existing envelopes = lost device credentials (E2). */
 export function deviceCustodyGap(input: {
   hasStoredWrappingKey: boolean;
   gatewayKeysPresent: boolean;
@@ -251,12 +172,7 @@ export function describeDeviceCustodyGap(dataDir: string): string {
   );
 }
 
-/**
- * A leftover daemon bound to the configured port but serving a DIFFERENT data
- * dir leaves our fresh spawn to die on EADDRINUSE — invisibly, because a
- * detached child is spawned with `stdio: 'ignore'` (H2). A pre-spawn probe is
- * the only cheap way to turn that into a sentence.
- */
+/** Detached children use `stdio: 'ignore'` (H2) — EADDRINUSE is invisible. */
 export function describePortConflict(input: {
   host: string;
   port: number;
@@ -270,7 +186,6 @@ export function describePortConflict(input: {
   );
 }
 
-/** Resolve the listen port: a positive configured port wins, else the stable default (H4). */
 export function resolveListenPort(configured?: number): number {
   if (
     typeof configured === "number" &&
@@ -283,15 +198,9 @@ export function resolveListenPort(configured?: number): number {
   return DEFAULT_GATEWAY_PORT;
 }
 
-/**
- * Spawn flags for a detached gateway child (H2). Returned as a plain config
- * object so tests can assert shape without calling `child_process.spawn`.
- * Wiring applies these to `spawn()` and then calls `child.unref()`.
- */
 export interface DetachedSpawnConfig {
   detached: true;
   stdio: "ignore";
-  /** Caller must `child.unref()` after spawn when this is true. */
   unref: true;
 }
 
@@ -299,17 +208,9 @@ export function buildDetachedSpawnOptions(): DetachedSpawnConfig {
   return { detached: true, stdio: "ignore", unref: true };
 }
 
-/**
- * H5 — whether onboarding should **show** the OS service install step.
- * Opt-in; install itself defaults off ({@link DEFAULT_OFFER_GATEWAY_SERVICE}).
- * Silent install is forbidden.
- *
- * - `offerGatewayService` already set (true|false) → user decided → do not re-offer
- * - `onboardingCompletedAt` set → first-run over → do not re-offer here
- * - otherwise (fresh install) → show the step
- */
+/** Fresh installs only (H5); silent install is forbidden. */
 export function shouldOfferServiceInstall(settings: {
-  /** Explicit opt-in (true) or declined (false). Absent = not asked yet. */
+  /** Absent = not asked yet. */
   offerGatewayService?: boolean;
   onboardingCompletedAt?: string;
 }): boolean {
@@ -317,5 +218,4 @@ export function shouldOfferServiceInstall(settings: {
   return !settings.onboardingCompletedAt;
 }
 
-/** Default for whether the OS service is installed (H5) — off until opted in. */
 export const DEFAULT_OFFER_GATEWAY_SERVICE = false;

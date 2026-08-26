@@ -1,20 +1,10 @@
 /*
- * The recovery-kit READER (issue #439 R1) — the counterpart to
- * `writeRecoveryKit` (engine.ts). `writeRecoveryKit` emits
- * `{version, kind, createdAt, keyring, targets}` (FORMAT.md § Recovery kit);
- * this parses + validates that document back into a typed shape so `recover()`
- * can restore "from nothing but this document". It is deliberately strict:
- * the kit is the ONLY thing standing between a blank machine and a vault, so a
- * wrong `kind`, an unsupported `version`, a malformed keyring, or a target
- * missing its addressing is rejected here rather than surfacing as an opaque
- * provider error three phases later.
- *
- * What the kit does NOT carry, by design (FORMAT.md): the provider API key. The
- * `target.provider` field is the provider's base URL (for a remote home) or a
- * `local:<dir>` moniker (an operator/test local provider) — enough to reach the
- * provider, but never the credential to authenticate. The recovering operator
- * supplies the key out-of-band (the invite email at beta; the provisioning
- * handshake at GA).
+ * The recovery-kit READER (#439): parses + validates the sealed document back
+ * into a typed shape so `recover()` restores from nothing but this document.
+ * Deliberately strict — reject wrong kind/version/keyring/addressing HERE,
+ * not as an opaque provider error three phases later. By design (FORMAT.md)
+ * the kit never carries the provider API key; the operator supplies it
+ * out-of-band.
  */
 
 import {
@@ -30,7 +20,7 @@ import type { Keyring } from "./crypto.js";
 import type { RecoveryKitTarget } from "./engine.js";
 import { canonicalJson } from "./manifest.js";
 
-/** A parsed + validated recovery kit (the shape `writeRecoveryKit` emits). */
+/** A parsed + validated recovery kit (the shape `wrapRecoveryKit` seals). */
 export interface RecoveryKitDocument {
   version: 1;
   kind: "centraid-recovery-kit";
@@ -74,10 +64,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function validateTarget(value: unknown, index: number): RecoveryKitTarget {
   if (!isRecord(value))
     throw new Error(`recovery kit: target ${index} is not an object`);
-  // `provider` is the base URL (remote) or `local:<dir>` moniker — the
-  // addressing recover() dials; `targetId` + `vaultId` are the storage-target
-  // and vault ids; `label` is the opaque provider-side label (never the vault
-  // name). All four are load-bearing for a restore, so all four are required.
+  // All four fields are load-bearing addressing for a restore; all required.
   for (const field of ["provider", "targetId", "vaultId", "label"] as const) {
     if (
       typeof value[field] !== "string" ||
@@ -100,13 +87,7 @@ function validateTarget(value: unknown, index: number): RecoveryKitTarget {
   };
 }
 
-/**
- * Parse + validate a recovery-kit document (already JSON-parsed into `value`).
- * Throws a descriptive `Error` on anything that is not a well-formed
- * `centraid-recovery-kit` version 1: wrong kind, unsupported version, a
- * malformed keyring (via the same `validateKeyring` `loadKeyring` uses), or a
- * target missing its addressing. Returns the typed document on success.
- */
+/** Parse + validate an already-JSON-parsed kit; throws descriptively. */
 function parsePlainRecoveryKit(
   value: unknown,
   allowEmptyTargets = false
@@ -228,14 +209,11 @@ export function wrapRecoveryKit(
 }
 
 /**
- * Unwrap the owner-held password document. Authentication failures stay loud.
+ * Unwrap the owner-held password document; auth failures stay loud.
  *
- * There is no unwrapped acceptance path (issue #568 item J). Accepting a plain
- * document also SILENTLY IGNORED the supplied password, so every caller that
- * treats "parse succeeded" as "the owner knows the password" —
- * `vaults:restore`, `vaults:initialize/verify`, and the kit-confirmed
- * transition — had a password-free branch. v0 carries no back-compat
- * obligation, so the branch is gone rather than gated.
+ * NEVER add an unwrapped acceptance path (#568): it silently ignores the
+ * password, and callers treating "parse succeeded" as "owner knows the
+ * password" then get a password-free branch reachable from the kit file.
  */
 export function parseRecoveryKit(
   value: unknown,

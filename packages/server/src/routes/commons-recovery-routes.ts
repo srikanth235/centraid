@@ -1,26 +1,9 @@
 /**
- * Owner-tier doors for Commons steward-absence recovery (#731).
- *
- * Two verbs, both same-machine owner-authenticated exactly like
- * `commons-routes.ts`:
- *
- *   GET  /centraid/_gateway/commons/recovery?actorVaultId=…
- *        The escalating steward status per commons grant this vault holds,
- *        plus the local sync instrumentation behind it. This is the surface a
- *        member renders "Alice's device hasn't been reachable for 9 days" from.
- *
- *   POST /centraid/_gateway/commons/recovery
- *        { actorVaultId, grantId, reason? } — perform the ceremony. Deliberate,
- *        never automatic; refuses with a NAMED reason when the seat is parked
- *        on a divergence fault or already stewards the grant.
- *
- * Recovery never fabricates consent: the successor's roster mirrors the old
- * one, but every other seat is INVITED and must accept. This door now also
- * DELIVERS those invitations (issue #750) — co-hosted seats, linked peers,
- * and an out-of-band claim ticket for the members whose only link was to the
- * vault that disappeared — and reports per-seat what happened, so an operator
- * following docs/recovery/commons-steward-loss.md can see exactly who still
- * has to be reached by hand.
+ * Owner-tier Commons steward-absence recovery doors (#731), owner-
+ * authenticated like `commons-routes.ts`. GET: steward status per grant.
+ * POST { actorVaultId, grantId, reason? }: named-refusal ceremony; seats are
+ * INVITED, never auto-consented; delivers invitations (#750)
+ * (docs/recovery/commons-steward-loss.md).
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -40,12 +23,11 @@ export const COMMONS_RECOVERY_PATH = "/centraid/_gateway/commons/recovery";
 export interface CommonsRecoveryRouteDeps {
   enrollments: EnrollmentStore;
   vaultFor: (vaultId: string) => VaultDb | undefined;
-  /** Peer-plane invitation push, shared with the ordinary commons door. */
+  /** Peer-plane invitation push, shared with the ordinary door. */
   invitePeer?: DeliverCommonsRecoveryInvitationsInput["invitePeer"];
 }
 
-/** Same shape `RouteHandler` has in `build-gateway.ts`, restated locally so
- *  this module does not import the builder it is mounted into. */
+/** Same shape `RouteHandler` has in `build-gateway.ts`, restated locally. */
 export type CommonsRecoveryRouteHandler = (
   req: IncomingMessage,
   res: ServerResponse
@@ -106,8 +88,7 @@ export function makeCommonsRecoveryRouteHandler(
         now,
       });
       if (result.state !== "recovered") return sendJson(res, 409, result);
-      // A successor nobody was told about is a steward of one. Delivery is
-      // part of the ceremony, not a follow-up the operator has to remember.
+      // Delivery is part of the ceremony, not a follow-up.
       const invitations = await deliverCommonsRecoveryInvitations({
         seat: vault,
         stewardVaultId: actorVaultId,

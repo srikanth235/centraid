@@ -67,7 +67,7 @@ export interface AssistantRouteOptions {
     requestedHarness?: HarnessKind
   ) => Promise<string | undefined>;
   /**
-   * Fire-and-forget LLM auto-title hook (issue #420). Wired by the gateway to a
+   * Fire-and-forget LLM auto-title hook (#420). Wired by the gateway to a
    * cheap-tier one-shot inference; the driver fires it once, after the first
    * successful turn of a still-unnamed thread. Optional so hermetic tests omit
    * it (threads keep the derived truncation).
@@ -78,7 +78,7 @@ export interface AssistantRouteOptions {
     assistantText: string;
   }) => void;
   /**
-   * Per-vault turn-concurrency gate (issue #420). Resolved per request so it
+   * Per-vault turn-concurrency gate (#420). Resolved per request so it
    * bounds running turns per ambient vault, shared with the per-app `_turn`
    * route. Optional so hermetic tests omit it (unbounded).
    */
@@ -153,7 +153,7 @@ export function makeAssistantRouteHandler(
           plane.assistantContext()
         );
 
-        // Attachments uploaded ahead of the turn (issue #190), mirroring the
+        // Attachments uploaded ahead of the turn (#190), mirroring the
         // per-app `_turn` route exactly: the bytes already live in the
         // `_assistant` blob CAS (`POST /_centraid-conversations/apps/_assistant/blobs`).
         const attachmentRefs: TurnAttachmentRef[] = validateTurnAttachmentRefs(
@@ -224,8 +224,8 @@ export function makeAssistantRouteHandler(
         additionalDirectories = additionalDirectories.filter(
           (directory) => directory !== workspaceDirectory
         );
-        // Every turn used to rewrite this row even when nothing changed. The
-        // selection is per conversation and rarely moves, so compare first.
+        // The selection is per conversation and rarely moves, so compare
+        // first rather than rewriting this row on every turn.
         const selectionUnchanged =
           savedWorkspace?.primaryKind === workspaceKind &&
           savedWorkspace.additionalDirectories.length ===

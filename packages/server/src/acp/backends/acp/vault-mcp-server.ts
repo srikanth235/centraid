@@ -1,6 +1,6 @@
 /*
  * Loopback MCP server exposing the vault tools to whatever ACP harness the
- * turn spawned (issue #479).
+ * turn spawned (#479).
  *
  * Before the ACP fold, each bespoke backend reached the vault through its
  * CLI's own tool surface: claude got an in-process MCP server, codex got
@@ -38,11 +38,10 @@
  * declines to offer a standalone SSE stream.
  *
  * The tool names, descriptions and JSON schemas come verbatim from
- * `vault-sql-tool.ts` — the same module the retired backends used — so
- * prompts and skills that name `vault_sql` / `vault_invoke` /
- * `vault_content` keep working unchanged. The server is also still named
- * `centraid`, so a namespacing harness surfaces `mcp__centraid__vault_sql`
- * exactly as the claude backend did.
+ * `vault-sql-tool.ts`, so prompts and skills that name `vault_sql` /
+ * `vault_invoke` / `vault_content` keep working unchanged. The server is
+ * named `centraid`, so a namespacing harness surfaces
+ * `mcp__centraid__vault_sql`.
  */
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
@@ -65,7 +64,7 @@ import {
 
 /** The single route; anything else 404s. */
 const MCP_PATH = "/mcp";
-/** MCP server name — kept from the retired claude MCP server for prompt parity. */
+/** MCP server name — what prompts and skills namespace tool names under. */
 export const VAULT_MCP_SERVER_NAME = "centraid";
 /** Answered when the client asks for a version we don't recognise. */
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";

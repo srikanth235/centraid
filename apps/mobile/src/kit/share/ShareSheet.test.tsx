@@ -1,4 +1,4 @@
-// The native sheet's quick-add path (issue #776).
+// The native sheet's quick-add path (#776).
 //
 // Three claims live here, and they are the ones that make quick-add safe to
 // ship on a device that may be offline:

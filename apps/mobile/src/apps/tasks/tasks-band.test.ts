@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-// The band's rules, asserted without a renderer (issue #834).
+// The band's rules, asserted without a renderer (#834).
 //
 // `tasks-band.ts` is deliberately free of `react-native` imports so the CAP,
 // the ownership latch and the sheet's contents can be checked as values. What

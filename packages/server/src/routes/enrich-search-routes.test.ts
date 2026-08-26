@@ -1,4 +1,4 @@
-// The semantic-search route (issue #721 E3) over a real vault plane and a real
+// The semantic-search route (#721) over a real vault plane and a real
 // HTTP server. The assertions are deliberately about the WIRE — field names and
 // status codes — because the mobile Photos surface is coded against exactly
 // this shape and a rename here is a protocol break, not a refactor.

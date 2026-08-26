@@ -62,28 +62,14 @@ export function supportsMobileOfflineGateway(raw: unknown): boolean {
   );
 }
 
-/**
- * The experimental gateway features (v0 early feedback) this app gates a
- * surface on. Read off the SAME `/centraid/_gateway/info` answer the
- * compatibility wall already fetched — C1 says capabilities are detected in
- * one place and never re-derived per screen.
- */
+/** Experimental features this app gates surfaces on, from the SAME `/info`
+ * answer the compatibility wall fetched (C1). */
 export interface MobileGatewayFeatures {
-  /** The Automations place — lifecycle, runs feed, webhook ingress. */
   automations: boolean;
-  /** The Connectors place — connection health/configure, consent ceremony. */
   connectors: boolean;
 }
 
-/**
- * What a member sees if they reach a switched-off place anyway — a deep link,
- * a saved shortcut, a row on another screen. Beside the compatibility wall
- * copy above for the same reason: the words a wall says are part of the
- * judgment, not of the screen that happens to draw them.
- *
- * It names the GATEWAY, not the app: nothing is missing from this phone, and
- * the switch is not on it either.
- */
+/** Copy for a member who reaches a switched-off place. Names the GATEWAY. */
 export const MOBILE_FEATURE_OFF_COPY: Record<
   keyof MobileGatewayFeatures,
   { title: string; body: string }
@@ -98,17 +84,8 @@ export const MOBILE_FEATURE_OFF_COPY: Record<
   },
 };
 
-/**
- * What this gateway says it has switched on. Absent flag reads as OFF (the
- * protocol keys are optional, so a gateway that predates them handshakes
- * clean); a body that is not a capability map at all reads as off too, since
- * this is only ever called on an answer that already passed the wall.
- *
- * `undefined` is NOT produced here — "the gateway never answered" is the
- * caller's fact (see `requireMobileOfflineGateway`), and consumers must keep
- * the two apart: an unanswered question is not a verdict, so it may not hide
- * a surface.
- */
+/** Absent flag reads OFF. Never returns `undefined`: "never answered" is the
+ * caller's fact (`requireMobileOfflineGateway`), distinct from a verdict. */
 export function readMobileGatewayFeatures(raw: unknown): MobileGatewayFeatures {
   const capabilities =
     raw !== null && typeof raw === "object"
@@ -122,11 +99,7 @@ export function readMobileGatewayFeatures(raw: unknown): MobileGatewayFeatures {
   };
 }
 
-/**
- * C1(b) judgment shared by foreground and background construction.
- * judgeGatewayInfo owns the mutual protocol window; this adapter only chooses
- * which side is older so the one blocking wall can give a useful instruction.
- */
+/** Chooses which side is older on `protocol_mismatch` (C1(b)). */
 export function judgeMobileGatewayCompatibility(
   raw: unknown
 ): MobileCompatibilityDisposition | "supported" {
@@ -149,7 +122,7 @@ export function judgeMobileGatewayCompatibility(
     protocol.protocolVersion < GATEWAY_MIN_PROTOCOL_VERSION
   )
     return "update-gateway";
-  // A contradictory/non-overlapping window is safest treated as a newer peer:
-  // updating the store-distributed app refreshes its complete protocol range.
+  // Non-overlapping window: safest read is a newer peer — a store update
+  // refreshes the app's complete protocol range.
   return "update-app";
 }

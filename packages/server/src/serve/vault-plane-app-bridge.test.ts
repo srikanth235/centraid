@@ -89,7 +89,7 @@ describe("vault-plane app bridge", () => {
     });
   });
 
-  // Issue #659 G11 moved the locker KDF onto the threadpool, so
+  // The locker KDF runs on the threadpool (#659), so
   // `authenticateLocker` returns a promise. `asVaultCallResult` takes a
   // `() => unknown`, so leaving `authenticate` in the synchronous switch
   // typechecks and wraps the PROMISE as the result — which reaches the app as

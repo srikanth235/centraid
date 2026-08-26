@@ -1,5 +1,5 @@
 // Steward-absence detection, local sync instrumentation, and replica-export
-// recovery lineage for the Commons plane (issue #731).
+// recovery lineage for the Commons plane (#731).
 //
 // The structural weakness these tables answer: a grant has exactly ONE steward
 // vault, and its loss is silent and terminal for every member. Members already

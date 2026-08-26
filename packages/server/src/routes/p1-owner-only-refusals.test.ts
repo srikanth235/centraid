@@ -1,5 +1,5 @@
 /*
- * Exit evidence #2 (issue #726 P1): host custody (the landlord bearer) keeps
+ * Exit evidence #2 (#726): host custody (the landlord bearer) keeps
  * process control, stop-hosting, and disk visibility — but it LOSES erase,
  * ticket-mint, and backup-target configuration for a vault it does not own.
  * Each refusal is typed `owner_only` and names the vault's actual owner,

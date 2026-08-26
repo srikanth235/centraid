@@ -1,9 +1,9 @@
-// Shared fixtures for the Commons command-tail replay suites (issue #750
+// Shared fixtures for the Commons command-tail replay suites (#750
 // invariant 7). A shared drive folder is the container type with a real
 // declared write surface, so every write these suites make travels through
 // the same authorization, sequencing and fan-out path production uses.
 //
-// Split from `commons-replay.test.ts` / `commons-increment.test.ts` for the
+// Kept out of `commons-replay.test.ts` / `commons-increment.test.ts` for the
 // repo file-size cap; both suites stand up the same shape of world and must
 // not drift apart by copy-paste.
 

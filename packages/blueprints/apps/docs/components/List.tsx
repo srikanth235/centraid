@@ -279,9 +279,9 @@ const COLUMNS: readonly { key: SortKey; label: string; cls: string }[] = [
 /**
  * The head row — and the drive's SORT CONTROL, which is the same thing.
  *
- * The sort used to be a button up in the toolbar reading "Date ↓", beside a
- * title, three regions away from the columns it ordered. A member who wants
- * this set by size looks at the word "Size" and presses it; that is the whole
+ * The sort is not a button up in the toolbar, three regions away from the
+ * columns it orders. A member who wants this set by size looks at the word
+ * "Size" and presses it; that is the whole
  * interaction, and it is the one the handoff draws. The arrow rides the active
  * column, so where the order comes from and what it is are one reading.
  */

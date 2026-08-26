@@ -13,12 +13,6 @@
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
- *
- * TS conversion note: the vault read/search surface returns
- * `Record<string, unknown>` rows (see HandlerCtx.vault), so each raw row set is
- * cast once to a typed shape (`as unknown as X[]`) at its read site — the only
- * place unknown vault columns become named fields. Handler logic is otherwise
- * byte-for-byte the pre-conversion JS.
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
@@ -67,7 +61,7 @@ function attachmentsBySubject(
   attachments: AttachmentRow[],
   contentById: Map<string, ContentRow>
 ) {
-  // Blob-backed bytes serve as same-origin URLs (issue #296).
+  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: ContentRow | undefined) =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -116,7 +110,7 @@ function decodeBody(uri: unknown): string {
 }
 
 // Same list-row discipline as library.ts: results carry a short preview + the
-// checklist tally, never the whole body (issue #404). See library.ts for the
+// checklist tally, never the whole body (#404). See library.ts for the
 // shape's home.
 const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
@@ -171,7 +165,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       ctx.vault.search({
         entity: "knowledge.note",
         query: term,
-        // Trashed notes (issue #308: delete is reversible) never match.
+        // Trashed notes (#308: delete is reversible) never match.
         where: [{ column: "deleted_at", op: "is-null" }],
         limit: 100,
         purpose,
@@ -194,7 +188,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         ],
         purpose,
       }),
-      // Notebooks are collections (issue #274) — the one curation mechanism.
+      // Notebooks are collections (#274) — the one curation mechanism.
       ctx.vault.read({ entity: "core.collection", purpose }),
       ctx.vault.read({
         entity: "core.attachment",

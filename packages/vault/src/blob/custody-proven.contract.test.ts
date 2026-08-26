@@ -1,4 +1,4 @@
-// The prune custody latch (issue #438 decision 3). A local-only vault proves
+// The prune custody latch (#438 decision 3). A local-only vault proves
 // custody by local CAS presence; an s3-configured vault requires durable
 // replica evidence AND no pending outbox obligation. Fail closed on every gap.
 

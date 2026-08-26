@@ -1,38 +1,20 @@
-// Semantic photo search (issue #721 E3): the query half of the embedding
-// index. A phrase becomes a vector through the SAME embed-text automation that
-// wrote the rows, and the vector is ranked against `enrich_embedding` by cosine.
+// Semantic photo search (#721): the query half of the embedding index.
 //
-// TWO CAPABILITIES, ONE SPACE (issue #724 W1). The rows are keyed by the
-// `embed-image` model, because that is what produced them; the query rides
-// `embed-text`. The two bundled handlers must share a model/vector space — a
-// text query is compared to image vectors by cosine, so mismatched models
-// return confident nonsense. The common pinned model id is that contract.
+// TWO CAPABILITIES, ONE SPACE (#724). Rows are keyed by `embed-image`, the
+// query rides `embed-text`; both bundled handlers MUST pin the same model id
+// or the cosine returns confident nonsense.
 //
-// TWO ENGINES, ONE ANSWER. When the host loaded `sqlite-vec` into this vault
-// handle, ranking is `vec_distance_cosine` inside SQLite, which filters trashed
-// assets and applies the LIMIT in the same statement. When it did not — an
-// unsupported platform, a missing optional dependency — ranking is
-// `scanEmbeddings`, the exact float32 cosine scan `@centraid/vault` has always
-// carried. They are the same function: sqlite-vec's cosine DISTANCE is
-// `1 - similarity`, so `score = 1 - distance` reproduces `cosine()` to float
-// rounding, and both orderings match. That parity is what makes the extension
-// an optimization rather than a feature — the search surface behaves
-// identically either way, which is the only honest way to ship a native
-// dependency that four of five platforms have and the fifth does not.
+// TWO ENGINES, ONE ANSWER. `sqlite-vec`'s `vec_distance_cosine` and the
+// `scanEmbeddings` fallback must stay the same function: distance is
+// `1 - similarity`, so `score = 1 - distance`. The extension is an
+// optimization, never a feature.
 //
-// NO VIRTUAL TABLE. sqlite-vec also offers `vec0` shadow tables with real ANN
-// indexes; this uses only its scalar distance function over the EXISTING
-// `enrich_embedding.vector` BLOB. That keeps the extension strictly additive:
-// no schema rung, no second copy of every vector to keep in sync, and a vault
-// opened on a platform without the extension is not missing a table — it is
-// just using the other ranker. Revisit when a personal library's linear scan
-// stops being fast; the row shape needs no change to get there.
+// NO VIRTUAL TABLE. Use only the scalar distance over the existing
+// `enrich_embedding.vector` BLOB; a `vec0` shadow table adds a schema rung and
+// a second copy of every vector. Revisit when linear scan stops being fast.
 //
-// COST. The fallback ranker reads every embedding row for the model — that is
-// what an exact scan is. It is bounded in the only place this module can bound
-// it: `FALLBACK_CANDIDATES` caps how many top matches are carried forward to
-// the liveness filter. The vec path has no such ceiling because SQLite does
-// the filtering and the LIMIT itself.
+// COST. The fallback reads every embedding row for the model;
+// `FALLBACK_CANDIDATES` is the only ceiling this module can impose.
 
 import { scanEmbeddings } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
@@ -41,21 +23,17 @@ import { hasSqliteVec } from "./sqlite-vec.js";
 
 const TARGET_TYPE = "media.asset";
 
-/** Default hits returned when the caller names no limit. */
 export const DEFAULT_SEARCH_LIMIT = 20;
-/** Hard ceiling on `limit`, so one request cannot ask for the library. */
+/** So one request cannot ask for the library. */
 export const MAX_SEARCH_LIMIT = 100;
 /**
- * Top matches the fallback ranker carries into the liveness filter. A stated
- * bound rather than an assumption that trash is rare: a library where more
- * than this many BETTER-scoring assets sit in the trash returns fewer hits on
- * the fallback path than on the vec path. Trashed assets keep their embeddings
- * only until their grace window lapses (`cleanupPolyRefs` drops them at
- * purge), so the window in which the two paths could disagree is bounded too.
+ * A stated bound, not an assumption that trash is rare: past this many
+ * better-scoring trashed assets the fallback returns fewer hits than the vec
+ * path. Purge drops their embeddings, so the divergence window is bounded.
  */
 export const FALLBACK_CANDIDATES = 500;
 
-/** One match, in the wire shape the search route returns verbatim. */
+/** The wire shape the search route returns verbatim. */
 export interface PhotoSearchHit {
   assetId: string;
   contentId: string;
@@ -68,7 +46,6 @@ export type PhotoSearchOutcome =
   | { status: "unavailable"; reason: string };
 
 export interface PhotoSearchOptions {
-  /** Invoke and await the release-managed embed-text automation. */
   embedQuery: (
     query: string
   ) => Promise<
@@ -80,17 +57,10 @@ export interface PhotoSearchOptions {
 }
 
 /**
- * Rank live photographs against a text query.
- *
- * `unavailable` is a 200-level ANSWER, not an error: the bundled automation is
- * disabled, its local model assets are absent, or nothing is indexed for its
- * model yet. All are ordinary states of a gateway whose owner has not opted
- * into enrichment, and a surface must be able to say "not available here"
- * without rendering a failure. Derived data enriches, it never gates.
- *
- * An automation that RAN and failed is the one genuine failure and it THROWS,
- * so the route can answer 500: an owner who enabled it deserves to know it
- * broke rather than to be told it was never switched on.
+ * `unavailable` is a 200-level ANSWER, never an error: enrichment off, model
+ * assets absent, nothing indexed yet are all ordinary states, and derived data
+ * must never gate a surface. Only an automation that RAN and failed throws, so
+ * an owner who enabled it hears that it broke.
  */
 export async function searchPhotosByText(
   db: VaultDb,
@@ -129,10 +99,9 @@ function rankWithVec(
   vector.forEach((value, index) => {
     query.writeFloatLE(value, index * 4);
   });
-  // `e.dim = ?` is load-bearing: `vec_distance_cosine` RAISES on mismatched
-  // lengths, so a stale row from a model of another width would turn a search
-  // into an error. The scan ranker scores such a row 0 and drops it; this
-  // clause is how the vec path reaches the same outcome.
+  // `e.dim = ?` is load-bearing: `vec_distance_cosine` RAISES on a mismatched
+  // width, so a stale row would turn a search into an error. The scan ranker
+  // scores such a row 0; this clause is how the vec path matches it.
   const rows = db.vault
     .prepare(
       `SELECT e.target_id AS asset_id, a.content_id AS content_id,

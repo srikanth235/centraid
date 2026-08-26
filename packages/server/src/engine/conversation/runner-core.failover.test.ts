@@ -1,8 +1,7 @@
 /*
  * Runner-core: turn-boundary failover + provider egress consent.
  *
- * Split from runner-core.test.ts (repo-hygiene 500-line cap): this file owns
- * the ladder loop — breaker-gated rung selection, per-rung resume/hydration
+ * This file owns the ladder loop — breaker-gated rung selection, per-rung resume/hydration
  * planning, and the attended cross-provider consent gate.
  */
 
@@ -165,11 +164,11 @@ describe("makeConversationRunnerCore — turn-boundary failover", () => {
   });
 
   it("hydrates the rung it actually reaches, not the rung the route targeted", async () => {
-    // Regression: resume + hydration used to be resolved ONCE against the
-    // primary target. When rung 0 was skipped (breaker open) the fallback rung
-    // inherited that plan — which, for an active primary sitting at the
-    // ledger's head, is "no session id and no hydration". The whole
-    // conversation silently vanished on the very turn a failover happened.
+    // Resume + hydration are resolved against the rung actually reached, not
+    // ONCE against the primary target. A fallback rung that inherits the
+    // primary's plan gets "no session id and no hydration" whenever the
+    // primary sits at the ledger's head — the whole conversation silently
+    // vanishing on the very turn a failover happens.
     const planned: HarnessPrefs["kind"][] = [];
     let seen: TurnInput | undefined;
     const runner = makeConversationRunnerCore({

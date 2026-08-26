@@ -2,7 +2,7 @@
  * The security review: compromised / weak / reused counts plus the needs-
  * attention items, in the secret-free row shape. Weak and reused come from
  * the `locker.watchtower` command — derived INSIDE the vault's sealed
- * boundary (issue #293), the unseal receipted — compromised is the one
+ * boundary (#293), the unseal receipted — compromised is the one
  * stored breach flag. Only non-trashed items are reviewed.
  */
 

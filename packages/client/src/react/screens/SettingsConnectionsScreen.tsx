@@ -30,7 +30,7 @@ import { ConnectorBrandGlyph } from "./connectorBrandMarks.js";
 
 import styles from "./SettingsConnectionsScreen.module.css";
 
-// Connectors (issue #304 renderer half; primary sidebar page), rebuilt on the
+// Connectors (#304 renderer half; primary sidebar page), rebuilt on the
 // v9 block vocabulary (#765): the page is a list of what is connected and what
 // each connection feeds, and nothing else. Its identity, its count line, its
 // health sentence and its two verbs live in the frame — the screen reports what

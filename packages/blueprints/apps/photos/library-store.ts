@@ -1,24 +1,6 @@
-// The N-scope library data layer (issue #599). Owns one page per mounted scope
-// and the merged timeline over them, so app-root.tsx keeps only rendering and
-// the store keeps every rule about WHICH scope gets re-read WHEN.
-//
-// Three properties this file exists to guarantee:
-//
-//  1. A change-feed burst refetches ONE scope. The shell tags every burst with
-//     the scope it came from; refetching all N on each would turn a busy
-//     audience into an N× read storm on a device that is already the weakest
-//     link. Only an untagged burst (a host that cannot say) falls back to all.
-//  2. "Show more" re-queries only the scopes AT the horizon, each with its own
-//     `before` cursor, and APPENDS. Growing one `limit` and re-reading every
-//     scope from zero is quadratic in the number of pages; the keyset cursor
-//     (queries/library.ts) exists precisely so it doesn't have to be.
-//  3. Nothing here touches the DOM, `window.centraid` or the kit. Every effect
-//     arrives through `deps`, which is what makes the two rules above testable
-//     as units (src/photos-library-store.test.ts) rather than as a mounted app.
-//
-// The merge itself — ordering, cross-scope dedupe, the shared safe horizon —
-// lives in apps/_shared/scope-merge.ts (issue #726 D11) and is deliberately
-// not re-derived here.
+// N-scope library data layer (#599). A tagged burst refetches ONE scope;
+// "show more" re-reads only horizon scopes from their own cursors. Ordering
+// and dedupe belong to `mergeScopePages`.
 import { mergeScopePages } from "../_shared/scope-merge.ts";
 import type { MergeResult, ScopePage } from "../_shared/scope-merge.ts";
 import {
@@ -35,12 +17,10 @@ import type {
   Place,
 } from "./types.ts";
 
-/** What one scope answered, or why it couldn't. Errors are data, never throws. */
 export type ScopeReadResult =
   | { scope: string; ok: true; data: LibraryData }
   | { scope: string; ok: false; error: { code?: string; message: string } };
 
-/** One scope's accumulated library: page 1 plus every "show more" page after. */
 export interface ScopeLibrary {
   assets: Asset[];
   albums: Album[];
@@ -48,33 +28,26 @@ export interface ScopeLibrary {
   trash: Asset[];
   memories: MemoryRow[];
   memoryMembers: MemoryMemberRow[];
-  /** The oldest `taken_at` reached so far — the next `before` cursor. */
   tail: string | null;
-  /** Older assets exist beyond what this scope has paged in. */
   truncated: boolean;
-  /** A consent denial, which is an outcome to render, not an error. */
+  /** An outcome to render, not an error. */
   denied: { code?: string; message?: string } | null;
-  /** Anything else that went wrong reading this scope. */
   error: string | null;
 }
 
 export interface LibraryStoreDeps {
-  /** Fan the `library` query across the named scopes. Must never reject. */
+  /** Must never reject. */
   readScopes: (
     scopeIds: readonly string[],
     input: Record<string, unknown>
   ) => Promise<ScopeReadResult[]>;
-  /** The mounted scope ids, primary first — read live (audiences hydrate late). */
+  /** Read live: audiences hydrate late. */
   scopeIds: () => string[];
-  /** The member's own scope id: the dedupe winner and the default write target. */
   ownScopeId: () => string;
-  /** The change-feed table gate — a burst touching none of these changes nothing. */
+  /** A burst touching none of these is inert. */
   readTables: ReadonlySet<string>;
-  /** Defer `run` under `key`, collapsing repeats (a debounce in the app). */
   schedule: (key: string, run: () => void) => void;
-  /** Fired after any applied read; the app re-renders from `merged()`. */
   onData: () => void;
-  /** Live assets per page. */
   pageSize?: number;
 }
 
@@ -99,7 +72,6 @@ const emptyLibrary = (): ScopeLibrary => ({
   error: null,
 });
 
-/** One read's answer folded into a scope's state, replacing its pages. */
 function libraryFrom(data: LibraryData): ScopeLibrary {
   return {
     assets: data.assets ?? [],
@@ -115,13 +87,7 @@ function libraryFrom(data: LibraryData): ScopeLibrary {
   };
 }
 
-/**
- * A deeper page folded onto what a scope already holds. Assets append (they are
- * strictly older than everything already there), deduped by `asset_id` because
- * an asset whose timestamp equals the cursor can legitimately ride both pages.
- * The album/place/trash lists are whole-collection reads that the cursor does
- * not window, so the newer page's copies stand.
- */
+// Deduped by `asset_id`: a row at the cursor rides both pages.
 function appendPage(prev: ScopeLibrary, data: LibraryData): ScopeLibrary {
   const next = libraryFrom(data);
   const seen = new Set(prev.assets.map((asset) => asset.asset_id));
@@ -137,41 +103,28 @@ function appendPage(prev: ScopeLibrary, data: LibraryData): ScopeLibrary {
     memories: next.memories.length > 0 ? next.memories : prev.memories,
     memoryMembers:
       next.memoryMembers.length > 0 ? next.memoryMembers : prev.memoryMembers,
-    // A page that came back empty says "nothing older", not "I forgot my tail".
+    // An empty page says "nothing older", not "no tail".
     tail: next.tail ?? prev.tail,
   };
 }
 
 export interface LibraryStore {
-  /** Re-read every mounted scope from the newest end, at its current depth. */
   refreshAll: () => Promise<void>;
-  /** Re-read exactly one scope. The change-feed path, and the only cheap one. */
   refreshScope: (scopeId: string) => Promise<void>;
-  /** Page the horizon scopes deeper, each from its own cursor, and append. */
   showMore: () => Promise<void>;
-  /** Route one change-feed burst to the smallest refetch that answers it. */
   handleChange: (detail: LibraryChangeDetail | undefined) => void;
-  /** The merged timeline across scopes (memoized until the next read lands). */
   merged: () => MergeResult<MergeableAsset>;
-  /** One scope's accumulated library, empty when it has never answered. */
   scope: (scopeId: string) => ScopeLibrary;
-  /** The member's own scope's library — albums, places and trash come from here. */
   own: () => ScopeLibrary;
-  /**
-   * Apply a page a LIVE read pushed (single-scope hosts, where the replica can
-   * hand the app a fresh projection without a round trip). Treated as the
-   * newest answer for that scope, so an older in-flight read cannot clobber it.
-   */
+  /** A live read's page; outranks any older in-flight read. */
   applyScopeData: (scopeId: string, data: LibraryData) => void;
-  /** Fence every in-flight read; nothing applies after this. */
   dispose: () => void;
 }
 
 export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   const pageSize = deps.pageSize ?? DEFAULT_PAGE_SIZE;
   const byScope = new Map<string, ScopeLibrary>();
-  // Per-scope read generation: a slower earlier read must never overwrite a
-  // later one's answer, and disposal bumps every generation at once.
+  // A slow read must never overwrite a later answer.
   const generation = new Map<string, number>();
   let disposed = false;
   let mergedCache: MergeResult<MergeableAsset> | null = null;
@@ -186,7 +139,6 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   const scopeOf = (scopeId: string): ScopeLibrary =>
     byScope.get(scopeId) ?? emptyLibrary();
 
-  /** How deep this scope currently is, rounded up to whole pages. */
   const depthOf = (scopeId: string): number => {
     const held = scopeOf(scopeId).assets.length;
     return Math.max(pageSize, Math.ceil(held / pageSize) * pageSize);
@@ -197,7 +149,6 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     deps.onData();
   };
 
-  /** Fold one scope's answer in. A failed read leaves the last good page alone. */
   const apply = (result: ScopeReadResult, mode: "replace" | "append"): void => {
     if (result.ok) {
       const prev = byScope.get(result.scope);
@@ -209,8 +160,7 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
       );
       return;
     }
-    // Keep whatever this scope last showed and record why it is stale — a
-    // failing audience must not blank the timeline the other scopes still fill.
+    // A failing scope must not blank what the others fill.
     byScope.set(result.scope, {
       ...scopeOf(result.scope),
       error: result.error.message,
@@ -228,7 +178,7 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     if (disposed) return;
     let applied = false;
     for (const result of results) {
-      // Dropped when a newer read for THIS scope started while we were waiting.
+      // Dropped: a newer read for this scope started.
       if (marks.get(result.scope) !== current(result.scope)) continue;
       apply(result, mode);
       applied = true;
@@ -244,12 +194,7 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
         const library = scopeOf(scopeId);
         return {
           scopeId,
-          // `Asset` and `MergeableAsset` describe the SAME query row from two
-          // sides: the merge names the columns it orders and dedupes on and
-          // takes the rest as `unknown`, while `Asset` names the columns the
-          // UI paints. Neither is a subtype of the other, so the bridge is a
-          // cast — with the asset rows themselves untouched in either
-          // direction.
+          // Same row, disjoint views: neither is a subtype, so cast.
           rows: library.assets as unknown as readonly MergeableAsset[],
           tail: library.tail,
           truncated: library.truncated,
@@ -266,8 +211,7 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
 
   async function refreshAll(): Promise<void> {
     const scopeIds = deps.scopeIds();
-    // One round trip, so one limit: the deepest scope's, which keeps a scope
-    // that has already paged deep from snapping back to page 1 on a refresh.
+    // One limit per trip: the deepest, or deep scopes snap back.
     const limit = scopeIds.reduce(
       (deep, id) => Math.max(deep, depthOf(id)),
       pageSize
@@ -282,9 +226,7 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
 
   async function showMore(): Promise<void> {
     const view = merged();
-    // The horizon names the truncated scopes holding the merged list back. When
-    // the merge reports truncation with nobody at the horizon there is nothing
-    // deeper to ask for, so this is a no-op rather than a blind re-read of all.
+    // Empty horizon means nothing deeper exists: no-op, never a full re-read.
     const targets = view.horizonScopeIds;
     await Promise.all(
       targets.map((scopeId) => {
@@ -292,9 +234,7 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
         return readInto(
           [scopeId],
           { limit: pageSize, ...(before ? { before } : {}) },
-          // Without a cursor the query returns the same newest page again;
-          // replacing (not appending) keeps that from being a no-op that also
-          // strands the accumulated depth.
+          // Cursorless reads repeat the newest page: replace, never append.
           before ? "append" : "replace"
         );
       })
@@ -304,15 +244,14 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   function handleChange(detail: LibraryChangeDetail | undefined): void {
     if (disposed) return;
     const scope = detail?.scope;
-    // A scope that just hydrated has no page at all: fetch exactly it, and
-    // never mistake the arrival for a data burst that the table gate can drop.
+    // A fresh scope has no page: fetch past the table gate.
     if (detail?.source === "scope-added") {
       const scopeId = scope ?? "";
       deps.schedule(`scope:${scopeId}`, () => void refreshScope(scopeId));
       return;
     }
     const tables = detail?.tables;
-    // An empty/absent table list means "this app acted" — always refetch.
+    // No table list means "this app acted" — always refetch.
     if (Array.isArray(tables) && tables.length > 0) {
       if (!tables.some((table) => deps.readTables.has(table))) return;
     }

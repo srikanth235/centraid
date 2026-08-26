@@ -1,5 +1,5 @@
 /**
- * Minimal design-tokens coverage (#496 H3).
+ * Minimal design-tokens coverage (#496).
  * Tokens are a known trap zone (hardcoded CSS drift); pin brand + palette shape.
  */
 import { describe, expect, test } from "vitest";

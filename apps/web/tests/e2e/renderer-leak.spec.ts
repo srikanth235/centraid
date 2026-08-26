@@ -1,34 +1,8 @@
 /**
- * RENDERER LEAK SOAK (issue #842, W3.5).
- *
- * The shell is a single long-lived document. #799 retired the served-app
- * iframe, so opening a bundled app is a route swap inside the SAME window and
- * nothing is torn down by a navigation any more — which means every allocation
- * an app open makes has to be released by the app close, or it is released
- * never. The desktop app and an installed PWA are opened once and left running
- * for days, so "never" is a real duration.
- *
- * The lane opens and closes one app N times and censuses what is still alive
- * between the cycles:
- *
- *   listeners      — `addEventListener` on window/document/body with no
- *                    matching removal
- *   intervals      — `setInterval` handles nobody cleared
- *   event sources  — the replica `_changes` SSE and anything like it
- *   observers      — Mutation/Resize/IntersectionObserver still observing
- *   attached nodes — elements in the document
- *   retained nodes — Chromium only, post-GC: the census that can see a
- *                    DETACHED subtree JS still holds
- *   heap           — Chromium only, post-GC, as a backstop
- *
- * The thresholds and the single argument they all come from are in
- * `leak-budgets.ts`; this file only measures and asserts.
- *
- * WHAT THIS LANE IS NOT: a multi-day soak. It proves the per-cycle residue is
- * zero, which is the property that makes a multi-day session safe; it does not
- * observe a multi-day session. A real one needs a resident host running for
- * days and is out of a PR lane's reach — see the receipt's blocked-external
- * note for the exact rig that would close it.
+ * RENDERER LEAK SOAK (#842). The shell is one long-lived document with no
+ * served-app iframe (#799), so what an app open allocates is released by the
+ * close or never. Thresholds live in `leak-budgets.ts`. This proves the
+ * per-cycle residue is zero, NOT that a multi-day session is clean.
  */
 
 import { promises as fs } from "node:fs";
@@ -47,9 +21,8 @@ const ADMIN_TOKEN = "centraid-web-e2e-token";
 const CONTROL_SESSION = "web-e2e-control-session";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
 const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
-// Same subject as the waterfall probe: a plain first-party route that mounts on
-// the web seat, so what the census measures is the shell's own mount/unmount
-// discipline with the least app-specific noise on top.
+// A plain first-party route, so the census measures shell discipline, not app
+// noise.
 const APP_NAME = "Tasks";
 
 const here = import.meta.dirname;
@@ -59,18 +32,12 @@ const REPORT_PATH = path.resolve(
   "artifacts/perf-input/renderer-leak-report.json"
 );
 
-/** Chromium `Performance.getMetrics` rows this lane reads, post-GC. */
 interface HeapCensus {
   retainedNodes: number;
   heapUsedBytes: number;
 }
 
-/**
- * Mint a control session, swap in the harness's enrolled device session, and
- * reload into a booted shell. Mirrors perf-waterfall.spec.ts — an inline app
- * cannot mount without a replica lease, so this bootstrap is the price of
- * measuring a real app open at all.
- */
+/** An inline app cannot mount without a replica lease. */
 async function establishSession(page: Page): Promise<void> {
   await installHarnessControlTransport(page, API_URL);
   const control = await page.evaluate(
@@ -158,15 +125,8 @@ async function openPalette(page: Page): Promise<void> {
     .toBe(true);
 }
 
-/**
- * One open/close cycle, proved at both ends.
- *
- * MOUNTED is proved by the inline bridge publishing `window.centraid`, and
- * UNMOUNTED by it going away again — waiting on the app frame alone would be
- * satisfied while the app is still up (the shell's own nav renders inside
- * InlineAppRoute too), and a census taken there would measure the app rather
- * than what the app left behind.
- */
+/** Prove both ends on `window.centraid` appearing and going away: the app frame
+ *  alone is visible while the app is still up. */
 async function openAndClose(page: Page): Promise<number> {
   await openPalette(page);
   const palette = page.getByRole("dialog", { name: "Command palette" });
@@ -187,11 +147,8 @@ async function openAndClose(page: Page): Promise<number> {
       )
     )
     .toBe(true);
-  // The app's OWN subtree, not the document total. The total is dominated by
-  // the shell frame and by whatever Home happens to be showing, so it is not a
-  // stable witness that an app rendered — measured in a full-suite run where
-  // earlier specs had populated the vault, the total delta was 0 while the app
-  // was demonstrably up.
+  // The app's OWN subtree, never the document total — that has read 0 delta
+  // with the app plainly up.
   const mountedNodes = await page.evaluate(
     () => document.querySelectorAll('[data-testid="inline-app-view"] *').length
   );
@@ -210,13 +167,7 @@ async function openAndClose(page: Page): Promise<number> {
   return mountedNodes;
 }
 
-/**
- * Post-GC node and heap census over CDP.
- *
- * `collectGarbage` is what makes the node number mean "retained", not merely
- * "allocated": anything the renderer could collect is gone by the time the
- * metrics are read, so what remains is what something still points at.
- */
+/** `collectGarbage` is what makes the count mean "retained", not "allocated". */
 async function heapCensus(cdp: CDPSession): Promise<HeapCensus> {
   await cdp.send("HeapProfiler.collectGarbage");
   const { metrics } = await cdp.send("Performance.getMetrics");
@@ -232,27 +183,23 @@ test("renderer leak soak — repeated app open/close leaves no residue", async (
   page,
   browserName,
 }) => {
-  // 15 real open/close cycles against a live gateway; far past the 60s default.
+  // Real cycles against a live gateway, far past the 60s default.
   test.setTimeout(360_000);
 
   await installLeakProbe(page);
   await page.goto("/");
   await establishSession(page);
 
-  // Chromium exposes the post-GC census over CDP. On another engine the
-  // page-side counters still run, and the report records that the two
-  // Chromium-only numbers were NOT measured rather than reporting them as
-  // healthy. On Chromium the session must open — an unavailable CDP session on
-  // the engine that has it is a broken rig, not a reason to measure less.
+  // Only Chromium exposes the post-GC census; elsewhere report NOT MEASURED.
+  // On Chromium a missing CDP session is a broken rig.
   let cdp: CDPSession | undefined;
   if (browserName === "chromium") {
     cdp = await page.context().newCDPSession(page);
     await cdp.send("Performance.enable");
   }
 
-  // Sequential by necessity — the cycles ARE the measurement, so they may not
-  // be started in parallel (`no-await-in-loop`'s remedy would measure a very
-  // different renderer).
+  // Sequential by necessity: parallelising the cycles (the `no-await-in-loop`
+  // remedy) measures a different renderer.
   let mountedSubtreeLow = Number.POSITIVE_INFINITY;
   const runCycles = async (count: number): Promise<void> => {
     if (count === 0) return;
@@ -335,11 +282,8 @@ test("renderer leak soak — repeated app open/close leaves no residue", async (
   }
   console.log("======================================================\n");
 
-  // Anti-vacuity first: every ceiling below is a ceiling on GROWTH, and a run
-  // whose cycles never mounted anything would satisfy all of them at zero.
-  // `openAndClose` already hard-asserts the mount and the unmount; this adds
-  // the quantitative half — the app must actually have PUT something in the
-  // document on every single cycle, including the worst one.
+  // Anti-vacuity: every ceiling below caps GROWTH, so a run that mounted
+  // nothing passes them all at zero.
   expect(
     mountedSubtreeLow,
     "elements inside the mounted app view, worst cycle"
@@ -377,8 +321,7 @@ test("renderer leak soak — repeated app open/close leaves no residue", async (
       leakBudgets.maxHeapGrowthRatio
     );
   } else {
-    // Honest degradation, not a silent pass: the run says which engine could
-    // not answer the two Chromium-only questions.
+    // Honest degradation, not a silent pass.
     test.info().annotations.push({
       type: "leak-note",
       description:

@@ -1,4 +1,4 @@
-// The sharing plane People projects per person (issue #821): linked/unlinked
+// The sharing plane People projects per person (#821): linked/unlinked
 // on the roster, the vaults / pending invitations / shared containers on the
 // profile, and the linked / to_link headline counts.
 //

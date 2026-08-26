@@ -1,25 +1,9 @@
 /*
- * HTTP route handler for the per-app chat surface.
- *
- *   POST    /centraid/<appId>/_turn                        ← send turn (SSE stream)
- *   GET     /centraid/<appId>/_turn/model                   ← read the ask-model picker
- *   PUT     /centraid/<appId>/_turn/model                   ← set/clear the ask-model override
- *
- * Surface A is now POST-only. The `conversationId` in the POST body is the
- * `conversations` row id in the per-app runtime SQLite. The desktop persists
- * the transcript itself via Surface B (`/_centraid-conversations`); this route only
- * drives the model turn and records turn completion + the harness-resume
- * handle against the session row.
- *
- * The runtime delegates to a host-injected `ConversationRunner`. When no runner is
- * configured, the chat route 503s with a clear error — that is the M1
- * stub behavior the issue calls out.
- *
- * The stream/ledger half of the turn — SSE framing, the event accumulator,
- * the per-session lock, recordTurn/noteTurn — lives in `turn-sse.ts`
- * (shared with the vault assistant's shell-level turn route). This module
- * keeps what is app-shaped: registry lookup, manifest reads, the
- * handler-catalog system-prompt preamble, and attachment blob resolution.
+ * HTTP routes for the per-app chat surface. The stream/ledger half — SSE
+ * framing, the accumulator, the per-session lock, recordTurn/noteTurn — lives
+ * in `turn-sse.ts`, shared with the vault assistant's route. This module keeps
+ * what is APP-shaped: registry lookup, manifest reads, the handler-catalog
+ * preamble, and attachment resolution.
  */
 
 import { promises as fs } from "node:fs";
@@ -49,12 +33,7 @@ import {
 } from "./turn-sse.js";
 import type { TurnAttachmentRef } from "./turn-sse.js";
 
-/**
- * Validate a chat-session id. Reject anything that could escape a
- * directory (the harness scratch dir uses the id verbatim as a filename) or
- * exceed a sane length. Chat-session ids are caller-supplied — the renderer
- * mints a stable id per chat pane (it's the chat session UUID).
- */
+/** Ids are CALLER-supplied and used verbatim as a scratch filename. */
 export function isValidConversationId(id: string): boolean {
   if (!id || id.length > 128) return false;
   if (id === "index.json") return false;
@@ -62,23 +41,11 @@ export function isValidConversationId(id: string): boolean {
   return /^[A-Za-z0-9_\-:]+$/u.test(id);
 }
 
-/**
- * One catalog entry the ask-model picker can offer — a trimmed `HarnessModel`
- * (just the id + a display label; the picker doesn't need tiers/default
- * flags, those are folded into `defaultModel` below).
- */
 export interface AskModelOption {
   id: string;
   label: string;
 }
 
-/**
- * Wire shape for `GET /centraid/<appId>/_turn/model` — the kit Ask panel's
- * inline model picker (subsystem `ask`). `current` is `null` when the
- * subsystem has no override (falls through to `defaultModel`, itself the
- * harness's own default when the owner hasn't set `model.<kind>.default`
- * either). `catalog` is the active harness's model list.
- */
 export interface AskModelInfo {
   harnessKind: string;
   defaultModel?: string;
@@ -86,82 +53,33 @@ export interface AskModelInfo {
   catalog: AskModelOption[];
 }
 
-/**
- * Host-injected read/write pair backing the ask-model picker routes.
- * `set(null)` clears the subsystem override (back to default). Optional —
- * without it the picker routes 503, same shape as the missing-runner guard
- * on `POST _turn`.
- */
 export interface AskModelPrefs {
   get: () => Promise<AskModelInfo>;
   set: (model: string | null) => Promise<void>;
 }
 
-/**
- * Dependencies injected from `Runtime`. Pulled out so the chat routes don't
- * need to know about `Runtime` directly (avoids a circular module shape).
- */
+/** Injected so these routes never import `Runtime` (a circular shape). */
 export interface TurnRouteContext {
   registry: Registry;
-  /**
-   * Resolve an app's live code dir, honoring the git-store override
-   * (issue #137): under the store backend there is no legacy `current.json`,
-   * so a version-based lookup always misses. The chat route reads the
-   * manifest from here to splice the declared handler catalog into the
-   * system prompt. Returns undefined when the app has no live code.
-   */
+  /** Honors the git-store override: there is no `current.json` (#137). */
   resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>;
-  /**
-   * Resolve the only primary workspace roots the client may choose. The host
-   * owns these paths; the wire carries enum values, never primary paths.
-   */
   workspaceRoots?: (
     entry: RegistryEntry,
     conversationId: string
   ) => Promise<Partial<Record<ConversationWorkspaceKind, string>>>;
   runner?: ConversationRunner;
-  /**
-   * Optional central chat store. When set, the route reads the session's
-   * harness-resume handle from it and records turn completion back into it.
-   * When unset, the route still works — no resume handle is threaded, so
-   * each turn starts the harness fresh.
-   */
+  /** Unset ⇒ no resume handle is threaded and each turn starts fresh. */
   conversationStore?: ConversationHistoryStore;
-  /**
-   * Central scratch base dir for harness-owned session files. The route
-   * passes `<conversationHarnessSessionDir>/<conversationId>.jsonl` as `ConversationTurnInput.sessionFile`.
-   */
   conversationHarnessSessionDir: string;
-  /**
-   * Optional per-app metadata reader. Used to populate `appName` / `appDescription`
-   * in the extra-system-prompt. Returns undefined when the app has no
-   * authored `app.json` yet (freshly registered uploads with no
-   * committed version).
-   */
   appMeta?: (
     entry: RegistryEntry
   ) => Promise<{ name?: string; description?: string }>;
-  /**
-   * Per-runtime chat-session lock map. The `Runtime` instance owns one of
-   * these and threads it in here so the `(appId, conversationId)` serialization
-   * map is scoped to one gateway. A module-level map would silently collide
-   * across gateways that share an appId — two profiles can both install the
-   * same template and end up with the same id.
-   */
+  /** Never module-level: two gateways can collide on appId. */
   conversationLocks: Map<string, Promise<void>>;
-  /**
-   * Optional per-vault turn-concurrency gate (issue #420). Resolved per request
-   * (the ambient vault decides which limiter), so it bounds running turns per
-   * vault, not per gateway. Absent → unbounded (the pre-#420 behavior).
-   */
+  /** Resolved PER REQUEST, so it bounds turns per vault, not per gateway
+   *  (#420). Absent ⇒ unbounded. */
   turnLimiter?: () => TurnLimiter | undefined;
-  /**
-   * Optional ask-model picker backing (subsystem `ask`). Wired by the
-   * gateway from the same prefs-store + model-catalog machinery that
-   * resolves the effective ask model at turn time
-   * (`resolveSubsystemModel`), so the picker and the actual turn always
-   * agree. Backs `GET`/`PUT /centraid/<appId>/_turn/model`.
-   */
+  /** Same machinery `resolveSubsystemModel` uses, so picker and turn agree. */
   askModel?: AskModelPrefs;
 }
 
@@ -170,22 +88,11 @@ export type ParsedTurnRoute =
   | { kind: "get-model"; appId: string }
   | { kind: "put-model"; appId: string };
 
-/**
- * Match the chat sub-routes under `/centraid/<appId>/_turn`. The caller
- * (router.ts) has already established the URL is under `/centraid/<id>/_turn...`.
- *
- * Surface A (`_turn`) is POST-only. `_turn/model` (the kit Ask composer's
- * model picker) is GET (read the picker state) / PUT (set or clear the
- * `ask` subsystem override) — everything else (including the old
- * `windows...` sub-paths) returns undefined and the caller 404s.
- */
 export function parseTurnSubRoute(
   appId: string,
   segments: string[],
   method: string
 ): ParsedTurnRoute | undefined {
-  // segments here are the path under /centraid/<appId>/ starting with "_turn"
-  // segments[0] === "_turn"
   const m = method.toUpperCase();
   if (segments.length === 1 && m === "POST") {
     return { kind: "post", appId };
@@ -200,25 +107,18 @@ export function parseTurnSubRoute(
 interface PostBody {
   conversationId?: string;
   message?: string;
-  /** Chat register: 'ask' = the app copilot; absent/'build' = builder chat. */
   register?: string;
   model?: string;
   harnessKind?: string;
   thinking?: string;
   idempotencyKey?: string;
-  /** Regenerate: the turn id this turn re-runs (issue #420). */
   retryOf?: string;
-  /** Attachments uploaded ahead of this turn (issue #190). */
   attachments?: TurnAttachmentRef[];
   providerConsent?: unknown;
   workspaceKind?: unknown;
   additionalDirectories?: unknown;
 }
 
-/**
- * Dispatch one chat-route request. Errors thrown out of here are caught by
- * `Runtime.handle`'s catch-all and turned into 500s.
- */
 export async function handleTurnRoute(
   req: IncomingMessage,
   res: ServerResponse,
@@ -241,7 +141,6 @@ export async function handleTurnRoute(
   await handlePostTurn(req, res, ctx, entry);
 }
 
-/** `GET /centraid/<appId>/_turn/model` — read the ask-model picker state. */
 async function handleGetAskModel(
   res: ServerResponse,
   ctx: TurnRouteContext
@@ -258,11 +157,6 @@ async function handleGetAskModel(
   sendJson(res, 200, await ctx.askModel.get());
 }
 
-/**
- * `PUT /centraid/<appId>/_turn/model` — set or clear (`model: null`) the
- * `ask` subsystem's model override. Responds with the refreshed picker
- * state so the client can render the new selection off one round-trip.
- */
 async function handlePutAskModel(
   req: IncomingMessage,
   res: ServerResponse,
@@ -350,9 +244,8 @@ async function handlePostTurn(
     sendError(res, 400, "bad_request", "Invalid conversationId.");
     return;
   }
-  // A client accumulates provider consents over a conversation and re-sends
-  // the whole set, so a second cross-provider switch cannot revoke the first.
-  // A bare string stays wire-valid and means a one-element set (issue #567).
+  // The client re-sends the WHOLE set, so a second cross-provider switch
+  // cannot revoke the first; a bare string is a one-element set (#567).
   const providerConsent = Array.isArray(body.providerConsent)
     ? body.providerConsent
     : body.providerConsent === undefined
@@ -387,9 +280,6 @@ async function handlePostTurn(
     return;
   }
 
-  // Resolve harness-resume handles from the central session row when a
-  // chat store is wired. The chat surface is one mode — no per-session
-  // mode toggle to read.
   let prevHarnessSessionId: string | undefined;
   let prevHarnessKind: string | undefined;
   let prevHarnessUsageSnapshot:
@@ -414,10 +304,8 @@ async function handlePostTurn(
     prevHarnessUsageSnapshot = resume?.usageSnapshot;
   }
 
-  // Attachments uploaded ahead of the turn (issue #190): the bytes already
-  // live in the per-app blob CAS, keyed by sha256. We resolve each to its
-  // on-disk path so the harness can build an image/document content block, and
-  // keep the refs to record `attachments` rows on the turn's `message_in` item.
+  // The bytes already live in the per-app blob CAS (#190); the refs are kept
+  // to record `attachments` rows on the turn's `message_in` item.
   const attachmentRefs: TurnAttachmentRef[] = validateTurnAttachmentRefs(
     ctx.conversationStore,
     entry.id,
@@ -533,17 +421,8 @@ async function handlePostTurn(
   });
 }
 
-/**
- * Read the app's manifest from disk, returning `undefined` when the app
- * has no live code dir or the file is unreadable. The system prompt still
- * works without it — but with the manifest the prompt includes the
- * declared catalog so the harness reaches for the right handler.
- *
- * Resolution goes through the runtime's code-dir resolver so it honors the
- * git-store override (issue #137): the materialized `main` worktree under
- * the store backend has no legacy `current.json`, so resolving by active
- * version would always miss and silently drop the catalog.
- */
+/** `undefined` when unreadable — the prompt still works, without the declared
+ *  catalog. Goes through the runtime's resolver for the git-store override. */
 async function safeReadManifest(
   entry: RegistryEntry,
   resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>

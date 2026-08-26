@@ -1,19 +1,4 @@
-// The records GRID (#775) — a kind as the store holds it.
-//
-// The block vocabulary already had a records block, `DocTable`, and it reads
-// the same rows as DOCUMENTS: a title and two facts. That is the right block
-// for a drive and the wrong one for the vault census, where the question is
-// what is actually in each column of each record. This is the other reading,
-// and it is a block rather than screen code for the usual reason: the column
-// declarations, the cell registers and the sort model are a vocabulary, not
-// one route's markup.
-//
-// It composes from recipes the system already has — the sunken header band and
-// hairline rows of `DocTable`, the badge of `KindBadge`, the toggle semantics
-// of the chips row — and invents no visual language of its own. What it adds
-// is the one thing a three-column summary cannot say: which cells the store
-// has no value for, which hold the empty string, and which it will not print
-// at all.
+// Records grid (#775): columns as the store holds them; sort is the store's, over the whole kind.
 import { useCallback, useState } from "react";
 import type { JSX, MouseEvent } from "react";
 
@@ -35,17 +20,10 @@ import Icon from "./Icon.js";
 
 import styles from "./GridBlock.module.css";
 
-/** `key` + `label` + the declarations, documented once in the shared contract.
- *  This kit adds no column fields of its own. */
 export type GridColumn = GridColumnData;
 
-/** One record. `values` is the record as the store returned it; the grid reads
- *  it through the declared columns and never through its own key order. */
 export interface GridRowDef {
-  /** Stable identity — the record's id, never the array index. */
   id: string;
-  /** What names this record in a control's accessible name ("More for …").
-   *  Rows repeat verbs; a name is what tells a thousand of them apart. */
   name: string;
   values: Readonly<Record<string, unknown>>;
 }
@@ -53,25 +31,16 @@ export interface GridRowDef {
 export interface GridBlockProps {
   columns: readonly GridColumn[];
   rows: readonly GridRowDef[];
-  /** Which column the ROWS ARE ALREADY ordered by. The grid does not sort —
-   *  the store does, over the whole kind rather than the page in hand. */
   sort?: GridSortData | null;
-  /** Asked for a new order. Omit for a grid whose store cannot reorder. */
   onSort?: (next: GridSortData) => void;
-  /** The line under the grid — how much of the whole this page is showing. */
   caption?: string;
-  /** The per-row overflow menu. Omit for a grid with no row actions. */
   menu?: readonly (CtxItem | "sep")[];
   onMenuPick?: (rowId: string, itemId: string) => void;
-  /** Prefix for each row's overflow-button accessible name ("More for …"). */
   menuLabel?: string;
   ariaLabel: string;
   className?: string;
 }
 
-/** The copy for the two cells that have no value to print. Stated here because
- *  they are not content — they are the grid naming its own two absences, the
- *  same way a null glyph in a database client is the client's word. */
 const NULL_WORD = "null";
 const BLANK_WORD = "empty";
 
@@ -125,7 +94,6 @@ function Cell({
   );
 }
 
-/** Records grid — declared columns, sortable headers, one register per column. */
 export default function GridBlock({
   columns,
   rows,
@@ -138,9 +106,6 @@ export default function GridBlock({
   ariaLabel,
   className,
 }: GridBlockProps): JSX.Element {
-  // Which long cells a member has opened. The grid's own state: an expansion
-  // is a reading position, not a fact about the record, so pushing it at the
-  // caller would make every screen carry a Set it never reasons about.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const toggleExpand = useCallback((key: string) => {
     setExpanded((prev) => {
@@ -166,9 +131,6 @@ export default function GridBlock({
   const hasMenu = Boolean(menu && menu.length > 0);
 
   return (
-    // The grid scrolls in the inline axis rather than dropping columns: a
-    // census whose columns disappeared on a narrower canvas would answer the
-    // page's own question differently depending on the window.
     <div className={cx(styles.wrap, className)}>
       <table aria-label={ariaLabel} className={styles.grid}>
         <thead>
@@ -223,11 +185,7 @@ export default function GridBlock({
                 </th>
               );
             })}
-            {/* A SPACER, not a header: it reserves exactly the width of the
-                row's overflow button so the last column lines up. A `<td>` in
-                the head row is the corner-cell idiom — "no header here" — and
-                it carries no word because each row's own control is named by
-                `menuLabel` plus the record. */}
+            {/* Spacer, not a header: width of the overflow button. */}
             <td
               aria-hidden="true"
               className={cx(styles.head, styles.menuSlot)}

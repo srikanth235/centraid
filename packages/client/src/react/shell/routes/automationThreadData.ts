@@ -1,14 +1,6 @@
-// Automation thread data layer (Automations UI revamp — see
-// receipts/issue-387-automations-ui-revamp.md). The thread is one long-lived conversation per
-// automation: every fire is a run appended to it, and consent (parked
-// invocations, staged outbox writes, standing grants) surfaces inline
-// instead of behind a separate Approvals detour. This module aggregates the
-// automation row, its runs, and the GLOBAL consent lists (there is no
-// automation-scoped consent endpoint), filters the latter down to this
-// automation's actor, and derives the `AutomationThreadData` DTO the thread
-// screen renders — reusing `deriveAutomationHero`/`triggerOriginLabel`/
-// `AU_STATUS_LABEL` from automationsData.ts rather than re-deriving the
-// hero/trigger block a second time.
+// Automation thread data (#387): one conversation per automation, every fire a
+// run in it. Consent endpoints are GLOBAL, so this filters them to the
+// automation's actor; hero/trigger/status come from automationsData.ts.
 import {
   auStatusForRow,
   glyphForId,
@@ -42,67 +34,16 @@ import {
   triggerOriginLabel,
 } from "./automationsData.js";
 
-/**
- * The result `loadAutomationThreadData` hands back to the route wrapper. The
- * screen-facing `data` is the self-contained `AutomationThreadData` DTO
- * (screen-contracts.ts, no ambient ipc types); `row` rides alongside it —
- * NOT inside `data` — so the route wrapper (which owns edit/delete/rotate
- * navigation, same as `AutomationViewRoute.tsx`'s `rowRef`) keeps the raw
- * `CentraidAutomationRow` without screen-contracts.ts having to import it
- * (that file is deliberately kept free of the renderer's ambient
- * `centraid-api.d.ts` globals — see its file header).
- */
+/** `row` rides ALONGSIDE `data`: screen-contracts.ts stays free of ambient
+ *  globals. */
 export interface AutomationThreadLoadResult {
   row: CentraidAutomationRow;
   data: AutomationThreadData;
 }
 
-// ── Consent actor matching (verified against the gateway/vault source, not
-// assumed) ───────────────────────────────────────────────────────────────
-//
-// Every automation fire rides ONE enrolled agent identity, keyed by the
-// automation's OWNING APP FOLDER, not its row id/ref:
-//   - `reconcileScheduler` enrolls one agent per `row.ownerApp`
-//     (packages/server/src/serve/build-gateway.ts:1157-1166:
-//     `vaultRegistry.enrollAutomationAgent(appId, nameByOwnerApp.get(appId))`
-//     where `appId` iterates `new Set(rows.map((r) => r.ownerApp))`).
-//   - `enrollAutomationAgent` calls `ensureAgentEnrolled(db, appId, {
-//     displayName })` (packages/server/src/serve/vault-plane.ts:520-526),
-//     which stores `appId` as `consent_agent.enrollment_key` and `displayName`
-//     (== the automation's manifest `name`, same value `row.name` carries)
-//     as `core_party.display_name` — self-healing on rename
-//     (packages/vault/src/host.ts:415-455).
-//
-// None of the three consent surfaces expose that `ownerApp`/enrollment_key to the
-// renderer, and only two of them expose the enrolled agent's row id at all:
-//   - `OutboxItem` (an outbox-staged write) carries only `actor` (the
-//     resolved DISPLAY NAME) and `actorKind` — `OutboxItemSummary`
-//     (vault-plane.ts:227-242) never puts `actor_id` on the wire.
-//   - `OutboxGrant.actorId` and `VaultParkedEntry.callerId` DO carry the raw
-//     `consent_agent.agent_id` (vault-plane.ts `listOutboxGrants`;
-//     packages/vault/src/gateway/gateway.ts:1292-1311 `listParked`), but the
-//     renderer has no lookup from a `CentraidAutomationRow` to that id — no
-//     `/centraid/_vault/agents` client fn exists in gateway-client-vault.ts
-//     even though the route is mounted server-side (vault-routes.ts:18/364).
-//
-// The only field ALL THREE surfaces carry that the renderer can compare to
-// something it already holds is therefore the enrolled agent's DISPLAY
-// NAME, which stays in sync with `CentraidAutomationRow.name` (same
-// `displayName` source as above). Filtering matches `actor`/`caller` ===
-// `row.name`, additionally requiring `actorKind`/`callerKind === 'agent'` so
-// a same-named connected app or the vault assistant (`callerKind:
-// 'assistant'`) never leaks into an automation's thread.
-//
-// This is a SOFT match: two automations sharing a display name would
-// collide, a very recent rename lags until the next scheduler reconcile
-// tick, and `OutboxGrant` carries no `actorKind` at all (grants are matched
-// on name alone — a coincidental app/automation name collision could leak a
-// grant here). A follow-up that exposes `consent_agent.agent_id` (e.g. a
-// renderer `listAgents()` client fn over the existing
-// `/centraid/_vault/agents` route) would let this become an exact id match.
-// Exported (not just used internally) so `automationEditorData.ts`'s
-// Behavior-tab consent view can filter the same global lists the same way,
-// without re-deriving the matching rule above a second time.
+// One enrolled agent identity per fire, keyed by the owning APP FOLDER
+// (`row.ownerApp` → `consent_agent.enrollment_key`), never the row id. Also
+// require `actorKind`/`callerKind === 'agent'`, or a same-named app leaks in.
 export function filterConsentForAutomation(
   agentId: string | undefined,
   blocking: BlockingSummary,
@@ -142,9 +83,6 @@ export function filterConsentForAutomation(
   return { grants: grantDtos, outbox, parked };
 }
 
-/** Small-caps mono date-separator label for the thread spine — "Today" /
- *  "Yesterday" / "Mon, Jul 6" (matches the run-view's `startedLabel` day
- *  logic, runViewData.ts, minus the time-of-day suffix). */
 function dateGroupLabel(startedAt: number): string {
   const d = new Date(startedAt);
   const now = new Date();
@@ -176,18 +114,7 @@ function buildThreadRun(run: CentraidAutomationTurnRecord): ThreadRunDTO {
   };
 }
 
-/**
- * What the run screen may say about the compiled plan.
- *
- * The latest compile turn is the whole story: in flight ⇒ the plan is being
- * rebuilt, failed ⇒ executions are running against a stale plan (or none),
- * ok ⇒ nothing to report. `never` is a real state, not an error — an
- * automation that has been saved but never compiled cannot run at all, and
- * saying so here is kinder than an empty run list.
- *
- * Deliberately inert: no turn id, no retry handle. Every remedy the banner
- * offers is a link to the compiler screen, which owns compiling.
- */
+/** Inert by design: every remedy links to the compiler screen. */
 function buildPlanStatus(
   compiles: readonly CentraidAutomationTurnRecord[],
   hasRun: boolean
@@ -235,11 +162,7 @@ function relativeCompileTime(startedAt: number): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-/**
- * Load one automation's thread: the row, its runs (newest first, capped at
- * 100), and its consent surface filtered down from the global lists. `null`
- * when the automation doesn't exist (deleted, or a stale deep link).
- */
+/** `null` when the automation does not exist (deleted, stale deep link). */
 export async function loadAutomationThreadData(input: {
   automationId: string;
   gatewayOrigin: string;
@@ -254,12 +177,8 @@ export async function loadAutomationThreadData(input: {
   if (!row) return null;
 
   const hero = deriveAutomationHero(row, input.gatewayOrigin);
-  // The one place the two surfaces are cut apart. A compile turn is the
-  // COMPILER working, not the automation running: it never belongs in the run
-  // history, where it used to sit as a "Compile" card among real executions.
-  // It is distilled into `plan` (an inert status the run screen may report and
-  // must not act on) and otherwise handed to the compiler screen, which reads
-  // the same turns as steps via automationCompileData.ts.
+  // A compile turn is the COMPILER working, not the automation running: never
+  // run history — distilled into `plan`, otherwise the compiler screen's.
   const compiles = runs
     .filter((run) => run.triggerKind === "compile")
     .sort((a, b) => b.startedAt - a.startedAt);
@@ -267,9 +186,7 @@ export async function loadAutomationThreadData(input: {
   const executions = threadTurns.filter(
     (run) => run.triggerKind !== "interactive"
   );
-  // Header status now reports the AUTOMATION, not its last compile — the plan
-  // banner carries compile state, and duplicating it in the header badge is
-  // what made "Compile failed" read like a run outcome.
+  // Header status reports the AUTOMATION, never its last compile.
   const statusKind = auStatusForRow(
     row.enabled,
     executions.length > 0
@@ -334,15 +251,8 @@ export async function loadAutomationThreadData(input: {
   };
 }
 
-/**
- * Thin passthroughs over the three consent-decision endpoints
- * (`decideOutboxItem` / `confirmVaultParked` / `revokeOutboxGrant`), unified
- * behind the one `onDecideConsent(kind, id, decision, alwaysAllow?)` shape
- * `AutomationThreadBridgeProps`/`AutomationEditorBridgeProps` both use.
- * Resolves `true` on a decision the caller should treat as settled (throws
- * on transport failure — the route wrapper catches + toasts, matching the
- * existing `AutomationViewRoute.tsx` pattern).
- */
+/** Resolves `true` when settled; THROWS on transport failure, which the route
+ *  wrapper catches and reports. */
 export async function decideConsentItem(input: {
   kind: ConsentKind;
   id: string;

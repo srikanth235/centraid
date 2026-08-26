@@ -8,14 +8,14 @@
 
 import { base64ToBytes } from "./upload/bytes";
 
-/** Desktop "Connect phone" QR payload (issue #263). */
+/** Desktop "Connect phone" QR payload (#263). */
 export type DesktopPairPayload = {
   kind: "centraid-pair";
   ticket: string;
   code: string;
 };
 
-/** Headless gateway ticket from `centraid-gateway pair` (issue #289 / #376). */
+/** Headless gateway ticket from `centraid-gateway pair` (#289 / #376). */
 export type GatewayPairPayload = {
   kind: "centraid-gw-pair";
   /** Gateway iroh EndpointTicket (identity + relay hint). */
@@ -42,7 +42,7 @@ export function parsePairQr(
 
 /**
  * Accept a desktop QR JSON string or a headless pairing ticket (scan or paste).
- * The pair ticket is the only ticket shape there is (issue #603) — gateways
+ * The pair ticket is the only ticket shape there is (#603) — gateways
  * found themselves on first start, so nothing else is redeemable here.
  * Whitespace-tolerant.
  */

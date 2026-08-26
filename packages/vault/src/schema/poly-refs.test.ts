@@ -1,4 +1,4 @@
-// Closure guard for the polymorphic-reference registry (issue #441 A1).
+// Closure guard for the polymorphic-reference registry (#441).
 //
 // The A1 bug was an UNKNOWN UNKNOWN: each polymorphic `(type, id)` mechanism
 // was added by a different issue, each purge clause written for the case in

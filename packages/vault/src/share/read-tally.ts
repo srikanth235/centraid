@@ -1,4 +1,4 @@
-// The origin-side read of a Tally group (issue #726 split of household.ts).
+// The origin-side read of a Tally group (#726 split of household.ts).
 //
 // A Tally group is the one shareable item that is a LEDGER rather than a
 // document: it only means anything alongside its circle, its accounting

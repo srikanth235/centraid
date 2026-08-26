@@ -70,7 +70,7 @@ describe("gateway-db scenarios", () => {
     // #726 P3 merged the two link tables into one: locality is routing, not
     // semantics, so there is exactly one answerer for "may an edge cross".
     expect(tables).not.toContain("peer_links");
-    // #603 retired the founding ceremony: no reservation table, and a ticket
+    // No founding ceremony (#603): no reservation table, and a ticket
     // has one shape (an invitation) rather than a `kind` discriminant.
     expect(tables).not.toContain("founding_ticket_reservations");
     expect(

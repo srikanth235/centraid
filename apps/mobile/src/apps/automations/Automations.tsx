@@ -1,40 +1,7 @@
-// AUTOMATIONS — what this vault does on its own (#765, spec §3).
-//
-// The page is a SEQUENCE OF BLOCKS and nothing else: a section head, a row
-// list, a run feed, the suggestions, a note. What the tile-shaped cards used
-// to carry, and where each part went:
-//
-//   the On/Off pill      → the row's state word (`Active` / `Paused`), plus
-//                          the one quiet verb in the row's expansion, so the
-//                          write survives; the pill's colour does not, because
-//                          a fill is not a state word.
-//   the schedule line    → the row's sub line, first clause.
-//   the description      → gone from the list. The row's second line is what
-//                          fires it and how it last went (spec §3); the
-//                          automation's own prose belongs where it is opened.
-//   `Run now` per card   → the automation's thread, which already carries it,
-//                          and which `Open` now reaches.
-//   the starter gallery  → the `Worth setting up` section, with the note that
-//                          says where those suggestions really come from.
-//
-// TWO DELIBERATE WITHHOLDINGS.
-//  - `New automation` (the reference's filled commit) is ABSENT. Authoring an
-//    automation means writing a manifest — a blueprint act with no mobile
-//    surface and no route on `lib/automations.ts` to reach. A filled verb that
-//    opened nothing would be the one thing this page cannot afford. When
-//    mobile grows an author flow, the verb lands here and nowhere else.
-//  - `Templates` is the quiet verb, and it is honest about what it is: on this
-//    surface the template catalogue IS the `Worth setting up` list further
-//    down the same page, so the verb takes you there rather than opening a
-//    second screen that would hold the same six rows. It is withheld entirely
-//    when the catalogue came back empty.
-//
-// THE ROW'S ONE TRAILING SLOT is spoken for by `Open` (spec §3). Pausing a
-// live automation is a capability this phone already had, so it keeps a
-// control: one quiet verb in the row's own expansion (`RowsBlock`'s documented
-// escape hatch), under the line it belongs to. A paused row needs no
-// expansion — its trailing verb is already `Resume`, which is the reference's
-// own verb for that row.
+// Automations (#765, spec §3). No `New automation` — authoring is a
+// blueprint act with no mobile route. `Templates` scrolls to `Worth
+// setting up` on this page. Trailing slot is `Open`; Pause lives in the
+// row expansion.
 
 import React, { useCallback, useMemo, useRef } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
@@ -85,23 +52,10 @@ import AutomationThread from "./AutomationThread";
 import { RECENT_CAP, useAutomations } from "./useAutomations";
 import type { AutomationsController } from "./useAutomations";
 
-/** Why a skeleton, said once, under the skeleton (spec §10). */
 const LOADING_NOTE = SKELETON_NOTE;
 
-/**
- * The suggestions note.
- *
- * The reference's sentence is "Suggestions come from what you already do by
- * hand." That is not true of this product: the list is a curated slice of the
- * TEMPLATE CATALOGUE (`listAutomationTemplates`), keyed off a fixed id list —
- * nothing watches what a member does by hand and nothing infers a rule from
- * it. The second half of the sentence is true and load-bearing, so it stands
- * verbatim; the provenance half states the provenance this product has. Same
- * words as the desktop screen, so both surfaces make one promise.
- */
 const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
 
-/** What the run feed says when the vault has automations but no history. */
 const NO_RUNS_NOTE =
   "Nothing has run yet — run an automation once, or wait for its trigger.";
 
@@ -110,10 +64,7 @@ export default function AutomationsScreen({
   route,
 }: AutomationsScreenProps): React.JSX.Element {
   const focusedRef = route.params?.automationRef;
-  // The gate is read here, above both branches, so a gateway with automations
-  // switched off never mounts the hooks that would read routes it does not
-  // serve. `undefined` is unknown, not off — no gateway has answered yet, and
-  // the page's own states already handle a gateway that will not talk.
+  // Gate above both branches so a switched-off gateway never mounts those hooks.
   const { features } = useReplica();
   if (features && !features.automations)
     return (
@@ -247,7 +198,6 @@ function AutomationsBody({
     net: copy.net,
     sub: copy.sub,
     title: copy.title,
-    // The pause write, kept where the trailing slot could not hold it.
     ...(copy.act === "open"
       ? {
           children: (
@@ -328,8 +278,6 @@ function AutomationsPlace({
   const { colors } = useTheme();
   const page = useAutomations();
   const scroll = useRef<ScrollView>(null);
-  // Where the suggestions section starts, so the quiet verb can take the
-  // member to the catalogue that is already on this page.
   const suggestionsY = useRef(0);
   const ink = useMemo(
     () => ({
@@ -341,8 +289,7 @@ function AutomationsPlace({
 
   const open = useCallback(
     (ref: string): void => {
-      // `push`, not `navigate`: the thread is a card ON TOP of the list, so
-      // leaving it returns here rather than to Home.
+      // `push`, not `navigate`: leaving the thread must return here, not Home.
       navigation.push("Automations", { automationRef: ref });
     },
     [navigation]
@@ -380,9 +327,7 @@ function AutomationsPlace({
         <View style={styles.head}>
           <HomeKey onPress={() => navigation.goBack()} variant="leave" />
           <View style={styles.headBar}>
-            {/* No filled commit — see the file header. The quiet verb follows
-                the reference's gating (hidden while loading), and is withheld
-                on error too, where the section it scrolls to is not drawn. */}
+            {/* No filled commit. Templates withheld while loading/error. */}
             <PlaceHeader
               title="Automations"
               {...(page.templates.length > 0 &&
@@ -422,8 +367,7 @@ function AutomationsPlace({
           />
         </ScrollView>
       </View>
-      {/* Docked above the bottom edge: the line is standing chrome, not
-          content, so it does not scroll with the blocks. */}
+      {/* Standing chrome — not inside ScrollView. */}
       <HealthLine
         text={health.text}
         {...(health.action && worst

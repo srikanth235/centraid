@@ -20,7 +20,7 @@ export interface TemporaryMultipartUpload {
 export interface RemoteBlobTransfer {
   /**
    * Restartable multipart upload whose destination is the final CAS SHA key.
-   * `storageClass` (issue #425 Wave 3) rides the CreateMultipartUpload — the
+   * `storageClass` (#425) rides the CreateMultipartUpload — the
    * object-creating call — when an eligible large original takes this path;
    * absent ⇒ the instance default.
    */
@@ -63,8 +63,8 @@ export interface RemoteBlobTransfer {
   getTemporary?: (tempId: string, range?: BlobRange) => Promise<Buffer | null>;
   /**
    * Promote a temp object to its final CAS key via CopyObject — the
-   * object-creating call for the presigned direct-to-CAS door (#414 §11).
-   * `storageClass` (issue #425 Wave 3) rides the CopyObject for an eligible
+   * object-creating call for the presigned direct-to-CAS door (#414).
+   * `storageClass` (#425) rides the CopyObject for an eligible
    * large original; the presigned temp PUT itself stays class-less (presign
    * signs only `host`). Absent ⇒ the instance default.
    */

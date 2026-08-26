@@ -1,31 +1,12 @@
-/**
- * Day context: the cross-app facts a calendar grid needs to decorate its days,
- * as ONE read-only server-shaped projection (#834 R-daycontext).
- *
- * Agenda's grid wants to say more about a day than "here are your events" —
- * whose birthday it is, how many tasks come due, which days are holidays.
- * Before this query each of those was a separate client-side pull from
- * another app's surface. They arrive here instead: one query, one shape, no
- * write path, and every entity it reads is registered in Agenda's
- * `CHANGE_TABLES` so a doorbell on any of them re-fetches the decorations.
- *
- * Scope (#834 R-shelf-scope): the due-task counts are THIS vault's tasks and
- * nothing else. There is deliberately no cross-vault aggregation — a shelf
- * that counts other people's work reintroduces "someone should, so no one
- * does". The vault's own scope check is what makes that true; this handler
- * simply never reaches past it.
- *
- * A consent denial is a first-class outcome, not an error: the same shape
- * comes back empty with `vaultDenied` attached, so the UI can draw an
- * undecorated grid rather than an error state.
- */
+/** Read-only cross-app decorations for the calendar grid (#834). Entities read
+ *  here must stay in Agenda's `CHANGE_TABLES`. THIS vault only; a denial
+ *  returns the same shape with `vaultDenied`. */
 
-/** A `core.party` row, as far as this projection reads it. */
 interface RawParty {
   party_id: string;
   kind?: string;
   display_name?: string;
-  /** `YYYY-MM-DD` or the year-less ISO-8601 form the vault writes (`--MM-DD`). */
+  /** `YYYY-MM-DD` or the year-less `--MM-DD` the vault writes. */
   birth_date?: string | null;
 }
 
@@ -52,7 +33,6 @@ interface RawTask {
   due_at?: string | null;
 }
 
-/** How close a person is to the owner, as the vault can actually answer it. */
 type RelationshipTier = "inner" | "outer";
 
 interface BirthdayFact {
@@ -63,9 +43,6 @@ interface BirthdayFact {
   tier: RelationshipTier;
 }
 
-/** One row behind a day's shelf. Identity and title only: Agenda decorates a
- *  day with it and hands the tap-through to Tasks, which is the room that owns
- *  the task — so nothing else about it is projected here. */
 interface DueTask {
   task_id: string;
   title: string;
@@ -73,10 +50,8 @@ interface DueTask {
 
 interface DueFact {
   day: string;
-  /** Every open task due that day, however few are listed. */
   count: number;
-  /** The first `SHELF_CAP` of them, in due order. A shelf lists; it never
-   *  becomes a second task board with paging of its own. */
+  /** First `SHELF_CAP`, in due order. A shelf lists; it never pages. */
   tasks: DueTask[];
 }
 
@@ -92,33 +67,21 @@ interface DayContextResult {
   vaultDenied?: { code?: string; message?: string };
 }
 
-// The owner's flags scheme — one starred tag per entity is the vault's ONLY
-// stored closeness judgment about a person (`packages/vault/src/commands/
-// flags.ts`, mirrored by People's own `starred` projection). There is no
-// `relationship_tier` column anywhere in the ontology, so `inner` means
-// "the owner starred them" and `outer` means everyone else. Naming it a tier
-// here rather than "starred" keeps the calendar's vocabulary about
-// relationships instead of about People's UI affordance.
+// No `relationship_tier` column exists: `inner` means starred.
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 const STARRED_NOTATION = "starred";
 
 const DAY_MS = 86_400_000;
-/** Longest window one call may ask for — a grid never shows more (#834). */
 const MAX_RANGE_DAYS = 400;
-/** Default forward runway when the caller passes no usable range. */
 const DEFAULT_RANGE_DAYS = 45;
-/** Ceilings: a vault has no upper bound, so every read is row-capped. */
+/** A vault has no upper bound; reads are row-capped. */
 const PARTY_CAP = 2000;
 const TASK_CAP = 2000;
 const TAG_CAP = 5000;
-/** Rows one day's shelf lists behind its count. A day with nineteen due tasks
- *  says nineteen and lists the first few; the room that pages them is Tasks. */
 const SHELF_CAP = 8;
 
-/** The statuses a task must be in to count as still coming due. */
 const OPEN_STATUSES = ["needs-action", "in-process"];
 
-/** `YYYY-MM-DD` if the value carries a parseable calendar day, else null. */
 function dayOf(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const head = value.slice(0, 10);
@@ -131,11 +94,7 @@ function addDays(day: string, days: number): string {
     .slice(0, 10);
 }
 
-/**
- * Normalize `{from, to}` into an inclusive day range that is always valid and
- * never longer than `MAX_RANGE_DAYS`. An unusable input is not an error: the
- * grid still has a window it means, so the default one is used.
- */
+/** An unusable range is not an error; the default window stands. */
 function rangeOf(input: Record<string, unknown> | undefined): {
   from: string;
   to: string;
@@ -149,7 +108,7 @@ function rangeOf(input: Record<string, unknown> | undefined): {
   return { from, to: to > ceiling ? ceiling : to };
 }
 
-/** The `MM-DD` a birth date recurs on — both stored forms end in it. */
+/** Both stored forms end in the recurring `MM-DD`. */
 function monthDayOf(birthDate: unknown): { month: number; day: number } | null {
   if (typeof birthDate !== "string" || birthDate.length < 5) return null;
   const tail = birthDate.slice(-5);
@@ -160,12 +119,7 @@ function monthDayOf(birthDate: unknown): { month: number; day: number } | null {
   return { month, day };
 }
 
-/**
- * Whether an annually recurring `MM-DD` falls inside `[from, to]`. Walked a
- * day at a time rather than reasoned about across year boundaries: the window
- * is capped at 400 days, and a February 29th birthday is then simply absent in
- * a non-leap year instead of being silently rounded onto a neighbouring day.
- */
+/** Day-by-day so Feb 29 stays absent in a non-leap year. */
 function recursInRange(
   month: number,
   day: number,
@@ -186,9 +140,7 @@ export default async function dayContext({
   const purpose = "dpv:ServiceProvision";
   const { from, to } = rangeOf(input);
   try {
-    // The window's task bound is a half-open instant range: `to` is inclusive
-    // as a DAY, so the upper bound is the start of the day after it. That
-    // catches both storage shapes — a date-only `due_at` and a timed one.
+    // Half-open, so date-only and timed `due_at` both land.
     const dueUpper = addDays(to, 1);
     const [parties, tasks, schemes] = await Promise.all([
       ctx.vault.read({
@@ -207,8 +159,7 @@ export default async function dayContext({
           { column: "due_at", op: "gte", value: from },
           { column: "due_at", op: "lt", value: dueUpper },
         ],
-        // Due order, so the rows a shelf lists behind its count are the day's
-        // earliest rather than whatever the table happened to hand back.
+        // Due order: a shelf lists the day's earliest rows.
         orderBy: { column: "due_at", dir: "asc" },
         limit: TASK_CAP,
         purpose,
@@ -220,10 +171,7 @@ export default async function dayContext({
       }),
     ]);
 
-    // Tier resolution is two more bounded reads, and only when the vault
-    // actually has a flags scheme: the marker concept, then the party tags
-    // carrying it. No scheme or no marker means nobody is starred, which is
-    // an honest `outer` for everyone rather than a missing field.
+    // No marker means nobody is starred: an honest `outer`.
     const flagsScheme = ((schemes.rows ?? []) as unknown as RawScheme[]).find(
       (scheme) => scheme.uri === FLAGS_SCHEME_URI
     );
@@ -277,10 +225,7 @@ export default async function dayContext({
         left.name.localeCompare(right.name)
     );
 
-    // Both storage shapes bucket to the calendar day their stored value
-    // carries: a date-only `due_at` IS the day, and a timed one contributes
-    // the day of the instant it stores. Days with no due task are absent
-    // rather than zero-filled — the shelf draws marks, not a histogram.
+    // Days with no due task are absent, not zero-filled.
     const counts = new Map<string, number>();
     const listed = new Map<string, DueTask[]>();
     for (const task of (tasks.rows ?? []) as unknown as RawTask[]) {
@@ -298,11 +243,7 @@ export default async function dayContext({
       .map(([day, count]) => ({ day, count, tasks: listed.get(day) ?? [] }))
       .toSorted((left, right) => left.day.localeCompare(right.day));
 
-    // Holidays have NO source in the vault today. There is no holiday feed,
-    // no subscribed-calendar mechanism (`schedule.calendar` is owner-authored
-    // and its `external_uri` is a label, not a poller), and no provider pull
-    // that would write one. The field is part of the shape so the grid can be
-    // built against it now; inventing storage for it is a separate ruling.
+    // No holiday source exists in the vault; the field holds the shape open.
     const holidays: HolidayFact[] = [];
 
     return { birthdays, due, holidays };

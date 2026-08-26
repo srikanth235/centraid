@@ -8,29 +8,15 @@ import { iconSvg } from "./iconSvg.js";
 
 import styles from "./gatewaySwitcher.module.css";
 
-// The sidebar switcher (issues #608, #665). It lists VAULTS ONLY, flattened
-// across every registered gateway.
+// The sidebar switcher (#608, #665): VAULTS ONLY, flattened across gateways.
+// A gateway is transport, not a pick — selecting a vault on another gateway
+// switches both pointers. SWITCHES and nothing else; disconnect lives on
+// Settings → Vault, host plumbing in Gateway → Components. Always reachable
+// with one vault, so Add vault and its shortcut never hide.
 //
-// A gateway is transport, not something the owner picks: a pairing ticket lands
-// them in a vault and which gateway hosts it is not their problem. So the
-// Gateways section is gone — picking a vault on another gateway switches both
-// pointers in one click. This surface SWITCHES and nothing else (issue #665):
-// no overflow menus, no management affordances on a row. Leaving a connection
-// is a per-vault act on Settings → Vault ("On this device → Disconnect"), and
-// host plumbing (rename / remove / test connection) lives in the Connections
-// section of Gateway → Components.
-//
-// It is always reachable, even with one vault, so Add vault and the keyboard
-// shortcut never disappear behind an inventory-count gate.
-//
-// Same body-portal mechanics as the popover it replaces: the sidebar column
-// clips `overflow: hidden` and a themed sidebar's `backdrop-filter` would trap
-// a plain `position: fixed` descendant, so this appends to `document.body`.
-//
-// The module is IO-free — it renders whatever `GatewayRow[]` it is given
-// (`gatewayRegistry.ts` owns the fetch/cache/merge and the flattening) and
-// reports picks through callbacks. `updateGatewaySwitcherRows` patches an open
-// popover in place as the stale-while-revalidate probes land.
+// Body-portal: the sidebar clips `overflow: hidden`; `backdrop-filter` traps
+// fixed descendants. IO-free; renders any `GatewayRow[]`
+// (`gatewayRegistry.ts` owns fetch/cache/merge).
 
 export interface GatewaySwitcherOpts {
   anchor: DOMRect;
@@ -38,12 +24,10 @@ export interface GatewaySwitcherOpts {
   scopes: ReadonlyArray<OwnerVaultScope>;
   activeGatewayId: string;
   rows: GatewayRow[];
-  /** Pick a vault. `gatewayId` may differ from the active one, in which case
-   *  the caller must switch gateway AND vault. */
+  /** May differ from the active gateway: switch both then. */
   onSelectVault: (gatewayId: string, vaultId: string) => void;
   onAddGateway: () => void;
-  /** Called once, however the popover closes (row pick, backdrop, Escape, or a
-   *  subsequent open) — lets the trigger drop its `data-open` styling. */
+  /** Called once on close — drop `data-open` styling. */
   onClose?: () => void;
 }
 
@@ -82,8 +66,6 @@ function buildRow(row: SwitcherVaultRow, o: GatewaySwitcherOpts): HTMLElement {
   el.dataset.active = String(row.isActive);
   el.dataset.gatewayId = row.gatewayId;
   el.dataset.selectable = String(row.selectable);
-  // `data-vault-id` is the switcher's long-standing row hook (glossary: code
-  // identifiers keep their `vault` names until a mechanical rename).
   if (row.vaultId !== undefined) el.dataset.vaultId = row.vaultId;
   if (!row.selectable) el.disabled = true;
 
@@ -122,10 +104,7 @@ function renderRows(): void {
   for (const row of rows) listEl.append(buildRow(row, opts));
 }
 
-/**
- * Patch an already-open popover's rows in place as a background probe settles —
- * a no-op when the popover is closed, so a late probe is harmless.
- */
+/** Patch an open popover's rows in place; no-op when closed. */
 export function updateGatewaySwitcherRows(rows: GatewayRow[]): void {
   if (!isGatewaySwitcherOpen() || !opts) return;
   opts = { ...opts, rows };
@@ -166,9 +145,7 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
   const add = document.createElement("button");
   add.type = "button";
   add.className = styles.action ?? "";
-  // "Add vault…" in the member's words — the same onAddGateway callback and the
-  // same modal behind it; a gateway is how a vault is reached, not the thing
-  // the member thinks they are adding.
+  // "Add vault…": the member's words; same callback behind it.
   add.innerHTML = `${iconSvg("Plug", 15)}<span>Add vault…</span>`;
   add.addEventListener("click", () => {
     closeGatewaySwitcher();
@@ -178,8 +155,7 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
 
   document.body.append(popEl);
 
-  // Anchor below the trigger, flipping above if it would overflow — the same
-  // edge-flip math as `contextMenu.ts`.
+  // Below the trigger, flipping above on overflow (as contextMenu.ts).
   const a = o.anchor;
   popEl.style.left = `${Math.max(8, a.left)}px`;
   let top = a.bottom + 6;

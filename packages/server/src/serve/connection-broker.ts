@@ -5,31 +5,13 @@
 // connection-limiter.ts, and splitting the lifecycle itself would scatter
 // the token-correctness invariants across files.
 /**
- * The connection broker (issue #304) — the gateway-side owner of
- * broker-carried credentials. Where issue #290 decision 4 made the gateway
- * a broker over HARNESS-ambient credentials (resolve/pin/allowlist/
- * liveness), this module extends the same brokerage to credentials the
- * connection row itself carries: `oauth2` (the owner's BYO client) and
- * `api_key` (a static PAT), both sealed columns on `sync_connection`.
+ * Connection broker (#304): oauth2 / api_key sealed on `sync_connection`.
+ * Law: injection only, never handout — plaintext substitutes parent-side
+ * toward pinned `allowed_hosts`. Never return a token to handler code.
  *
- * The one law: **injection only, never handout.** Connector code refers to
- * `{{connection:access_token}}` / `{{connection:api_key}}` placeholders in
- * `ctx.fetch`; the plaintext substitutes parent-side of the worker boundary
- * (`@centraid/server/automation`'s runner) and only toward the connection's pinned
- * `allowed_hosts`. Nothing here ever returns a token to handler code.
- *
- * Token lifecycle correctness — the three known rot points, each with a
- * named defense (issue #304 decision 4):
- *   1. rotating refresh tokens: the rotated pair persists (receipted,
- *      through `sync.store_tokens`) BEFORE the new access token is used;
- *   2. concurrent refresh races: one single-flight refresh per connection —
- *      concurrent fires join the same promise, so a rotating provider never
- *      sees two competing refresh calls;
- *   3. real death vs transient failure: an `invalid_grant`-shaped refusal
- *      flips the connection to `needs-auth` with an owner-readable note
- *      (ONE actionable state, no 401 flood — dependent automations skip via
- *      honest liveness); a network/5xx failure retries once and then skips
- *      the fire WITHOUT flipping, because the next fire may simply succeed.
+ * Rot points (#304 d4): (1) persist rotated pair BEFORE use; (2) single-flight
+ * refresh; (3) `invalid_grant` → `needs-auth`; network/5xx retries once then
+ * skips WITHOUT flipping.
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -60,21 +42,13 @@ import {
 import { timeoutSignal } from "./fetch-timeout.js";
 import type { VaultPlane } from "./vault-plane.js";
 
-/** Purpose stamped on the broker's own vault acts. */
 const BROKER_PURPOSE = "dpv:ServiceProvision";
-
-/** Refresh when the stored token has less than this long to live. */
 const EXPIRY_SLACK_MS = 60 * 1000;
-
-/** One transient retry before a refresh gives up for this fire. */
 const TRANSIENT_RETRY_DELAY_MS = 500;
 
 /**
- * Bound on one token-endpoint POST (issue #351 Tier 4 hygiene) — a hung IdP
- * would otherwise wedge whatever awaits the refresh (a fire, the outbox
- * drain) indefinitely. A timeout rejects the `fetch` exactly like a dropped
- * connection would, so it rides the existing transient-failure path below
- * (retry once, then give up for this fire WITHOUT flipping the connection).
+ * Token-endpoint POST bound (#351). Timeout rides the transient path
+ * (retry once, then skip WITHOUT flipping).
  */
 export const TOKEN_ENDPOINT_TIMEOUT_MS = 30_000;
 
@@ -132,7 +106,6 @@ function readOnlyPostsFor(
   }
 }
 
-/** One in-flight consent ceremony, keyed by its single-use `state`. */
 interface PendingCeremony {
   mode: "byo" | "assist";
   plane: VaultPlane;
@@ -140,20 +113,16 @@ interface PendingCeremony {
   verifier: string;
   redirectUri: string;
   expiresAt: number;
-  /** Assist only: never placed in the authorization URL. */
+  /** Assist: never placed in the authorization URL. */
   clientSessionId?: string;
-  /** Assist only: enrolled transport identity, or null for admin/loopback. */
+  /** Assist: enrolled transport identity, or null for admin/loopback. */
   deviceKey?: string | null;
-  /**
-   * Assist only: one-ceremony browser binding. It is delivered in the
-   * Worker's scrubbed `/start` fragment, never in Google's authorization URL.
-   */
+  /** Assist: Worker `/start` fragment — never in Google's authorization URL. */
   browserBinding?: string;
-  /** Assist only: exact allowlisted scopes expected back from Google. */
+  /** Assist: exact allowlisted scopes expected back from Google. */
   requestedScopes?: readonly string[];
 }
 
-/** A ceremony the owner walked away from is dead after ten minutes. */
 const CEREMONY_TTL_MS = 10 * 60 * 1000;
 const MAX_TOKEN_RESPONSE_BYTES = 64 * 1024;
 const MAX_PROVIDER_RESPONSE_BYTES = 1024 * 1024;
@@ -177,33 +146,26 @@ export class ConnectionBroker {
   /** Single-flight refresh per `<vaultId>:<connectionId>` (rot point 2). */
   private readonly refreshing = new Map<string, Promise<string>>();
   private readonly limiters = new Map<string, ConnectionLimiter>();
-  /** In-flight consent ceremonies, single-use, TTL-bound. */
   private readonly pending = new Map<string, PendingCeremony>();
   private readonly assistOAuth?: AssistOAuthConfig;
 
   constructor(
     private readonly planeFor: () => VaultPlane,
-    /** Overridable for tests; production callers take the default. */
     private readonly tokenTimeoutMs: number = TOKEN_ENDPOINT_TIMEOUT_MS,
     assistOAuth?: AssistOAuthConfig,
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
     private readonly logger?: RuntimeLogger
   ) {
-    // Defense in depth: every caller, including embedders that bypass the
-    // environment parser, gets the same fixed-origin validation before a
-    // refresh token can ever be posted.
+    // Defense in depth: same fixed-origin validation even if the env parser is bypassed.
     this.assistOAuth = assistOAuth
       ? validateAssistOAuthConfig(assistOAuth)
       : undefined;
   }
 
   /**
-   * Start the consent ceremony (issue #304 decision 3): mint the PKCE
-   * verifier + single-use `state` and build the provider consent URL. The
-   * `state` is the capability the (bearer-free) callback authenticates by.
-   * `access_type=offline&prompt=consent` are Google's knobs for issuing a
-   * refresh token — other providers ignore them.
+   * Start consent (#304 d3): PKCE + single-use `state` (callback capability).
+   * `access_type=offline&prompt=consent` are Google refresh-token knobs.
    */
   beginAuthorization(
     plane: VaultPlane,
@@ -256,10 +218,8 @@ export class ConnectionBroker {
   }
 
   /**
-   * Start Model-B Assist. The gateway alone owns state + PKCE verifier.
-   * The state prefix is a non-authorizing return-surface hint the stateless
-   * Worker may read; the random remainder and every validation decision stay
-   * gateway-owned.
+   * Assist start. Gateway owns state + PKCE. State prefix is a non-authorizing
+   * return-surface hint; validation stays gateway-owned.
    */
   beginAssistAuthorization(input: {
     plane: VaultPlane;
@@ -316,13 +276,7 @@ export class ConnectionBroker {
     return { authUrl: startUrl.toString(), state, redirectUri };
   }
 
-  /**
-   * Finish the ceremony: the provider bounced the owner's browser back with
-   * `code` + `state`. The state must match a live pending entry (single-use
-   * — consumed even on failure); the code exchanges at the token endpoint
-   * with the PKCE verifier, and the pair lands via `sync.store_tokens`
-   * (receipted, sealed, connection flips active).
-   */
+  /** Finish BYO: single-use `state` (consumed even on failure); persist via `sync.store_tokens`. */
   async completeAuthorization(
     state: string,
     code: string
@@ -380,10 +334,8 @@ export class ConnectionBroker {
   }
 
   /**
-   * Redeem an Assist courier handoff. Binding checks happen before state is
-   * consumed so a copied fragment from another client/device cannot burn the
-   * owner's live ceremony. A valid bound attempt is single-use even if the
-   * Worker or Google later refuses it.
+   * Redeem Assist courier. Bind before consuming state so a copied fragment
+   * cannot burn the live ceremony. Bound attempt is single-use even on later refusal.
    */
   async completeAssistAuthorization(input: {
     state: string;
@@ -431,9 +383,8 @@ export class ConnectionBroker {
       scopes: ceremony.requestedScopes,
     });
     if (!response.ok) {
-      // A reconnect ceremony is additive until replacement tokens persist.
-      // A stale/expired courier receipt must not disable an already-working
-      // connection; the stored pair remains authoritative for normal fires.
+      // Additive until replacement tokens persist — a stale receipt must not
+      // disable an already-working connection.
       if (response.authDead && !row.access_token && !row.refresh_token) {
         await this.flipNeedsAuth(
           ceremony.plane,
@@ -455,7 +406,6 @@ export class ConnectionBroker {
     return { connectionId: ceremony.connectionId };
   }
 
-  /** Consume a denied/abandoned ceremony without ever attempting exchange. */
   cancelAuthorization(input: {
     state: string;
     clientSessionId?: string;
@@ -475,9 +425,7 @@ export class ConnectionBroker {
   }
 
   /**
-   * The per-fire seam `runFire` calls (issue #304): resolve the connector's
-   * connection to injectable values. `undefined` = the connection carries
-   * no broker credential (harness-ambient lane, pre-#304 behavior).
+   * Per-fire seam (#304). `undefined` = no broker credential (harness-ambient).
    */
   resolveForFire: ResolveConnection = async (
     connector
@@ -519,7 +467,6 @@ export class ConnectionBroker {
       } satisfies ConnectionAuth;
     }
 
-    // oauth2: make sure a live access token exists before the handler runs.
     try {
       const accessToken = await this.ensureFreshToken(
         plane,
@@ -541,7 +488,6 @@ export class ConnectionBroker {
         limit,
       } satisfies ConnectionAuth;
     } catch (error) {
-      // AuthDead already flipped needs-auth; either way this fire skips.
       return {
         refused: `connection "${connector.label}" has no usable token: ${error instanceof Error ? error.message : String(error)}`,
       };
@@ -549,10 +495,8 @@ export class ConnectionBroker {
   };
 
   /**
-   * Bounded read-only JSON request for first-party event cursor adapters.
-   * The adapter never receives a token: the broker validates the connection
-   * host pin, injects here, retries one OAuth 401 after refresh, and returns
-   * only status/selected response headers/parsed provider data.
+   * Bounded read-only JSON for event adapters. Adapter never receives a token:
+   * host pin + inject + one 401-after-refresh retry.
    */
   async pollJson(
     connection: ConnectionBinding,
@@ -634,9 +578,7 @@ export class ConnectionBroker {
       }
     }
     const headers: Record<string, string> = {};
-    // Link is provider pagination state, not credential material. Preserve it
-    // so adapters exercise the same page walk through this production broker
-    // that they do through their direct PollJson test seam.
+    // Link is pagination, not credentials — preserve it for the page walk.
     for (const name of ["etag", "last-modified", "link", "x-poll-interval"]) {
       const value = response.headers.get(name);
       if (value) headers[name] = value;
@@ -649,11 +591,8 @@ export class ConnectionBroker {
   }
 
   /**
-   * The outbox executor's seam (issue #306): resolve one connection to
-   * injectable values on the WRITE lane. Same custody as `resolveForFire` —
-   * injection only, host pin, single-flight refresh — plus `allowWrites`,
-   * which connector fires never get: the only mutating injected requests in
-   * the system are executor drains of owner-approved/grant-matched items.
+   * Outbox write-lane seam (#306). Same custody as `resolveForFire` plus
+   * `allowWrites` — connector fires never get this.
    */
   async resolveForDrain(
     plane: VaultPlane,
@@ -723,11 +662,7 @@ export class ConnectionBroker {
     }
   }
 
-  /**
-   * Resolve a live access token, refreshing when expired (or `force`, after
-   * an upstream 401). Single-flight: concurrent callers of one connection
-   * join the running refresh instead of racing it.
-   */
+  /** Live access token; `force` after 401. Single-flight per connection. */
   async ensureFreshToken(
     plane: VaultPlane,
     connectionId: string,
@@ -753,7 +688,6 @@ export class ConnectionBroker {
     return refresh;
   }
 
-  /** POST the refresh grant, persist the (possibly rotated) pair, return the new access token. */
   private async refreshTokens(
     plane: VaultPlane,
     connectionId: string,
@@ -805,8 +739,7 @@ export class ConnectionBroker {
           })
         : await this.postByoRefresh(row, connectionId, plane, refreshToken);
     if (!response.ok && response.authDead) {
-      // Rot point 3: invalid_grant et al. — the refresh token is dead, only
-      // a new consent ceremony revives this connection.
+      // Rot point 3: invalid_grant — only a new consent ceremony revives this.
       await this.flipNeedsAuth(
         plane,
         connectionId,
@@ -824,8 +757,7 @@ export class ConnectionBroker {
       refreshToken: rotatedRefreshToken,
       expiresAt,
     } = response;
-    // Rot point 1: persist BEFORE first use — receipted, sealed by the
-    // command pipeline, journal-redacted via sealedInput.
+    // Rot point 1: persist BEFORE first use.
     await this.persistTokens(
       plane,
       connectionId,
@@ -864,10 +796,7 @@ export class ConnectionBroker {
     return this.postTokenForm(row.token_url!, form);
   }
 
-  /**
-   * One token-endpoint POST with a single transient retry. Distinguishes
-   * auth-dead (4xx with an OAuth error body) from transient (network/5xx).
-   */
+  /** One POST, one transient retry. Auth-dead (4xx OAuth) vs transient (network/5xx). */
   private async postTokenForm(
     tokenUrl: string,
     form: URLSearchParams
@@ -881,8 +810,7 @@ export class ConnectionBroker {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: form.toString(),
-          // Never forward a code, refresh token, or client secret to a
-          // token endpoint's attacker-controlled redirect target.
+          // Never follow a redirect with a code / refresh token / client secret.
           redirect: "error",
           signal: timeoutSignal(tokenTimeoutMs),
         });
@@ -945,7 +873,7 @@ export class ConnectionBroker {
     return sendAttempt(0);
   }
 
-  /** Stateless confidential-client hop; the gateway never receives a client secret. */
+  /** Confidential-client hop; the gateway never receives a client secret. */
   private async postAssist(
     path: "/exchange" | "/refresh",
     body: unknown
@@ -1081,11 +1009,7 @@ export class ConnectionBroker {
     }
   }
 
-  /**
-   * A missing Gmail baseline degrades safely — the first poll re-baselines —
-   * but a silently swallowed fallible action is a debugging dead end
-   * (docs/coding-standards.md), so the failure is at least logged.
-   */
+  /** Missing Gmail baseline degrades; still log — don't swallow fallible work. */
   private async warnOnBaselineFailure(work: Promise<void>): Promise<void> {
     await work.catch((error: unknown) => {
       this.logger?.warn(
@@ -1142,7 +1066,7 @@ export class ConnectionBroker {
     }
   }
 
-  /** needs-auth with a reason — the ONE actionable reconnect state. */
+  /** `needs-auth` with a reason — the one actionable reconnect state. */
   private async flipNeedsAuth(
     plane: VaultPlane,
     connectionId: string,
@@ -1172,14 +1096,12 @@ export class ConnectionBroker {
     plane: VaultPlane,
     connector: { kind: string; label: string; connectionId?: string }
   ): ConnectionCredRow | undefined {
-    // Prefer durable connection id when the automation/manifest carries one.
     if (connector.connectionId) {
       const row = this.readRowById(plane, connector.connectionId);
-      // Durable ids survive label changes, but cannot retarget a manifest to
-      // a credential belonging to another connector kind.
+      // Durable id survives label changes; cannot retarget another connector kind.
       return row?.kind === connector.kind ? row : undefined;
     }
-    // No credential sidecar row = the harness-ambient lane (issue #290).
+    // No credential sidecar = harness-ambient lane (#290).
     return plane.db.vault
       .prepare(
         `SELECT cc.connection_id, c.kind, c.label, cc.provider,
@@ -1207,7 +1129,7 @@ export class ConnectionBroker {
       .get(connectionId) as ConnectionCredRow | undefined;
   }
 
-  /** Host-side unseal of one credential cell — never crosses to handler code. */
+  /** Host-side unseal — never crosses to handler code. */
   private unseal(
     plane: VaultPlane,
     connectionId: string,
@@ -1253,7 +1175,7 @@ function stringField(value: unknown, field: string): string | undefined {
 }
 
 function expiringSoon(expiresAt: string | null): boolean {
-  if (!expiresAt) return false; // no recorded expiry — trust it until a 401 forces a refresh
+  if (!expiresAt) return false; // no expiry recorded — trust until a 401
   return Date.parse(expiresAt) - Date.now() < EXPIRY_SLACK_MS;
 }
 

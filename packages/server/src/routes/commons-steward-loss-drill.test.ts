@@ -1,5 +1,5 @@
 /**
- * The steward-absence DRILL (issue #750): the whole path an operator walks in
+ * The steward-absence DRILL (#750): the whole path an operator walks in
  * docs/recovery/commons-steward-loss.md, end to end, over the in-process
  * transport — absence evidence recorded → a notice surfaces → the ceremony
  * runs → successor invitations are actually delivered → a member converges on

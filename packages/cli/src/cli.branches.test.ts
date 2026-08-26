@@ -1,5 +1,5 @@
 /**
- * Branch-depth tests for packages/cli `main` (issue #545 B10):
+ * Branch-depth tests for packages/cli `main` (#545):
  * unknown verb, missing --url/token paths, non-2xx health/list, --help/--version.
  */
 

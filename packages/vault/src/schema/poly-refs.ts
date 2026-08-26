@@ -1,4 +1,4 @@
-// The polymorphic-reference registry (issue #441 A1).
+// The polymorphic-reference registry (#441).
 //
 // Engine FKs cannot cover the vault's polymorphic `(type, id)` mechanisms —
 // a `target_type='core.party'` / `target_id=…` pair is a logical reference
@@ -24,9 +24,9 @@ import type { DatabaseSync } from "node:sqlite";
 /**
  * What happens to a live polymorphic pointer when its target row is purged:
  *   - `end-date`: temporal relation — stamp `valid_to = now` on open rows
- *     (a link onto a purged row ends, it does not dangle; issue #272).
+ *     (a link onto a purged row ends, it does not dangle; #272).
  *   - `delete`: classification/curation/derived data that says nothing once
- *     the row is gone — remove it (issue #274).
+ *     the row is gone — remove it (#274).
  */
 export type PolyRefPolicy = "end-date" | "delete";
 

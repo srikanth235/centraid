@@ -1,8 +1,3 @@
-// Per-conversation composer draft persistence (issue #420 §4). The composer's
-// text survives navigation + reload, keyed by conversation id in localStorage
-// and cleared on send. A fresh (uncreated) thread uses a stable `:new` key so a
-// half-typed first message isn't lost either.
-
 const PREFIX = "centraid.assistant.draft.";
 
 function keyFor(conversationId: string | undefined): string {
@@ -26,12 +21,8 @@ export function clearDraft(conversationId: string | undefined): void {
   }
 }
 
-// `localStorage` is synchronous and blocks the main thread, so writing the
-// draft on every keystroke put a disk-backed write between the key and the
-// character appearing (issue #659). Persistence is a safety net measured in
-// seconds, not frames: coalesce keystrokes and write once they pause. Every
-// path that must not lose the last character — send, thread switch, unmount —
-// flushes explicitly, so the debounce can never eat a draft.
+// Coalesced because localStorage writes block the main thread (#659);
+// explicit flushes (send/thread switch/unmount) guard the last character.
 const DRAFT_WRITE_DELAY_MS = 400;
 let queuedKey: string | null = null;
 let queuedText = "";
@@ -46,7 +37,7 @@ function writeQueued(): void {
     if (text) localStorage.setItem(key, text);
     else localStorage.removeItem(key);
   } catch {
-    /* storage unavailable / full — a lost draft is non-fatal */
+    /* lost draft is non-fatal */
   }
 }
 
@@ -59,14 +50,12 @@ function dropQueued(key: string): void {
   }
 }
 
-/** Persist `text` for this conversation shortly after typing stops. */
 export function queueDraftSave(
   conversationId: string | undefined,
   text: string
 ): void {
   const key = keyFor(conversationId);
-  // A different conversation's pending write must land before this one takes
-  // the slot, or switching threads mid-keystroke would silently discard it.
+  // A different conversation's pending write lands first.
   if (queuedKey !== null && queuedKey !== key) writeQueued();
   queuedKey = key;
   queuedText = text;
@@ -77,7 +66,6 @@ export function queueDraftSave(
   }, DRAFT_WRITE_DELAY_MS);
 }
 
-/** Write any pending draft now — send, thread switch, unmount. */
 export function flushDraftSave(): void {
   if (queuedTimer !== null) {
     clearTimeout(queuedTimer);

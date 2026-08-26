@@ -1,5 +1,5 @@
-// Install-time consent (issue #306) and what the owner may do to it afterwards
-// (issue #308): installing IS the grant, widening a manifest parks as a scope
+// Install-time consent (#306) and what the owner may do to it afterwards
+// (#308): installing IS the grant, widening a manifest parks as a scope
 // request instead of auto-granting, a denial tombstones the ask, a revocation
 // is never re-minted by the top-up, and the per-execution clamp still cuts the
 // durable grant down to the anchor the run declared.
@@ -55,7 +55,7 @@ describe("vault-plane install scopes + execution clamps", () => {
     const after = plane.listApps().find((a) => a.name === "planner")
       ?.grants.length;
     expect(after).toBe(before);
-    // A widened declaration no longer auto-grants (issue #308 A3): agents
+    // A widened declaration no longer auto-grants (#308): agents
     // author their own manifests, so the ask parks as a blocking request.
     plane.ensureAppInstallGrant("planner", {
       scopes: [

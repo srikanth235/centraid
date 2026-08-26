@@ -1,5 +1,5 @@
 /**
- * Client courier for Centraid Assist OAuth (issue #526).
+ * Client courier for Centraid Assist OAuth (#526).
  *
  * Authorization material is parsed from a URL fragment, removed from the
  * address bar synchronously, kept only in memory, and delivered to the

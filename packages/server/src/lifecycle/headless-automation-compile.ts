@@ -46,7 +46,7 @@ export interface HeadlessCompileOptions {
    * How the user authored this attempt's harness: `direct` = their automations
    * primary, `ladder` = current failover membership. Omit when the harness came
    * from a manifest pin the user never authored — the compile is then denied
-   * unless a real grant already exists (#567 D13).
+   * unless a real grant already exists (#567).
    */
   consentSource?: ProviderConsentSource;
   /** Resolve historical upload hashes into this automation app's blob CAS. */

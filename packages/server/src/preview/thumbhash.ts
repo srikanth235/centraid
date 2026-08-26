@@ -1,19 +1,9 @@
-// ThumbHash encoder (issue #419 M0.3): a ~5-25 byte, DCT-based placeholder a
-// native client paints instantly while a real thumb streams in. Inline
-// derivative variant `thumbhash`, base64 (unpadded) as its canonical form.
-//
-// `rgbaToThumbHash` is a faithful port of Evan Wallace's public-domain
-// reference (https://github.com/evanw/thumbhash, js/thumbhash.js) — the
-// algorithm is kept byte-identical so a hash this encodes decodes on any
-// conforming ThumbHash decoder. The only edits are TypeScript ergonomics:
-// `?? 0` on typed-array reads (noUncheckedIndexedAccess), booleans coerced to
-// 0/1 before bit-shifts, and sparse-index writes made explicit. No numeric
-// constant, quantization step, or byte-layout decision is changed.
+// ThumbHash encoder (#419): `rgbaToThumbHash` is a byte-identical port of
+// Evan Wallace's public-domain reference; only TS ergonomics differ.
 
 /**
- * Encode an RGBA raster (row-major, 4 bytes/pixel, at most 100×100) to its
- * ThumbHash bytes. Throws when either edge exceeds 100 — callers downscale
- * first. Returns the compact hash (opaque images ~5-24 bytes, alpha larger).
+ * Encode an RGBA raster (row-major, ≤100×100) to ThumbHash bytes. Throws past
+ * 100 — callers downscale first.
  */
 export function rgbaToThumbHash(
   w: number,
@@ -23,7 +13,6 @@ export function rgbaToThumbHash(
   if (w > 100 || h > 100) throw new Error(`${w}x${h} doesn't fit in 100x100`);
   const { PI, round, max, cos, abs } = Math;
 
-  // Determine the average color, weighting each pixel by its alpha.
   let avg_r = 0;
   let avg_g = 0;
   let avg_b = 0;
@@ -45,12 +34,12 @@ export function rgbaToThumbHash(
   const l_limit = hasAlpha ? 5 : 7; // luminance limit for the number of channels
   const lx = max(1, round((l_limit * w) / max(w, h)));
   const ly = max(1, round((l_limit * h) / max(w, h)));
-  const l: number[] = []; // luminance
-  const p: number[] = []; // yellow - blue
-  const q: number[] = []; // red - green
-  const a: number[] = []; // alpha
+  const l: number[] = [];
+  const p: number[] = [];
+  const q: number[] = [];
+  const a: number[] = [];
 
-  // Convert the image from RGBA to LPQA (composite atop the average color).
+  // RGBA → LPQA, composite atop the average color.
   for (let i = 0, j = 0; i < w * h; i++, j += 4) {
     const alpha = (rgba[j + 3] ?? 0) / 255;
     const r = avg_r * (1 - alpha) + (alpha / 255) * (rgba[j] ?? 0);
@@ -62,7 +51,7 @@ export function rgbaToThumbHash(
     a[i] = alpha;
   }
 
-  // Encode using the DCT into DC (constant) and normalized AC (varying) terms.
+  // Encode via DCT into DC (constant) and normalized AC (varying) terms.
   const encodeChannel = (
     channel: number[],
     nx: number,
@@ -102,7 +91,6 @@ export function rgbaToThumbHash(
     ? encodeChannel(a, 5, 5)
     : [0, [] as number[], 0];
 
-  // Write the constants bytes to the output.
   const isLandscape = w > h;
   const header24 =
     round(63 * l_dc) |
@@ -126,7 +114,7 @@ export function rgbaToThumbHash(
   let ac_index = 0;
   if (hasAlpha) hash.push(round(15 * a_dc) | (round(15 * a_scale) << 4));
 
-  // Write the varying AC terms to the output, two 4-bit nibbles per byte.
+  // AC terms, two 4-bit nibbles per byte.
   for (const ac of hasAlpha ? [l_ac, p_ac, q_ac, a_ac] : [l_ac, p_ac, q_ac]) {
     for (const f of ac) {
       const idx = ac_start + (ac_index >> 1);

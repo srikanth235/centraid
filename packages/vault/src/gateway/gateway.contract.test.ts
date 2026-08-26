@@ -991,7 +991,7 @@ describe("gateway", () => {
       };
       gw = createGateway(db, deps);
       registerScheduleCommands(gw);
-      // Mark the command loud-on-purpose (issue #306): confirmation is a
+      // Mark the command loud-on-purpose (#306): confirmation is a
       // property of the command's capability row, not of its risk.
       db.vault
         .prepare(
@@ -1473,7 +1473,7 @@ describe("gateway", () => {
         )
         .run();
       // Tags on the doomed row (its folder filing, its star) purge with it —
-      // classification on a gone row is noise, not history (issue #274).
+      // classification on a gone row is noise, not history (#274).
       db.vault
         .prepare(
           `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_at)
@@ -1499,7 +1499,7 @@ describe("gateway", () => {
 
     test("sweep purges a lapsed trashed asset on its own clock while its rented bytes live on", () => {
       // Live content (an avatar also rents it) + an asset whose grace window
-      // has passed: the asset row purges, the bytes stay (issue #274).
+      // has passed: the asset row purges, the bytes stay (#274).
       db.vault
         .prepare(
           `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)

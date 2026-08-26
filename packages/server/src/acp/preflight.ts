@@ -1,15 +1,5 @@
-/*
- * CLI preflight — runs `<bin> --version` once on settings change or
- * gateway boot. Result cached in memory and exposed via
- * `GET /centraid/_turn/harness-status` so the chat panel can show a
- * Setup screen when the binary is missing, unauthenticated, or too old.
- *
- * Minimum versions are empirically-verified — see `MIN_VERSIONS` below.
- * If the user's CLI is older than the pinned minimum, preflight reports
- * `ok: true` but `versionAtLeast: false` so the chat panel can warn
- * (without hard-blocking — the adapter may still work; we only know
- * for sure on a fresh-empirically-tested version).
- */
+// CLI preflight: `<bin> --version` cached in memory. Older than min is
+// `ok: true` with `versionAtLeast: false` — warn, do not hard-block.
 
 import { spawn } from "node:child_process";
 
@@ -31,13 +21,6 @@ interface SemVer {
   patch: number;
 }
 
-/**
- * Minimum CLI versions whose event/flag schemas we've verified live in the
- * harness-spec registry (`registry.ts`), alongside each kind's default
- * binary and install hint. codex/claude-code are empirically captured; the
- * ACP-native kinds are pinned to the oldest release whose ACP surface we
- * rely on (see each entry's comment in `registry.ts`).
- */
 export function minVersionString(kind: HarnessKind): string {
   const v = getHarness(kind).minVersion;
   return `${v.major}.${v.minor}.${v.patch}`;
@@ -66,26 +49,17 @@ export function invalidatePreflightCache(): void {
 }
 
 export interface CliAvailability {
-  /** The `<bin> --version` invocation succeeded — the CLI is on PATH. */
   available: boolean;
-  /** Trimmed `--version` output when available. */
   version?: string;
 }
 
-/**
- * Is a coding harness CLI available on PATH? Runs `<bin> --version` and
- * reports success — Centraid is agnostic to how the CLI authenticates, so
- * this checks only that the command runs, not for any auth file/keychain/env.
- * Used by the gateway's `GET /centraid/_harnesses/status` to report which
- * agents its host can drive.
- */
+/** PATH probe only — does not check auth. */
 export async function probeCliAvailability(
   kind: HarnessKind,
   binPath?: string,
   opts: { refresh?: boolean; now?: number } = {}
 ): Promise<CliAvailability> {
   const bin = binPath ?? getHarness(kind).defaultBin;
-  // The custom `acp` kind has no default binary — unavailable until configured.
   if (!bin) return { available: false };
   const key = `${kind}::${bin}`;
   const now = opts.now ?? Date.now();
@@ -117,16 +91,7 @@ export async function probeCliAvailability(
   }
 }
 
-/**
- * Run the CLI preflight and attach the chat picker's model list.
- *
- * The `--version` probe is cached (cheap, stable). The model list is a pure
- * read from the gateway-owned catalog — enumeration and warming are owned by
- * the `CatalogWarmer`, driven on boot and Refresh. Without a `catalogPath`
- * there's no list (the picker shows a loading/empty state). The caller (the
- * gateway's `harnessStatus` override) attaches `modelsStatus` and kicks a warm,
- * since this module has no warmer handle.
- */
+/** Cached `--version` plus catalog model list; no warmer handle here. */
 export async function runPreflight(
   prefs: HarnessPrefs,
   opts: {
@@ -141,11 +106,7 @@ export async function runPreflight(
   cached = { status, cacheKey: key };
 
   if (status.ok && opts.requireSessionReady) {
-    // Readiness only needs "does this harness reach initialize + session/new,
-    // and is it signed in". A fresh cached snapshot answers that, so this
-    // never spawns on a warm cache — and when it does have to spawn it skips
-    // the probe's live diagnostic prompt, which would bill the owner a real
-    // provider turn on every session-ready check.
+    // Never spawn a billed live diagnostic on a session-ready check.
     const caps = await resolveAcpCapabilities(prefs.kind, {
       ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
       ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
@@ -175,8 +136,7 @@ export async function runPreflight(
 async function probe(prefs: HarnessPrefs): Promise<HarnessStatus> {
   const harness = getHarness(prefs.kind);
   const bin = prefs.binPath ?? harness.defaultBin;
-  // The custom `acp` kind has no default binary: report unavailable (with the
-  // configuration hint) rather than spawning `undefined --version`.
+  // Custom `acp` has no default binary — do not spawn `undefined --version`.
   if (!bin) {
     return {
       kind: prefs.kind,
@@ -232,17 +192,8 @@ async function probe(prefs: HarnessPrefs): Promise<HarnessStatus> {
   }
 }
 
-/**
- * Parse a semver from a `--version` output string. Accepts shapes like
- *   "codex-cli 0.128.0"
- *   "2.1.126 (Claude Code)"
- *   "v1.2.3"
- * Returns undefined when no semver is found.
- */
 export function parseSemver(text: string): SemVer | undefined {
-  // No leading `\b` — strings like `v1.2.3` have a word char before the
-  // digit, which would block the boundary. We still want `1.2.3` out of
-  // them.
+  // No leading `\b` — `v1.2.3` has a word char before the digit.
   const m = text.match(/(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)/u);
   if (!m) return undefined;
   return {
@@ -295,9 +246,7 @@ async function execVersion(
       if (code === 0) {
         const stdout = Buffer.concat(stdoutChunks).toString("utf8");
         const stderr = Buffer.concat(stderrChunks).toString("utf8");
-        // `nice` can report a harmless setpriority denial on stderr inside a
-        // sandbox. Successful CLIs normally put their version on stdout; fall
-        // back to stderr only for CLIs that intentionally version there.
+        // `nice` may print a sandbox setpriority denial on stderr; prefer stdout.
         settle(() => resolve(stdout.trim() ? stdout : stderr));
       } else
         settle(() => reject(new Error(`--version exited ${code ?? "null"}`)));

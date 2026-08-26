@@ -48,11 +48,7 @@ async function openApp(
   await page.getByTestId("inline-app-view").waitFor({ state: "visible" });
 }
 
-// ─────────────────────────── §7 the inline app route ───────────────────────────
-//
-// §7.2–7.4 drove the per-app copilot inside the sandboxed app iframe. Both the
-// iframe host and that panel retired with the served-app plane (#799), so the
-// cases went with the surface rather than staying as permanent skips.
+// No sandboxed app iframe, no per-app copilot panel (#799): no §7.2–7.4 cases.
 
 test("7.1 — opening a system app renders inline; back returns home", async () => {
   gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
@@ -63,7 +59,6 @@ test("7.1 — opening a system app renders inline; back returns home", async () 
     await expect(page.locator("iframe[data-centraid-app]")).toHaveCount(0);
     await page.keyboard.press("Meta+[");
     await waitForHome(page);
-    // Home is the content springboard now (#708), not the library apps-grid.
     await expect(
       page.locator(
         '[data-testid="home-springboard"], [data-testid="home-first-run"]'
@@ -74,20 +69,13 @@ test("7.1 — opening a system app renders inline; back returns home", async () 
   }
 });
 
-// ───────────────────────── §10 Automation templates ─────────────────────────
-//
-// Discover retired with #708 — every first-party app ships installed, so the
-// only catalogue left is the automation gallery, reached from Automations →
-// Browse templates. Its cases (10.1 "renders template cards", 10.4 "empty
-// Discover") went with the page; adoption is covered by 10.2 below. Case 10.3
-// (independent builder drafts) went with the builder itself (#799).
+// No Discover page (#708): the catalogue is the automation gallery
+// (Automations → Browse templates), so this section carries only 10.2.
 
 test("10.2 — an automation template clone survives a fresh gateway instance and Electron process", async () => {
   gateway.state.templates = [
     {
-      // The gallery intentionally exposes only the v0 curated IDs.
-      // Keep this fixture on that public catalog contract; a made-up id is
-      // correctly filtered out before the card reaches the page.
+      // The gallery exposes only v0 curated IDs; made-up ids are filtered out.
       id: "obligation-extractor",
       name: "Daily Digest",
       desc: "Summarize the day",
@@ -134,16 +122,9 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
       .toBe(true);
     await expect.poll(() => gateway.state.automations).toHaveLength(1);
 
-    // Cloning must NOT consume the source template — it stays adoptable in the
-    // gallery until the user publishes (the invariant the retired agent-e2e
-    // flows owned: "template tile disappeared after clone — expected templates
-    // to remain available until publish"). Adopt navigates to the new thread,
-    // so return to the gallery and assert the Daily Digest card is still listed.
+    // Clone must NOT consume the source template — it stays adoptable.
     await gotoNav(launched.page, "Automations");
-    // The clone left one automation behind, so the page is no longer empty and
-    // its empty-state verb ("Browse templates", used earlier in this test) is
-    // gone. With a populated list the way to the gallery is the app bar's
-    // secondary (#765) — same destination, different door.
+    // Populated list drops the empty-state verb; use the app bar secondary (#765).
     await launched.page
       .getByRole("button", { name: "Templates" })
       .first()
@@ -152,11 +133,8 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
       launched.page.getByRole("button", { name: /Daily Digest/u })
     ).toBeVisible();
 
-    // #765 UI evidence. This is the v9 binding layer on a POPULATED operational
-    // page — app-bar verbs (filled commit + quiet secondary), the status line,
-    // and the block vocabulary drawing real rows rather than an empty state.
-    // An empty page would prove nothing about the blocks, which is why the
-    // capture sits here, after the clone, rather than at first paint.
+    // #765 UI evidence: the v9 binding layer on a POPULATED page (blocks draw
+    // real rows; an empty state would prove nothing).
     const evidenceDir = path.resolve(
       import.meta.dirname,
       "../../../../artifacts/e2e/ui-impact"
@@ -238,10 +216,8 @@ test("11.1 — Analytics renders the runs chart and what it cost", async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, "Analytics");
-    // v9 (#765) retired the KPI strip; #775 restored the two things going
-    // with it that the page could not do without — the promoted spend figure
-    // and the categorical breakdowns the gateway was already computing. The
-    // chart is one image with a sentence, and it draws SPEND per day.
+    // No KPI strip (#765): only the promoted spend figure and the categorical
+    // breakdowns remain (#775); the chart draws SPEND per day.
     await expect(
       page.getByRole("img", { name: "Spend per day over the last 30 days" })
     ).toBeVisible();
@@ -252,12 +228,10 @@ test("11.1 — Analytics renders the runs chart and what it cost", async () => {
       page.locator("dl[aria-label='Spend by harness']")
     ).toBeVisible();
     await expect(page.locator("body")).toContainText("claude-code");
-    // The spend, promoted: the page HEADLINES the figure again.
+    // The spend, promoted: HEADLINED.
     await expect(page.locator("body")).toContainText("$1.23");
 
-    // #775 UI evidence, captured on a POPULATED page for the same reason the
-    // #765 capture is: an empty Analytics screen would prove nothing about
-    // the figure, the distribution rows, or the dated chart.
+    // #775 UI evidence, captured on a POPULATED page (same reason as #765's).
     const evidenceDir = path.resolve(
       import.meta.dirname,
       "../../../../artifacts/e2e/ui-impact"

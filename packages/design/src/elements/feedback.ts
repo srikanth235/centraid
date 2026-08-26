@@ -1,6 +1,4 @@
-// The one feedback channel that follows the user, plus the states that stand
-// in for content: the status line, the outcome sentence, the skeleton, the
-// read-failure banner, confirm-to-act, and the bulk runner that narrates.
+// The one feedback channel, and the stand-ins for content.
 
 import { applyInOrder } from "./dom.js";
 import { haptic } from "./host.js";
@@ -13,7 +11,6 @@ export type VaultOutcomeStatus =
   | "failed"
   | "denied";
 
-/** The typed-command result an app narrates. */
 export interface VaultOutcome {
   status: VaultOutcomeStatus;
   output?: Record<string, unknown>;
@@ -28,41 +25,23 @@ export interface VaultOutcome {
 export interface StatusLineOptions {
   undoLabel?: string;
   onUndo?: () => void;
-  /** Ms before the line reverts to quiet (default 5000; sticky if 0). Ignored
-   *  while `progress` is running — a determinate operation clears itself. */
+  /** 0 is sticky; ignored while `progress` runs. */
   duration?: number;
-  /** Feedback tone is explicit; neutral updates do not vibrate or imply
-   *  success. The status line's dot stays a fixed neutral colour regardless
-   *  — tone only ever selects the haptic, never a visual hue. */
+  /** Selects the haptic only: the dot stays neutral. */
   tone?: "affirm" | "change" | "destructive" | "none";
-  /** A long local operation: renders a determinate track+fill bar with exact
-   *  counts instead of a spinner. */
+  /** A determinate bar, never a spinner. */
   progress?: { done: number; total: number };
 }
 
-// ---------- Status line ----------
+// ────────── Status line ──────────
 //
-// Retired the floating `toast` stack (#707 Phase 3 — the Binding Layer's
-// fifth invariant): state is reported on ONE persistent line docked to the
-// bottom of the frame, updated IN PLACE. There is no stack, no per-call
-// element, and no entry/exit animation — a single `.kit-status-line` element
-// is mounted once and its children swap under it. A duration still clears the
-// message back to quiet, but the line itself never leaves the DOM.
-//
-// #799 retired the `<kit-status-line>` custom element that used to wrap this:
-// the host is now the live region itself. That is stronger than the element
-// was — the element re-created the `role="status"`/`aria-live` div on every
-// render, and a live region that is replaced rather than mutated is not
-// reliably announced.
+// NO TOAST STACK (#707): ONE `.kit-status-line`, mounted once and updated in
+// place. It is the live region (#799) — replacing it breaks announcement.
 
 let statusLineHost: HTMLElement | null = null;
-// Module-level, not per-call: the host is reused across every `statusLine()`
-// call, so the pending auto-clear timer has to be shared too — a per-call
-// local would let an OLDER call's timer fire later and wipe a NEWER (or
-// sticky, duration 0) message it knows nothing about.
+// Module-level: a per-call timer lets an old call wipe a new one.
 let statusLineTimer = 0;
-// Read at CLICK time by the inline action, never captured at render time, so
-// a stale render's button can never invoke a superseded handler.
+// Read at CLICK time, never at render.
 let statusLineUndo: (() => void) | undefined;
 
 function ensureStatusLineHost(): HTMLElement {
@@ -76,7 +55,6 @@ function ensureStatusLineHost(): HTMLElement {
   return host;
 }
 
-/** Paint the one line's contents. Called for every update; never re-mounts. */
 function renderStatusLine(
   host: HTMLElement,
   {
@@ -125,16 +103,7 @@ function renderStatusLine(
   host.replaceChildren(...children);
 }
 
-/**
- * Update the one persistent status line. Options:
- *  - undoLabel/onUndo: the line's single inline text action (e.g. Undo).
- *  - duration: ms before the line reverts to quiet (default 5000; sticky if
- *    0). Ignored while `progress` is set.
- *  - tone: semantic outcome; only explicit non-neutral tones haptically
- *    signal — the dot stays neutral regardless.
- *  - progress: {done,total} renders a determinate bar with exact counts
- *    instead of a spinner, for a long local operation.
- */
+/** See `StatusLineOptions`. */
 export function statusLine(
   text: string,
   {
@@ -159,9 +128,7 @@ export function statusLine(
     });
   };
   const label = undoLabel && onUndo ? undoLabel : "";
-  // Assigned before the render so the freshly built button's click handler —
-  // which reads this module slot rather than closing over a handler — always
-  // sees the handler belonging to the message it is painted beside.
+  // Assigned BEFORE the render: the button must read its own handler.
   statusLineUndo =
     label && onUndo
       ? () => {
@@ -176,16 +143,13 @@ export function statusLine(
     total: progress ? progress.total : null,
   });
   clearTimeout(statusLineTimer);
-  // A determinate operation clears itself when the caller reports it done
-  // (done >= total) or is left running; a plain message reverts on its own
-  // duration. Sticky (duration 0) leaves the line up for an explicit clear.
+  // A determinate operation clears itself; sticky waits.
   if (!progress && duration > 0) {
     statusLineTimer = setTimeout(clear, duration) as unknown as number;
   }
   return clear;
 }
 
-/** The shared translation of a typed-command outcome into a human sentence. */
 export function outcomeMessage(
   outcome: VaultOutcome | null | undefined
 ): string | null {
@@ -201,10 +165,7 @@ export function outcomeMessage(
   if (outcome?.status === "failed") {
     const detail =
       outcome.predicate ?? outcome.reason ?? "a precondition failed";
-    // A command-authored friendly message (see ConditionSpec.message) is
-    // already a full sentence with its own punctuation — don't double it up
-    // ("...on your calendar..") the way the raw `name: column op value`
-    // fallback needs its trailing period added.
+    // A `ConditionSpec.message` is punctuated; the fallback is not.
     return `The vault refused: ${detail}${/[.!?]$/u.test(detail) ? "" : "."}`;
   }
   if (outcome?.status === "denied") {
@@ -213,15 +174,8 @@ export function outcomeMessage(
   return null;
 }
 
-// ---------- Loading and read-error states ----------
+// ────────── Loading / read errors ──────────
 
-/**
- * Fill a container with placeholder rows while the first read is in flight.
- * The React surfaces render the same `.kit-skeleton` rows through
- * `_shared/LoadingSkeleton.tsx`; this is the imperative twin for the DOM
- * surfaces that have no React tree (#799 retired the `<kit-skeleton>` element
- * both used to go through).
- */
 export function showSkeleton(container: Element, rows = 3): void {
   container.replaceChildren(
     ...Array.from({ length: Math.max(0, rows) }, () => {
@@ -232,10 +186,7 @@ export function showSkeleton(container: Element, rows = 3): void {
   );
 }
 
-/**
- * Surface a failed read in the app's notice banner instead of silence —
- * a broken vault must not look like an empty one.
- */
+/** A broken vault must not look like an empty one. */
 export function readFailed(bannerEl: HTMLElement | null | undefined): void {
   if (!bannerEl) return;
   bannerEl.textContent =
@@ -243,12 +194,9 @@ export function readFailed(bannerEl: HTMLElement | null | undefined): void {
   bannerEl.hidden = false;
 }
 
-// ---------- Confirm-to-act (arm on first click, run on second) ----------
+// ────────── Confirm-to-act ──────────
 
-/**
- * Returns true when the click should proceed. First click arms the button
- * (label swap + auto-disarm after `timeout` ms); second click confirms.
- */
+/** True when the click should proceed: first arms, second confirms. */
 export function armConfirm(
   btn: HTMLElement,
   {
@@ -275,13 +223,8 @@ export function armConfirm(
   return false;
 }
 
-// ---------- Bulk runner (selection-bar actions) ----------
+// ────────── Bulk runner ──────────
 
-/**
- * Run `run(id)` over `ids` sequentially, narrating progress and the final
- * tally. The app supplies its voice + cleanup: `notice(text)`,
- * `friendly(outcome) → string|null` for failure copy, `after()` once done.
- */
 export async function runBulk(
   ids: string[],
   run: (id: string) => Promise<VaultOutcome | undefined>,

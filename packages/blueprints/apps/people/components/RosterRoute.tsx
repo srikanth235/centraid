@@ -1,21 +1,4 @@
-// The roster (v12 handoff § Screens 1) — the app's reference screen.
-//
-// Every other People screen is this one with different rows: a filter row, a
-// flat list built out of the shared `Row` recipe, and one empty state that
-// names its own reason. Nothing here describes a row, a chip or a metric —
-// they all come from `Shared.tsx` and `shared.module.css`, which is what keeps
-// the app to a single row definition.
-//
-// THE VAULT LINK LEADS THE ROW'S SECOND LINE where there is one: a linked
-// person reads `Linked · architect`, an unlinked person reads the role alone.
-// The handoff leads that line with the vault's NAME and label; a binding
-// carries only a `vault_id` and an id is not a name, so the word `Linked`
-// stands where the name would (people-copy.ts LINK).
-//
-// The meta slot carries `<n> days` in the consequence tone exactly while the
-// person is overdue. The handoff gates that on "linked AND overdue"; being
-// overdue is a fact about the cadence alone, and hiding it from an unlinked
-// person would hide the thing this app is for.
+// The roster — the app's reference screen; rows/chips/metrics come from Shared.tsx.
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
@@ -25,10 +8,8 @@ import type { PersonRow, RosterFilter, RosterRouteProps } from "../types.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import { Row, SkeletonBlock, StarButton, ChipRow } from "./Shared.tsx";
 
-/** The chips narrow the SAME set — a filter is a view of the roster, never a
- *  second read — so this is a pure predicate over the rows already in hand.
- *  A row whose link fact is unknown answers NEITHER link chip: unknown is not
- *  "unlinked", and a shelf that quietly counted it as one would be guessing. */
+// Pure view predicate — a filter is never a second read. Unknown link state
+// matches NEITHER link chip.
 export function applyRosterFilter(
   people: readonly PersonRow[],
   filter: RosterFilter,
@@ -42,8 +23,7 @@ export function applyRosterFilter(
   return [...people];
 }
 
-/** `Linked · architect`, or the role alone. Absent entirely for an unlinked
- *  person with no role — an empty separator is not a second line. */
+// `Linked · <role>`, or the role alone; nothing for unlinked+roleless.
 export function rosterSub(person: PersonRow): string {
   if (linkState(person) !== "linked") return person.role;
   return person.role ? `${LINK.linked} · ${person.role}` : LINK.linked;
@@ -58,12 +38,7 @@ export function RosterRoute(props: RosterRouteProps): ReactNode {
     );
   }
 
-  // NOTHING IS EMPTY UNTIL A READ HAS LANDED (`_shared/view-state-kit.ts`),
-  // which the `loading` gate above is: past it, an empty roster is a fact.
-  // A member with no people at all gets the first run — the one screen in the
-  // app that carries a display head and a commit of its own; a member whose
-  // FILTER matched nothing gets a sentence, because the way forward is the
-  // chip they just pressed.
+  // Empty past the loading gate: no people → first run; no filter match → EMPTY sentence.
   if (props.people.length === 0) {
     return (
       <EmptyState

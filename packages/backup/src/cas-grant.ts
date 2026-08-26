@@ -39,7 +39,6 @@ export async function requestStorageGrant(
 
 export type RequestCasGrantOptions = Omit<RequestStorageGrantOptions, "store">;
 
-/** Convenience wrapper — fixes `store: "cas"`. */
 export async function requestCasGrant(
   opts: RequestCasGrantOptions
 ): Promise<S3Grant> {

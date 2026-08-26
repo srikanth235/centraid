@@ -766,7 +766,7 @@ describe(ConversationHistoryStore, () => {
       kind: "build",
     });
 
-    // The kind moved UP onto the conversation (issue #190): a builder turn
+    // The kind moved UP onto the conversation (#190): a builder turn
     // sets its thread to `kind: 'build'`; a data chat stays `'chat'`. Read the
     // persisted conversations back through a fresh store on the same file.
     const conv = new ConversationStore(journalFor(appsDir));
@@ -1146,7 +1146,7 @@ interface FakeRes {
   headers: Record<string, string>;
   bodyText: string;
   writeHead: (status: number, headers: Record<string, string>) => FakeRes;
-  // The transcript route negotiates compression (#659 G5), so the fake speaks
+  // The transcript route negotiates compression (#659), so the fake speaks
   // the setHeader/statusCode half of ServerResponse too.
   setHeader: (name: string, value: string) => void;
   end: (text?: string | Buffer) => void;
@@ -1164,7 +1164,7 @@ function makeReq(
     method,
     url,
     // A real request always has headers. The transcript route negotiates
-    // compression (#659 G5) and only reads them once a body clears 1 KiB, so a
+    // compression (#659) and only reads them once a body clears 1 KiB, so a
     // fixture without them passed every small-payload test and threw on the
     // first realistic transcript.
     headers,

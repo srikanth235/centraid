@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 /*
  * Publish/session/files HTTP surface for the git-store backend
- * (issue #137). Drives a booted `serve()` over HTTP
+ * (#137). Drives a booted `serve()` over HTTP
  * end-to-end: open a session, write draft files, publish (with
  * gateway-side manifest validation), serve the published app, then
- * roll back. Replaces the tarball-upload flow.
+ * roll back.
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -16,7 +16,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "../serve/serve.ts";
 import type { GatewayServeHandle } from "../serve/serve.ts";
-// apps-store-routes is exercised through serve() HTTP paths below (#545 B7).
+// apps-store-routes is exercised through serve() HTTP paths below (#545).
 
 let dataDir: string;
 let handle: GatewayServeHandle;

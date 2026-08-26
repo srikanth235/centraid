@@ -13,30 +13,12 @@ export interface PairDeviceModalProps {
   onClose: () => void;
 }
 
-/**
- * Pairing a device from the account menu, not from Settings.
- *
- * Pairing is a one-off ACT you perform — mint a ticket, scan it, done — the
- * same shape as "Log out" rather than "Appearance", so it left the settings
- * rail for this modal. It hosts the SAME `DevicePairPanel` that Household →
- * Devices offers, deliberately: two ways to reach one surface, not a second
- * implementation that can drift.
- *
- * Not the Electron phone-tunnel screen that used to be Settings → Phone. That
- * one publishes desktop apps over a tunnel and is inert on web (the browser
- * host answers "pairing is managed by the gateway or desktop client"); this is
- * the ticket flow that actually enrolls a phone against this gateway.
- *
- * Landing state — the only state, since #726 — is self-pair, which is what
- * makes "add my own phone" cost nothing: the gateway derives the access from
- * the enrollment you already hold, so there is nothing here to pick.
- */
+/** Self-pair (#726); mirrors the Devices panel. */
 export default function PairDeviceModal({
   onClose,
 }: PairDeviceModalProps): JSX.Element {
   const [now, setNow] = useState(() => Date.now());
 
-  // The panel humanizes its ticket's remaining life, so it needs a clock.
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);

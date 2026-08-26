@@ -1,4 +1,4 @@
-// Per-entity activity read (issue #352 phase 3/4): journal.db already
+// Per-entity activity read (#352 phase 3/4): journal.db already
 // records a provenance row for every command write (writeProvenance,
 // evidence.ts) keyed by (entity_type, entity_id); this is the app-plane read
 // path over it — plain `gw.read({ entity: 'consent.provenance', ... })`, held

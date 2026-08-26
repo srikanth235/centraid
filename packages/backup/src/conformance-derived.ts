@@ -1,6 +1,6 @@
 /*
  * Layer 2 — `derived` store conformance cases (PROTOCOL.md § derived store
- * semantics). Split out of `conformance.ts` because that file is at the
+ * semantics). Held outside `conformance.ts` to keep that file under the
  * repo-hygiene 500-line cap; spread back in there next to the observability
  * cases. Same framework-agnostic discipline (`node:assert/strict`).
  *

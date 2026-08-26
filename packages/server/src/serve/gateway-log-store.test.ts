@@ -2,7 +2,7 @@ import fs from "node:fs";
 /*
  * GatewayLogStore: ring buffer + fan-out + the RuntimeLogger tee that
  * feeds the realtime Logs surface, plus the optional JSONL persistence
- * (issue #351): rotation, boot-tail reload, and the dropped-writes
+ * (#351): rotation, boot-tail reload, and the dropped-writes
  * counter for an unwritable dir.
  */
 import path from "node:path";

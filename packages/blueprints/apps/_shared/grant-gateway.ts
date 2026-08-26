@@ -1,5 +1,5 @@
 /**
- * THE WEB SEAT'S TRANSPORT into the grant plane (issue #825).
+ * THE WEB SEAT'S TRANSPORT into the grant plane (#825).
  *
  * A blueprint app cannot fetch a gateway path itself: the shell's document
  * origin is not the gateway (the installable PWA rides the iroh tunnel, the
@@ -19,7 +19,6 @@ import type { GrantDoor, GrantWireCalls } from "./grant-door.ts";
 export const GRANTS_UNAVAILABLE_HERE =
   "Sharing needs a newer gateway connection.";
 
-/** True when this host can reach the grant plane at all. */
 export function grantPlaneAvailable(): boolean {
   return typeof window.centraid?.grants?.create === "function";
 }
@@ -30,7 +29,6 @@ function bridge(): NonNullable<typeof window.centraid.grants> {
   return grants;
 }
 
-/** The web seat's calls, in the shape `grantDoor` takes. */
 export function webGrantCalls(): GrantWireCalls {
   return {
     subjects: () => bridge().subjects(),
@@ -43,7 +41,6 @@ export function webGrantCalls(): GrantWireCalls {
   };
 }
 
-/** The web seat's one door over the grant plane. */
 export function webGrantDoor(): GrantDoor {
   return grantDoor(webGrantCalls());
 }

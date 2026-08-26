@@ -23,7 +23,7 @@ const TICKET: GatewayDeviceTicket = {
   expiresAt: new Date(NOW + 900_000).toISOString(),
 };
 
-/** What "Add someone" (#726 P1) mints back: a NEW owner+vault, not the caller's. */
+/** What "Add someone" (#726) mints back: a NEW owner+vault, not the caller's. */
 const PERSON_TICKET: GatewayDeviceTicket = {
   ticket: "CENTRAID-TICKET-PERSON",
   ownerId: "o-new",

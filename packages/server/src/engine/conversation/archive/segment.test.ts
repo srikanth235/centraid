@@ -1,8 +1,7 @@
 /**
- * Direct unit tests for segment archive + digest fold (issue #545 B4).
- * Complements digest-parity (Insights union) by naming segment.ts and
- * asserting archiveRange + readArchivedConversationSegment round-trip and
- * conversation_digest accretion.
+ * Complements digest-parity (Insights union): `archiveRange` +
+ * `readArchivedConversationSegment` round-trip, and `conversation_digest`
+ * accretion.
  */
 
 import { createHash } from "node:crypto";

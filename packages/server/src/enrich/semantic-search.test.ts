@@ -1,4 +1,4 @@
-// Semantic search (issue #721 E3) — the property that matters most is PARITY:
+// Semantic search (#721) — the property that matters most is PARITY:
 // a vault whose handle loaded sqlite-vec and one whose handle did not must
 // answer the same query with the same photographs in the same order. If they
 // ever diverge, the extension has stopped being an optimization and become a

@@ -1,4 +1,4 @@
-// Enrichment publisher unit tests (issue #545 B6) — tagNotation + ATTRIBUTED contract.
+// Enrichment publisher unit tests (#545) — tagNotation + ATTRIBUTED contract.
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 

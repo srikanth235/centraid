@@ -18,7 +18,7 @@ import {
   viewportTransform,
 } from "./atlasRelationsTestKit.js";
 
-// Component behaviour for the Relations "Map" tab (issue #519). Pure geometry
+// Component behaviour for the Relations "Map" tab (#519). Pure geometry
 // and the detail-dial predicates live in atlasOrreryGeometry.test; the shared
 // fixture, mount harness, and DOM helpers live in atlasRelationsTestKit.
 
@@ -36,24 +36,21 @@ describe("AtlasRelationsTab", () => {
 
     it("renders nodes and FK edges from the payload", async () => {
       const el = await mountTab(makeGraph());
-      // this asserts standard-visibility facts (reachable machinery shows, ghost
-      // edges draw, the hidden-endpoint edge is dropped) — the default is simple
+      // standard-visibility facts: reachable shows, ghost edges draw, the
+      // hidden-endpoint edge is dropped
       await setLevel(el, "standard");
       const nodes = el.querySelectorAll('[data-testid="atlas-node"]');
       expect(nodes.length).toBeGreaterThan(0);
       // core_party is the centre — drawn as the plate, not a node
       expect(nodeEl(el, "core_party")).toBeNull();
-      // ontology kinds render, including the unreached island members
+      // ontology kinds render, including unreached island members
       expect(nodeEl(el, "knowledge_note")).not.toBeNull();
       expect(nodeEl(el, "locker_item")).not.toBeNull();
-      // reachable machinery renders; unreachable machinery (sync_connection,
-      // an island member) is hidden to keep the chart about the ontology
+      // reachable machinery renders; unreachable machinery is hidden
       expect(nodeEl(el, "consent_device")).not.toBeNull();
       expect(nodeEl(el, "sync_connection")).toBeNull();
-      // FK edges present; the self-reference is excluded from the edge layer,
-      // and so is any edge touching a hidden kind — sync_connection is hidden
-      // (unreachable machinery), so locker_item's edge to it must not streak
-      // into empty space (9 fkEdges − 1 self-ref − 1 hidden endpoint = 7)
+      // FK edges present; self-reference and hidden-kind edges excluded —
+      // 9 − 1 self-ref − 1 hidden endpoint = 7
       const edges = el.querySelectorAll('[data-testid="atlas-edge"]');
       expect(edges).toHaveLength(7);
       expect(
@@ -179,10 +176,8 @@ describe("AtlasRelationsTab", () => {
       // core_observation carries a curated friendly name + blurb in the fixture
       await fire(nodeEl(el, "core_observation"), "mouseover");
       const readout = el.querySelector('[data-testid="atlas-readout"]');
-      // friendly title leads; physical name stays present (demoted to the mono sig)
       expect(readout?.textContent).toContain("Observations");
       expect(readout?.textContent).toContain("core_observation");
-      // the curated blurb renders as the lead sentence
       expect(
         el.querySelector('[data-testid="atlas-node-blurb"]')?.textContent
       ).toContain("Point-in-time readings");
@@ -190,12 +185,10 @@ describe("AtlasRelationsTab", () => {
 
     it("a machinery kind with no blurb omits the blurb line cleanly", async () => {
       const el = await mountTab(makeGraph());
-      // consent_device is machinery — only visible at standard (simple hides
-      // plumbing), and it has neither a friendly override nor a blurb in the fixture
+      // consent_device is machinery (standard-only; no blurb in the fixture)
       await setLevel(el, "standard");
       await fire(nodeEl(el, "consent_device"), "mouseover");
       expect(el.querySelector('[data-testid="atlas-node-blurb"]')).toBeNull();
-      // it still reads its humanized label + physical name, never blank
       const readout = el.querySelector('[data-testid="atlas-readout"]');
       expect(readout?.textContent).toContain("consent_device");
     });
@@ -207,11 +200,9 @@ describe("AtlasRelationsTab", () => {
       );
       await fire(hit, "mouseover");
       const lede = el.querySelector('[data-testid="atlas-edge-lede"]');
-      // the sentence uses friendly names on both ends…
       expect(lede?.textContent).toContain("Vitals");
       expect(lede?.textContent).toContain("Observations");
       expect(lede?.textContent).toContain("point to");
-      // …and the mechanical detail keeps both physical table names + the count
       const readout = el.querySelector('[data-testid="atlas-readout"]');
       expect(readout?.textContent).toContain("health_vital");
       expect(readout?.textContent).toContain("core_observation");
@@ -282,8 +273,8 @@ describe("AtlasRelationsTab", () => {
     // ── Question chips ─────────────────────────────────────────────────────────
     it("question chips light a lens on the chart and clear on a second click", async () => {
       const el = await mountTab(makeGraph());
-      // the "unused" lens lights consent_device (a target-only machinery kind);
-      // machinery only shows at standard, so switch off the default simple lens
+      // the "unused" lens lights consent_device (target-only machinery);
+      // machinery only shows at standard
       await setLevel(el, "standard");
       const cls = (p: string): string =>
         nodeEl(el, p)?.getAttribute("class") ?? "";
@@ -317,11 +308,10 @@ describe("AtlasRelationsTab", () => {
     // ── Pan/zoom camera ───────────────────────────────────────────────────────
     it("wraps every layer in one viewport group at identity by default", async () => {
       const el = await mountTab(makeGraph());
-      // identity camera: no pan, unit scale
+      // identity camera
       expect(viewportTransform(el)).toBe(
         "translate(0.000 0.000) scale(1.0000)"
       );
-      // the viewport carries the whole chart — nodes/edges live inside it
       const viewport = el.querySelector('[data-testid="atlas-viewport"]');
       expect(
         viewport?.querySelector('[data-testid="atlas-node"]')
@@ -361,9 +351,7 @@ describe("AtlasRelationsTab", () => {
       expect(scaleOf(el)).toBeGreaterThan(1);
 
       await fire(nodeEl(el, "core_observation"), "click");
-      // the centre travelled…
       expect(orreryCenter(el)).toBe("core_observation");
-      // …and the camera snapped back to identity
       expect(viewportTransform(el)).toBe(
         "translate(0.000 0.000) scale(1.0000)"
       );
@@ -371,8 +359,7 @@ describe("AtlasRelationsTab", () => {
 
     // ── Detail dial ─────────────────────────────────────────────────────────
     it("defaults to Simple, showing only kinds that provably carry data", async () => {
-      // a bespoke slice: two populated ontology kinds, one empty ontology kind,
-      // and one plumbing kind — Simple keeps only the two with data
+      // a bespoke slice: two populated ontology kinds, one empty, one plumbing
       const g = makeGraph({
         nodes: [
           node("core_party", "core", "ontology", { friendly: "People" }),
@@ -412,16 +399,15 @@ describe("AtlasRelationsTab", () => {
 
     it("Everything reveals unreachable machinery and surfaces the physical SQL sublabels", async () => {
       const el = await mountTab(makeGraph());
-      // at simple the island's plumbing is hidden and no SQL sublabels show
+      // at simple the island's plumbing is hidden, no SQL sublabels show
       expect(nodeEl(el, "sync_connection")).toBeNull();
       expect(
         el.querySelector('[data-testid="atlas-node-physical"]')
       ).toBeNull();
 
       await setLevel(el, "everything");
-      // the unreachable machinery (an island member) now renders…
+      // the unreachable machinery now renders…
       expect(nodeEl(el, "sync_connection")).not.toBeNull();
-      // …and every node carries its physical name as a demoted second label line
       const sub = nodeEl(el, "knowledge_note")?.querySelector(
         '[data-testid="atlas-node-physical"]'
       );
@@ -430,7 +416,6 @@ describe("AtlasRelationsTab", () => {
 
     it("turning the dial preserves the centre and the camera (no reframe)", async () => {
       const el = await mountTab(makeGraph());
-      // travel to a new centre, then zoom in
       await fire(nodeEl(el, "core_observation"), "click");
       await fire(el.querySelector('[data-testid="atlas-zoom-in"]'), "click");
       const cameraBefore = viewportTransform(el);
@@ -438,7 +423,6 @@ describe("AtlasRelationsTab", () => {
       expect(scaleOf(el)).toBeGreaterThan(1);
 
       await setLevel(el, "everything");
-      // the lens change moved neither the centre nor the camera
       expect(orreryCenter(el)).toBe("core_observation");
       expect(viewportTransform(el)).toBe(cameraBefore);
     });
@@ -449,19 +433,16 @@ describe("AtlasRelationsTab", () => {
         [...el.querySelectorAll('[data-testid="atlas-caption-lens"]')]
           .map((n) => n.textContent ?? "")
           .join(" | ");
-      // simple hides the two plumbing kinds (consent_device, sync_connection) and
-      // the three connections that touch them or are ghosts
+      // simple hides the two plumbing kinds + their touching/ghost connections
       expect(lens()).toContain("2");
       expect(lens()).toContain("kinds hidden");
       expect(lens()).toContain("3");
       expect(lens()).toContain("connections hidden");
 
-      // standard hides only the one unreachable plumbing kind and its one edge
       await setLevel(el, "standard");
       expect(lens()).toContain("beyond reach");
       expect(lens()).not.toContain("empty or plumbing");
 
-      // everything hides nothing, but names the plumbing it revealed
       await setLevel(el, "everything");
       expect(lens()).toContain("now shown");
       expect(lens()).not.toContain("hidden");

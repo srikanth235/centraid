@@ -48,11 +48,10 @@ describe("month and day labels (handoff §4.3)", () => {
     expect(describeCounts([asset({ id: "p" })])).toBe("1 photograph");
   });
 
-  // The day sub-label carries the PLACE and no tally. The counts left the
-  // timeline entirely (issue 712 iOS parity) — `describeCounts` above is kept
-  // for the Years/Months period cards, which summarise a period the member
-  // cannot see the whole of, and this asserts the timeline no longer prints
-  // one.
+  // The day sub-label carries the PLACE and no tally: the timeline prints no
+  // count at all (#712, iOS parity). `describeCounts` above serves the
+  // Years/Months period cards, which summarise a period the member cannot see
+  // the whole of.
   test("the day sub-label is the place alone, with no count in it", () => {
     const places = new Map([["pl1", "Lyme Regis"]]);
     const dayAtOnePlace = Array.from({ length: 12 }, (_, i) =>

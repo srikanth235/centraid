@@ -1,14 +1,14 @@
 import { promises as fs } from "node:fs";
-// Publish-time `automation.json` validation gap: `validateManifestAt` parsed
-// `app.json` and linted `handler.js` for replay safety, but never ran
-// `@centraid/server/automation`'s `parseManifest` over `automations/<id>/automation.json`
-// itself. Consequence: the dedicated POST /centraid/_automations create route
-// validates trigger/vault shapes on the way in, but the generic draft
-// file-write route (PUT /centraid/_apps/<id>/files/<path> — how the builder's
-// trigger editor applies changes) did not, so a malformed edit rode straight
-// through publish and only failed later at fire/schedule time. This file
-// covers the new walk directly; `lifecycle/automation-lifecycle-over-http.test.ts`
-// covers the end-to-end publish-time 400.
+// `validateManifestAt` walks `automations/<id>/automation.json` through
+// `@centraid/server/automation`'s `parseManifest`, not just `app.json` and the
+// `handler.js` replay lint. Without that walk only the dedicated POST
+// /centraid/_automations create route checks trigger/vault shapes, so a
+// malformed edit through the generic draft file-write route (PUT
+// /centraid/_apps/<id>/files/<path> — how the builder's trigger editor applies
+// changes) rides straight through publish and fails later at fire/schedule
+// time. This file covers the walk directly;
+// `lifecycle/automation-lifecycle-over-http.test.ts` covers the end-to-end
+// publish-time 400.
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";

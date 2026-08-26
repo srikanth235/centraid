@@ -94,9 +94,7 @@ function sendOutcome(
 }
 
 function concealIdentityConflict(res: ServerResponse, intentId: string): true {
-  // UUID collisions are not actionable by the submitting device. Use the
-  // ordinary in-flight acknowledgement so another device's durable row is
-  // not exposed as an existence oracle, and leave that row untouched.
+  // UUID collisions aren't actionable: ordinary in-flight ack, no existence oracle.
   return sendJson(res, 202, {
     protocolVersion: REPLICA_PROTOCOL_VERSION,
     accepted: true,
@@ -179,16 +177,13 @@ export async function handleReplicaIntent(
     if (!sameIdentity(existing, identity)) {
       return concealIdentityConflict(res, intentId);
     }
-    // Terminal and parked outcomes are immutable dedupe hits. A `sending`
-    // row means the process died between durable admission and outcome;
-    // re-enter dispatch with the same intent id, which the dispatcher binds
-    // to deterministic vault invocation ids for replay-safe recovery.
+    // Terminal/parked outcomes are immutable dedupe hits; a `sending` row
+    // died pre-outcome — re-enter dispatch.
     if (replicaOutcomeWire(existing)) return sendOutcome(res, existing);
   }
 
-  // `access.canWrite` is the one predicate for "may this caller mutate" —
-  // ownership-sourced (#726), and kept flowing so read-only commons
-  // scopes are denied here rather than deeper in the vault plane.
+  // access.canWrite is THE may-mutate predicate (#726): deny read-only
+  // commons scopes here, not deeper in the plane.
   const deniedReason = context.access.canWrite
     ? undefined
     : "read-only devices cannot submit actions";
@@ -206,11 +201,8 @@ export async function handleReplicaIntent(
     }
   }
 
-  // A precondition is checked against the canonical change sequence before
-  // dispatch. The check is intentionally fail-closed for stale rows: the
-  // device receives the current sequence it must refresh before retrying.
-  // Once a canonical invocation marker exists, deterministic replay takes
-  // precedence over a later unrelated edit.
+  // Precondition vs canonical sequence, fail-closed for stale rows; once a
+  // canonical marker exists, replay beats a later unrelated edit.
   if (!hasCanonicalCommit(context.plane.db.vault, intentId, "any")) {
     const conflict = currentConflict(
       context.plane.db.vault,
@@ -240,14 +232,12 @@ export async function handleReplicaIntent(
       status: "sending",
     });
   } catch {
-    // A wrong-device collision is intentionally indistinguishable from any
-    // other immutable-id conflict.
+    // Intentionally indistinguishable from any other immutable-id conflict.
     return concealIdentityConflict(res, intentId);
   }
 
-  // A retained marker means this HTTP attempt is replaying a canonical
-  // execution. Its arbitrary handler return was deliberately not persisted,
-  // so only a dispatch with no pre-existing marker may surface live output.
+  // A retained marker = replay of a canonical execution; only fresh dispatch
+  // may surface live output.
   const canonicalCommitExistedBeforeDispatch = hasCanonicalCommit(
     context.plane.db.vault,
     intentId,
@@ -260,8 +250,7 @@ export async function handleReplicaIntent(
         intentId,
         appId,
         deviceId: identity.deviceId,
-        // L4 attribution (#599): the acting owner travels with the intent so
-        // a replayed offline write names the person, not only the hardware.
+        // L4 attribution (#599): the acting owner travels with the intent.
         ...(context.access.ownerId === undefined
           ? {}
           : { ownerId: context.access.ownerId }),
@@ -276,11 +265,8 @@ export async function handleReplicaIntent(
         })
     );
   } catch {
-    // Dispatch/transport failure is ambiguous: the canonical command may
-    // already have committed and only its journal finalization or response
-    // path failed. Keep `sending` so retry re-enters with the same intent id
-    // and consumes the canonical commit marker instead of terminalizing a
-    // possibly successful action as failed.
+    // Dispatch failure is ambiguous (the command may have committed): keep
+    // `sending` so retry consumes the marker.
     const pending = readReplicaIntentOutcome(
       context.plane.db.vault,
       intentId,
@@ -291,13 +277,10 @@ export async function handleReplicaIntent(
     }
     return sendOutcome(res, pending);
   }
-  // The worker-facing bridge necessarily reports a post-canonical journal
-  // failure as VAULT_ERROR. Blueprints may catch ctx.vault.invoke errors and
-  // return a successful `{status: 'denied'}` action envelope, so an unfinished
-  // marker makes that terminal result ambiguous. Keep admission retryable
-  // until deterministic replay repairs the journal. A fully finalized marker,
-  // however, proves only that one invocation committed; it must not overwrite
-  // a genuine denial/failure returned by a later invocation in the same action.
+  // Post-canonical journal failures surface as VAULT_ERROR and blueprints may
+  // catch invoke errors into denials, so terminal results are ambiguous while
+  // the marker is unfinished — stay retryable until replay repairs it. A
+  // finalized marker proves one commit; it never overwrites a genuine denial.
   const canonicalFinalizationPending = hasCanonicalCommit(
     context.plane.db.vault,
     intentId,
@@ -326,8 +309,8 @@ export async function handleReplicaIntent(
       ...("reason" in dispatched && dispatched.reason
         ? { reason: dispatched.reason }
         : {}),
-      // Handler returns are live process data. Never copy an arbitrary value
-      // into the durable device outcome; canonical row changes reconcile it.
+      // Handler returns are live process data — never copied into durable
+      // outcomes; canonical row changes reconcile it.
     });
   } catch (error) {
     return sendJson(res, 500, {

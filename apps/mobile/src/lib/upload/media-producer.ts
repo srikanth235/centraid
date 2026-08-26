@@ -23,24 +23,12 @@ export interface DeviceMediaInput {
   capturedAt?: string;
   tzOffsetMin?: number;
   captureGroupId?: string;
-  /**
-   * Edit lineage (issue #711/#724 B1): the asset these bytes were derived
-   * FROM. Set by the phone editor's `Save as a new photograph` commit
-   * (`photo-edit-save.ts`) and forwarded straight through to
-   * `media.add_asset`'s own `source_asset_id` — the vault command, the
-   * `photos / upload` action schema and its handler have carried this field
-   * since issue #711; this producer was the missing link between them.
-   */
+  /** Edit lineage (#711): asset these bytes derive FROM. */
   sourceAssetId?: string;
   width?: number;
   height?: number;
   durationS?: number;
-  /**
-   * F10: delete the source file once its bytes settle durably (and its
-   * follow-up is recorded). Set by the share-intent ingest, whose copies in the
-   * OS share container would otherwise leak forever. Off by default — a
-   * camera-roll original is never deleted.
-   */
+  /** F10: delete the source after durable settle; never a camera-roll original. */
   deleteSourceAfterSettle?: boolean;
   onProgress?: (progress: { completed: number; total: number }) => void;
 }
@@ -52,7 +40,7 @@ export interface BackupDocumentInput {
   mediaType: string;
   plaintextSize: number;
   folderId?: string;
-  /** User-reviewed local OCR text; becomes the document's searchable derivative. */
+  /** User-reviewed OCR text; the document's searchable derivative. */
   extractedText?: string;
   /** F10: see {@link DeviceMediaInput.deleteSourceAfterSettle}. */
   deleteSourceAfterSettle?: boolean;
@@ -97,11 +85,8 @@ function openQueue(
 }
 
 /**
- * Drain and replay under the shared single-flight lock, so a producer never
- * runs concurrently with the reconciler or another producer (F8). The producer
- * OWNS the foreground service across this call (refcounted), and surfaces a
- * terminal transfer failure to its caller instead of returning a phantom
- * success over a stuck row (F6).
+ * Single-flight drain/replay (F8); owns the foreground service here;
+ * terminal failure, not phantom success (F6).
  */
 async function drainToSettlement(
   session: MobileReplicaSession,
@@ -111,9 +96,7 @@ async function drainToSettlement(
   source: { localUri: string; deleteAfterSettle: boolean }
 ): Promise<string> {
   await withDrainLock(async () => {
-    // Own the foreground service only for the exclusive drain, so it reflects
-    // the transfer actually in flight and a concurrent reconcile (which never
-    // starts it) cannot poke a notification it does not own.
+    // Foreground service owned only here; reconcile never starts it.
     UploadForegroundService.start(queue.pending().length);
     try {
       const summary = await queue.drain();
@@ -140,21 +123,17 @@ async function drainToSettlement(
   return sha256;
 }
 
-/** The bytes are durable in CAS; the share-container copy is now redundant. */
+/** Bytes durable in CAS; the share-container copy is redundant. */
 function deleteSource(localUri: string): void {
   try {
     const file = new File(localUri);
     if (file.exists) file.delete();
   } catch {
-    // A leaked share-container temp is a cosmetic loss, never a correctness one.
+    // A leaked share-container temp is cosmetic, never a correctness loss.
   }
 }
 
-/**
- * First producer for the durable queue. Re-running after any process death is
- * safe: enqueue dedupes by sha, direct begin dedupes in CAS, derivative slots
- * upsert by (parent, variant), and the replica intent is payload-idempotent.
- */
+/** Safe to re-run after process death: sha dedupe, CAS begin dedupe, derivative upserts, idempotent intent. */
 export async function backupDeviceMedia(
   session: MobileReplicaSession,
   gatewayBase: string,
@@ -162,10 +141,7 @@ export async function backupDeviceMedia(
 ): Promise<string> {
   const queue = openQueue(gatewayBase, input.onProgress);
   try {
-    // F11: address the bytes ONCE and probe the ledger. A sha the queue has
-    // seen keeps the derivatives it was first enqueued with, so re-scanning a
-    // library of settled photos pays a hash and a lookup — not N resize/encode
-    // pipelines.
+    // F11: address bytes ONCE — seen shas keep their first derivatives; re-scans pay hash+lookup only.
     const digest = await sha256OfFile(
       expoFileSource,
       input.localUri,
@@ -185,8 +161,7 @@ export async function backupDeviceMedia(
         plaintextSize: input.plaintextSize,
         digest,
       },
-      // Only a brand-new sha attaches a follow-up here; an existing row already
-      // carries its own, and re-adding one without derivatives would fork it.
+      // Brand-new shas alone attach a follow-up; existing rows carry their own (re-adding forks it).
       isNew
         ? (addressed) => ({
             shape: "photos",
@@ -227,7 +202,7 @@ export async function backupDeviceMedia(
   }
 }
 
-/** Docs producer: same sha queue and transfer path, different canonical intent. */
+/** Docs producer: same queue and transfer path, different canonical intent. */
 export async function backupDocument(
   session: MobileReplicaSession,
   gatewayBase: string,

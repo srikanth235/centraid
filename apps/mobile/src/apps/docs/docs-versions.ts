@@ -1,36 +1,12 @@
-// A document's version chain, walked over THIS DEVICE'S replica rows
-// (issue #821, spec §10: "every change is a version and nothing is ever
-// overwritten").
-//
-// The web seat asks the gateway (`queries/history.ts`); the phone holds the
-// same facts already — `core.link` is in the docs manifest's read scopes and
-// replicates — so the walk is re-expressed here over plain rows, mirroring
-// the gateway handler edge for edge: start at the wrapper's
-// `current_content_id`, follow the single live `revises` edge OUT of each
-// content item (NEW → OLD, the direction commands/revisions.ts asserts) to
-// the version it superseded, stop at the never-revised original or at a
-// content id already visited (a restore gives an OLD version a NEW outgoing
-// edge, which can cycle the graph). Each entry's date is the ASSERTION time
-// of the edge that superseded it — the vault's own record — never the
-// content item's mint time.
-//
-// WHAT IS NOT HERE, deliberately: who made each version. That is a
-// `consent.provenance` fact, and this phone's replica does not carry
-// provenance rows — the screen states that absence instead of guessing
-// (INTEGRATION-NOTES.md → Withholdings). No diff is computed anywhere: the
-// codebase cannot render a real one on this seat, so none is drawn.
-//
-// Pure and react-free — plain rows in, plain view models out.
+// Version chain over THIS DEVICE'S replica (#821). Follow live `revises` OUT
+// (NEW → OLD); a restore can cycle. Date is the edge's assertion time.
+// No provenance on this replica — withhold rather than guess. No diff.
 
 import type { EntityRow } from "./docs-projection";
 
-// Mirrors packages/vault/src/commands/links.ts's RELATIONS_SCHEME_URI and the
-// relation the revision recorder writes.
 const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 const REVISES_RELATION = "revises";
 const CONTENT_TYPE = "core.content_item";
-// One walk step per version; the cap only stops runaway growth (the same
-// number the gateway handler uses).
 const MAX_CHAIN_STEPS = 500;
 
 const str = (row: EntityRow, key: string): string | null => {
@@ -60,7 +36,6 @@ export interface VersionChain {
 }
 
 export interface VersionChainRows {
-  /** The one `core.document` row this chain belongs to. */
   document: EntityRow | undefined;
   links: readonly EntityRow[];
   contents: readonly EntityRow[];
@@ -68,12 +43,6 @@ export interface VersionChainRows {
   schemes: readonly EntityRow[];
 }
 
-/**
- * The chain, newest first, or `null` when the document row itself is absent.
- * A vault where nothing has ever been edited/replaced/restored has no
- * `revises` concept at all — every document is honestly its own one-entry
- * history, exactly as the gateway handler renders it.
- */
 export function projectVersionChain(
   rows: VersionChainRows
 ): VersionChain | null {
@@ -98,8 +67,7 @@ export function projectVersionChain(
             : []
         )[0] ?? null);
 
-  // Live revises edges out of a content item, newest assertion first — the
-  // same `orderBy valid_from desc, limit`-shaped pick the gateway makes.
+  // Live revises edges out of a content item, newest assertion first.
   const edgesFrom = new Map<string, { to: string; valid_from: string }[]>();
   if (revisesConceptId !== null) {
     for (const link of rows.links) {

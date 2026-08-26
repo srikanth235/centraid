@@ -1,25 +1,19 @@
 /*
- * Live-gateway adapter for the shareable support bundle (#842 W8.1).
+ * Live-gateway adapter for the shareable support bundle (#842). The one place
+ * that reads live gateway state into a `SupportBundleInput`; kept separate so
+ * the pure builder in `support-bundle.ts` stays trivially testable and its
+ * "no network primitive" source scan means something.
  *
- * `support-bundle.ts` is pure and knows nothing about this process. This
- * module is the one place that reads live gateway state and turns it into
- * a `SupportBundleInput`. It is deliberately a separate file so the pure
- * builder stays trivially testable and so the "no network primitive"
- * source scan over the builder means something.
+ * Second job, the one that makes the tripwire real: HARVESTING the literals
+ * this machine considers sensitive — vault names, owner display name, seal
+ * key and identity seed encodings, host bearer tokens. A redaction policy can
+ * only refuse shapes it recognises; a literal hit in the serialized document
+ * means the policy missed something. The value is removed either way and the
+ * miss is counted in the bundle's own report.
  *
- * Its second job is the one that makes the tripwire real: HARVESTING the
- * literals this machine considers sensitive. A redaction policy can only
- * refuse shapes it recognises, so the strongest available check is to ask
- * the running system for the values it knows must never appear — the
- * owner-authored vault names, the owner's display name, the seal key and
- * identity seed in their encoded forms, and any host-supplied bearer
- * token — and sweep the serialized document for them by literal. A hit
- * means the policy missed something; the value is removed either way and
- * the miss is counted in the bundle's own report.
- *
- * Structural parameter types, not the concrete `HealthRegistry` /
- * `GatewayLogStore` / `VaultRegistry` classes: this file sits downstream
- * of all three and importing them would knot the serve graph for no gain.
+ * Parameter types are structural, not the concrete HealthRegistry/
+ * GatewayLogStore/VaultRegistry classes: importing them would knot the serve
+ * graph for no gain.
  */
 
 import { dbSizeBreakdown } from "@centraid/vault";
@@ -67,8 +61,7 @@ export interface SupportBundlePlaneLike {
 export interface SupportBundleSourceOptions {
   readonly health: SupportBundleHealthLike;
   readonly logs: SupportBundleLogsLike;
-  /** Structural, like the two above: an `AnomalyLedger` satisfies it, and so
-   *  does a reader over the on-disk mirror `readAnomalyLedger` returns. */
+  /** Structural: an `AnomalyLedger` satisfies it, as does a reader over the on-disk mirror `readAnomalyLedger` returns. */
   readonly anomalies: { snapshot: () => readonly AnomalyRecord[] };
   readonly planes: readonly SupportBundlePlaneLike[];
   readonly gateway: SupportBundleInput["gateway"];
@@ -116,11 +109,7 @@ function ownerNames(db: VaultDb | undefined): string[] {
   }
 }
 
-/**
- * Every encoding of the key material that could plausibly appear in a
- * stringified structure. Cheap, and the alternative is trusting that no
- * lane ever hex-encodes a key into a log line.
- */
+/** Every encoding of key material that could plausibly appear in a stringified structure — the alternative is trusting no lane ever hex-encodes a key into a log line. */
 function keyEncodings(db: VaultDb | undefined): string[] {
   if (!db) return [];
   const out: string[] = [];

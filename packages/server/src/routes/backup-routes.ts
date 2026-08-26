@@ -1,22 +1,11 @@
 /*
- * `GET /centraid/_gateway/backup` + `POST /centraid/_gateway/backup/run` +
- * `POST /centraid/_gateway/backup/kit-confirmed` — the HTTP surface over
- * `BackupService` (issue #351's last workstream: the `centraid-gateway
- * backup` CLI has status/run, but nothing exposes it to the desktop's
- * Gateway page; wave 4 adds the recovery-kit confirmation gate).
- *
- * Thin wiring, same shape as `health-routes.ts`/`diagnostics-routes.ts`:
- * mounted in `extraHandlers` behind the same host bearer gate. When backup
- * isn't configured (`options.backup?.enabled` false), `build-gateway.ts`
- * never constructs a `BackupService` — this handler is built with
- * `backupService: undefined` in that case and answers a `configured: false`
- * body (with `recoveryKit: {confirmedAt: null}`, since there's no state to
- * read) rather than 404, so the UI can render an explainer without a
- * separate "does backup exist" probe.
- *
- * `recoveryKit` is deliberately generic, not backup-card-specific — issue
- * #367 reuses this exact `{confirmedAt}` shape and the same POST to gate
- * the S3-storage enable flow.
+ * `GET /centraid/_gateway/backup` (+ `/run`, `/kit-confirmed`) — the HTTP
+ * surface over `BackupService` (#351), mounted in `extraHandlers` behind the
+ * host bearer gate. When backup is unconfigured, this handler is built with
+ * `backupService: undefined` and answers `configured: false` (not 404) so the
+ * UI renders an explainer without a separate probe. `recoveryKit` is
+ * deliberately generic — #367 reuses the `{confirmedAt}` shape and POST to
+ * gate the S3-storage enable flow.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -85,9 +74,8 @@ export interface BackupStatusBody {
   provider?: string;
   vaults: BackupVaultStatus[];
   recoveryKit: RecoveryKitState;
-  /** The home bundle's provider-declared promises (#436 §6) — Recovery window
-   *  (`retention`) and Exit (`restoreCostClass`) of the five-metric contract.
-   *  Absent when backup isn't configured, or when discovery couldn't be read. */
+  /** Provider-declared promises (#436): Recovery retention + Exit
+   *  restoreCostClass. Absent when backup isn't configured or unreadable. */
   home?: HomeDiscovery;
 }
 
@@ -95,18 +83,16 @@ export interface BackupRouteDeps {
   /** `undefined` when `options.backup?.enabled` is false — no service exists. */
   backupService?: BackupService;
   /**
-   * Gateway-level recovery-kit state (issue #367 §C10) — present even when
-   * backup isn't configured, so the confirmation gate the S3-storage enable
-   * flow shares can actually be satisfied on a backup-less gateway (the
-   * desktop embed) instead of only bypassed with force.
+   * Gateway-level recovery-kit state (#367), present even without backup so
+   * the shared confirmation gate can be satisfied, not only bypassed.
    */
   recoveryKitStore?: RecoveryKitStateStore;
   /** Real per-vault enrollments used to keep live key export owner-only. */
   enrollments?: EnrollmentStore;
   /**
-   * Direct host-custody request (authenticated bearer, never iroh-forwarded).
-   * It can see every vault, so refusals it hits are `owner_only` (naming the
-   * real owner) rather than `not_found` topology hiding (#726 P1).
+   * Direct host-custody request (bearer, never iroh-forwarded). It sees every
+   * vault, so its refusals are `owner_only` (real owner named), not
+   * `not_found` topology hiding (#726).
    */
   isHostCustody?: (req: IncomingMessage) => boolean;
   vaults: VaultRegistry;
@@ -156,8 +142,8 @@ async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
       backupService.casReconciliationStatus?.() ??
         Promise.resolve<Record<string, BackupReconciliationState>>({}),
       backupService.recoveryKitStatus(),
-      // Discovery is a provider round-trip; a failure must never blank the whole
-      // status body — the five-metric surface degrades to unknown recovery/exit.
+      // Discovery is a provider round-trip; failure must never blank the
+      // status body — degrade to unknown recovery/exit.
       typeof backupService.homeDiscovery === "function"
         ? backupService.homeDiscovery().catch(() => undefined)
         : Promise.resolve<HomeDiscovery | undefined>(undefined),
@@ -197,7 +183,7 @@ function vaultStatus(
   casReconciliation?: BackupReconciliationState
 ): BackupVaultStatus {
   const store = readBlobStoreSettings(plane.db.vault);
-  // Every remote CAS connection is a provider home bundle now (#436 §2).
+  // Every remote CAS connection is a provider home bundle (#436).
   const destination: BackupDestinationStatus =
     store.kind === "s3"
       ? {
@@ -241,14 +227,10 @@ function newestReconciliation(
     : second;
 }
 
-// Owner-editable policy keys (issue #436 §4). Deliberately EXCLUDED:
-//   - `casAck`: the wire declaration keeps the field (default 'receipt'), but
-//     durability semantics are not an owner knob — remote custody is always
-//     receipt-acked; the store engine reads the default, the owner never sets it.
-//   - `storageClass` / `directToColdOriginals`: store-class vocabulary — the
-//     gateway routes store classes internally; not user-facing.
-// The cadence fields (rpo/snapshot/verify) stay editable as "advanced", along
-// with the transit budgets and WAL-roll knobs.
+// Owner-editable policy keys (#436). Excluded: `casAck` (remote custody is
+// always receipt-acked — not an owner knob) and store-class vocabulary
+// (`storageClass` / `directToColdOriginals`, routed internally, not
+// user-facing).
 const POLICY_KEYS: readonly (keyof BackupPolicy)[] = [
   "rpoSeconds",
   "snapshotIntervalHours",
@@ -304,9 +286,8 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
           message: "GET, PUT only",
         });
       }
-      // Configuring a vault's backup target is an owner act (#726 P1):
-      // `backup_targets` rows key by vault_id, but hosting a vault confers
-      // no authority over ITS destination/policy.
+      // Owner act (#726): hosting a vault confers no authority over ITS
+      // destination/policy.
       const configRefusal = vaultOwnerRefusal(
         req,
         deps,
@@ -420,16 +401,14 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
             'backup is not configured — add a "backup" block to the gateway config',
         });
       }
-      // Serialize: a run already in flight covers every mounted vault
-      // (`runAll`), so a second concurrent POST just observes it rather
-      // than enqueueing a duplicate pass over the same vaults.
+      // Serialize: a run in flight covers every mounted vault (`runAll`), so
+      // a second POST observes it rather than enqueueing a duplicate pass.
       if (backupService.isRunning()) {
         return sendJson(res, 202, { accepted: true, alreadyRunning: true });
       }
-      // Fire-and-forget: `doRunBackup` already records failures into
-      // backup state + the `backups` health component, so this catch
-      // only silences the unhandled-rejection warning — the UI learns
-      // the outcome from the next `GET` (lastError / running flips back).
+      // Fire-and-forget: `doRunBackup` records failures in backup state +
+      // health; this catch only silences unhandled-rejection. The UI learns
+      // the outcome from the next GET.
       void backupService.runAll().catch(() => undefined);
       return sendJson(res, 202, { accepted: true });
     }
@@ -482,9 +461,8 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
             message: "a recovery-kit password is required",
           });
         }
-        // Owner-held (#726 P1): a kit carries only the vaults the REQUESTING
-        // owner owns — hosting someone else's vault does not entitle you to
-        // their recovery material.
+        // Owner-held (#726): a kit carries only vaults the REQUESTING owner
+        // owns — hosting someone else's vault earns nothing.
         const document = scopeKitToRequestingOwner(
           await deps.backupService.recoveryKitDocument(),
           req,

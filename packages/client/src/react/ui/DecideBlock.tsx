@@ -1,19 +1,9 @@
-// The decision card (binding layer v11, issue #815).
-//
-// A row cannot hold an actor, an artifact, a standing-grant offer and an
-// irreversible verb honestly: it has one line of text, one meta and one verb,
-// so everything else it is given either truncates or lies about its geometry.
-// A decision is therefore its own block.
-//
-// Collapsed it states who staged what and offers one outlined **Review**; the
-// whole title block is the disclosure target, because a chevron beside a
-// sentence a member is allowed to read is a second target for one act. Open it
-// adds the facts, the preview of what the write would do, the standing-grant
-// offer, and at most three verbs.
-//
-// Presentational only. Every piece of state — open, editing, confirming — is
-// the caller's, so a background refresh can never take a decision out of a
-// member's hands by re-deriving it here.
+// The decision card (#815). A decision is its own block, not a row: a row's
+// one line, one meta and one verb cannot hold actor, artifact, grant offer and
+// irreversible verb honestly. The whole title block is the disclosure target.
+// Presentational only — open, editing and confirming are the caller's state,
+// so a background refresh can never re-derive a decision out of a member's
+// hands.
 import type { JSX } from "react";
 
 import Button from "./Button.js";
@@ -22,16 +12,11 @@ import { cx } from "./cx.js";
 import styles from "./DecideBlock.module.css";
 
 /**
- * One fact about the decision, on the shared `--w-key-col` grid.
- *
- * `field` is what makes a fact EDITABLE, and it is deliberately per-fact
- * rather than a card-level flag: only a value a member can author becomes an
- * input, and a computed fact — a size, a file count — stays stated, because a
- * computed fact offered as text lets an approved card misdescribe the write it
- * approved.
+ * One fact, on the shared `--w-key-col` grid. `field` is per-fact, never a
+ * card-level flag: a computed fact offered as an input lets an approved card
+ * misdescribe the write it approved.
  */
 export interface DecideFact {
-  /** The displayed word in the key column. */
   key: string;
   value: string;
   /** Numeric register — ids, sizes, addresses. */
@@ -39,36 +24,28 @@ export interface DecideFact {
   /** This value is the part that leaves the device. */
   net?: boolean;
   field?: {
-    /** Accessible name for the input — the fact's own human label. */
     label: string;
     multiline?: boolean;
     onChange: (next: string) => void;
   };
 }
 
-/**
- * `commit` is the one filled ink verb, `outline` the ordinary one, `net` the
- * OUTLINED destructive one (invariant 3 — a filled destructive button is not
- * part of this grammar, whatever a confirm feels like), and `quiet` the way
- * back out of a confirm.
- */
+/** `net` is the OUTLINED destructive verb: a filled destructive button is not
+ *  part of this grammar, whatever a confirm feels like (invariant 3). */
 export type DecideActionKind = "commit" | "outline" | "net" | "quiet";
 
 export interface DecideAction {
   label: string;
   onClick: () => void;
   kind?: DecideActionKind;
-  /** Rendered inert, with the reason stated as the card's `note`. */
+  /** Inert, with the reason stated as the card's `note`. */
   disabled?: boolean;
-  /** What tells ten identically-labelled verbs apart. */
   hint?: string;
-  /** Does this verb WRITE? Defaults to true for `commit` and `net`, which are
-   *  the two that do; an override exists for a verb that only navigates. */
+  /** Does this verb WRITE? Defaults true for `commit` and `net`. */
   commits?: boolean;
 }
 
-/** The standing-grant offer, made where the decision is made — never as a
- *  separate screen — with the one line that says what it costs next time. */
+/** The standing-grant offer, made here — never as a separate screen. */
 export interface DecideCheck {
   label: string;
   sub: string;
@@ -78,10 +55,8 @@ export interface DecideCheck {
 }
 
 export interface DecideBlockProps {
-  /** `Staged write · personal`, `Parked command · tier 3` — the kind, in the
-   *  micro caps register. */
+  /** The kind, in the micro caps register: `Staged write · personal`. */
   eyebrow: string;
-  /** How long it has been waiting. Numeric register, trailing the eyebrow. */
   age?: string;
   title: string;
   sub?: string;
@@ -89,20 +64,16 @@ export interface DecideBlockProps {
   /** Presence turns the title block into the disclosure. */
   onToggle?: () => void;
   facts?: readonly DecideFact[];
-  /** "What it would do", behind a 2px leading rule on the sunken ground. */
   preview?: { label: string; body: string };
   check?: DecideCheck;
-  /** One line under the facts: the honest limitation, the editing rule, or the
-   *  consequence of the verb currently being confirmed. */
+  /** One line under the facts: limitation, editing rule, or consequence. */
   note?: string;
   noteNet?: boolean;
   /** This decision's consequence leaves the device. */
   net?: boolean;
-  /** An irreversible verb is being confirmed in place — the card's border
-   *  becomes `--net` and the action row is the consequence plus two verbs. */
+  /** Confirming in place: border goes `--net`, row is consequence + two verbs. */
   confirming?: boolean;
-  /** At most three. A fourth verb on a decision is a decision that has not been
-   *  reduced to a decision yet. */
+  /** At most three — a fourth verb means the decision is not reduced yet. */
   actions?: readonly DecideAction[];
   className?: string;
 }
@@ -117,8 +88,6 @@ const VARIANT: Record<
   quiet: "quiet",
 };
 
-/** The decision card: eyebrow, title block, and — once open — facts, preview,
- *  the standing-grant offer and its verbs. */
 export default function DecideBlock({
   eyebrow,
   age,
@@ -209,9 +178,8 @@ export default function DecideBlock({
         </div>
       ) : null}
       {check ? (
-        // `aria-label` on the LABEL, not the input: the checkbox takes its
-        // accessible name from this element, and the name is the offer's own
-        // words rather than the consequence line under them.
+        // `aria-label` on the LABEL: the name is the offer's own words, not
+        // the consequence line under them.
         <label aria-label={check.label} className={styles.check}>
           <input
             checked={check.on}

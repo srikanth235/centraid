@@ -1,6 +1,6 @@
 // `buildCollectionSections` — the section model behind `PhotosCollectionsView`
 // (see that module's own header for the shelf-by-shelf argument). This file
-// pins two things issue #721 changed: the key-photo fix (B5) and the new
+// pins two things #721 changed: the key-photo fix (B5) and the new
 // Videos shelf (B3), plus the ordering and honest-empty-copy invariants the
 // rest of the model already holds.
 

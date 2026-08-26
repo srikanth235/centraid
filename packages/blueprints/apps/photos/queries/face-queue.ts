@@ -1,45 +1,20 @@
 /**
- * The Face review queue (issue #711): the vault-wide propose-and-confirm
- * backlog, read as one ORDERED queue the component walks one entry at a
- * time — never the whole backlog at once (v4 handoff §8, §16 `faces.note`:
- * "One face at a time"). `queries/faces.ts` stays the PER-ASSET read the
- * lightbox's own mini-list uses; this is the dedicated "Face review" surface
- * (v4 4305-4318) reachable on its own, over every unconfirmed face in the
- * vault rather than one photograph's.
+ * Face review queue (#711): vault-wide, one entry at a time.
+ * `queries/faces.ts` stays the per-asset lightbox read.
  *
- * CONFIDENCE IS A MATCH COUNT, NEVER A PERCENTAGE (README.md:285). The
- * enricher's own `confidence` column is a 0-1 similarity score, but the
- * surface must say "N matching faces" — derived here by counting OTHER
- * `media_face_region` rows (any confirm state) that propose the SAME
- * `party_id`, deduped by photograph. No new column: the table already
- * carries what this needs, because every proposal for one person shares that
- * person's `party_id`.
+ * Confidence is a match count, never a percentage: other regions proposing
+ * the same `party_id`, deduped by photograph.
  *
- * THE QUEUE IS ANSWERABLE (issue #712). It filters on `review_state`, not on
- * `confirmed_by_party_id`, and that is the whole difference between a queue
- * that can be finished and one that cannot. Every region the owner has
- * answered — confirmed, rejected, or dismissed ("reviewed, deliberately left
- * unnamed") — leaves this list for good, and the enricher may not put it
- * back (`ingest/enrich-publishers.ts` only refreshes a still-`proposed`
- * region). `rejectedTotal` is therefore a real number now, which is what
- * lets the surface's status note say what the prototype asks it to.
+ * Filters on `review_state`, not `confirmed_by_party_id` (#712). Confirmed /
+ * rejected / dismissed leave this list; the enricher may not put them back.
  *
- * ONE FACT THE PROTOTYPE ASKS FOR THAT THIS SCHEMA STILL CANNOT STATE —
- * flagged here rather than faked:
- *
- *  - `first seen` (4310) reads as the EARLIEST CAPTURE DATE among the
- *    matching photographs (`media_asset.captured_at`), not "when the
- *    enricher first proposed this face" — `media_face_region` has no
- *    `created_at` column, so that fact does not exist in this schema today.
- *    Capture date is the closest true substitute, not an invented one.
+ * `first seen` is earliest `media_asset.captured_at` among matches —
+ * `media_face_region` has no `created_at`. Do not invent proposal time.
  *
  * @type {import('@centraid/server/engine').QueryHandler}
  */
 import { srcOf } from "./_shared.ts";
 
-// One page of the queue. The component walks it one entry at a time and
-// only ever asks for more once this page is exhausted (skip cycles inside
-// it), so this bounds the join work per read rather than the review itself.
 const QUEUE_LIMIT = 60;
 
 interface RawRegion {
@@ -49,7 +24,6 @@ interface RawRegion {
   party_id?: string | null;
   confidence?: number | null;
   confirmed_by_party_id?: string | null;
-  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
   review_state?: string | null;
 }
 interface RawParty {
@@ -88,9 +62,7 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
     const nameOf = new Map(
       persons.map((p) => [p.party_id, p.display_name] as const)
     );
-    // UNANSWERED, not merely unconfirmed (issue #712). A rejected or
-    // dismissed region is a decision the owner already made; re-offering it
-    // is the bug this queue existed to have.
+    // Unanswered, not merely unconfirmed (#712).
     const pending = regions.filter((r) => r.review_state === "proposed");
     const confirmedTotal = regions.filter(
       (r) => r.review_state === "confirmed"
@@ -101,7 +73,6 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
     const dismissedTotal = regions.filter(
       (r) => r.review_state === "dismissed"
     ).length;
-    // Deterministic order (no created_at to sort on): region_id, ascending.
     const queueSlice = [...pending]
       .sort((a, b) => (a.region_id < b.region_id ? -1 : 1))
       .slice(0, QUEUE_LIMIT);
@@ -136,8 +107,6 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
       )
     );
 
-    // Every OTHER region proposing the same party, deduped by photograph —
-    // the match-count and first-seen derivations share this grouping.
     const assetIdsByParty = new Map<string, Set<string>>();
     for (const r of regions) {
       if (!r.party_id) continue;

@@ -1,11 +1,6 @@
 /*
- * Conversation-scoped provider egress consent (#567).
- *
- * Direct rows are keyed by conversation × HarnessKind. Ladder rows add the
- * subsystem whose Settings membership authorized unattended egress, so
- * removing a harness from one ladder revokes that lane without touching a
- * direct grant or another subsystem's ladder grant. Revocation is retained as
- * evidence rather than deleting the row.
+ * Conversation-scoped provider egress consent (#567). Revocation is
+ * retained as evidence, not deleted.
  */
 
 import type { DatabaseProvider } from "../stores/gateway-db.js";
@@ -20,10 +15,7 @@ export interface ProviderEgressConsentController {
     harnessKind: HarnessKind,
     subsystem?: ModelSubsystem
   ) => boolean;
-  /**
-   * Attended consent: the user answered an egress prompt for this
-   * conversation, so a prior revocation is deliberately cleared.
-   */
+  /** Attended: the user answered an egress prompt; clears a prior revocation. */
   grant: (
     conversationId: string,
     harnessKind: HarnessKind,
@@ -32,13 +24,8 @@ export interface ProviderEgressConsentController {
     now?: number
   ) => void;
   /**
-   * Unattended consent derived from user authoring (a prefs-primary harness or
-   * current ladder membership). No owner is present to answer a prompt, so
-   * this must never resurrect a revoked row — a revocation outlives every
-   * later derivation. Returns whether egress is now consented.
-   *
-   * Optional so a host may inject a narrower controller; an absent
-   * implementation means unattended egress is denied, never assumed.
+   * Unattended, derived from authoring; never resurrects a revoked row.
+   * Absent ⇒ unattended egress is denied, never assumed.
    */
   recordDerived?: (
     conversationId: string,
@@ -52,7 +39,7 @@ export interface ProviderEgressConsentController {
     harnessKind: HarnessKind,
     now?: number
   ) => void;
-  /** Revoke grants created by one subsystem's automatic ladder membership. */
+  /** Revoke grants created by one subsystem's ladder membership. */
   revokeLadderProvider?: (
     harnessKind: HarnessKind,
     subsystem: ModelSubsystem,
@@ -138,8 +125,7 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
   ): boolean {
     const consentSubsystem = consentSubsystemFor(source, subsystem);
     const db = this.dbProvider();
-    // An explicit `revoke()` leaves a direct tombstone. Unattended derivation
-    // must not step over it: only an attended `grant()` re-opens the lane.
+    // An explicit `revoke()` tombstone: only an attended grant re-opens.
     const revokedDirectly =
       db
         .prepare(
@@ -151,16 +137,13 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
         .get(conversationId, harnessKind) !== undefined;
     if (revokedDirectly) return false;
     if (source === "ladder" && subsystem !== undefined) {
-      // Ladder membership IS the authorization (D13); the row is only its
-      // receipt. A harness the user has (re-)placed in the live ladder is
-      // consented, so a membership-removal revocation clears on re-add — but a
-      // harness absent from the ladder is denied outright, never auto-added.
+      // Ladder membership IS the authorization (D13); re-add clears a
+      // membership-removal revocation, absence is denial.
       if (!this.isCurrentLadderMember(harnessKind, subsystem)) return false;
       this.grant(conversationId, harnessKind, source, subsystem, now);
       return true;
     }
-    // `DO UPDATE … WHERE revoked_at IS NULL` refreshes a live row and leaves a
-    // revoked one untouched — the insert half only ever creates a fresh grant.
+    // `DO UPDATE … WHERE revoked_at IS NULL` never resurrects a revoked row.
     db.prepare(
       `INSERT INTO conversation_provider_consent (
          conversation_id, harness_kind, source, subsystem, granted_at, revoked_at
@@ -188,10 +171,8 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
     now = Date.now()
   ): void {
     const db = this.dbProvider();
-    // The direct row doubles as the durable tombstone: it is what tells a
-    // later unattended derivation that the user withdrew this provider from
-    // this conversation. Membership removal (`revokeLadderProvider`) writes no
-    // tombstone, so re-adding a harness to a ladder re-authorizes it (D13).
+    // Direct row is the durable tombstone; membership removal writes none —
+    // re-adding a harness re-authorizes (D13).
     db.prepare(
       `INSERT INTO conversation_provider_consent (
          conversation_id, harness_kind, source, subsystem, granted_at, revoked_at

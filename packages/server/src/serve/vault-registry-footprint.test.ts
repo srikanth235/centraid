@@ -1,12 +1,12 @@
 /*
- * The mounted-plane memory budget (issue #659 L8).
+ * The mounted-plane memory budget (#659).
  *
- * `mmap_size` and `cache_size` used to be per-FILE constants, so every mounted
- * vault opened two databases at the full per-file numbers and a household's
- * memory bill grew linearly with its vault count — on exactly the small
- * always-on box that cannot absorb it. The claim under test is that the summed
- * footprint across N planes stays inside ONE host ceiling: flat in vault count,
- * not linear in it.
+ * `mmap_size` and `cache_size` are a HOST budget, not per-FILE constants: at
+ * per-file numbers every mounted vault opens two databases at the full figure
+ * and a household's memory bill grows linearly with its vault count — on
+ * exactly the small always-on box that cannot absorb it. The claim under test
+ * is that the summed footprint across N planes stays inside ONE host ceiling:
+ * flat in vault count, not linear in it.
  */
 
 import type { DatabaseSync } from "node:sqlite";

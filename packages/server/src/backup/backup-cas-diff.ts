@@ -1,8 +1,7 @@
 /*
- * The remote-CAS inventory diff primitive (issue #414 D14), split out of
- * backup-reconciliation.ts so the one CAS-vs-model comparison is shared,
- * verbatim, by every reconciliation fork: the backup-configured pass
- * (`runBackupReconciliation`), the BYO-S3 pass (`runCasOnlyReconciliation`),
+ * The remote-CAS inventory diff primitive (#414) — the one
+ * CAS-vs-model comparison, shared verbatim by every reconciliation fork:
+ * the backup-configured pass (`runBackupReconciliation`), the BYO-S3 pass (`runCasOnlyReconciliation`),
  * and the derived-store diff. Observe-and-report only — its sole mutation is
  * the safety-critical demotion of stale replica evidence via `unmark`.
  */
@@ -95,7 +94,7 @@ export function reconcileCasInventory(opts: {
   unmark: (sha: string) => void;
   /** Marks created after inventory began cannot be disproved by that listing. */
   recentlyIndexed?: ReadonlySet<string>;
-  /** Retained-snapshot GC roots (#436 §6): never orphans; absent-from-remote ⇒ critical missing. */
+  /** Retained-snapshot GC roots (#436): never orphans; absent-from-remote ⇒ critical missing. */
   snapshotReferenced?: ReadonlySet<string>;
 }): StoreReconciliationState {
   const remote = new Set<string>();

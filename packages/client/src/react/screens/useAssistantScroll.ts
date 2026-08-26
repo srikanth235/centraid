@@ -1,4 +1,4 @@
-// Scroll-aware autoscroll for the assistant transcript (issue #420 §5). The
+// Scroll-aware autoscroll for the assistant transcript (#420). The
 // old behavior forced `scrollTop = scrollHeight` on every message change, which
 // fought a user scrolling up mid-stream. Here we only stick to the bottom when
 // the reader is already there, surface a "jump to bottom" pill otherwise, and

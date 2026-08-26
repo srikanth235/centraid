@@ -1,17 +1,13 @@
-// The shapes the Notes routes read. Every field here is something one of this
-// app's own queries (`queries/library.ts`, `note.ts`, `search.ts`,
-// `history.ts`, `journal.ts`) actually ships — a view may not invent a fact
-// the projection does not carry.
+// Shapes the Notes routes read. Every field ships from this app's own queries;
+// a view may not invent a fact the projection does not carry.
 import type { ShelfId } from "./shelves.ts";
 
-/** One tag edge on a note, as the library projection ships it. */
 export interface NoteTag {
   tag_id: string;
   concept_id: string;
   label: string;
 }
 
-/** A resolved far end of one outbound link, plus the passage it anchored to. */
 export interface NoteReference {
   link_id: string;
   selector?: {
@@ -44,7 +40,6 @@ export interface NoteAttachment {
   byte_size?: number;
 }
 
-/** One row of the library window, the search results, or the Journal place. */
 export interface Note extends Record<string, unknown> {
   note_id: string;
   title?: string;
@@ -54,13 +49,12 @@ export interface Note extends Record<string, unknown> {
   updated_at?: string;
   deleted_at?: string | null;
   purge_at?: string | null;
-  /** The short flattened preview (`library`/`search`/`journal`), never a body. */
+  /** Flattened teaser (`library`/`search`/`journal`) — never a body. The
+   *  canonical body arrives only via `note`; `check` is the projection's
+   *  tally; `snippet` is the FTS hit on a search row. */
   preview?: string;
-  /** The checklist tally the projection counted, so a card need not parse. */
   check?: { total: number; done: number };
-  /** The canonical body, present only once the `note` query has answered. */
   body?: string;
-  /** The FTS hit, on a search result row. */
   snippet?: string;
   notebook_ids?: string[];
   notebook_names?: string[];
@@ -76,7 +70,6 @@ export interface Notebook {
   sort_order?: number;
 }
 
-/** One version of a note's body, newest first (`queries/history.ts`). */
 export interface NoteVersion {
   content_id: string;
   body: string;
@@ -84,7 +77,6 @@ export interface NoteVersion {
   asserted_at: string;
 }
 
-/** One powerbox candidate across the seven linkable kinds. */
 export interface LinkTarget {
   type: string;
   id: string;
@@ -93,7 +85,6 @@ export interface LinkTarget {
   app: string;
 }
 
-/** Everything the library read landed, mutated in place (never reassigned). */
 export interface AppData {
   notes: Note[];
   trash: Note[];
@@ -104,28 +95,23 @@ export interface AppData {
   window: number;
 }
 
-/** The one arrangement switch the Library carries (§1's two rows). */
 export type LibraryView = "cards" | "list";
 
 export type SearchScope = "everywhere" | "notebook";
 
-/** The mutable bag the orchestrator holds in a ref. */
 export interface AppState {
   shelf: ShelfId;
   view: LibraryView;
-  /** The open note, for the editor and the version chain. */
   noteId: string | null;
-  /** The tag lens over the library — never a place, only a filter. */
+  /** Tag lens over the library — never a place, only a filter. */
   conceptId: string | null;
-  /** Unfiled: a PLACE in the spine, expressed as a filter over the library
-   *  window rather than a route of its own — a note that was never filed
-   *  still opens, and it opens from the library it is already in. */
+  /** Unfiled is a PLACE in the spine as a library filter — never its own
+   *  route; an unfiled note still opens from where it is. */
   unfiledOnly: boolean;
   search: string;
-  /** Everywhere, or the notebook the member reached Search FROM. */
   searchScope: SearchScope;
-  /** That notebook, remembered on the way in — a scope control with no
-   *  notebook behind it would be a pair of buttons meaning the same thing. */
+  /** Notebook Search was scoped FROM; a scope control with no notebook behind
+   *  it would be two controls meaning one thing. */
   scopeNotebookId: string | null;
   searchResults: Note[] | null;
   searchStatus: "resting" | "searching" | "ready" | "unreachable";
@@ -135,14 +121,11 @@ export interface AppState {
     open: boolean;
     term: string;
     targets: LinkTarget[];
-    /** The passage the link will anchor to, when one was selected. */
     anchor: { exact: string; prefix: string; suffix: string; start: number };
   };
-  /** The version chain for `noteId`, once history has been asked. */
   versions: NoteVersion[] | null;
   libraryWindow: number;
   creatingNotebook: boolean;
   renamingNotebookId: string | null;
-  /** How many of this app's writes are still queued on this device. */
   queued: number;
 }

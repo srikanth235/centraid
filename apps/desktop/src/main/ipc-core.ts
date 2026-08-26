@@ -1,15 +1,6 @@
-/**
- * IPC channel names + pure broadcast payloads (issue #545 C2).
- *
- * Electron-free: both `ipc.ts` (main) and `preload.ts` import the same
- * `Channel` map so the bridge stays lockstep. Broadcast payload builders
- * capture the exact shape the renderer listeners type against.
- */
+// Electron-free Channel map + broadcast payloads. Keep in sync with
+// `renderer/centraid-api.d.ts`.
 
-/**
- * IPC channel names. Keep in sync with the renderer-side typings in
- * `renderer/centraid-api.d.ts` (and any new surface added there).
- */
 export const Channel = {
   SETTINGS_GET: "centraid:settings:get",
   SETTINGS_SAVE: "centraid:settings:save",
@@ -61,7 +52,6 @@ export const Channel = {
   DEEP_LINK: "centraid:deep-link",
 } as const;
 
-/** Settings slice used to build gateway-changed broadcasts. */
 export interface GatewayChangedSettings {
   activeGatewayId: string;
   activeGatewayKind: "local" | "remote";
@@ -116,27 +106,9 @@ export function vaultChangedPayload(next: {
   };
 }
 
-/**
- * Will starting the local gateway pop an OS credential prompt? (issue #603)
- *
- * The gateway's first start writes this device's wrapping key + loopback
- * token through `safeStorage` (`gateway-secrets.ts` `writeSecrets` is the
- * single choke point). Whether that is silent or throws up a system dialog is
- * purely a property of the host, so the renderer can pre-warn honestly:
- *
- *  - **no safeStorage encryption** → nothing to prompt for. macOS/Windows
- *    would have thrown before reaching a prompt; Linux falls back to the 0600
- *    device-local secrets file. Either way: no dialog.
- *  - **macOS, unpackaged** (dev / unsigned builds) → the keychain item is not
- *    owned by a stable signed identity, so the login keychain asks for
- *    permission. Packaged + signed builds own their item and stay silent.
- *  - **Linux with a working libsecret/kwallet** → the keyring may need to be
- *    unlocked, which is a prompt.
- *  - **Windows** → DPAPI, always silent.
- *
- * Pure so the policy is unit-testable; `ipc.ts` supplies the live
- * `safeStorage.isEncryptionAvailable()` / `app.isPackaged` / `process.platform`.
- */
+// #603: will starting the local gateway pop an OS credential prompt?
+// No encryption → silent. macOS unpackaged → prompt. Linux libsecret → prompt.
+// Windows DPAPI → silent.
 export function keychainPromptExpected(host: {
   platform: NodeJS.Platform;
   encryptionAvailable: boolean;
@@ -149,12 +121,11 @@ export function keychainPromptExpected(host: {
 }
 
 /**
- * Renderer-supplied app id gate for filesystem-bound app surfaces (issue
- * #865): an appId is joined into on-disk paths (APPS_OPEN hands one to
- * `shell.openPath`), so a traversal id like "../../" would open arbitrary
- * directories and act as a filesystem existence oracle. Mirrors the gateway's
- * grammar (`@centraid/blueprints` app-meta ID_RE) deliberately — store-created
- * apps share it, so membership in the shipped inline set is NOT required.
+ * Renderer-supplied app id gate for filesystem-bound app surfaces (#865):
+ * an appId is joined into on-disk paths (APPS_OPEN → `shell.openPath`), so a
+ * traversal id must never reach the filesystem. Mirrors the gateway's
+ * app-meta ID_RE — store-created apps share it, so membership in the shipped
+ * inline set is NOT required.
  */
 const APP_ID_GRAMMAR = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
@@ -182,23 +153,10 @@ export function parseRevealableAppId(input: unknown): string {
   return id;
 }
 
-/**
- * Host-capability snapshot the preload exposes. Pure so the capability
- * flags stay unit-testable.
- *
- * `compute.transcript` is a permanent `false` (issue #724 W6): desktop's
- * on-device file-ASR adapter (`device-transcription.ts`, the
- * `CENTRAID_DEVICE_ASR_*` env trio, and the `DEVICE_TRANSCRIPT_AVAILABLE` /
- * `DEVICE_TRANSCRIBE` IPC channels) is deleted — transcription now runs on
- * the gateway's deterministic `transcript` automation, never on a
- * member's desktop. The key ITSELF stays in the return shape rather than
- * being dropped: `compute` is the fixed wire shape a device PUTs to the
- * gateway's compute-advertisement endpoint
- * (`packages/client/src/gateway-client-devices.ts`'s
- * `DeviceComputeCapabilities`), and narrowing that shape here would leave
- * this one host type diverging from the wire contract every other caller
- * still serializes against.
- */
+// Host-capability snapshot (pure, unit-testable). `compute.transcript` stays
+// `false` (#724 W6) — on-device ASR is gone; transcription is the gateway
+// `transcript` automation. The key stays in the `DeviceComputeCapabilities`
+// wire shape — do not drop it.
 export function hostCapabilities(): {
   platform: "desktop";
   compute: {

@@ -1,18 +1,7 @@
-// DOC TABLE — records, in the one form this surface has (#765, spec §9/§11).
-//
-// The reference's table has a column header and two fixed columns, and hides
-// ALL THREE at phone width (`showHead: !mob`, `display:none` on Kind and
-// Written). This app is always at phone width, so there is no `showHead` prop
-// and no wide branch to keep honest: the collapsed form IS the table here. A
-// record is its title over one annotation line carrying what the two hidden
-// columns held (./doc-table-model#snipLine), and the row grows to 52 to hold
-// the second line rather than tightening its leading.
-//
-// The trailing control is a 44×44 overflow button opening the kit's own
-// `AnchoredMenu` — which already hangs its card off the TRAILING edge of the
-// control it was measured from, so the geometry the reference specifies
-// (`inset-inline-end: 0`) is the one this gets for free, mirrored under RTL.
-// Every menu word, including the button's own label, is the caller's.
+// Records table (#765, spec §9/§11). Phone-width only: the collapsed form IS
+// the table — title over one snip line carrying the hidden columns
+// (./doc-table-model#snipLine). The menu card hangs off the TRAILING edge,
+// mirrored under RTL.
 
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -33,15 +22,10 @@ import { styles } from "./DocTable.styles";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
-/** The overflow menu's words. There are no defaults: a kit block that shipped
- *  its own copy would be the one place in this app where a string has no
- *  author.
- *
- *  `edit` and `delete` are OPTIONAL, and a menu given neither honestly carries
- *  two items — a screen whose surface cannot yet edit or delete a record says
- *  so by omitting the verb, not by listing one that does nothing. */
+/** NO defaults: kit copy would be this app's only authorless string; a
+ *  surface that can't yet do a verb omits it. */
 export interface DocTableCopy extends DocRowActionLabels {
-  /** The overflow button's accessibility label, e.g. `More for ${title}`. */
+  /** Overflow button accessibility label. */
   more: (title: string) => string;
 }
 
@@ -49,10 +33,8 @@ export interface DocTableProps {
   records: readonly DocRecord[];
   copy: DocTableCopy;
   onRowAction: (record: DocRecord, action: DocRowAction) => void;
-  /** The sentence under the table — how many of how many, and in what order. */
   caption?: string;
   accessibilityLabel?: string;
-  /** The glyph on the overflow control. */
   moreIcon?: string;
 }
 
@@ -73,9 +55,7 @@ function DocTableRow({
   moreIcon: string;
   onRowAction: (record: DocRecord, action: DocRowAction) => void;
 }): React.JSX.Element {
-  // One anchor per ROW, not one per table: the card hangs off the button that
-  // was pressed, and a shared anchor would open every menu beside the first
-  // row that happened to measure itself.
+  // One anchor per ROW, not shared — it would open beside the first measured row.
   const { anchor, anchorRef, measureAnchor } = useMenuAnchor();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -98,9 +78,8 @@ function DocTableRow({
       }));
     return [
       { key: "record", rows: rowsFor(menu.record, false) },
-      // Its own group, so the rule above it is the separation the reference
-      // draws — a delete never sits one thumb-width from "Copy the id". A
-      // caller that named no delete gets no group and no rule.
+      // Own group: the rule above separates delete from "Copy the id".
+      // No delete named, no group, no rule.
       ...(menu.danger.length > 0
         ? [{ key: "danger", rows: rowsFor(menu.danger, true) }]
         : []),

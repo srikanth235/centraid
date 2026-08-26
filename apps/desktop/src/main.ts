@@ -33,28 +33,12 @@ import { loadWindowState, trackWindowState } from "./main/window-state.js";
 
 const __dirname = import.meta.dirname;
 
-/*
- * Single-instance lock (issue #351). Without this, launching a second copy
- * of the desktop app would boot a SECOND embedded gateway against the same
- * on-disk vault — two processes fighting over the same SQLite files. This
- * has to be the very first thing the process does, before crash-handler
- * install or anything else that does real work: a losing second instance
- * should hand off and exit before touching the filesystem at all, not after.
- *
- * The check is synchronous and cheap; when it fails, `app.quit()` is called
- * and the REST OF THIS FILE's startup — `app.whenReady()`, window creation,
- * the gateway boot — is skipped entirely by wrapping it in the `else` below
- * (the standard Electron pattern: letting `app.whenReady()` register
- * unconditionally risks it firing before the queued `quit()` takes effect).
- * Registering `second-instance` is what makes launching Centraid again from
- * the Dock / Start Menu / a second `open` just focus the existing window
- * instead of silently no-op'ing.
- */
+// Single-instance lock (#351): a second copy boots a second gateway on one
+// vault. Startup stays in the `else` — an unconditional `app.whenReady()` can
+// beat the queued `quit()`.
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (gotSingleInstanceLock) {
-  // Deep-link second-instance handler is also registered in app-chrome;
-  // this block focuses the window when the user re-launches without a URL.
   app.on("second-instance", () => {
     const [win] = BrowserWindow.getAllWindows();
     if (!win) return;
@@ -63,16 +47,9 @@ if (gotSingleInstanceLock) {
     win.focus();
   });
 
-  // Installed before `app.whenReady()` so even an early-boot failure (module
-  // init, a settings read that runs ahead of the window) gets captured.
-  // Deliberate log-and-continue posture — see crash-log.ts's doc comment.
   installCrashHandlers();
   installDeepLinkProtocol();
 
-  // Icon lives at the package root (../../icon.png from dist/main.js); used
-  // for the BrowserWindow on Windows/Linux and the macOS dock during dev.
-  // Packaged builds will pick up the .icns via electron-builder config
-  // (appId: dev.centraid.desktop — electron-builder/app-id.json).
   const ICON_PATH = path.join(__dirname, "..", "icon.png");
 
   let flushWindowState: (() => void) | undefined;
@@ -98,10 +75,7 @@ if (gotSingleInstanceLock) {
       minWidth: 1100,
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 16 },
-      // Deferred until the renderer has something to paint (issue #659).
-      // Showing at construction meant the first thing launch put on screen was
-      // an empty `backgroundColor` rectangle that sat there for the whole of
-      // module init + first render — a flash of nothing, read as a slow app.
+      // Revealed on first paint below: no empty-window flash (#659).
       show: false,
       webPreferences: {
         contextIsolation: true,
@@ -113,10 +87,7 @@ if (gotSingleInstanceLock) {
     if (state.isMaximized) win.maximize();
     flushWindowState = trackWindowState(win);
 
-    // `ready-to-show` is the paint-ready signal, but a window that never fires
-    // it is invisible forever — a far worse failure than a flash. `did-finish-
-    // load` is the backstop, and `show()` is idempotent, so whichever lands
-    // first wins.
+    // Both listeners: a window that never fires `ready-to-show` stays invisible.
     const reveal = (): void => {
       if (win.isDestroyed() || win.isVisible()) return;
       win.show();
@@ -148,88 +119,39 @@ if (gotSingleInstanceLock) {
     }
     installApplicationMenu();
     installTray(ICON_PATH);
-    // `installAuthInjector` reads settings, so it rejects for exactly the same
-    // reasons the gateway boot below does. Bare `void` left that rejection
-    // unhandled, which meant every locked-data-dir / missing-credential launch
-    // wrote a `kind:"unhandledRejection"` row into crash.log — a startup
-    // diagnosis, filed as a crash, in the log used to triage real crashes. The
-    // header injector simply has no headers to inject until a gateway resolves,
-    // and it is reinstalled on every gateway change (`refreshAuthInjector`).
+    // Not a bare `void`: rejects on every gateway-less launch, logging as a crash.
     installAuthInjector().catch((error: unknown) => {
       process.stdout.write(
         `[auth-injector] not installed yet: ${error instanceof Error ? error.message : String(error)}\n`
       );
     });
     registerIpcHandlers();
-    // The window comes FIRST, before the gateway boot below can fail.
-    //
-    // This used to be the other way round, with a `dialog.showErrorBox` in the
-    // catch: a modal NSAlert with no window behind it. Every failure mode that
-    // needs the user to *do* something — a locked data dir, missing device
-    // credentials — therefore parked the app on a system alert that only a
-    // human at the keyboard could dismiss, and unattended relaunch (a login
-    // item, an automated run) simply hung. Startup failures are rendered
-    // in-window instead: the renderer's boot path already calls `getSettings()`,
-    // whose IPC rejects with the same message this catch logs, so the error
-    // reaches a surface the user can read, retry, and copy from.
+    // Window first: an error modal with no window behind it hangs unattended
+    // launches; failures render in-window via `getSettings()`.
     createWindow();
-    // Boot the active gateway (issue #351). Before this, a `serve()` failure
-    // during lazy startup only surfaced as a failed IPC invoke the FIRST time
-    // the renderer called `getSettings()`, and (pre-supervision) every
-    // subsequent settings read just retried the same failing start
-    // immediately. `loadSettings()` resolves the active gateway (starting the
-    // local runtime when it's the active one) and local-gateway.ts's
-    // supervisor owns backed-off background retries — this is just the
-    // "get the gateway up at launch" call, not itself a retry loop.
-    //
-    // On a TRUE first run `loadSettings()` deliberately does NOT start the
-    // local gateway (issue #603 — no keychain prompt before the user has
-    // chosen anything), so `gatewayUrl` comes back empty and the tray says
-    // "not running" until the first-run chooser's local-connect starts it.
+    // First run starts no local gateway (#603): no keychain prompt before choosing.
     try {
       const settings = await loadSettings();
-      // Launch-at-login (issue #351, tier 4) — apply on every launch, not
-      // just when the setting changes, so an OS-level login-item reset (or
-      // a settings.json hand-edit) reconciles instead of drifting silently.
+      // Every launch, not just on change: reconciles an OS login-item reset.
       applyLaunchAtLogin(settings.launchAtLogin);
       setTrayGatewayRunning(settings.gatewayUrl.length > 0);
     } catch (error) {
-      // Log-and-continue is the whole point: the renderer is already up and
-      // will surface this same failure through its own `getSettings()` call.
       setTrayGatewayRunning(false);
       process.stdout.write(
         `[startup] gateway did not start: ${error instanceof Error ? error.message : String(error)}\n`
       );
     }
-    // Relaunch-to-update: watch the built dist for a newer build landing while
-    // the app runs; the sidebar shows a "Relaunch to update" pill when one does.
     startUpdateWatcher();
-    // Gateway runtime watch: heartbeat the active gateway, keep the
-    // per-launch uptime history, and fire the OS down-alert. Lives in main
-    // so it survives navigation and alerts land while backgrounded.
+    // In main so they survive navigation and alert while backgrounded (#528).
     startGatewayMonitor();
-    // Host power-context push (#528 Phase D): the desktop owns the battery, so
-    // a battery/AC/thermal transition nudges an immediate gateway-monitor tick
-    // (which carries the push); the 5s heartbeat keeps it fresh otherwise.
     registerPowerContextListeners(() => nudgeGatewayMonitor());
-    // Task/event reminder watch: poll due `remind_before_min`/`reminders_json`
-    // alerts and fire an OS notification for each new one. Same "lives in
-    // main so it survives backgrounding" posture as the gateway monitor above.
     startReminderMonitor();
-    // Phone link (issue #263): bring the iroh endpoint up front so paired
-    // phones reconnect without any UI open. Failures surface in the
-    // Settings → Phone panel via PHONE_STATUS; they must not block launch.
+    // Must not block launch (#263); failures surface in Settings → Phone.
     ensurePhoneLink().catch((error) => {
       process.stdout.write(`[phone-link] failed to start: ${String(error)}\n`);
     });
-    // Remote template refresh now runs inside the embedded gateway (issue
-    // #141, Phase 5): `local-gateway` passes the configured remote manifest
-    // URL into `serve()`, and the gateway's `/centraid/_templates` route
-    // fires a one-time best-effort fetch into its cache. The desktop main
-    // process no longer touches `@centraid/blueprints`.
-    // Harness detection moved to the gateway (`GET /centraid/_harnesses/status`):
-    // it's colocated with the harness and probes its own host on demand, so the
-    // desktop no longer runs a first-launch credential probe.
+    // Templates and harness detection belong to the gateway (#141): main must
+    // not touch `@centraid/blueprints`.
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
@@ -243,19 +165,9 @@ if (gotSingleInstanceLock) {
     }
   });
 
-  /**
-   * Graceful quit (issue #351 / #468 H1). Embedded (in-process) gateways
-   * get a WAL checkpoint + close so SQLite doesn't see a crash. Detached
-   * gateway children intentionally outlive the UI — `shutdownAllLocalGatewaysExcept`
-   * skips `mode: 'detached'` handles so pairing, the browser extension,
-   * and mobile keep a reachable vault after the window closes.
-   *
-   * `before-quit` is cancelable, so we intercept the first one, run the
-   * async teardown, then call `app.quit()` ourselves — which re-fires
-   * `before-quit`; the `quitting` guard lets that second pass through
-   * instead of looping. A hard cap bounds the wait so a wedged gateway
-   * can't hang the whole app on quit.
-   */
+  // Graceful quit (#351 / #468 H1): detached children outlive the UI; only
+  // embedded gateways get the WAL checkpoint. `before-quit` is cancelable, so
+  // the `quitting` guard passes the re-fire through.
   const QUIT_TEARDOWN_TIMEOUT_MS = 5000;
   let quitting = false;
 
@@ -263,28 +175,18 @@ if (gotSingleInstanceLock) {
     if (quitting) return;
     quitting = true;
     event.preventDefault();
-    // Flush window bounds before async teardown (issue #468 K13).
     flushWindowState?.();
 
-    // Stop taking on new supervised-restart work first — a scheduled
-    // auto-retry firing mid-teardown would otherwise resurrect a gateway we
-    // just told to close. Detached children keep running; only the
-    // supervisor timers + embedded servers are torn down.
+    // First: a mid-teardown auto-retry would resurrect a closing gateway.
     markLocalGatewaysDisposed();
     stopGatewayMonitor();
     stopReminderMonitor();
 
     const teardown = Promise.allSettled([
-      // Embedded local gateways only — detached outlive the UI (#468 H1).
       shutdownAllLocalGatewaysExcept(),
-      // The iroh phone tunnel holds its own endpoint + device store.
       shutdownPhoneLink(),
     ]);
-    // Deliberately NOT unref'd. This timer is the hard cap that guarantees
-    // `app.quit()` is reached even when teardown wedges — an unref'd timer
-    // does not hold the loop open, so it is precisely the wrong primitive for
-    // a deadline you are relying on to fire. It is cleared implicitly by the
-    // process exiting, and the race below always settles.
+    // Not unref'd: this deadline must fire when teardown wedges.
     let cap: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<void>((resolve) => {
       cap = setTimeout(resolve, QUIT_TEARDOWN_TIMEOUT_MS);

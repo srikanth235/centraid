@@ -1,5 +1,5 @@
 /*
- * Peer (gateway↔gateway) handshake (issue #726 P3 decision 5).
+ * Peer (gateway↔gateway) handshake (#726 P3 decision 5).
  *
  * The C1 two-contract shape, applied to the link plane:
  *   1. PARSE always succeeds — a malformed hello becomes the `bad_request`

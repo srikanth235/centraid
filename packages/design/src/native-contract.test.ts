@@ -13,17 +13,9 @@ import {
 import { type } from "./typography.js";
 
 describe("Expo reachability", () => {
-  // The package's `.` export carries a `react-native` condition straight to
-  // `src/index.ts`, so EVERY module the barrel can reach is loaded by Metro on
-  // a device that has no `document`, no `window`, and no `customElements`. The
-  // element layer (`src/elements/**`, the `./elements` export) is the DOM half
-  // and deliberately carries no such condition.
-  //
-  // Two independent guards, because each catches what the other cannot:
-  // `tsconfig.json` compiles the token layer with `lib: ["ES2023"]` and no DOM
-  // (a bare `document.x` is a type error there), and this walk catches the
-  // reference the type system cannot see — a `globalThis` cast, or a plain
-  // re-export of the element barrel from `index.ts`.
+  // The `.` export runs where DOM globals don't exist (react-native condition);
+  // the element layer is the DOM half. Guards: tsconfig without DOM lib, plus
+  // this walk catching globalThis casts / element-barrel re-exports.
   const SRC = path.resolve(import.meta.dirname);
   const DOM_GLOBALS =
     /\b(?:document|customElements|HTMLElement|ResizeObserver|FileReader|MutationObserver|localStorage)\b/u;
@@ -107,9 +99,7 @@ describe("native product-grammar lowering", () => {
   });
 
   test("native carries the whole ramp — no profile-only type role", () => {
-    // The Binding Layer's ramp is the same on all three profiles. A role only
-    // one surface can render is a role that has stopped being shared, which
-    // is how `hero` and `greeting` became desktop-only in the first place.
+    // Shared ramp: a role only one surface renders has stopped being shared (how hero/greeting became desktop-only).
     const nativeType = toNativeTheme("light").type;
     expect(Object.keys(nativeType).sort()).toStrictEqual(
       Object.keys(type).sort()
@@ -119,8 +109,7 @@ describe("native product-grammar lowering", () => {
   });
 
   test("the numeric register is tabular on native too", () => {
-    // "Numerics are mono and tabular in every app, without exception" is only
-    // true if the native lowering carries the variant; RN will not infer it.
+    // RN will not infer tabular numerics or uppercase — lowering must carry them.
     expect(toNativeTheme("light").type.mono.variantNumeric).toBe(
       "tabular-nums"
     );
@@ -151,44 +140,33 @@ describe("native product-grammar lowering", () => {
   });
 
   test("the native rule is a FULL point, not the platform hairline", () => {
-    // The v4 handoff draws every border and rule as `border: 1px solid`, and
-    // the native lowering has to carry that number itself: React Native's
-    // `StyleSheet.hairlineWidth` is one PHYSICAL pixel, so on a 3× phone it is
-    // 0.33pt — a third of the specified edge, on surfaces whose fill is only a
-    // few percent off the page. `scripts/lint-hairline.mjs` keeps call sites
-    // off the platform value; this keeps the token they reach for at 1.
+    // Handoff draws borders as `1px solid`; RN's `hairlineWidth` is one
+    // PHYSICAL pixel. lint-hairline.mjs keeps call sites off it; this keeps the token at 1.
     for (const scheme of ["light", "dark"] as const) {
       expect(toNativeTheme(scheme).borders.hairline, scheme).toBe(1);
     }
   });
 
   test("the page margin is lowered, and is NOT a spacing rung", () => {
-    // `R.margin:{d:32,m:18}` (handoff line 3356) is a scale of its own,
-    // parallel to `R.gap`. Before this token existed, 18 was unrepresentable:
-    // Home hard-coded it and Photos substituted 16 and 10, so two screens of
-    // one product started their pages in different places.
+    // R.margin:{d:32,m:18} (handoff line 3356) parallels R.gap, not part of it;
+    // snapping onto the gap ladder trips the assertion below.
     for (const scheme of ["light", "dark"] as const) {
       expect(toNativeTheme(scheme).pageMargin, scheme).toBe(18);
     }
-    // The point of a separate scale — if 18 were ever quietly snapped onto the
-    // 4px gap ladder this assertion is what notices.
+    // A separate scale: if 18 is ever snapped onto the 4px gap ladder, this
+    // assertion notices.
     expect(Object.values(toNativeTheme("light").spacing)).not.toContain(18);
   });
 
   test("the scrim is the handoff's veil, not a heavier cold plate", () => {
-    // Handoff line 5101: `dark?'rgba(0,0,0,.62)':'rgba(26,24,21,.3)'`. Ours
-    // was rgba(20,20,20,0.48) / rgba(0,0,0,0.72) — 60% over the specified
-    // alpha on light, and on the cool ink rather than the warm one the
-    // ink-on-paper flip settled on.
+    // Handoff line 5101 specifies these exact alphas.
     expect(toNativeTheme("light").colors.scrim).toBe("rgba(26,24,21,0.3)");
     expect(toNativeTheme("dark").colors.scrim).toBe("rgba(0,0,0,0.62)");
   });
 
   test("the stage carries its own sunken rung, one literal in both themes", () => {
-    // Handoff line 4479: the stage-local palette's `sunken:'#1A1A19'`, used by
-    // the media transport's empty track (line 4552). `--stage-line` (#2A2A29)
-    // was the stand-in and reads too light: a hairline is tuned to be SEEN,
-    // a trough to recede under its fill.
+    // Handoff line 4479: stage-local sunken '#1A1A19' for the transport's empty
+    // track; a hairline is tuned to be SEEN, a trough to recede under its fill.
     for (const scheme of ["light", "dark"] as const) {
       expect(toNativeTheme(scheme).colors.stageSunken, scheme).toBe("#1A1A19");
     }

@@ -1,47 +1,23 @@
-/*
- * SKILL.md discovery, frontmatter parsing, and body composition.
- *
- * The grounding "skills" are static markdown units under `<pkg>/skills/<name>/
- * SKILL.md`, each with YAML frontmatter (`name` + `description`) — the
- * Anthropic Agent Skill format, so both agent backends can discover and
- * progressively disclose them from disk.
- *
- * `composeSkills()` is the phase-1 delivery: it concatenates the named skills'
- * bodies into one string the gateway appends to a turn's instructions. This is
- * byte-equivalent to the old `CENTRAID_APPEND_PROMPT` / `AUTOMATION_APPEND_PROMPT`
- * constants, just sourced from editable markdown. It also doubles as the
- * safety-valve path once native progressive disclosure is wired on each backend.
- */
+/* SKILL.md discovery, frontmatter parsing, body composition. */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Metadata parsed from a skill's `SKILL.md` frontmatter. */
 export interface SkillMeta {
-  /** The `name` frontmatter field (matches the directory name). */
   name: string;
-  /** The `description` frontmatter field — what the model selects on. */
   description: string;
-  /** Absolute path to the skill's `SKILL.md`. */
   path: string;
 }
 
 const SKILL_FILE = "SKILL.md";
 const FRONTMATTER_RE = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---\r?\n?/u;
 
-/**
- * Absolute path to the gateway's `skills/` grounding catalog (package root,
- * shipped via the package's `files` allow-list). Resolves the same from
- * compiled `dist/skills/` and from `tsx`/vitest-run `src/skills/`: this loader
- * sits two levels under the package root in both layouts, so `../../skills`
- * lands on the catalog either way.
- */
+/** Gateway `skills/` catalog; same path from dist/ and src/ layouts. */
 export function skillsDir(): string {
   return fileURLToPath(new URL("../../skills", import.meta.url));
 }
 
-/** Split a `SKILL.md` into its frontmatter map and its markdown body. */
 export function parseSkillFile(raw: string): {
   meta: Record<string, string>;
   body: string;
@@ -59,7 +35,6 @@ export function parseSkillFile(raw: string): {
   return { meta, body: raw.slice(m[0].length).trim() };
 }
 
-/** List the on-disk skills with their `{name, description, path}` metadata. */
 export function listSkills(dir: string = skillsDir()): SkillMeta[] {
   let entries: string[];
   try {
@@ -88,9 +63,8 @@ export function listSkills(dir: string = skillsDir()): SkillMeta[] {
 }
 
 /**
- * Concatenate the bodies (frontmatter stripped) of the named skills, in the
- * given order, joined by a blank line. Throws when a name has no `SKILL.md` —
- * a missing grounding skill is a programming error, not a soft-fail.
+ * Concatenate the named skills' bodies, in order. Throws on a missing
+ * `SKILL.md` — that is a programming error, not a soft-fail.
  */
 export function composeSkills(
   names: readonly string[],

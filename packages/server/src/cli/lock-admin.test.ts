@@ -56,7 +56,7 @@ describe("lock-admin scenarios", () => {
       // `vault list` answers from the on-disk vault registry and never issues a
       // `gateway.db` read — it is unaffected by the lock BY CONSTRUCTION, which
       // is why it cannot stand in for the read-only-open behaviour asserted in
-      // the next test (issue #568 item H).
+      // the next test (#568).
       await expect(
         capture(() =>
           commandVault(["list", "--data-dir", dataDir, "--json"], fail)

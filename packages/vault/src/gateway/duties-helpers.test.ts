@@ -1,4 +1,4 @@
-// Direct unit coverage for standing-duty helpers (issue #545 B2).
+// Direct unit coverage for standing-duty helpers (#545).
 // Imports `duties.ts` by name — admitImportedRow / resolveHandle / revoke /
 // sweepLifecycle pure-ish paths with a bootstrapped vault.
 

@@ -3,7 +3,7 @@
 // (kind='person') enriched with a 1:1 people_profile carrying the CRM-only
 // facts the party spine doesn't model — the role line, the avatar hue, the
 // keep-in-touch cadence, when they were last reached, and how they were met.
-// Cross-domain facts do not get re-imported at table grain (issue #450):
+// Cross-domain facts do not get re-imported at table grain (#450):
 // interactions are core_activity + annotation, tasks are schedule_task,
 // relationships are core_link, debts are tally_obligation, and owner journal
 // entries are knowledge_note, and gift ideas are typed schedule tasks linked
@@ -11,17 +11,17 @@
 // profile and important dates.
 //
 // The pieces that already have a home in the ontology are NOT re-invented
-// here (issue #274's rule): notes are knowledge.annotation on the party,
+// here (#274's rule): notes are knowledge.annotation on the party,
 // favorites are the flags-scheme star on the party, and the owner files people
 // into `lists` — SKOS concepts in the owner's `lists` scheme with membership
-// one core.tag per person, the exact mechanism Docs folders use. These were
-// called "circles" until issue #441 A2.4: that name collided with
+// one core.tag per person, the exact mechanism Docs folders use. Do not name
+// this classification "circles" (#441): that name collides with
 // social_circle (the AUDIENCE mechanism shares and Tally groups target), two
-// unrelated things named identically. People's classification is renamed to
-// "lists" end-to-end; social_circle keeps "circle". Journal entries are the
+// unrelated things named identically. People's classification is "lists"
+// end-to-end; social_circle keeps "circle". Journal entries are the
 // one owner-level (not per-person) row, so they carry the owner party directly.
 //
-// Trash (issue #441 A4): every owner-authored CONTENT row carries the uniform
+// Trash (#441): every owner-authored CONTENT row carries the uniform
 // soft-delete pair `deleted_at` / `purge_at` with the CHECK guard
 // (`purge_at IS NULL OR deleted_at IS NOT NULL`), matching Docs/Photos/Locker —
 // so a delete here is a reversible grace-window trash, and the lifecycle sweep

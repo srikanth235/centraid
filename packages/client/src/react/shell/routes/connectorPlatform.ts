@@ -89,7 +89,6 @@ export interface ConnectorToolDescriptor {
 
 export function toolDescriptorsFromHealthyConnections(input: {
   connections: readonly ConnectionHealthRow[];
-  /** providerId → capabilities */
   capabilitiesByProvider: ReadonlyMap<string, ProviderCapabilitiesDTO>;
   /** kind → capabilities when provider is missing (fallback via connector kind). */
   capabilitiesByKind?: ReadonlyMap<string, ProviderCapabilitiesDTO>;

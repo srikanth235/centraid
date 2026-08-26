@@ -1,7 +1,7 @@
 /*
  * governance: allow-repo-hygiene file-size-limit (#567) the interactive automation path is one lock/hydration/event/artifact/ledger state machine; splitting its settlement phases would scatter transaction ordering
  *
- * Interactive automation turn (issue #541, Wave 6).
+ * Interactive automation turn (#541).
  *
  * The ACP session is only a cache. Every steering turn receives a compact
  * preamble reconstructed from the durable automation conversation, so a cold

@@ -1,4 +1,4 @@
-// The first-run camera-roll import's OFFER (issue #724 A2) — the honest,
+// The first-run camera-roll import's OFFER (#724) — the honest,
 // reviewable alternative to the silent automatic sweep (`photos-backup.ts`).
 // A member sees a plain count and two verbs: `Import` runs
 // `runCameraRollImport` (`camera-roll-import.ts`) over the vault's existing

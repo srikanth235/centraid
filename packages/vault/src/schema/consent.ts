@@ -119,7 +119,7 @@ CREATE INDEX IF NOT EXISTS idx_export_job_requested_by_party ON consent_export_j
 CREATE INDEX IF NOT EXISTS idx_export_job_artifact_content ON consent_export_job(artifact_content_id);
 `;
 
-// v14 (issue #308 A3/A4): consent memory for the install-grant top-up.
+// v14 (#308 A3/A4): consent memory for the install-grant top-up.
 //
 // `consent_scope_tombstone` — the owner's "no", made durable. #306's top-up
 // diffed declared scopes against ACTIVE grants only, so an owner-revoked

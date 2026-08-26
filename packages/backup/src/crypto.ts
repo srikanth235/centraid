@@ -1,19 +1,10 @@
 /*
  * Key custody and object encryption (FORMAT.md § Key custody, § Encryption).
- * AES-256-GCM everywhere: `iv (12 bytes) || ciphertext || tag (16 bytes)`.
- * Per-vault keys derive from the keyring's active epoch via HKDF-SHA256 with
- * the exact info strings FORMAT.md specifies — changing either string would
- * silently re-key every vault, so they're `const`, not templated loosely.
- *
- * Format /1 (issue #408) makes every object nonce DETERMINISTIC — derived by HKDF
- * from the object's identity rather than `randomBytes` — so a retried upload
- * is byte-identical to the first attempt (G7). Safety rests on the derivation
- * inputs never repeating with different plaintext: chunk nonces derive from
- * the chunk's own keyed content hash, WAL-segment nonces from the full
- * `(db, generation, group, startOffset, endOffset)` address (offsets are
- * monotonic within a group, generations are random 128-bit — and including
- * BOTH offsets means a crash-retry that re-reads a LONGER range from the
- * same start gets a fresh nonce, never a reused one).
+ * HKDF info strings are format-normative: editing one silently re-keys every
+ * vault. Object nonces are DETERMINISTIC (#408) — safety rests on derivation
+ * inputs never repeating under different plaintext: chunk nonces from the
+ * keyed content hash, WAL nonces from the full segment address including
+ * BOTH offsets, so a longer crash-retry re-nonces.
  */
 
 import {
@@ -30,16 +21,11 @@ const KEY_BYTES = 32;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 
-/** Encrypt `plain` under `key` (32 bytes) with a random nonce: `iv || ciphertext || tag`. */
 export function encrypt(key: Uint8Array, plain: Uint8Array): Uint8Array {
   return encryptWithNonce(key, randomBytes(IV_BYTES), plain);
 }
 
-/**
- * Encrypt with a caller-supplied 12-byte nonce (use `deriveNonce` — never a
- * counter, never a reused tuple) and optional additional authenticated data.
- * Same wire shape as `encrypt`: `nonce || ciphertext || tag`.
- */
+/** Use `deriveNonce` — never a counter, never a reused tuple. */
 export function encryptWithNonce(
   key: Uint8Array,
   nonce: Uint8Array,
@@ -55,7 +41,6 @@ export function encryptWithNonce(
   return new Uint8Array(Buffer.concat([nonce, ct, tag]));
 }
 
-/** Decrypt an `encrypt()`/`encryptWithNonce()` blob. Throws (auth tag failure) on any tampering. */
 export function decrypt(
   key: Uint8Array,
   blob: Uint8Array,
@@ -73,12 +58,8 @@ export function decrypt(
   return new Uint8Array(Buffer.concat([decipher.update(ct), decipher.final()]));
 }
 
-/**
- * A deterministic 12-byte GCM nonce: `HKDF(key, salt=∅, info)[0..12)`. The
- * caller's `info` string IS the uniqueness argument — it must be injective
- * over everything ever sealed under `key` (FORMAT.md § Encryption lists the
- * exact info strings per object kind; they are format-normative).
- */
+/** `info` IS the uniqueness argument: it must be injective over everything
+ *  ever sealed under `key`. FORMAT.md is normative. */
 export function deriveNonce(key: Uint8Array, info: string): Uint8Array {
   const out = hkdfSync(
     "sha256",
@@ -90,12 +71,10 @@ export function deriveNonce(key: Uint8Array, info: string): Uint8Array {
   return new Uint8Array(out);
 }
 
-/** `dataKey = HKDF(master, salt=∅, info="centraid-backup:data:" + vaultId)`. */
 export function deriveDataKey(master: Uint8Array, vaultId: string): Uint8Array {
   return hkdfDerive(master, `centraid-backup:data:${vaultId}`);
 }
 
-/** `dedupKey = HKDF(master, salt=∅, info="centraid-backup:dedup:" + vaultId)`. */
 export function deriveDedupKey(
   master: Uint8Array,
   vaultId: string
@@ -114,7 +93,6 @@ function hkdfDerive(master: Uint8Array, info: string): Uint8Array {
   return new Uint8Array(out);
 }
 
-/** `chunkId = HMAC-SHA256(dedupKey, plaintextChunkBytes)` (hex). */
 export function chunkId(dedupKey: Uint8Array, plain: Uint8Array): string {
   return createHmac(
     "sha256",
@@ -124,17 +102,11 @@ export function chunkId(dedupKey: Uint8Array, plain: Uint8Array): string {
     .digest("hex");
 }
 
-// ---------------------------------------------------------------------------
-// Keyring (FORMAT.md § Key custody — epochs)
-// ---------------------------------------------------------------------------
-// Mutation ownership for #532 is the pure seal/HKDF surface above (property
-// suite). Keyring I/O is covered by crypto.test.ts unit tests, not the
-// property/mutation mutate set.
+// Keyring I/O is unit-tested, not in the #532 mutation set.
 // Stryker disable all
 
 export interface KeyringEpoch {
   epoch: number;
-  /** base64 32 bytes. */
   key: string;
   createdAt: string;
 }
@@ -151,7 +123,6 @@ function epochOf(keyring: Keyring, epoch: number): KeyringEpoch {
   return found;
 }
 
-/** The active epoch's master key, decoded from base64. */
 export function activeMasterKey(keyring: Keyring): {
   epoch: number;
   key: Uint8Array;
@@ -160,15 +131,11 @@ export function activeMasterKey(keyring: Keyring): {
   return { epoch: e.epoch, key: new Uint8Array(Buffer.from(e.key, "base64")) };
 }
 
-/** A specific epoch's master key (needed to read snapshots written under an old epoch). */
 export function masterKeyForEpoch(keyring: Keyring, epoch: number): Uint8Array {
   return new Uint8Array(Buffer.from(epochOf(keyring, epoch).key, "base64"));
 }
 
-/** Validate an untyped JSON value as a `Keyring` (FORMAT.md § Key custody).
- *  Exported (issue #439) so the recovery-kit reader can validate the keyring
- *  it carries with the SAME rules `loadKeyring` holds a file to — a kit whose
- *  keyring is malformed is rejected before a single provider call. */
+/** Exported (#439) for the recovery-kit reader. */
 export function validateKeyring(value: unknown): Keyring {
   if (typeof value !== "object" || value === null)
     throw new Error("keyring: not an object");
@@ -202,13 +169,11 @@ export function validateKeyring(value: unknown): Keyring {
   return value as Keyring;
 }
 
-/** Load and validate a keyring file. */
 export async function loadKeyring(file: string): Promise<Keyring> {
   const raw = await fs.readFile(file, "utf8");
   return validateKeyring(JSON.parse(raw));
 }
 
-/** Atomic write (temp + rename), file mode 0600 — the keyring carries live key material. */
 export async function saveKeyring(
   file: string,
   keyring: Keyring
@@ -222,7 +187,6 @@ export async function saveKeyring(
   await fs.rename(tmp, file);
 }
 
-/** Mint a fresh single-epoch keyring at `file`. Refuses to overwrite an existing file. */
 export async function createKeyring(file: string): Promise<Keyring> {
   try {
     await fs.access(file);
@@ -247,13 +211,8 @@ export async function createKeyring(file: string): Promise<Keyring> {
   return keyring;
 }
 
-/**
- * Rotation = a new epoch (FORMAT.md): old epochs are retained (so old
- * snapshots stay readable) and the new epoch becomes active (so new
- * snapshots — and the first post-rotation snapshot's full re-upload — use
- * it). Dedup does not span epochs; this function only manages key custody,
- * the re-upload consequence lives in `engine.ts`.
- */
+/** Old epochs are retained so old snapshots stay readable. Dedup does not
+ *  span epochs — the re-upload consequence lives in `engine.ts`. */
 export async function rotateKeyring(file: string): Promise<Keyring> {
   const keyring = await loadKeyring(file);
   const nextEpoch = Math.max(...keyring.epochs.map((e) => e.epoch)) + 1;

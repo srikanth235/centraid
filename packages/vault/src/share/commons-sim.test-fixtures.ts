@@ -1,5 +1,5 @@
 // A FoundationDB-style deterministic simulator for the Commons sharing plane
-// (issue #731). One seeded PRNG drives a random program of steward writes,
+// (#731). One seeded PRNG drives a random program of steward writes,
 // signed member intents, pulls, roster/capability churn, steward-transfer
 // windows, compaction, crash-restarts, and stale-restores across several real
 // on-disk vaults, then forces quiescence and checks the golden invariants.

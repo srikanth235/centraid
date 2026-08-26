@@ -16,25 +16,14 @@ const TYPES: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
   ".map": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
-  // `application/wasm` is required for `WebAssembly.instantiateStreaming`,
-  // which the browser Iroh/WASM transport uses to load `*_bg.wasm`. Without
-  // it the file is served as `application/octet-stream` and wasm-bindgen
-  // falls back (with a console warning) to a slower non-streaming path.
+  // `WebAssembly.instantiateStreaming` needs this exact type.
   ".wasm": "application/wasm",
   ".webmanifest": "application/manifest+json",
 };
 
 /**
- * Cache policy for a served asset.
- *
- * Invariant: never hand a browser a year-immutable copy of a file whose URL
- * never changes. Only Vite's content-hashed assets (emitted under `/assets/`
- * with a hash in the filename) get `immutable`. Everything else at the web
- * root has a stable URL (`sw.js`, `manifest.webmanifest`, `centraid.svg`, the
- * stable-named `*_bg.wasm`), so a long immutable cache would strand updates.
- * `.html` is always revalidated (`no-store`); the service worker and manifest
- * must revalidate on every load so a redeploy is picked up promptly; other
- * unhashed root files get a modest, revalidating cache.
+ * NEVER hand a browser an immutable copy of a file whose URL never changes.
+ * Only content-hashed `/assets/` files may be `immutable`.
  */
 function cacheControlFor(
   rootDir: string,
@@ -47,10 +36,9 @@ function cacheControlFor(
     return "public, max-age=31536000, immutable";
   }
   const base = path.basename(served);
-  // The service worker and web manifest gate app updates — always revalidate.
+  // These gate app updates.
   if (base === "sw.js" || extension === ".webmanifest") return "no-cache";
-  // Other unhashed root files (icons, the stable-named wasm) can be cached
-  // briefly but must revalidate rather than be pinned for a year.
+  // Unhashed root files: brief cache, always revalidating.
   return "public, max-age=3600, must-revalidate";
 }
 
@@ -164,32 +152,11 @@ export async function startWebUiServer(
       if (extension === ".html") {
         const scriptNonce = crypto.randomBytes(16).toString("base64");
         bytes = stampShellNonce(bytes, scriptNonce);
-        // The PWA's headline feature is ticket-only, relay-only Iroh/WASM
-        // pairing/transport. That requires three relaxations vs. a plain
-        // static-app CSP:
-        //   - `'wasm-unsafe-eval'` in `script-src` so `WebAssembly.instantiate`
-        //     may run the Iroh WASM module.
-        //   - `https:`/`wss:` in `connect-src` so browser Iroh (relay-only) can
-        //     open its `wss://` WebSocket + HTTP to the n0 relay. Broad `wss:`/
-        //     `https:` is acceptable for a self-hosted personal gateway.
-        //   - `data:` in `frame-src` plus the response nonce and `blob:` in
-        //     `script-src` for the self-contained, opaque-origin app document.
-        //     Data documents inherit this policy container, so their inlined
-        //     scripts carry the shell nonce and query modules use blob URLs.
-        //     The shell itself retains nonce-only inline execution; it never
-        //     admits `unsafe-inline`. `${apiOrigin}` stays for naturally
-        //     cross-origin direct-HTTP mode.
-        //   - `blob:` in `frame-src`, so an inline app can EMBED a document it
-        //     already holds. A bundled app renders a PDF in an `<iframe>`
-        //     pointed at a vault blob, and off the gateway origin that
-        //     reference is rewritten to a `blob:` object URL by the shell's
-        //     authorizer (inline-blob-images.ts) — bytes THIS document already
-        //     fetched with its own credential, handed to a frame. Without the
-        //     token the frame is blocked and the viewer paints a blank white
-        //     page. This is not a widening of what the page may reach: it is
-        //     the same trust `img-src`, `media-src` and `object-src` already
-        //     place in the identical URLs. A `blob:` URL is unforgeable and
-        //     unguessable from outside this document.
+        // Each relaxation below is load-bearing: `'wasm-unsafe-eval'` runs the
+        // Iroh module, `https:`/`wss:` reach the relay, `data:`/`blob:` carry
+        // the opaque-origin app document, and `blob:` in `frame-src` lets an
+        // inline app EMBED bytes it already fetched. NEVER admit
+        // `unsafe-inline`: the shell stays nonce-only.
         res.setHeader(
           "content-security-policy",
           `default-src 'self'; script-src 'self' 'nonce-${scriptNonce}' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' ${apiOrigin} https: wss:; frame-src 'self' data: blob: ${apiOrigin}; object-src blob:; base-uri 'self'; frame-ancestors 'none'`
@@ -201,13 +168,8 @@ export async function startWebUiServer(
   });
   tuneGatewayHttpServer(server);
 
-  // Bind the requested port, but degrade gracefully on a collision. The daemon
-  // derives the web port from its API port (`config.port + 1`); if some
-  // unrelated process already holds that port we must NOT let the rejection
-  // propagate and take down the whole gateway — the API is the critical plane,
-  // the web UI is secondary. On `EADDRINUSE` we retry once on an ephemeral
-  // port (0) and log a warning so the moved port is never silently surprising;
-  // `handle.url` then reflects the real, listening port.
+  // NEVER let a port collision propagate — the API is the critical plane.
+  // `EADDRINUSE` retries once on an ephemeral port; `handle.url` is the truth.
   const requestedPort = options.port ?? 0;
   const listenOn = (port: number): Promise<void> =>
     new Promise<void>((resolve, reject) => {
@@ -238,13 +200,9 @@ export async function startWebUiServer(
     url: `http://${host}:${address.port}`,
     close: () =>
       new Promise<void>((resolve, reject) => {
-        // Same defect as the runtime HTTP server: `server.close()` only
-        // resolves once every connection has ended, and an active
-        // `text/event-stream` response never ends on its own — so a single
-        // subscribed client would pin this listener open forever. `serve()`
-        // awaits this during teardown, so that wedges a gateway switch or
-        // quit. Stop accepting, hurry the idle sockets along, then destroy
-        // whatever is left after the grace window.
+        // `server.close()` resolves only once every connection ends, and an
+        // open `text/event-stream` never does — one subscriber would wedge the
+        // teardown `serve()` awaits.
         let force: ReturnType<typeof setTimeout> | undefined = undefined;
         server.close((error) => {
           if (force) clearTimeout(force);

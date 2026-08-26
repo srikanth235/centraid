@@ -11,7 +11,7 @@ import type { SampleResult } from "./atlasSampleRows.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
-// The orrery's fixed side panel (issue #441 B2) — a presentational leaf of
+// The orrery's fixed side panel (#441) — a presentational leaf of
 // AtlasRelationsTab. It holds the centred-on breadcrumb, the hover/focus readout
 // (a fixed panel, never a floating tooltip), a few real sample rows of the
 // current centre, the relation-vocabulary chips (the SEPARATE authored-link

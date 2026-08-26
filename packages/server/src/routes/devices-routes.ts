@@ -1,27 +1,13 @@
 /*
- * `GET/DELETE /centraid/_gateway/devices` — the paired-device roster + its
- * revoke gesture over HTTP (issue #376), the wire twin of `cli/device-admin.ts`'s
- * `devices list` / `devices revoke`. Backs the desktop's Gateway → Devices card.
- *
- * `POST /centraid/_gateway/devices/ticket` — the inverse of revoke: MINT a
- * one-time pairing ticket from the app, the HTTP twin of `centraid-gateway
+ * Paired-device roster, revoke, and pairing-ticket mint over HTTP (#376).
  * governance: allow-repo-hygiene file-size-limit (#608) cohesive device route owns listing, pairing, rename, compute, and revocation authorization
- * pair`. Same caller-plane scope; the target vault is `body.vaultId` or the
- * addressed `x-centraid-vault`. Requires the daemon's iroh endpoint (the
- * ticket's `gw` pin) — 409 `no_iroh_endpoint` when absent.
  *
- * Scope is enrollment-only. The iroh forwarder stamps the cryptographic
- * caller identity onto `AUTHED_DEVICE_HEADER`; a request without one has no
- * roster authority.
+ * Scope is enrollment-only: the iroh forwarder stamps the caller identity onto
+ * `AUTHED_DEVICE_HEADER`, and a request without one has no authority. A vault
+ * has exactly one owner (#726), so visibility IS authorization.
  *
- * A caller sees only vaults its owner owns — and since a vault has exactly
- * one owner (#726), every device it can see is its own owner's.
- *
- * The revoke cascade mirrors device-admin.ts exactly: revoke the enrollment
- * row(s), then close the Rust-owned iroh transport once an EndpointId no
- * longer holds ANY enrollment. Live web control/app cookies die on their
- * next request via `web-control-sessions.ts`'s `isDeviceValid` re-check against
- * `enrollments.isEnrolled`, which this cascade flips.
+ * The revoke cascade must mirror device-admin.ts: revoke the rows, then close
+ * the iroh transport once an EndpointId holds no enrollment.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -42,15 +28,10 @@ import { readJson, sendJson } from "./route-helpers.js";
 const DEVICES_PATH = "/centraid/_gateway/devices";
 const DEVICES_TICKET_PATH = `${DEVICES_PATH}/ticket`;
 
-/**
- * One paired device on the wire (mirrors the client's `CentraidGatewayDevice`
- * in `@centraid/client`'s `gateway-client-devices.ts` — kept in step by hand,
- * the gateway does not depend on the client package).
- */
+/** Kept in step with the client's `CentraidGatewayDevice` BY HAND. */
 interface DeviceDTO {
   deviceId: string;
   endpointId: string;
-  /** The person this device acts as — roster grouping keys on it. */
   ownerId: string;
   ownerLabel: string;
   label: string;
@@ -61,7 +42,7 @@ interface DeviceDTO {
   addedAt?: string;
   lastUsedAt?: string;
   current?: boolean;
-  /** Device tombstone — never a role (#726). */
+  /** A tombstone, never a role (#726). */
   revoked: boolean;
   rememberDevice: boolean;
   grantProfile?: string[];
@@ -76,50 +57,21 @@ interface DeviceDTO {
 
 export interface DevicesRouteDeps {
   enrollments: EnrollmentStore;
-  /** One-time pairing-ticket mint store — the `POST /devices/ticket` twin of `pair`. */
   tickets: PairingTicketStore;
-  /** Resolves a vault id to its owner-facing name; undefined when unknown. */
   vaultName: (vaultId: string) => string | undefined;
-  /**
-   * *Add someone* (#726 P1): create + mount a fresh vault for a newly minted
-   * person (the registry mints its identity keypair at creation). Wired to
-   * `VaultRegistry.create`. Undefined ⇒ `forPerson` requests are refused
-   * (never silently downgraded to a self-pair).
-   */
+  /** Undefined must REFUSE `forPerson`, never self-pair instead (#726). */
   mintVaultForPerson?: (name: string) => { vaultId: string };
-  /**
-   * Cleanup twin of `mintVaultForPerson` (issue #750): remove a vault the
-   * *Add someone* workflow minted before its gateway.db transaction failed —
-   * the dir, the keys inside it, and the registry mount. Wired to
-   * `VaultRegistry.delete`. Undefined ⇒ a failed mint leaves an orphan dir
-   * (inert debris — no committed row names it), never partial rows.
-   */
+  /** Undefined leaves an inert orphan dir, never partial rows (#750). */
   unmintVaultForPerson?: (vaultId: string) => void;
-  /**
-   * The gateway's iroh EndpointTicket (identity pin + relay hint) for a minted
-   * ticket's `gw` field, read lazily at mint time; undefined before the daemon
-   * has an endpoint (or on the desktop embed).
-   */
   endpointTicket?: () => string | undefined;
-  /**
-   * The registry's default vault — the owner's PERSONAL vault on an
-   * auto-founded gateway (marked at founding; never "Shared"). Used when the
-   * caller names no target at all, so a bare `centraid-gateway pair` invites
-   * into the owner's own space rather than whichever vault happens to sort
-   * first in the caller's enrollments.
-   */
+  /** An untargeted pair invites here, not into whichever enrollment sorts first. */
   defaultVaultId?: () => string | undefined;
-  /** Direct host-custody request (authenticated bearer, never iroh-forwarded). */
   canMintPairingTicket?: (req: IncomingMessage) => boolean;
-  /** Filesystem registry ids, used only by the direct host-custody mint lane. */
   vaultIds?: () => string[];
-  /** Purge vault-local protocol state owned by removed enrollment rows. */
   onRevoked?: (rows: DeviceEnrollment[]) => void | Promise<void>;
-  /** Close Rust-owned live transports once a device loses its final enrollment. */
   onEndpointRevoked?: (endpointId: string) => void | Promise<void>;
 }
 
-/** The caller's proved iroh EndpointId. */
 function callerDeviceKey(req: IncomingMessage): string | undefined {
   const raw = req.headers[AUTHED_DEVICE_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -165,10 +117,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       return sendJson(res, 200, { devices });
     }
 
-    // POST /centraid/_gateway/devices/ticket — mint a one-time pairing ticket,
-    // including the *Add someone* `forPerson` mint lane (#726 P1). Matched
-    // BEFORE the DELETE `/:id` branch so `ticket` isn't read as an id. Split
-    // into `device-ticket-mint.ts` to keep this file under the size cap.
+    // Must match BEFORE the DELETE `/:id` branch, or `ticket` reads as an id.
     if (url.pathname === DEVICES_TICKET_PATH) {
       return handleTicketMint(
         req,
@@ -187,8 +136,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       });
     }
 
-    // PUT /centraid/_gateway/devices/:enrollmentId/compute — advertise what
-    // this device can do and opt it into charging + unmetered work leases.
     if (url.pathname.endsWith("/compute")) {
       if (method !== "PUT")
         return sendJson(res, 405, { error: "method_not_allowed" });
@@ -219,7 +166,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       return sendJson(res, 200, { device: toDto(updated, deps, callerKey) });
     }
 
-    // /centraid/_gateway/devices/:enrollmentId
     const enrollmentId = decodeURIComponent(
       url.pathname.slice(`${DEVICES_PATH}/`.length)
     );
@@ -249,10 +195,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     }
     if (!enrollmentId) return false;
 
-    // Refuse to touch — or even acknowledge — an enrollment outside the
-    // caller's allowed vaults. Ownership makes the visibility check the whole
-    // authorization: every device inside an allowed vault belongs to the
-    // vault's one owner, who is the caller's owner.
+    // Never acknowledge an enrollment outside the caller's vaults (#726).
     const target = deps.enrollments
       .list()
       .find((row) => row.enrollmentId === enrollmentId);
@@ -260,8 +203,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       return sendJson(res, 404, { error: "not_found" });
     }
 
-    // Revoking the owner's last live device strands the vault behind
-    // filesystem-only recovery, so it demands a typed confirmation.
+    // Revoking the owner's last device strands the vault: demand confirmation.
     if (target && lastDeviceOfOwner(deps, target)) {
       let body: Record<string, unknown>;
       try {
@@ -282,7 +224,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
 
     const removed = deps.enrollments.revoke(enrollmentId);
     if (removed.length === 0) {
-      // Already gone — idempotent, not an error.
       return sendJson(res, 200, { removed: false });
     }
     await deps.onRevoked?.(removed);
@@ -303,9 +244,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     );
     const sent = sendJson(res, 200, { removed: true });
     if (selfKey && deps.onEndpointRevoked) {
-      // Let a self-unpair response finish traversing the current QUIC stream.
-      // The enrollment is already absent, so the per-stream authorize guard
-      // rejects any second request during this short close grace.
+      // Let the self-unpair response finish traversing the QUIC stream.
       const timer = setTimeout(
         () => void deps.onEndpointRevoked?.(selfKey),
         1_000
@@ -316,7 +255,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
   };
 }
 
-/** Is this the last live device of the OWNER of its vault? */
 function lastDeviceOfOwner(
   deps: DevicesRouteDeps,
   row: DeviceEnrollment
@@ -394,7 +332,6 @@ function parseComputeProfile(
   };
 }
 
-/** Current device first, then by label (locale compare). */
 function compareDevices(a: DeviceDTO, b: DeviceDTO): number {
   if (a.current && !b.current) return -1;
   if (b.current && !a.current) return 1;

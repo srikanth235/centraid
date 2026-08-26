@@ -1,4 +1,4 @@
-// Unit tests for the dependency-free fenced-code highlighter (issue #420, W2).
+// Unit tests for the dependency-free fenced-code highlighter (#420).
 import { describe, expect, it } from "vitest";
 
 import { configFor, highlightCode } from "./code-highlight.js";

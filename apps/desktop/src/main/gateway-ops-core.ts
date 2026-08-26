@@ -1,19 +1,6 @@
 /*
- * Gateway ops (issue #351) — diagnostics export orchestration.
- *
- * `exportGatewayDiagnostics` is the whole "fetch the bundle, ask where to
- * save it, write the file" flow, but every side effect (settings read,
- * network fetch, save dialog, file write, clock) is passed in as a
- * dependency rather than reached for directly — so it unit-tests as plain
- * async logic with fakes, the same "electron-free pure core" posture as
- * gateway-monitor-core.ts, with no `electron` import at all. `gateway-ops.ts`
- * (not this file) wires the real `dialog.showSaveDialog` / `fs.writeFile` /
- * `loadSettings` in for the IPC handler.
- *
- * Restart doesn't need this treatment — `local-gateway.ts`'s
- * `restartLocalGateway` is already a plain async function, and the IPC
- * handler in ipc.ts is a thin dispatch (remote → refuse, local → call it)
- * with no seams worth injecting.
+ * Gateway ops (#351): electron-free pure core — side effects injected so this
+ * unit-tests without `electron`; gateway-ops.ts wires the real ones for IPC.
  */
 
 /** `GET /centraid/_gateway/diagnostics`, fetched and pretty-printed. */
@@ -24,13 +11,8 @@ export type DiagnosticsFetchResult =
 const DIAGNOSTICS_PATH = "/centraid/_gateway/diagnostics";
 const RECOVERY_KIT_PATH = "/centraid/_gateway/backup/kit";
 
-/**
- * Fetch the active gateway's diagnostics bundle. `fetchImpl` is injectable
- * for tests (same convention as `version-handshake.ts`'s `handshakeGateway`).
- * The response is parsed as JSON and re-stringified (pretty-printed) rather
- * than written byte-for-byte — a malformed response is caught here as an
- * error instead of silently saving unparseable bytes.
- */
+/** Parsed as JSON and re-stringified so a malformed response fails HERE,
+ *  never saved as unparseable bytes. */
 export async function fetchDiagnosticsText(
   baseUrl: string,
   token: string | undefined,
@@ -78,7 +60,7 @@ async function fetchJsonText(
   return { ok: true, text: JSON.stringify(body, null, 2) };
 }
 
-/** `centraid-diagnostics-YYYY-MM-DD.json`, in the local calendar day. */
+/** Local calendar day. */
 export function diagnosticsFileName(now: Date = new Date()): string {
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, "0");
@@ -87,10 +69,10 @@ export function diagnosticsFileName(now: Date = new Date()): string {
 }
 
 export interface ExportDiagnosticsDeps {
-  /** Resolves the active gateway's HTTP base URL + bearer token. */
+  /** Active gateway base URL + bearer token. */
   loadSettings: () => Promise<{ gatewayUrl: string; gatewayToken?: string }>;
   fetchImpl?: typeof fetch;
-  /** Native save dialog — `filePath` undefined/absent implies canceled. */
+  /** Native save dialog — absent `filePath` implies canceled. */
   showSaveDialog: (
     defaultPath: string
   ) => Promise<{ canceled: boolean; filePath?: string }>;
@@ -102,11 +84,8 @@ export type ExportDiagnosticsResult =
   | { ok: true; path: string }
   | { ok: false; canceled?: boolean; error?: string };
 
-/**
- * Fetch `/centraid/_gateway/diagnostics` from the active gateway and save it
- * through a native save dialog. Mirrors the `exportGatewayDiagnostics`
- * contract in `renderer/centraid-api.d.ts` exactly.
- */
+/** Fetch + save diagnostics via native dialog, mirroring
+ *  `renderer/centraid-api.d.ts`. */
 export async function exportGatewayDiagnostics(
   deps: ExportDiagnosticsDeps
 ): Promise<ExportDiagnosticsResult> {
@@ -139,7 +118,7 @@ export async function exportGatewayDiagnostics(
   }
 }
 
-/** Fetch and save the active gateway's recovery kit through a native dialog. */
+/** Fetch + save the recovery kit through a native dialog. */
 export async function exportGatewayRecoveryKit(
   deps: ExportDiagnosticsDeps,
   input: { password: string }

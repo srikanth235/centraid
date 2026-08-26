@@ -1,4 +1,4 @@
-// Client ThumbHash (issue #419): a ~5-25 byte DCT placeholder painted instantly
+// Client ThumbHash (#419): a ~5-25 byte DCT placeholder painted instantly
 // while the real thumb streams. A faithful port of Evan Wallace's public-domain
 // reference (github.com/evanw/thumbhash) so the bytes decode on any conforming
 // decoder — produced here off the same canvas decode the thumb/dHash pay for;
@@ -126,7 +126,7 @@ export function thumbHashFromRgba(
 }
 
 /**
- * Decode one bitmap to ≤100 px RGBA on a canvas and hash it (issue #419) — the
+ * Decode one bitmap to ≤100 px RGBA on a canvas and hash it (#419) — the
  * same canvas raster codec the thumb/dHash use, so no extra image fetch.
  */
 export function thumbHashFromImage(

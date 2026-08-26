@@ -5,7 +5,7 @@
  * Contacts) lives in pull-connectors.test.ts beside this file; the split is
  * the repo's 625-line file ceiling, not a conceptual boundary.
  *
- * Original scope note of the hand-authored PULL CONNECTORS in this tree
+ * The scope of the hand-authored PULL CONNECTORS in this tree
  * (issues #304/#781): cursor discipline (provider tokens, high-water
  * watermarks, honest expiry/reset), external-payload → staging-row shaping
  * (identity normalization, truncation, stable external ids), bounded pages

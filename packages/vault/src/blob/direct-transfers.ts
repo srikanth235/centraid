@@ -421,7 +421,7 @@ export class DirectBlobTransfers {
       );
     }
     const byteSize = row.expected_size ?? 0;
-    // Direct-to-cold heuristic (issue #425 Wave 3): the CopyObject that mints
+    // Direct-to-cold heuristic (#425): the CopyObject that mints
     // the final CAS object carries STANDARD_IA for an eligible large original.
     // The staging row is written after custody, so the declared media type +
     // size are handed in directly for the resolver (a session without a declared

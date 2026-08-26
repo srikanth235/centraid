@@ -1,4 +1,4 @@
-// The capture-time OCR consent copy (issue #712 C3) — pinned the same way
+// The capture-time OCR consent copy (#712) — pinned the same way
 // Photos' enrichment-consent.test.ts pins its copy, so a future edit that
 // drops the caps, the egress flag, or the "not a separate choice" answer
 // fails here rather than being noticed only in a screenshot review.

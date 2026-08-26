@@ -1,42 +1,20 @@
-// Command-tail replay: the Commons catch-up engine (issue #750 invariant 7).
-//
-// A steward's `share_commons_op` log already holds the exact command and input
-// of every write that changed the shared closure. Catch-up therefore ships the
-// OPERATION TAIL and re-executes it on the replica, instead of walking and
-// diffing the whole closure to describe the same change in rows. That is what
-// makes a sync-with-changes cost O(k) for k operations rather than O(commons
-// size) — the steward never projects what did not move.
-//
-// Two properties make re-execution converge:
-//
-//   * Deterministic ids. The steward invokes each Commons write under the seed
-//     `commons-replica:<grantId>:<sequence>` (`replicaInvocationKey`), and the
-//     replica re-invokes under the same seed, so `ctx.newId()` mints identical
-//     row ids on both sides.
-//   * Contiguity. A replica may only replay a tail that starts exactly at its
-//     own cursor and ends at the steward's head; a gap would apply a command to
-//     state it was never authored against.
-//
-// Replay is never load-bearing for correctness on its own. EVERY failure —
-// an unknown command, a handler that refuses, a missing payload, an app whose
-// version skew makes the input invalid — raises `CommonsReplayError`, and both
-// rails answer that by falling back to the full scrub + re-project, which
-// repairs any state. A grant can never be wedged by an operation this build
-// cannot replay.
+// Command-tail replay: the Commons catch-up engine (#750), O(k) operations
+// instead of an O(commons size) diff. Convergence needs DETERMINISTIC IDS —
+// one `replicaInvocationKey` seed on both sides — and CONTIGUITY, since a gap
+// applies a command to state it never saw. EVERY failure raises
+// `CommonsReplayError` and falls back to the full re-project.
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { recordKnownStagedBlob } from "../blob/staging-record.js";
 import type { InvokeOutcome } from "../gateway/types.js";
 
-/** Host-only replica executor; never serialized or exposed to member code. */
 export type CommonsReplicaExecutor = (
   command: string,
   commandInput: Record<string, unknown>,
   invocationId: string
 ) => InvokeOutcome;
 
-/** One executed row of the log, in the shape both rails carry it. */
 export interface CommonsTailOperation {
   sequence: number;
   kind: string;
@@ -45,12 +23,7 @@ export interface CommonsTailOperation {
   outcome: string;
 }
 
-/**
- * Bytes a tail command claims by sha. Content-addressed bytes cannot be
- * derived from the command input the way ids can, so the manifest travels with
- * the tail and the replica stages it before replay. Sizing metadata rides
- * along because `blob_staging` is what `ctx.blobs.claimStaged` reads.
- */
+/** Bytes cannot be derived from the input the way ids can, so they travel. */
 export interface CommonsTailBlob {
   sha256: string;
   size: number;
@@ -58,8 +31,7 @@ export interface CommonsTailBlob {
   title?: string;
 }
 
-/** A tail this replica could not re-execute. Never fatal: fall back to the
- * full projection, which is the one path that repairs arbitrary state. */
+/** Never fatal: the full projection repairs any state. */
 export class CommonsReplayError extends Error {
   constructor(message: string) {
     super(message);
@@ -73,10 +45,6 @@ export function isCommonsReplayError(
   return error instanceof CommonsReplayError;
 }
 
-/**
- * The invocation identity of one Commons operation, used as BOTH the replica's
- * invocation id and the deterministic id seed on either side of the rail.
- */
 export function replicaInvocationKey(
   grantId: string,
   sequence: number
@@ -84,7 +52,6 @@ export function replicaInvocationKey(
   return `commons-replica:${grantId}:${sequence}`;
 }
 
-/** The operations after `afterSequence`, oldest first. */
 export function readCommonsTail(
   steward: DatabaseSync,
   grantId: string,
@@ -100,11 +67,7 @@ export function readCommonsTail(
     .all(grantId, afterSequence) as unknown as CommonsTailOperation[];
 }
 
-/**
- * Does this tail cover `(fromSequence, headSequence]` with no gap? Compaction
- * prunes below a retention floor, so a long-absent replica's window may have
- * been reclaimed; that replica re-baselines instead of replaying a hole.
- */
+/** A replica whose window compaction reclaimed re-baselines instead. */
 export function commonsTailIsContiguous(input: {
   tail: readonly { sequence: number }[];
   fromSequence: number;
@@ -118,7 +81,6 @@ export function commonsTailIsContiguous(input: {
   );
 }
 
-/** Operations that carry an executable payload; control events do not. */
 export function executableCommonsTail(
   tail: readonly CommonsTailOperation[]
 ): CommonsTailOperation[] {
@@ -129,9 +91,7 @@ export function executableCommonsTail(
   );
 }
 
-/** Declared blob-claiming input key. A command that names staged bytes always
- * spells them this way, so the manifest is derived in O(k) from the tail
- * itself rather than by diffing two closures. */
+/** Always spelled this way, keeping the manifest O(k) in the tail. */
 const STAGED_SHA_KEY = "staged_sha";
 
 function collectStagedShas(value: unknown, into: Set<string>): void {
@@ -147,12 +107,6 @@ function collectStagedShas(value: unknown, into: Set<string>): void {
   }
 }
 
-/**
- * The bytes a tail's commands claim, described from the STEWARD's own content
- * rows. The steward's staging rows are consumed at claim time, so the durable
- * `core_content_item` the claim minted is the surviving description of those
- * bytes — which is exactly what the replica needs to stage them again.
- */
 export function commonsTailBlobs(
   steward: DatabaseSync,
   tail: readonly CommonsTailOperation[]
@@ -170,9 +124,7 @@ export function commonsTailBlobs(
     const row = describe.get(sha256) as
       | { media_type: string; byte_size: number; title: string | null }
       | undefined;
-    // A sha the steward no longer describes cannot be staged at the replica.
-    // Omitting it makes the replay fail loudly and re-baseline, which is
-    // strictly better than staging bytes with invented metadata.
+    // Omitting an undescribed sha re-baselines, beating invented metadata.
     if (!row) continue;
     blobs.push({
       sha256,
@@ -184,12 +136,7 @@ export function commonsTailBlobs(
   return blobs;
 }
 
-/**
- * Put the tail's claimed bytes back into the replica's staging band so
- * `claimStaged` resolves. The CAS bytes must already be present (placed by the
- * caller's transport); a sha the replica already owns as a content item needs
- * no staging row at all, because `promoteStagedBlob` dedupes onto it.
- */
+/** CAS bytes must already be present; an owned sha needs no staging row. */
 export function stageCommonsTailBlobs(
   seat: DatabaseSync,
   blobs: readonly CommonsTailBlob[]
@@ -209,15 +156,9 @@ export function stageCommonsTailBlobs(
 }
 
 /**
- * Re-execute the tail against this replica. Callers MUST hold the seat's write
- * transaction: a partially replayed tail is not a state any seat may keep, and
- * the cursor advance that records the replay belongs in the same commit.
- *
- * `replayed` is refused deliberately. Idempotency here is owned by the seat's
- * cursor, which moves inside the same transaction as the replay — so an
- * operation whose invocation id is already spent means an earlier attempt was
- * rolled back underneath its journal record, and its rows are NOT present.
- * Re-baselining is the only honest answer.
+ * Callers MUST hold the seat's write transaction: a partly replayed tail is no
+ * state to keep. `replayed` is refused deliberately — a spent invocation id
+ * means an earlier attempt rolled back, so its rows are NOT present.
  */
 export function replayCommonsTail(input: {
   grantId: string;
@@ -253,9 +194,7 @@ export function replayCommonsTail(input: {
         invocationId
       );
     } catch (error) {
-      // An unregistered command, an app the replica does not host, a schema
-      // this build cannot validate: all of it is version skew, all of it
-      // re-baselines rather than parking the grant.
+      // Version skew re-baselines rather than parking the grant.
       throw new CommonsReplayError(
         `commons operation ${operation.sequence} (${operation.command}) could not be replayed: ${
           error instanceof Error ? error.message : String(error)

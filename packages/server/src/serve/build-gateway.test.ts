@@ -19,10 +19,9 @@ import { configureApiKey, stageItem } from "./outbox-executor-test-kit.js";
 import { OwnerStore } from "./owner-store.js";
 import type { VaultPlane } from "./vault-plane.js";
 
-// `buildGateway()` is the host-agnostic core: it constructs the whole
-// object graph but binds no socket. These tests pin that contract — the
-// listener-free shape, plus `composedHandler` dispatching the gateway's
-// route chain WITHOUT a bearer check (for hosts that own auth themselves).
+// Pins buildGateway()'s host-agnostic contract: the whole graph constructed,
+// no socket bound, and composedHandler dispatching the route chain WITHOUT a
+// bearer check (fronting hosts own auth).
 
 let dataDir: string;
 let gateway: BuiltGateway;
@@ -249,9 +248,8 @@ describe("build-gateway scenarios", () => {
   test("a burst of provenance commits collapses into one Notifications recomputation (#647)", async () => {
     const plane = gateway.vaults.current();
     // Instrument the production projection the doorbell samples: every
-    // uncoalesced commit would pay a listOutbox scan plus three queries AND
-    // ring SSE to every subscriber, which a bulk connector sync repeats per
-    // batch.
+    // uncoalesced commit pays a listOutbox scan plus queries AND SSE fanout,
+    // repeated per batch by bulk connector syncs.
     const computeSummary = plane.notificationsSummary.bind(plane);
     let summaries = 0;
     plane.notificationsSummary = ((includeArchived?: boolean) => {
@@ -259,14 +257,13 @@ describe("build-gateway scenarios", () => {
       return computeSummary(includeArchived);
     }) as VaultPlane["notificationsSummary"];
 
-    // Each of these is a journalled write commit → one provenance doorbell.
+    // Each is a journalled write commit → one provenance doorbell.
     configureApiKey(plane);
     for (let i = 0; i < 12; i += 1) stageItem(plane);
 
-    // The leading edge fired once; the other twelve commits are still in the
-    // window, not twelve more projections.
+    // Leading edge fired once; the other twelve commits sit in the window.
     expect(summaries).toBe(1);
-    // …and the whole burst settles into exactly one trailing recomputation.
+    // …and the burst settles into exactly one trailing recomputation.
     await waitFor(() => summaries > 1);
     expect(summaries).toBe(2);
     expect(plane.blocking().outbox).toHaveLength(12);
@@ -297,8 +294,7 @@ describe("build-gateway scenarios", () => {
     await gateway.start("http://127.0.0.1:0");
     const mounted = await mountUnauthed(gateway.composedHandler);
     // A skipped fire never opens a run: the honest-liveness gate returns
-    // before the handler executes. A real fire always lands a terminal turn,
-    // so the ledger separates "skipped" from "ran".
+    // before the handler executes.
     interface LedgerTurn {
       endedAt?: number;
       ok?: boolean;
@@ -321,8 +317,8 @@ describe("build-gateway scenarios", () => {
     const notice = (): unknown =>
       gateway.vaults.current().notices.getBySource("automation", automationRef);
     try {
-      // A paused connection is owner-chosen state, already carried by its own
-      // connection card: every tick skips, and stays silent while it does.
+      // Paused is owner-chosen state carried by its connection card: every
+      // tick skips, silently.
       await fire();
       await fire();
       await new Promise((resolve) => {
@@ -332,9 +328,8 @@ describe("build-gateway scenarios", () => {
       // No notice → no severity, no unread reset, no wake.
       expect(notice()).toBeUndefined();
 
-      // Resuming runs for real — which also proves the fires above were
-      // skipped by the gate, not lost by the harness. The skip left no
-      // stored "failure", so this success announces no recovery either.
+      // Resuming runs for real — proving the fires above were skipped by the
+      // gate, not lost; no recovery notice either, since no failure was stored.
       setStatus("active");
       await fire();
       await waitForAsync(async () => (await endedTurns()).length === 1);
@@ -443,8 +438,7 @@ describe("build-gateway scenarios", () => {
         pair: () => ({ ok: false }),
       },
     });
-    // Founding creates one marked personal vault. A shared destination is an
-    // explicit later owner action, not part of gateway construction.
+    // Founding creates one marked personal vault; shared is an explicit later owner action.
     expect(gateway.vaults.list().map((v) => v.name)).toStrictEqual([
       "Personal",
     ]);
@@ -477,7 +471,7 @@ describe("build-gateway scenarios", () => {
         ),
         fetch(`${mounted.url}/centraid/_vault/status`),
       ]);
-      // No `status` field survives #603 — there is no uninitialized state left.
+      // No `status` field survives #603 — no uninitialized state left.
       const infoBody = (await info.json()) as Record<string, unknown>;
       expect("status" in infoBody).toBe(false);
       expect(infoBody).toMatchObject({ authenticated: false });
@@ -485,10 +479,9 @@ describe("build-gateway scenarios", () => {
       expect(tunnel.status).toBe(200);
       await expect(tunnel.json()).resolves.toStrictEqual({ allowed: true });
       expect(tunnelAttacker.status).toBe(403);
-      // The vault plane answers straight away: no 409 wall to clear first.
+      // The vault plane answers straight away — no 409 wall first.
       expect(status.status).toBe(200);
-      // Unscoped → the default vault, which is Personal — and since #665 that
-      // is also the head of the listing `founded` was read from.
+      // Unscoped → the default vault, Personal — head of the listing since #665.
       await expect(status.json()).resolves.toMatchObject({
         vaultId: founded[0],
       });
@@ -496,12 +489,11 @@ describe("build-gateway scenarios", () => {
       await mounted.close();
     }
 
-    // Rebuilding over the SAME dir must adopt what is there, never re-found.
+    // Rebuilding over the SAME dir must adopt, never re-found.
     await gateway.stop();
     gateway = await buildGateway({ paths: pathsUnder(dataDir) });
     expect(gateway.vaults.list().map((v) => v.vaultId)).toStrictEqual(founded);
-    // The `personal` marker is durable, so the remount still resolves the
-    // same default vault.
+    // The durable `personal` marker still resolves the same default vault.
     expect(gateway.vaults.list().map((v) => v.name)).toStrictEqual([
       "Personal",
     ]);
@@ -522,10 +514,8 @@ describe("build-gateway scenarios", () => {
   });
 
   test("an inhabited gateway whose vaults were all erased is NOT re-founded (#603)", async () => {
-    // Erasing every vault leaves the filesystem registry fresh but keeps the
-    // `owners` rows in gateway.db. Restarting the daemon in that state must
-    // wait for restore — auto-founding a new personal vault over it would
-    // silently bury restore-after-erase.
+    // Erasing every vault leaves live `owners` rows in gateway.db: restart must
+    // wait for restore — auto-founding would bury restore-after-erase.
     for (const vault of gateway.vaults.list()) {
       gateway.vaults.delete(vault.vaultId);
     }
@@ -550,8 +540,7 @@ describe("build-gateway scenarios", () => {
       expect(rows.map((row) => row.vault_id).sort()).toStrictEqual(
         [...founded].sort()
       );
-      // ONE owner owns the founded vault — a fresh install has no
-      // "Unassigned" binding.
+      // ONE owner owns the founded vault — no "Unassigned" binding.
       expect(new Set(rows.map((row) => row.owner_id)).size).toBe(1);
       const owners = database.db
         .prepare("SELECT COUNT(*) AS n FROM owners")
@@ -564,17 +553,15 @@ describe("build-gateway scenarios", () => {
     }
   });
 
-  // Exit evidence #4 (#726 P1): founding auto-creates only Personal owned by
-  // the founding owner (covered above), AND a fresh boot after the
-  // household-migration sweep mints no extra vaults.
+  // Exit evidence #4 (#726): founding auto-creates only Personal owned by the founding owner, and a post-sweep fresh boot mints no extra vaults.
   test("household migration mints a vault for every ownerless owner, once (#726 P1)", async () => {
     const foundedCount = gateway.vaults.list().length;
     expect(foundedCount).toBe(1);
     // Release the gateway's exclusive lock before touching gateway.db directly.
     await gateway.stop();
 
-    // A person record with no vault — the shape P0's admin-fallback migration
-    // or the bare host-custody `POST /owners` lane can leave behind.
+    // Ownerless person record from P0's admin-fallback migration or the bare
+    // host-custody `POST /owners` lane.
     let strandedOwnerId: string;
     {
       const database = GatewayDatabase.open(dataDir);
@@ -586,8 +573,7 @@ describe("build-gateway scenarios", () => {
       }
     }
 
-    // Reboot: the migration sweep runs once, at boot, for every ownerless
-    // owner — this one gets "<label>'s vault" minted on THIS machine.
+    // Reboot: the sweep mints "<label>'s vault" for each ownerless owner, at boot.
     gateway = await buildGateway({ paths: pathsUnder(dataDir) });
     const afterMigration = gateway.vaults.list();
     expect(afterMigration).toHaveLength(foundedCount + 1);
@@ -606,8 +592,7 @@ describe("build-gateway scenarios", () => {
       }
     }
 
-    // A second boot after migration mints NOTHING extra — the guard is
-    // "does this owner own a vault yet", re-evaluated, not a one-shot flag.
+    // A second boot mints NOTHING extra — the guard is re-evaluated ownership.
     gateway = await buildGateway({ paths: pathsUnder(dataDir) });
     expect(gateway.vaults.list()).toHaveLength(foundedCount + 1);
   });
@@ -642,7 +627,7 @@ describe("build-gateway scenarios", () => {
   });
 
   test("mounts the vault registry and recovers it across rebuilds (#280)", async () => {
-    // The registry is mandatory now — the whole app world is vault-scoped.
+    // The registry is mandatory — the whole app world is vault-scoped.
     expect(gateway.vaults).toBeDefined();
     expect(gateway.vaults.current().boot.fresh).toBe(true);
     expect(gateway.vaults.list()).toHaveLength(1);
@@ -659,8 +644,7 @@ describe("build-gateway scenarios", () => {
       await mounted.close();
     }
 
-    // A stopped gateway releases gateway.db; a rebuild recovers the same
-    // vault and WAL ownership is unconditional after the lease deletion.
+    // A stopped gateway releases gateway.db; a rebuild recovers the same vault.
     const vaultId = gateway.vaults.current().boot.vaultId;
     expect(gateway.vaults.current().walShipper).toBeDefined();
     await gateway.stop();
@@ -673,7 +657,7 @@ describe("build-gateway scenarios", () => {
   test("the active vault owns a code store — activeAppsStore materializes it", async () => {
     const store = await gateway.appsStore();
     expect(store).toBeTruthy();
-    // The store lives INSIDE the active vault's directory (#280).
+    // Lives INSIDE the active vault's directory (#280).
     const vaultId = gateway.vaults.current().boot.vaultId;
     expect(
       store
@@ -686,12 +670,11 @@ describe("build-gateway scenarios", () => {
     await gateway.start("http://127.0.0.1:0");
     const srv = await mountUnauthed(gateway.composedHandler);
     try {
-      // No Authorization header — a fronting host owns auth itself, so
-      // the composed chain must serve the request, not 401 it.
+      // No Authorization header — a fronting host owns auth, so the chain
+      // must serve the request, not 401 it.
       const res = await fetch(`${srv.url}/centraid/_apps`);
       expect(res.status).toBe(200);
-      // The mounted vault's bundled roster (#708) — what is under test is that
-      // the chain SERVED the route rather than 401'd it.
+      // Mounted bundled roster (#708) — what is under test is SERVED vs 401.
       const body = (await res.json()) as { id: string }[];
       expect(body.map((a) => a.id)).toContain("tasks");
     } finally {
@@ -753,11 +736,11 @@ describe("build-gateway scenarios", () => {
     await gateway.start("http://127.0.0.1:0");
     const srv = await mountUnauthed(gateway.composedHandler);
     try {
-      // Both prefixes resolve to their store handlers (not the runtime
-      // fall-through) — proving the chat → prefs → extra → runtime order.
+      // Both prefixes hit their store handlers — proving the chat → prefs →
+      // extra → runtime order.
       const chat = await fetch(`${srv.url}/_centraid-user/prefs`);
       expect(chat.status).not.toBe(404);
-      // `/id` answers with the ACTIVE vault's owner party id (#280).
+      // `/id` answers the ACTIVE vault's owner party id (#280).
       const id = (await (
         await fetch(`${srv.url}/_centraid-user/id`)
       ).json()) as { id: string };
@@ -777,8 +760,7 @@ describe("build-gateway scenarios", () => {
         body: JSON.stringify({ patch: { [`enrich.profile.${id}`]: value } }),
       });
     try {
-      // Empty prefs already list one derived built-in per capability, each
-      // carrying the computed egress class — nothing was stored for them.
+      // Empty prefs already list derived built-ins with computed egress — nothing stored.
       const listed = (await (
         await fetch(`${srv.url}/centraid/_enrich/profiles`)
       ).json()) as {
@@ -797,7 +779,7 @@ describe("build-gateway scenarios", () => {
       expect(((await faces.json()) as { error: string }).error).toContain(
         "biometric"
       );
-      // So are an unknown harness and an attempt to shadow the built-in id.
+      // Unknown harness and shadowing the built-in id are refused too.
       expect(
         (await putProfile("mine", { capability: "ocr", harness: "x" })).status
       ).toBe(409);
@@ -809,7 +791,7 @@ describe("build-gateway scenarios", () => {
         gateway.prefs.getAllPrefs()["enrich.profile.faces-llm"]
       ).toBeUndefined();
 
-      // A valid one lands in prefs and shows up on the listing as `provider`.
+      // A valid profile lands in prefs and lists as `provider`.
       const ok = await putProfile("careful-ocr", {
         capability: "ocr",
         label: "Careful OCR",
@@ -837,8 +819,7 @@ describe("build-gateway scenarios", () => {
     await gateway.runtime.registry.ensureUploaded("demo");
     const srv = await mountUnauthed(gateway.composedHandler);
     try {
-      // No override yet — `current` is null, no defaultModel (no prefs, no
-      // catalog in this hermetic test — the CLI probe/warmer never runs).
+      // No override yet: `current` null, no defaultModel (hermetic test).
       const before = (await (
         await fetch(`${srv.url}/centraid/demo/_turn/model`)
       ).json()) as {
@@ -850,7 +831,7 @@ describe("build-gateway scenarios", () => {
       expect(before.current).toBeNull();
       expect(before.catalog).toStrictEqual([]);
 
-      // Setting the override writes the SAME `model.<kind>.ask` prefs key
+      // Override writes the SAME `model.<kind>.ask` prefs key
       // `resolveSubsystemModel` reads at turn time — one source of truth.
       const putRes = await fetch(`${srv.url}/centraid/demo/_turn/model`, {
         method: "PUT",
@@ -869,7 +850,7 @@ describe("build-gateway scenarios", () => {
       };
       expect(after.current).toBe("gpt-5.5-mini");
 
-      // `model: null` clears the override back to default.
+      // `model: null` clears the override.
       const cleared = await fetch(`${srv.url}/centraid/demo/_turn/model`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -889,14 +870,14 @@ describe("build-gateway scenarios", () => {
     await gateway.runtime.registry.ensureUploaded("demo");
     const srv = await mountUnauthed(gateway.composedHandler);
     try {
-      // The default harness stays codex; only the `ask` register is re-pinned.
+      // Default harness stays codex; only the `ask` register re-pins.
       gateway.prefs.setPrefs({
         "harness.kind": "codex",
         "harness.ask": "claude-code",
       });
 
-      // GET reports ask's resolved harness — the picker must offer the models of
-      // the backend the ask turn will actually run on.
+      // GET reports ask's resolved harness — the picker must offer models of
+      // the backend ask turns actually run on.
       const info = (await (
         await fetch(`${srv.url}/centraid/demo/_turn/model`)
       ).json()) as {
@@ -904,8 +885,8 @@ describe("build-gateway scenarios", () => {
       };
       expect(info.harnessKind).toBe("claude-code");
 
-      // ...and PUT writes THAT harness's key. Reading one key while writing
-      // another is the exact bug per-subsystem resolution has to avoid.
+      // …and PUT writes THAT harness's key — reading one key while writing
+      // another is the exact bug per-subsystem resolution must avoid.
       const putRes = await fetch(`${srv.url}/centraid/demo/_turn/model`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -915,7 +896,7 @@ describe("build-gateway scenarios", () => {
       expect(gateway.prefs.getAllPrefs()["model.claude-code.ask"]).toBe(
         "claude-sonnet-4-6"
       );
-      // The default harness's key is untouched — no cross-harness bleed.
+      // Default harness's key untouched — no cross-harness bleed.
       expect(gateway.prefs.getAllPrefs()["model.codex.ask"]).toBeUndefined();
 
       // The round-trip agrees: GET reads back what PUT wrote.
@@ -935,9 +916,8 @@ describe("build-gateway scenarios", () => {
     await gateway.runtime.registry.ensureUploaded("demo");
     const srv = await mountUnauthed(gateway.composedHandler);
     try {
-      // Back-compat is the hard requirement: a prefs file that predates
-      // per-subsystem selection carries only `harness.kind`, and every
-      // register must resolve to it exactly as it did before.
+      // Back-compat is the hard requirement: old prefs carry only `harness.kind`,
+      // and every register resolves to it exactly as before.
       gateway.prefs.setPrefs({ "harness.kind": "claude-code" });
 
       const info = (await (
@@ -981,7 +961,7 @@ describe("build-gateway scenarios", () => {
       };
       expect(body.status).toBe("error");
       const byName = new Map(body.components.map((c) => [c.component, c]));
-      // Wired-in probes: the boot vault mounted, no connections configured.
+      // Wired-in probes: boot vault mounted, no connections configured.
       expect(byName.get("vaults")).toMatchObject({
         status: "ok",
         detail: "1 vault mounted",
@@ -989,16 +969,13 @@ describe("build-gateway scenarios", () => {
       expect(byName.get("connections")).toMatchObject({ status: "ok" });
       // Reconcile ran during start() and reported the scheduler healthy.
       expect(byName.get("automations")?.status).toBe("ok");
-      // Bundled enricher templates are installed disabled by default on the
-      // boot vault; health reports the full installed set while showing none
-      // enabled. No s3 tier is configured, and the probe remains an honest ok
-      // state.
+      // Bundled enricher templates install disabled by default on the boot vault.
       expect(byName.get("enrichment")).toMatchObject({
         status: "ok",
         detail: "0 of 5 enrichers enabled",
       });
       expect(byName.get("blob-sweep")?.status).toBe("ok");
-      // The host-pushed failure carries its structured event.
+      // Host-pushed failure carries its structured event.
       expect(byName.get("tunnel")).toMatchObject({
         status: "error",
         lastError: "iroh endpoint dial failed",
@@ -1025,9 +1002,7 @@ describe("build-gateway scenarios", () => {
         }>;
       };
       const disk = body.components.find((c) => c.component === "disk");
-      // The host volume may legitimately be degraded/error under the shipped
-      // percent + absolute thresholds. The classifier's deterministic status
-      // cases live in disk-health.test.ts; this integration test owns wiring.
+      // Classifier cases live in disk-health.test.ts — this test owns wiring.
       expect(disk).toBeDefined();
       expect(disk?.detail).toContain("free of");
       expect(disk?.detail).toMatch(/\(\d+\.\d% free\)/u);
@@ -1040,10 +1015,9 @@ describe("build-gateway scenarios", () => {
     await gateway.start("http://127.0.0.1:0");
     const plane = gateway.vaults.current();
     const vaultId = plane.boot.vaultId;
-    // Simulate the file becoming unreadable underneath the process (disk
-    // failure, external corruption) WITHOUT actually closing the handle —
-    // that would double-close on teardown. The plane object stays "mounted"
-    // in memory; only the trivial read the probe runs now fails.
+    // Simulate the file becoming unreadable under the process WITHOUT closing
+    // the handle (that would double-close on teardown): only the trivial read
+    // the probe runs now fails.
     (plane.db.vault as unknown as { prepare: () => never }).prepare = () => {
       throw new Error("database disk image is malformed");
     };

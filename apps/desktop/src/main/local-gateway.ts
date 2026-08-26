@@ -34,37 +34,19 @@ import { phoneLinkStatus } from "./phone-link.js";
 import { templatesCacheDir } from "./settings.js";
 
 /**
- * Electron-flavored local-gateway lifecycle (issue #351 / #468).
- *
- * By default the gateway is a **detached child** that outlives the UI
- * (H1–H4): `centraid-gateway serve` is spawned with detached stdio-ignore
- * + unref, stamped with desktop ownership, and polled until
- * `/centraid/_gateway/info` answers. Set `CENTRAID_EMBEDDED_GATEWAY=1`
- * to keep the legacy in-process `serve()` path (E2E / tests).
- *
- * Electron-only layer on top of `@centraid/server`:
- *   - per-gateway lifecycle (`handles` map + `starting` dedupe)
- *   - safeStorage-backed secrets (remote profiles; a local detached daemon
- *     uses the desktop-minted per-launch loopback token, issue #505 phase 7)
- *   - Electron-derived paths (via `gateway-paths.ts`)
- *   - supervision (H7): `gateway-supervisor-core` crash-loop / backoff on
- *     both embed and detached spawn failures
- *
- * Switching the active local gateway tears down its server (embedded close
- * or owned-detached SIGTERM). App quit deliberately does **not** kill
- * detached children so pairing / mobile keep working with the window closed.
+ * Electron local-gateway lifecycle (#351/#468): detached child outliving the
+ * UI (H1–H4); `CENTRAID_EMBEDDED_GATEWAY=1` selects in-process serve() for
+ * tests. Quit deliberately does NOT kill detached children.
  */
 
-/** Runtime surface callers need — subset of GatewayServeHandle + mode. */
 export interface LocalGatewayRuntime {
   url: string;
   token: string;
   mode: "embedded" | "detached";
   owned?: boolean;
-  /** Detached child's pid — the liveness check `reviveLocalGatewayIfDead` needs. */
+  /** Detached child's pid, for `reviveLocalGatewayIfDead`'s liveness check. */
   pid?: number;
   close: () => Promise<void>;
-  /** Compatible with gateway HealthRegistry.registerProbe for the tunnel probe. */
   health: {
     registerProbe: (
       name: string,
@@ -83,31 +65,23 @@ export interface LocalGatewayRuntime {
 const handles = new Map<string, LocalGatewayRuntime>();
 const starting = new Map<string, Promise<LocalGatewayRuntime>>();
 const restarting = new Map<string, Promise<void>>();
-/** Per-gateway backoff/crash-loop bookkeeping (issue #351 / H7). */
 const supervisor = new Map<string, SupervisorState>();
 /** Epoch ms before which `ensureLocalGateway` refuses a new attempt. */
 const nextAttemptAt = new Map<string, number>();
-/**
- * Set once the app is quitting (main.ts's `before-quit` handler) so a
- * scheduled auto-retry timer that fires mid-teardown doesn't resurrect a
- * gateway we just told to close.
- */
+/** Set at quit, so a scheduled auto-retry can't resurrect a closing gateway. */
 let disposed = false;
 
 export function markLocalGatewaysDisposed(): void {
   disposed = true;
 }
 
-/** Supervision snapshot for gateway `gatewayId` — empty state if it has never failed. */
 export function getLocalGatewaySupervisorState(
   gatewayId: string
 ): SupervisorState {
   return supervisor.get(gatewayId) ?? initialSupervisorState();
 }
 
-// Per-gateway info provider is registered with gateway-store once on
-// module load — the closure reads `handles` at lookup time, so future
-// gateways come online without re-registering.
+// Registered once; the closure reads `handles` at lookup time.
 let infoProviderRegistered = false;
 function ensureInfoProviderRegistered(): void {
   if (infoProviderRegistered) return;
@@ -216,18 +190,13 @@ async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
 async function startDetached(): Promise<LocalGatewayRuntime> {
   const ownerId = await getOrCreateDesktopOwnerId();
   const dataDir = localGatewayDataDir();
-  // `replaceOwnedIfStale`: on launch, if we own a gateway that's still running
-  // from an older build than the one on disk, respawn it instead of adopting
-  // the stale daemon — so a rebuilt gateway (dev) or an updated app (prod)
-  // actually takes effect. Safe now that stop waits for real exit.
+  // Respawns an owned daemon left from an older build; stop waits for real exit.
   const detached = await ensureDetachedGateway({
     dataDir,
     ownerId,
     replaceOwnedIfStale: true,
   });
-  // Phone tunnel lives in the Electron main process; register is a no-op on
-  // detached handles (child owns its own health registry). Keep the probe
-  // call for API parity.
+  // No-op on detached handles (child owns health registry); API parity.
   detached.health.registerProbe("tunnel", async () => {
     const status = await phoneLinkStatus();
     if (status.error) return { status: "error", detail: status.error };
@@ -245,28 +214,16 @@ export async function ensureLocalGateway(
   gatewayId: string
 ): Promise<LocalGatewayRuntime> {
   ensureInfoProviderRegistered();
-  // A cached handle is returned as-is, deliberately: this function is called
-  // from every settings read (including the monitor's own 5s tick), so putting
-  // "is it still alive? then respawn" here would restart a crash-looping daemon
-  // on every tick with no budget. `reviveLocalGatewayIfDead` is the single
-  // owner of that decision and is rate-limited — see its comment block.
+  // No liveness check here — settings reads land constantly; reviveLocalGatewayIfDead owns retry.
   const ready = handles.get(gatewayId);
   if (ready) return ready;
   const inFlight = starting.get(gatewayId);
   if (inFlight) return inFlight;
 
-  // Supervision guard (issue #351 / H7): fail fast instead of hammering
-  // serve/spawn again on every caller. `restartLocalGateway` clears both
-  // maps first, so a deliberate user action is never blocked by this.
+  // Fail fast, not re-spawn per caller (#351/H7); restartLocalGateway clears both maps.
   const sup = supervisor.get(gatewayId);
   if (sup?.loopBroken) {
-    // No recovery instruction in the message. This string is quoted verbatim
-    // on the startup error screen, which has no sidebar and no navigation —
-    // telling that reader to "use Settings → Gateway → Restart" pointed at a
-    // surface they cannot reach, and quitting the app was the only real exit.
-    // The recovery now lives where the message is READ: the screen's "Try
-    // again" button routes through `retryLocalGatewayStart`, which clears this
-    // very latch. In the running shell the Gateway page still offers Restart.
+    // Quoted verbatim on the startup error screen; "Try again" clears this latch via retryLocalGatewayStart.
     throw new Error(
       `local gateway "${gatewayId}" failed to start repeatedly and stopped retrying` +
         (sup.lastError ? ` (last error: ${sup.lastError})` : "")
@@ -281,7 +238,7 @@ export async function ensureLocalGateway(
   }
 
   const p = (async () => {
-    // Read *persisted* settings only — `loadSettings()` re-enters ensure.
+    // Persisted settings only: `loadSettings()` re-enters ensure.
     if (preferEmbeddedGateway()) {
       return startEmbedded(gatewayId);
     }
@@ -321,25 +278,9 @@ export async function ensureLocalGateway(
 }
 
 /*
- * Revival of an owned detached daemon that DIED after a successful start.
- *
- * `ensureLocalGateway` returns its cached handle without a liveness check, so
- * once the desktop's own daemon was killed the UI correctly said "Gateway down"
- * and nothing ever brought it back — the handle in `handles` still looked fine
- * and the supervisor only ever sees *start* failures, never post-start death.
- *
- * The trigger is deliberately narrow so this cannot become a hot restart loop:
- *
- *   - only an OWNED detached gateway (embedded ones die with the process;
- *     foreign daemons are not ours to restart, H3);
- *   - only when the pid is actually GONE. A daemon that is merely wedged or
- *     slow still holds gateway.db, and respawning against it would either be
- *     refused or start a second writer — so an unreachable-but-alive daemon is
- *     left to the down alert;
- *   - inside the `claimRevival` budget (gateway-supervisor-core.ts): a daemon
- *     that dies immediately every time stops being respawned after a few tries
- *     instead of being restarted on every monitor tick forever, and the crash
- *     loop surfaces through the existing supervisor/down alerts instead.
+ * Revival of an owned daemon that DIED after start — supervisor sees start
+ * failures only. Trigger stays narrow: OWNED detached only (H3), pid really
+ * GONE (a wedged daemon holds gateway.db), within claimRevival budget.
  */
 const revivals = new Map<string, RevivalBudget>();
 
@@ -352,13 +293,7 @@ function pidAlive(pid: number): boolean {
   }
 }
 
-/**
- * Called by the gateway monitor when its heartbeat fails. Drops the stale
- * cached handle and re-runs `ensureLocalGateway` when — and only when — the
- * owned detached daemon behind it is really gone. Resolves to whether a
- * revival was started; never rejects (the retry bookkeeping in
- * `ensureLocalGateway` already records the failure).
- */
+/** Never rejects; resolves to whether a revival started. */
 export async function reviveLocalGatewayIfDead(
   gatewayId: string
 ): Promise<boolean> {
@@ -376,8 +311,7 @@ export async function reviveLocalGatewayIfDead(
   );
   handles.delete(gatewayId);
   await ensureLocalGateway(gatewayId).catch((error: unknown) => {
-    // Recorded by the supervisor inside ensureLocalGateway; keep the monitor
-    // tick alive rather than turning a failed respawn into a crash-log entry.
+    // Already recorded by the supervisor; keep the monitor tick alive.
     process.stdout.write(
       `[local-gateway] respawn of "${gatewayId}" failed: ${error instanceof Error ? error.message : String(error)}\n`
     );
@@ -385,10 +319,7 @@ export async function reviveLocalGatewayIfDead(
   return true;
 }
 
-/**
- * Stop a local gateway. For **owned detached** children this SIGTERMs the
- * process group; foreign detached handles are left alone (H3). Idempotent.
- */
+/** Idempotent. Foreign detached handles are left alone (H3). */
 export async function shutdownLocalGateway(gatewayId: string): Promise<void> {
   const h = handles.get(gatewayId);
   if (!h) return;
@@ -396,14 +327,7 @@ export async function shutdownLocalGateway(gatewayId: string): Promise<void> {
   await h.close().catch(() => undefined);
 }
 
-/**
- * Stop local gateways except `exceptId`.
- *
- * **Detached gateways are skipped** — they outlive the UI (H1). Pass
- * `{ includeDetached: true }` only for explicit lifecycle (gateway switch
- * uses `shutdownLocalGateway` per id instead). App quit calls this with
- * defaults so only in-process embeds are closed.
- */
+/** Detached skipped by default (H1); `includeDetached` for explicit lifecycle only. */
 export async function shutdownAllLocalGatewaysExcept(
   exceptId?: string,
   options?: { includeDetached?: boolean }
@@ -417,10 +341,7 @@ export async function shutdownAllLocalGatewaysExcept(
   await Promise.all(ids.map((id) => shutdownLocalGateway(id)));
 }
 
-/**
- * Restart a local gateway: stop then start. Refuses foreign detached
- * gateways (H3). Manual restart always clears supervision bookkeeping.
- */
+/** Refuses foreign detached gateways (H3); always clears supervision state. */
 export async function restartLocalGateway(gatewayId: string): Promise<void> {
   const inFlight = restarting.get(gatewayId);
   if (inFlight) return inFlight;
@@ -444,56 +365,33 @@ export async function restartLocalGateway(gatewayId: string): Promise<void> {
 }
 
 /*
- * "Try again", pressed by a member who cannot reach Settings.
- *
- * The startup error screen appears when the shell could not READ its settings,
- * which on this desktop almost always means the local gateway would not start.
- * Once `ensureLocalGateway` has latched `loopBroken`, every subsequent read
- * fails instantly from the guard above — so a button that only re-read the
- * settings was dead the moment it appeared, even after the user had removed
- * the cause entirely (killed the process holding gateway.db, restored the
- * device credential file). It is the same recovery the Gateway page's Restart
- * offers, reachable from a screen that has no Gateway page.
- *
- * Clearing the automatic budgets is the whole point — see the tradeoff written
- * out at `claimManualRetry` in gateway-supervisor-core.ts. The floor there is
- * the only thing that survives, so leaning on the button costs one start
- * attempt per press rather than one per event-loop turn.
+ * "Try again" from the startup error screen: once loopBroken latches, clearing
+ * the automatic budgets is the point; claimManualRetry's floor survives,
+ * one attempt per press.
  */
 const lastManualRetryAt = new Map<string, number>();
 const manualRetryInFlight = new Map<string, Promise<void>>();
 
-/**
- * Clear every give-up latch for `gatewayId` and start it again. Rejects with
- * the start failure so the caller can report why the retry did not take.
- */
+/** Rejects with the start failure so the caller can report why it did not take. */
 export async function retryLocalGatewayStart(gatewayId: string): Promise<void> {
   const claim = claimManualRetry(lastManualRetryAt.get(gatewayId), Date.now());
   const pending = manualRetryInFlight.get(gatewayId);
-  // Inside the floor the press is collapsed into the previous one: the caller
-  // still gets a truthful outcome, just not a second spawn.
+  // Inside the floor a press collapses into the previous one.
   if (!claim.allowed && pending) return pending;
   lastManualRetryAt.set(gatewayId, claim.next);
-  // The revival budget belongs to the monitor's automatic respawns; a human
-  // asking for a start hands it back a full one. `restartLocalGateway` clears
-  // the start-failure supervisor state (`loopBroken`) and the backoff deadline,
-  // then runs the same stop → start a manual Restart does.
+  // A human press hands back the full revival budget.
   revivals.delete(gatewayId);
   const p = restartLocalGateway(gatewayId);
   manualRetryInFlight.set(gatewayId, p);
   return p;
 }
 
-/**
- * Owner-scoped vault operations on the running local gateway.
- */
 function localVaults(gatewayId: string): LocalGatewayRuntime["vaults"] {
   const h = handles.get(gatewayId);
   if (!h) throw new Error(`local gateway ${gatewayId} is not running`);
   return h.vaults;
 }
 
-/** Create a vault as the enrolled local owner. */
 export async function createLocalVault(
   gatewayId: string,
   name?: string
@@ -501,7 +399,7 @@ export async function createLocalVault(
   return localVaults(gatewayId).create(name);
 }
 
-/** Erase a vault through the typed-name owner ceremony. */
+/** Typed-name owner ceremony. */
 export async function deleteLocalVault(
   gatewayId: string,
   vaultId: string,

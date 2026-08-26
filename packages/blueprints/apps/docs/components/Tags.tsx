@@ -1,4 +1,4 @@
-// The Details drawer's tag editor (issue #352 phase 4): add/remove chips
+// The Details drawer's tag editor (#352): add/remove chips
 // over core.tag_item/untag_item (the shared "Tags" concept scheme,
 // packages/vault/src/commands/tags.ts) — additive and idempotent, so
 // retyping an existing label just no-ops rather than erroring. Mirrors the

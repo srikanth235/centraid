@@ -1,24 +1,7 @@
 /*
- * `session/request_permission` — the one server→client request we answer with
- * a decision rather than a refusal.
- *
- * Wire shape (verified against the public ACP spec):
- *   `session/request_permission` { sessionId, toolCall, options: [{ optionId,
- *   name, kind }] } → { outcome: { outcome: 'selected', optionId } |
- *   { outcome: 'cancelled' } }.
- *
- * `cancelled` means the PROMPT TURN was cancelled before this request could be
- * answered — agents unwind the whole turn on it. A per-tool refusal is a
- * `selected` outcome naming a `reject_once` / `reject_always` option, which
- * leaves the turn running with its pre-granted tools.
- *
- * We auto-allow the least-destructive option, matching the headless policy
- * codex/claude already run under: nothing in this surface can render an
- * approval prompt, so a turn that waited for one would simply stall.
- *
- * Every auto-allow also produces a `permission_auto_allowed` notice so the
- * transcript records what the harness asked for and what we picked — headless
- * is not the same as silent.
+ * Headless auto-answer: no surface can render an approval prompt, so waiting
+ * would stall. `cancelled` unwinds the PROMPT TURN whole; a per-tool refusal
+ * is `selected` naming reject_once/reject_always and keeps pre-granted tools.
  */
 
 import type {
@@ -28,14 +11,12 @@ import type {
 
 import type { TurnStreamEvent } from "@centraid/server/engine";
 
-/** The SDK validates this inbound frame before the handler receives it. */
 export function readPermissionOptions(
   params: RequestPermissionRequest
 ): PermissionOption[] {
   return params.options;
 }
 
-/** Best-effort tool title from the permission request's toolCall payload. */
 export function readPermissionToolTitle(
   params: RequestPermissionRequest
 ): string {
@@ -46,15 +27,7 @@ export function readPermissionToolTitle(
   return "tool";
 }
 
-/**
- * The option a confined turn answers with. `reject_once` is preferred over
- * `reject_always` so one denied request never poisons the harness's memory of
- * the tool for a later turn that runs under a different policy.
- *
- * Returns undefined only when the harness offered no reject option at all —
- * the one case where `{ outcome: 'cancelled' }` is the honest answer, even
- * though agents read that as "the prompt turn was cancelled".
- */
+/** Undefined only when no reject option exists — caller then sends `cancelled`. */
 export function pickRejectPermissionOption(
   options: PermissionOption[]
 ): string | undefined {
@@ -63,7 +36,6 @@ export function pickRejectPermissionOption(
   return (byKind("reject_once") ?? byKind("reject_always"))?.optionId;
 }
 
-/** Least-destructive allow: prefer allow_always, then allow_once, then any non-reject, then first. */
 export function pickPermissionOption(
   options: PermissionOption[]
 ): string | undefined {
@@ -78,7 +50,6 @@ export function pickPermissionOption(
     .optionId;
 }
 
-/** Transcript notice for an auto-allow decision. */
 export function permissionAutoAllowNotice(
   optionId: string,
   options: PermissionOption[],
@@ -96,7 +67,6 @@ export function permissionAutoAllowNotice(
   };
 }
 
-/** Transcript notice for a permission request refused by a confined surface. */
 export function permissionDeniedNotice(
   toolTitle: string
 ): Extract<TurnStreamEvent, { type: "notice" }> {

@@ -1,7 +1,5 @@
-// Export & portability (§10 standing duty; GDPR art.20): exit is a feature.
-// The whole model out as a verifiable artifact, and back in with identities
-// intact. §11 gates every new domain on this: "If export→reimport isn't
-// lossless, ownership is theater."
+// Export & portability (§10, GDPR art.20): whole model out verifiable, back
+// lossless — §11 gates every new domain on this.
 
 import type { VaultDb } from "../db.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
@@ -17,23 +15,18 @@ export interface VaultExport {
   format: "jsonld";
   ontologyVersion: string;
   exportedAt: string;
-  /** Logical entity → rows, PK-ordered. The hash covers exactly this. */
+  /** Logical entity → rows, PK-ordered; the hash covers exactly this. */
   tables: Record<string, Record<string, unknown>[]>;
-  /** sha256 over the canonical form of `tables`. */
+  /** sha256 over the canonical `tables`. */
   verifyHash: string;
   /**
-   * Entities a poisoned row knocked out of this export (issue #374 tier
-   * 4.3) — e.g. an out-of-range integer `node:sqlite` throws reading back
-   * rather than silently truncating. Absent/omitted means every entity made
-   * it in. `verifyHash` is computed over `tables` as actually assembled, so
-   * a skip here never desyncs round-trip verification — it just means the
-   * artifact is honestly partial instead of a single bad row sinking the
-   * whole export.
+   * Entities a poisoned row knocked out of this export (#374 tier 4.3);
+   * absent means all made it in. Skips never desync round-trip verification.
    */
   skippedTables?: { entity: string; error: string }[];
 }
 
-/** Deterministic JSON: object keys sorted at every level. */
+/** Deterministic JSON: keys sorted at every level. */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value !== null && typeof value === "object") {
@@ -56,10 +49,8 @@ function primaryKeyColumn(db: VaultDb, physical: string): string {
 }
 
 /**
- * Assemble the whole-model artifact, then record the consent.export_job row
- * and receipt. The job row is written *after* assembly so an export never
- * contains its own job — which is also what makes round-trip hashes
- * comparable.
+ * Assemble the artifact; the job row is written *after* assembly so an
+ * export never contains its own job.
  */
 export function exportVault(
   db: VaultDb,
@@ -71,11 +62,7 @@ export function exportVault(
   for (const logical of listVaultEntities(db.vault)) {
     const ref = resolveEntity(logical, db.vault);
     if (!ref) continue;
-    // Per-table isolation (issue #374 tier 4.3): one poisoned row anywhere
-    // — e.g. an INTEGER past Number.MAX_SAFE_INTEGER, which node:sqlite
-    // throws reading back rather than truncating — must not abort every
-    // OTHER table's export. Skip just this one, log it in the artifact and
-    // the receipt, and keep going.
+    // Per-table isolation (#374 4.3): a poisoned row skips its table; others continue.
     try {
       const pk = primaryKeyColumn(db, ref.physical);
       tables[logical] = db.vault
@@ -88,9 +75,7 @@ export function exportVault(
       });
     }
   }
-  // Computed over `tables` as actually assembled — a skipped table is never
-  // counted, so round-trip verification stays sound against the artifact
-  // that was actually produced, not the one that was attempted.
+  // Hash over `tables` as assembled; skipped tables never counted.
   const verifyHash = sha256Hex(canonicalJson(tables));
   const artifact: VaultExport = {
     format: "jsonld",
@@ -135,9 +120,8 @@ export function exportVault(
 }
 
 /**
- * Rebuild a fresh vault from an export, identities intact. FKs are checked
- * wholesale after load (imports arrive in registry order, but polymorphic
- * and self-referencing rows make per-row ordering impossible in general).
+ * Rebuild a fresh vault from an export, identities intact; FKs checked
+ * wholesale after load (per-row ordering impossible in general).
  */
 export function importVaultExport(
   db: VaultDb,
@@ -211,8 +195,7 @@ export function importVaultExport(
       }
       return n;
     };
-    // Canonical entities first — that loads consent_app_ext, whose specs
-    // then plant the ext-band tables before their rows arrive.
+    // Canonical entities first: loads consent_app_ext, planting ext-band tables.
     for (const logical of listVaultEntities()) imported += load(logical);
     recreateExtTables(db);
     for (const logical of listVaultEntities(db.vault)) {

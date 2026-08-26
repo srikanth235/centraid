@@ -1,33 +1,13 @@
-// NOTIFICATIONS — the phone's consent surface (#765, spec §2), revamped onto
-// the v9 block list.
-//
-// Agents stage external writes, connections lapse, high-risk acts park,
-// republished apps ask for wider scopes, and automations file notices. This
-// screen is the one place an owner sees all of it and decides.
-//
-// The v9 shape is a single BLOCK LIST, not a set of chip-gated views: the head
-// of the queue is promoted to a panel (the words are somebody else's, so they
-// are quoted, and every fact about where they are going is stated before the
-// commit), everything else waiting is a row, and the reference material
-// underneath — standing grants, updates, the archive — is sections of rows in
-// the same list rather than content hidden behind a filter.
-//
-// WHAT THE OLD SCREEN DID, AND WHERE IT WENT (nothing was dropped):
-//   • the five-way source filter (Needs me / Automations / Agents / Apps /
-//     Archived) → the queue chips narrow by what a thing NEEDS, and the
-//     notices that are not demands live in `Updates` and `Archived` sections
-//     that are always present rather than one filter position away.
-//   • `OutboxDecisionCard` → the panel, plus two rows under it carrying the
-//     edit form and the always-allow toggle (see `approvals/StagedWrite.tsx`).
-//   • the `Reconnect` card → an `Also waiting` row whose verb runs the same
-//     in-app OAuth ceremony, with the "stay here until it closes" sentence
-//     kept on the row, because leaving the app still breaks the ceremony.
-//   • `no-gateway` → the error panel with the pairing sentence and the
-//     `Open Settings` way forward. It was never a sixth visual state.
-//   • `Loading…` → the skeleton at row geometry. Never a spinner.
-//
-// The data half is `approvals/useApprovals.ts`; every word is
-// `approvals/approvals-model.ts`. This file owns the frame and the sequence.
+// NOTIFICATIONS — consent surface (#765, spec §2): staged writes, lapsed
+// connections, parked high-risk acts, scope requests, automation notices —
+// the one place an owner sees all of it and decides. V9 shape = single BLOCK
+// LIST; nothing behind a filter, nothing dropped:
+//   • chips narrow by what a thing NEEDS; non-demands sit in always-present
+//     `Updates`/`Archived` sections
+//   • staged write = panel + edit row + always-allow row (`StagedWrite.tsx`)
+//   • lapsed connection = `Also waiting` row running the OAuth ceremony
+//   • `no-gateway` = error panel + pairing sentence + `Open Settings`
+// Data half `useApprovals.ts`; words `approvals-model.ts`.
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
@@ -91,9 +71,7 @@ export default function ApprovalsScreen({
     []
   );
 
-  /** The bar's filled verb. Not a navigation: it drops whatever filter is in
-   *  force and puts the head of the queue back in the panel, which is what
-   *  "review all of it" means on a page whose content is already all here. */
+  /** Not navigation: drops the active filter and re-promotes the queue head. */
   const reviewAll = useCallback(() => {
     setFocus({
       alwaysAllow: false,
@@ -109,8 +87,7 @@ export default function ApprovalsScreen({
     scroller.current?.scrollTo({ animated: true, y: grantsY.current });
   }, []);
 
-  /** Where tapping a notice goes. The alert history is the Gateway page's
-   *  Alerts tab — one implementation, reached from both places. */
+  /** Alert history is the Gateway page's Alerts tab — one implementation, two entries. */
   const openNotice = useCallback(
     (notice: MobileNotice): void => {
       const parent = navigation.getParent();
@@ -147,13 +124,11 @@ export default function ApprovalsScreen({
     <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
       <View style={styles.page}>
         <View style={styles.head}>
-          {/* `goBack`, not a pop to Settings: this cover is also reached from
-              a push notification, where Settings is not beneath it. */}
+          {/* Not pop-to-Settings: also reached from push notifications, where Settings isn't beneath. */}
           <HomeKey onPress={() => navigation.goBack()} variant="leave" />
           <View style={styles.headBar}>
             <PlaceHeader
-              // The reference's gating: the filled commit is hidden while
-              // loading AND while errored; the quiet verb only while loading.
+              // Filled commit hidden while loading AND errored; quiet verb only while loading.
               primary={
                 showCommit
                   ? { label: "Review all", onPress: reviewAll }
@@ -236,7 +211,7 @@ function ApprovalsBody(props: BodyProps): React.JSX.Element {
             : undefined
         }
         action={{ label: ERROR_RETRY, onPress: page.retry }}
-        // The one way forward a phone that was never paired actually has.
+        // The one way forward an unpaired phone has.
         action2={
           page.load.kind === "error" && page.load.unpaired
             ? { label: "Open Settings", onPress: props.onOpenSettings }

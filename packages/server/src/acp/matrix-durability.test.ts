@@ -1,5 +1,4 @@
 /**
- * Matrix cell agent-runtime.durability (#535 coverable-today).
  * Preflight cache must be clearable and semver parse must be stable.
  */
 import { describe, expect, test } from "vitest";

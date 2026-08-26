@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// One place's photographs (issue #781) — the screen a Places card opens.
+// One place's photographs (#781) — the screen a Places card opens.
 //
 // What this file owns that `places-model.test.ts` cannot: the head's sentence,
 // the empty state's, and the two exits. Specifically:
@@ -351,7 +351,7 @@ describe("one place's photographs (native)", () => {
   });
 });
 
-// THE NAMING CONVERSATION (issue #816) — the phone is the primary surface for
+// THE NAMING CONVERSATION (#816) — the phone is the primary surface for
 // it, because the phone is where the photographs were taken.
 //
 // A place minted from GPS carries its own coordinate as a label, and every

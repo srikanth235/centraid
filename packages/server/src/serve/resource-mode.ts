@@ -1,11 +1,9 @@
 /*
- * Owner-facing Resource mode (#521) — one durable preference that feeds the
- * existing hardware-profile resolver (issue #456 A7). Modes never invent a
- * second policy path: Conserve/Balanced/Performance only select class and
- * throughput tier; Auto keeps boot-time detection.
- *
- * Pref key lives under the gateway preferences table (`gateway.db`) so the shell
- * can write it via PUT `/_centraid-user/prefs` without env vars.
+ * Owner-facing Resource mode (#521) — one durable preference feeding the
+ * existing hardware-profile resolver (#456). Modes NEVER add a second policy
+ * path: they only select class and throughput tier; Auto keeps boot-time
+ * detection. Pref key lives under the gateway preferences table (`gateway.db`)
+ * so the shell writes it via PUT `/_centraid-user/prefs` — no env vars.
  */
 
 export type ResourceMode = "auto" | "conserve" | "balanced" | "performance";
@@ -21,13 +19,11 @@ export const RESOURCE_MODES: readonly ResourceMode[] = [
 export const RESOURCE_MODE_PREF_KEY = "gateway.resourceMode";
 
 /**
- * Prioritized per-knob UI overrides (#528 Phase F). These sit alongside the
- * Resource *mode*: mode selects a budget preset; these four keys let the owner
- * pin an individual throughput knob above/below that preset from the shell.
- * An absent key means "Linked" (follow the preset). Precedence per knob is
- * env > prefs > preset, resolved in the ONE hardware-profile resolver — these
- * keys never add a second policy path. Values are positive integers; the
- * resolver clamps them through the same bounds as the matching env var.
+ * Prioritized per-knob UI overrides (#528): mode selects a budget preset;
+ * these keys pin an individual knob above/below it from the shell. Absent key
+ * = "Linked". Precedence per knob is env > prefs > preset, resolved in the ONE
+ * hardware-profile resolver — never a second policy path. Positive integers;
+ * the resolver clamps them like the matching env var.
  */
 export interface ResourceKnobOverrides {
   workerMaxConcurrent?: number;
@@ -55,10 +51,9 @@ function safePositiveInteger(value: unknown): number | undefined {
 }
 
 /**
- * Read the durable knob overrides out of the flat prefs KV. Garbage (strings,
- * negatives, floats, NaN, missing) is silently dropped so a hand-edited or
- * stale preference values can never widen a bound or crash boot — the resolver still
- * clamps whatever survives.
+ * Read durable knob overrides from the flat prefs KV. Garbage (strings,
+ * negatives, floats, NaN, missing) is silently dropped — a hand-edited pref
+ * can never widen a bound or crash boot; the resolver still clamps survivors.
  */
 export function parseResourceKnobPrefs(
   prefs: Record<string, unknown>
@@ -86,10 +81,7 @@ export function parseResourceMode(value: unknown): ResourceMode | undefined {
   return isResourceMode(value) ? value : undefined;
 }
 
-/**
- * Resolve the effective Resource mode. Operator env wins, then durable
- * device prefs (owner UI), then daemon config option, else Auto.
- */
+/** Resolve the effective mode: operator env, then durable device prefs (owner UI), then daemon config option, else Auto. */
 export function resolveResourceMode(input: {
   env?: NodeJS.ProcessEnv;
   optionsMode?: unknown;
@@ -118,7 +110,6 @@ export function resourceModeLabel(mode: ResourceMode): string {
   }
 }
 
-/** Human-readable event-loop probe detail (shared by health API + UI). */
 export function formatEventLoopDetail(sample: {
   eventLoopLagP50Ms: number;
   eventLoopLagP99Ms: number;
@@ -131,12 +122,10 @@ export function formatEventLoopDetail(sample: {
   return `Responsive (${numbers})`;
 }
 
-/** Human-readable load-shed component detail while pressure is active. */
 export function formatLoadShedDeferringDetail(p99Ms: number): string {
   return `Busy: pausing backups, sweeps, and other background work so apps stay responsive (event-loop p99 ${p99Ms.toFixed(1)} ms)`;
 }
 
-/** Human-readable load-shed detail when a forced pass is admitted after max deferral. */
 export function formatLoadShedForcedPassDetail(
   p99Ms: number,
   deferredMs: number
@@ -149,11 +138,7 @@ export function formatLoadShedClearedDetail(): string {
   return "Event-loop pressure cleared; background work resumes";
 }
 
-/**
- * Human-readable detail for the owner-triggered background pause (#528
- * Phase B). Durability work — WAL/fsync and the consent outbox — is never
- * gated, so the copy names only the loops that actually stop.
- */
+/** Owner-triggered background pause (#528 Phase B). Durability work — WAL/fsync and the consent outbox — is NEVER gated, so the copy names only loops that actually stop. */
 export function formatBackgroundPausedDetail(until: string | null): string {
   const scope =
     "Paused non-urgent background work (vault sweeps, backup retention)";
@@ -166,12 +151,7 @@ export function formatBackgroundResumedDetail(): string {
   return "Background work resumed";
 }
 
-/**
- * Human-readable detail for the host power-context posture component (#528
- * Phase D). Posture is a COURTESY, not a fault — the component stays `ok`
- * and the copy explains why background work is deferring right now, never
- * an alarm and never a durable mode flip.
- */
+/** Host power-context posture detail (#528 Phase D). Posture is a COURTESY, not a fault — stays `ok`, explains the deferral, never an alarm or durable mode flip. */
 export function formatPowerPostureDeferringDetail(
   reason: "on-battery" | "low-battery" | "thermal",
   kind: "battery" | "mains" | "server"

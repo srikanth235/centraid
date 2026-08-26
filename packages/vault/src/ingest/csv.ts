@@ -1,4 +1,4 @@
-// Bank-statement CSV parsing (issue #290 phase 2). Deliberately narrow: a
+// Bank-statement CSV parsing (#290). Deliberately narrow: a
 // header row naming a date, a description and an amount column (aliases
 // below), optional currency and id columns. Signed amounts: negative = debit.
 // Two-decimal minor units — the common case for consumer statements; exotic

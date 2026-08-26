@@ -1,10 +1,8 @@
-// The nested app-stack navigators, split out of `App.tsx` for the same reason
-// `lazy-screens.tsx` was (#765, extended by #821): the composition root crossed
-// the repo's 625-line ceiling once Docs and People became stacks again, and
-// this block has a single job — wire each cover's screens into its stack — with
-// no coupling to boot, providers, or the root navigator. It lives beside
-// `App.tsx`, not under `src/`, because it names screens from every app and only
-// the composition root may do that (`scripts/check-import-boundaries.ts`).
+// The nested app-stack navigators: each cover's screens wired into its stack.
+//
+// It lives beside `App.tsx`, not under `src/`, because it names screens from
+// every app and only the composition root may do that
+// (`scripts/check-import-boundaries.ts`).
 
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";

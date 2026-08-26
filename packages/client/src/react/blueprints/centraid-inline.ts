@@ -5,25 +5,13 @@ import type {
   InlineAppModule,
   InlineScope,
 } from "@centraid/blueprints/apps/inline-types";
-// The inline `window.centraid` — the app client every blueprint app talks to.
-// Backed by the shell replica session: reads run the app's query modules locally
-// (inlineQueryCtx), writes go through the replica intent dispatch carrying the
-// caller's `intentId` verbatim (#406 dedupe lives in the session/route — never
-// re-minted here), and `onChange` is a replica-invalidation subscription mapped
-// into the kit's `CentraidChangeDetail` shape.
+// The inline `window.centraid` every blueprint app talks to, backed by the
+// shell replica session. Writes carry the caller's `intentId` VERBATIM — #406
+// dedupe lives in the session/route and is never re-minted here.
 //
-// MULTI-SCOPE (issue #599). An app may be mounted over N scopes at once — the
-// member's own scope plus every audience scope they belong to — each backed by
-// its OWN replica session. The facade is therefore built from an ordered list of
-// scope bindings whose FIRST entry is the primary (the member's own): `read`
-// addresses the primary unless told otherwise, `readAll` fans out, `write`
-// addresses one named scope and refuses a scope the member cannot write, and
-// `onChange` fans in with every event tagged by the scope it came from.
-//
-// `createInlineCentraidClient` builds the client and writes nothing global;
-// `installInlineCentraid` publishes it on `window.centraid` and returns a
-// teardown that restores whatever was there before. Only one inline app is
-// mounted at a time, so a single module-level install is still enough.
+// MULTI-SCOPE (#599): an app may be mounted over N scopes, each with its own
+// replica session. Bindings are ordered, FIRST is the primary: `read` hits the
+// primary, `readAll` fans out, `write` names one scope, `onChange` tags each.
 import { appActionPath, appQueryPath, ROUTES } from "@centraid/core/protocol";
 
 import {
@@ -53,7 +41,6 @@ interface InlineLinkDestination {
   vaultId: string;
   partyId: string;
   approved: boolean;
-  /** The linked vault's own name from the vault directory (#750), or null. */
   label: string | null;
 }
 
@@ -69,18 +56,15 @@ interface InlineCommonsShareResult extends Record<string, unknown> {
   claims: Array<{ partyId: string; claimToken: string }>;
 }
 
-/** The kit change-feed event shape (blueprints' ambient `CentraidChangeDetail`). */
 interface InlineChangeDetail {
   tables?: string[];
   source?: string;
   intentId?: string;
   intentState?: string;
   ts?: number;
-  /** Which mounted scope burst. Apps refetch only this one (issue #599). */
   scope?: string;
 }
 
-/** The replica surface one scope binding needs. */
 export type InlineScopeSession = Pick<
   ReplicaShellSession,
   "read" | "search" | "write" | "subscribe"
@@ -89,7 +73,6 @@ export type InlineScopeSession = Pick<
     Pick<ReplicaShellSession, "discardPendingWrite" | "retryPendingWrite">
   >;
 
-/** One mounted scope: its shell-resolved descriptor and its replica session. */
 export interface InlineScopeBinding {
   scope: InlineScope;
   session: InlineScopeSession;
@@ -100,10 +83,7 @@ export type InlineScopeRead<T> =
   | { scope: string; ok: true; data: T }
   | { scope: string; ok: false; error: { code?: string; message: string } };
 
-/** Durable member-side overlay for a command waiting on its Commons steward.
- * `expired` (a parked intent that outlived its review window) and
- * `cancelled` (a member-initiated cancel) are settled states like `denied`
- * (issue #731 goal 2). */
+/** `expired` and `cancelled` are settled states like `denied`. */
 export interface InlineCommonsIntent {
   intentId: string;
   grantId: string;
@@ -117,11 +97,9 @@ export interface InlineCommonsIntent {
   settledAt?: string;
 }
 
-/** A People-directory identity available to the ceremony-free share sheet. */
 export interface InlineShareTarget {
   partyId: string;
   label: string;
-  /** Absent while the person is invited but has not joined with a vault. */
   vaultId?: string;
 }
 
@@ -148,7 +126,6 @@ export class InlineScopeError extends Error {
 
 export interface InlineCentraidClient {
   appId: string;
-  /** Mounted scopes, primary (the member's own) first. */
   scopes: InlineScope[];
   read: <T = Record<string, unknown>>(opts: {
     query: string;
@@ -160,7 +137,6 @@ export interface InlineCentraidClient {
     query: string;
     input?: Record<string, unknown>;
     signal?: AbortSignal;
-    /** Restrict the fan-out (e.g. "load more" hits only the horizon scopes). */
     scopes?: readonly string[];
   }) => Promise<InlineScopeRead<T>[]>;
   write: <T = unknown>(opts: {
@@ -169,31 +145,19 @@ export interface InlineCentraidClient {
     intentId?: string;
     signal?: AbortSignal;
     scope?: string;
-    /** Bypass every replica/outbox path for sealed or otherwise non-durable input. */
+    /** Bypass every replica/outbox path for sealed or non-durable input. */
     onlineOnly?: boolean;
   }) => Promise<T>;
   retryPendingWrite: (intentId: string, scope?: string) => Promise<boolean>;
   discardPendingWrite: (intentId: string, scope?: string) => Promise<boolean>;
-  /** Leave the app for the shell-owned owner/steward review inbox. */
   openApprovals?: () => void;
-  /**
-   * Leave this app for another first-party one (#834). The one door the
-   * cross-app projections need: Agenda's due-task shelf and Notes' Send to
-   * Tasks both show a fact that another room OWNS, and handing the member
-   * there is navigation, never a second copy of that room's UI.
-   */
+  /** Handing the member to another first-party app is navigation, never a second copy of that room's UI (#834). */
   openApp?: (appId: string, focus?: { taskId?: string }) => void;
-  /** Commands durably queued on this member seat while its steward is away. */
   commonsIntents: (opts?: {
     scope?: string;
     signal?: AbortSignal;
   }) => Promise<InlineCommonsIntent[]>;
-  /** Cancel a durable Commons intent that has not executed yet (issue #731
-   * goal 2). Idempotent and safe to race with the steward — the vault-side
-   * guard only ever moves a still-open (`queued`/`parked`) intent to
-   * `cancelled`; an intent the steward already settled comes back
-   * unchanged, so the caller reads the real outcome off the result rather
-   * than assuming the cancel won. */
+  /** Idempotent and racy-safe: the vault-side guard only moves a still-open intent, so read the real outcome off the result rather than assuming the cancel won. */
   cancelCommonsIntent: (opts: {
     intentId: string;
     scope?: string;
@@ -213,7 +177,6 @@ export interface InlineCentraidClient {
     sourceVaultId: string;
     targetVaultId: string;
   }) => Promise<Record<string, unknown>>;
-  /** Share a complete actable container into every joined member's vault. */
   share: (opts: {
     containerType:
       | "core.collection"
@@ -232,15 +195,12 @@ export interface InlineCentraidClient {
     }[];
     circleId?: string;
   }) => Promise<InlineCommonsShareResult>;
-  /** People-directory identities, joined to a vault only after acceptance. */
   shareTargets: () => Promise<InlineShareTarget[]>;
-  /** Mint a People person inline from the ShareSheet. Online-only: resolves
-   *  only with a real, settled party id — never a pending overlay id. */
+  /** Online-only: resolves only with a settled party id, never a pending overlay id. */
   quickAddPerson: (opts: {
     name: string;
   }) => Promise<{ partyId: string; label: string }>;
-  /** Deliberately reusable named audiences. Implicit per-container circles
-   * are excluded by construction. */
+  /** Implicit per-container circles are excluded by construction. */
   shareCircles: () => Promise<InlineShareCircle[]>;
   commonsResidents: (actorVaultId?: string) => Promise<InlineCommonsResident[]>;
   retainCommonsItem: (opts: {
@@ -248,26 +208,16 @@ export interface InlineCentraidClient {
     itemType: string;
     itemId: string;
   }) => Promise<{ retained: boolean; grantIds: string[] }>;
-  /** The household's cross-vault links (#726 P6) — candidate share
-   *  destinations beyond the member's own mounted scopes, co-hosted and
-   *  remote alike (D3: locality is routing, not semantics). */
   links: () => Promise<InlineLinkDestination[]>;
-  /** The grant plane (#825): standing shares, read and written by the
-   *  shared `_shared/grant-door` kit rather than by any app directly. */
   grants: GrantBridge;
   describe: () => Promise<unknown>;
   onChange: (cb: (detail: InlineChangeDetail) => void) => () => void;
-  /** An authed `blob:` URL for a `/_vault/blobs/…` path in one scope. */
   blobUrl: (pathname: string, scope?: string) => Promise<string | null>;
-  /** Authed text bytes, without a CSP-governed second fetch of a blob URL. */
   blobText: (pathname: string, scope?: string) => Promise<string | null>;
-  /** Stream a File into the vault's blob CAS (see blob-staging.ts). */
   stageBlob: typeof stageBlob;
-  /** Submit a typed derivative contribution against a staged parent. */
   stageDerivative: typeof stageDerivative;
 }
 
-/** Codes on which a failed local read escalates to the gateway tool route. */
 const FALLBACK_CODES = new Set([
   "ONLINE_ONLY",
   "REPLICA_UNAVAILABLE",
@@ -280,13 +230,7 @@ function canFallbackOnline(error: unknown): boolean {
   return typeof code === "string" && FALLBACK_CODES.has(code);
 }
 
-/**
- * The escalation path when a local read cannot be answered from the replica.
- * It names the scope explicitly for the same reason the replica transport does
- * (see `fetchReplicaForScope`): without it the gateway answers for whichever
- * vault is FOCUSED, so a secondary scope would silently render the primary's
- * rows.
- */
+/** Names the scope explicitly, or the gateway answers for whichever vault is FOCUSED and a secondary scope renders the primary's rows. */
 async function gatewayRead(
   appId: string,
   query: string,
@@ -305,11 +249,7 @@ async function gatewayRead(
   return readJson<unknown>(res, `read ${query}`);
 }
 
-/**
- * Invoke an explicitly online-only action without ever presenting its payload
- * to a replica session. The served iframe bridge has the same policy boundary;
- * keeping it here prevents the inline seat from durably queueing sealed input.
- */
+/** Never presents its payload to a replica session: the inline seat must not durably queue sealed input. */
 async function gatewayAction(
   appId: string,
   action: string,
@@ -330,7 +270,6 @@ async function gatewayAction(
   return readJson(response, `write ${action}`);
 }
 
-/** Map one replica invalidation into the kit change-feed detail shape. */
 function toChangeDetail(
   invalidation: ReplicaInvalidation,
   scope: string
@@ -399,26 +338,15 @@ async function loadShareTargets(
     targets.set(link.partyId, {
       partyId: link.partyId,
       vaultId: link.vaultId,
-      // The directory's own name for that vault (#750). When it truly has
-      // none, say so honestly — a truncated vault id is not a person's name
-      // and never read as one.
       label: link.label ?? "Linked person",
     });
   }
   return [...targets.values()];
 }
 
-/** The default check-in cadence a person gets when People mints them without
- * the member choosing one, matching the People screen's own default. */
 const QUICK_ADD_CADENCE_DAYS = 30;
 
-/**
- * The party id a quick-add write actually settled on, or a throw. Only an
- * `executed` intent has a real identity behind it: `queued`/`parked` are still
- * waiting on a steward, and `denied`/`expired`/`cancelled` never happened at
- * all. A `pending:` id is the offline overlay's placeholder, never a person —
- * returning one would put a nonexistent identity into a share.
- */
+/** Only an `executed` intent has a real identity: queued/parked are still waiting, denied/expired/cancelled never happened, and a `pending:` id names nobody. */
 export function settledPartyIdFromOutcome(outcome: unknown): string {
   const settled = outcome as {
     status?: unknown;
@@ -453,9 +381,6 @@ async function loadShareCircles(
       .read("people", { entity: "core.vault", limit: 1 })
       .catch(() => undefined),
   ]);
-  // A current-owner Tally group is the shipped, deliberate named-circle
-  // surface. Commons' implicit circles have no tally_group decorator; a
-  // projected/foreign group has another owner. Neither can enter this picker.
   const ownerPartyId = vault?.rows[0]?.values["owner_party_id"];
   if (typeof ownerPartyId !== "string") return [];
   const ownedCircles = new Set(
@@ -491,9 +416,7 @@ async function loadShareCircles(
       continue;
     if (partyId === ownerPartyId) continue;
     const target = targetByParty.get(partyId);
-    // The steward is implicit in createCommonsGrant and is never submitted as
-    // a member. Every other member must resolve exactly; a partial roster is
-    // not offered as reusable.
+    // The steward is implicit in createCommonsGrant. Every other member must resolve exactly: a partial roster is not offered as reusable.
     if (!target) {
       incomplete.add(circleId);
       continue;
@@ -523,11 +446,7 @@ async function loadShareCircles(
   });
 }
 
-/**
- * The single-scope shape a pre-#599 caller passes. Its scope id is empty, which
- * every scope-addressed transport reads as "the ambient scope" — exactly the
- * behaviour that path had before.
- */
+/** Its scope id is empty, which every scope-addressed transport reads as the ambient scope. */
 const AMBIENT_SCOPE: InlineScope = { id: "", label: "Library", canWrite: true };
 
 export interface CreateInlineCentraidOptions {
@@ -536,12 +455,9 @@ export interface CreateInlineCentraidOptions {
   queries: InlineAppModule["queries"];
   /** Mounted scopes, primary first. Mutually exclusive with `session`. */
   scopes?: readonly InlineScopeBinding[];
-  /** Single-scope shorthand (pre-#599 callers and single-scope apps). */
   session?: InlineScopeSession;
   isOnline?: () => boolean;
-  /** Shell navigation stays injected; blueprints never import shell routing. */
   onOpenApprovals?: () => void;
-  /** The cross-app door, injected for the same reason (#834). */
   onOpenApp?: (appId: string, focus?: { taskId?: string }) => void;
 }
 
@@ -554,23 +470,13 @@ function bindingsOf(
   throw new Error("An inline client needs at least one mounted scope");
 }
 
-/**
- * Live controls for a built client, kept OFF the client object so an app can
- * never reach them. The route host hydrates secondary scopes after first paint
- * (issue #599): the primary scope blocks the first render, every audience
- * arrives later through `addInlineScope`.
- */
+/** Kept OFF the client object so an app can never reach them. Secondary scopes hydrate after first paint; only the primary blocks the first render. */
 interface InlineClientControls {
   add: (binding: InlineScopeBinding) => void;
 }
 const controls = new WeakMap<object, InlineClientControls>();
 
-/**
- * Grant-plane transport stays off the eager shell graph. `App.tsx` pulls
- * `centraid-inline` on signed-in Home; a static `grant-wire` import put
- * protocol helpers on that path. Methods `import()` the module on first
- * call so Tasks/Home never pay it.
- */
+/** Grant-plane transport stays off the eager shell graph: methods `import()` it on first call so Tasks/Home never pay for it. */
 function lazyGrantBridge(getAuth: () => Promise<GatewayAuth>): GrantBridge {
   let pending: Promise<GrantBridge> | undefined;
   const loaded = (): Promise<GrantBridge> =>
@@ -588,12 +494,7 @@ function lazyGrantBridge(getAuth: () => Promise<GatewayAuth>): GrantBridge {
   };
 }
 
-/**
- * Hydrate one more scope into an already-installed client. Returns false when
- * the object is not a client this module built. Existing `onChange` listeners
- * are extended to the new scope and then told it arrived, so an app refetches
- * exactly the scope that appeared rather than re-reading all of them.
- */
+/** Extends existing `onChange` listeners to the new scope and then announces it, so an app refetches exactly the scope that appeared. */
 export function addInlineScope(
   client: unknown,
   binding: InlineScopeBinding
@@ -605,7 +506,6 @@ export function addInlineScope(
   return true;
 }
 
-/** Build the inline client for one app over N scopes. Writes nothing global. */
 export function createInlineCentraidClient(
   options: CreateInlineCentraidOptions
 ): InlineCentraidClient {
@@ -613,8 +513,6 @@ export function createInlineCentraidClient(
   const bindings = bindingsOf(options);
   const byId = new Map(bindings.map((binding) => [binding.scope.id, binding]));
   const primary = bindings[0]!;
-  // Live `onChange` registrations, so a scope hydrated later still reaches
-  // listeners that subscribed before it existed.
   const listeners = new Set<{
     cb: (detail: InlineChangeDetail) => void;
     stops: Map<string, () => void>;
@@ -674,12 +572,10 @@ export function createInlineCentraidClient(
 
   const client: InlineCentraidClient = {
     appId,
-    // The SAME array the app holds: hydrating a scope pushes into it, so an
-    // app that captured `client.scopes` sees the audience appear.
+    // The SAME array the app holds, so a hydrated scope appears to a captured ref.
     scopes: bindings.map((binding) => binding.scope),
 
-    // `async` deliberately: an unmounted-scope refusal must REJECT like every
-    // other read failure, not throw synchronously out of the call site.
+    // `async` deliberately: an unmounted-scope refusal must REJECT like any other read failure, not throw synchronously.
     async read<T>(opts: {
       query: string;
       input?: Record<string, unknown>;
@@ -689,11 +585,7 @@ export function createInlineCentraidClient(
       return readIn<T>(bindingFor(opts.scope), opts);
     },
 
-    /**
-     * Fan a query across scopes. Settled per scope: one audience being
-     * unreachable, unmigrated, or denied must never blank the whole surface, so
-     * its failure rides back as an entry the app can render beside live data.
-     */
+    /** Settled per scope: one unreachable audience must never blank the whole surface. */
     async readAll<T>(opts: {
       query: string;
       input?: Record<string, unknown>;
@@ -723,17 +615,14 @@ export function createInlineCentraidClient(
       onlineOnly?: boolean;
     }) {
       const binding = bindingFor(opts.scope);
-      // A read-only audience is refused HERE rather than at the gateway: the
-      // app gets a typed code it can turn into a disabled control, instead of a
-      // 403 after the user already committed to the action.
+      // Refused HERE, not at the gateway, so the app gets a typed code for a disabled control instead of a 403 after the user committed.
       if (!binding.scope.canWrite) {
         throw new InlineScopeError(
           "SCOPE_READONLY",
           `${binding.scope.label} is read-only here.`
         );
       }
-      // Sealed inputs must never cross the durable session boundary. Network
-      // failure is returned to the app and cannot fall back to queueing.
+      // Sealed inputs must never cross the durable session boundary; a network failure cannot fall back to queueing.
       if (opts.onlineOnly === true) {
         return (await gatewayAction(
           appId,
@@ -761,9 +650,7 @@ export function createInlineCentraidClient(
           ? { baseVersions: projected.baseVersions }
           : {}),
       });
-      // Shape the intent outcome into the `VaultOutcome` the kit narrates: the
-      // durable intentId is the app's `invocationId` (pending-add key), and any
-      // handler output rides through unchanged.
+      // The durable intentId is the app's `invocationId` (pending-add key); handler output rides through unchanged.
       const outcome = result as {
         intentId: string;
         status: string;
@@ -833,8 +720,7 @@ export function createInlineCentraidClient(
           if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
             input = parsed as Record<string, unknown>;
         } catch {
-          // A malformed historical row remains visible with an empty payload;
-          // the overlay must not disappear merely because it cannot be drawn.
+          // A malformed historical row stays visible with an empty payload: the overlay must not vanish because it cannot be drawn.
         }
         const stewardLabel = intent.stewardLabel ?? undefined;
         const reason =
@@ -887,8 +773,6 @@ export function createInlineCentraidClient(
           "Placement needs a gateway connection on web; the native app queues it offline."
         );
       const { baseUrl, token } = await auth();
-      // The wire door is `/edges` now (#726 P2); place()'s signature/result
-      // stay pre-#726-P2 (placement-wire.ts), so no caller needs an edit.
       const response = await doFetch(baseUrl, ROUTES.gatewayEdges, {
         method: "POST",
         headers: authHeaders(token, "application/json"),
@@ -930,15 +814,12 @@ export function createInlineCentraidClient(
           "INVALID_INPUT",
           "A person needs a name before they can be added."
         );
-      // No offline queue for this one: the sheet needs the settled party id
-      // right now to name a member, and an overlay id names nobody.
+      // No offline queue: the sheet needs the settled party id now, and an overlay id names nobody.
       if (!isOnline())
         throw new Error(
           "Adding a person needs a gateway connection on web; add them from the People app on the native seat."
         );
-      // Written under the PEOPLE app's identity from whichever app is
-      // embedding the sheet — the same cross-app-id path `loadShareTargets`
-      // reads the roster over, so no app manifest grows a People grant.
+      // Written under the PEOPLE app's identity, so no app manifest grows a People grant.
       const outcome = await primary.session.write("people", {
         action: "add-person",
         input: {
@@ -972,15 +853,9 @@ export function createInlineCentraidClient(
       return loadLinkDestinations(primary.scope.id);
     },
 
-    // One door. Transport loads on first call so Home/Tasks stay off the
-    // grant-plane chunk (see `lazyGrantBridge`). The vault header `doFetch`
-    // stamps is what addresses it — no scope argument.
     grants: lazyGrantBridge(auth),
 
     describe() {
-      // Manifests ship in the shell bundle; no inline app reads describe on the
-      // render path today, so answer with an empty descriptor rather than a
-      // network round-trip (issue #505 surface inventory).
       return Promise.resolve({ commands: [] });
     },
 
@@ -1005,10 +880,7 @@ export function createInlineCentraidClient(
       return authorizeBlobText(pathname, id || undefined);
     },
 
-    // The upload half of the same door. Passed through rather than bound to
-    // the primary scope: `stageFileBytes({scope})` names the mounted scope the
-    // bytes belong to, and defaulting it here would quietly stage an
-    // audience's upload into the member's own CAS (issue #599).
+    // Passed through, never bound to the primary: defaulting it would stage an audience's upload into the member's own CAS (#599).
     stageBlob,
     stageDerivative,
   };
@@ -1024,9 +896,6 @@ export function createInlineCentraidClient(
           binding.scope.id,
           subscribe(registration.cb, binding)
         );
-        // Announce the arrival on the same channel a burst uses, tagged with
-        // the new scope — the app's existing per-scope refetch handles it, and
-        // nothing has to re-read the scopes that were already painted.
         registration.cb({
           source: "scope-added",
           scope: binding.scope.id,
@@ -1039,18 +908,12 @@ export function createInlineCentraidClient(
 }
 
 export interface InstallInlineCentraidOptions extends CreateInlineCentraidOptions {
-  /** Test seam for the window the client is published on. */
   target?: { centraid?: unknown };
-  /**
-   * The client that was published. The route host keeps it so later scope
-   * hydration extends THIS client rather than whatever is on `window` by then
-   * (a remount installs its own).
-   */
+  /** The route host keeps THIS client, so later hydration extends it rather than whatever is on `window` by then. */
   onInstalled?: (client: InlineCentraidClient) => void;
 }
 
-/** Clients this module has published. Restoring one on teardown is the
- * goHome hang: Home is painted, `window.centraid` still names a client. */
+/** Restoring one on teardown is the goHome hang: Home painted, `window.centraid` still naming a client. */
 const publishedClients = new WeakSet<object>();
 
 function isPublishedClient(value: unknown): boolean {
@@ -1059,7 +922,6 @@ function isPublishedClient(value: unknown): boolean {
   );
 }
 
-/** Install `window.centraid` for one inline app mount; returns the teardown. */
 export function installInlineCentraid(
   options: InstallInlineCentraidOptions
 ): () => void {
@@ -1072,10 +934,7 @@ export function installInlineCentraid(
   target.centraid = client;
   options.onInstalled?.(client);
   return () => {
-    // Scope-set remounts (and discarded useState initializers whose teardown
-    // never armed) install a successor while this client is still published.
-    // Only the live client may clear the slot; never restore a client this
-    // module published — that leaves `window.centraid` set after Home.
+    // A successor may install while this client is still published, so only the live client may clear the slot — never restore one this module published.
     if (target.centraid !== client) return;
     target.centraid = isPublishedClient(previous) ? undefined : previous;
   };

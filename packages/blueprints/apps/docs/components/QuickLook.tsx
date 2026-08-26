@@ -1,31 +1,7 @@
-// THE STAGE (#quickRoot root) — Docs spec §7's `docsStage`.
-//
-// The second tenant of the product's one theater ground: `--stage` /
-// `--on-stage` / `--stage-line`, the SAME literals in both themes, and the
-// same surface Photos stands its lightbox on. Docs uses it for the kinds it
-// renders AS MEDIA — a PDF, an image, audio, video — and for text it lays that
-// text on paper at the reading measure, because that is what the app's
-// declared register promises.
-//
-// WHAT LIVES WHERE, on the seam Photos already cut: this file is the SHELL —
-// which regions exist, and what the bar carries. The document itself and the
-// two steps beside it are in `QuickLookStage.tsx`; the properties panel is in
-// `QuickLookInfo.tsx`; every word either of them says is in `document-copy.ts`.
-//
-// ONE ACTION SET, TWO ARRANGEMENTS (the handoff's `acts` and `bottomActs`).
-// The desktop bar and the phone's bottom bar carry the same names and the same
-// marks; what differs is where the row sits. So each action is described ONCE,
-// as data, and laid out twice — rather than two lists drifting apart on what a
-// verb is called or which of them a phone gets.
-//
-// WITHHELD, and named here so nobody re-derives the omission as an oversight:
-// the page filmstrip and the zoom chip. Both step through the pages of ONE
-// document, and neither this seat nor the `<iframe>` a PDF renders in exposes
-// a page model — the browser's own viewer owns paging and zoom inside that
-// frame, and drawing a second set of controls over it that could not drive it
-// would be two controls for one job, one of them fake. The handoff's `Keep
-// this on my device` status action goes with them: there is no
-// fetch-the-original verb on this seat to put behind it.
+// THE STAGE (spec §7) — the SHELL only: the document is `QuickLookStage.tsx`,
+// the panel `QuickLookInfo.tsx`, the words `document-copy.ts`. ONE action set,
+// TWO arrangements: described once as data, laid out twice. Withheld on
+// purpose — filmstrip, zoom chip, `Keep this on my device`: no page model.
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -42,8 +18,7 @@ import { Icon } from "./Shared.tsx";
 
 import styles from "./QuickLook.module.css";
 
-/** One action, described once. `href` makes it an anchor — Download is a real
- *  link, so it keeps the browser's own save behaviour and its context menu. */
+/** `href` makes it an anchor, keeping the browser's save behaviour. */
 interface StageAction {
   id: string;
   label: string;
@@ -53,14 +28,11 @@ interface StageAction {
   download?: string;
   pressed?: boolean;
   disabled?: boolean;
-  /** Why it is disabled, ON the control — never in a toast (§6). */
+  /** Why it is disabled, ON the control, never in a toast (§6). */
   reason?: string;
   destructive?: boolean;
 }
 
-/** The bar's row: outlined stage buttons, labelled unless the pane is narrow.
- *  A control that cannot fire is DISABLED and says why, rather than firing and
- *  apologising. */
 function BarActions({
   actions,
   labelled,
@@ -76,10 +48,7 @@ function BarActions({
         const label = labelled ? (
           <span className={styles.actionLabel}>{action.label}</span>
         ) : null;
-        // An icon-only control names itself twice on purpose: `aria-label` for
-        // a screen reader, `title` for a pointer that hovers and wonders.
-        // Labelled, the visible text IS the name, so `title` only carries the
-        // reason a disabled control cannot fire.
+        // Labelled, `title` carries only a disabled control's reason.
         const title = action.reason ?? (labelled ? undefined : action.label);
         if (action.href !== undefined)
           return (
@@ -115,9 +84,7 @@ function BarActions({
   );
 }
 
-/** The phone's bottom bar: 56px targets where a thumb is. Never labelled — at
- *  390px there is no width for five words — so every one of them carries its
- *  name on the element instead. */
+/** Never labelled at 390px; names ride on the element. */
 function BottomBar({ actions }: { actions: readonly StageAction[] }) {
   return (
     <div className={styles.bottomBar} role="toolbar" aria-label="Document">
@@ -169,37 +136,24 @@ export function QuickLook({
 }: {
   doc: DriveDoc;
   rows: DriveDoc[];
-  /** The compact form factor — the actions leave the bar for a bottom row
-   *  where a thumb is, and the properties panel becomes a pointer affordance
-   *  the pane has no width to hold beside the document. Carried as a prop and
-   *  stamped on this component's own dialog, never read off a global state
-   *  class another module owns (trap #5). */
+  /** From this prop, never off a global state class (trap #5). */
   narrow: boolean;
   folderName: (id: string | null | undefined) => string;
   onClose: () => void;
   onStep: (delta: number) => void;
-  /** Omitted where the shelf cannot write (trash) — as are rename and trash. */
   onToggleStar?: () => void;
   onRename?: () => void;
   onTrash?: () => void;
-  /** The roster and status line Share needs, or `null` where this seat has no
-   *  grant plane — the stage then draws no Share verb at all. */
+  /** `null` where the seat has no grant plane: no Share verb. */
   shareHost: DocsShareHost | null;
 }) {
   const m = typeMeta(doc.media_type, doc.title);
   const idx = rows.findIndex((d) => d.document_id === doc.document_id);
-  // Closed by default: the document is what the member came for, and a panel
-  // that opens itself takes a third of the stage to answer a question nobody
-  // asked yet.
+  // Closed by default: the document is what they came for.
   const [infoOpen, setInfoOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  // The stage reports through the app's one status line, never its own.
   const handleStatus = (message: string): void => shareHost?.onStatus(message);
   const printable = printKind(doc) !== null;
-  // The stage's own region, read for ONE thing: the src the picture is
-  // currently showing. Off the gateway origin that is a `blob:` URL the shell
-  // authorized in this tree, and the print sheet — a separate document — can
-  // only load what is already same-origin. See print.ts.
 
   const star: StageAction | null = onToggleStar
     ? {
@@ -217,19 +171,9 @@ export function QuickLook({
     href: doc.content_uri,
     download: doc.title || "file",
   };
-  // Named, so the ref read is unmistakably a HANDLER body rather than a
-  // closure the render's own data flow carries. The picture's `src` is taken
-  // off the element the stage is already showing (print.ts), and that element
-  // only exists once the stage has painted — so the read has to happen at
-  // press time, never while building this list.
-  // NO REF, and the reason is not style. Print needs the src of the <img> the
-  // stage is ACTUALLY showing: off the gateway origin the shell's authorizer
-  // rewrites the vault path to a `blob:` URL, so `doc.content_uri` is not the
-  // thing on screen. That element does not exist until the stage has painted,
-  // so the read has to happen on press — and a ref carrying it would be a ref
-  // captured by an action object built during render, which is exactly the
-  // shape the React compiler refuses to reason about. The stage marks itself
-  // instead, and only one QuickLook is ever open.
+  // NO REF: print needs the <img> the stage is ACTUALLY showing (a `blob:`
+  // URL, not `doc.content_uri`), which exists only after paint — and a ref in
+  // an action object built during render is what the React compiler refuses.
   const handlePrint = (): void => {
     const shown = document.querySelector<HTMLImageElement>(
       "[data-quicklook-body] img"
@@ -244,8 +188,7 @@ export function QuickLook({
     ...(printable ? {} : { reason: printRefusal(doc) }),
     onRun: handlePrint,
   };
-  // Drawn only where the grant plane can be reached: a Share the host cannot
-  // fulfil is a verb that exists to refuse.
+  // A Share the host cannot fulfil is a verb that exists to refuse.
   const share: StageAction | null = shareHost
     ? {
         id: "share",
@@ -307,9 +250,7 @@ export function QuickLook({
       aria-modal="true"
       aria-label="Quick look"
     >
-      {/* Share opens the one shared grant sheet, object-first over the
-          document already on the stage; the stage invents no sharing flow of
-          its own and keeps no share state beyond "is it open". */}
+      {/* The one shared grant sheet; no sharing flow of its own. */}
       {shareHost ? (
         <GrantSheet
           open={shareOpen}
@@ -324,9 +265,7 @@ export function QuickLook({
         />
       ) : null}
       <div className={styles.topbar}>
-        {/* Close is the FIRST thing in the bar, at the leading edge: it is the
-            way back out of a surface that covers everything, and the way out
-            does not hide at the end of a row of six verbs. */}
+        {/* Close leads the bar: the way out never hides after six verbs. */}
         <button
           type="button"
           className={styles.close}
@@ -335,27 +274,22 @@ export function QuickLook({
         >
           <Icon svg={I.close!} />
         </button>
-        {/* Title AND what it is, stacked. A stage that names the document but
-            not its kind, its weight or its filing makes a member close it to
-            find out. */}
+        {/* Title AND kind, weight, filing — or a member closes it to see. */}
         <div className={styles.heading}>
           <div className={styles.title}>{doc.title || "Untitled"}</div>
           <div className={styles.metaLine}>
             {m.name} · {fmtBytes(doc.byte_size)} · {folderName(doc.folder_id)}
           </div>
         </div>
-        {/* THE SPACER MUST NOT FLEX. Beside a `flex: 1` heading, a growable
-            spacer splits the slack with it and the title truncates with empty
-            space beside it. */}
+        {/* THE SPACER MUST NOT FLEX, or it splits the slack with the
+            heading and truncates the title. */}
         <span className={styles.spacer} aria-hidden="true" />
         {narrow ? null : <BarActions actions={barActions} labelled />}
       </div>
       <div className={styles.body} data-quicklook-body="">
         {body}
       </div>
-      {/* The status line: where in the set this document is, and where its
-          bytes are — the one custody fact a stage can state and a row cannot
-          fit. */}
+      {/* Position in the set, plus the custody fact a row cannot fit. */}
       <p className={styles.status}>
         <span className={styles.statusDot} aria-hidden="true" />
         <span className={styles.statusText}>

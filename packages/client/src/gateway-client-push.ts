@@ -6,11 +6,8 @@ import type { NotificationsPull } from "./notifications-model.js";
 const NOTIFICATION_CACHE = "centraid-private-notification-delivery-v1";
 const NOTIFICATIONS_DELIVERY_KEY = "/__centraid_notifications__/delivered";
 const REMINDER_DELIVERY_KEY = "/__centraid_notifications__/reminders";
-/**
- * Ledger member recording that the Notifications delivery baseline has been taken for
- * this (gateway, vault). Not a notification key — never composed, never
- * matched by the service worker's membership test.
- */
+/** Delivery-baseline-taken marker for this (gateway, vault); not a notification
+ * key — never composed or matched by the service worker. */
 const DELIVERY_SEEDED = "__seeded__";
 
 /** Register the PWA only after the user has created reminder value. */
@@ -85,11 +82,8 @@ interface WebDueReminder {
   minutesBefore: number;
 }
 
-/**
- * Turn an opaque Web Push wake into local notification content. The push
- * provider sees no title, vault, item, or balance; this authenticated fetch is
- * made only by the paired browser.
- */
+/** Turn an opaque Web Push wake into local content; the push provider sees no
+ * title/vault/item/balance — only the paired browser makes this fetch. */
 export async function syncWebDueNotifications(): Promise<void> {
   if (
     typeof window === "undefined" ||
@@ -119,8 +113,7 @@ export async function syncWebDueNotifications(): Promise<void> {
           (value): value is string => typeof value === "string"
         );
     } catch {
-      // A corrupt browser cache is disposable; authenticated gateway state is
-      // canonical and will safely re-emit the bounded reminder window.
+      // Corrupt cache is disposable; gateway state re-emits the bounded window.
     }
   }
   const delivered = new Set([
@@ -157,19 +150,10 @@ export async function syncWebDueNotifications(): Promise<void> {
 }
 
 /**
- * Fetch private Notifications content locally after an opaque wake/SSE doorbell.
- *
- * Two guards keep this from banner-blasting the owner, because the callers
- * (useNotificationsCounts, the Notifications route) ring it on every load, poll, SSE event and
- * focus tick:
- *
- *  - A FOCUSED page composes nothing. The owner is looking at these rows in
- *    the UI; OS banners for what is already on screen are noise, and closed /
- *    backgrounded delivery is the service worker's job.
- *  - A page with NO delivery ledger yet (first run, or the moment permission
- *    is granted) seeds the ledger from the current payload silently. Without
- *    it, every already-open decision counts as newly delivered and fires at
- *    once.
+ * Fetch private Notifications locally after an opaque wake/SSE doorbell;
+ * callers ring it constantly, so a FOCUSED page composes nothing
+ * (backgrounded delivery is the service worker's job) and a page with NO
+ * delivery ledger seeds it silently from the current payload.
  */
 export async function syncWebNotifications(): Promise<void> {
   if (
@@ -205,13 +189,9 @@ export async function syncWebNotifications(): Promise<void> {
   }
   const cached = await readNotificationCache(NOTIFICATIONS_DELIVERY_KEY);
   const delivered = new Set([...prior, ...cached]);
-  // Deliver-silently baseline: no ledger means "we have never notified for
-  // this (gateway, vault)", not "everything currently open is brand new". The
-  // sentinel is what makes that a one-time decision — an EMPTY pull would
-  // otherwise leave the ledger empty and re-arm the blast for the next
-  // payload. It rides in the same array of strings the service worker reads
-  // (membership only), so the shared ledger format is unchanged, and it can
-  // never collide with a composed key (all of which are `prefix:…`).
+  // Deliver-silently baseline: no ledger means "never notified for this
+  // (gateway, vault)", not "everything open is brand new" — the sentinel
+  // makes it one-time and cannot collide with a composed key (`prefix:…`).
   const seeding = !delivered.has(DELIVERY_SEEDED);
   const rows = composeWebNotifications(notifications, delivered);
   if (seeding) {
@@ -249,8 +229,7 @@ export async function syncWebNotifications(): Promise<void> {
     })
   );
   for (const row of rows) delivered.add(row.key);
-  // Keep the sentinel at the tail so the bounded slice can never evict it and
-  // silently re-arm the seeding path.
+  // Sentinel stays at the tail: the bounded slice cannot evict it and re-arm seeding.
   delivered.delete(DELIVERY_SEEDED);
   delivered.add(DELIVERY_SEEDED);
   window.localStorage.setItem(

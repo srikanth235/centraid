@@ -1,18 +1,7 @@
 // @vitest-environment jsdom
-// THE PEOPLE SHELF'S CONSENT GATE (issue #712 C2).
-//
-// The face-detection consent question used to open from a toolbar icon +
-// `<dialog>` (components/Enrichment.tsx, retired) — built, correct, and
-// nearly unreachable. It now re-homes into THIS shelf's empty state: while
-// the roster (and its proposals) are empty and the question is still open,
-// `gate` renders in place of the grid/note. `app-root.tsx` (enrichment-gate.ts)
-// decides WHEN that is true; this file only proves `PeopleShelf` renders
-// what it is given — the gate when `gate` is present, the ordinary grid/note
-// otherwise — and never both at once.
-//
-// A pure-view test, same technique enrichment-consent.test.ts uses:
-// `renderToStaticMarkup` over the component's props, because `PeopleShelf`
-// holds no state of its own.
+// THE PEOPLE SHELF'S CONSENT GATE (#712): while the roster is empty and the
+// question open, `gate` replaces the grid/note; app-root.tsx decides WHEN.
+// Pure-view test via renderToStaticMarkup.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -104,12 +93,8 @@ describe("the People shelf's consent gate", () => {
   });
 
   it("prefers a non-empty roster's cards over the gate even if `gate` were passed", () => {
-    // Belt and braces: app-root.tsx never passes `gate` alongside a non-empty
-    // roster (enrichment-gate.ts's `rosterEmpty` check), but the component
-    // itself should never show both a card grid and the gate at once — the
-    // gate branch returns unconditionally, so this pins that it is the
-    // CALLER's job to withhold `gate`, not this component silently merging
-    // the two states.
+    // Belt and braces: the component never shows grid AND gate together —
+    // withholding `gate` is the CALLER's job.
     const html = markup({
       people: [{ party_id: "p1", name: "Ana", count: 2, asset_ids: [] }],
       gate: GATE_PROPS,
@@ -119,14 +104,9 @@ describe("the People shelf's consent gate", () => {
   });
 });
 
-// A FACE GROUP MAY SPAN TWO PEOPLE'S CONFIRMATIONS (issue #712 P6b).
-//
-// `media_face_region` records the subject (`party_id`) and the answerer
-// (`confirmed_by_party_id`) as two separate columns, so a group assembled from
-// two members' confirmations is a fact the schema already carries. What the
-// roster used to do was DROP the answerer, which made "who agreed" unaskable —
-// and the only alternative anyone reaches for after that is merging the two
-// members, which is precisely the thing that must not happen.
+// A FACE GROUP MAY SPAN TWO PEOPLE'S CONFIRMATIONS (#712): subject and
+// answerer are separate schema columns; merging the two members is
+// precisely what must not happen.
 describe("a person's confirmers", () => {
   const ANA = (confirmedBy: Person["confirmed_by"]): Person => ({
     party_id: "p1",

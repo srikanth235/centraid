@@ -1,31 +1,16 @@
 /**
- * The outbox executor (issue #306 decision 3) — the ONLY path from an
- * outbox artifact to the network, and the only holder of the broker's
- * `allowWrites` lane. It runs OUTSIDE the fire loop: connector fires stage
- * items and stay read-only (issue #304's ceiling, untouched); the executor
- * drains only items the owner approved (or a standing grant matched), one
- * receipted `outbox.record_result` per drain — loop-safe by construction.
+ * The ONLY path from an outbox artifact to the network (#306 decision 3), and
+ * the only holder of the broker's `allowWrites` lane. Runs OUTSIDE the fire
+ * loop: connectors stage items and stay read-only (#304).
  *
- * The drain keeps every #304 injection invariant: `{{connection:…}}`
- * placeholders substitute HERE (tokens never sit in rows or cross to any
- * handler), the substituted URL must satisfy the connection's
- * `allowed_hosts` pin over https (loopback excepted for tests), redirects
- * are never auto-followed, and a 401 gets exactly one forced refresh.
- * Failure taxonomy per item:
- *   - 2xx → `sent` (terminal, receipted);
- *   - other 4xx → `failed` with the status + a scrubbed body snippet
- *     (terminal — a request the provider rejects won't improve by waiting);
- *   - 429/5xx/network → the item STAYS approved and retries next drain;
- *   - auth-dead (401 after refresh / scope-flavored 403) → needs-auth flips
- *     with a note and the item stays approved until the owner reconnects.
+ * `{{connection:…}}` substitutes HERE (tokens never sit in rows). Substituted
+ * URL must satisfy `allowed_hosts` over https (loopback excepted). Redirects
+ * are never auto-followed. A 401 gets exactly one forced refresh.
+ * 2xx → `sent`; other 4xx → `failed` (terminal); 429/5xx/network → stay
+ * approved and retry; auth-dead → needs-auth, stay approved until reconnect.
  *
- * Two consent-freshness bounds ride the drain (issue #308 A7/A8):
- *   - an approved item older than the staleness window reparks to pending
- *     via `outbox.repark` instead of draining — consent to the thing never
- *     silently becomes consent to any future moment;
- *   - each pass drains a bounded batch with a per-actor cap, so a buggy
- *     automation under a standing grant cannot flush an unbounded queue in
- *     one pass; the surplus stays approved for later passes, logged.
+ * #308: stale approvals repark; each pass is a bounded batch with a per-actor
+ * cap so a standing grant cannot flush an unbounded queue.
  */
 
 import type { ConnectionAuth } from "@centraid/server/automation";
@@ -38,19 +23,13 @@ import type { VaultPlane } from "./vault-plane.js";
 
 const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
 const BODY_SNIPPET_CHARS = 300;
-/** Approval staleness window (issue #308 A7): older approvals repark. */
 const DEFAULT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
-/** Per-pass drain bound (issue #308 A8): the surplus waits, logged. */
 const DEFAULT_MAX_ITEMS_PER_DRAIN = 25;
-/** Per-actor bound within one pass (issue #308 A8). */
 const DEFAULT_MAX_ITEMS_PER_ACTOR = 10;
 /**
- * Bound on one external write (issue #351 Tier 4 hygiene) — a hung
- * third-party endpoint would otherwise wedge the whole drain pass (drains
- * run one item at a time, see `drainPass`). A timeout rejects the `fetch`
- * exactly like a dropped connection, so it lands in `drainItem`'s existing
- * network-failure catch: the item stays approved and retries next drain —
- * same as any other transient upstream failure, no new state.
+ * Bound on one external write (#351): a hung endpoint would wedge the whole
+ * drain pass. Timeout lands in the existing network-failure catch — item stays
+ * approved and retries; no new state.
  */
 export const DEFAULT_WRITE_TIMEOUT_MS = 60_000;
 
@@ -80,13 +59,9 @@ function drainApprovedRowsInOrder(
 }
 
 export interface OutboxExecutorOptions {
-  /** Approved items older than this (by decided_at) repark to pending. */
   staleAfterMs?: number;
-  /** Max items drained in one pass across all actors. */
   maxItemsPerDrain?: number;
-  /** Max items drained in one pass per staging actor. */
   maxItemsPerActor?: number;
-  /** Per-write timeout to the external endpoint (issue #351). */
   writeTimeoutMs?: number;
 }
 
@@ -101,14 +76,11 @@ export interface DrainReport {
   approved: number;
   sent: number;
   failed: number;
-  /** Items left approved for a later pass (needs-auth, transient upstream, caps). */
   deferred: number;
-  /** Stale approvals parked back to pending for a fresh decision (#308 A7). */
   reparked: number;
 }
 
 export class OutboxExecutor {
-  /** One drain at a time per vault — concurrent triggers join the running pass. */
   private readonly draining = new Map<string, Promise<DrainReport>>();
   private readonly staleAfterMs: number;
   private readonly maxItemsPerDrain: number;
@@ -158,9 +130,8 @@ export class OutboxExecutor {
     const perActor = new Map<string, number>();
     let drained = 0;
     await drainApprovedRowsInOrder(rows, async (row) => {
-      // A stale approval never drains (issue #308 A7): the owner said yes to
-      // a send NOW, not to whenever the provider recovers. Repark first so
-      // staleness is judged even when the caps would have deferred the item.
+      // Stale approval never drains (#308). Repark first so staleness is judged
+      // even when the caps would have deferred the item.
       const decidedAtMs = row.decided_at
         ? Date.parse(row.decided_at)
         : Number.NaN;
@@ -176,9 +147,7 @@ export class OutboxExecutor {
         report.reparked += 1;
         return;
       }
-      // Bounded passes (issue #308 A8): the surplus stays approved and the
-      // next pass (event kick or the 60s clock) continues — no silent drop,
-      // but no unbounded flush under a standing grant either.
+      // Bounded passes (#308): surplus stays approved; no silent drop.
       const actorCount = perActor.get(row.actor_id) ?? 0;
       if (
         drained >= this.maxItemsPerDrain ||
@@ -209,7 +178,6 @@ export class OutboxExecutor {
     return report;
   }
 
-  /** Park a stale approval back to pending via the typed command (one door). */
   private async repark(
     plane: VaultPlane,
     itemId: string,
@@ -234,7 +202,6 @@ export class OutboxExecutor {
   ): Promise<"sent" | "failed" | "deferred"> {
     const auth = await this.broker.resolveForDrain(plane, row.connection_id);
     if ("refused" in auth) {
-      // needs-auth (or unpinned) — the item waits for the owner's reconnect.
       this.logger.warn(`outbox: ${row.item_id} deferred — ${auth.refused}`);
       return "deferred";
     }
@@ -245,8 +212,7 @@ export class OutboxExecutor {
       injectedSpec = substitute(spec, auth.values);
       assertDrainable(injectedSpec.url, auth);
     } catch (error) {
-      // Structural refusals (bad request row, host outside the pin) are
-      // terminal: waiting will not move the pin.
+      // Structural refusals (bad row, host outside the pin) are terminal.
       await this.recordResult(
         plane,
         row.item_id,
@@ -271,8 +237,7 @@ export class OutboxExecutor {
         refreshed = true;
         try {
           injectedSpec = substitute(spec, await auth.refresh());
-          // Re-assert the pin on the RE-substituted URL: a placeholder in
-          // the URL means new values can move the destination.
+          // Re-assert the pin on the RE-substituted URL.
           assertDrainable(injectedSpec.url, auth);
           return send();
         } catch (error) {
@@ -327,7 +292,7 @@ export class OutboxExecutor {
         ...(spec.headers ? { headers: spec.headers } : {}),
         ...(spec.body === undefined ? {} : { body: spec.body }),
         // Injected requests never auto-follow: a cross-host Location would
-        // carry the Authorization header past the pin (issue #304).
+        // carry the Authorization header past the pin (#304).
         redirect: "manual",
         signal: timeoutSignal(this.writeTimeoutMs),
       });
@@ -379,9 +344,7 @@ export class OutboxExecutor {
           typeof value === "string" && value.trim() !== ""
       );
     const target = artifactLabel?.trim() ?? item?.target ?? "External write";
-    // D4: a failure headline names the reason, not just the disposition —
-    // "… — failed: 403 forbidden" beats a wall of identical "failed" cards.
-    // The full record stays in `detail`.
+    // D4: a failure headline names the reason, not just the disposition.
     const gist = disposition === "sent" ? undefined : noticeGist(detail);
     const suffix =
       disposition === "sent"
@@ -437,7 +400,6 @@ function parseRequest(json: string): StagedRequest {
   return parsed as StagedRequest;
 }
 
-/** `{{connection:name}}` → plaintext, url + headers + body. Unknown names throw. */
 function substitute(
   spec: StagedRequest,
   values: Readonly<Record<string, string>>
@@ -460,7 +422,6 @@ function substitute(
   };
 }
 
-/** The #304 pin, executor-side: https (loopback excepted) + allowed_hosts. */
 function assertDrainable(rawUrl: string, auth: ConnectionAuth): void {
   const url = new URL(rawUrl);
   const loopback =
@@ -485,7 +446,6 @@ function assertDrainable(rawUrl: string, auth: ConnectionAuth): void {
   }
 }
 
-/** No credential value ever reaches a receipt or a log line. */
 function scrub(text: string, auth: ConnectionAuth): string {
   let out = text;
   for (const value of Object.values(auth.values)) {

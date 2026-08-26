@@ -302,7 +302,7 @@ describe("vault-plane consent", () => {
     expect(bootstrap.ok).toBe(true);
     const cursor = (bootstrap.result as { cursor: string }).cursor;
 
-    // An app parks a confirm-gated booking request (issue #306: parking is a
+    // An app parks a confirm-gated booking request (#306: parking is a
     // property of the command, not of risk)…
     plane.enrollApp("bookings");
     plane.approveGrant("bookings", {
@@ -333,7 +333,7 @@ describe("vault-plane consent", () => {
     expect(proposed.ok).toBe(true);
     expect((proposed.result as { status: string }).status).toBe("parked");
 
-    // The parked op shows the app ITS pending approval (issue #260 seam).
+    // The parked op shows the app ITS pending approval (#260 seam).
     const parked = await appBridge({ op: "parked", payload: {} });
     expect(parked.ok).toBe(true);
     expect(parked.result).toMatchObject([
@@ -395,7 +395,7 @@ describe("vault-plane consent", () => {
     expect(apps.apps[0]?.grants).toHaveLength(1);
 
     // Park an invocation through the bridge, confirm it over HTTP. Parking
-    // is confirm-gated (issue #306): mark the command loud-on-purpose first.
+    // is confirm-gated (#306): mark the command loud-on-purpose first.
     plane.db.vault
       .prepare(
         `UPDATE agent_capability SET requires_confirmation=1

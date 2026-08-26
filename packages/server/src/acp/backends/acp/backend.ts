@@ -2,7 +2,7 @@
  * governance: allow-repo-hygiene file-size-limit (#567) the generic ACP lifecycle is one ordered initialize/configure/resume/prompt/settle state machine; splitting its transaction would scatter failure cleanup and confirmed-state accounting
  *
  * Generic ACP (Agent Client Protocol) backend — the ONE integration path
- * for every harness kind (issue #479).
+ * for every harness kind (#479).
  *
  * Turn flow: launch (or warm reuse) → initialize → session resume|load|new →
  * pin mode/model → session/prompt → stopReason handling → warm park or kill.
@@ -217,7 +217,7 @@ export async function runAcpTurn(
     },
   });
 
-  // ---- Warm reuse ---------------------------------------------------------
+  // ──── Warm reuse ─────────────────────────────────────────────────────────
   if (input.prevSessionId) {
     const warm = takeWarmSlot(
       config.kind,

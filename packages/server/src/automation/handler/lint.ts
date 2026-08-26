@@ -1,39 +1,13 @@
-/**
- * Static handler lint for automation `handler.js` (issue #167).
- *
- * An automation fire is a chat whose brain is `handler.js`. Its outside effects
- * must go through the `ctx.*` surface (`ctx.vault` / `ctx.fetch` / `ctx.delegate` /
- * `ctx.state` / `ctx.runs`): those calls are recorded in the run ledger
- * (`run_nodes`). A raw `fetch`/`fs` call is invisible to the run history. The
- * handler should also be deterministic: a crashed fire simply re-runs from the
- * top (there is no resume journal), so a wall-clock read or a random value
- * makes the re-run diverge and re-fire effects with different ids.
- *
- * This module is the *authoring-time* guard: a lexical scan that flags the
- * common offenders (`Date.now()`, `Math.random()`, `randomUUID()`, raw
- * `fetch`/`fs`, ambient `process.*`, the removed `ctx.tool`, …) so the builder
- * sees an authoring error at publish time rather than a surprise at fire time.
- * It is a lint, not a sandbox — it cannot catch every escape (an aliased
- * global, an `eval`), but it catches what a generated/edited handler
- * realistically emits.
- *
- * The deterministic alternatives are watermarks via `ctx.runs.last()` /
- * `ctx.state`, ids derived from the run's inputs, and values read off a
- * `ctx.vault` result. The rules below only ever match raw globals (or the
- * retired `ctx.tool`), so anything else on the `ctx.` surface passes untouched.
- */
+// Static handler lint for `handler.js` (#167). Outside effects must go through
+// `ctx.*` so they land in the run ledger; handlers must be deterministic, since
+// a crashed fire re-runs from the top and re-fires effects under new ids. A
+// lexical scan, not a sandbox: it only matches raw globals.
 
-/** One flagged pattern found in a handler. */
 export interface HandlerLintFinding {
-  /** Stable rule id (e.g. `no-date-now`). */
   readonly rule: string;
-  /** Human-readable reason + the deterministic alternative. */
   readonly message: string;
-  /** 1-based line of the match. */
   readonly line: number;
-  /** 1-based column of the match. */
   readonly column: number;
-  /** The offending source line, trimmed, for context. */
   readonly snippet: string;
 }
 
@@ -41,29 +15,15 @@ interface LintRule {
   readonly id: string;
   readonly re: RegExp;
   readonly message: string;
-  /**
-   * Which masked view the rule scans. `code` (default) masks comments AND
-   * string/template literal bodies — for value-nondeterminism calls that must
-   * never match a mention inside a string. `withStrings` masks only comments,
-   * keeping string literals — for the module-import rule whose target *is* a
-   * string specifier (`from 'fs'`).
-   */
+  /** `withStrings` keeps strings, for the rule whose target IS a specifier. */
   readonly target?: "code" | "withStrings";
 }
 
-/**
- * The flagged patterns. Each `re` is a global regex run over the
- * comment-and-string-masked source, so a match is real code — never a mention
- * inside a comment or a string/template literal (interpolated `${…}` code is
- * still scanned). Keep messages prescriptive: say *why* it is a problem and
- * what to use instead.
- */
+/** Each `re` runs over the masked source, so a match is real code. */
 const RULES: readonly LintRule[] = [
   {
     id: "no-ctx-tool",
-    // `ctx.tool` (dot form, with optional whitespace before `(`) and the
-    // bracket forms `ctx['tool'](` / `ctx["tool"](`. Uses the string-keeping
-    // view so the bracketed string key isn't masked away.
+    // Bracket form too, hence the string-keeping view.
     re: /\bctx\s*(?:\.\s*tool|\[\s*['"]tool['"]\s*\])\s*\(/gu,
     message:
       "ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.delegate.",
@@ -107,9 +67,8 @@ const RULES: readonly LintRule[] = [
   },
   {
     id: "no-raw-fetch",
-    // `ctx.fetch(...)` is exempt: it is the audited connector rail (ledgered,
-    // broker-injected, host-pinned, read-only) — the very thing this rule
-    // steers toward. Everything else spelling `fetch(` is ambient I/O.
+    // `ctx.fetch` is exempt: it is the audited connector rail this rule steers
+    // toward. Everything else spelling `fetch(` is ambient I/O.
     re: /(?<!ctx\.)\bfetch\s*\(/gu,
     message:
       'A raw fetch() is network I/O that bypasses the run ledger. READS ride ctx.fetch (connector fires, broker-injected and host-pinned) or a ctx.vault read; an external WRITE (send an email, call a mutating API) is staged, never sent: ctx.vault.invoke({ command: "outbox.stage", … }) parks it for the owner and the gateway executor performs the send (issue #306).',
@@ -129,26 +88,12 @@ const RULES: readonly LintRule[] = [
   },
 ];
 
-/**
- * Sentinel that masked (non-code) characters collapse to — a NUL, which no
- * rule regex matches and which `\s` / `\b` treat as a non-word, non-space char.
- * Using a sentinel rather than a space is what lets `new Date('x')` stay
- * distinguishable from the argless `new Date()`: the masked argument becomes
- * `\0\0\0`, not whitespace that would read as empty parens.
- */
+/** A NUL, not a space: `new Date('x')` must stay distinguishable from the
+ *  argless `new Date()`. */
 const MASK = "\0";
 
-/**
- * Mask comments — and, when `maskStrings`, string/template literal bodies and
- * their delimiters — to the {@link MASK} sentinel (newlines preserved so
- * line/column math stays exact), leaving real code — including interpolated
- * `${…}` expressions inside template literals — intact. A small hand-written
- * scanner rather than a full parser: handlers are tiny `.js` modules and this
- * keeps the lint dependency-free, but it is sound for the literal/comment
- * shapes a handler actually contains. The scanner always *tracks* string state
- * (so a `//` inside a string is not mistaken for a comment); `maskStrings` only
- * decides whether string content is blanked.
- */
+/** Newlines are preserved so line/column math stays exact. String state is
+ *  ALWAYS tracked, so a `//` inside a string is not read as a comment. */
 function maskNonCode(src: string, maskStrings: boolean): string {
   const out = src.split("");
   const mask = (k: number): void => {
@@ -158,8 +103,6 @@ function maskNonCode(src: string, maskStrings: boolean): string {
     if (maskStrings) mask(k);
   };
   const n = src.length;
-  // Saved brace depths for each open template-literal interpolation. Entering
-  // `${` pushes the outer depth and resets; the matching `}` pops it.
   const tplStack: number[] = [];
   let mode: "code" | "line" | "block" | "sq" | "dq" | "tpl" = "code";
   let braceDepth = 0;
@@ -195,7 +138,6 @@ function maskNonCode(src: string, maskStrings: boolean): string {
         i++;
       } else if (c === "}") {
         if (braceDepth === 0 && tplStack.length > 0) {
-          // Closes a template interpolation — the brace is template syntax.
           braceDepth = tplStack.pop()!;
           mask(i);
           mode = "tpl";
@@ -232,7 +174,6 @@ function maskNonCode(src: string, maskStrings: boolean): string {
         i++;
       }
     } else {
-      // template literal body
       maskStr(i);
       if (c === "\\") {
         if (i + 1 < n) maskStr(i + 1);
@@ -241,7 +182,6 @@ function maskNonCode(src: string, maskStrings: boolean): string {
         mode = "code";
         i++;
       } else if (c === "$" && d === "{") {
-        // Enter an interpolation: the `${` is template syntax, the body is code.
         maskStr(i + 1);
         tplStack.push(braceDepth);
         braceDepth = 0;
@@ -255,7 +195,6 @@ function maskNonCode(src: string, maskStrings: boolean): string {
   return out.join("");
 }
 
-/** Map a character offset to a 1-based {line, column}. */
 function offsetToPosition(
   src: string,
   offset: number
@@ -271,11 +210,6 @@ function offsetToPosition(
   return { line, column: offset - lineStart + 1 };
 }
 
-/**
- * Scan a handler's source for ambient-I/O and nondeterminism patterns. Returns
- * one finding per match, sorted by position. An empty array means the handler
- * is, lexically, clean. Pure — no I/O, no throw.
- */
 export function lintHandlerSource(
   source: string,
   options: { allowLocalModelAssets?: boolean } = {}
@@ -285,10 +219,8 @@ export function lintHandlerSource(
   const lines = source.split("\n");
   const findings: HandlerLintFinding[] = [];
   for (const rule of RULES) {
-    // Release-managed recognition bundles are allowed to read only their
-    // local native/model assets. Callers must opt in from the reserved system
-    // lifecycle; authored handlers never receive this exception. Network,
-    // clocks, randomness and every other replay hazard stay forbidden.
+    // Release-managed recognition bundles may read their own local assets, from the
+    // reserved system lifecycle only. Authored handlers never get this exception.
     if (
       options.allowLocalModelAssets &&
       (rule.id === "no-node-io-import" || rule.id === "no-process-ambient")
@@ -306,7 +238,6 @@ export function lintHandlerSource(
         column,
         snippet: (lines[line - 1] ?? "").trim(),
       });
-      // Guard against a zero-width match looping forever.
       if (m.index === rule.re.lastIndex) rule.re.lastIndex++;
     }
   }
@@ -314,11 +245,6 @@ export function lintHandlerSource(
   return findings;
 }
 
-/**
- * Format lint findings as a single multi-line authoring error — the shape the
- * gateway publish gate surfaces back to the builder. Returns `undefined` when
- * there are no findings.
- */
 export function formatHandlerLintError(
   findings: readonly HandlerLintFinding[],
   file = "handler.js"

@@ -1,22 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit (#468) one cohesive detached spawn/adopt/poll/stop owner — splitting would scatter lock/probe/CLI resolve that must stay in lockstep
 /*
- * Impure detached-gateway glue (issue #468, H2–H7).
- *
- * Pure decisions live in `detached-gateway-core.ts`. This module owns:
- *   - resolving the bundled `centraid-gateway` CLI entry (H6)
- *   - spawning with detached/stdio-ignore/unref (H2)
- *   - kernel-backed gateway.db lock inspection (H3/H4)
- *   - minting the per-launch loopback token, handing it to the spawned daemon
- *     via `CENTRAID_GATEWAY_TOKEN`, and polling `/centraid/_gateway/info` until
- *     ready (issue #505 phase 7 retired the daemon's persistent `token.bin`;
- *     the desktop is the loopback token's landlord now, persisting it only in
- *     device safeStorage so no non-daemon writer touches the data dir)
- *   - stopping only processes we own
- *
- * Lifecycle verbs (start/stop/status/service) all invoke the same CLI
- * entry `service-admin` uses for LaunchAgent/systemd units
- * (`dev.centraid.gateway`). Crash-loop bookkeeping stays in
- * `gateway-supervisor-core.ts` (H7) and is applied by `local-gateway.ts`.
+ * Impure detached-gateway glue (#468, H2–H7): CLI resolve, detached spawn,
+ * gateway.db lock inspection, loopback-token mint, and stopping only processes
+ * we own. Pure decisions belong in `detached-gateway-core.ts`, crash-loop
+ * bookkeeping in `gateway-supervisor-core.ts`. The desktop is the loopback
+ * token's landlord (#505): it lives in device safeStorage, never the data dir.
+ * Every lifecycle verb goes through the same CLI `service-admin` drives.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -57,7 +46,6 @@ const DEFAULT_HOST = "127.0.0.1";
 const READY_POLL_MS = 100;
 const READY_TIMEOUT_MS = 30_000;
 
-/** In-memory handle for a detached (or adopted foreign) gateway child. */
 export interface DetachedGatewayHandle {
   mode: "detached";
   url: string;
@@ -69,12 +57,10 @@ export interface DetachedGatewayHandle {
   /** True when ownership stamp matches this desktop install. */
   owned: boolean;
   /**
-   * Stop the child if we own it. Foreign gateways are left alone (H3).
-   * App quit must NOT call this for detached handles — see
-   * `shutdownAllLocalGatewaysExcept` in local-gateway.ts.
+   * Stop the child only if we own it (H3). App quit must NOT call this for
+   * detached handles — see `shutdownAllLocalGatewaysExcept`.
    */
   close: () => Promise<void>;
-  /** Minimal health surface so callers that only registerProbe don't crash. */
   health: {
     registerProbe: (
       name: string,
@@ -84,39 +70,27 @@ export interface DetachedGatewayHandle {
       }>
     ) => void;
   };
-  /**
-   * Owner vault acts through the live daemon. A second CLI writer cannot
-   * mutate gateway.db while the daemon holds its lifetime exclusive lock.
-   */
+  /** Acts through the live daemon: a second CLI writer cannot mutate gateway.db. */
   vaults: {
     create: (name?: string) => Promise<{ vaultId: string }>;
     delete: (vaultId: string, name: string) => Promise<void>;
   };
 }
 
-/**
- * Stable desktop device identity derived from its safeStorage-backed iroh key.
- * This is an EndpointId, not a parallel UUID or a gateway-tree credential.
- */
+/** An EndpointId, never a parallel UUID or a gateway-tree credential. */
 export async function getOrCreateDesktopOwnerId(): Promise<string> {
   return endpointIdForSecret(ensureIrohDeviceKey(LOCAL_GATEWAY_ID));
 }
 
-/**
- * Resolve the compiled `centraid-gateway` CLI entry (`dist/cli/cli.js`).
- * Prefers the package export via require.resolve, then monorepo-relative
- * fallbacks for unpackaged electron runs.
- */
 export function resolveGatewayCliPath(): string {
   try {
     const pkgJson = require.resolve("@centraid/server/package.json");
     const candidate = path.join(path.dirname(pkgJson), "dist", "cli", "cli.js");
     return candidate;
   } catch {
-    // fall through
+    // unresolved
   }
   const here = import.meta.dirname;
-  // apps/desktop/dist/main → ../../../packages/server/dist/cli/cli.js
   const monorepo = path.resolve(
     here,
     "../../../packages/server/dist/cli/cli.js"
@@ -133,7 +107,6 @@ function processExists(pid: number): boolean {
   }
 }
 
-/** Probe HTTP liveness on the gateway info route. */
 export async function probeGatewayInfo(
   url: string,
   token?: string,
@@ -175,7 +148,6 @@ async function probeGatewayAuthenticated(
   }
 }
 
-/** First candidate bearer the live gateway accepts, or `undefined`. */
 async function firstWorkingToken(
   url: string,
   candidates: ReadonlyArray<string | undefined>,
@@ -190,23 +162,17 @@ async function firstWorkingToken(
 
 export interface EnsureDetachedOptions {
   dataDir: string;
-  /** Optional port override; defaults to DEFAULT_GATEWAY_PORT. */
   port?: number;
   host?: string;
   ownerId: string;
-  /** safeStorage-backed AES wrapping key for gateway KeyStore envelopes. */
   gatewayWrappingKey?: Buffer;
-  /** Node binary; defaults to process.execPath when not electron, else `node` on PATH. */
   nodeBin?: string;
   cliPath?: string;
   readyTimeoutMs?: number;
   /**
-   * When adopting a gateway we OWN, first check whether it was spawned from an
-   * older build than the one on disk (via the ownership stamp's `buildTag`) and
-   * respawn it if so. The desktop passes `true` so a rebuilt gateway (dev) or an
-   * updated app (prod) takes effect on the next launch instead of the stale
-   * daemon serving forever. Only ever touches gateways we own (H3 preserved).
-   * Absent/false → adopt whatever is live (unit tests, legacy behavior).
+   * Respawn an owned gateway whose stamp `buildTag` is older than the build on
+   * disk, so a rebuild takes effect next launch. Only touches gateways we own
+   * (H3). Absent/false → adopt whatever is live.
    */
   replaceOwnedIfStale?: boolean;
 }
@@ -225,14 +191,12 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-/** How long to wait for a SIGTERM'd gateway to exit before escalating (H2). */
 const STOP_TIMEOUT_MS = 5_000;
 const STOP_POLL_MS = 100;
 
 /**
- * Send `signal` to the detached child's whole process group, falling back to
- * the bare pid. Detached children are their own group leaders (H2), so the
- * group signal takes grandchildren (harness processes, workers) down with the gateway.
+ * Group signal, falling back to the bare pid: detached children lead their own
+ * group (H2), so this takes grandchildren (harnesses, workers) down too.
  */
 function signalGatewayGroup(pid: number, signal: NodeJS.Signals): void {
   try {
@@ -241,19 +205,16 @@ function signalGatewayGroup(pid: number, signal: NodeJS.Signals): void {
     try {
       process.kill(pid, signal);
     } catch {
-      // already gone
+      // gone
     }
   }
 }
 
 /**
- * Stop an owned detached gateway and **wait for it to actually exit** before
- * returning — SIGTERM the group, poll the pid, escalate to SIGKILL, then a
- * short final wait. Callers MUST await this before rebinding the port (else the
- * fresh child races the old listener → EADDRINUSE, swallowed by stdio:'ignore')
- * or before re-reading the ownership stamp (else `ensureDetachedGateway` adopts
- * the still-dying pid and never respawns). This is exactly the restart-crash
- * footgun: the old stop was a fire-and-forget SIGTERM with no wait.
+ * Waits for the process to actually exit. Callers MUST await before rebinding
+ * the port (the fresh child otherwise races the old listener into an
+ * EADDRINUSE that `stdio:'ignore'` swallows) or before re-reading the ownership
+ * stamp (`ensureDetachedGateway` would adopt the still-dying pid).
  */
 async function terminateDetachedGateway(
   pid: number,
@@ -350,18 +311,14 @@ function makeHandle(input: {
     owned,
     health: {
       registerProbe() {
-        // Tunnel/health probes are registered on the in-process embed only;
-        // a detached child owns its own health registry.
+        // No-op: a detached child owns its own health registry.
       },
     },
     vaults: makeVaults(input.url, input.token),
     async close() {
       if (!owned) return;
-      // Wait for the process to actually exit (H2) — a fire-and-forget SIGTERM
-      // let `restartLocalGateway`'s stop→start race the dying daemon: the
-      // respawn either adopted the still-terminating pid or hit EADDRINUSE on
-      // the not-yet-released port, leaving the gateway down. Awaiting exit here
-      // makes stop→start correct for every caller.
+      // Awaited (H2): a fire-and-forget SIGTERM lets a stop→start restart race
+      // the dying daemon.
       await terminateDetachedGateway(pid);
     },
   };
@@ -371,11 +328,8 @@ async function waitUntilReady(input: {
   host: string;
   port: number;
   timeoutMs: number;
-  /**
-   * The loopback token the daemon was spawned with (issue #505 phase 7). The
-   * desktop minted it and handed it over via `CENTRAID_GATEWAY_TOKEN`, so we
-   * already know the bearer — no polling a daemon-written token file.
-   */
+  /** Minted here and passed via `CENTRAID_GATEWAY_TOKEN` (#505) — the daemon
+   * writes no token file to poll. */
   token: string;
 }): Promise<{ url: string; token: string }> {
   const url = `http://${input.host}:${input.port}`;
@@ -397,11 +351,8 @@ async function waitUntilReady(input: {
 const LOCK_STATUS_TIMEOUT_MS = 5_000;
 
 /**
- * Run `lock-status` and classify the outcome (never throws).
- *
- * `spawnSync` reports a timeout as `error.code === 'ETIMEDOUT'` after killing
- * the child — the ONLY way to tell "the CLI blocked on the holder's SQLite
- * lock" apart from "the CLI failed fast", and previously discarded.
+ * Never throws. `ETIMEDOUT` is the only signal separating "the CLI blocked on
+ * the holder's SQLite lock" from "the CLI failed fast".
  */
 function probeLockStatus(
   dataDir: string,
@@ -433,13 +384,9 @@ function probeLockStatus(
 }
 
 /**
- * Ask the OS which process holds `file`, without opening it.
- *
- * This is the fallback for exactly the case where the CLI cannot tell us —
- * it blocks on the same lock we are asking about — so it must not go through
- * SQLite. `lsof -t` is the portable-enough POSIX answer (the gateway CLI uses
- * it for the same purpose); best-effort and diagnostic only, never a decision
- * input. Returns `undefined` where lsof is absent (Windows) or says nothing.
+ * Must not go through SQLite: this is the fallback for when the CLI is itself
+ * blocked on the lock being asked about. Diagnostic only, never a decision
+ * input; `undefined` where lsof is absent (Windows) or silent.
  */
 function osLockHolderPid(file: string): number | undefined {
   const result = spawnSync("lsof", ["-t", file], {
@@ -451,7 +398,6 @@ function osLockHolderPid(file: string): number | undefined {
   return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 }
 
-/** Whether `<dataDir>/keys` already holds key-store envelopes (E2 detection). */
 function gatewayKeysPresent(dataDir: string): boolean {
   const keysDir = path.join(dataDir, "keys");
   if (!fs.existsSync(keysDir)) return false;
@@ -460,7 +406,6 @@ function gatewayKeysPresent(dataDir: string): boolean {
     .some((entry) => entry.isFile());
 }
 
-/** Whether anything is listening on host:port right now (EADDRINUSE pre-check). */
 function portListenerPid(port: number): number | undefined {
   const result = spawnSync("lsof", ["-t", `-iTCP:${port}`, "-sTCP:LISTEN"], {
     encoding: "utf8",
@@ -485,11 +430,7 @@ function portInUse(host: string, port: number): Promise<boolean> {
   });
 }
 
-/**
- * Ensure a detached gateway is running for `dataDir`. Adopts a live owned
- * (or foreign) process when possible; refuses reclaim when a probe fails
- * against a foreign stamp (H3).
- */
+/** Adopts a live process where possible; refuses reclaim on a foreign stamp (H3). */
 export async function ensureDetachedGateway(
   options: EnsureDetachedOptions
 ): Promise<DetachedGatewayHandle> {
@@ -500,11 +441,9 @@ export async function ensureDetachedGateway(
   const nodeBin = options.nodeBin ?? resolveNodeBin();
   const readyTimeoutMs = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
   const candidateUrl = `http://${host}:${port}`;
-  // E2 — check custody BEFORE minting. `getOrCreateGatewayWrappingKey` mints a
-  // fresh key whenever this device holds none, which is right for a new gateway
-  // and silently fatal for an existing one: the new key cannot open the
-  // envelopes already in `<dataDir>/keys`, and every downstream symptom (the
-  // CLI's KeyStoreError, the refusal below) points somewhere else.
+  // Custody check must precede the mint: `getOrCreateGatewayWrappingKey` mints
+  // whenever this device holds no key, and a fresh key cannot open envelopes
+  // already in `<dataDir>/keys` — every downstream symptom points elsewhere.
   if (
     options.gatewayWrappingKey === undefined &&
     deviceCustodyGap({
@@ -525,12 +464,9 @@ export async function ensureDetachedGateway(
     gatewayWrappingKey
   );
   const lock = lockViewFor(lockProbe);
-  // A gateway the user installed as an OS service was not spawned by this
-  // desktop, so it never received `CENTRAID_GATEWAY_TOKEN` and derives its
-  // landlord bearer from the endpoint key instead. The desktop holds the same
-  // custody credential, so try the derived bearer as well — otherwise opting
-  // into the service produces a permanent `'foreign'` refusal on every
-  // subsequent launch (issue #568 item F).
+  // An OS-service gateway never received `CENTRAID_GATEWAY_TOKEN` and derives
+  // its landlord bearer from the endpoint key, so the derived bearer must stay
+  // in the candidate list or the service is refused as `'foreign'` (#568).
   const controlToken = await firstWorkingToken(candidateUrl, [
     existingToken,
     landlordBearerForDataDir(dataDir, { masterKey: gatewayWrappingKey }),
@@ -544,10 +480,8 @@ export async function ensureDetachedGateway(
   });
 
   if (decision === "probe-failed-refuse") {
-    // Refusing is still correct — we will not open a second writer against a
-    // db we could not read the lock of. The pid comes from the OS when the CLI
-    // could not name the holder, which is precisely the case where the user
-    // needs it (the CLI was blocked by that very holder).
+    // Never open a second writer against a db whose lock we could not read.
+    // The OS names the holder exactly when the CLI (blocked by it) cannot.
     const holderPid =
       lock.holderPid ?? osLockHolderPid(path.join(dataDir, "gateway.db"));
     throw new Error(
@@ -580,16 +514,13 @@ export async function ensureDetachedGateway(
     });
   }
 
-  // Need to spawn (own-but-dead, stale-reclaim, or failed adopt).
-  // Prefer the configured/default port for a fresh bind (H4), not a stale status port.
+  // Fresh bind uses the configured/default port (H4), not a stale status port.
   const listenPort = port;
   const listenHost = host;
 
-  // Pre-spawn port identity check. Reaching here means the lock on OUR data dir
-  // is free — which says nothing about the port, and a leftover daemon bound to
-  // a DIFFERENT data dir still owns it. The child is spawned detached with
-  // `stdio: 'ignore'` (H2), so its EADDRINUSE exit is invisible and the only
-  // symptom is the ready-poll timing out 30s later against a stranger's gateway.
+  // A free lock on our data dir says nothing about the port; under
+  // `stdio: 'ignore'` (H2) a child's EADDRINUSE exit is invisible and surfaces
+  // only as a 30s ready-poll timeout against a stranger's gateway.
   if (await portInUse(listenHost, listenPort)) {
     const pid = portListenerPid(listenPort);
     throw new Error(
@@ -613,9 +544,8 @@ export async function ensureDetachedGateway(
     listenHost,
   ];
 
-  // Mint the per-launch loopback token and hand it to the daemon via
-  // `CENTRAID_GATEWAY_TOKEN`. Persist it in device safeStorage—never the
-  // gateway tree—so a desktop restart can re-adopt the child.
+  // Persisted in device safeStorage, never the gateway tree, so a desktop
+  // restart can re-adopt the child.
   const loopbackToken = crypto.randomBytes(32).toString("hex");
   storeLocalLoopbackToken(LOCAL_GATEWAY_ID, loopbackToken);
 
@@ -666,18 +596,13 @@ export async function ensureDetachedGateway(
   });
 }
 
-/** Whether the desktop should prefer the in-process embed (tests/E2E). */
 export function preferEmbeddedGateway(
   env: NodeJS.ProcessEnv = process.env
 ): boolean {
   return env.CENTRAID_EMBEDDED_GATEWAY === "1";
 }
 
-/**
- * H5/H6 — install the OS service unit via the same CLI `service-admin` uses
- * (`centraid-gateway service install --data-dir …`, label `dev.centraid.gateway`).
- * Opt-in only; never call from a silent path.
- */
+/** H5/H6 — opt-in only; never call from a silent path. */
 export async function installGatewayOsService(
   dataDir: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -700,9 +625,8 @@ export async function installGatewayOsService(
         "--port",
         String(port),
       ],
-      // `nodeBin` here is `process.execPath` = the Electron binary. Run it in
-      // node mode so this one-shot install doesn't flash the full desktop app
-      // (and so the child's own `process.execPath`-derived unit stays sane).
+      // `nodeBin` is the Electron binary here; node mode keeps this one-shot
+      // install from flashing the desktop app and keeps the unit sane.
       {
         encoding: "utf8",
         timeout: 30_000,

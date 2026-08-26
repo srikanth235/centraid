@@ -159,7 +159,7 @@ describe("gateway-client-device-work-source", () => {
           })
         )
       );
-      // eslint-disable-next-line unicorn/prefer-blob-reading-methods -- jsdom's Blob lacks arrayBuffer(); governance: allow-no-unjustified-suppressions test-environment compatibility (#414)
+      // oxlint-disable-next-line unicorn/prefer-blob-reading-methods -- jsdom's Blob lacks arrayBuffer(); governance: allow-no-unjustified-suppressions test-environment compatibility (#414)
       reader.readAsArrayBuffer(blob);
     });
   }
@@ -236,7 +236,7 @@ describe("gateway-client-device-work-source", () => {
       (call) => call.url === "https://provider.test/object"
     );
     expect(providerCalls.length).toBeGreaterThan(3);
-    // Every provider read was a byte range — never a whole-object GET. Runs
+    // Every provider read is a byte range — never a whole-object GET. Runs
     // unconditionally, and the `> 3` assertion above keeps it non-vacuous.
     expect(
       providerCalls.every((call) =>

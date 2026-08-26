@@ -1,12 +1,7 @@
 import { IDENTITY_COLORS } from "@centraid/design";
 
-/**
- * Gateway profile registry — pure core (issue #109 / #545 C1).
- *
- * Avatar palette, profile shape validation, read-time defaults, and list sort
- * are side-effect-free so unit tests cover them without mocking fs / keychain.
- * I/O and Electron wiring stay in `gateway-store.ts`.
- */
+/** Gateway profile registry — pure core (#109 / #545 C1); I/O stays in
+ *  `gateway-store.ts`. */
 
 export type GatewayKind = "local" | "remote";
 
@@ -23,19 +18,10 @@ export interface GatewayProfileShape {
   readonly createdAt: string;
 }
 
-/**
- * 8-color avatar palette. Picked for AA contrast against the dark sidebar
- * background and for being visually distinct from each other at 24×24px.
- * The order matters — `defaultAvatarColor` hashes id into this array.
- */
+/** Order matters: `defaultAvatarColor` hashes id into this array. */
 export const AVATAR_PALETTE: readonly string[] = IDENTITY_COLORS;
 
-/**
- * Deterministic palette pick from a profile id. Stable across launches —
- * a user who never touches `avatarColor` always sees the same color for
- * the same profile. Hash is FNV-1a 32-bit; cryptographic strength is not
- * needed.
- */
+/** Deterministic FNV-1a pick from a profile id; stable across launches. */
 export function defaultAvatarColor(id: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < id.length; i++) {
@@ -46,26 +32,18 @@ export function defaultAvatarColor(id: string): string {
   return AVATAR_PALETTE[idx] as string;
 }
 
-/** Validate a user-supplied avatar color. Accepts `#RRGGBB` only. */
+/** Validate a user-supplied avatar color. */
 export function isValidAvatarColor(value: unknown): value is string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}$/u.test(value);
 }
 
 export const ENDPOINT_ID_RE = /^[0-9a-f]{64}$/u;
 
-/**
- * A connection identity is either the primordial local gateway or a real
- * 32-byte iroh public key rendered as its 64-character EndpointId.
- */
 export function isValidGatewayId(id: string): boolean {
   return id === "local" || ENDPOINT_ID_RE.test(id);
 }
 
-/**
- * Normalize a raw `connections.json` row into a populated profile, or
- * `undefined` when required fields are missing/wrong. Applies read-time
- * defaults for `displayName`, `avatarColor`, and legacy local persistence.
- */
+/** Raw `connections.json` row → populated profile, or undefined when invalid. */
 export function normalizeProfile(
   id: string,
   parsed: Partial<GatewayProfileShape> | null | undefined
@@ -104,9 +82,7 @@ export function normalizeProfile(
     ...(typeof parsed.relayHint === "string" && parsed.relayHint.length > 0
       ? { relayHint: parsed.relayHint }
       : {}),
-    // Local profiles created before durable replica storage had no preference.
-    // Treat that legacy absence as opted in so desktop offline state survives a
-    // restart; an explicit false still honors the user's storage choice.
+    // No stored preference counts as opted in; explicit false still honored.
     rememberDevice:
       parsed.rememberDevice === true ||
       (parsed.kind === "local" && parsed.rememberDevice === undefined),
@@ -114,10 +90,7 @@ export function normalizeProfile(
   };
 }
 
-/**
- * Stable list order: local first, then remotes by creation time (oldest first).
- * Mutates nothing — returns a new array.
- */
+/** Local first, then remotes by creation time; mutates nothing. */
 export function sortGatewayProfiles<
   T extends { id: string; createdAt: string },
 >(profiles: readonly T[], localId: string): T[] {

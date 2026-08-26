@@ -1,20 +1,9 @@
-// The Connectors place, rendered (#765, spec §4). Five states, one screen.
-//
-// What this pins is what a future edit is likeliest to undo quietly:
-//
-//  - loading draws the ROW GEOMETRY plus the sentence that explains why, and
-//    never a spinner
-//  - empty is the verbatim consent paragraph, in the routine register
-//  - error is the net panel with the reference's exact cause, the retry verb,
-//    and — the load-bearing half — the promise that nothing has been paused
-//  - a lapsed row's `Re-authorize` reaches the real ceremony (begin → in-app
-//    auth session → complete), not a local status write
-//  - the standing line's inline verb appears only when there is a lapsed
-//    connection to act on
-//
-// The frame's own verbs are ABSENT by decision (no add-connection or catalog
-// flow exists on this surface); the last test holds that absence in place so
-// a future pass has to change the file header before it invents one.
+// The Connectors place, rendered (#765, spec §4). Pins what an edit is
+// likeliest to undo quietly: loading = ROW GEOMETRY + why-sentence, never a
+// spinner; empty = verbatim consent paragraph; error = net panel + exact
+// cause + retry + promise nothing was paused; lapsed `Re-authorize` runs the
+// real ceremony, not a local write; inline verb only with a lapsed row.
+// Frame verbs ABSENT by decision — the last test holds that absence.
 
 import type { WebBrowserAuthSessionResult } from "expo-web-browser";
 // @vitest-environment jsdom
@@ -35,9 +24,8 @@ import ConnectorsScreen from "./Connectors";
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
-  // `RefreshControl` is a pull-to-refresh gesture host with nothing to draw;
-  // the shared stub covers the primitives the kit blocks use, and this is the
-  // one primitive a SCREEN adds on top of them.
+  // RefreshControl is the screen-added primitive: a gesture host that draws
+  // nothing; kit primitives come from the shared stub.
   return {
     ...stub.reactNativeStub(),
     RefreshControl: () => null,
@@ -57,10 +45,8 @@ vi.mock(import("react-native-safe-area-context"), () => ({
   useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 47 }),
 }));
 
-// The one fact this screen reads from the session: which experimental
-// features the gateway advertised on the single `/info` answer the
-// compatibility wall already made. Mocked at the provider so the test does
-// not mount the replica machinery to state a capability.
+// Only session fact read: features advertised on `/info`. Provider mocked so
+// the replica machinery never mounts to state a capability.
 const session = vi.hoisted(() => ({
   features: undefined as
     | { automations: boolean; connectors: boolean }
@@ -70,9 +56,6 @@ vi.mock(import("../../kit/replica/ReplicaProvider"), () => ({
   useReplica: () => ({ online: true, ready: true, ...session }),
 }));
 
-// Each mock takes the REAL function's signature, so a wire shape that drifts
-// is a typecheck failure here rather than a test that passes against a
-// module the app no longer has.
 type Connections = typeof import("../../lib/connections");
 type WebBrowserModule = typeof import("expo-web-browser");
 
@@ -98,8 +81,6 @@ vi.mock(import("../../lib/connections"), () => ({
   listConnections: wire.list,
   setConnectionStatus: wire.setStatus,
 }));
-// Only the one function this screen's hook reaches; the module's other
-// exports are not on this page's path.
 vi.mock(
   import("../../lib/gateway"),
   () =>
@@ -153,9 +134,8 @@ async function render(): Promise<HTMLElement> {
   return mounted.container;
 }
 
-/** Let the effect's read — and anything it chained — finish. Two macrotask
- *  turns: every microtask in between has drained by the time the first timer
- *  callback runs, and the second turn covers a read that a write kicked off. */
+/** Two macrotask turns: microtasks drain before the first timer; the second
+ *  covers a read that a write kicked off. */
 async function settle(): Promise<void> {
   await new Promise<void>((resolve) => {
     setTimeout(resolve, 0);
@@ -180,16 +160,14 @@ function buttonLabelled(container: HTMLElement, label: string): Element | null {
 describe(ConnectorsScreen, () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Unknown by default — the gateway has not answered — which is the state
-    // every other test in this file is written against.
+    // Unknown by default — the gateway has not answered yet.
     session.features = undefined;
     wire.list.mockResolvedValue([]);
     wire.begin.mockResolvedValue(wire.authUrl);
     wire.complete.mockResolvedValue(undefined);
     wire.setStatus.mockResolvedValue(undefined);
-    // The everyday outcome: the member closed the sheet. `WebBrowserResultType`
-    // is a runtime enum from a module this file mocks, so the literal is
-    // asserted against the type rather than imported as a value.
+    // Everyday outcome: member closed the sheet. Runtime enum from a mocked
+    // module — the literal is type-asserted.
     wire.openAuthSession.mockResolvedValue({
       type: "dismiss",
     } as WebBrowserAuthSessionResult);
@@ -200,9 +178,8 @@ describe(ConnectorsScreen, () => {
     dispose = undefined;
   });
 
-  // THE V0 EXPERIMENTAL GATE. Off means this gateway does not mount the
-  // connections routes, so the page must not read them and must say what is
-  // true rather than dress a 404 as a failed read.
+  // V0 gate off: no connections routes mounted — don't dress a 404 as a
+  // failed read.
   it("walls the place when the gateway has connectors switched off", async () => {
     session.features = { automations: true, connectors: false };
     const container = await render();
@@ -249,8 +226,7 @@ describe(ConnectorsScreen, () => {
       "A connector lets one outside service reach a named part of this vault, and nothing else."
     );
     expect(spans).toContain("Nothing to attend to");
-    // The reference's `Open the catalog` is withheld: there is no catalog on
-    // this surface, so the empty state offers nothing it cannot do.
+    // No catalog exists on this surface; offer nothing it cannot do.
     expect(buttonLabelled(container, "Open the catalog")).toBeNull();
   });
 
@@ -298,7 +274,7 @@ describe(ConnectorsScreen, () => {
       "centraid://oauth/finish"
     );
     expect(wire.complete).toHaveBeenCalledOnce();
-    // The row's health is re-read from the gateway, never assumed locally.
+    // Health is re-read from the gateway, never assumed locally.
     expect(wire.setStatus).not.toHaveBeenCalled();
     expect(wire.list.mock.calls.length).toBeGreaterThan(1);
   });

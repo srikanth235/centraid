@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-// The import routes (issue #290 phase 2) over a real vault plane: stage a
+// The import routes (#290) over a real vault plane: stage a
 // file over HTTP, review its rows, publish, and see the batch in history.
 import http from "node:http";
 

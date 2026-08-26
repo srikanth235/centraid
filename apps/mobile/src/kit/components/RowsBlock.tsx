@@ -1,25 +1,4 @@
-// ROWS — the workhorse of every operational page (#765, spec §9).
-//
-// One bordered container, rows separated by a hairline, each row a 44pt
-// target carrying a title, an optional sub line, an optional state word and at
-// most ONE trailing verb. Three rules are load-bearing and easy to undo:
-//
-//  1. The TITLE is always primary ink, even on a net-toned row. Only the sub
-//     and the state word take `net` — a row that "leaves the device" says so
-//     with its metadata, not by recolouring the thing it is about.
-//  2. The trailing verb is ALWAYS outlined, dangerous or not. A filled button
-//     inside a list row would be the second filled commit on a page that is
-//     allowed exactly one.
-//  3. `off` recedes on the LEAF (disabled ink on the title, a disabled button)
-//     and never as a container opacity. `struck` recedes the same way and adds
-//     the rule through the title: a revoked holder stays on the record, so the
-//     row keeps its height and its place in the list.
-//
-// `children` is the per-row escape hatch: a row that has to open something in
-// place (Notifications' outbox editor) renders it under its own line, inside
-// the same cell, so the divider still separates one record from the next.
-//
-// Every string is the caller's.
+// Rows (#765, §9): outlined trailing verb, `off`/`struck` recede on the leaf.
 
 import React, { useMemo } from "react";
 import { View } from "react-native";
@@ -32,29 +11,19 @@ import Button from "./Button";
 import { Text } from "./NativeText";
 import { styles } from "./RowsBlock.styles";
 
-/**
- * A row's trailing verb. It is an OBJECT and not a flat `action` string beside
- * an `onAction` handler, because the flat pair had nowhere to put `hint` — so
- * ten rows that all say "Open" announced themselves identically to a screen
- * reader here while the shell named each one.
- */
+// Object, not a flat `action` string: the flat pair had nowhere to put `hint`.
 export interface RowsBlockAction extends ActionData {
   onPress: () => void;
 }
 
-/** `title`, `sub`, `meta` and the `net` / `dangerous` / `off` flags come from
- *  the shared contract, where each one is documented once. */
 export interface RowsBlockRow extends RowData {
-  /** Stable identity for the list; never rendered. */
   key: string;
   action?: RowsBlockAction;
-  /** Rendered under the row's own line, inside the same cell. */
   children?: React.ReactNode;
 }
 
 export interface RowsBlockProps {
   rows: readonly RowsBlockRow[];
-  /** Named for a screen reader when the list is not preceded by a section. */
   accessibilityLabel?: string;
 }
 
@@ -126,9 +95,7 @@ export default function RowsBlock({
               ) : null}
               {rowAction ? (
                 <Button
-                  // `hint` is what distinguishes ten identical verbs. It is an
-                  // accessibility HINT and not a label, because the control
-                  // already renders its visible word (#708 B.4).
+                  // Hint, not label: the control already renders its visible word (#708 B.4).
                   accessibilityHint={rowAction.hint}
                   disabled={row.off === true}
                   label={rowAction.label}

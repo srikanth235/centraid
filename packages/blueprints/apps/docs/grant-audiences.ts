@@ -1,5 +1,5 @@
 /**
- * WHAT THE DOCS SEAT MUST HOLD BEFORE IT MAY DRAW SHARE (issue #825).
+ * WHAT THE DOCS SEAT MUST HOLD BEFORE IT MAY DRAW SHARE (#825).
  *
  * The roster mapping itself is NOT here: `_shared/grant-audiences.ts` owns it
  * for every app and both seats. What is Docs-specific is the contract between

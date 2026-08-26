@@ -1,29 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-/**
- * Expo config — single-sources version + native build numbers (issue #468 J6).
- * Build numbers come from {@link nativeBuildNumber} so app.json hardcodes cannot drift.
- */
+// Single-sources version + native build numbers (#468); app.json cannot drift.
 import type { ExpoConfig, ConfigContext } from "expo/config";
 
-// Expo evaluates app.config via Node CJS resolve (require-from-string). An
-// extensionless TS import of `./src/version-core` fails with MODULE_NOT_FOUND
-// on CI; the .cjs twin is the same formula and resolves under plain require.
-// Do NOT use import.meta.url / fileURLToPath here — Expo's eval path mixes
-// CJS `exports` with ESM load and dies with "exports is not defined".
+// Node require only — extensionless TS fails on CI; import.meta dies under Expo eval.
 import { nativeBuildNumber } from "./src/version-core.cjs";
 
-/**
- * Single-source version from `@centraid/mobile` package.json (synced from the
- * monorepo root by scripts/release/sync-versions.mjs / publish.mjs — #501 / J6).
- * Walk cwd candidates so gradle (cwd=android/) and monorepo-root invokers both
- * resolve the right package.json without import.meta.
- */
+// Version of @centraid/mobile (#501); cwd candidates cover gradle + root.
 function readMobilePackageVersion(): string {
   const candidates = [
     path.join(process.cwd(), "package.json"),
-    path.join(process.cwd(), "..", "package.json"), // apps/mobile/android → apps/mobile
+    path.join(process.cwd(), "..", "package.json"),
     path.join(process.cwd(), "apps", "mobile", "package.json"),
   ];
   for (const p of candidates) {
@@ -96,14 +84,9 @@ export default function createExpoConfig({
         backgroundColor: "#3EC8B4",
       },
     },
-    // The native projects are checked in (bare workflow), where Expo
-    // requires a concrete runtime version rather than the managed-workflow
-    // `appVersion` policy. VERSION is the same value that policy would
-    // resolve to and keeps OTA compatibility tied to the store version.
+    // Bare workflow needs a concrete runtime version; VERSION ties OTA to it.
     runtimeVersion: VERSION,
-    // J7 / #501 — routine updates are store-only. The emergency OTA lane is
-    // explicitly disabled until the real Expo project id is enrolled; no
-    // placeholder endpoint or dormant native updater ships.
+    // Store-only updates (#501): OTA off until a real Expo project id is enrolled.
     updates: EAS_PROJECT_ID
       ? {
           enabled: true,
@@ -162,19 +145,12 @@ export default function createExpoConfig({
         },
       ],
       "expo-video",
-      // Photos' real map (#816). MapKit on iOS through `expo-maps`, MapLibre
-      // over OpenFreeMap's vector tiles on Android — the split exists because
-      // `expo-maps`' Android side is Google Maps, which would mean an API key
-      // and Play Services. Neither plugin is given `requestLocationPermission`:
-      // this map answers "where have I been", never "where am I", so the app
-      // asks for no location grant to draw it.
+      // Photos' map (#816): MapKit iOS + MapLibre/OpenFreeMap Android; NO location permission.
       "expo-maps",
       [
         "@maplibre/maplibre-react-native",
         {
-          // The plugin's own default, stated rather than inherited: `google`
-          // would pull Play Services back in through the location engine and
-          // undo the reason MapLibre is here at all.
+          // Plugin default; `google` would pull Play Services back in.
           android: { locationEngine: "default" },
         },
       ],
@@ -183,7 +159,7 @@ export default function createExpoConfig({
     ],
     extra: {
       recurrencePolicy: "bounded-local-expansion",
-      // Expose for tests / tooling that cannot import version-core through Expo.
+      // For tests/tooling outside Expo's module graph.
       nativeBuildNumber: BUILD,
       updateChannel: EAS_PROJECT_ID ? "eas-hotfix" : "store-only",
       ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),

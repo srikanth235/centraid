@@ -1,7 +1,5 @@
 /*
- * `gateway.db`'s DDL, extracted out of `gateway-db.ts` to keep that file
- * under the 500-line cap (mirrors the P1 precedent of
- * `device-ticket-mint.ts`). Pre-1.0, this repo carries NO backward
+ * `gateway.db`'s DDL. Pre-1.0, this repo carries NO backward
  * compatibility for `gateway.db`: there are no legacy-generation migrations
  * here, on principle. `installGatewaySchema` is the single source of truth
  * for the current shape; a `gateway.db` written by an older generation is
@@ -93,8 +91,7 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * A ticket is an INVITATION: which owner the joining device binds to,
      * and the vault-id list (grants_json — no roles, just ids) the device
      * lands in. One scan, many vaults, atomically. There is only one kind of
-     * ticket since #603 retired the founding ceremony — a gateway founds
-     * itself.
+     * ticket (#603) — a gateway founds itself.
      */
     CREATE TABLE IF NOT EXISTS tickets (
       ticket_id TEXT PRIMARY KEY,
@@ -170,9 +167,9 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * three. The audience projection always commits before a move deletes
      * its source; replay resumes from target_state/source_state.
      *
-     * The retired live/lend relationship is not represented (#731): mode
-     * admits ONE value, which is that removal asserted at the boundary rather
-     * than merely remembered. A live edge cannot be written here, so no
+     * A live/lend relationship is not representable (#731): mode admits ONE
+     * value, asserted at the boundary rather than merely remembered by a
+     * reader. A live edge cannot be written here, so no
      * reader downstream has to ask whether a scope is a standing declaration
      * — a scope is always a fixed, validated set of item ids
      * (serve/share-scope.ts).
@@ -369,9 +366,9 @@ export function installGatewaySchema(db: DatabaseSync): void {
       expires_at INTEGER NOT NULL
     ) STRICT;
     /*
-     * link_receive_settings is NOT here. D9's accept|ask|refuse preference
-     * answered one question — "may another person's vault push a copy into
-     * mine?" — and copy-as-share retired (#825, ruling G-copy), so nothing
+     * link_receive_settings is NOT here. An accept|ask|refuse preference
+     * answers one question — "may another person's vault push a copy into
+     * mine?" — and nothing pushes a copy (#825, ruling G-copy), so nothing
      * arrives for it to govern: a grant is a standing permission the AUDIENCE
      * accepts through the channel invitation, not a push it pre-authorizes.
      * retireDeadShareEffects drops the table where an older generation left

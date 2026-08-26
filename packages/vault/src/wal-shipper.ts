@@ -1,51 +1,35 @@
 // governance: allow-repo-hygiene file-size-limit (#408) the WAL capture loop is one correctness argument — detectors, capture, rollover, generation lifecycle and crash-ordering rules all lean on each other's invariants; splitting them would scatter the proof across files that only ever change together
 /*
- * In-process WAL segment shipper (issue #408) — the capture half of the
- * continuous, PITR-capable vault backup. Each tick copies the committed
- * byte-delta of `vault.db-wal` / `journal.db-wal` into local segment files;
- * the gateway's uploader seals and drains them to the provider
- * (`@centraid/backup` wal-format owns the object format).
+ * In-process WAL segment shipper (#408): each tick copies the committed
+ * byte-delta of `vault.db-wal` / `journal.db-wal` into local segment files,
+ * which the gateway's uploader seals and drains (`@centraid/backup` wal-format
+ * owns the object format).
  *
- * The correctness story rests on two invariants:
- *   I1 — the gateway's synchronous command pipeline is the only writer to
- *        vault.db (journal.db additionally has out-of-process ledger
- *        writers — tolerated, see below);
- *   I2 — nobody checkpoints but this shipper, always with TRUNCATE, so the
- *        WAL is strictly append-only between our checkpoints and byte
- *        offsets are never reused within a group.
- * I2 is VERIFIED, not enforced (issue #411 action 1). Verification is the
- * single authoritative mechanism: every capture re-checks the WAL salts, the
- * offset chain, and the main-file identity, and ANY foreign checkpoint breaks
- * the generation — a fresh base snapshot — never a silent gap. Correctness
- * therefore does NOT depend on the `wal_autocheckpoint = 0` convention every
- * opener carries; that pragma is a perf hint that keeps generation churn (base
- * re-clones) near zero, not a precondition — a stray default-config connection
- * resetting the WAL is a churn event the detectors catch and heal, counted in
- * `foreignCheckpointCount` and surfaced to health. The tick body is fully
- * synchronous, which on a synchronous
- * `node:sqlite` write path means no gateway write can interleave with it
- * (event-loop atomicity): the per-tick stat pair over the two databases is
- * a coordinated restore point without any locking.
+ * Two invariants carry the correctness argument. I1 — the gateway's
+ * synchronous command pipeline is vault.db's only writer (journal.db also has
+ * out-of-process ledger writers, tolerated below). I2 — nobody checkpoints but
+ * this shipper, always TRUNCATE, so the WAL is append-only between our
+ * checkpoints and offsets are never reused within a group.
  *
- * journal.db's subprocess writers make two extra defenses load-bearing:
- *   - segments end on COMMIT boundaries (`lastCommitBoundary`): uncommitted
- *     tails are not append-only — a rollback rewinds SQLite's write cursor
- *     and the next transaction overwrites those bytes in place;
- *   - every TRUNCATE is bracketed by a `PRAGMA data_version` reading
- *     (`settleWal` + `truncate`): a writer that commits in the
- *     stat→checkpoint microsecond window would otherwise have its frames
- *     silently folded into the main file and zeroed from the WAL — a
- *     permanent hole in the stream (the one thing the design forbids) —
- *     detected ⇒ generation break, whose fresh base clone carries exactly
- *     the commits that were folded in.
+ * I2 is VERIFIED, NOT ENFORCED (#411 action 1): every capture re-checks WAL
+ * salts, the offset chain and main-file identity, and ANY foreign checkpoint
+ * breaks the generation — a fresh base, never a silent gap. Correctness
+ * therefore does not rest on the `wal_autocheckpoint = 0` convention, which
+ * only keeps churn near zero. Keep every path here SYNCHRONOUS: the guarantee
+ * that no gateway write interleaves is event-loop atomicity over a synchronous
+ * `node:sqlite`, so one `await` destroys it with every test still green.
  *
- * Crash ordering (G7): segment file fsync happens BEFORE the state-file
- * offset fsync. A crash between the two re-captures a range from the same
- * start — possibly longer, which is why the object nonce derivation
- * includes the end offset — and duplicate uploads are prefix-compatible
- * (longest-wins at plan time). A hole is not reachable: nothing ever
- * advances `offset` past bytes that aren't durably in a local segment, and
- * nothing checkpoints bytes that aren't durably at or behind `offset`.
+ * journal.db's subprocess writers make two defenses load-bearing: segments end
+ * on COMMIT boundaries (`lastCommitBoundary`), and every TRUNCATE is bracketed
+ * by a `PRAGMA data_version` reading (`settleWal` + `truncate`) — see those
+ * functions for why.
+ *
+ * Crash ordering (G7): segment fsync happens BEFORE the state-file offset
+ * fsync, so a crash between them re-captures from the same start (which is why
+ * the object nonce includes the end offset) and duplicate uploads stay
+ * prefix-compatible. A hole is unreachable: `offset` never passes bytes that
+ * are not durably in a local segment, and nothing checkpoints bytes that are
+ * not durably at or behind `offset`.
  */
 
 import { execFileSync } from "node:child_process";
@@ -128,49 +112,43 @@ interface DbStreamState {
   salt2: number | null;
   /** The database's WAL page size once observed (fixed per file). */
   pageSize: number | null;
-  /** Main-db file identity after our last checkpoint — it MUST NOT change
-   * between our checkpoints (all writes go to the WAL); any change means a
-   * foreign checkpoint backfilled frames we may never have seen. */
+  /** Main-db identity after our last checkpoint. It MUST NOT change between
+   *  our checkpoints — a change means a foreign checkpoint backfilled frames
+   *  we may never have seen. */
   dbSize: number;
   dbMtimeMs: number;
-  /** Hash of SQLite's 100-byte database header. Catches a foreign
-   * checkpoint even on filesystems whose coarse mtime and stable size hide it. */
+  /** Hash of SQLite's 100-byte header: catches a foreign checkpoint even
+   *  where coarse mtime and a stable size hide it. */
   dbHeaderSha256: string;
   /** Relative path of the pinned base clone for this generation. */
   baseName: string;
   /**
    * The SUPERSEDED generation's base clone, kept one break longer: the
-   * gateway's snapshot engine may still be streaming it when a base-cadence
-   * or archival roll lands mid-run — deleting it immediately would ENOENT
-   * a running backup. It is removed at the NEXT break (a run spanning two
-   * breaks would have to outlive a whole base interval).
+   * snapshot engine may still be streaming it when a roll lands mid-run, and
+   * deleting it now would ENOENT a running backup.
    */
   retiredBaseName?: string;
   baseCreatedAtMs: number;
-  /** SHA-256 of the base clone (computed by `pendingBases` consumers lazily
-   * would race the file's lifetime; it is cheap enough at roll time). */
+  /** SHA-256 of the base clone; computed at roll time, not lazily. */
   baseSha256: string;
   /** True until the gateway registers a snapshot anchoring this base. */
   basePending: boolean;
   /** Set by `close()` after a final ship+truncate; cleared on next start. */
   closedClean: boolean;
   /**
-   * Set when captured files of THIS stream were deleted without upload
-   * (backup unconfigured — capture-then-discard). The stream has holes, so
-   * the moment a backend appears it must break to a fresh generation
-   * BEFORE its stale base gets registered: a restore of a holed stream
-   * silently lands on the old base, exactly the quiet truncation this
-   * feature forbids. Persisted — the transition can span restarts.
+   * Captured files of THIS stream were deleted without upload (backup
+   * unconfigured). The stream has holes, so the moment a backend appears it
+   * MUST break to a fresh generation BEFORE its stale base is registered — a
+   * restore of a holed stream silently lands on the old base. Persisted: the
+   * transition can span restarts.
    */
   discarded?: boolean;
   /**
-   * A coordinated generation break that could not complete (the sibling's
-   * checkpoint came back busy after this one's had already truncated). The
-   * stream is FROZEN until the break lands: nothing captures, nothing rolls,
-   * nothing ships under this generation. Persisted — the intent must survive a
-   * restart, or the next boot would cheerfully resume a stream whose sibling is
-   * mid-break, and the pair of bases that eventually registers would be two
-   * different instants.
+   * A coordinated break that could not complete (the sibling's checkpoint came
+   * back busy after this one had truncated). The stream is FROZEN until the
+   * break lands: nothing captures, rolls, or ships. Persisted — otherwise the
+   * next boot resumes a stream whose sibling is mid-break, and the pair of
+   * bases that eventually registers would be two different instants.
    */
   breakPending?: string;
 }
@@ -196,19 +174,11 @@ interface ShipperState {
   lastTickMs: number;
   dbs: Partial<Record<WalDbName, DbStreamState>>;
   /**
-   * Issue #411 action 1: how many FOREIGN checkpoints this shipper has detected
-   * and healed across ALL generations (see `FOREIGN_CHECKPOINT_REASONS`).
-   *
-   * TOP-LEVEL, not per-stream, ON PURPOSE: a generation break REPLACES both
-   * stream records wholesale (`mintBase`), so a per-stream counter would reset
-   * to zero on the very event it exists to count. A monotone churn signal — the
-   * gateway copies it into persisted backup state where the health probe
-   * recomputes a degraded verdict from it, per the #408 lesson that probes
-   * override pushed reports.
-   *
-   * Optional so a `state.json` written before this field defaults to 0 on load
-   * (still `version: 1` — the tolerant default-on-load, like the gateway's
-   * `recoveryKit`). `undefined` is read as 0 everywhere.
+   * Foreign checkpoints detected and healed across ALL generations (#411
+   * action 1; see `FOREIGN_CHECKPOINT_REASONS`). TOP-LEVEL, not per-stream: a
+   * break REPLACES both stream records (`mintBase`), so a per-stream counter
+   * would reset on the very event it counts. Optional so a pre-#411
+   * `state.json` defaults to 0 on load; `undefined` reads as 0 everywhere.
    */
   foreignCheckpointCount?: number;
   /** The most recent foreign checkpoint: when (tick ms), which database, and
@@ -217,30 +187,20 @@ interface ShipperState {
 }
 
 /**
- * Break reasons that mean SOMETHING ELSE checkpointed one of our databases: a
- * foreign checkpoint reset the WAL in place — salts jumped, offsets got reused,
- * or frames were folded into the main file we never observed. Issue #411
- * action 1: these are exactly the reasons whose whole cost is a generation
- * break (base re-clone), i.e. a PERF/churn event, not a correctness threat —
- * verification (not the `wal_autocheckpoint = 0` convention) is what keeps them
- * safe. They feed `ShipperState.foreignCheckpointCount`.
+ * Break reasons meaning SOMETHING ELSE checkpointed one of our databases —
+ * salts jumped, offsets were reused, or frames were folded into the main file
+ * unobserved. Their whole cost is a base re-clone, i.e. churn, not a
+ * correctness threat; they feed `ShipperState.foreignCheckpointCount` (#411).
  *
- * DELIBERATELY EXCLUDED, and why each is not a foreign CHECKPOINT:
- *   - `first-run` / `base-cadence` / `local-budget` / `key-epoch-rotation` /
- *     `journal-archival` / `backup-enabled-after-discard`: OUR OWN scheduled or
- *     requested re-bases.
- *   - `checkpoint-raced-writer`: a foreign WRITER committed inside OUR
- *     checkpoint's lock window — OUR checkpoint folded its frames, not a foreign
- *     one. A raced writer is not a foreign checkpointer (issue #411: be precise).
- *   - `wal-exceeds-safe-capture-window`: a single oversized transaction we chose
- *     to re-base past — nobody else's checkpoint.
- *   - `wal-checksum-invalid-before-captured-offset`: WAL byte corruption before
- *     our offset — an integrity break of ambiguous cause, not evidence of a
- *     foreign CHECKPOINT specifically.
- *   - `coordinated:*`: the SIBLING database re-bases in lockstep with the
- *     trigger; counting it would double-count one event (`mintBase` runs for
- *     both databases on every break), so the `coordinated:` prefix keeps it out
- *     of this set.
+ * DELIBERATELY EXCLUDED, each for its own reason: `first-run`/`base-cadence`/
+ * `local-budget`/`key-epoch-rotation`/`journal-archival`/
+ * `backup-enabled-after-discard` are OUR OWN re-bases;
+ * `checkpoint-raced-writer` is a foreign WRITER inside OUR checkpoint's lock
+ * window, not a foreign checkpointer; `wal-exceeds-safe-capture-window` is an
+ * oversized transaction we chose to re-base past;
+ * `wal-checksum-invalid-before-captured-offset` is corruption of ambiguous
+ * cause; and `coordinated:*` is the SIBLING re-basing in lockstep, which would
+ * double-count one event.
  */
 const FOREIGN_CHECKPOINT_REASONS: ReadonlySet<string> = new Set([
   "main-db-file-changed-without-our-checkpoint",
@@ -332,9 +292,8 @@ function isShipperState(value: unknown): value is ShipperState {
   if (state["version"] !== 1 || !isNonNegativeInteger(state["lastTickMs"]))
     return false;
   if (typeof state["dbs"] !== "object" || state["dbs"] === null) return false;
-  // Issue #411 action 1: optional fields — absent on pre-#411 state files
-  // (default-on-load to 0/undefined), so tolerate absence but reject a
-  // malformed shape.
+  // Optional fields, absent on pre-#411 state files: tolerate absence but
+  // reject a malformed shape.
   if (
     state["foreignCheckpointCount"] !== undefined &&
     !isNonNegativeInteger(state["foreignCheckpointCount"])
@@ -399,16 +358,14 @@ const DEFAULT_BASE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LOCAL_BUDGET = 2 * 1024 * 1024 * 1024;
 /** Max ms a checkpoint may block the (synchronous) tick on a busy reader. */
 const CHECKPOINT_BUSY_MS = 250;
-/** A single oversized transaction must not turn capture into an unbounded
- * allocation. Re-basing preserves its committed state while sacrificing only
- * the PITR points inside that exceptional WAL era. */
+/** A single oversized transaction must not make capture an unbounded
+ * allocation. Re-basing keeps its committed state, sacrificing only the PITR
+ * points inside that exceptional WAL era. */
 const MAX_CAPTURE_BYTES = 64 * 1024 * 1024;
 /**
- * Max capture passes `settleWal` will make chasing a writer before it gives up
- * and leaves the WAL untruncated for this tick. Each pass captures whatever
- * committed since the last one, so a normal writer settles in one or two; a
- * writer that outruns eight is one we would rather retry next tick than
- * checkpoint under.
+ * Max passes `settleWal` chases a writer before giving up and leaving the WAL
+ * untruncated this tick. A normal writer settles in one or two; one that
+ * outruns eight is better retried than checkpointed under.
  */
 const TRUNCATE_SETTLE_PASSES = 8;
 const noopLog: Required<WalShipperLogger> = {
@@ -425,24 +382,18 @@ function reflinkDeviceKey(src: string, dst: string): string {
 /**
  * Copy-on-write clone of a database file — the base of a new generation.
  *
- * This MUST be a reflink wherever the filesystem offers one, or the design's
- * cost story collapses: a base is minted on every generation break (daily, at
- * minimum), so a byte copy means writing a second full copy of the vault every
- * day and carrying 2x the vault on disk forever. Local bytes/day would be
- * O(database), not O(change).
+ * This MUST be a reflink wherever the filesystem offers one, or the cost story
+ * collapses: a base is minted at least daily, so a byte copy writes a second
+ * full vault every day and carries 2x on disk forever.
  *
- * `copyFileSync(..., COPYFILE_FICLONE)` does NOT deliver that on macOS. libuv
- * implements FICLONE via `ioctl` on Linux only; on Darwin it silently falls
- * back to a full byte copy — the flag is accepted and ignored. Measured here on
- * APFS, 512 MiB: `COPYFILE_FICLONE` 497 ms and a real second copy on disk,
- * `cp -c` (clonefile(2)) 2 ms and no new blocks. At a 10 GiB vault that is
- * ~10 GiB written per day versus ~0.
- *
- * So on Darwin we ask for clonefile(2) explicitly. It fails on a non-APFS
- * volume or across devices; that is exactly when a byte copy is the only option
- * anyway, so fall through to it. `execFileSync` keeps the tick synchronous —
- * the cross-database ordering guarantee (journal cut strictly before vault, no
- * commit interleaving) rests on this whole path being one event-loop turn.
+ * `copyFileSync(..., COPYFILE_FICLONE)` does NOT deliver that on macOS — libuv
+ * implements FICLONE via ioctl on Linux only, and Darwin silently falls back to
+ * a byte copy. Measured on APFS at 512 MiB: FICLONE 497 ms and a real second
+ * copy, `cp -c` (clonefile(2)) 2 ms and no new blocks. So Darwin asks for
+ * clonefile(2) explicitly; it fails on non-APFS or across devices, which is
+ * exactly when a byte copy is the only option. `execFileSync` keeps the tick
+ * synchronous — the cross-database ordering guarantee rests on this whole path
+ * being one event-loop turn.
  */
 export function cloneDbFile(src: string, dst: string): boolean {
   const capabilityKey = reflinkDeviceKey(src, dst);
@@ -483,8 +434,8 @@ function fsyncDirBestEffort(dir: string): void {
       closeSync(fd);
     }
   } catch {
-    // Directory fsync is not supported everywhere; the file fsyncs are the
-    // load-bearing ones, this narrows the rename-durability window further.
+    // Directory fsync is not portable; the file fsyncs are the load-bearing
+    // ones and this only narrows the rename-durability window.
   }
 }
 
@@ -501,7 +452,6 @@ function writeFileDurable(file: string, data: Uint8Array): void {
   fsyncDirBestEffort(path.dirname(file));
 }
 
-/** The WAL shipper for one open vault. All methods are synchronous. */
 export class WalShipper {
   private readonly db: VaultDb;
   private readonly dir: string;
@@ -516,12 +466,10 @@ export class WalShipper {
   private stateRecovered = false;
   private closed = false;
   /**
-   * Running total of local segment bytes — seeded by one walk at
-   * construction, then maintained incrementally (capture adds, noteUploaded
-   * and the prune paths subtract). The shipper is the only writer and
-   * deleter of this tree, so the counter is exact; it replaces a full
-   * readdir+stat walk per 60 s tick that grew with exactly the offline
-   * backlog the budget exists to handle.
+   * Running total of local segment bytes: seeded by one walk at construction,
+   * then maintained incrementally. The shipper is this tree's only writer and
+   * deleter, so the counter is exact — it replaces a per-tick readdir+stat walk
+   * that grew with the offline backlog the budget exists to handle.
    */
   private localSegmentBytes = 0;
   private warnedPlainClone = false;
@@ -567,7 +515,7 @@ export class WalShipper {
     return total;
   }
 
-  // -------------------------------------------------------------------- state
+  // ──────────────────────────────────────────────────────────────────── state
 
   private loadState(): ShipperState {
     try {
@@ -601,20 +549,17 @@ export class WalShipper {
   }
 
   /**
-   * Startup hygiene: local segment files whose end lies BEYOND the persisted
-   * offset are un-acknowledged rewrites from a crash between segment-fsync
-   * and state-fsync. Their bytes are still in the WAL (nothing checkpointed
-   * past `offset` — see G4/G7 ordering), so the next tick re-captures them;
-   * deleting the strays keeps duplicate uploads bounded. (Uploading such a
-   * file would be SAFE — same-start ranges are prefix-compatible and the
-   * planner takes the longest — this is hygiene, not correctness.)
+   * Startup hygiene: local segments ending BEYOND the persisted offset are
+   * un-acknowledged rewrites from a crash between segment-fsync and
+   * state-fsync. Their bytes are still in the WAL (nothing checkpointed past
+   * `offset`), so the next tick re-captures them. Deleting the strays only
+   * bounds duplicate uploads — hygiene, not correctness.
    */
   private startupHygiene(): void {
     if (!this.stateRecovered) {
-      // Without authenticated offsets/generations no orphan segment can be
-      // chained safely. Drop the whole unreferenced spool so the first-run
-      // base starts clean instead of letting an unreachable backlog trigger a
-      // generation roll on every budget check forever.
+      // Without authenticated offsets/generations no orphan segment chains
+      // safely. Drop the whole unreferenced spool so the first-run base starts
+      // clean instead of triggering a generation roll on every budget check.
       rmSync(path.join(this.dir, "segments"), { recursive: true, force: true });
       rmSync(path.join(this.dir, "markers"), { recursive: true, force: true });
       rmSync(path.join(this.dir, "bases"), { recursive: true, force: true });
@@ -644,9 +589,8 @@ export class WalShipper {
 
   /**
    * Local filenames are the object key's basename plus an extension (see
-   * capture()) — parsing reconstructs the key and delegates to the ONE
-   * codec in wal-format, so a format change can never desync the builder
-   * from these parsers.
+   * `capture`), so parsing delegates to the ONE codec in wal-format — a format
+   * change can never desync the builder from these parsers.
    */
   private parseSegmentFileName(
     db: WalDbName,
@@ -660,7 +604,7 @@ export class WalShipper {
     );
   }
 
-  // -------------------------------------------------------------------- paths
+  // ──────────────────────────────────────────────────────────────────── paths
 
   private walPath(db: WalDbName): string {
     return path.join(this.db.dir, `${WAL_DB_FILES[db]}-wal`);
@@ -713,7 +657,7 @@ export class WalShipper {
     );
   }
 
-  // ------------------------------------------------------------------ ticking
+  // ────────────────────────────────────────────────────────────────── ticking
 
   private nextTickMs(): number {
     const t = Math.max(this.now(), this.state.lastTickMs + 1);
@@ -722,9 +666,8 @@ export class WalShipper {
   }
 
   private newReport(): WalTickReport {
-    // ONE `nextTickMs()` per pass. Every segment, closer and pair marker this
-    // pass emits carries this exact value — a marker that named a different
-    // tick than the segments it describes would be unsatisfiable forever.
+    // ONE `nextTickMs()` per pass: a marker naming a different tick than the
+    // segments it describes would be unsatisfiable forever.
     return {
       tickMs: this.nextTickMs(),
       shipped: [],
@@ -737,21 +680,16 @@ export class WalShipper {
   }
 
   /**
-   * One capture pass, in four phases over BOTH databases:
-   *   1. decide whether either database breaks (detectors, a deferred break,
-   *      a first run) — BEFORE a byte ships under a generation that may be
-   *      condemned;
-   *   2. capture, journal FIRST, for the databases that are not breaking, plus
-   *      their cadence/rollover checks (which may themselves REQUEST a break);
-   *   3. ONE coordinated break if either database asked for one — they re-base
-   *      together or not at all;
-   *   4. the end-of-tick pair marker, once both databases have settled.
+   * One capture pass, four phases over BOTH databases: (1) decide which
+   * databases break, BEFORE a byte ships under a condemned generation; (2)
+   * capture, journal FIRST, for the rest, with their cadence/rollover checks
+   * (which may REQUEST a break); (3) ONE coordinated break if either asked —
+   * they re-base together or not at all; (4) the end-of-tick pair marker.
    *
    * Synchronous end to end, and it must stay that way: the guarantee that no
-   * gateway write can land between the journal's cut and the vault's is
-   * event-loop atomicity over a synchronous `node:sqlite` (invariant I1), not
-   * a lock. A single `await` anywhere in this path destroys it — and no test
-   * would fail.
+   * gateway write lands between the journal's cut and the vault's is
+   * event-loop atomicity over a synchronous `node:sqlite` (I1), not a lock. One
+   * `await` anywhere destroys it, and no test would fail.
    */
   tick(): WalTickReport {
     if (this.closed) throw new Error("WalShipper is closed");
@@ -768,15 +706,15 @@ export class WalShipper {
           reasons[db] = captured.reason;
           continue;
         }
-        // Base cadence: a generation roll IS the base snapshot. A REQUEST, not
-        // an inline break — the pair re-bases in one tick or not at all.
+        // A generation roll IS the base snapshot. A REQUEST, not an inline
+        // break — the pair re-bases in one tick or not at all.
         if (report.tickMs - stream.baseCreatedAtMs >= this.baseIntervalMs()) {
           reasons[db] = "base-cadence";
           continue;
         }
-        // Group rollover: bound the WAL (and with it segment sizes + restart
-        // recovery time), local-only — never network-coupled (G4). A rollover
-        // that catches a racing writer requests a break of its own.
+        // Group rollover bounds the WAL, segment sizes and restart recovery.
+        // Local-only, never network-coupled (G4); one that catches a racing
+        // writer requests a break of its own.
         if (stream.lastSize > this.threshold()) {
           this.rollover(db, stream, reasons, report);
         }
@@ -800,9 +738,9 @@ export class WalShipper {
 
   /**
    * Phase 1: which databases must break, and why. Nothing ships, nothing
-   * checkpoints — a stream whose detector fired is untrustworthy and must not
-   * ship another byte under its current generation, and a stream with a
-   * deferred break must not ship at all until that break lands.
+   * checkpoints — a stream whose detector fired must not ship another byte
+   * under its current generation, and one with a deferred break must not ship
+   * at all until that break lands.
    */
   private resolveBreakReasons(): Partial<Record<WalDbName, string>> {
     const reasons: Partial<Record<WalDbName, string>> = {};
@@ -817,9 +755,8 @@ export class WalShipper {
         continue;
       }
       if (stream.closedClean) {
-        // Clean shutdown left the WAL empty (or deleted by SQLite's own
-        // close-checkpoint of an already-empty WAL). Whatever exists now is a
-        // fresh WAL for the already-advanced group.
+        // Clean shutdown left the WAL empty, so whatever exists now is a fresh
+        // WAL for the already-advanced group.
         stream.closedClean = false;
         stream.salt1 = null;
         stream.salt2 = null;
@@ -834,10 +771,10 @@ export class WalShipper {
 
   /** Returns a break reason, or null when the stream is intact. */
   private detectForeign(db: WalDbName, stream: DbStreamState): string | null {
-    // Main-db identity: between OUR checkpoints every write goes to the WAL,
-    // so the main file must be byte-stable. A change means someone else
-    // checkpointed (frames possibly never observed by us — unrecoverable
-    // for this stream, catchable no other way).
+    // Between OUR checkpoints every write goes to the WAL, so the main file
+    // must be byte-stable. A change means someone else checkpointed frames we
+    // may never have observed — unrecoverable for this stream, catchable no
+    // other way.
     const dbStat = statSync(this.dbPath(db));
     if (
       dbStat.size !== stream.dbSize ||
@@ -881,50 +818,37 @@ export class WalShipper {
   }
 
   /**
-   * A micro read-lock over the byte copy (issue #411 action 2), belt-and-
-   * suspenders to the after-the-fact detection in `capture` — NOT a
-   * replacement for it. A FOREIGN checkpointer (journal.db is multi-process:
-   * app-engine workers, the key-admin CLI open it by path) could RESTART or
-   * TRUNCATE the WAL mid-copy and reset it under our read. `capture`'s re-stat +
-   * header re-read (and `detectForeign`) already CATCH that race after the fact
-   * and heal it with a generation break — that detection stays authoritative
-   * (action 1's verify-don't-enforce). This eliminates the race BY CONSTRUCTION
-   * for the copy's duration: an open WAL read snapshot holds a read mark that no
-   * checkpointer in ANY process can reset or truncate past — a foreign TRUNCATE
-   * under it returns busy and leaves the bytes AND salts untouched (measured on
-   * this runtime before it was relied on).
+   * A micro read-lock over the byte copy (#411 action 2) — belt-and-suspenders
+   * to `capture`'s after-the-fact detection, NEVER a replacement for it. A
+   * foreign checkpointer (journal.db is multi-process: app-engine workers, the
+   * key-admin CLI) could RESTART or TRUNCATE the WAL mid-copy; an open WAL read
+   * snapshot holds a read mark no checkpointer in any process can reset past,
+   * so a foreign TRUNCATE returns busy and leaves bytes and salts untouched.
    *
-   * A SEPARATE read-only connection, deliberately NOT the gateway's shared write
-   * handle. Two reasons it must be separate: (1) a `readOnly` connection cannot
-   * checkpoint — so `wal_autocheckpoint` is moot on it — and node:sqlite runs no
-   * `PRAGMA optimize` on close, so it writes NOTHING to the WAL on open or close
-   * (verified: `data_version` is unmoved across its open+close); (2) an
-   * exception in here can never strand the gateway's write handle inside a
-   * transaction, which a `BEGIN` on the shared handle could. The lock lives only
-   * for the milliseconds of the copy (this is NOT Litestream's long-held read
-   * lock) and MUST be released before the shipper's OWN `truncate` runs, or that
-   * TRUNCATE would find our reader and come back busy under its own lock —
-   * `capture` and `truncate` are separate calls, and `capture`'s finally always
-   * releases first.
+   * A SEPARATE read-only connection, deliberately not the gateway's shared
+   * write handle: a `readOnly` connection cannot checkpoint and writes NOTHING
+   * on open or close (verified — `data_version` is unmoved), and an exception
+   * here can never strand the write handle inside a transaction. The lock lives
+   * only for the copy and MUST be released before the shipper's own `truncate`,
+   * or that TRUNCATE finds our reader and comes back busy; `capture`'s finally
+   * always releases first.
    *
-   * Acquisition failure (busy open, momentary unavailability) is not fatal:
-   * return null and copy WITHOUT the pin — the post-copy detection is the
-   * correctness mechanism; the pin is only belt-and-suspenders.
+   * Acquisition failure is not fatal: return null and copy WITHOUT the pin —
+   * post-copy detection is the correctness mechanism.
    */
   private acquireWalReadLock(db: WalDbName): { release: () => void } | null {
     let conn: DatabaseSync | undefined;
     try {
       conn = new DatabaseSync(this.dbPath(db), { readOnly: true });
-      // `BEGIN` is DEFERRED — it takes no read mark until a read runs. The
-      // SELECT is what materializes the snapshot and grabs the WAL read mark
-      // that pins the file against a foreign checkpointer's reset/truncate.
+      // `BEGIN` is DEFERRED and takes no read mark until a read runs; the
+      // SELECT is what materializes the snapshot and grabs the WAL read mark.
       conn.exec("BEGIN");
       conn.prepare("SELECT 1 FROM sqlite_schema LIMIT 1").get();
       const held = conn;
       return {
         release: () => {
-          // The snapshot ends when the connection closes regardless; ending the
-          // transaction first is tidy and drops the read mark immediately.
+          // The snapshot ends at close anyway; ending the transaction first
+          // drops the read mark immediately.
           try {
             held.exec("ROLLBACK");
           } catch {
@@ -954,9 +878,8 @@ export class WalShipper {
 
   /**
    * Capture the committed delta `[offset, lastCommitBoundary(head))` into a
-   * local segment file. G7 ordering: segment bytes fsync, then state fsync
-   * (via the caller's persistState) — after `capture` returns, `offset`
-   * only ever names durably-captured bytes.
+   * local segment. G7 ordering: segment bytes fsync, then state fsync, so after
+   * this returns `offset` only ever names durably-captured bytes.
    */
   private capture(
     db: WalDbName,
@@ -969,9 +892,8 @@ export class WalShipper {
     let bytes: Buffer;
     let head: number;
     let headerStable = true;
-    // Pinned across the byte copy only (see acquireWalReadLock). Released in the
-    // finally BEFORE this method returns, so it is never held when the caller
-    // later runs the shipper's own TRUNCATE.
+    // Pinned across the byte copy only (see `acquireWalReadLock`), released in
+    // the finally so it is never held during the caller's TRUNCATE.
     let readLock: { release: () => void } | null = null;
     try {
       head = fstatSync(fd).size;
@@ -980,11 +902,10 @@ export class WalShipper {
       if (head > MAX_CAPTURE_BYTES) {
         return { kind: "break", reason: "wal-exceeds-safe-capture-window" };
       }
-      // Acquire the read mark now: after the size checks, before the FIRST read
-      // of bytes. A reset in the sliver between the `head` stat and this pin is
-      // still caught by the re-stat/header-compare below (a shorter file makes
-      // readSync return 0 ⇒ break); the pin closes the far larger window of the
-      // multi-syscall copy itself.
+      // Acquire the read mark after the size checks and before the FIRST byte
+      // read. A reset in the sliver before this is still caught by the
+      // re-stat/header compare below; the pin closes the far larger window of
+      // the multi-syscall copy.
       readLock = this.acquireWalReadLock(db);
       bytes = Buffer.alloc(head);
       let at = 0;
@@ -1048,10 +969,9 @@ export class WalShipper {
       endOffset: boundary,
       tickMs: report.tickMs,
     };
-    // The local filename IS the object key's basename (+ extension): one
-    // codec (wal-format) owns widths and field order for both sides, so
-    // the builder and the parsers in listUploadable/startupHygiene can
-    // never drift.
+    // The local filename IS the object key's basename plus an extension: one
+    // codec (wal-format) owns widths and field order, so the builder and the
+    // parsers in listUploadable/startupHygiene can never drift.
     const file = path.join(
       this.groupDir(db, stream.generation, stream.group),
       `${path.posix.basename(walSegmentKey(addr))}.seg`
@@ -1060,8 +980,7 @@ export class WalShipper {
       writeFileDurable(file, bytes.subarray(stream.offset, boundary));
     } catch (error) {
       // G4: the segment did not become durable, so the offset must not move
-      // and NOTHING may checkpoint — the WAL keeps the bytes and the
-      // failure surfaces as backpressure, not data loss.
+      // and NOTHING may checkpoint — the failure surfaces as backpressure.
       report.errors.push({
         db,
         message: `segment write failed (${error instanceof Error ? error.message : String(error)}) — WAL retained`,
@@ -1075,20 +994,14 @@ export class WalShipper {
   }
 
   /**
-   * `PRAGMA data_version` — SQLite bumps this whenever a connection OTHER than
-   * the one being queried commits to the database, and never for the querying
-   * connection's own writes. That asymmetry is exactly what makes it the
-   * raced-writer detector, and all three properties were measured on this
-   * runtime before it was relied on:
-   *   - stable across OUR OWN `wal_checkpoint(TRUNCATE)` — otherwise every
-   *     rollover would look like a race and force a whole-database re-base per
-   *     group;
-   *   - stable across OUR OWN writes — the shipper checkpoints on the very
-   *     handles the gateway writes vault.db through, so anything else would
-   *     false-positive on every tick;
-   *   - BUMPED by a commit from another connection or another process — the
-   *     only writers we cannot see any other way (journal.db's subprocess
-   *     ledger writers, the key-admin CLI).
+   * `PRAGMA data_version` bumps when a connection OTHER than the one queried
+   * commits, and never for the querying connection's own writes — which is what
+   * makes it the raced-writer detector. All three properties were MEASURED on
+   * this runtime before being relied on: stable across our own
+   * `wal_checkpoint(TRUNCATE)` (else every rollover would force a re-base),
+   * stable across our own writes (the shipper checkpoints on the handles the
+   * gateway writes through), and bumped by another connection or process — the
+   * only writers we cannot see any other way.
    */
   private dataVersion(db: WalDbName): number {
     const row = this.handle(db).prepare("PRAGMA data_version").get() as {
@@ -1098,31 +1011,24 @@ export class WalShipper {
   }
 
   /**
-   * Bring `stream.offset` up to everything the WAL has COMMITTED, and return
-   * the `data_version` reading that the TRUNCATE which follows must be checked
-   * against. Null means DO NOT TRUNCATE (retry next tick).
+   * Bring `stream.offset` up to everything COMMITTED, and return the
+   * `data_version` reading the following TRUNCATE must be checked against. Null
+   * means DO NOT TRUNCATE (retry next tick).
    *
    * THE ORDER OF THE TWO READS INSIDE THE LOOP IS THE WHOLE CORRECTNESS
-   * ARGUMENT, and it is the easy thing to get backwards. `data_version` is read
-   * FIRST, the WAL is stat'd SECOND:
-   *   - a commit landing BEFORE the reading makes the file longer than
-   *     `offset`, so the stat that follows sees it and we capture it;
-   *   - a commit landing AFTER the reading is not in it, so the reading taken
-   *     after the checkpoint differs and the fold is DETECTED.
-   * Read the stat first and `data_version` second and there is a window between
-   * them in which a commit is both invisible to the stat AND already baked into
-   * the reading — folded into the main database, zeroed from the WAL, never
-   * shipped, never noticed. That is the defect this replaced; do not "simplify"
-   * the order back.
+   * ARGUMENT and is the easy thing to get backwards. `data_version` is read
+   * FIRST, the WAL stat'd SECOND: a commit landing before the reading makes the
+   * file longer than `offset`, so the stat sees it; a commit landing after it is
+   * not in the reading, so the post-checkpoint reading differs and the fold is
+   * DETECTED. Stat first and there is a window where a commit is invisible to
+   * the stat AND already baked into the reading — folded into the main
+   * database, zeroed from the WAL, never shipped, never noticed. Do not
+   * "simplify" the order back.
    *
-   * The loop is only an optimization: a writer that commits while we are
-   * mid-capture is far commoner than one that commits inside the checkpoint's
-   * lock window, and capturing its frames costs one segment instead of a whole
-   * fresh base. When capture stops making progress the WAL's tail is
-   * UNCOMMITTED (a rolled-back transaction leaves its frames behind and the
-   * next transaction overwrites them in place, so the file's high-water size
-   * legitimately outruns `offset` forever) — there is nothing left to ship and
-   * the checkpoint cannot destroy committed bytes, so we stop and truncate.
+   * The loop is only an optimization. When capture stops making progress the
+   * WAL's tail is UNCOMMITTED — a rolled-back transaction leaves frames behind
+   * and the file's high-water size legitimately outruns `offset` forever — so
+   * there is nothing left to ship and truncating destroys nothing.
    */
   private settleWal(
     db: WalDbName,
@@ -1144,10 +1050,9 @@ export class WalShipper {
       if (stream.offset === offsetBefore)
         return { kind: "ready", dataVersion: dvBefore };
     }
-    // A writer is committing faster than we can capture. Leaving the WAL
-    // untruncated is merely wasteful (it stays large and we retry next tick);
-    // truncating without a settled stat would risk folding away committed bytes
-    // we never shipped, which is the one thing that is never recoverable.
+    // A writer is committing faster than we capture. Leaving the WAL
+    // untruncated is merely wasteful; truncating without a settled stat could
+    // fold away committed bytes we never shipped, which is unrecoverable.
     this.log.warn(
       `wal-ship: ${db} WAL will not settle for a checkpoint — retrying next tick`
     );
@@ -1156,28 +1061,19 @@ export class WalShipper {
 
   /**
    * `wal_checkpoint(TRUNCATE)` with a bounded busy wait, bracketed by a
-   * `data_version` reading. Returns null when the handle reported busy (a
-   * reader/writer held it longer than we're willing to block the event loop —
-   * retry next tick; nothing was truncated), else whether a foreign connection
-   * committed inside the window.
+   * `data_version` reading. Null means the handle was busy (nothing truncated,
+   * retry next tick); otherwise, whether a foreign connection committed inside
+   * the window. `dvBefore` MUST have been read by the caller BEFORE the
+   * evidence that the WAL holds nothing past `stream.offset` (see `settleWal`).
    *
-   * `dvBefore` MUST have been read by the caller BEFORE the evidence it used to
-   * conclude the WAL holds nothing past `stream.offset` (see `settleWal`).
-   *
-   * NOT usable, and both of these were measured rather than assumed:
-   *
-   *  - the checkpoint's own `checkpointed` frame count. A SUCCESSFUL TRUNCATE
-   *    returns `{busy: 0, log: 0, checkpointed: 0}` — it zeroes the WAL and
-   *    RESETS both counters — so any comparison of it against what we shipped is
-   *    dead code that can never fire. It looks like a hole check and is not one.
-   *
-   *  - a `wal_checkpoint(FULL)` or `(PASSIVE)` pre-pass to learn the frame count
-   *    before truncating. Once FULL has backfilled the WAL, the next writer
-   *    RESTARTS it at offset 0 and overwrites the bytes IN PLACE — the file does
-   *    not even grow — which silently destroys the append-only byte-offset chain
-   *    every segment address in this format is built on. It is precisely the
-   *    harmless-looking optimization to reach for here, and it corrupts the
-   *    stream.
+   * Two alternatives are NOT usable, both measured rather than assumed. The
+   * checkpoint's own `checkpointed` frame count: a successful TRUNCATE returns
+   * `{busy: 0, log: 0, checkpointed: 0}` because it resets the counters, so
+   * comparing it against what we shipped is dead code that looks like a hole
+   * check. And a `wal_checkpoint(FULL)`/`(PASSIVE)` pre-pass to learn the frame
+   * count: once FULL has backfilled, the next writer RESTARTS the WAL at offset
+   * 0 and overwrites bytes IN PLACE without the file even growing, destroying
+   * the append-only offset chain every segment address is built on.
    */
   private truncate(db: WalDbName, dvBefore: number): TruncateResult | null {
     const handle = this.handle(db);
@@ -1215,10 +1111,9 @@ export class WalShipper {
 
   /**
    * Close the current group: capture the remainder, settle, TRUNCATE, then
-   * finish the bookkeeping. Any frames the checkpoint folded that we never
-   * shipped ⇒ a break REQUEST — the design's cardinal rule is that a checkpoint
-   * never destroys unshipped committed bytes SILENTLY; here it is detected and
-   * healed with a fresh base (of BOTH databases — see `coordinatedBreak`).
+   * finish the bookkeeping. Frames the checkpoint folded that we never shipped
+   * become a break REQUEST — a checkpoint must never destroy unshipped
+   * committed bytes SILENTLY.
    */
   private rollover(
     db: WalDbName,
@@ -1238,9 +1133,8 @@ export class WalShipper {
       return;
     }
     if (settled.kind === "retry") {
-      // Either the capture failed (the error is already on the report) or the
-      // WAL would not settle. Both mean the same thing: do not checkpoint, and
-      // do not consider this stream cleanly cut (`close()` reads `busy`).
+      // Either the capture failed or the WAL would not settle. Both mean: do
+      // not checkpoint, and do not treat this stream as cleanly cut.
       report.busy.push(db);
       return;
     }
@@ -1250,32 +1144,26 @@ export class WalShipper {
       return;
     }
     this.finishTruncate(db, stream, result, reasons, report, { trusted: true });
-    // Narrow the crash window between "WAL truncated" and "state knows":
-    // a crash inside it is detected on restart (shrunken WAL ⇒ generation
-    // break), so persisting immediately merely makes that rare.
+    // Narrow the crash window between "WAL truncated" and "state knows"; a
+    // crash inside it is still detected on restart (shrunken WAL ⇒ break).
     this.persistState();
   }
 
   /**
    * The post-TRUNCATE half of a rollover, extracted because the aborted
-   * coordinated break has to reuse it: once a WAL is truncated, its
-   * bookkeeping MUST catch up or the next tick reads a fresh WAL from a stale
-   * offset. Two decisions live here.
+   * coordinated break reuses it: once a WAL is truncated its bookkeeping MUST
+   * catch up, or the next tick reads a fresh WAL from a stale offset.
    *
-   * The raced-writer check (`result.raced`, from the `data_version` bracket in
-   * `truncate`): a connection other than ours committed between the reading that
-   * proved the WAL held nothing past `offset` and the checkpoint's writer lock.
-   * Its frames were appended past `offset`, folded into the main file, and
-   * ZEROED from the WAL — we cannot ship them and cannot get them back. That is
-   * the hole, and it is healed by a fresh base (the clone reads the main file,
-   * which is exactly where those commits now live), never papered over.
+   * `result.raced` (from `truncate`'s `data_version` bracket) means another
+   * connection committed between the reading that proved the WAL held nothing
+   * past `offset` and the checkpoint's writer lock: its frames were folded into
+   * the main file and ZEROED from the WAL. That is the hole, healed by a fresh
+   * base (whose clone reads the main file, where those commits now live).
    *
-   * `trusted`: whether this stream's own `offset` still describes the real WAL.
-   * A CONDEMNED stream (a detector fired, or a writer just raced us) must not
-   * get a group closer: the closer asserts "group N ends at exactly `offset`"
-   * and a restore trusts it absolutely, so writing one over folded-away frames
-   * would be a forgery. It is frozen instead — `breakPending` blocks every
-   * further capture, so no group N+1 can ever exist to be walled off.
+   * `trusted` is whether this stream's `offset` still describes the real WAL. A
+   * CONDEMNED stream must not get a group closer: the closer asserts "group N
+   * ends at exactly `offset`" and a restore trusts it absolutely, so writing
+   * one over folded-away frames would be a forgery. It is frozen instead.
    */
   private finishTruncate(
     db: WalDbName,
@@ -1302,10 +1190,9 @@ export class WalShipper {
       result.untrustedReason === undefined &&
       stream.offset > 0
     ) {
-      // Closer first, then advance: replay only ever crosses a group
-      // boundary through this marker, so a group counter that advanced
-      // without one would silently wall off everything after it. Filename
-      // derives from the object-key codec (see capture()).
+      // Closer first, then advance: replay crosses a group boundary only
+      // through this marker, so a group counter that advanced without one would
+      // silently wall off everything after it.
       const closerKey = walGroupCloserKey({
         db,
         generation: stream.generation,
@@ -1323,9 +1210,8 @@ export class WalShipper {
       stream.group += 1;
       stream.offset = 0;
     }
-    // A truncate with nothing shipped (offset 0 — the WAL held only
-    // uncommitted/rolled-back frames) keeps the SAME group: no closer
-    // exists for it, and an advance would make later groups unreachable.
+    // A truncate with nothing shipped keeps the SAME group: no closer exists
+    // for it, and an advance would make later groups unreachable.
     stream.lastSize = 0;
     stream.salt1 = null;
     stream.salt2 = null;
@@ -1333,47 +1219,33 @@ export class WalShipper {
   }
 
   /**
-   * Re-base BOTH databases in ONE tick. The single most order-sensitive
-   * function in the feature.
+   * Re-base BOTH databases in ONE tick — the most order-sensitive function in
+   * the feature.
    *
-   * When EITHER database needs a fresh generation, BOTH get one. Two bases from
-   * two different instants have no coordinated restore point between them: a
-   * journal base minted after the vault's already contains receipts for rows
-   * that live only in the vault's SEGMENTS, so losing one of those segments
-   * hands back history asserting data the restore does not have. Coordinated
-   * bases give every degradation somewhere safe to land — the base pair is
-   * itself one instant.
+   * When EITHER database needs a fresh generation, BOTH get one: two bases from
+   * two instants have no coordinated restore point, and a journal base minted
+   * after the vault's contains receipts for rows living only in the vault's
+   * SEGMENTS. The base pair must itself be one instant.
    *
-   * The order, and why each half of it is load-bearing:
+   * The order, and why each half is load-bearing:
    *
-   * 1. Journal's TRUNCATE first. A base's effective instant is its TRUNCATE
-   *    instant, NOT its `copyFileSync` instant — the clone reads the MAIN file,
-   *    and everything committed after the truncate lands in the new
-   *    generation's WAL and ships as segments. With journal cut at t1 and vault
-   *    at t2 > t1: no vault row can commit in [t1, t2) at all (the tick body is
-   *    synchronous over a synchronous `node:sqlite`, and the gateway's command
-   *    pipeline is vault.db's only writer — I1), so base(vault) == vault@t1.
-   *    Every receipt in base(journal) committed at or before t1, and receipts
-   *    commit only AFTER their vault transaction, so every row they name is in
-   *    base(vault). A dangling receipt is not constructible. Code that
-   *    carefully clones the journal first while truncating the vault first
-   *    looks right and is ordered WRONG.
+   * 1. Journal's TRUNCATE first. A base's effective instant is its TRUNCATE,
+   *    not its `copyFileSync`. With journal cut at t1 and vault at t2 > t1, no
+   *    vault row can commit in [t1, t2) at all (synchronous tick, and the
+   *    command pipeline is vault.db's only writer — I1), so base(vault) ==
+   *    vault@t1, and since receipts commit only after their vault transaction,
+   *    a dangling receipt is not constructible. Cloning the journal first while
+   *    truncating the vault first looks right and is ordered WRONG.
+   * 2. BOTH truncates before EITHER clone — not for the ordering proof but for
+   *    the BUSY ABORT: `truncate()` returns null on a busy handle and a clone
+   *    cannot be undone, so discovering the vault busy after cloning the
+   *    journal would strand the uncoordinated pair this exists to forbid.
+   * 3. The generation receipts LAST, after both clones: `writeReceipt` commits
+   *    to journal.db, and one landing between the truncates would be a journal
+   *    write the vault's base could not account for.
    *
-   * 2. BOTH truncates before EITHER clone. Not for the ordering proof (either
-   *    interleaving is safe under I1) but for the BUSY ABORT: `truncate()`
-   *    returns null on a busy handle, and a break that has already cloned
-   *    cannot be undone. Discovering the vault's busy-ness after cloning the
-   *    journal would strand exactly the uncoordinated pair this exists to
-   *    forbid.
-   *
-   * 3. The generation receipts LAST, after both clones. `writeReceipt` commits
-   *    to journal.db; one landing between the two truncates would be a journal
-   *    write the vault's base could not account for. (It is harmless today only
-   *    because its `objectId` is null and `restore-check.ts` filters those out
-   *    — do not lean on that.)
-   *
-   * Every step is SYNCHRONOUS. One `await` in here and the "no vault commit can
-   * interleave" argument evaporates, silently, with every test still green.
+   * Every step is SYNCHRONOUS. One `await` and the "no vault commit can
+   * interleave" argument evaporates with every test still green.
    */
   private coordinatedBreak(
     reasons: Partial<Record<WalDbName, string>>,
@@ -1386,14 +1258,11 @@ export class WalShipper {
 
     const truncated: Partial<Record<WalDbName, TruncateResult>> = {};
     for (const db of WAL_CAPTURE_ORDER) {
-      // The `data_version` reading is taken here rather than in `settleWal`: a
-      // breaking stream may be CONDEMNED, and a condemned stream must not ship
-      // another byte, so there is no settling to do. The bracket still covers
-      // the checkpoint's own lock window, which is what the ABORT path needs —
-      // `abortBreak` may complete a trusted stream as an ordinary rollover, and
-      // it must not write a group closer over frames a racer got folded away.
-      // On the success path below nothing is closed (the fresh base clone IS the
-      // history), so `raced` there is simply moot.
+      // Read `data_version` here rather than in `settleWal`: a breaking stream
+      // may be CONDEMNED, so there is no settling to do. The bracket still
+      // covers the checkpoint's lock window, which the ABORT path needs —
+      // `abortBreak` may finish a trusted stream as an ordinary rollover and
+      // must not write a closer over frames a racer got folded away.
       const result = this.truncate(db, this.dataVersion(db));
       if (result === null) {
         report.busy.push(db);
@@ -1407,14 +1276,11 @@ export class WalShipper {
       journal: this.state.dbs.journal,
     };
     for (const db of WAL_CAPTURE_ORDER) this.mintBase(db, reasons[db]!, report);
-    // Issue #411 action 1: tally the foreign checkpoints THIS break healed. One
-    // increment per database that INDEPENDENTLY established a foreign reason —
-    // the coordinated sibling carries a `coordinated:*` reason and is excluded
-    // by `FOREIGN_CHECKPOINT_REASONS` (it would double-count the same event).
-    // This runs only on the success path (a break DEFERRED by a busy sibling
-    // returns from `abortBreak` before `mintBase`, so a deferred foreign break
-    // is counted exactly once — when its retry finally lands here), and BEFORE
-    // `persistState` so the counter is durable.
+    // Tally the foreign checkpoints THIS break healed (#411 action 1): one per
+    // database that INDEPENDENTLY established a foreign reason, since the
+    // coordinated sibling carries `coordinated:*` and is excluded. Success path
+    // only — a deferred break counts once, when its retry lands — and BEFORE
+    // `persistState`, so the counter is durable.
     for (const db of WAL_CAPTURE_ORDER) {
       const reason = reasons[db]!;
       if (!FOREIGN_CHECKPOINT_REASONS.has(reason)) continue;
@@ -1428,8 +1294,8 @@ export class WalShipper {
       olds.vault.basePending &&
       olds.journal.basePending
     ) {
-      // The retired pair was never registered ⇒ never restorable ⇒ its pair
-      // markers are dead weight, exactly like its segments.
+      // A pair still at its pending base is not registered ⇒ not restorable
+      // ⇒ its pair markers are dead weight, exactly like its segments.
       this.dropLocalMarkers(olds.vault.generation, olds.journal.generation);
     }
     this.persistState();
@@ -1437,13 +1303,11 @@ export class WalShipper {
   }
 
   /**
-   * `truncate(busy)` came back busy after its predecessor in WAL_CAPTURE_ORDER
-   * had already truncated. Nothing has been CLONED (which is exactly why both
-   * truncates precede both clones), so no uncoordinated base pair can escape —
-   * but a WAL that did truncate is empty now and its stream has to be tidied,
-   * and both streams are FROZEN (`breakPending`) until the break lands next
-   * tick. Nothing irreversible; the pair the gateway can still register is the
-   * old, coordinated one.
+   * `truncate()` came back busy after its predecessor in WAL_CAPTURE_ORDER had
+   * already truncated. Nothing has been CLONED (which is why both truncates
+   * precede both clones), so no uncoordinated base pair can escape — but the
+   * truncated stream must be tidied and BOTH are FROZEN (`breakPending`) until
+   * the break lands next tick.
    */
   private abortBreak(
     busy: WalDbName,
@@ -1455,9 +1319,8 @@ export class WalShipper {
       const result = truncated[db];
       const stream = this.state.dbs[db];
       if (result === undefined || !stream) continue;
-      // A partial pair break can never authenticate a group end. Even when
-      // this stream looked healthy before TRUNCATE, the sibling did not cut,
-      // so a closer here would certify a one-sided instant.
+      // A partial pair break can never authenticate a group end: the sibling
+      // did not cut, so a closer here would certify a one-sided instant.
       this.finishTruncate(db, stream, result, reasons, report, {
         trusted: false,
       });
@@ -1476,15 +1339,12 @@ export class WalShipper {
   }
 
   /**
-   * Clone one database's WAL-quiet main file as the base of a fresh generation
-   * (reflink where the filesystem supports it — the main file is immutable
-   * until our next checkpoint, so even a slow plain copy reads a stable file),
-   * hash it, and reset the stream. `baseCreatedAtMs` is the TICK, identical for
-   * both databases: that equality IS the coordination the manifest carries as
-   * `baseTickMs` and the restore asserts.
-   *
-   * The caller has already TRUNCATED both databases. `copyFileSync` and
-   * `sha256File` are synchronous on purpose — see `coordinatedBreak`.
+   * Clone one database's WAL-quiet main file as a fresh generation's base
+   * (reflink where supported; the main file is immutable until our next
+   * checkpoint, so even a slow copy reads a stable file), hash it, and reset
+   * the stream. `baseCreatedAtMs` is the TICK, identical for both databases —
+   * that equality IS the coordination the manifest carries as `baseTickMs`.
+   * The caller has already TRUNCATED both; synchronous on purpose.
    */
   private mintBase(db: WalDbName, reason: string, report: WalTickReport): void {
     const old = this.state.dbs[db];
@@ -1573,30 +1433,22 @@ export class WalShipper {
 
   /**
    * The end-of-tick pair marker (FORMAT.md § WAL segments): what BOTH databases
-   * had shipped when the tick ended, sealed by the shipper.
+   * had shipped when the tick ended.
    *
-   * Written LAST, after captures, rollovers AND the coordinated break, because
-   * it must describe where the tick actually ENDED. A marker recording the
-   * journal's post-tick position beside the vault's pre-tick one is a lie that
-   * makes every later restore walk back a tick.
+   * Written LAST — after captures, rollovers AND the coordinated break —
+   * because it must describe where the tick ENDED; a marker pairing the
+   * journal's post-tick position with the vault's pre-tick one makes every
+   * later restore walk back a tick.
    *
    * Exactly ONE marker per (vaultGeneration, journalGeneration, tick): the
-   * object's nonce derives from that triple, so two DIFFERENT payloads under it
-   * would reuse a (key, nonce) pair — GCM's one fatal sin. Writing it once, at
-   * the end, is what guarantees that; and because the local file's path IS that
-   * triple, a tick re-run after a crash overwrites it in place, so a second
-   * ciphertext for one key can never reach the provider.
+   * nonce derives from that triple, so two different payloads under it would
+   * reuse a (key, nonce) pair — GCM's one fatal sin. The local path IS that
+   * triple, so a tick re-run after a crash overwrites in place.
    *
-   * Two ticks need no marker at all:
-   *  - one where nothing moved (restoring "at T" is identical to restoring at
-   *    the last marker ≤ T), and
-   *  - one that ended in a BREAK, which leaves both databases at (0, 0) of
-   *    fresh generations — that IS their base pair, the floor a restore already
-   *    falls back to when no marker is satisfiable.
-   * The cost of the second is that the RETIRING pair never gets a marker for
-   * its final tick, so its last tick's segments are unusable. That is one tick
-   * of PITR depth on a generation being replaced anyway — paid to keep the
-   * once-per-key write property airtight.
+   * Two ticks need no marker: one where nothing moved, and one ending in a
+   * BREAK, which leaves both databases at (0, 0) of fresh generations — that IS
+   * their base pair. The cost of the second is one tick of PITR depth on a
+   * generation that retires anyway, paid to keep once-per-key airtight.
    */
   private writePairMarker(report: WalTickReport): void {
     // A marker is a proof about BOTH cuts. Any per-db error, busy checkpoint,
@@ -1663,21 +1515,17 @@ export class WalShipper {
   }
 
   /**
-   * Local disk budget (design Q4): while offline, segments accumulate. Over
-   * budget ⇒ trade PITR depth for disk — break both generations (fresh
-   * bases) and DROP the superseded generations' local segments, registered
-   * or not. Registered generations keep whatever already drained to the
-   * provider (restore lands on the last drained point); the undrained tail
-   * is the price of the budget — but the space MUST actually free, or this
-   * fires again every tick: a per-minute break is a whole-DB copy per
-   * minute, the exact wear cliff this feature exists to delete.
+   * Local disk budget (design Q4): over budget, trade PITR depth for disk —
+   * break both generations and DROP the superseded ones' local segments,
+   * registered or not. The space MUST actually free, or this fires every tick:
+   * a per-minute break is a whole-DB copy per minute, the exact wear cliff this
+   * feature exists to delete.
    */
   private enforceLocalBudget(report: WalTickReport): void {
     if (this.localBudgetBytes <= 0) return;
-    // Segments only (the incremental counter): the base clones are pinned
-    // by design (≤ 2 per db, reflink-cheap) — counting them would make an
-    // over-budget vault mint a fresh base every tick without ever freeing
-    // anything (thrash).
+    // Segments only: base clones are pinned by design (≤ 2 per db,
+    // reflink-cheap), and counting them would make an over-budget vault mint a
+    // fresh base every tick without ever freeing anything.
     if (this.localSegmentBytes <= this.localBudgetBytes) return;
     this.log.warn(
       `wal-ship: local segments ${this.localSegmentBytes} bytes exceed budget ` +
@@ -1708,12 +1556,11 @@ export class WalShipper {
     }
   }
 
-  // ------------------------------------------------------- controlled points
+  // ─────────────────────────────────────────────────────── controlled points
 
   /**
-   * A controlled checkpoint of both databases (replaces `checkpointVault`
-   * while a shipper owns the WALs): ship the remainder, then TRUNCATE with
-   * the same raced-writer verification as a rollover.
+   * A controlled checkpoint of both databases: ship the remainder, then
+   * TRUNCATE with the same raced-writer verification as a rollover.
    */
   checkpointNow(): WalTickReport {
     if (this.closed) throw new Error("WalShipper is closed");
@@ -1730,14 +1577,11 @@ export class WalShipper {
   }
 
   /**
-   * Explicit generation roll (journal archival, backup-enable transition,
-   * restore-takeover, tests). By default the old generation's pending
-   * committed bytes ship first so its PITR history is maximal;
-   * `captureFirst: false` skips that — the journal-archival hook uses it
-   * because the WAL at that point holds the archival VACUUM's whole-database
-   * rewrite, and shipping a DB-sized burst into a generation whose next
-   * event is its own retirement would be pure waste (the fresh base already
-   * contains every byte of it).
+   * Explicit generation roll (journal archival, backup-enable, restore-takeover,
+   * tests). By default the old generation ships its pending bytes first so PITR
+   * history stays maximal; `captureFirst: false` skips that for the
+   * journal-archival hook, whose WAL holds the archival VACUUM's whole-database
+   * rewrite that the fresh base already contains.
    */
   rollGeneration(
     db: WalDbName,
@@ -1755,23 +1599,16 @@ export class WalShipper {
     reasons[db] ??= reason;
     for (const other of WAL_CAPTURE_ORDER)
       reasons[other] ??= `coordinated:${reason}`;
-    // Both streams ship their pending committed bytes under their OLD
-    // generation first, so PITR history stays maximal across the roll.
-    // `captureFirst: false` skips that for the NAMED database only: the
-    // journal-archival hook uses it because the WAL at that moment holds the
-    // archival VACUUM's whole-database rewrite, and shipping a DB-sized burst
-    // into a generation whose next event is its own retirement is pure waste
-    // (the fresh base already contains every byte of it). The SIBLING's WAL
-    // holds no such thing, so it always ships — a journal-archival roll now
-    // re-bases the vault too, and losing the vault's pending bytes with it
-    // would be a needless gap.
+    // Both streams ship pending committed bytes under their OLD generation, so
+    // PITR history stays maximal. `captureFirst: false` skips that for the
+    // NAMED database only — the SIBLING's WAL holds no VACUUM burst, so losing
+    // its pending bytes would be a needless gap.
     for (const target of WAL_CAPTURE_ORDER) {
       if (condemned.has(target)) continue;
       if (target === db && opts.captureFirst === false) continue;
       const stream = this.state.dbs[target];
-      // A stream holed by capture-then-discard ships nothing either: its
-      // captured files were DELETED, so more bytes only widen a hole in a
-      // generation whose very next event is its retirement.
+      // A stream holed by capture-then-discard ships nothing either: more
+      // bytes only widen a hole in a generation about to retire.
       if (stream && stream.discarded !== true) {
         const captured = this.capture(target, stream, report);
         if (captured.kind === "break") reasons[target] = captured.reason;
@@ -1785,17 +1622,13 @@ export class WalShipper {
 
   /**
    * Final ship + truncate, then mark the streams clean so the reopen path
-   * knows SQLite's own close-checkpoint (of an EMPTY wal) and fresh salts
-   * are expected, not foreign. Call before `db.close({ skipOptimize: true })`
-   * — `PRAGMA optimize` runs HERE, before the final checkpoint, because its
-   * ANALYZE writes land in the WAL: were they still there at handle close,
-   * SQLite's close-checkpoint would fold them into the main file behind our
-   * back and every restart would look like a foreign checkpoint (a spurious
-   * generation break per restart). The main-db identity check deliberately
-   * stays ACTIVE across restarts: any commit that races the window between
-   * this checkpoint and the handle close gets folded by the close-checkpoint
-   * and is thereby DETECTED on reopen — degraded to a fresh base, never a
-   * silent gap.
+   * expects SQLite's own close-checkpoint of an EMPTY wal and fresh salts. Call
+   * before `db.close({ skipOptimize: true })` — `PRAGMA optimize` runs HERE,
+   * before the final checkpoint, because its ANALYZE writes land in the WAL and
+   * would otherwise be folded in at handle close, making every restart look
+   * foreign. The main-db identity check stays ACTIVE across restarts, so a
+   * commit racing the window between this checkpoint and the close is DETECTED
+   * on reopen — degraded to a fresh base, never a silent gap.
    */
   close(): WalTickReport {
     for (const db of WAL_DB_NAMES) {
@@ -1815,16 +1648,15 @@ export class WalShipper {
     return report;
   }
 
-  // ------------------------------------------------------------ upload seam
+  // ──────────────────────────────────────────────────────────── upload seam
 
   /** Every durable local file awaiting upload, oldest generation first. */
   listUploadable(): UploadableWalFile[] {
     const out: UploadableWalFile[] = [];
     const segRoot = path.join(this.dir, "segments");
     if (!existsSync(segRoot)) return out;
-    // Shape-check every level: a stray plain file (Finder's .DS_Store, an
-    // editor swap file) must be skipped, not readdirSync'd — one ENOTDIR
-    // here would wedge the drain for this vault forever.
+    // Shape-check every level: one stray plain file (.DS_Store, an editor swap)
+    // readdirSync'd here would wedge this vault's drain forever.
     const dirsIn = (dir: string, re: RegExp): string[] =>
       readdirSync(dir, { withFileTypes: true })
         .filter((e) => e.isDirectory() && re.test(e.name))
@@ -1869,10 +1701,9 @@ export class WalShipper {
         }
       }
     }
-    // Pair markers LAST — so a tick's marker always drains after the segments
-    // and closers it describes. Not a correctness requirement (an orphan marker
-    // is merely unsatisfiable, which walks the restore back safely) but the
-    // reverse order would cost a tick of RPO on every interrupted drain.
+    // Pair markers LAST, so a tick's marker drains after the segments and
+    // closers it describes. Not correctness (an orphan marker is merely
+    // unsatisfiable) but the reverse order costs a tick of RPO per drain.
     const markerRoot = path.join(this.dir, "markers");
     if (existsSync(markerRoot)) {
       for (const pair of dirsIn(markerRoot, /^[0-9a-f]{32}-[0-9a-f]{32}$/u)) {
@@ -1919,10 +1750,9 @@ export class WalShipper {
   }
 
   /**
-   * Captured files of this database were deleted WITHOUT upload (backup
-   * unconfigured — capture-then-discard). Marks the stream holed; the
-   * BackupService breaks the generation before ever registering its base,
-   * because a restore of a holed stream silently lands on the stale base.
+   * Captured files were deleted WITHOUT upload (backup unconfigured). Marks the
+   * stream holed; the BackupService breaks the generation before registering
+   * its base, since a restore of a holed stream lands on the stale base.
    */
   noteStreamDiscarded(db: WalDbName): void {
     const stream = this.state.dbs[db];
@@ -1975,9 +1805,9 @@ export class WalShipper {
 
   /**
    * Are the two current bases a coherent pair — both present, cloned in ONE
-   * tick, with no break mid-flight? A snapshot MUST NOT be registered when this
-   * is false: a manifest pairing bases from two instants is not restorable
-   * without risking a journal that is newer than its vault.
+   * tick, no break mid-flight? A snapshot MUST NOT be registered when this is
+   * false: a manifest pairing bases from two instants risks a journal newer
+   * than its vault.
    */
   basesCoordinated(): boolean {
     const vault = this.state.dbs.vault;
@@ -2013,9 +1843,8 @@ export class WalShipper {
       >
     >;
     localBytes: number;
-    /** Issue #411 action 1: foreign checkpoints detected+healed over this
-     *  shipper's whole life (all generations). A churn signal the gateway
-     *  persists and surfaces through backup health. */
+    /** Foreign checkpoints detected and healed over this shipper's whole life;
+     *  a churn signal the gateway surfaces through backup health. */
     foreignCheckpointCount: number;
     lastForeignCheckpoint?: { atMs: number; db: WalDbName; reason: string };
   } {

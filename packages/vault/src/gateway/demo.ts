@@ -1,9 +1,6 @@
-// Demo-data purge (issue #290 phase 1) — the second half of the scenario
-// contract: loading demo data is only safe because unloading it is one act.
-// Purge walks the seed registry, hard-deletes the physical rows, and runs the
-// same lifecycle duties any hard delete owes (end-date links, drop tags and
-// collection entries — the sweep's doctrine, issue #272/#274). Provenance
-// records the purge; receipts stay: history is never rewritten.
+// Demo-data purge (#290): loading is safe because unloading is one act.
+// Same lifecycle duties as any hard delete (#272/#274). Provenance records
+// the purge; receipts stay — history is never rewritten.
 
 import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";
@@ -15,41 +12,27 @@ import { pkColumn } from "./execution.js";
 import type { Identity } from "./types.js";
 
 export interface DemoPurgeResult {
-  /** Physical rows deleted. */
   purged: number;
-  /** Registry rows whose entity was already gone (deleted through an app). */
   missing: number;
-  /** Rows a non-demo FK still references — left in place, still registered. */
+  /** Non-demo FK still holds these — left in place, still registered. */
   blocked: { entityType: string; entityId: string }[];
   receiptId: string;
 }
 
 /**
- * Derived rows a hard delete must clear FIRST or its FK refuses the delete.
- *
- * The lifecycle purge sweep already spells the doctrine — "derivatives go with
- * their parent" (gateway/duties.ts) — and the demo purge is the same hard
- * delete, so it owes the same cleanup. Without this, seeding any image (issue
- * #708's photo roll, or any real ingest once the gateway's preview backstop
- * has run) leaves `core_content_derivative` rows holding their content item
- * hostage and the one-click purge reports it blocked forever. Only rebuildable
- * projections belong here: a thumb/thumbhash/phash regenerates from the bytes,
- * so clearing it destroys no owner meaning. Orphaned CAS bytes fall to the
- * local orphan sweep exactly as they do on the lifecycle path.
+ * Clear these FIRST or the parent FK refuses. Same doctrine as
+ * gateway/duties.ts: derivatives go with their parent. Without this, a
+ * seeded image's `core_content_derivative` hostage-holds the content item
+ * and one-click purge reports blocked forever. Only rebuildable projections
+ * (thumb/phash regenerate from bytes).
  */
 const DEPENDENT_ROWS: Record<string, { table: string; column: string }[]> = {
   "core.content_item": [
     { table: "core_content_derivative", column: "content_id" },
   ],
-  // A staged import row is not owner meaning — it is the batch's own line
-  // items, and it cannot outlive the batch it belongs to (its FK says so).
-  // Photos' scenario stages face proposals through the ordinary publisher
-  // road (issue #712), which is the same road any enricher takes, so without
-  // this the batch is reported blocked for ever and the one-click purge stops
-  // being one act. This differs from the content-derivative case above — an
-  // import row does not regenerate — but the deletion is still lossless in
-  // the only sense that matters here: the batch is going, and a line item of
-  // a deleted batch describes nothing.
+  // Import rows cannot outlive the batch (FK). Without this, Photos' staged
+  // face proposals (#712) block purge forever. Not rebuildable, but the
+  // batch is going — a line item of a deleted batch describes nothing.
   "sync.import_batch": [{ table: "sync_import_row", column: "batch_id" }],
 };
 
@@ -60,7 +43,6 @@ interface SeedRow {
   target_id: string;
 }
 
-/** Rows seeded per app — the "demo data present" surface. */
 export function demoStatus(db: VaultDb): { appId: string; rows: number }[] {
   const rows = db.vault
     .prepare(
@@ -71,12 +53,9 @@ export function demoStatus(db: VaultDb): { appId: string; rows: number }[] {
 }
 
 /**
- * Purge every seeded row (optionally one app's). Deletion runs newest-first
- * (seed ids are UUIDv7, so registry order IS insertion order and children
- * seeded after their parents delete before them), then repeats until a pass
- * makes no progress — whatever remains is held by a NON-demo reference and
- * is reported blocked rather than force-deleted: the owner may have built
- * real data on top of a demo row, and honest refusal beats a broken FK web.
+ * Newest-first (UUIDv7 = insertion order, children after parents), then
+ * repeat until a pass makes no progress. Remainder is a NON-demo FK —
+ * refuse rather than force-delete; the owner may have built on a demo row.
  */
 export function purgeDemoRows(
   db: VaultDb,
@@ -106,16 +85,14 @@ export function purgeDemoRows(
     for (const row of remaining) {
       const ref = resolveEntity(row.target_type, db.vault);
       if (!ref || ref.file !== "vault") {
-        // An unresolvable registry row (e.g. a purged ext band) has nothing
-        // left to delete — retire the registry entry.
+        // Unresolvable (purged ext band): retire the registry entry.
         dropSeed.run(row.seed_id);
         missing += 1;
         progressed = true;
         continue;
       }
       const pk = pkColumn(db.vault, ref.physical);
-      // A savepoint so a row that turns out to be blocked keeps its derived
-      // rows: they are only expendable when the parent actually goes.
+      // Savepoint: derived rows stay if the parent is blocked.
       db.vault.exec("SAVEPOINT demo_purge_row");
       try {
         for (const dep of DEPENDENT_ROWS[row.target_type] ?? [])
@@ -135,8 +112,7 @@ export function purgeDemoRows(
         progressed = true;
         db.vault.exec("RELEASE demo_purge_row");
       } catch {
-        // FK constraint: something still references this row. Another pass
-        // may free it (a sibling demo row deletes first); otherwise report.
+        // FK still holds. Another pass may free it; otherwise report.
         db.vault.exec("ROLLBACK TO demo_purge_row");
         db.vault.exec("RELEASE demo_purge_row");
         blocked.push(row);

@@ -1,40 +1,11 @@
-// Share-by-placement (issue #599 decision 11) — the vault-side mechanism the
-// gateway's cross-vault share plane calls.
-//
-// The standing product promise is that *no one can ever query your vault —
-// what others see is only what you placed where they are*. So sharing is
-// PLACEMENT, not filtering: an item is projected into the audience vault (a
-// vault IS the audience — Family, Partner-only) and its bytes are hardlinked
-// into that vault's CAS. There are no row-level ACLs anywhere; the vault
-// boundary is the isolation.
-//
-// The shape of one share — the LOCAL COMPOSITION of the two halves the split
-// in issue #726 made independent (read-closure.ts / project-closure.ts):
-//
-//   (a) read the closure out of the origin (read-only, no transaction there);
-//   (b) hardlink its blobs from the origin CAS into the audience CAS
-//       (share/blobs.ts), copying only where the filesystem refuses to link;
-//   (c) ONE transaction in the AUDIENCE vault: the projected rows, the
-//       `core_share_origin` provenance record, and the audience's own ingest
-//       re-registration of what arrived.
-//
-// Byte custody is the half that does NOT generalise to a wire: a hardlink
-// needs both CAS directories on one filesystem. P3's tunnel replaces (b) and
-// leaves (a) and (c) exactly as they are.
-//
-// The origin vault is never written — sharing needs only READ there — so there
-// is no two-database transaction and no new recovery machinery. Blobs go
-// first because a link is idempotent; a failure between (a) and (b) leaves at
-// most an orphaned link that the audience vault's own orphan-grace sweep
-// already reclaims.
-//
-// Permissions are the caller's (gateway) business and introduce nothing new:
-// placing INTO a vault is a write to it, so it needs `write` there; the origin
-// needs only your own read access.
-//
-// This module deliberately sits OUTSIDE the per-vault AsyncLocalStorage
-// handler path: a share spans two vault scopes, so it belongs beside that
-// path, not inside it.
+// Share-by-placement (#599 decision 11). Sharing is PLACEMENT, not filtering:
+// nothing may query your vault, so an item is projected INTO the audience vault
+// and its bytes hardlinked there. No row-level ACLs — the vault boundary is the
+// isolation. The order is fixed: read the closure from the origin (no
+// transaction), hardlink blobs, then ONE transaction in the audience vault.
+// Blobs first because a link is idempotent; the origin is NEVER written, so no
+// two-database transaction exists. Lives OUTSIDE the per-vault
+// AsyncLocalStorage handler path — a share spans two vault scopes.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -49,67 +20,42 @@ import { projectShareClosure } from "./project-closure.js";
 import { readShareClosure } from "./read-closure.js";
 import { deleteProjectedClosure } from "./removal.js";
 
-/**
- * The narrow slice of an open vault a share touches: its canonical database
- * and its local CAS. `VaultDb` satisfies this structurally, so the gateway
- * passes its live handles unchanged.
- */
 export interface ShareVaultRef {
   vault: DatabaseSync;
   blobs: { local: LocalBlobStore };
-  /** Per-vault DEK used only to re-seal a shared Locker item for its audience. */
   sealKey?: Buffer;
-  /** Optional vault signing seed used to authenticate commons member intents. */
   identitySeed?: Buffer;
 }
 
 export interface ShareItemsToVaultInput {
-  /** The vault the items live in. READ-ONLY throughout this flow. */
+  /** READ-ONLY throughout this flow. */
   origin: ShareVaultRef;
-  /** Gateway id of the origin vault, recorded as provenance in the audience. */
   originVaultId: string;
-  /** The vault the items are placed into — the only vault written. */
+  /** The only vault written. */
   audience: ShareVaultRef;
-  /** Logical entity name of the items being shared. */
   itemType: ShareableItemType;
-  /** The items' row ids in the ORIGIN vault. One closure covers the set. */
+  /** ORIGIN row ids; one closure covers the set. */
   itemIds: readonly string[];
-  /**
-   * Written into `core_share_origin.shared_by` (issue #726 Finding 6 — the
-   * household L2 member-principal layer this field name once implied is
-   * gone). An owner id for a co-hosted edge, or a `peer:<vaultId>` string
-   * naming the remote vault a give arrived from — an attribution, not a
-   * principal this vault can look up.
-   */
+  /** An attribution, never a principal this vault can look up (#726). */
   sharedBy: string;
-  /** Injectable clock, epoch ms. Defaults to `Date.now`. */
   now?: () => number;
   /**
-   * True when the audience is not this owner's own vault (#726 P3 threat 8) —
-   * forwarded to `readShareClosure`, which gates the origin's `media.location`
-   * policy against `exif_json` on that basis. Defaults false: the placement
-   * plane's callers are same-owner by construction (ownership already gates
-   * that route), so only the cross-vault edge plane opts in.
+   * Gates the origin's `media.location` policy against `exif_json` (#726 P3
+   * threat 8). Defaults false — only the edge plane opts in.
    */
   crossOwner?: boolean;
 }
 
 export interface UnshareFromVaultInput {
-  /** The vault the projection lives in — the only vault written. */
+  /** The only vault written. */
   audience: ShareVaultRef;
   itemType: ShareableItemType;
-  /** The projection's row id in the AUDIENCE vault. */
   itemId: string;
 }
 
 export interface UnshareFromVaultResult {
-  /** False when there was no projection to remove. */
   removed: boolean;
-  /**
-   * Content addresses the audience vault no longer claims. Its own orphan
-   * sweep unlinks them on schedule; the inode survives until the LAST vault
-   * lets go, so the origin's bytes stay readable throughout.
-   */
+  /** The inode survives until the LAST vault lets go; origin bytes stay. */
   orphanedShas: string[];
 }
 
@@ -119,14 +65,11 @@ export interface MoveOutOfVaultInput {
   itemId: string;
 }
 
-/** Read the provenance record for a projected row, or undefined. */
 export interface ShareOriginRecord {
   itemType: string;
   itemId: string;
   originVaultId: string;
   originItemId: string;
-  /** `core_share_origin.shared_by` — an owner id, or a `peer:<vaultId>`
-   *  attribution. See `ShareItemsToVaultInput.sharedBy`'s doc comment. */
   sharedBy: string;
   sharedAt: number;
 }
@@ -162,21 +105,14 @@ export function readShareOrigin(
 
 export interface ShareItemsToVaultResult {
   itemType: ShareableItemType;
-  /** One entry per requested id, in the order asked for. */
+  /** One entry per requested id, in order. */
   items: ProjectedItem[];
-  /** Every content address the closure needed, and how it got there. */
   blobs: BlobPlacement[];
 }
 
 /**
- * Place a SET of items from `origin` into `audience` as one share: one
- * closure, one blob pass, one audience transaction. Rows shared between the
- * items (the bytes two photographs deduped onto, an album cover that is also
- * an entry) cross exactly once.
- *
- * Idempotent: re-sharing the same items — including by a DIFFERENT member —
- * dedupes onto the existing rows (`core_content_item.sha256` is UNIQUE) and
- * keeps the first placement record. One row, no duplicate, no error.
+ * Idempotent: re-sharing, even by a different member, dedupes onto existing
+ * rows (`core_content_item.sha256` is UNIQUE) and keeps the first placement.
  */
 export function shareItemsToVault(
   input: ShareItemsToVaultInput
@@ -186,8 +122,8 @@ export function shareItemsToVault(
       "cannot share a vault into itself — sharing crosses a vault boundary"
     );
   }
-  // Resolve everything out of the origin BEFORE touching the audience, so an
-  // unknown item is refused with nothing placed anywhere.
+  // Resolve out of the origin BEFORE touching the audience, so an unknown item
+  // is refused with nothing placed anywhere.
   const closure = readShareClosure(input.origin.vault, {
     originVaultId: input.originVaultId,
     itemType: input.itemType,
@@ -195,8 +131,6 @@ export function shareItemsToVault(
     crossOwner: input.crossOwner === true,
   });
 
-  // (a) Bytes first — a link is idempotent, and a failure after this point
-  // leaves at most an orphaned link the audience's own sweep reclaims.
   const blobs: BlobPlacement[] = closure.blobs.map((entry) => ({
     sha256: entry.sha256,
     mode: placeBlob(
@@ -206,7 +140,6 @@ export function shareItemsToVault(
     ),
   }));
 
-  // (b) One transaction, audience vault only.
   const projection = projectShareClosure(input.audience.vault, closure, {
     sharedBy: input.sharedBy,
     now: input.now,
@@ -219,10 +152,6 @@ export function shareItemsToVault(
 }
 
 /**
- * Remove a projection from the audience vault. The origin row and its bytes
- * remain readable in the owner's vault, and re-sharing later is idempotent
- * again.
- *
  * Refuses to touch a row the audience AUTHORED (no `core_share_origin`
  * record): unshare removes placements, never someone's own data.
  */
@@ -233,9 +162,8 @@ export function unshareFromVault(
   if (!readShareOrigin(audience, input.itemType, input.itemId)) {
     return { removed: false, orphanedShas: [] };
   }
-  // Nest under a savepoint when a caller (e.g. the commons scrub+re-project
-  // apply, commons.ts) already owns the audience transaction, so the whole
-  // sequence is one atomic unit and this removal never double-opens BEGIN.
+  // Savepoint when a caller already owns the audience transaction (commons
+  // scrub+re-project): stays atomic, never double-opens BEGIN.
   const nested = audience.isTransaction;
   audience.exec(nested ? "SAVEPOINT unshare_from_vault" : "BEGIN IMMEDIATE");
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
@@ -260,20 +188,17 @@ export function unshareFromVault(
     if (nested) audience.exec("RELEASE unshare_from_vault");
     throw error;
   }
-  // Which of those addresses the vault no longer claims — read from the live
-  // model AFTER the commit, so a sha some other row still holds is honestly
-  // reported as still-live rather than guessed at.
+  // Liveness is read AFTER the commit, so a sha another row still holds is
+  // reported live rather than guessed at.
   const live = liveBlobShas(audience);
   return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
 }
 
 /**
- * Remove the source side of a completed cross-vault MOVE.
- *
- * Unlike unshare this may remove an authored item. The caller must durably
- * prove that the target projection committed first; the gateway placement
- * ledger owns that ordering and replay. Kept explicit so no ordinary share
- * path can accidentally invoke authored deletion.
+ * Source side of a completed cross-vault MOVE. Unlike unshare this removes an
+ * AUTHORED item: the caller must durably prove the target projection committed
+ * first (the gateway placement ledger owns that ordering), and this stays
+ * separate so no ordinary share path reaches authored deletion.
  */
 export function moveOutOfVault(
   input: MoveOutOfVaultInput

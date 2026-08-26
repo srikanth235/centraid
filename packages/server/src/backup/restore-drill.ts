@@ -1,51 +1,7 @@
 /*
- * The restore drill's DEPTH half (umbrella #842, slice W1.3).
- *
- * A backup you never restore is not a backup — and a restore you only ever
- * check structurally is barely better. The gateway already runs a REAL restore
- * from the remote into a scratch directory on the vault's `verifyEveryDays`
- * clock (`BackupService.runRestoreVerify`, issue #408 G9) and proves the two
- * files open: `restoreSnapshot` re-derives every chunk id and every entry's
- * capture-time sha, then `verifyRestoredPair` (`@centraid/vault`) runs
- * `integrity_check` / `foreign_key_check`, the G8 receipt cross-check and the
- * #439 R5 seal-key custody verdict.
- *
- * Every one of those checks passes on a restored vault whose CONTENT is gone.
- * `integrity_check` is a statement about b-tree pages, not about rows; a vault
- * that restores with zero content items is a perfectly healthy empty database,
- * and a content row whose blob was never captured is a broken photo that no
- * structural check has an opinion about. This module is the missing half: the
- * checks that ask whether the restored vault is USABLE.
- *
- *   - `restored-blob-coverage`  every blob sha the restored model still claims
- *     (`core_content_item.content_uri`, `core_content_derivative.sha256`) must
- *     be resolvable from the restored vault — present in the restored CAS,
- *     recorded as replicated to the durable remote tier (`blob_replica`, the
- *     bytes a remote-primary snapshot deliberately omits — `backup-sources.ts`
- *     §b), or explicitly held back by a lazy restore's `skipBlob` predicate. A
- *     sha in none of the three is unrecoverable: the row survives the restore
- *     and its bytes do not.
- *   - `restored-census`  the durable content spine (parties, content items,
- *     media assets, consent receipts). A restore with zero parties is an
- *     EMPTY SHELL and fails outright — founding enrols the owner party, so no
- *     instant a snapshot could capture is partyless. A spine table that holds
- *     rows live and none in the restore DEGRADES instead of failing: a
- *     snapshot is a point in the past and a stale one restores fewer rows
- *     truthfully.
- *   - `cas-rehash` / `replica-journal`  reused verbatim from the doctor
- *     integrity-scrub library (`../doctor`, issue #839 W1.2). The scrub asks
- *     these of a LIVE vault; a restored pair is a vault too, and it is the one
- *     copy nobody has ever opened. They are imported, never reimplemented.
- *
- * The structural half stays where it is. This module runs AFTER
- * `verifyRestoredPair` over the same scratch directory, and the caller folds
- * `error` findings into the run's failure list (health goes red and the
- * failure is PERSISTED into backup state, so the next health probe cannot
- * recompute itself green) and `warning` findings into the degraded branch.
- *
- * Determinism: the CAS sample is drawn from a seed the caller derives from the
- * snapshot being drilled (`<vaultId>:<seq>`), never `Math.random`, so a
- * failing drill re-runs over the identical sample. Nothing here reads a clock.
+ * The restore drill's DEPTH half (#842 W1.3), run AFTER `verifyRestoredPair`
+ * over the same scratch directory. Every structural check passes on a restored
+ * vault whose CONTENT is gone: `integrity_check` speaks about pages, not rows.
  */
 
 import { createHash } from "node:crypto";
@@ -69,10 +25,8 @@ import type {
   IntegrityFinding,
 } from "../doctor/index.js";
 
-/** Failure lines a finding's detail carries before it truncates. */
 const MAX_DETAIL_ITEMS = 5;
 
-/** How many restored CAS objects the drill re-hashes when not exhaustive. */
 export const DEFAULT_DRILL_CAS_SAMPLE = 64;
 
 export type RestoreDrillCheckName =
@@ -80,7 +34,6 @@ export type RestoreDrillCheckName =
   | "restored-blob-coverage"
   | "restored-census";
 
-/** One drill verdict. Shape-compatible with the doctor's `IntegrityFinding`. */
 export interface RestoreDrillFinding {
   readonly check: RestoreDrillCheckName;
   readonly level: FindingLevel;
@@ -103,14 +56,7 @@ function preview(values: readonly string[]): string {
   return rest > 0 ? `${head.join(", ")}, +${rest} more` : head.join(", ");
 }
 
-// ── deterministic sampling ────────────────────────────────────────────
-
-/**
- * A replayable `[0, 1)` generator seeded from a string (mulberry32 over the
- * first 32 bits of `sha256(seed)`). `Math.random` is banned in this repo: a
- * drill that samples differently on every run cannot be re-run over the
- * sample that failed, and the CI lane could not pin one either.
- */
+/** `Math.random` is banned: a drill must re-run over the sample that failed. */
 export function seededRandom(seed: string): () => number {
   let state = createHash("sha256").update(seed).digest().readUInt32LE(0);
   return () => {
@@ -122,23 +68,12 @@ export function seededRandom(seed: string): () => number {
   };
 }
 
-// ── restored-census ───────────────────────────────────────────────────
-
-/**
- * The durable content spine. Not every table — a generic "count everything"
- * census would flag transient tables (staging rows, drained transfer queues)
- * that legitimately differ between the capture instant and now, and a drill
- * that cries wolf is a drill the owner learns to ignore. These four are the
- * tables whose emptiness means the owner's data is gone.
- */
+/** The tables whose emptiness means the data is gone; transient ones
+ *  legitimately differ from the capture instant. */
 export interface SpineCensus {
-  /** `core_party` — people and orgs. */
   readonly party: number;
-  /** `core_content_item` — the content spine. */
   readonly content: number;
-  /** `media_asset` — the photo/media rows. */
   readonly media: number;
-  /** `consent_receipt` (journal.db) — the audit trail. */
   readonly receipt: number;
 }
 
@@ -148,7 +83,6 @@ function countOf(db: DatabaseSync, table: string): number {
   ).c;
 }
 
-/** Census one open vault/journal pair — live source or restored copy alike. */
 export function spineCensus(
   vault: DatabaseSync,
   journal: DatabaseSync
@@ -163,28 +97,10 @@ export function spineCensus(
 
 const SPINE_KEYS = ["party", "content", "media", "receipt"] as const;
 
-/**
- * Two graded verdicts, and the grading is the whole design.
- *
- * ERROR — `party = 0`. Founding enrolls the host device's owner party, so
- * every founded vault holds at least one `core_party` row for the rest of its
- * life, at every point in time a snapshot could have captured. A restored pair
- * with zero parties is therefore not a stale vault, it is an EMPTY SHELL: two
- * structurally perfect databases with nobody in them. `integrity_check`,
- * `foreign_key_check` and the receipt cross-check all pass on it, which is
- * exactly why the drill has to be the one to say so.
- *
- * WARNING — a spine table that holds rows in the live source and none in the
- * restore. This is NOT promoted to an error, for the same reason the existing
- * dangling-receipt degrade is not: a snapshot is a point in the past, and a
- * legitimately stale one taken before the owner ever added a photo restores
- * zero media rows truthfully. It needs eyes, not an alarm — and a drill that
- * cries wolf is a drill its owner learns to ignore.
- *
- * With no source census (the vault's plane is not mounted, so there is nothing
- * to compare against) the check WARNS naming that reason — never a silent
- * pass. A drill that could not make its comparison must say so.
- */
+/** ERROR on `party = 0`: founding enrols the owner party, so a founded vault
+ *  is never partyless at any instant a snapshot could capture. WARNING, never
+ *  error, on a spine table with rows live and none restored — a stale snapshot
+ *  restores fewer rows truthfully. No source census ⇒ WARN, never silence. */
 export function checkRestoredCensus(input: {
   readonly vaultId: string;
   readonly restored: SpineCensus;
@@ -236,15 +152,8 @@ export function checkRestoredCensus(input: {
   );
 }
 
-// ── restored-blob-coverage ────────────────────────────────────────────
-
-/**
- * Every blob sha the model still CLAIMS as durable content. Deliberately
- * narrower than `@centraid/vault`'s `liveBlobShas`, which also returns
- * `blob_staging` rows: staged bytes are a TTL'd ingress buffer that a snapshot
- * has no obligation to carry, and counting them would make the drill red on a
- * perfectly good backup taken mid-ingest.
- */
+/** Narrower than `liveBlobShas`: `blob_staging` is a TTL'd ingress buffer no
+ *  snapshot must carry, and counting it reddens a good mid-ingest backup. */
 export function claimedBlobShas(vault: DatabaseSync): Set<string> {
   const claimed = new Set<string>();
   const uris = vault
@@ -267,30 +176,14 @@ export function claimedBlobShas(vault: DatabaseSync): Set<string> {
 
 export interface BlobCoverageInput {
   readonly vaultId: string;
-  /** The RESTORED `vault.db` handle. */
   readonly vault: DatabaseSync;
-  /** Shas materialized under the restored `blobs/` CAS. */
   readonly restoredShas: ReadonlySet<string>;
-  /** Shas a lazy restore's `skipBlob` predicate deliberately held back. */
   readonly skippedBlobs?: readonly string[] | undefined;
 }
 
-/**
- * Prove no restored row points at bytes the restore cannot produce. A claimed
- * sha resolves three ways, and a sha that resolves NONE of them is data the
- * owner has already lost without being told:
- *
- *   1. it is in the restored CAS (the ordinary local-only path — the snapshot
- *      carries the complete resident CAS);
- *   2. the restored vault's own `blob_replica` index records it as replicated
- *      to the durable remote tier, which is exactly the set a remote-primary
- *      snapshot omits on purpose;
- *   3. this restore was lazy and skipped it by predicate.
- *
- * The `blob_replica` evidence is read from the RESTORED vault rather than the
- * live one on purpose: a restore is judged by what the restored bytes alone
- * can prove, not by what the machine that still has the original believes.
- */
+/** A claimed sha resolves three ways — restored CAS, the RESTORED vault's own
+ *  `blob_replica`, or a lazy restore's predicate. One that resolves none is
+ *  already-lost data. */
 export function checkRestoredBlobCoverage(
   input: BlobCoverageInput
 ): RestoreDrillFinding {
@@ -334,37 +227,17 @@ export function checkRestoredBlobCoverage(
   );
 }
 
-// ── orchestrator ──────────────────────────────────────────────────────
-
 export interface RestoreDrillInput {
   readonly vaultId: string;
-  /** The scratch directory `restoreSnapshot` materialized into. */
   readonly destDir: string;
-  /**
-   * Census of the LIVE source pair, taken by the caller from the mounted
-   * plane. Omit only when no plane is mounted — the census check then warns
-   * rather than passing.
-   */
   readonly sourceCensus?: SpineCensus | undefined;
-  /** `RestoreResult.skippedBlobs` from a lazy restore. */
   readonly skippedBlobs?: readonly string[] | undefined;
-  /** Replayable sampling seed. Callers pass `<vaultId>:<seq>`. */
   readonly seed: string;
-  /** Re-hash every restored CAS object instead of a seeded sample. */
   readonly full?: boolean | undefined;
   readonly casSampleSize?: number | undefined;
 }
 
-/**
- * Run every depth check over a freshly restored scratch pair, in a fixed
- * order, and return one flat finding list. Opens the restored databases
- * READ-ONLY and always closes them: the caller deletes this directory next,
- * and an open handle would race the teardown on Windows.
- *
- * A restored pair too damaged to open is not a thrown exception here — it is
- * one `database-integrity` error finding, so the caller reports every problem
- * it found rather than only the first.
- */
+/** A pair too damaged to open returns an error FINDING, never a throw. */
 export function runRestoreDrill(
   input: RestoreDrillInput
 ): RestoreDrillFinding[] {
@@ -403,8 +276,6 @@ export function runRestoreDrill(
         restoredShas,
         skippedBlobs: input.skippedBlobs,
       }),
-      // Reused from the doctor scrub — the restored CAS is a CAS, and this is
-      // the one copy of it nobody has ever opened.
       widen(
         checkCasRehash({
           vaultId: input.vaultId,
@@ -429,19 +300,16 @@ export function runRestoreDrill(
   }
 }
 
-/** An `IntegrityFinding` is already a valid drill finding; name the widening. */
 function widen(found: IntegrityFinding): RestoreDrillFinding {
   return found;
 }
 
-/** The drill's failure list — details of every `error` finding, in order. */
 export function drillErrors(
   findings: readonly RestoreDrillFinding[]
 ): string[] {
   return findings.filter((f) => f.level === "error").map((f) => f.detail);
 }
 
-/** The drill's degrade list — details of every `warning` finding, in order. */
 export function drillWarnings(
   findings: readonly RestoreDrillFinding[]
 ): string[] {

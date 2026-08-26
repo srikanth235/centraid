@@ -1,4 +1,4 @@
-// The rule-explaining note (v9 §8, issue #765).
+// The rule-explaining note (v9 §8, #765).
 //
 // One paragraph, quiet ink, capped at a reading measure. Trivial as CSS and
 // deliberately a component anyway: the same sentence-under-a-list shape

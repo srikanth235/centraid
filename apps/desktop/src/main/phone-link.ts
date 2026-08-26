@@ -1,4 +1,4 @@
-// Phone link (issue #263): the desktop side of the iroh tunnel.
+// Phone link (#263): the desktop side of the iroh tunnel.
 //
 // One iroh endpoint per desktop install — its secret key persists under
 // `<userData>/phone-link/key.bin`, so the desktop's EndpointId (what paired

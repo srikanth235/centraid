@@ -1,7 +1,6 @@
-// The frame's transfer policy record (#711, S4). The EVALUATION of these rules
-// against the radios lives in `lib/upload/native-policy.test.ts` and did not
-// move; what is pinned here is the record itself — its defaults, the key it is
-// stored under, which switches go inert, and the sentence it says about itself.
+// The frame's transfer policy record (#711); rule EVALUATION against the
+// radios lives in `lib/upload/native-policy.test.ts`. AsyncStorage stubbed
+// so the record logic runs under node.
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,8 +13,6 @@ import {
   writeTransferPolicy,
 } from "./transfer-policy";
 
-// AsyncStorage is a native module; the durable mirror is stood in for so the
-// record logic runs under node.
 vi.mock(import("../../storage") as Promise<unknown>, () => {
   const cache = new Map<string, unknown>();
   return {
@@ -33,23 +30,17 @@ vi.mock(import("../../storage") as Promise<unknown>, () => {
 
 describe("the policy record", () => {
   it("keeps the original storage key, whatever the owner is called now", () => {
-    // Moving ownership from Photos to the frame must not move the ROW: this
-    // key names an answer already sitting on every member's device, and
-    // renaming it would silently reset all of them to the defaults.
+    // Renaming the key resets every member device to defaults.
     expect(TRANSFER_POLICY_KEY).toBe("photos.backupRules");
   });
 
   it("defaults to the conservative answer", () => {
-    // A default that spends a cellular allowance without being asked is a
-    // bill, not a preference.
     expect(DEFAULT_TRANSFER_POLICY).toStrictEqual({
       wifiOnly: true,
       allowMetered: false,
       allowRoaming: false,
       chargerOnly: false,
-      // …and `never` is OFF by default: the conservative answer is "under
-      // rules", not "not at all". A device that shipped refusing every
-      // transfer would look identical to a broken one (#712 P5).
+      // `never` OFF by default: "under rules", not "not at all" (#712).
       never: false,
     });
   });
@@ -92,11 +83,7 @@ describe("which switches go inert", () => {
     ).toStrictEqual([]);
   });
 
-  // THE REFUSAL GRAMMAR (issue #712 E1). "Shown disabled and explained" was
-  // the interface's own promise and only the first half was kept — four
-  // switches went grey in silence. `inertReason` is required on the switch's
-  // shape now, so these two properties are what keep it honest rather than
-  // merely present.
+  // REFUSAL GRAMMAR (#712): required `inertReason` keeps grey switches explained.
   it("every inert switch states a reason, and no active one does", () => {
     const policies = [
       DEFAULT_TRANSFER_POLICY,
@@ -104,8 +91,7 @@ describe("which switches go inert", () => {
       { ...DEFAULT_TRANSFER_POLICY, wifiOnly: false, allowMetered: true },
       { ...DEFAULT_TRANSFER_POLICY, never: true },
     ];
-    // Collected, then asserted once — an `if` around an `expect` hides which
-    // case actually ran when the assertion never fires.
+    // Collected then asserted once — an `if` around an `expect` hides the case.
     const seen = policies.flatMap((policy) =>
       TRANSFER_POLICY_SWITCHES.map((rule) => ({
         key: rule.key,
@@ -114,8 +100,7 @@ describe("which switches go inert", () => {
       }))
     );
     expect(seen.filter((row) => row.inert !== row.explained)).toStrictEqual([]);
-    // …and the sample actually contained both cases, or the line above is
-    // vacuously true.
+    // …and the sample has both cases, or the assert is vacuous.
     expect(seen.some((row) => row.inert)).toBe(true);
     expect(seen.some((row) => !row.inert)).toBe(true);
   });
@@ -129,9 +114,7 @@ describe("which switches go inert", () => {
     expect(
       roaming?.inertReason({ ...DEFAULT_TRANSFER_POLICY, wifiOnly: false })
     ).toContain("Metered and cellular");
-    // The floor rule wins over the narrower ones, so a member never reads
-    // "Wi-Fi only already answered this" on a device that will not transfer
-    // at all.
+    // Floor rule wins: never read "Wi-Fi only" on a device that transfers nothing.
     expect(
       roaming?.inertReason({ ...DEFAULT_TRANSFER_POLICY, never: true })
     ).toContain("Never move bytes off this device");
@@ -142,10 +125,7 @@ describe("which switches go inert", () => {
   });
 
   it("`never` makes every other switch inert, and is never inert itself", () => {
-    // It is the floor of the table (#712 P5): once this device may not move
-    // bytes at all, "on Wi-Fi" and "while charging" are questions about a
-    // thing that is not going to happen. The switch that says so must stay
-    // reachable, or a member could not undo it.
+    // Floor (#712): the switch must stay reachable, or it cannot be undone.
     const off = { ...DEFAULT_TRANSFER_POLICY, never: true };
     expect(inertKeys(off)).toStrictEqual([
       "wifiOnly",
@@ -166,9 +146,7 @@ describe("the switch table's shape", () => {
       "chargerOnly",
       "never",
     ]);
-    // `net` is ink and an edge, never a fill (§18) — and it is reserved for
-    // the one switch whose ON state HALTS transfers rather than scheduling
-    // them differently.
+    // `net` is ink/edge, never fill (§18) — reserved for ON-halts-transfers.
     expect(
       TRANSFER_POLICY_SWITCHES.filter((rule) => rule.net).map(
         (rule) => rule.key

@@ -1,7 +1,5 @@
-// Pure-math helpers for the faces capability (YuNet detection decode + SFace
-// alignment), kept separate from src/capabilities/faces.ts so every formula
-// here is unit-testable with synthetic tensors/points — no ONNX/sharp
-// import in this file.
+// Pure-math helpers for faces (YuNet decode + SFace alignment). Separate from
+// src/capabilities/faces.ts so every formula is unit-testable — no ONNX/sharp.
 
 export function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
@@ -13,18 +11,14 @@ export interface Point {
 }
 
 export interface YuNetLevelInput {
-  /** Grid stride in input-image pixels (YuNet's 2023mar export uses strides 8, 16, 32). */
+  /** Grid stride in input-image pixels (YuNet 2023mar: 8, 16, 32). */
   stride: number;
-  /** Feature map width/height in grid cells. */
   gridWidth: number;
   gridHeight: number;
-  /** Row-major per-cell class logits, length gridWidth*gridHeight. */
   classScores: ArrayLike<number>;
-  /** Row-major per-cell objectness logits, length gridWidth*gridHeight. */
   objectness: ArrayLike<number>;
-  /** Row-major per-cell [dx, dy, dw, dh] box regression, length gridWidth*gridHeight*4. */
   boxes: ArrayLike<number>;
-  /** Row-major per-cell 5-point landmark regression [x0,y0,...,x4,y4] relative to cell center, in stride units. Length gridWidth*gridHeight*10. */
+  /** Row-major 5-point landmarks relative to cell center, stride units. */
   landmarks?: ArrayLike<number>;
 }
 
@@ -34,14 +28,7 @@ export interface DecodedFace {
   landmarks?: Point[];
 }
 
-/**
- * Decodes one YuNet feature-map level (one of its three strides) into
- * image-space boxes. The pinned 2023mar export exposes separate class and
- * objectness logits, combined as `sqrt(sigmoid(cls) * sigmoid(obj))`; box and
- * landmark regressions are offsets from the grid origin in stride units.
- * This matches OpenCV Zoo's YuNet post-processing and is exercised against
- * the actual pinned ONNX weights in the weekly live lane.
- */
+/** Score is `sqrt(cls * obj)`; box/landmark offsets are in stride units. */
 export function decodeYuNetLevel(
   input: YuNetLevelInput,
   scoreThreshold: number
@@ -98,13 +85,7 @@ export function decodeYuNetLevel(
   return results;
 }
 
-/**
- * The standard ArcFace/SFace 5-point reference template for a 112x112
- * aligned face crop (left eye, right eye, nose tip, left mouth corner,
- * right mouth corner) — the same widely-published constants used by
- * insightface and reproduced across many MIT-licensed face-alignment
- * implementations.
- */
+/** ArcFace/SFace 5-point template for a 112x112 crop (L-eye, R-eye, nose, L-mouth, R-mouth). */
 export const SFACE_TEMPLATE_112: readonly Point[] = [
   { x: 38.2946, y: 51.6963 },
   { x: 73.5318, y: 51.5014 },
@@ -121,12 +102,7 @@ export interface SimilarityTransform {
   ty: number;
 }
 
-/**
- * Umeyama's least-squares 2D similarity transform (scale + rotation +
- * translation, no reflection): finds the transform that best maps `src`
- * points onto `dst` points in a least-squares sense. Used to align detected
- * face landmarks onto SFACE_TEMPLATE_112 before recognition.
- */
+/** Umeyama 2D similarity (no reflection): maps `src` onto `dst`. */
 export function computeSimilarityTransform(
   src: readonly Point[],
   dst: readonly Point[]
@@ -164,9 +140,7 @@ export function computeSimilarityTransform(
     srcVar += sx * sx + sy * sy;
   }
 
-  // Closed-form rotation+scale for the no-reflection similarity case:
-  // rotation angle = atan2(sxy - syx, sxx + syy); scale = (sxx+syy accounted
-  // via the same numerator/denominator) / srcVar.
+  // No-reflection similarity: angle = atan2(sxy - syx, sxx + syy).
   const rotationNumerator = sxy - syx;
   const rotationDenominator = sxx + syy;
   const angle = Math.atan2(rotationNumerator, rotationDenominator);
@@ -199,20 +173,13 @@ export interface RawImage {
   height: number;
 }
 
-/**
- * Inverse-warps `image` into a `outWidth`x`outHeight` output using the
- * INVERSE of `forwardTransform` (a src->dst similarity) with bilinear
- * sampling — standard image-warp direction (for each output pixel, sample
- * the corresponding source location) so the output has no holes.
- */
 export function warpAffine(
   image: RawImage,
   forwardTransform: SimilarityTransform,
   outWidth: number,
   outHeight: number
 ): RawImage {
-  // Invert the similarity transform: forward is [a -b; b a] * p + t.
-  // det = a^2+b^2 (a pure rotation+scale matrix, always invertible for scale != 0).
+  // Invert [a -b; b a] * p + t. det = a²+b²; identity if scale is 0.
   const det = forwardTransform.a ** 2 + forwardTransform.b ** 2;
   const inv =
     det === 0

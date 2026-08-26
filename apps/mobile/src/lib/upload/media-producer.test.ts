@@ -1,5 +1,5 @@
-// Producer orchestration: the follow-up input mapping, the F11 derivative
-// short-circuit, the foreground-service lifecycle, and F6/F10 outcomes. The
+// Producer orchestration: the follow-up input mapping, the derivative
+// short-circuit, the foreground-service lifecycle, and the settle outcomes. The
 // native queue, sealer, imaging and file modules are all injected via mocks so
 // the pure orchestration runs under node.
 

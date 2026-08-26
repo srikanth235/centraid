@@ -1,27 +1,6 @@
-/*
- * Pure state machine for ConnectFlow (issue #382) — the wizard shared by
- * onboarding's ticket path and the switcher's "Add gateway" action. Two
- * top-level methods:
- *
- *   - `local`  — the embedded gateway on this Mac. Nothing to configure or
- *     test (it's always reachable); the flow skips straight to picking or
- *     creating a vault on it.
- *   - `gateway` — an existing gateway elsewhere, reached ONLY by a pairing
- *     ticket over iroh. URL pairing and per-device bearers were retired in
- *     issue #555; the QUIC identity is the enrollment credential.
- *
- * The third method, `ssh`, was deleted in issue #603: driving a remote
- * `centraid-gateway` CLI over SSH was an admin channel, not an onboarding
- * path, and a pair ticket now covers every remote connect.
- *
- * Steps: method → details → test → vault → committing → done | error.
- * `local` skips `details`/`test` (nothing to fill in, nothing to probe) and
- * goes straight to `vault`. Every transition here is a synchronous reducer
- * over an explicit event — no `window.CentraidApi`, no timers, no DOM. The
- * impure IO (testGatewayConnection / redeemGatewayPairing / addGateway /
- * listVaults) lives in `connectFlowIO.ts` and feeds results back in as
- * events, mirroring the gatewayRegistry.ts pure-core / impure-glue split.
- */
+// Pure state machine for ConnectFlow (#382); `local` skips details/test. A
+// remote gateway is reached ONLY by a pairing ticket — no URL pairing, no
+// per-device bearer (#555). Impure IO is in `connectFlowIO.ts`.
 
 export type ConnectMethod = "local" | "gateway";
 export type ConnectStep =
@@ -33,8 +12,6 @@ export type ConnectStep =
   | "done"
   | "error";
 
-/** One stage of the "handshake ladder" — mirrors the design doc's
- *  `ConnectivityReport.stages[]` contract (GATEWAY_TEST_CONNECTION output). */
 export interface ConnectivityStage {
   id: "reach" | "identify" | "auth" | "vaults" | "decode";
   label: string;
@@ -47,12 +24,10 @@ export interface ConnectivityVaultPreview {
   name: string;
   color?: string;
   icon?: string;
-  /** The owner's own vault — the gateway's default (marked in the vault). */
   personal?: boolean;
 }
 
-/** Mirrors the design doc's `ConnectivityReport` (GATEWAY_TEST_CONNECTION
- *  output) — never a rejection, always this shape. */
+/** GATEWAY_TEST_CONNECTION never rejects — always this shape. */
 export interface ConnectivityReport {
   ok: boolean;
   stages: ConnectivityStage[];
@@ -67,7 +42,6 @@ export interface ConnectivityReport {
   error?: string;
 }
 
-/** The input union GATEWAY_TEST_CONNECTION accepts (design doc). */
 export type ConnectTestInput =
   | { kind: "ticket"; ticket: string }
   | { kind: "gateway"; gatewayId: string };
@@ -79,14 +53,12 @@ export type VaultChoice =
 export interface ConnectFlowResult {
   gatewayId: string;
   vaultId: string;
-  /** Every vault enrolled by the ticket; `vaultId` remains the initial focus. */
+  /** Every vault the ticket enrolled; `vaultId` is the initial focus. */
   vaultIds?: string[];
   displayLabel: string;
 }
 
-/** Outcome of reading the local gateway's vaults (issue #603 W4). A transport
- *  failure is NOT an empty registry — the vault step renders them differently,
- *  so the two cases stay distinguishable all the way to the UI. */
+/** A transport failure is NOT an empty registry (#603). */
 export type LocalVaultsResult =
   | { ok: true; vaults: ConnectivityVaultPreview[] }
   | { ok: false; message: string };
@@ -95,44 +67,26 @@ export interface ConnectFlowState {
   step: ConnectStep;
   method: ConnectMethod | null;
 
-  // "gateway" method details — one iroh pairing ticket, potentially covering
-  // several vault grants.
   ticket: string;
   label: string;
-  /**
-   * Durable replica, intent queue, and media cache on this device.
-   *
-   * Defaults to ON and is no longer asked during pairing/onboarding: an
-   * offline copy is what makes the product work on a flaky link, and a
-   * first-timer has no basis to answer the question. It stays a real,
-   * reversible choice — Settings → This device owns the toggle now, and
-   * turning it off there purges what was kept.
-   */
+  /** Defaults ON and is never asked during pairing; Settings owns the toggle. */
   rememberDevice: boolean;
 
-  // test step.
   testing: boolean;
   report: ConnectivityReport | null;
   testError: string | null;
 
-  // vault step. `newVaultName` backs `vaultChoice.kind === 'create'`.
   vaultChoice: VaultChoice | null;
   newVaultName: string;
-  /** Why the local vault list could not be read. Never set for an empty but
-   *  successfully-read registry. */
+  /** Never set for an empty but successfully-read registry. */
   vaultsError: string | null;
 
-  // commit step.
   committing: boolean;
   commitError: string | null;
   result: ConnectFlowResult | null;
 }
 
-/**
- * `method` pre-selects a method and lands on its first real step — used when
- * the host already made the choice (onboarding's ticket path, issue #603) and
- * a one-card method grid would just be a redundant click.
- */
+/** `method` pre-selects and lands on its first real step (#603). */
 export function createInitialConnectFlowState(
   method: ConnectMethod | null = null
 ): ConnectFlowState {
@@ -144,8 +98,6 @@ export function createInitialConnectFlowState(
     newVaultName: "",
     report: null,
     result: null,
-    // ON by default — see the field's doc comment: the pairing UI no longer
-    // asks, so the initial state IS the product default.
     rememberDevice: true,
     step: "method",
     testError: null,
@@ -190,8 +142,7 @@ export function connectFlowReducer(
   switch (event.type) {
     case "selectMethod": {
       const base = { ...createInitialConnectFlowState(), method: event.method };
-      // `local` has nothing to fill in or probe — the embedded gateway is
-      // always reachable — so it skips straight to picking/creating a vault.
+      // `local` is always reachable: nothing to fill in or probe.
       return { ...base, step: event.method === "local" ? "vault" : "details" };
     }
     case "back": {
@@ -231,8 +182,7 @@ export function connectFlowReducer(
     case "testSettled":
       return { ...state, report: event.report, testing: false };
     case "localVaultsLoaded":
-      // A failed read still settles `report` so the step leaves its loading
-      // state — `vaultsError` is what tells the UI it settled UNHAPPILY.
+      // A failed read still settles `report`; `vaultsError` says it went badly.
       return event.result.ok
         ? {
             ...state,
@@ -288,8 +238,6 @@ export function connectFlowReducer(
   }
 }
 
-/** Input for GATEWAY_TEST_CONNECTION given the current details, or `null`
- *  when nothing testable has been supplied yet (`local` never has one). */
 export function buildTestInput(
   state: ConnectFlowState
 ): ConnectTestInput | null {
@@ -304,17 +252,13 @@ export function canStartTest(state: ConnectFlowState): boolean {
   return buildTestInput(state) !== null;
 }
 
-/** Whether the current method can create a brand-new vault as part of this
- *  flow (design doc step C): the desktop admins its own embedded gateway's
- *  vault lifecycle; a ticket's initial vault is fixed by the ticket payload. */
+/** Only `local`: a ticket's initial vault is fixed by its payload. */
 export function canCreateVaultFor(state: ConnectFlowState): boolean {
   return state.method === "local";
 }
 
 export interface ConnectVaultCapability {
-  /** Set only for a ticket-mode "Existing gateway" connect — the initial
-   *  vault is fixed by the ticket payload, shown as a locked, non-selectable
-   *  row. Additional grants are surfaced after redemption. */
+  /** Ticket mode only: a locked, non-selectable row. */
   locked: { vaultName: string } | null;
   options: ConnectivityVaultPreview[];
   canCreate: boolean;
@@ -349,18 +293,13 @@ export function canCommitConnectFlow(state: ConnectFlowState): boolean {
   }
   if (state.method === "gateway") {
     if (state.ticket.trim().length === 0) return false;
-    // Once the ticket has been redeemed the report says which vault the
-    // enrollment actually grants. An enrollment that names none leaves the
-    // vault step with nothing to pick, so "Continue" must not proceed
-    // (issue #603 D10) — it would commit against no vault at all.
+    // An enrollment naming no vault must not proceed (#603).
     if (state.step === "vault" && state.report) return hasUsableVault(state);
     return true;
   }
   return false;
 }
 
-/** Does the vault step have anything the user can actually connect to —
- *  a ticket-locked vault or at least one selectable/creatable option? */
 function hasUsableVault(state: ConnectFlowState): boolean {
   const cap = vaultCapability(state);
   return cap.locked !== null || cap.options.length > 0 || cap.canCreate;

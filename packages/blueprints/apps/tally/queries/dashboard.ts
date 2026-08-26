@@ -128,7 +128,7 @@ export async function loadTally(
   ctx: HandlerCtx,
   purpose: string
 ): Promise<TallyData> {
-  // A group decorates a social.circle (issue #310 S4): the circle carries
+  // A group decorates a social.circle (#310): the circle carries
   // the name and the membership, tally.group the icon + colour.
   const [
     vaultRes,
@@ -151,7 +151,7 @@ export async function loadTally(
     ctx.vault.read({ entity: "social.circle_member", purpose }),
     ctx.vault.read({
       entity: "tally.expense",
-      // Trashed expenses (issue #441 A4) drop out of every balance and ledger —
+      // Trashed expenses (#441) drop out of every balance and ledger —
       // their splits are read below but never consumed once the expense is gone.
       where: [{ column: "deleted_at", op: "is-null" }],
       orderBy: { column: "spent_on", dir: "desc" },

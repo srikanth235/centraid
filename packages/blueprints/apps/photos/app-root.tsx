@@ -1,30 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit — the app's orchestration is one React tree by design (#505). The v4 frame rewrite pulled the shelf model (shelves.ts), the filters (filters.ts), the copy (view-copy.ts), the member preferences (member-prefs.ts) and the frame contribution (frame.tsx) out of it; what is left is the wiring those five modules are wired BY, and splitting it further would split one closure across files.
-// Photos — query-free React tree (issue #505), as a ROUTE INSIDE THE FRAME
-// (v4 handoff §3). Holds the `Root` component and the orchestration that does
-// NOT depend on the node-side `./queries/*` handler modules.
-//
-// PHOTOS DRAWS NO CHROME OF ITS OWN. The app bar, the ONE status line and the
-// compact bottom band are the frame's; this module contributes to all three
-// through the `frame` prop and renders, inside its pane, only the shelf strip,
-// the toolbar row, the grid and the overlay regions. The hamburger, the
-// in-pane search field, the zoom pair, the slideshow button and the drawer
-// retired with the header that carried them.
-//
-// MULTI-SCOPE (issue #599, v4 §H). This app mounts over N scopes at once — the
-// member's own vault, the shared one the account was founded with, and every
-// household audience — and paints them as ONE timeline. Which scopes are IN
-// that timeline is `vaultsOn`; whether a photograph is marked as shared is
-// `personal === false` on its scope, never a name (filters.ts). The per-scope pages and the merge live in library-store.ts.
-// Two projections are NOT merged:
-//
-//  * ALBUMS, PLACES and TRASH stay OWN-SCOPE. A collection id, a place id and
-//    a trash shelf are per-scope facts: an album id minted in one scope means
-//    nothing in another — or, worse, means something else, since ids collide
-//    across scopes by design. Album MEMBERSHIP is therefore computed against
-//    own-scope assets only.
-//  * The TIMELINE is merged, deduped and horizon-bounded
-//    (apps/_shared/scope-merge.ts), then filtered by `vaultsOn` and by the
-//    kind filter.
+// Photos — query-free React tree (#505), a route inside the frame (v4 §3).
+// Multi-scope (#599, §H): N scopes as one timeline; albums/places/trash stay
+// own-scope (ids collide). Timeline merges, then filters by `vaultsOn`.
 
 import {
   useCallback,
@@ -140,8 +117,7 @@ import { createVisibility } from "./visibility.ts";
 
 import styles from "./Chrome.module.css";
 
-// The vault tables the library projection reads — the change-subscription
-// filter AND the onChange refetch gate (issue #404).
+// The change-subscription filter AND the onChange refetch gate (#404).
 export const PHOTOS_READ_TABLES_LIST = [
   "media.asset",
   "core.content_item",
@@ -152,8 +128,7 @@ export const PHOTOS_READ_TABLES_LIST = [
   "core.concept",
   "core.tag",
   "blob.custody_state",
-  // The Storage screen's whole-library rollup (issue #711) — a sweep rewrites
-  // it, and this app should repaint when it does.
+  // A sweep rewrites the Storage rollup (#711); repaint when it does.
   "blob.custody_rollup",
 ];
 const PHOTOS_READ_TABLES = new Set<string>(PHOTOS_READ_TABLES_LIST);
@@ -167,10 +142,7 @@ export function Root({
   compact = false,
 }: InlineAppProps): ReactElement {
   const rootElRef = useRef<HTMLDivElement | null>(null);
-  // The frame handle is read from inside the mount-once boot closure. A ref
-  // keeps that read live without re-running the boot when the host re-renders;
-  // it is seeded at construction and re-synced in an effect, never written
-  // during render.
+  // Boot closure reads `frame` via this ref — never written during render.
   const frameRef = useRef(frame);
   const compactRef = useRef(compact);
   const narrowRef = useRef(false);
@@ -204,8 +176,7 @@ export function Root({
     [rootRef]
   );
 
-  // Seed the narrow layout BEFORE the first paint: inline, the app pane can be
-  // narrower than the viewport, so measure the real element (#505 trap 1).
+  // Seed narrow BEFORE first paint, measuring the real element (#505 trap 1).
   useLayoutEffect(() => {
     const el = rootElRef.current;
     if (el) {
@@ -218,7 +189,6 @@ export function Root({
   useEffect(() => {
     let disposed = false;
 
-    // ---- slot roots ----
     const setSlot = (key: SlotKey, node: ReactNode): void => {
       setSlots((prev) => ({ ...prev, [key]: node }));
     };
@@ -226,13 +196,8 @@ export function Root({
       render: (node: ReactNode) => setSlot(key, node),
     });
     const shelfStripRoot = mk("shelfStrip");
-    // The app navigation rail (v16) — the pointer seat's form of the same
-    // spine the strip is. Its own slot, because it stands in a different
-    // REGION: the strip is a block above the scroll pane and the rail is a
-    // column beside it.
+    // Its own slot: the strip stands above the scroll pane, the rail beside it (v16).
     const navRailRoot = mk("navRail");
-    // The toolbar row's mount — also where the selection bar renders while a
-    // selection is active (v4 §6 close-out, selection.tsx's header).
     const toolbarRoot = mk("toolbar");
     const bannerRoot = mk("banner");
     const mainRoot = mk("main");
@@ -243,73 +208,41 @@ export function Root({
     const permissionRoot = mk("permission");
     const moreSheetRoot = mk("moreSheet");
 
-    // ---- state ----
     let assets: Asset[] = [];
     let albums: Album[] = [];
     let places: Place[] = [];
     let trash: Asset[] = [];
-    /** The current shelf (v4 §16 `shelf`). Built-in ids come from shelves.ts;
-     *  an album's own id means album detail. */
+    /** Built-in ids from shelves.ts; an album's own id means album detail. */
     let shelf: ShelfId = null;
     let uploading = false;
-    /**
-     * A read has LANDED (§14). Until it has, this app knows nothing about the
-     * library — and a view that knows nothing may not say it is empty. Set
-     * once, by the first read that comes back without an error; a later
-     * failure does not un-know what was already read, which is exactly the
-     * offline case (the last good page still renders, and the banner explains
-     * why it is not growing).
-     */
+    /** Set by the first successful read; later failure does not un-know (§14). */
     let loaded = false;
-    /** Did the most recent read of the member's OWN scope come back failed?
-     *  The only reachability evidence this app can actually observe — see
-     *  `libraryReachability` (view-state.ts). */
     let readFailed = false;
     let offlineShown = false;
     let searchQuery = "";
     let searchResults: Asset[] | null = null;
-    /** Which of §9's four states the search shelf is in (search.ts). */
     let searchStatus: SearchStatus = "resting";
-    /** Per-scope reach for the current answer (issue #726 D10/D11) — one
-     *  `{label, value}` fact per mounted scope that did not answer, named
-     *  BESIDE whatever other scopes' hits are still on screen. */
+    /** Per-scope miss, named beside hits other scopes still have (#726 D10/D11). */
     let searchReachFacts: readonly { label: string; value: string }[] = [];
-    /** Is the band's own overflow sheet open (§3.1)? */
     let moreOpen = false;
-    /** The kind filter (v4 §16 — session, not the member record). */
     let kind: KindFilter = "all";
     let newAlbumOpen = false;
     let renamingAlbum = false;
-    /**
-     * The last import that had something to EXPLAIN (§11) — a dedupe, a
-     * restore, or both. Null the rest of the time, including after a run where
-     * every file was new: that run said everything it had to say on the one
-     * status line, and a panel repeating it would be a second surface for one
-     * outcome. Cleared by the member (`Dismiss`) and by nothing else, because
-     * the two panels are read AFTER the fact.
-     */
+    /** Last import with something to explain (§11); null after an all-new run; member-cleared. */
     let lastImport: ImportResult | null = null;
-    // The face-review queue rides the People shelf as a mode, not a ninth
-    // tab: the shelf's own pending note opens it, and any navigation — the
-    // People tab included — returns to the roster. See navigateTo.
+    // People-shelf mode, not a ninth tab: any navigation returns to the roster.
     let faceReviewOpen = false;
-    // Which face the review should open ON, when the member arrived by pressing
-    // a specific unnamed proposal rather than the shelf's own Review control.
-    // Null means "start at the head of the queue".
     let faceReviewFocusRegionId: string | null = null;
     let paneWidth = gridWidthFallback(
       typeof window === "undefined" ? 1280 : window.innerWidth
     );
     let libraryTruncated = false;
-    /** Is the member's own library out of reach right now (§13)? The app bar
-     *  drops Import while it is: an import that cannot land is not an offer. */
+    /** App bar drops Import while denied (§13): an import that cannot land is not an offer. */
     let accessDenied = false;
     let lastFreshLoadAt = 0;
     let recordNextLoad = false;
 
-    // `tileSize` and `vaultsOn` — the two preferences the handoff puts on the
-    // member record (§16). See member-prefs.ts for what is and is not true
-    // about that today.
+    // The two member-record preferences (§16); see member-prefs.ts.
     const prefs = createMemberPrefs(() => {
       renderNavigation();
       renderToolbarRow();
@@ -317,23 +250,16 @@ export function Root({
       contributeAppBar();
     });
 
-    // ---- scopes (issue #599) ----
+    // Scopes (issue #599)
     const scopesNow = (): InlineScope[] => mountedScopes();
     const ownId = (): string => ownScopeId(scopesNow());
-    /** Merged assets restricted to the member's own scope — see the header. */
     let ownAssets: Asset[] = [];
-    /**
-     * The mounted vault a tile is shown FROM. The tile's marker is derived
-     * from this scope's `personal` marker (tile-state.ts `vaultMarker`) — any
-     * scope but the member's own — never from its label, which the owner is
-     * free to rename (§H).
-     */
+    /** Tile marker from `personal`, never the renameable label (§H). */
     const vaultOf = (
       scopeId: string | null | undefined
     ): InlineScope | undefined =>
       scopesNow().find((scope) => scope.id === (scopeId ?? ""));
-    // Where a CREATING write lands. One vault switched on is an unambiguous
-    // target; "all", or several, falls back to the member's own.
+    // One vault on is an unambiguous target; several falls back to own.
     setWriteTargetResolver((kindOfWrite) =>
       photoWriteTarget(
         kindOfWrite,
@@ -342,13 +268,9 @@ export function Root({
       )
     );
 
-    // ---- the frame's ONE status line ----
-    // Every write outcome announces itself there, with Undo where undo is
-    // possible. No toast, no badge, no spinner, no red dot (§3, §14).
-    // `progress` rides through untouched: a long local operation says how far
-    // it has got with EXACT counts on this same line, and the frame draws the
-    // determinate meter. A caller that does not know says nothing, which is
-    // why this is a passthrough and never a default (§14).
+    // The frame's ONE status line (§3, §14): every write outcome announces
+    // itself here, Undo where possible. No toast/badge/spinner/dot. `progress`
+    // rides through untouched — a caller that does not know says nothing.
     setStatusSink((note) =>
       publishOutcome(
         frameRef.current,
@@ -362,7 +284,6 @@ export function Root({
       )
     );
 
-    // ---- data ----
     const store = createLibraryStore({
       readScopes: (scopeIds, input) =>
         readLibraryScopes(scopeIds, input, (scopeId, data) =>
@@ -375,16 +296,12 @@ export function Root({
       onData: () => applyStore(),
     });
 
-    /** Repaint from whatever the store now holds. */
     function applyStore(): void {
       if (disposed) return;
       const own = store.own();
-      // A consent denial and a read failure are OWN-scope outcomes: they are
-      // about the member's own library, which is the thing the screen names.
+      // Consent denial and read failure are OWN-scope outcomes.
       const denied = own.denied;
-      // PERMISSION IS A SCREEN (§13), rendered into its own slot — Chrome hides
-      // the live region behind it rather than unmounting it, so every tile's
-      // already loaded bytes survive a grant coming back.
+      // PERMISSION IS A SCREEN (§13): Chrome HIDES the live region rather than unmounting, so loaded bytes survive a grant.
       accessDenied = Boolean(denied);
       permissionRoot.render(
         denied ? <PermissionScreen reason={denied.message ?? null} /> : null
@@ -393,19 +310,12 @@ export function Root({
         contributeAppBar();
         return;
       }
-      // A FAILED READ IS NOT A DEAD END (§14). It used to `return` here, which
-      // meant the app stopped repainting entirely and left whatever was on
-      // screen — including, on a first read, the empty state — standing under
-      // one invented sentence. Now the failure is recorded, the banner
-      // explains it in the product's own words, and everything that IS known
-      // keeps rendering from the replica: months, days, counts, captions,
-      // albums, people. The store keeps each scope's last good page for
-      // exactly this (library-store.ts `apply`).
+      // A FAILED READ IS NOT A DEAD END (§14): record it, let the banner explain,
+      // keep rendering the replica's last good pages.
       readFailed = Boolean(own.error);
       renderOfflineBanner();
       const view = store.merged();
-      // `MergedRow<MergeableAsset>` and `Asset` describe the same query row
-      // from two sides — see the same cast's note in library-store.ts.
+      // Same query row from two sides; see library-store.ts's note.
       const merged = view.rows as unknown as Asset[];
       const own_ = ownId();
       const vaultsOn = prefs.read().vaultsOn;
@@ -418,14 +328,10 @@ export function Root({
       albums = own.albums;
       places = own.places;
       trash = own.trash;
-      // A read that came back is a read that landed, even if the library it
-      // describes is genuinely empty — THAT is when the empty state may speak.
+      // A returned read has landed — THAT is when the empty state may speak.
       if (!readFailed) loaded = true;
-      // The Trash → Library redirect that used to live here is GONE (§14). An
-      // empty trash is a state with its own words ("Trash is empty."), and
-      // silently landing the member on a different shelf answered a question
-      // they did not ask. The one shelf that cannot survive a read is a
-      // deleted album — see `shelfAfterRead`.
+      // NO Trash → Library redirect (§14); the one shelf a read can invalidate
+      // is a deleted album.
       shelf = shelfAfterRead(
         shelf,
         albums.map((album) => album.album_id)
@@ -441,16 +347,7 @@ export function Root({
       lightbox.renderIfOpen();
     }
 
-    /**
-     * The offline banner (§14) and the ONE status line that goes with it.
-     *
-     * Both are driven by `libraryReachability`, which is the honest answer
-     * this app can give — the frame contract carries no reachability channel
-     * today (see that function's own note). The status line says the state in
-     * the product's words instead of the invented apology it used to carry;
-     * the frame owns the `--net` dot and takes it from the shell's own
-     * heartbeat, which this app cannot and must not restyle.
-     */
+    /** Driven by `libraryReachability`. Do not restyle the frame's `--net` dot. */
     function renderOfflineBanner(): void {
       const offline =
         libraryReachability({
@@ -460,16 +357,12 @@ export function Root({
       bannerRoot.render(
         offline ? <OfflineBanner onRetry={handleRetryRead} /> : null
       );
-      // Published ON THE TRANSITION only. The line is the frame's ONE status
-      // line and a write outcome (with its Undo) shares it; re-asserting the
-      // offline sentence on every repaint would quietly eat the outcome the
-      // member is still reading.
+      // Transition edge only: re-asserting every repaint would eat a write outcome.
       if (offline && !offlineShown) {
         notice(OFFLINE_COPY.status);
         offlineShown = true;
       } else if (!offline && offlineShown) {
-        // Take the sentence back down when the library is reachable again —
-        // it is a state, not an outcome, so it does not linger.
+        // A state, not an outcome, so it does not linger.
         notice("");
         offlineShown = false;
       }
@@ -478,7 +371,6 @@ export function Root({
       void refresh();
     };
 
-    /** Album detail is any shelf id that is neither built-in nor a tag. */
     function isAlbumId(id: ShelfId): id is string {
       return (
         typeof id === "string" &&
@@ -492,44 +384,21 @@ export function Root({
         : undefined;
     }
 
-    /**
-     * May this member write to the album they are looking at — and if not,
-     * WHY? Albums are a per-scope collection this app only ever authors in the
-     * member's own space (scopes.ts `photoWriteTarget("own", …)`), so ONE
-     * answer serves the bar's Rename and Delete, the tile's Remove and the app
-     * bar's primary. They each used to derive their own, which is how a
-     * read-only album ended up refusing two writes and offering a third.
-     */
+    /** One answer for bar Rename/Delete, tile Remove, and app-bar primary. */
     function albumWriteTarget(): WriteTarget {
       return photoWriteTarget("own", null, scopesNow());
     }
-    /** Why the album refuses a write, or undefined while it accepts one — a
-     *  reason is a thing to SAY, so there is no empty-string state for it. */
     function albumRefusalReason(): string | undefined {
       const target = albumWriteTarget();
       return target.disabled ? target.reason : undefined;
     }
-    /** What the member calls their own library — the SHELL's label, which its
-     *  owner may rename, never a storage noun (issue #599). */
+    /** Shell label, never a storage noun (#599). */
     function ownScopeLabel(): string {
       const own = ownId();
       return scopesNow().find((scope) => scope.id === own)?.label ?? "Library";
     }
 
-    /**
-     * The read-only surface's primary (proto 4800): download what this view is
-     * showing. A client-side save through the SAME batch path the selection
-     * bar's fourth action uses — a grant that reads "read and download" gets
-     * the download it names, and nothing is written anywhere.
-     *
-     * The progress ref is null on purpose: `runBatchDownload` writes its
-     * running count into the selection bar's own busy element, which this
-     * surface has not got. The outcome still lands on the frame's one status
-     * line ("Downloaded 12 items · 2 not on this device"), so the member is
-     * told what happened — only the intermediate count is missing, and a
-     * determinate app-bar counter is a frame contribution this app cannot make
-     * today (see the report on `frame.tsx`).
-     */
+    /** Read-only primary: same batch path as the selection bar; progress ref null here. */
     const handleDownloadAll = (): void => {
       const shown = visibleAssets();
       void runBatchDownload(
@@ -540,17 +409,14 @@ export function Root({
       );
     };
 
-    /** Re-read every scope — the explicit, post-write and window-focus path. */
     async function refresh(): Promise<void> {
       await store.refreshAll();
     }
 
     function albumAssets(): Asset[] {
       if (!shelf) return assets;
-      // Favorites and tags are per-asset facts that travel with the row, so
-      // they read the merged (filtered) list. Album membership is an ID match
-      // against an own-scope collection, so it reads own-scope assets only —
-      // see the header note on colliding ids.
+      // Favorites/tags travel with the row (merged list); album membership is
+      // an ID match against own-scope assets only — ids collide across scopes.
       if (shelf === FAVORITES) return assets.filter((a) => a.favorite);
       if (shelf === TRASH) return trash;
       if (typeof shelf === "string" && shelf.startsWith("tag:")) {
@@ -567,24 +433,18 @@ export function Root({
         );
         return ownAssets.filter((asset) => memberIds.has(asset.asset_id));
       }
-      // PLACES is one flat list in section order (see `sections()`), so the
-      // lightbox steps through it exactly as it is drawn — a viewer that
-      // stepped in a different order than the grid would be a second answer to
-      // "what is next?". Places, like albums, are an own-scope fact.
+      // One flat list in DRAWN order, so the lightbox walk agrees with the
+      // screen. Places are own-scope, like albums.
       if (shelf === PLACES) return sections().flatMap((s) => s.assets);
-      // One person's own sub-state: the same timeline under a filter (§5).
+      // One person's sub-state: the same timeline under a filter (§5).
       const personId = personIdFrom(shelf);
       if (personId) return people.assetsFor(personId, ownAssets);
       return ownAssets.filter((a) => a.album_ids?.includes(shelf!));
     }
 
-    /** The Places shelf's sections — an own-scope projection, for the same
-     *  reason albums are (a place id minted in one scope means nothing in
-     *  another). */
+    /** Own-scope, for the same reason albums are. */
     function sections(): ReturnType<typeof placeSections> {
-      // The places, then the no-location bucket (issue #816) — the shelf as it
-      // is drawn, so the search groups over it and the lightbox's walk order
-      // read the same list the member is looking at.
+      // The shelf as DRAWN (#816): search and lightbox walk the same list.
       return placeSectionsWithNoLocation(ownAssets);
     }
 
@@ -597,7 +457,6 @@ export function Root({
       getSelectedAlbum: () => shelf,
     });
 
-    // ---- memories (§4.6) ----
     function memories(): MemoryCard[] {
       if (rootElRef.current?.dataset.showMemories === "hide") return [];
       return buildMemories({
@@ -608,12 +467,9 @@ export function Root({
       });
     }
 
-    // ---- navigation ----
     function navigateTo(id: ShelfId): void {
-      // The shelf strip is the way back OUT of the review (proto :4849 keeps
-      // the strip on `dupereview`, and gives the review no Back control of its
-      // own): re-selecting Duplicates returns to the cluster list, while
-      // leaving Duplicates entirely re-fetches.
+      // The strip is the review's only way back: re-selecting Duplicates
+      // returns to the cluster list.
       if (shelf === DUPLICATES) {
         if (id === DUPLICATES) duplicates.exitReview();
         else duplicates.invalidate();
@@ -621,35 +477,28 @@ export function Root({
       shelf = id;
       newAlbumOpen = false;
       renamingAlbum = false;
-      // Any navigation closes the review queue — the shelf strip is the way
-      // back, so the People tab itself returns a member to the roster.
+      // Any navigation closes the review queue.
       faceReviewOpen = false;
       faceReviewFocusRegionId = null;
-      // Navigating IS the dismissal — a sheet that stayed open over the
-      // destination it just sent you to would be a second navigation.
+      // Navigating IS the dismissal — never a sheet over the destination just reached.
       if (moreOpen) closeMore();
-      // Selection is cleared when the route leaves Photos (§16); within
-      // Photos it survives a shelf change, which is what §6 asks for.
+      // Cleared only when the route leaves Photos (§16), not on shelf change (§6).
       renderNavigation();
       renderToolbarRow();
       renderMain();
       contributeAppBar();
     }
 
-    /** Toggle one vault in the merged timeline. A pure re-projection of data
-     *  already held: no scope is re-read. */
+    /** A pure re-projection of data already held: no scope is re-read. */
     function toggleVault(scopeId: string): void {
       const current = prefs.read().vaultsOn;
       const every = scopesNow().map((scope) => scope.id);
-      // The resting state is "every one", held as an EMPTY set. The first
-      // toggle therefore materialises the full set and removes one from it,
-      // rather than leaving the member looking at a single vault they did not
-      // ask to isolate.
+      // Resting state "every one" held as an EMPTY set: the first toggle
+      // materialises the full set and removes one — never isolates one.
       const base = current.size === 0 ? new Set(every) : new Set(current);
       if (base.has(scopeId)) base.delete(scopeId);
       else base.add(scopeId);
-      // Switching the last one off would show an empty timeline the member
-      // cannot explain, so it reads as "back to every one".
+      // Switching the last off would show an unexplainable empty timeline.
       prefs.write({
         vaultsOn:
           base.size === 0 || base.size === every.length ? new Set() : base,
@@ -662,7 +511,6 @@ export function Root({
       applyStore();
     }
 
-    // ---- the frame's app bar (§3) ----
     function contributeAppBar(): void {
       const album = currentAlbum();
       const copy = shelfCopy(shelf);
@@ -682,15 +530,11 @@ export function Root({
         scopesNow()
       );
       const count = countFor();
-      // A READ-ONLY SURFACE SWAPS THE PRIMARY, IT DOES NOT LOSE IT
-      // (proto 4800-4801: `readonly ? 'Download' : 'Import'`). Import is not
-      // merely disabled here — an import that cannot land is not an offer —
-      // and what stands in its place is the one thing this grant DOES allow.
+      // A READ-ONLY SURFACE SWAPS THE PRIMARY, NOT LOSES IT: what replaces
+      // Import is what the grant allows.
       const readOnlyAlbum = Boolean(album) && albumWriteTarget().disabled;
-      // On the phone, while selecting, `Select all`/`Select none` stays in
-      // the head with the count and Done — the five actions are the only
-      // thing that moves to the bottom bar (§6, §15). Desktop/PWA carry
-      // Select all inside the bar itself, so this is left off there.
+      // Phone (§6, §15): Select all/none stays in the head; only the five
+      // actions move to the bottom bar.
       const phoneSelectHead =
         narrowRef.current && selection.isActive()
           ? {
@@ -699,10 +543,8 @@ export function Root({
             }
           : {};
       const contribution = appBar({
-        // proto :3964 — the review keeps the Duplicates shelf and retitles the
-        // bar. The position ("cluster 2 of 6") is NOT put here: the frame's
-        // count contract is `{count, unit}` and cannot express it, so the
-        // review draws it in its own section head, where the prototype does.
+        // Position ("cluster 2 of 6") NOT here: `{count, unit}` cannot express
+        // it, so the review draws it in its own section head.
         title:
           shelf === DUPLICATES && duplicates.reviewing()
             ? "Duplicate review"
@@ -720,12 +562,8 @@ export function Root({
         selectMode: selection.isActive(),
         onToggleSelect: () =>
           selection.isActive() ? selection.exit() : selection.enter(),
-        // ONE FILLED INK ELEMENT PER VIEW (§18). The empty block's own
-        // `Import photographs` is filled, and it is where the member is
-        // looking, so the bar stands down while it is offered rather than
-        // putting a second filled Import in the same view. The same rule
-        // already drops it while access is denied — an offer that cannot
-        // land, or that is already on screen, is not an offer.
+        // ONE FILLED INK ELEMENT PER VIEW (§18): the empty block's filled
+        // Import is where the member looks, so the bar stands down.
         showImport:
           !accessDenied &&
           !readOnlyAlbum &&
@@ -733,19 +571,12 @@ export function Root({
           shelf !== TRASH &&
           shelf !== DUPLICATES &&
           shelf !== STORAGE &&
-          // No app-bar primary on Search (§9, ~4799): the shelf's own
-          // field is where the member is looking, same reason the empty
-          // block already stands the bar down.
+          // No primary on Search (§9): the shelf's field is where the member looks.
           shelf !== SEARCH,
-        // Inside a real album the natural "add" is from the library, not from
-        // disk (proto :4280, the Picker tab). This is the ONLY route that
-        // reaches the picker in a NON-empty album: its other entry lives in
-        // the empty block, which is `hidden` the moment the album has a
-        // photograph in it, so the picker was unreachable there.
+        // In an album the natural "add" is from the library — the ONLY picker
+        // route while NON-EMPTY; the empty-block entry hides once it has one.
         onImport: () => (album ? openPicker() : $("fileInput").click()),
-        // Desktop/PWA's own way to Search (§9) — the compact band already
-        // claims a Search destination, so the bar's control is dropped
-        // there (frame.tsx honours `compact`).
+        // Compact band claims Search, so the bar drops its control there (§9).
         compact: narrowRef.current,
         onSearch: () => navigateTo(SEARCH),
         ...(target.disabled ? { importDisabledReason: target.reason } : {}),
@@ -755,20 +586,14 @@ export function Root({
         readOnlyAlbum
           ? {
               ...contribution,
-              // COMPOSED onto the frame's own action set, never a second bar:
-              // frame.tsx describes `Select` and `Import`, and this appends the
-              // one primary that surface has left. It is the app bar's LAST
-              // action, which is where the primary lives (frame.tsx).
+              // COMPOSED onto the frame's actions, LAST — where the primary lives.
               actions: (
                 <>
                   {contribution.actions}
                   <button
                     type="button"
                     className="kit-btn primary"
-                    // The prototype's own `primaryTitle` — help on an ENABLED
-                    // control, not a refusal hidden in a tooltip. The library
-                    // is named by its scope's label, which its owner may
-                    // rename, never by a storage noun (issue #599).
+                    // Help on an ENABLED control, named by the scope's label (#599).
                     title={downloadPrimaryTitle(ownScopeLabel())}
                     onClick={handleDownloadAll}
                   >
@@ -782,11 +607,7 @@ export function Root({
               (duplicates.count() ?? 0) > 0
             ? {
                 ...contribution,
-                // proto :4800/:4803 — the Duplicates shelf's primary is
-                // `Review duplicates`, not Import. Composed onto the frame's
-                // action set exactly as the read-only Download above is.
-                // Offered only once `count()` has answered positively, so it
-                // never fires into an empty queue.
+                // Offered only after `count()` answers positively.
                 actions: (
                   <>
                     {contribution.actions}
@@ -802,9 +623,7 @@ export function Root({
               }
             : contribution
       );
-      // The band is claimed unconditionally: the frame honours it only for a
-      // first-party app on the compact form factor, so Photos never needs a
-      // second ownership toggle in its app bar (§3.1).
+      // Claimed unconditionally; honoured only first-party + compact (§3.1).
       frameRef.current.claimBand(
         bandClaim(
           shelf,
@@ -814,41 +633,28 @@ export function Root({
       );
     }
 
-    /** What the app bar's count counts on this shelf — or null where a count
-     *  would have to be invented rather than read. */
+    /** Null where a count would have to be invented rather than read. */
     function countFor(): number | null {
       if (shelf === ALBUMS) return albums.length;
-      // The places the LOADED photographs actually name, not the whole known
-      // place list: the sections below are what this count counts.
+      // The places LOADED photographs name, not the whole known place list.
       if (shelf === PLACES) return sections().length;
       if (shelf === PEOPLE) return people.list()?.length ?? null;
-      // The count IS known once the shelf's own load lands (proto 3943
-      // `Duplicates · 6 clusters`) — `duplicates.count()` carries the same
-      // "not yet answered" `null` every other lazy shelf's count does.
+      // Known once the shelf's load lands; `count()` carries the same
+      // "not yet answered" null as every lazy shelf.
       if (shelf === DUPLICATES) return duplicates.count();
       if (shelf === STORAGE) return null;
       if (shelf === SEARCH) return searchResults?.length ?? null;
       return visibleAssets().length;
     }
 
-    // ---- the app's own navigation: the rail (v16) or the strip (§5) ----
-    //
-    // ONE FUNCTION FOR ONE QUESTION. The rail and the strip are the same spine
-    // on two axes and they answer the same question — where in Photos am I —
-    // so they are re-rendered together and can never disagree about the answer
-    // or about which seat is carrying it.
+    // ONE FUNCTION FOR ONE QUESTION (v16, §5): rail and strip are one spine on
+    // two axes, re-rendered together so they can never disagree.
     function renderNavigation(): void {
       renderNavRail();
       renderShelfStrip();
     }
 
-    /**
-     * The 232px column beside the content (v16 §4). A POINTER SEAT ONLY, and
-     * both halves of that are read for the same reason the strip reads both:
-     * `narrow` is this app's own pane, `compact` is the SHELL's form factor,
-     * and a rail drawn on either would be a column where there is no room for
-     * one — with the strip withdrawn behind it.
-     */
+    /** Pointer seat only: `narrow`=pane, `compact`=shell; a rail on either withdraws the strip (v16 §4). */
     function renderNavRail(): void {
       const seat = navSeat({
         narrow: narrowRef.current,
@@ -881,8 +687,7 @@ export function Root({
             title={album.title ?? "Album"}
             renaming={renamingAlbum}
             canWrite={!albumWriteTarget().disabled}
-            // A refused control SAYS WHY, inline (README:233). The bar used to
-            // disable Rename and Delete and explain nothing.
+            // A refused control SAYS WHY, inline.
             {...(refusal === undefined ? {} : { reason: refusal })}
             onBack={() => navigateTo(ALBUMS)}
             onStartRename={() => {
@@ -912,11 +717,8 @@ export function Root({
         );
         return;
       }
-      // ON THE BAND'S SEAT the frame carries the shelves, and ON THE RAIL'S
-      // the column beside the content does (v16). The strip is what is left:
-      // the form of the same spine that fits a narrow pane on a pointer shell
-      // and a wide one on a compact shell. `navSeat` answers all three at once
-      // so no seat can end up with two navigations or with none.
+      // Shelves ride the band's seat, columns the rail's; the strip is what is
+      // left. `navSeat` answers all seats at once (v16).
       if (
         navSeat({ narrow: narrowRef.current, compact: compactRef.current }) !==
         "strip"
@@ -924,9 +726,7 @@ export function Root({
         shelfStripRoot.render(null);
         return;
       }
-      // No shelf strip on Search (§9, ~4849): Search reads as its own page,
-      // not the timeline under a filter every other strip tab is — the field
-      // and the states below it are the whole surface.
+      // No strip on Search (§9): it reads as its own page, not a filtered timeline.
       if (shelf === SEARCH) {
         shelfStripRoot.render(null);
         return;
@@ -940,28 +740,10 @@ export function Root({
       );
     }
 
-    /**
-     * WHAT EACH SHELF COUNTS — one map, read by the compact band's More sheet
-     * and by the navigation rail (v16 §3: "counts read from the same source
-     * the shelf headers read; a count that disagrees with its shelf header is
-     * a defect"). The desktop strip still follows the handoff's quiet
-     * label-only presentation and draws none of them.
-     *
-     * Every entry is the same expression `countFor` uses for that shelf when
-     * the member is standing on it, so the number in the rail is the number
-     * the app bar will show once they press the row. A shelf whose count is
-     * NOT KNOWN YET omits its entry rather than contributing a zero:
-     *
-     *   * PEOPLE answers `null` until its own lazy read lands;
-     *   * DUPLICATES answers `null` until the cluster scan does;
-     *
-     * and a rail that printed 0 for either would be reporting an empty shelf
-     * it had never read.
-     */
+    /** One map for More sheet and rail (v16 §3); omit unknown counts — never a zero. */
     function shelfCounts(): ReadonlyMap<string, number> {
       const counts = new Map<string, number>([
-        // The Library shelf's id is `null`, so it keys on the band's own name
-        // for the root (`countKey`) rather than a third name invented here.
+        // Library's id is `null`, so it keys on the band's own root name.
         [countKey(null), assets.length],
         [FAVORITES, assets.filter((a) => a.favorite).length],
         [ALBUMS, albums.length],
@@ -975,16 +757,12 @@ export function Root({
       return counts;
     }
 
-    // ---- the Photos toolbar row (§3) ----
-    // It renders only when it carries something — ToolbarView returns null
-    // when it does not, so an empty row is never laid out.
+    // Toolbar row (§3) renders only when it carries something.
     function renderToolbarRow(): void {
       applyUploadTarget();
       if (selection.isActive()) {
-        // `#toolbarMount` becomes the selection bar while a selection is
-        // active — selection.tsx's `renderBar` owns writing to it then, so
-        // this function stays out of its way rather than racing it with a
-        // `null` write of its own (v4 §6 close-out).
+        // While a selection is active, selection.tsx owns `#toolbarMount` —
+        // do not race it with a null write.
         return;
       }
       const tileSize = prefs.read().tileSize;
@@ -1006,7 +784,6 @@ export function Root({
       );
     }
 
-    // ---- main content ----
     function renderMain(): void {
       if (shelf === DUPLICATES) {
         applyEmptyState(NO_EMPTY_STATE);
@@ -1036,9 +813,7 @@ export function Root({
         return;
       }
       if (shelf === PEOPLE) {
-        // The review queue is the People shelf in a different mode (§8):
-        // same tab, same strip, one proposal at a time. FaceReview is
-        // self-contained — it fetches its queue and fires its own writes.
+        // People shelf in review mode (§8); FaceReview fetches and writes itself.
         if (faceReviewOpen) {
           applyEmptyState(emptyFor(1));
           mainRoot.render(
@@ -1049,26 +824,19 @@ export function Root({
           );
           return;
         }
-        // Lazy, like the duplicate clusters: the roster walks every confirmed
-        // face region, which is a bigger read than the bounded window.
+        // Lazy: the roster walks every confirmed face region.
         void people.ensureLoaded();
         const roster = people.list();
         const proposalRoster = people.proposalList() ?? [];
-        // The consent gate (issue #712 C2) is the empty state's body only
-        // while there is truly nothing to browse — a roster with unconfirmed
-        // proposal cards has content the gate would hide, not an invitation
-        // to ask the question again.
+        // Gate = empty body only while there is nothing to browse (#712).
         const rosterEmpty =
           roster !== null && roster.length === 0 && proposalRoster.length === 0;
         if (rosterEmpty) enrichGate.ensurePolicyLoaded();
         const gateProps = rosterEmpty
           ? enrichGate.props(ownAssets.length)
           : null;
-        // A roster that has not answered is not an empty roster — the same
-        // rule the timeline follows below, expressed through the same gate.
-        // The consent gate draws its own explanation of an empty shelf, so
-        // the generic empty block is suppressed while it is showing — the
-        // same treatment Search, Duplicates and Storage get.
+        // An unanswered roster is not an empty one; suppress the generic empty
+        // block while the gate shows.
         applyEmptyState(
           gateProps
             ? NO_EMPTY_STATE
@@ -1104,12 +872,8 @@ export function Root({
       const shown = visibleAssets();
       applyEmptyState(emptyFor(shown.length));
 
-      // BEFORE THE FIRST READ LANDS THE GRID IS A SHAPE, NOT A VERDICT (§14).
-      // `shown` is `[]` while the read is in flight, and the app used to hand
-      // that straight to the empty state — telling a member with 6,214
-      // photographs that their library was empty. Now it paints `--skel` at
-      // the packed geometry, so nothing reflows when the rows arrive, and the
-      // toolbar, the shelf strip and the rail all stay exactly where they are.
+      // BEFORE THE FIRST READ LANDS THE GRID IS A SHAPE, NOT A VERDICT (§14):
+      // `shown` is [] while in flight; --skel at packed geometry means no reflow.
       if (!loaded) {
         const phone = narrowRef.current;
         mainRoot.render(
@@ -1137,22 +901,7 @@ export function Root({
       );
     }
 
-    /**
-     * WHAT SITS AT THE HEAD OF THE TIMELINE (§4.6, §5, §11). One slot, several
-     * claimants, and the order below is the order of urgency:
-     *
-     *  1. The import panels, when the last run had a dedupe or a restore to
-     *     explain. They are read after the fact and they are about what the
-     *     member just did, so they lead — and they ride ANY shelf, because an
-     *     import lands somewhere the member is looking at.
-     *  2. The shelf's own head: Trash's note (§5, proto 4445) or the memories
-     *     strip (§4.6). These are mutually exclusive by shelf, so they share
-     *     the slot rather than asking Timeline.tsx for two.
-     *
-     * Memories are the Library shelf's alone, and only at rungs XS-M: at L the
-     * cards and the first row of tiles are the same size and the head stops
-     * reading as a head.
-     */
+    /** Import panels first, then shelf head; memories on Library at rungs XS-M. */
     function timelineHead(): ReactNode {
       const panels = lastImport ? (
         <ImportPanels
@@ -1183,12 +932,7 @@ export function Root({
       );
     }
 
-    /**
-     * The justified timeline, as one element. Every shelf that packs tiles
-     * renders the SAME grid under a different filter (§5), so its props live
-     * in one place: two call sites drifting apart is how a shelf quietly stops
-     * honouring the tile size or the selection.
-     */
+    /** Same grid under a different filter (§5) — one props site. */
     function timeline(
       shown: Asset[],
       extra: {
@@ -1203,21 +947,17 @@ export function Root({
       const albumRefusal = albumRefusalReason();
       const phone = narrowRef.current;
       const rung = prefs.read().tileSize;
-      // Named for the jsx-handler-names rule: the grid's props ask for
-      // `handle*`, and re-pointing them here keeps selection.tsx the one owner.
+      // Named for jsx-handler-names; re-pointing keeps selection.tsx the owner.
       const handleEnterSelect = selection.enter;
       const handleToggleSelect = selection.toggle;
-      // Pinch walks the SAME four rungs the stepper walks (§4.2) — one member
-      // preference, one clamp, two ways in.
+      // Pinch walks the SAME four rungs the stepper does (§4.2).
       const handlePinchRung = (delta: number): void => {
         prefs.write({ tileSize: stepTileSize(prefs.read().tileSize, delta) });
       };
       return (
         <TimelineBody
           assets={shown}
-          // The rail is a real column on desktop/PWA, so the packer's budget
-          // is the pane minus it; on the phone the rail overlays and the grid
-          // keeps every pixel (§4.5).
+          // Real column on desktop/PWA — packer budget excludes it; overlays on phone.
           containerWidth={paneWidth - (phone ? 0 : RAIL_WIDTH)}
           targetHeight={rungHeight(rung, phone ? "phone" : "desktop")}
           rung={rung}
@@ -1225,10 +965,8 @@ export function Root({
           memories={extra.memories ?? null}
           inAlbum={Boolean(album)}
           albumId={album ? album.album_id : null}
-          // The tile's own Remove is gated by the SAME answer as the album
-          // bar's Rename and Delete. It used to be gated by `inAlbum` alone,
-          // so a read-only album refused two writes in its bar and offered a
-          // third, working one on every tile below it.
+          // Gated by the SAME answer as Rename/Delete; inAlbum alone would
+          // refuse two writes and offer a third.
           canWriteAlbum={!albumWriteTarget().disabled}
           {...(albumRefusal === undefined ? {} : { albumReason: albumRefusal })}
           isTrash={shelf === TRASH}
@@ -1249,12 +987,6 @@ export function Root({
       );
     }
 
-    /**
-     * The empty block for the current view — the ONE place that decides
-     * whether this app is entitled to say a view is empty (view-state.ts).
-     * `count` is what the view is showing; `loaded` is whether it has been
-     * told anything at all.
-     */
     function emptyFor(
       count: number,
       extra: { suppressed?: boolean } = {}
@@ -1268,17 +1000,13 @@ export function Root({
         query: searchQuery,
         inAlbum: Boolean(currentAlbum()),
         personName: personId ? (person?.name ?? "this person") : null,
-        // The camera is the compact surface's second way in (§15) — a desktop
-        // browser would open a file picker wearing a camera's name.
+        // Compact only (§15): never a camera-named picker on desktop.
         phone: narrowRef.current,
         ...extra,
       });
     }
 
-    /** Write one empty block onto its nodes, or take it down. The nodes are
-     *  imperative and long-lived (Chrome.tsx's `#empty`); upload.ts bound
-     *  `#emptyUpload` at boot and `applyUploadTarget` re-reads it every
-     *  render, so they are never unmounted. */
+    /** Imperative nodes bound at boot (`#emptyUpload`) — never unmount. */
     function applyEmptyState(view: EmptyStateView): void {
       $("empty").hidden = !view.visible;
       if (!view.visible) return;
@@ -1288,11 +1016,7 @@ export function Root({
       $("emptyCamera").hidden = !view.offersCamera;
     }
 
-    /** Is the empty block currently drawing the view's one filled Import? Read
-     *  off what is actually on screen rather than re-derived: "one filled ink
-     *  element per view" (§18) is a claim about the rendered view, and two
-     *  derivations of it could disagree. `renderMain` always runs before
-     *  `contributeAppBar` on every path that changes either. */
+    /** Read the rendered view, never re-derive (§18). `renderMain` always runs before `contributeAppBar`. */
     function emptyBlockOffersImport(): boolean {
       return !$("empty").hidden && !$("emptyUpload").hidden;
     }
@@ -1334,14 +1058,13 @@ export function Root({
       );
     }
 
-    /** The Places shelf (§5) — sections, not cartography. See Places.tsx. */
+    /** Sections, not cartography (§5). */
     function renderPlacesShelf(
       grouped: ReturnType<typeof placeSections>
     ): void {
       const phone = narrowRef.current;
       const rung = prefs.read().tileSize;
-      // Named for the jsx-handler-names rule, exactly as `timeline()` does —
-      // re-pointing them here keeps selection.tsx the one owner.
+      // Named for jsx-handler-names, exactly as `timeline()` does.
       const handleToggleSelect = selection.toggle;
       const handleEnterSelect = selection.enter;
       mainRoot.render(
@@ -1361,10 +1084,9 @@ export function Root({
       );
     }
 
-    /** Storage (§12) — every number read off the rows this app already holds. */
+    /** Every number read off rows this app already holds (§12). */
     function renderStorage(): void {
-      // Read on first visit, not on every library refresh: the rollup only
-      // moves when the gateway's standing blob sweep runs.
+      // First visit only: the rollup moves when the blob sweep runs.
       void custody.ensureLoaded();
       mainRoot.render(
         <StorageView
@@ -1405,7 +1127,7 @@ export function Root({
       );
     }
 
-    // ---- search (a shelf, §9) ----
+    // Search (a shelf, §9)
     const { run: runSearch, invalidate: invalidateSearch } = createSearch({
       getQuery: () => searchQuery,
       setResults: (r) => {
@@ -1425,9 +1147,8 @@ export function Root({
     }, 180);
     function onSearchQuery(value: string): void {
       searchQuery = value.trim();
-      // The `searching` state is DETERMINATE, not a spinner (§14): what is on
-      // screen while the index answers is the local match over the loaded
-      // window, and the shelf says so with its exact count.
+      // `searching` is DETERMINATE, never a spinner (§14): local matches are
+      // on screen, counted by the shelf.
       searchStatus = searchQuery === "" ? "resting" : "searching";
       renderMain();
       debouncedLocalRender();
@@ -1445,10 +1166,7 @@ export function Root({
       contributeAppBar();
     }
 
-    // ---- the band's overflow sheet (§3.1) ----
-    // The band's sixth slot is the APP's, so the sheet is the app's too. It
-    // opens on a tap, dismisses on Esc, on Close, and on navigating — never by
-    // itself, and never over a destination it just reached.
+    // Band overflow sheet (§3.1): dismisses on Esc/Close/navigating — never by itself.
     function renderMoreSheet(): void {
       moreSheetRoot.render(
         moreOpen ? (
@@ -1470,15 +1188,12 @@ export function Root({
       renderMoreSheet();
     }
 
-    // ---- upload ----
+    // ──── upload ────
     async function uploadFiles(files: File[]): Promise<void> {
       if (uploading || files.length === 0) return;
-      // WHAT THE TRASH HELD BEFORE THE RUN, snapshotted now. Re-uploading the
-      // bytes of a deleted photograph restores it, and the vault reports that
-      // with the same `deduped: 1` it reports an ordinary dedupe with — so the
-      // only way to tell the two apart is to have known, a moment ago, that
-      // the asset was in the trash. `runUpload` refreshes before it returns,
-      // by which point the row is live again and the evidence is gone.
+      // WHAT THE TRASH HELD BEFORE THE RUN, snapshotted NOW: a re-upload that
+      // restores bytes reports like an ordinary dedupe, and runUpload's
+      // pre-return refresh destroys the evidence.
       const trashedBefore = new Set(trash.map((asset) => asset.asset_id));
       const result = await runUpload(files, {
         refresh,
@@ -1487,13 +1202,12 @@ export function Root({
         },
         wasTrashed: (assetId) => trashedBefore.has(assetId),
       });
-      // Only a run with an outcome to explain leaves a panel behind (§11).
+      // Only a run with an outcome to explain leaves a panel (§11).
       lastImport = result.deduped + result.restored > 0 ? result : null;
       renderMain();
     }
 
-    // Selection owns its own mode, keys, busy latch and bar (selection.tsx);
-    // this closure only tells it when the data moved and what to repaint.
+    // selection.tsx owns mode/keys/busy/bar; this closure only reports data movement.
     const selection = createSelection({
       selectionBarRoot: toolbarRoot,
       bottomBarRoot: selectionBottomBarRoot,
@@ -1509,8 +1223,7 @@ export function Root({
       isNarrow: () => narrowRef.current,
     });
 
-    // The People shelf's roster (people.ts). Own-scope and lazy, like the
-    // duplicate clusters; a repaint is all this closure owes it.
+    // Own-scope and lazy, like the duplicate clusters.
     const people = createPeople({
       onData: () => {
         if (disposed) return;
@@ -1519,9 +1232,7 @@ export function Root({
       },
     });
 
-    // The face-detection consent gate (issue #712 C2), re-homed from a
-    // toolbar icon + dialog into the People shelf's own empty state — see
-    // enrichment-gate.ts and components/People.tsx's `gate` prop.
+    // Consent gate lives in the People shelf's empty state (#712).
     const enrichGate = createEnrichmentGate({
       onData: () => {
         if (disposed) return;
@@ -1529,8 +1240,7 @@ export function Root({
       },
     });
 
-    // The Storage screen's custody rollup (custody-store.ts). Lazy and
-    // multi-scope, like the People roster; a repaint is all this closure owes it.
+    // Lazy and multi-scope, like the People roster.
     const custody = createCustody({
       onData: () => {
         if (disposed) return;
@@ -1573,9 +1283,7 @@ export function Root({
       openPicker,
     });
 
-    // `Take a photograph` (§14, §15) — the compact surface's second way in.
-    // Its own input, because `capture` on the shared one would take the file
-    // picker away from the desktop (see Chrome.tsx).
+    // Own input: `capture` on the shared one would steal the file picker from desktop (§14, §15).
     const onCameraClick = (): void => $("cameraInput").click();
     const onCameraChange = async (): Promise<void> => {
       const input = $<HTMLInputElement>("cameraInput");
@@ -1586,7 +1294,6 @@ export function Root({
     $("emptyCamera").addEventListener("click", onCameraClick);
     $("cameraInput").addEventListener("change", onCameraChange);
 
-    // ---- global wiring ----
     const onKeydown = (e: globalThis.KeyboardEvent): void => {
       if (e.key === "Escape" && moreOpen) {
         closeMore();
@@ -1607,11 +1314,7 @@ export function Root({
         if (e.key === "Escape") target!.blur();
         return;
       }
-      // What a key means over an open lightbox is decided in ONE pure place
-      // (lightbox.tsx `viewerKeyAction`) — including the refusal that matters:
-      // while the editor is up, ←/→ mean nothing, because stepping the viewer
-      // remounts the editor and destroys a crop and rotation that were never
-      // written anywhere (§7.4).
+      // `viewerKeyAction` owns keys; while editing, ←/→ are refused — stepping remounts and destroys an unwritten crop (§7.4).
       switch (viewerKeyAction(e.key, lightbox.isEditing())) {
         case "cancel-edit":
           lightbox.cancelEdit();
@@ -1641,8 +1344,7 @@ export function Root({
       store.handleChange(detail)
     );
 
-    // The grid's real width drives the justified timeline (read off #grid, not
-    // #scrollPane whose clientWidth includes its own padding).
+    // Read off #grid, not #scrollPane, whose clientWidth includes its padding.
     function measurePane(): void {
       const el = $("grid");
       const w =
@@ -1661,9 +1363,7 @@ export function Root({
       window.addEventListener("resize", measurePane);
     }
 
-    // Component-width narrow observer (#505 trap 1). The strip and the band
-    // are two views of one navigation, so a width change re-decides which one
-    // is drawn.
+    // Component-width narrow observer (#505 trap 1): width change re-decides which spine draws.
     const stopWidth = rootElRef.current
       ? observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
           narrowRef.current = isNarrow;
@@ -1672,32 +1372,22 @@ export function Root({
         })
       : () => {};
 
-    // ---- first paint ----
     renderNavigation();
     renderToolbarRow();
-    // `renderMain` paints the packed `--skel` grid while `loaded` is false
-    // (§14) — the first frame already occupies the geometry the photographs
-    // will, so nothing reflows when the read lands. It used to be a stack of
-    // placeholder bars, which is the wrong shape for a timeline and
-    // guaranteed exactly the reflow §14 exists to prevent.
+    // Packed --skel grid occupies the photographs' geometry on frame one;
+    // placeholder bars guarantee reflow (§14).
     renderMain();
-    // The host may already know the gateway is unreachable before this app has
-    // asked it anything — if it says so, the member reads why on the first
-    // frame rather than after a read has timed out.
+    // Render reachability on frame one, before a read can time out.
     renderOfflineBanner();
     contributeAppBar();
     void store.refreshAll();
 
     return () => {
-      // A read may resolve after React removes Chrome's DOM. Fence its
-      // continuation before removing listeners so it cannot mutate detached
-      // slots or call the id-based helpers against a now-empty document.
+      // Fence late-resolving reads before removing listeners, or they mutate detached slots.
       disposed = true;
       store.dispose();
       stopLiveReads();
-      // Withdraw every contribution: the bar, the band and the status line all
-      // belong to the frame, and a stale Photos title on the next route would
-      // be this app drawing chrome it no longer owns.
+      // Withdraw every contribution — stale chrome on the next route is theft.
       setStatusSink(null);
       frameRef.current.setAppBar(null);
       frameRef.current.claimBand(null);
@@ -1714,9 +1404,8 @@ export function Root({
   }, []);
 
   return (
-    // Fill the app pane (a flex child of the route body) so the inline chrome
-    // gets real width (#505 trap 1). The Photos token layer
-    // (Chrome.module.css `.appRoot`) rides this same element.
+    // Fill the app pane so inline chrome gets real width (#505 trap 1);
+    // the Photos token layer rides this element.
     <div
       ref={setRoot}
       className={styles.appRoot}

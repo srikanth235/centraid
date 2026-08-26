@@ -1,19 +1,6 @@
-// Empty trash — the Trash shelf's own action (v4 handoff §4.5, proto:4800-4803).
-//
-// THE CONTROL IS NOT THE DELETION. Pressing `Empty trash` opens a confirm that
-// names the exact number, what leaves with them, and that it cannot be undone;
-// only the second press destroys anything. That two-step is the entire safety
-// story for the one irreversible act in this app, which is why it lives in a
-// component of its own rather than as a button someone can later "simplify"
-// into a single tap.
-//
-// OUTLINED `--net`, NEVER FILLED (§18, proto:4802). The frame's app bar owns
-// the one filled ink control in the view; a destructive action that shouted
-// louder than Import would be inviting the press it most needs the member to
-// think about.
-//
-// NO UNDO. The narration this fires (trash-actions.ts) never passes the status
-// line's undo slot — see that file's head for why.
+// Empty trash (v4 handoff §4.5). The control is NOT the deletion: confirm
+// names count + irreversibility first; outlined --net never filled (§18);
+// no undo (trash-actions.ts).
 import { useState } from "react";
 
 import { fmtBytes } from "@centraid/design/elements";
@@ -27,13 +14,11 @@ import { EMPTY_TRASH_COPY, TRASH_NOTE } from "../view-copy.ts";
 import styles from "./EmptyTrash.module.css";
 
 export interface EmptyTrashProps {
-  /** Every photograph on the Trash shelf, in the shelf's own order. */
   trash: readonly Asset[];
-  /** Re-read the library once the run has finished. */
   refresh: () => Promise<void>;
 }
 
-/** The first scope in this trash the member may not delete from, if any. */
+/** First scope in this trash the member may not delete from, if any. */
 function blockedLabel(trash: readonly Asset[]): string | null {
   const blocked = trash.find((asset) => !canWriteScope(asset.scope_id));
   if (!blocked) return null;
@@ -43,18 +28,12 @@ function blockedLabel(trash: readonly Asset[]): string | null {
   return scope ? scope.label : "that library";
 }
 
-/**
- * The Trash shelf's head: the shelf note, then the action. Renders the note
- * alone on an empty shelf — a destroy control with nothing to destroy is a
- * control that can only disappoint.
- */
+/** Shelf head: note then action; note alone when empty. */
 export function EmptyTrash({ trash, refresh }: EmptyTrashProps) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const count = trash.length;
-  // Deleting from a read-only audience is refused by the shell anyway; saying
-  // so on the control beats firing a write whose refusal the member has to
-  // read after the fact.
+  // Refused server-side anyway; surfaced on the control up front.
   const blocked = blockedLabel(trash);
   let bytes = 0;
   for (const asset of trash) bytes += assetBytes(asset) ?? 0;

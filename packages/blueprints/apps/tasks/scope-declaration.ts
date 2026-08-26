@@ -2,7 +2,7 @@
 // share needs to know about this app's rows, declared once against the
 // shared kit (apps/_shared/scope-kit.ts) — no sharing code of Tasks' own.
 //
-// Record-only, the cheaper of Tasks/Docs to wire (issue #726 D11 task 3): a
+// Record-only, the cheaper of Tasks/Docs to wire (#726 D11 task 3): a
 // task carries no bytes of its own — attachments are `core.content_item`
 // rows this app only ever references, never mints — so a projected task has
 // nothing to re-ingest, unlike Photos' EXIF re-link + enrichment enqueue.

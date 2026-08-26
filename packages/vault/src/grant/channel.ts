@@ -1,20 +1,6 @@
-/*
- * The CHANNEL is not a new table (issue #825). "Can this vault reach that
- * person, and over which peer vault" was already answered by
- * `share_party_vault_binding` (#731) plus the pending-invitation fact; this
- * module reframes those rows as one channel state so the grant plane never
- * has to ask two tables the same question — and so a grant's fulfillment
- * state can be read against a channel rather than against a transport.
- *
- * The three states, in the order they are decided:
- *   - `live`     — a live binding: there is a vault to deliver into now.
- *   - `invited`  — no live binding, but a pending commons invitation stands.
- *                  The peer has been asked; nothing may be delivered yet.
- *   - `severed`  — only a revoked binding remains. The two were once linked,
- *                  and that memory is deliberately not the same as "never".
- * No binding and no pending invitation at all is `null`: not a channel in any
- * state, just a person this vault has never reached.
- */
+// Channel state per party (#825) — #731 binding rows + pending invitation:
+// live = deliverable; invited = invitation stands, nothing delivers;
+// severed = revoked only; neither = null.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -23,13 +9,9 @@ export type ShareChannelState = "invited" | "live" | "severed";
 export interface ShareChannel {
   partyId: string;
   state: ShareChannelState;
-  /** The peer vault to deliver into. Absent only for an `invited` channel
-   *  whose invitation was addressed by party before the peer's vault id was
-   *  known. */
+  /** Absent only for `invited`. */
   vaultId?: string;
-  /** When the binding behind this channel was made, when there is one. */
   linkedAt?: string;
-  /** When it was severed, for `severed`. */
   revokedAt?: string;
 }
 
@@ -39,11 +21,7 @@ interface BindingRow {
   revoked_at: string | null;
 }
 
-/**
- * The binding this vault would use for a party: the live one, else the most
- * recent revoked one. `share_party_vault_binding` allows at most one LIVE row
- * per party (partial unique index), so the first branch is unambiguous.
- */
+/** Live else most-recent revoked; ≤1 live row per party. */
 function bindingForParty(
   db: DatabaseSync,
   partyId: string
@@ -73,7 +51,6 @@ function pendingInvitationVaultId(
     .get(partyId) as { member_vault_id: string | null } | undefined;
 }
 
-/** The channel to a person, or `null` when this vault has never reached them. */
 export function channelForParty(
   db: DatabaseSync,
   partyId: string

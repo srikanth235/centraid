@@ -1,18 +1,5 @@
-// Agenda's vault IO: the typed commands, the search read, and the narration
-// each outcome earns. `createLogic` closes over the orchestrator's own
-// `state`/`data` bags (mutated in place, never reassigned) plus the render and
-// refresh entry points it defines — the same factory shape docs/logic.ts uses.
-//
-// THREE OUTCOMES, THREE DIFFERENT SENTENCES, none of them an error:
-//
-//   * `executed` — the vault applied it; the status line carries the receipt.
-//   * `parked`   — the vault is HOLDING the ask for the owner. This is the
-//                  designed `parked cancel` state, not a failure. There is no
-//                  unpark door in an app's hands: the owner approves or denies
-//                  in Approvals (`window.centraid.openApprovals`), and the
-//                  event stays on the agenda meanwhile.
-//   * `queued` / `in-flight` — the write is on this device and will go when
-//                  the gateway answers. The row already shows it.
+// Agenda vault IO. `parked` is a designed hold (no unpark door in an app),
+// not an error; `queued`/`in-flight` stay on this device until the gateway answers.
 
 import { debounce, outcomeMessage } from "@centraid/design/elements";
 
@@ -46,7 +33,6 @@ interface LogicDeps {
   refresh: () => Promise<void> | void;
 }
 
-/** Statuses that mean "the member's device is holding this write". */
 function isHeld(status: string | undefined): boolean {
   return status === "queued" || status === "in-flight" || status === "sending";
 }
@@ -66,11 +52,6 @@ export function createLogic({
     el.hidden = text === "";
   }
 
-  /**
-   * Executed clears the notice and tells the caller to refresh; parked is
-   * narrated by the caller (it is a calm designed state, not a banner);
-   * everything else puts the plain-language reason in the notice.
-   */
   function narrate(outcome: VaultOutcome | undefined): boolean {
     if (outcome?.status === "executed") {
       notice("");
@@ -85,7 +66,6 @@ export function createLogic({
     return false;
   }
 
-  /** One write, returning the raw outcome for callers that narrate their own. */
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -109,7 +89,6 @@ export function createLogic({
     return outcome;
   }
 
-  /** The one place a held or parked write is put into words. */
   function narrateHeld(outcome: VaultOutcome | undefined): boolean {
     if (outcome?.status === "parked") {
       publishOutcome(frame, { text: OUTCOME_PARKED });
@@ -121,8 +100,6 @@ export function createLogic({
     }
     return false;
   }
-
-  // ---------- Event commands ----------
 
   async function proposeEvent(
     input: CreatePayload
@@ -158,14 +135,7 @@ export function createLogic({
     return outcome;
   }
 
-  /**
-   * RSVP, projected back into the guest list before the vault answers.
-   *
-   * The projection is applied to the loaded window in place so every view
-   * showing that event shows the answer on the same frame — a member who
-   * presses Going and watches the row stay "No answer yet" for a round trip
-   * has been told the press did nothing.
-   */
+  /** Project RSVP into the loaded window before the vault answers. */
   async function respondRsvp(
     eventId: string,
     partyId: string,
@@ -198,20 +168,12 @@ export function createLogic({
     return outcome;
   }
 
-  /**
-   * Ask to cancel. CANCELLING PARKS: the vault treats it as medium-risk and
-   * holds it for the owner rather than executing, so `parked` is the ordinary
-   * outcome here and not the exception. The event stays on the agenda, the row
-   * carries the held-write mark, and the detail panel says what is held and
-   * who releases it.
-   */
+  /** Cancelling parks — `parked` is the ordinary outcome. */
   async function cancelEvent(
     eventId: string
   ): Promise<VaultOutcome | undefined> {
     const outcome = await act("cancel-event", { event_id: eventId });
-    // A HELD ASK IS NOT A FAILURE, so it is answered before `narrate` gets a
-    // chance to put a reason in the notice banner: the row already carries the
-    // mark and the status line already carries the sentence.
+    // A held ask is not a failure — answer it before `narrate` writes a reason.
     if (narrateHeld(outcome)) {
       render();
       return outcome;
@@ -221,8 +183,6 @@ export function createLogic({
     else render();
     return outcome;
   }
-
-  // ---------- Attachments ----------
 
   let attachTarget: string | null = null;
   const setAttachTarget = (eventId: string): void => {
@@ -240,10 +200,7 @@ export function createLogic({
     return outcome;
   }
 
-  // ---------- Search ----------
-  // Searching asks the VAULT, not the loaded window: the FTS5 index matches
-  // over every event, so the app never greps an unbounded table in memory.
-
+  // Search asks the vault FTS5 index, not the loaded window.
   let searchSeq = 0;
   const applySearchInput = debounce(async (raw: string) => {
     state.search = raw;
@@ -261,8 +218,7 @@ export function createLogic({
       });
       rows = result?.events ?? [];
     } catch {
-      // A THROW IS NOT AN EMPTY RESULT SET — the index lives on the gateway,
-      // and "nothing matches" would be a claim nobody verified.
+      // A throw is not an empty result set — "nothing matches" would be unverified.
       rows = null;
     }
     if (seq !== searchSeq) return;

@@ -1,21 +1,7 @@
 /*
- * Connection-broker credential health — the `broker` component (issue #351
- * tier 2).
- *
- * The `connections` component (`build-gateway.ts`) already counts every
- * connection's `needs-auth` status across ALL connections, harness-ambient
- * included. This probe is narrower and specifically about the BROKER's own
- * custody of `sync_connection_credential` rows (issue #304's oauth2/api_key
- * sidecar): it names WHICH broker-carried connections are dead
- * (`needs-auth`, with the broker's own `sync_connection_health.auth_note`
- * reason) and — the signal `connections` can't give you — which oauth2
- * credentials are sitting past their `token_expires_at` without having been
- * flipped yet. That second case is real: `ConnectionBroker.ensureFreshToken`
- * only refreshes LAZILY, on the next fire that needs the connection: an
- * automation that hasn't fired since expiry leaves a stale-but-not-yet-
- * diagnosed token sitting there. A grace window (past expiry, not "about
- * to" expire) keeps this from flagging the normal one-tick staleness every
- * token has moments before its next lazy refresh.
+ * Broker credential health (#351 tier 2): broker-carried connections needing
+ * re-auth plus oauth2 tokens past expiry — refresh is LAZY (next fire), so
+ * the grace window ignores momentary pre-refresh staleness.
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -24,13 +10,11 @@ import type { HealthProbe } from "./health-registry.js";
 
 export interface BrokerHealthVaultEntry {
   readonly vaultId: string;
-  /** The vault's `vault.db` handle — `sync_connection*` tables live here. */
   readonly db: DatabaseSync;
 }
 
 export interface BrokerHealthOptions {
   readonly vaults: () => readonly BrokerHealthVaultEntry[];
-  /** How far past `token_expires_at` before it counts as "overdue" rather than momentarily stale. Defaults to 1h. */
   readonly overdueGraceMs?: number;
   /** Clock override (tests). */
   readonly now?: () => number;
@@ -47,7 +31,6 @@ interface BrokerCredRow {
 
 const DEFAULT_OVERDUE_GRACE_MS = 60 * 60 * 1000;
 
-/** Builds the `broker` component's `HealthProbe` (registered in `build-gateway.ts`). */
 export function createBrokerHealthProbe(
   options: BrokerHealthOptions
 ): HealthProbe {
@@ -70,9 +53,7 @@ export function createBrokerHealthProbe(
           )
           .all() as unknown as BrokerCredRow[];
       } catch {
-        // A vault whose plane failed to mount / has no sync tables yet
-        // (fresh vault) contributes nothing — the `vaults` probe already
-        // flags a failed mount.
+        // Fresh/unmounted vault: no sync tables yet; the vaults probe flags mounts.
         continue;
       }
       for (const row of rows) {

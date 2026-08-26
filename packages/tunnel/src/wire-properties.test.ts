@@ -12,11 +12,8 @@ import {
   sanitizeHeaders,
 } from "./protocol.js";
 
-/**
- * Tunnel wire properties (#532 core expansion).
- *
- * Model: header frames are length-prefixed JSON; pair QR parse is fail-closed;
- * hop-by-hop headers never cross the tunnel.
+/** Tunnel wire properties (#532): length-prefixed JSON header frames;
+ * fail-closed pair QR parse; hop-by-hop headers never cross the tunnel.
  */
 describe("tunnel wire property", () => {
   test("encodeHeaderFrame length prefix matches JSON byte length", () => {
@@ -35,14 +32,9 @@ describe("tunnel wire property", () => {
           const frame = Buffer.from(encodeHeaderFrame(header));
           const len = frame.readUInt32BE(0);
           expect(len).toBe(frame.length - 4);
-          // Compare what the frame decodes to against what `header` encodes
-          // to, decoded the same way. That is the actual wire contract, and it
-          // also sidesteps a fast-check detail: the shrinker can hand back a
-          // counterexample built from null-prototype objects at any depth
-          // (including nested `headers`), which `toStrictEqual` would reject
-          // against a plain-object literal even when every field matches.
-          // `structuredClone` is NOT a substitute here — it would preserve
-          // `undefined`-valued keys that JSON encoding drops.
+          // Compare decoded frame vs `header` re-encoded the same way — the
+          // wire contract; sidesteps shrinker null-prototype objects that
+          // toStrictEqual would reject.
           const encodedHeader: unknown = JSON.parse(
             JSON.stringify(header) as string
           );
@@ -220,15 +212,11 @@ describe("tunnel wire property", () => {
   });
 
   /*
-   * The guard's own edges (#846 P6/P7), asserted here rather than only in the
-   * differential lane because THIS file is the tunnel's mutation seed: a rule
-   * the seed never exercises is a rule the mutation score cannot speak for,
-   * and the rules below were exactly the untested half after P6/P7 landed.
+   * The guard's own edges (#846 P6/P7), asserted HERE: this is the
+   * tunnel's mutation seed.
    */
   test("a dot inside a segment is not a dot segment", () => {
-    // The `.`/`..` rule is about SEGMENTS. A blob named `a.b`, or a version
-    // suffix, is an ordinary name — rejecting it would break real routes, and
-    // a guard that split on the wrong boundary would do exactly that.
+    // The `.`/`..` rule is about SEGMENTS; `a.b` is an ordinary name.
     for (const target of [
       `${PEER_PLANE_PREFIX}blobs/a.b`,
       `${PEER_PLANE_PREFIX}route/v1.2/assert`,
@@ -237,8 +225,7 @@ describe("tunnel wire property", () => {
     ])
       expect(isPeerPlaneTarget(target)).toBe(true);
 
-    // …while a real dot segment stays refused wherever it sits, including
-    // last, where a trailing slash does not follow it.
+    // …while a real dot segment stays refused wherever it sits.
     for (const target of [
       `${PEER_PLANE_PREFIX}../x`,
       `${PEER_PLANE_PREFIX}./x`,
@@ -250,8 +237,7 @@ describe("tunnel wire property", () => {
   });
 
   test("the path must extend the prefix, not merely start with it", () => {
-    // #846 P6: measuring the whole target let a lone `?` or `#` stand in for
-    // the extension, so a bare prefix addressed no resource and was admitted.
+    // #846 P6: a lone `?` or `#` addresses no resource — a bare prefix is refused.
     expect(isPeerPlaneTarget(PEER_PLANE_PREFIX)).toBe(false);
     expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}?a=1`)).toBe(false);
     expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}#f`)).toBe(false);
@@ -262,10 +248,8 @@ describe("tunnel wire property", () => {
 
   test("a target the Rust lane cannot represent is refused", () => {
     /*
-     * #846 P7. The Rust guard reads a `&str`, so a lone surrogate is a string
-     * JS can hold and Rust cannot. Re-encoding to judge it would rewrite it to
-     * U+FFFD and judge a different string than the one it forwards, so the
-     * check is on the code units themselves.
+     * #846 P7: the Rust guard reads a `&str`, so a lone surrogate is judged
+     * on the code units themselves — re-encoding would rewrite it to U+FFFD.
      */
     const high = "\u{D800}";
     const highLast = "\u{DBFF}";
@@ -284,8 +268,7 @@ describe("tunnel wire property", () => {
     ])
       expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}${suffix}`)).toBe(false);
 
-    // A well-formed pair is representable and stays admitted — the rule is
-    // "no LONE surrogate", not "no surrogate".
+    // A well-formed pair stays admitted — "no LONE surrogate", not "no surrogate".
     for (const pair of [
       `${high}${low}`,
       `${high}${lowLast}`,
@@ -295,8 +278,7 @@ describe("tunnel wire property", () => {
     ])
       expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}${pair}`)).toBe(true);
 
-    // And a pair does not shield what follows it: the scan must resume after
-    // the low half rather than run off the end.
+    // A pair does not shield what follows it: the scan resumes after the low half.
     expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}${high}${low}${high}`)).toBe(
       false
     );
@@ -306,9 +288,7 @@ describe("tunnel wire property", () => {
   });
 
   test("encodeHeaderFrame and alpnBytes count UTF-8 bytes, not code units", () => {
-    // A length prefix measured in the wrong encoding desynchronises the frame
-    // reader on the first non-ASCII target, so the multi-byte case is the one
-    // worth asserting.
+    // A wrong-encoding length prefix desynchronises the frame reader.
     const frame = Buffer.from(
       encodeHeaderFrame({
         method: "GET",

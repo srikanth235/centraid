@@ -1,4 +1,4 @@
-// The phone's drive projection and the row's one state slot (issue #821).
+// The phone's drive projection and the row's one state slot (#821).
 import { describe, expect, it } from "vitest";
 
 import {

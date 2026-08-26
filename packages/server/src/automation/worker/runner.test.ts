@@ -1,7 +1,7 @@
 /* oxlint-disable unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin */
 /**
- * Direct tests naming packages/server/src/automation/worker/runner.ts (issue #545 B5).
- * The entry throws without a worker_thread parentPort, so we drive it as a Worker.
+ * The entry throws without a worker_thread parentPort, so it is driven as a
+ * Worker (#545).
  */
 
 import { writeFile } from "node:fs/promises";

@@ -68,8 +68,8 @@ describe(StorageScreen, () => {
   it("renders only local footprint and limits, with independent partial state", async () => {
     const el = await mount();
     // Two section heads, each ABOVE its own container (binding layer v11).
-    // "On this machine" retired with the footprint card's in-panel head: the
-    // Capacity head states the figure it used to caption.
+    // There is no "On this machine" in-panel head on the footprint card: the
+    // Capacity head states that figure itself.
     const headings = [...el.querySelectorAll("h2")].map(
       (heading) => heading.textContent
     );

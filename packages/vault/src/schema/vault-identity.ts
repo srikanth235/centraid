@@ -1,5 +1,5 @@
 /*
- * The vault identity keypair (issue #726 P1 — "a vault per person").
+ * The vault identity keypair (#726 P1 — "a vault per person").
  *
  * Every vault mints an Ed25519 seed at creation, named `<vaultId>.identity`
  * in the SAME KeyStore/envelope/custody as the sealing key
@@ -10,7 +10,7 @@
  * the SAME vault.
  *
  * Minted alongside the DEK on every open: a fresh vault creates one, an
- * existing vault loads its own. Identity is FAIL-CLOSED (issue #750
+ * existing vault loads its own. Identity is FAIL-CLOSED (#750
  * invariant 1): the mint also pins the derived public key in a
  * `<vaultId>.identity.pub` sidecar (same KeyStore, same keys dir, same
  * custody), and a later open with the pin present but the seed missing or
@@ -59,7 +59,7 @@ export function ephemeralVaultIdentitySeed(): Buffer {
 }
 
 /**
- * The identity custody refusal (issue #750 invariant 1): the vault's pinned
+ * The identity custody refusal (#750 invariant 1): the vault's pinned
  * public key exists but the seed that produced it is missing or different.
  * Thrown, never worked around — minting a fresh seed here would silently
  * re-key a vault whose peers pinned the old key at link time. `code` is the

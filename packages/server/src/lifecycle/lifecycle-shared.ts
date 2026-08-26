@@ -1,9 +1,3 @@
-// Shared options + helpers for the gateway-owned app lifecycle routes
-// (issue #141, Phase 2). Split out of `lifecycle-routes.ts` so the app
-// handlers (create/clone/meta) and the automation handlers
-// (create/set-enabled/delete) can each stay under the repo file-size
-// limit while sharing the stage-vs-publish fork and error mapping.
-
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AppScaffoldError } from "@centraid/blueprints";
@@ -20,91 +14,47 @@ import { applyExtOnPublish } from "./ext-band.js";
 import type { ExtBandOps } from "./ext-band.js";
 
 export interface LifecycleRouteOptions {
-  /** Git store backing app code. Sessions/publishes ride through it. */
   store: WorktreeStore;
-  /** Materialized `main` apps dir — reads back a published automation row. */
   codeAppsDir: () => string;
-  /** Per-gateway templates cache dir (clone resolves bundle-or-cache). */
   templatesCacheDir?: string;
-  /**
-   * Register/refresh an app in the runtime registry (creates its data
-   * dir + entry) WITHOUT publishing — wires `runtime.registry.ensureUploaded`
-   * so a staged app's draft is immediately previewable.
-   */
+  /** Registers WITHOUT publishing. */
   ensureRegistered: (appId: string) => Promise<void>;
-  /**
-   * Drop an app from the runtime registry AND delete its state dir
-   * (`<appsDir>/<id>/` — logs, settings.json, blobs) after the store
-   * removed its code — wires the gateway's deregister+cleanup path.
-   */
+  /** Also deletes the app state dir. */
   deregister: (appId: string) => Promise<void>;
-  /** Reconcile the gateway's in-process cron scheduler after a publish
-   *  changed the live set (issue #149/#150). */
   reconcile: () => void;
-  /**
-   * The vault plane's ext-band operations (issue #286 phase 2). Injected
-   * so a lifecycle publish applies the staged app's declared extension
-   * tables to the vault before the ff-merge — symmetric to the apps-store
-   * publish route. Omitted on hosts without a vault plane.
-   */
   ext?: ExtBandOps;
-  /** Start a hidden builder compile; status is recorded in the automation conversation. */
   compileAutomation?: (input: {
     automationRef: string;
     runId: string;
     enableOnSuccess: boolean;
   }) => void;
-  /** Rewrite standing instructions, publish them, then enter the same compile seam. */
   reviseAutomation?: (input: {
     row: automation.Row;
     steering: string;
     revisionTurnId: string;
     compileTurnId: string;
   }) => void;
-  /**
-   * True when `id` is a bundled blueprint app id (issue #434). Bundled ids are
-   * RESERVED — scaffold/clone reject or avoid them so a code-store app can
-   * never shadow the shipped blueprint the resolver serves in place.
-   */
+  /** Bundled ids are RESERVED: no code-store app may shadow one (#434). */
   isBundledAppId?: (id: string) => boolean;
-  /** Stable host-managed recipe refs whose implementation is release-owned.
-   * Owners may toggle them and choose declared model/variant settings, but
-   * cannot delete, compile, or rewrite their code/intent in place. */
+  /** Toggle + declared settings only; never delete, compile, or rewrite. */
   isSystemManagedAutomation?: (automationRef: string) => boolean;
-  /** Release-owned code-store app ids (the container of a system recipe). */
   isSystemManagedApp?: (appId: string) => boolean;
-  /**
-   * Install a bundled blueprint app in place (issue #434): enroll the
-   * `consent.app` record (origin 'installed') + register in the runtime +
-   * grant the manifest-declared scopes — no git, no id minting. Idempotent
-   * (an already-installed app returns its existing registration). Resolves
-   * `undefined` when `templateId` isn't a bundled app. Omitted on hosts with
-   * no vault plane.
-   */
   installBundledApp?: (
     templateId: string
   ) => Promise<InstalledBundledApp | undefined>;
-  /**
-   * Set/clear an installed bundled app's per-vault rename (issue #434), since
-   * its code is read-only. Returns true when handled (the id is an installed
-   * bundled app); false lets the meta route fall through to the code-store
-   * app.json rewrite. Omitted on hosts with no vault plane.
-   */
+  /** False falls through to the code-store app.json rewrite. */
   renameBundledApp?: (appId: string, name: string | null) => boolean;
 }
 
-/** What {@link LifecycleRouteOptions.installBundledApp} returns to the client. */
 export interface InstalledBundledApp {
   id: string;
   name?: string;
   description?: string;
   iconKey?: string;
   colorKey?: string;
-  /** True when the app was already installed — the install was a no-op. */
   alreadyInstalled: boolean;
 }
 
-/** Build an app's absolute webhook URL from the inbound request's host. */
 export function webhookUrl(req: IncomingMessage, webhookId: string): string {
   const host = req.headers.host ?? "127.0.0.1";
   const forwarded = req.headers["x-forwarded-proto"];
@@ -115,7 +65,6 @@ export function webhookUrl(req: IncomingMessage, webhookId: string): string {
   return `${proto}://${host}/_centraid-hook/${webhookId}`;
 }
 
-/** Open a session, tolerating one that already exists (reuse its worktree). */
 export async function ensureSession(
   store: WorktreeStore,
   sessionId: string
@@ -130,22 +79,8 @@ export async function ensureSession(
   }
 }
 
-/**
- * Prepare the session a lifecycle mutation will stage into.
- *
- * `ephemeral` sessions are the caller-defaulted `lifecycle-<appId>` ones a
- * one-shot create/clone/meta/automation mutation uses when the renderer
- * didn't supply its own editing session. They must start *fresh off current
- * `main`*: a previous one-shot may have left an orphan worktree branched off
- * a stale `main` (e.g. a clone that published a baseline then the app was
- * deleted), and reusing it would stage onto pre-delete state. We close any
- * leftover (idempotent) and open a clean one; {@link stageAndMaybePublish}
- * closes it again once the publish lands.
- *
- * Non-ephemeral sessions are the renderer's persistent `desktop-<appId>`
- * editing sessions — reuse them in place via {@link ensureSession} and leave
- * them open across the mutation.
- */
+/** Ephemeral sessions start fresh off `main`: a leftover worktree may sit on a
+ *  stale `main` and stage onto pre-delete state. */
 export async function prepareLifecycleSession(
   store: WorktreeStore,
   sessionId: string,
@@ -159,19 +94,12 @@ export async function prepareLifecycleSession(
   await store.openSession(sessionId);
 }
 
-/** A session id derived from the app id, when the caller didn't supply one. */
 export function defaultSessionId(appId: string): string {
   return `lifecycle-${appId}`;
 }
 
-/**
- * Coerce a wire value into an {@link automation.HistoryKeep}, or undefined.
- *
- * `"all"` is deliberately NOT accepted (issue #659 L9): the manifest validator
- * rejects it, and this direct-API lane must not be the door that reintroduces
- * unbounded run history. An unrecognized value reads as "unset", which falls
- * back to the bounded default rather than to keeping everything.
- */
+/** `"all"` is deliberately NOT accepted (#659); unrecognized reads as unset →
+ *  the bounded default, never keep-everything. */
 export function parseHistoryKeep(
   raw: unknown
 ): automation.HistoryKeep | undefined {
@@ -184,26 +112,14 @@ export function parseHistoryKeep(
   return undefined;
 }
 
-/**
- * The "a publish landed on `main`" invariant, in one place: validate the
- * worktree manifest, merge it onto `main`, register the now-live app, and
- * reconcile the in-process cron scheduler against the new live set.
- * Optionally close a one-shot session afterward.
- *
- * Every lifecycle mutation that publishes funnels through here so no route
- * hand-sequences `publish → ensureRegistered → reconcile` itself (issue #147,
- * Concern 3) — the apps-store publish route already centralizes the same
- * sequence via its `onAppLive` hook.
- */
+/** Every publishing mutation funnels through here (#147). */
 export async function publishAndReconcile(
   opts: LifecycleRouteOptions,
   input: {
     appId: string;
     sessionId: string;
-    /** The session worktree's app dir (already mutated by the caller). */
     appDir: string;
     message: string;
-    /** Close the session after publishing — see {@link stageAndMaybePublish}. */
     ephemeralSession?: boolean;
   }
 ): Promise<void> {
@@ -212,10 +128,8 @@ export async function publishAndReconcile(
   });
   if (validationError)
     throw new AppScaffoldError("invalid_manifest", validationError);
-  // Apply the staged app's declared ext tables to the vault as part of the
-  // publish (issue #286 phase 2). The `beforeMerge` hook runs inside the
-  // store's mutex, post-rebase + pre-ff-merge, against the final worktree
-  // tree. A refused spec throws and aborts the publish, vault untouched.
+  // Post-rebase, pre-ff-merge, inside the store mutex: a refused ext spec aborts
+  // the publish with the vault untouched (#286).
   const ext = opts.ext;
   const appId = input.appId;
   await opts.store.publish({
@@ -235,14 +149,7 @@ export async function publishAndReconcile(
   if (input.ephemeralSession) await opts.store.closeSession(input.sessionId);
 }
 
-/**
- * Delete a whole app wholesale and reconcile: drop its code from `main`,
- * deregister it (removing its state dir), then reconcile the scheduler so
- * its triggers stop firing. The delete-side counterpart to
- * {@link publishAndReconcile} — keeps `reconcile()` out of the route body.
- * (The app's vault ext band is RETAINED by the grant-revocation cascade;
- * purging it is the owner's separate act.)
- */
+/** The vault ext band is RETAINED; purging it is a separate owner act. */
 export async function deleteAppAndReconcile(
   opts: LifecycleRouteOptions,
   appId: string
@@ -252,11 +159,6 @@ export async function deleteAppAndReconcile(
   opts.reconcile();
 }
 
-/**
- * Stage a file map into a session, then either register the app (draft
- * only) or validate + publish onto `main`. Centralizes the stage/publish
- * fork shared by create / clone / automation-create.
- */
 export async function stageAndMaybePublish(
   opts: LifecycleRouteOptions,
   input: {
@@ -265,13 +167,7 @@ export async function stageAndMaybePublish(
     files: ReadonlyArray<FileMapEntry>;
     publish: boolean;
     message: string;
-    /**
-     * When true, close the session after a successful publish — the session
-     * was a one-shot `lifecycle-<appId>` (see {@link prepareLifecycleSession}),
-     * not the renderer's persistent editing session, so leaving it open would
-     * orphan a worktree. No-op on the staged (`publish:false`) path: a staged
-     * draft must keep its session so it stays previewable.
-     */
+    /** Closes the one-shot session, or its worktree is orphaned. */
     ephemeralSession?: boolean;
   }
 ): Promise<void> {
@@ -295,7 +191,6 @@ export async function stageAndMaybePublish(
   });
 }
 
-/** Map a lifecycle error to a status + JSON body. */
 export function sendLifecycleError(res: ServerResponse, err: unknown): true {
   if (err instanceof AppScaffoldError) {
     const status =
@@ -307,17 +202,12 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
     return sendJson(res, status, { error: err.code, message: err.message });
   }
   if (err instanceof ManifestError) {
-    // A malformed trigger/vault/etc. spec (e.g. a create-route data/condition
-    // trigger the caller hand-authored) is a bad request, not a server fault —
-    // surface the validator's own field-scoped message instead of a 500.
     return sendJson(res, 400, {
       error: "bad_request",
       message: `Invalid automation manifest (${err.code}): ${err.message}`,
     });
   }
   if (err instanceof ExtSpecError) {
-    // A declared ext table the vault refuses (bad shape, unsupported
-    // change) aborts the publish (issue #286 phase 2) — a bad request.
     return sendJson(res, 400, {
       error: "invalid_ext_spec",
       message: err.message,

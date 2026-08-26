@@ -1,13 +1,6 @@
-// The reading room: the card, the row, and the two arrangements of them
-// (Notes spec §5).
-//
-// ONE SHAPE FOR THE TITLED AND THE UNTITLED CASE. Every surface reads
-// `promote()` — the first line stands in the title slot at the reading rung
-// and the preview picks up below it — so a card, a row, a result and a chip
-// cannot disagree about what a note is called.
-//
-// Nothing here notifies, counts unread or keeps a streak. A pile of 2,704
-// unfiled notes is a fact the member can look at.
+// The reading room (Notes spec §5): the card, the row, and their two arrangements.
+// Every surface reads `promote()`, so none can disagree what a note is called.
+// Nothing here notifies, counts unread, or keeps a streak.
 import type { ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
@@ -28,12 +21,10 @@ interface NoteProps {
   note: Note;
   onOpen: (noteId: string) => void;
   onTogglePin: (note: Note) => void;
-  /** The term to say what a result matched, on the Search route. */
   search?: string;
 }
 
-/** The pin. A star is a 44px target on touch and 30 on pointer — the
- *  stylesheet reads the surface's own `--target-min`, never a media query. */
+/** Sized by the surface's own `--target-min`, never a media query. */
 function Pin({ note, onTogglePin }: Pick<NoteProps, "note" | "onTogglePin">) {
   const pinned = note.pinned === 1;
   return (
@@ -52,9 +43,7 @@ function Pin({ note, onTogglePin }: Pick<NoteProps, "note" | "onTogglePin">) {
   );
 }
 
-/** The striped block a note with nothing to preview shows instead. The
- *  content type is STATED, so a screenshot, a pasted link and a voice memo
- *  are three different facts rather than three identical empty cards. */
+/** Content type is STATED per kind, not three identical empty cards. */
 function Placeholder({ kind }: { kind: "screenshot" | "link-only" | "audio" }) {
   return (
     <div className={styles.placeholder} data-kind={kind}>
@@ -63,8 +52,7 @@ function Placeholder({ kind }: { kind: "screenshot" | "link-only" | "audio" }) {
   );
 }
 
-/** The foot every card and row carries: age · notebook · marks, all in
- *  annotation ink. The age is a fact, never a reprimand. */
+/** Age · notebook · marks. */
 function Foot({ note }: { note: Note }): ReactNode {
   const tally = tallyLabel(note.check);
   const notebook = (note.notebook_names ?? [])[0];
@@ -93,9 +81,7 @@ export function NoteCard({ note, onOpen, onTogglePin, search }: NoteProps) {
         <span
           className={styles.title}
           data-untitled={String(shown.untitled)}
-          // The heading is member text, and a note can arrive from an import,
-          // a share target or another member — so it is sanitised at the
-          // render boundary like every other vault string.
+          // Member text (imports, share targets) — sanitised at the render boundary.
         >
           {displayText(shown.heading)}
         </span>
@@ -144,15 +130,13 @@ export interface NoteSetProps {
   onOpen: (noteId: string) => void;
   onTogglePin: (note: Note) => void;
   search?: string;
-  /** What stands in the set's place when it is empty and a read HAS landed. */
+  /** Empty-set stand-in once the read has landed. */
   empty?: ReactNode;
-  /** The window-end line, when the projection said there is more behind it. */
+  /** Window-end line when the projection has more. */
   foot?: ReactNode;
 }
 
-/** One set of notes, in whichever arrangement the member chose. Both
- *  arrangements say the same things about the same notes; the width changes
- *  the column count and the measure, never the type size. */
+/** Both arrangements say the same things; width changes columns and measure, never type size. */
 export function NoteSet({
   notes,
   view,

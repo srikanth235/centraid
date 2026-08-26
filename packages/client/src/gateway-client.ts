@@ -1,26 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit renderer HTTP-client hub pending split per-surface (apps, templates, vault, automations) once the thin-client surface stabilizes
 /*
- * Renderer-side HTTP client for the gateway's runtime/data plane.
- *
- * Thin-client pivot: the renderer talks to the active gateway directly
- * over HTTP with a Bearer token, instead of relaying each call through
- * the Electron main process. Main still owns the credential — it reads
- * the active gateway's `{ baseUrl, token }` from keychain-backed settings
- * and hands it over once via `getGatewayAuth()`; we cache it and refresh
- * on gateway switch. The local embedded gateway answers on loopback; a
- * remote gateway answers on its URL — identical wire protocol either way
- * (the local server now emits CORS for the `file://` renderer origin).
- *
- * This module ports the pure `fetch` methods that previously lived in the
- * desktop's `main/*-client.ts` modules and its old builder gateway client.
- * It covers the app read surface (logs / settings / deregister — the
- * schema/table-rows/query trio died with the per-app data.sqlite, issue
- * #286 phase 2), version history (list / activate), the
- * `/_centraid-user` identity + prefs surface, and the automation
- * read/run/analytics + insights surface. The shared fetch infrastructure
- * lives in `gateway-client-core.ts`; the app-editing + lifecycle surface
- * in `gateway-client-editing.ts` — both re-exported here so call sites
- * import everything from `./gateway-client.js`.
+ * Renderer-side HTTP client for the gateway's runtime/data plane. Electron main
+ * still owns the credential and hands it over once via `getGatewayAuth()`,
+ * cached here and refreshed on gateway switch; local and remote gateways share
+ * one wire protocol. This file is the barrel — hence the re-exports at the foot.
  */
 
 import { isGatewayCapabilities, ROUTES } from "@centraid/core/protocol";
@@ -41,7 +24,6 @@ export * from "./gateway-client-automations.js";
 export * from "./gateway-client-automation-compile.js";
 export * from "./gateway-client-push.js";
 
-/** Feature flags advertised by the active gateway, or undefined if malformed. */
 export async function readGatewayCapabilities(): Promise<
   GatewayCapabilities | undefined
 > {
@@ -56,7 +38,6 @@ export async function readGatewayCapabilities(): Promise<
     : undefined;
 }
 
-/** Newest-first tail of persistent handler logs. */
 export async function appLogs(input: {
   id: string;
   limit?: number;
@@ -80,11 +61,6 @@ export async function appLogs(input: {
   return readJson<{ entries: CentraidLogEntry[] }>(res, "fetch app logs");
 }
 
-/**
- * All app-owned `settings.json` values for the app (issue #286 phase 2:
- * the per-app data.sqlite's `__centraid_settings` table became this
- * file). Knob keys are the manifest's camelCase `app*` names.
- */
 export async function appSettings(input: {
   id: string;
 }): Promise<CentraidAppSettings> {
@@ -104,12 +80,8 @@ export async function appSettings(input: {
   return out.settings ?? {};
 }
 
-/**
- * Write one app-owned settings key; `value: null` deletes it. Keys are
- * sent verbatim (camelCase `app*` — the runtime kebab-cases at bake
- * time); `__`-prefixed keys are runtime-owned and refused gateway-side.
- * Returns the full settings map after the write.
- */
+/** `value: null` deletes. Keys go verbatim — the runtime kebab-cases at bake
+ *  time — and `__`-prefixed keys are refused gateway-side. */
 export async function appSettingWrite(input: {
   id: string;
   key: string;
@@ -132,7 +104,6 @@ export async function appSettingWrite(input: {
   return out.settings ?? {};
 }
 
-/** Remove an app from the registry. */
 export async function deregisterApp(input: {
   id: string;
 }): Promise<{ id: string }> {
@@ -144,25 +115,16 @@ export async function deregisterApp(input: {
   return readJson<{ id: string }>(res, "deregister");
 }
 
-/** Apps on `main` + their display metadata (the `GET /centraid/_apps` row). */
 export interface AppMetaEntry {
   id: string;
   name?: string;
   description?: string;
   kind?: "app" | "automation";
-  /** Tile identity from `app.json` (issue #263) — raw strings; validate
-   *  against the design-tokens sets before rendering. */
+  /** Raw strings; validate against the design-token sets before rendering. */
   iconKey?: string;
   colorKey?: string;
 }
 
-/**
- * Apps published on `main`, with the metadata the home shelf reads. The
- * git store is the source of truth post-#137 — there's no local worktree
- * to stat — so this returns the registry-backed metadata row, not the
- * legacy `CentraidAppInfo` (the renderer only reads id/name/desc/kind
- * off it).
- */
 export async function listApps(): Promise<AppMetaEntry[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps`, {
@@ -173,7 +135,6 @@ export async function listApps(): Promise<AppMetaEntry[]> {
   return out ?? [];
 }
 
-/** One requested scope of a template's `app.json` `vault` block. */
 export interface TemplateVaultScope {
   schema: string;
   table?: string;
@@ -182,18 +143,14 @@ export interface TemplateVaultScope {
   fieldMask?: string[];
 }
 
-/** A template's requested vault access (issue #434). Read from the app-kind
- *  template's `app.json`; automations omit it. `why` is the owner-facing
- *  sentence; `scopes` are what it will touch. The install/consent sheet that
- *  rendered it retired with Discover (#708) — the standing surface for the same
- *  question is now the Privacy grants ledger, which can also revoke. */
+/** No install/consent sheet renders this (#708): the standing surface for the
+ *  same question is the Privacy grants ledger, which can also revoke. */
 export interface TemplateVaultDTO {
   purpose?: string;
   why?: string;
   scopes: TemplateVaultScope[];
 }
 
-/** Display metadata for one bundled template (the `GET /centraid/_templates` row). */
 export interface TemplateMetaEntry {
   id: string;
   name: string;
@@ -202,30 +159,13 @@ export interface TemplateMetaEntry {
   iconKey: string;
   version: string;
   kind?: "app" | "automation";
-  /** Automation trigger presentation mirrors the bundled app metadata. */
   triggerKind?: "cron" | "webhook" | "data" | "condition";
   triggerLabel?: string;
-  /**
-   * Whether this bundled app is already installed in the addressed vault
-   * (issue #434). Present only when the gateway resolves per-vault install
-   * state. True for every bundled app on a mounted vault since #708 installs
-   * them all at mount.
-   */
   installed?: boolean;
-  /**
-   * Requested vault access (issue #434). Present for app-kind templates whose
-   * `app.json` declares a `vault` block; the install sheet renders it as the
-   * consent surface before the owner installs.
-   */
   vault?: TemplateVaultDTO;
 }
 
-/**
- * Bundled template catalog, resolved gateway-side (bundle-or-cache). Only
- * display metadata crosses the wire — the renderer casts this to its own
- * `TemplateEntry`. The clone path still reads template files gateway-side,
- * so `files`/`source` never reach the renderer.
- */
+/** Only display metadata crosses the wire: `files`/`source` stay gateway-side. */
 export async function listTemplates(): Promise<TemplateMetaEntry[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_templates`, {
@@ -245,7 +185,6 @@ export interface DailyBrief {
   currency: string;
 }
 
-/** Today's content-minimized cross-app summary in the renderer's local zone. */
 export async function getDailyBrief(now = new Date()): Promise<DailyBrief> {
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
@@ -269,25 +208,17 @@ export async function getDailyBrief(now = new Date()): Promise<DailyBrief> {
   return readJson<DailyBrief>(res, "fetch daily brief");
 }
 
-// ---- Versions (git-store tag history) ----
+// ─── Versions (git-store tag history) ─────
 
-/** Raw tag-driven version entry from the git store, newest-first. */
 interface GitVersion {
   tag: string;
   version: number;
   sha: string;
   uploadedAt: string;
-  /** `true` iff this tag's subtree matches the one currently on main. */
   active: boolean;
 }
 
-/**
- * Version history for the app, shaped for the renderer's version list.
- * Mirrors the old VERSIONS_LIST IPC handler: the git store marks the
- * active tag explicitly (`active: true` on the entry whose subtree
- * matches main — after a rollback that's NOT necessarily the newest
- * tag), which becomes `current` per-row + the top-level `activeVersion`.
- */
+/** The ACTIVE tag is not necessarily the newest one — a rollback moves it. */
 export async function listVersions(input: {
   id: string;
 }): Promise<{ activeVersion?: string; versions: CentraidVersionRecord[] }> {
@@ -300,8 +231,7 @@ export async function listVersions(input: {
       headers: authHeaders(token),
     }
   );
-  // The app may have no tags yet (never published) — the gateway 404s
-  // until the first publish lands a tag; treat that as an empty list.
+  // The gateway 404s until the first publish lands a tag; that is an empty list.
   if (res.status === 404) {
     await res.body?.cancel().catch(() => {});
     return { versions: [] };
@@ -325,11 +255,6 @@ export async function listVersions(input: {
   };
 }
 
-/**
- * Roll the app back to an existing version tag (forward-only overlay).
- * `versionId` is the version tag returned by `listVersions`; we report
- * it back as the new active version.
- */
 export async function activateVersion(input: {
   id: string;
   versionId: string;
@@ -348,9 +273,8 @@ export async function activateVersion(input: {
   return { activeVersion: input.versionId };
 }
 
-// ---- User identity + global prefs (`/_centraid-user`) ----
+// ─── User identity + global prefs (`/_centraid-user`) ─────
 
-/** Stable user UUID, generated gateway-side on first read. */
 export async function getUserId(): Promise<string> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/_centraid-user/id`, {
@@ -361,7 +285,6 @@ export async function getUserId(): Promise<string> {
   return out.id;
 }
 
-/** Snapshot of every gateway-side global preference. */
 export async function getUserPrefs(): Promise<Record<string, unknown>> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/_centraid-user/prefs`, {
@@ -375,16 +298,6 @@ export async function getUserPrefs(): Promise<Record<string, unknown>> {
   return out.prefs ?? {};
 }
 
-/**
- * Merge `patch` into the gateway-side prefs store; returns the full map.
- *
- * The old IPC handler also called `noteHarnessPrefsChanged()` to drop the
- * main process's in-memory preflight cache. That's no longer needed from
- * here: the preflight cache keys on the harness prefs that matter
- * (kind / binPath / provider id+baseUrl+envKey), so a change to any of
- * them re-probes automatically; and the harness-status panel
- * (`getHarnessStatus`) force-invalidates before every read regardless.
- */
 export async function saveUserPrefs(
   patch: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
@@ -401,12 +314,9 @@ export async function saveUserPrefs(
   return out.prefs ?? {};
 }
 
-// ---- Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ----
-// Read/run/analytics proxies. Code (manifests) resolves gateway-side from
-// the materialized `main`; run ledgers + analytics from the gateway's data
-// dir. A turn-now fires on the gateway host with ITS harness + provider key.
+// ─── Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ─────
+// A turn-now fires on the GATEWAY host, with its harness and provider key.
 
-/** Every automation on `main`, sorted by name. */
 export async function listAutomations(): Promise<CentraidAutomationRow[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_automations`, {
@@ -420,12 +330,10 @@ export async function listAutomations(): Promise<CentraidAutomationRow[]> {
   return out.rows ?? [];
 }
 
-/** One automation by its `<appId>/<id>` ref, or `null` when absent/invalid. */
 export async function readAutomation(input: {
   automationId: string;
 }): Promise<CentraidAutomationRow | null> {
-  // Mirror the old handler's `parseAutomationRef` guard: a valid ref is
-  // `<appId>/<id>`, so anything without a slash can't resolve.
+  // A valid ref is `<appId>/<id>`, so anything without a slash cannot resolve.
   if (!input.automationId.includes("/")) return null;
   const { baseUrl, token } = await auth();
   const res = await doFetch(
@@ -443,7 +351,6 @@ export async function readAutomation(input: {
   return out.row ?? null;
 }
 
-/** Fire an automation now on the gateway host; returns the minted turn id. */
 export async function runAutomationNow(input: {
   automationId: string;
 }): Promise<CentraidAutomationTurnResult> {
@@ -456,11 +363,7 @@ export async function runAutomationNow(input: {
   return readJson<CentraidAutomationTurnResult>(res, "run automation");
 }
 
-/**
- * Fire through the gateway's ordinary automation path and wait for the
- * handler outcome. Test Run and synchronous product gestures use this seam;
- * Run now remains the background/SSE affordance.
- */
+/** The synchronous seam; `runAutomationNow` stays the background/SSE one. */
 export async function invokeAutomationAndAwait(input: {
   automationId: string;
   payload?: unknown;
@@ -487,7 +390,6 @@ export async function invokeAutomationAndAwait(input: {
   return result;
 }
 
-/** Native automation turns, newest-first. Omit `automationId` for the global feed. */
 export async function listAutomationTurns(input: {
   automationId?: string;
   limit?: number;
@@ -511,7 +413,6 @@ export async function listAutomationTurns(input: {
   return out.turns ?? [];
 }
 
-/** One native turn from the shared ledger, or `null` when unknown. */
 export async function readAutomationTurn(input: {
   turnId: string;
 }): Promise<CentraidAutomationTurnRecord | null> {
@@ -531,7 +432,6 @@ export async function readAutomationTurn(input: {
   return out.turn ?? null;
 }
 
-/** One turn and its items in one authoritative ledger snapshot. */
 export async function readAutomationTurnExpanded(input: {
   turnId: string;
 }): Promise<{
@@ -551,7 +451,6 @@ export async function readAutomationTurnExpanded(input: {
   return { turn: out.turn ?? null, items: out.items ?? [] };
 }
 
-/** Latest turn for an automation, expanded with its native items. */
 export async function readLatestAutomationTurnExpanded(input: {
   automationId: string;
 }): Promise<{
@@ -571,7 +470,6 @@ export async function readLatestAutomationTurnExpanded(input: {
   return { turn: out.turn ?? null, items: out.items ?? [] };
 }
 
-/** The turn's native item timeline from the shared ledger. */
 export async function listAutomationItems(input: {
   turnId: string;
 }): Promise<CentraidAutomationItem[]> {
@@ -591,10 +489,7 @@ export async function listAutomationItems(input: {
   return out.items ?? [];
 }
 
-/**
- * Live native automation-turn event. `item.delta` nests the same
- * `TurnStreamEvent` grammar used by interactive conversations.
- */
+/** `item.delta` nests the same `TurnStreamEvent` grammar as conversations. */
 export type AutomationTurnStreamEvent =
   | { type: "turn.start"; turnId: string }
   | {
@@ -628,13 +523,7 @@ export type AutomationTurnStreamEvent =
     }
   | { type: "turn.end"; turnId: string; ok: boolean; error?: string };
 
-/**
- * Subscribe to a turn's live events over SSE. The gateway replays the
- * durable ledger snapshot, then streams live until `turn.end`. `onEvent` fires
- * per parsed event; the promise resolves when the stream closes. Pass an
- * `AbortSignal` to detach (panel teardown). An abort resolves quietly; other
- * transport failures reject so the caller can fall back to a one-shot read.
- */
+/** An abort resolves quietly; other failures reject so a caller can fall back. */
 export async function streamAutomationTurn(
   turnId: string,
   onEvent: (ev: AutomationTurnStreamEvent) => void,
@@ -676,12 +565,7 @@ export async function streamAutomationTurn(
   }
 }
 
-/**
- * Execute a one-off interactive turn in an automation's durable
- * conversation. The stream is the exact shared `TurnStreamEvent` grammar;
- * the gateway exposes the new native turn id in a response header so the
- * caller can perform one authoritative expanded re-read on completion.
- */
+/** The new turn id arrives in a response header, for one expanded re-read. */
 export async function streamAutomationConversationTurn(
   automationId: string,
   message: string,
@@ -730,7 +614,6 @@ export async function streamAutomationConversationTurn(
   return { ...result, ...(turnId ? { turnId } : {}) };
 }
 
-/** Pin / unpin a run as a replay fixture (ledger + central summary). */
 export async function pinAutomationTurn(input: {
   turnId: string;
   pinned: boolean;
@@ -749,7 +632,6 @@ export async function pinAutomationTurn(input: {
   return { ok: true };
 }
 
-/** The Insights screen's analytics payload over the central run ledger. */
 export async function getInsightsSummary(input?: {
   windowDays?: number;
 }): Promise<CentraidInsightsSummary> {
@@ -765,13 +647,6 @@ export async function getInsightsSummary(input?: {
   return readJson<CentraidInsightsSummary>(res, "insights summary");
 }
 
-/**
- * Component-level gateway health (`GET /centraid/_gateway/health`):
- * per-subsystem status (vaults, schedulers, outbox, connections, …), each
- * component's last error, and the gateway's recent structured warn/error
- * tail. Backs the Gateway page's Components tab (and its Overview orb's
- * reconciled status, via useGatewayHealth's poll).
- */
 export async function getGatewayHealth(): Promise<CentraidGatewayHealth> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_gateway/health", {
@@ -781,12 +656,7 @@ export async function getGatewayHealth(): Promise<CentraidGatewayHealth> {
   return readJson<CentraidGatewayHealth>(res, "gateway health");
 }
 
-/**
- * Hot-apply a background-work pause (issue #528 Phase B). `durationMs` absent
- * ⇒ an indefinite pause (`until: null`); the gateway clamps to a 24h max.
- * Returns the reconciled pause state — same shape health reports under
- * `metrics.backgroundPause`.
- */
+/** Absent `durationMs` ⇒ indefinite (`until: null`); the gateway clamps to 24h. */
 export async function pauseBackgroundWork(
   durationMs?: number
 ): Promise<{ paused: boolean; until: string | null }> {
@@ -802,7 +672,6 @@ export async function pauseBackgroundWork(
   );
 }
 
-/** Lift a background-work pause (issue #528 Phase B). */
 export async function resumeBackgroundWork(): Promise<{ paused: boolean }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_gateway/resource/pause", {
@@ -813,60 +682,30 @@ export async function resumeBackgroundWork(): Promise<{ paused: boolean }> {
 }
 
 // ───────────────────────── editing + lifecycle ─────────────────────
-// The app-editing (sessions / files / publish) + lifecycle (create / clone
-// / meta / automation CRUD) surface lives in `gateway-client-editing.ts`
-// (split out for the repo file-size limit). Re-exported here so call sites
-// keep importing everything from `./gateway-client.js`.
+// Split for the file-size limit; re-exported so this stays the one barrel.
 export * from "./gateway-client-editing.js";
 export * from "./gateway-client-automation-editing.js";
 
-// The unified chat transport (SSE turn streaming + chat-history surface)
-// lives in `gateway-client-conversation.ts` (issue #141, Phase 3). Re-exported here
-// so the chat panel imports it from the same barrel.
 export * from "./gateway-client-conversation.js";
 
-// The owner consent surface over the mounted vault plane (duaility §12)
-// lives in `gateway-client-vault.ts`. Re-exported here so the per-app
-// Vault tab imports it from the same barrel.
 export * from "./gateway-client-vault.js";
-// The staged-import workflow half of that same plane (issue #712 P18) — one
-// lifecycle rather than one act per call; see its header for the seam.
+// The staged-import half: one lifecycle, not one act per call.
 export * from "./gateway-client-vault-imports.js";
 export * from "./gateway-client-atlas.js";
 
-// The broker-owned OAuth / BYO-client connections surface (issue #304)
-// lives in `gateway-client-connections.ts`. Re-exported here so the
-// Settings → Connections screen imports it from the same barrel.
 export * from "./gateway-client-connections.js";
 
-// The outbox / blocking-notifications / standing-grant surface (issues #306, #308)
-// lives in `gateway-client-outbox.ts`. Re-exported here so the Approvals
-// screen imports it from the same barrel.
 export * from "./gateway-client-outbox.js";
 
-// The gateway's realtime log surface lives in `gateway-client-logs.ts`.
-// Re-exported here so the Settings → Logs screen imports it from the
-// same barrel.
 export * from "./gateway-client-logs.js";
 
-// The offsite backup engine's status/run surface (issue #351) lives in
-// `gateway-client-backup.ts`. Re-exported here so the Gateway page's
-// Backup card imports it from the same barrel.
 export * from "./gateway-client-backup.js";
 
-// The gateway-level storage-connection surface (issue #367 §C1/§D) lives in
-// `gateway-client-storage.ts`. Re-exported here so the Gateway page's
-// Storage card and the Settings → Storage screen import it from the same
-// barrel.
 export * from "./gateway-client-storage.js";
 
-// The LOCAL disk surface (issue #544) — footprint by component + the owner's
-// two limits. Same route prefix, different question; see the module header.
+// The LOCAL disk surface: same route prefix as storage, different question.
 export * from "./gateway-client-local-storage.js";
 
-// The paired-device roster + revoke surface (issue #376) lives in
-// `gateway-client-devices.ts`. Re-exported here so the Gateway page's
-// Devices card imports it from the same barrel.
 export {
   listGatewayDevices,
   revokeGatewayDevice,
@@ -889,12 +728,9 @@ export {
   type GatewayDeviceTicketInput,
 } from "./gateway-client-devices.js";
 
-// The tombstone predicate lives on its own leaf so screens can ask "is this
-// row revoked?" without importing the HTTP client (see the module header).
+// On its own leaf: a screen asks this without importing the HTTP client.
 export { isRevokedDevice } from "./device-roster.js";
 
-// The caller's own person (issue #726) — the device roster's own-owner
-// header. Same card, same barrel; see `gateway-client-owners.ts`.
 export {
   listGatewayOwners,
   renameGatewayOwner,
@@ -902,11 +738,8 @@ export {
   type GatewayOwnerVault,
 } from "./gateway-client-owners.js";
 
-// The link ceremony (#726 P2/P3) and the placement/commons surface (#726
-// P2/P4) — the People panel's own data plane. Same barrel so
-// `SharingCard.tsx` reads it beside the devices/owners surfaces above. D9's
-// per-link receive setting is NOT here: it governed gives arriving from
-// another person's vault, and copy-as-share retired (#825, ruling G-copy).
+// D9's per-link receive setting is deliberately NOT here: it would govern gives
+// arriving from another person's vault, and there is no copy-as-share (#825).
 export {
   listGatewayLinks,
   proposeGatewayLink,

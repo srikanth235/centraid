@@ -1,26 +1,11 @@
 // @vitest-environment jsdom
-// The four v4 shelves that used to lead nowhere, plus the routing that reaches
-// them (v4 handoff §5, §9, §12, §13).
-//
-// Places, People, Storage and the permission screen are the last of the app's
-// advertised destinations to land, and each one is asserted on the thing that
-// makes it honest rather than on its markup:
-//
-//   Places   groups by the place a photograph CARRIES; a photograph with no
-//            place is not "somewhere unknown" and must not appear at all.
-//   People   the roster is the member's confirmed names, and a card crops the
-//            first photograph of theirs this device actually loaded.
-//   Storage  every number is read off the rows; a row with no recorded size is
-//            counted and named rather than folded into a total that would then
-//            be presented as the truth.
-//   More     the band's sixth slot carries exactly what the five destinations
-//            left behind, plus Storage — never a destination that is already a
-//            tab, which would be one place in two.
-//
-// Rendered to static markup where a view is asserted: these are pure views over
-// their props, so the markup IS the behaviour, and a server render keeps the
-// assertions free of act() scheduling noise. The app sources are loaded by file
-// URL, like every other blueprint-app fixture here.
+// The four v4 shelves and their routing (v4 handoff §5 §9 §12 §13), each
+// asserted on what makes it honest rather than its markup:
+//   Places  groups by the place carried; no place → appears nowhere.
+//   People  confirmed names; crops the first loaded photo of theirs.
+//   Storage rows only; unsized counted+named, never folded into a total.
+//   More    exactly what five tabs left behind plus Storage.
+// Static-markup assertions (pure views over props).
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -95,10 +80,9 @@ const { storageFacts, StorageView } = (await import(
     onOpenTrash: () => void;
   }>;
 };
-// The whole-library custody rollup the screen reads (issue #711). Its own
-// arithmetic is covered by apps/photos/storage-model.test.ts; here it is a
-// prop, and the UNCOUNTED case is the one this file cares about — a Storage
-// screen with no rollup must still render its window facts.
+// Whole-library custody rollup (#711); its arithmetic is covered in
+// apps/photos/storage-model.test.ts. Here it is a prop; the UNCOUNTED case is
+// the one this file cares about — no rollup must still render window facts.
 const { custodyFacts } = (await import(app("storage-model.ts"))) as {
   custodyFacts: (
     scopes: readonly { label: string; rollup: unknown }[]
@@ -168,8 +152,7 @@ describe("Places groups by the place a photograph carries", () => {
   });
 
   it("leaves a photograph with no place out entirely", () => {
-    // Not "somewhere unknown": nobody told the vault where this was taken, and
-    // a section for it would be a claim about geography.
+    // Not "somewhere unknown": nobody told the vault where this was taken.
     expect(
       placeSections([{ asset_id: "a" }, { asset_id: "b", place: null }])
     ).toStrictEqual([]);
@@ -220,10 +203,8 @@ describe("People shows confirmed names and crops what is loaded", () => {
     expect(html).toContain("Ana");
     expect(html).toContain(">2<");
     // Unconfirmed faces stay in the enrichment flow — the shelf says so rather
-    // than duplicating that loop. The live count has not loaded under a
-    // static-markup render (no effect has fired), so the note omits the
-    // number rather than claiming a zero nobody checked (photos-people.test.ts
-    // covers the loaded-count case with a client render).
+    // than duplicating that loop. No live count under static markup, so the
+    // note omits the number (photos-people.test.ts covers the loaded case).
     expect(html).toContain("not matched to anyone yet");
   });
 
@@ -233,7 +214,6 @@ describe("People shows confirmed names and crops what is loaded", () => {
     expect(personIdFrom("built-in:people")).toBeNull();
     // An album id carries no colon, so it can never be read as a person.
     expect(personIdFrom("col_abc")).toBeNull();
-    // And one person's own view IS the timeline under a filter.
     expect(showsTimeline(id)).toBe(true);
   });
 });
@@ -253,9 +233,9 @@ describe("Storage reports what the rows say and nothing else", () => {
   });
 
   it("says nothing about custody when the sweep has not answered", () => {
-    // Custody is no longer inferred from the loaded rows at all (issue #711):
-    // the whole-library rollup replaced that window-sized answer. With no
-    // rollup the screen says so, and prints no custody section.
+    // Custody is never inferred from the loaded rows (#711): the whole-library
+    // rollup is the answer. With none, the screen says so and prints no
+    // custody section.
     const facts = storageFacts([{ asset_id: "a", byte_size: 1 }], [], false);
     const html = renderToStaticMarkup(
       createElement(StorageView, {
@@ -389,8 +369,7 @@ describe("the band's sixth slot carries what the five left behind", () => {
 describe("permission is a screen, not an error", () => {
   it("keeps the focus-refresh contract the element layer reads", () => {
     // `#consentBanner` is how `onFocusRefresh` knows a window focus is a
-    // recovery from a just-granted permission. The element was redrawn; the
-    // hook's question did not change.
+    // recovery from a just-granted permission; the contract did not change.
     const html = renderToStaticMarkup(
       createElement(PermissionScreen, { reason: null })
     );
@@ -418,10 +397,8 @@ describe("permission is a screen, not an error", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Search's four states (§9), the status line's determinate meter (§14), and
-// the one member preference the duplicates shelf used to opt out of (§4.2).
-// ---------------------------------------------------------------------------
+// Search's four states (§9), the determinate meter (§14), and the one member
+// preference the duplicates shelf honours too (§4.2).
 
 interface SearchProps {
   query: string;
@@ -498,8 +475,7 @@ describe("search is four states, and each one is a different sentence", () => {
   it("echoes the query and what was searched on a miss", () => {
     const html = search({ query: "ferry", status: "ready", count: 0 });
     expect(html).toContain("Nothing matches “ferry”");
-    // Aligned with mobile's wording for the same fact (issue #711
-    // reconciliation) — see view-copy.ts's SEARCH_COPY.miss.body comment.
+    // Aligned with mobile's wording for the same fact (#711 reconciliation).
     expect(html).toContain(
       "Nothing in captions, people, places, things or album names."
     );
@@ -511,8 +487,7 @@ describe("search is four states, and each one is a different sentence", () => {
     expect(html).toContain("Search needs the gateway");
     expect(html).toContain("Retry");
     expect(html).toContain("browsing, albums, favorites, captions");
-    // The vault noun is forbidden in Photos copy (issue #599) — this is the
-    // handoff's "Cannot reach the vault" without the word.
+    // The vault noun is forbidden in Photos copy (#599).
     expect(html).not.toContain("vault");
     // The honest miss line is a claim nobody verified here, so it is absent.
     expect(html).not.toContain("Nothing matches");
@@ -561,8 +536,7 @@ describe("the duplicates shelf honours the member's tile size", () => {
     );
 
   it("packs at the rung it is given, not at a size of its own", () => {
-    // A shelf pinned to one rung would be a fifth, surface-specific tile size
-    // the member never chose (§4.2).
+    // A pinned rung would be a fifth tile size the member never chose (§4.2).
     expect(render(0)).not.toBe(render(3));
   });
 

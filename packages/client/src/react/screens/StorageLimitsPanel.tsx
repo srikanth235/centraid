@@ -16,34 +16,8 @@ import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./StorageLimitsPanel.module.css";
 
-// Capacity → the ledger limit (issue #544).
-//
-// ONE LIMIT, because only one of them is a limit. The panel used to offer two
-// side by side, in identical form, with the copy carrying the whole difference:
-//
-//   Disk budget  — warn-only. Nothing was ever blocked; setting it degraded a
-//                  health component and turned this page amber, then red.
-//   Ledger limit — actuating. It makes conversation/audit archival run early
-//                  and reach further back. Archival seals cold rows into the
-//                  content-addressed store; the delete half is already gated
-//                  behind proven custody (issue #438), and it never reaches
-//                  inside the last 7 days.
-//
-// A control that looks exactly like a ceiling and is not one is worse than no
-// control: a member who sets "30 GB" and reads the form has every reason to
-// believe the vault will stop at 30 GB, and it will not. The disk budget is
-// gone from this surface for that reason. Its ROW survives on exactly one
-// condition — a budget is already stored — because removing the last control
-// that can unset a stored value is a one-way door, and a warning threshold
-// somebody set once and can no longer clear is worse again.
-//
-// NO SECTION OF ITS OWN. "Limits" was a second head under Capacity restating
-// the same subject — how much room there is, and where the line is — as though
-// it were a different question, and on a read-only seat it was a whole bordered
-// card whose entire content was the word "Off" twice.
+// Ledger limit only (#544). Disk budget is warn-only; its row survives only to unset a stored value.
 
-/** Presets, in bytes. Chosen to be recognisable rather than round in binary —
- *  the owner is thinking about their ledger, not about powers. */
 const LEDGER_PRESETS: readonly { label: string; bytes: number }[] = [
   { label: "256 MB", bytes: 256 * 1024 ** 2 },
   { label: "1 GB", bytes: 1024 ** 3 },
@@ -52,12 +26,8 @@ const LEDGER_PRESETS: readonly { label: string; bytes: number }[] = [
 
 export interface StorageLimitsPanelProps {
   limits: StorageLimitsDTO | null;
-  /** Live footprint — powers the "you are here" line under each control. */
   report: LocalUsageReportDTO | null;
   onSave: (patch: StorageLimitsPatchDTO) => Promise<void>;
-  /** A read-only seat withholds the verb. The row then says WHERE the limit is
-   *  changed instead — a control that is simply missing reads as a limit that
-   *  cannot be configured at all, which is not what is true. */
   gatewayLabel?: string;
   readOnly?: boolean;
 }
@@ -66,12 +36,9 @@ interface LimitControlProps {
   id: string;
   title: string;
   icon: "Gauge" | "Journal";
-  /** What this limit currently is, in bytes; `null` when off. */
   value: number | null;
   presets: readonly { label: string; bytes: number }[];
-  /** One line of live context ("your ledger is 812 MB today"). */
   hereNow: string | null;
-  /** Shown when the entered value would be refused by the gateway. */
   floorBytes: number;
   floorLabel: string;
   onCommit: (bytes: number | null) => Promise<void>;
@@ -94,9 +61,6 @@ function LimitControl({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // The server is the source of truth: a save elsewhere, or a rejected value,
-  // resyncs the field rather than leaving a stale draft that looks committed.
-  // Adjusted during render, so the field never paints the stale draft once.
   const [seenValue, setSeenValue] = useState(value);
   if (seenValue !== value) {
     setSeenValue(value);
@@ -139,8 +103,7 @@ function LimitControl({
 
   return (
     <div className={styles.control} data-testid={`limit-control-${id}`}>
-      {/* NO HEAD: the row above this IS the head — it carries the title, the
-          description and the current value, and this is the control it opened. */}
+      {/* No head: the row above is the head. */}
       <div className={styles.controlRow}>
         <span className={styles.controlIcon} aria-hidden="true">
           <Icon name={icon} size={14} />
@@ -205,7 +168,6 @@ function LimitControl({
   );
 }
 
-/** Bytes the ledger currently occupies, summed across mounted vaults. */
 function ledgerBytes(report: LocalUsageReportDTO | null): number | null {
   if (!report) return null;
   let total = 0;
@@ -225,12 +187,9 @@ export default function StorageLimitsPanel({
   readOnly,
 }: StorageLimitsPanelProps): JSX.Element | null {
   const ledger = ledgerBytes(report);
-  // One at a time: two open editors under two rows is a form, and neither of
-  // these is a field of the other.
   const [open, setOpen] = useState<"budget" | "ledger" | null>(null);
 
   if (limits === null) return null;
-  // The legacy row, present only to be turned off (see the file header).
   const strandedBudget = limits.totalLimitBytes !== null;
 
   const row = (
@@ -241,11 +200,7 @@ export default function StorageLimitsPanel({
     control: JSX.Element
   ): RowDef => ({
     id,
-    // The VALUE is the meta, because "where is the line" is the question the
-    // row answers at a glance; changing it is the verb beside it.
     meta: value === null ? "off" : formatBytes(value),
-    // A withheld verb is explained where it is withheld. Without this the row
-    // reads as a limit nobody can set, rather than one set on another machine.
     sub:
       readOnly && gatewayLabel
         ? `${sub} · set in Centraid on ${gatewayLabel}`

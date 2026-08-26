@@ -1,16 +1,6 @@
-// Centraid — themes barrel.
-// Collects every preset under this folder into a typed registry +
-// ordered display list. The desktop/web shell drinks from here via CSS vars
-// (`toCss()`). Mobile reaches the same theme values through the concrete typed
-// `toNativeTheme()` lowering; it neither parses CSS nor keeps a copied theme.
-
 import { darkTheme, lightTheme } from "./centraid";
 
-// `PAGE` and `WALL` are deliberately NOT re-exported here (or from the
-// package root). A consumer reaching for the literal instead of the `--bg`
-// role is exactly the per-app page retune the one-page rule exists to
-// prevent — see docs/traps/design-tokens.md, "There is ONE page, and an app
-// does not retune it."
+// No `PAGE`/`WALL` re-export: one-page rule (traps/design-tokens.md).
 export type { Theme } from "./shared";
 export {
   ACCENT_HOVER,
@@ -38,16 +28,7 @@ export {
 
 export { darkTheme, lightTheme } from "./centraid";
 
-// Registry: every entry shows up in the desktop theme picker.
-//
-// INVARIANT — a registry key must equal its `kind`. Shell stylesheets key
-// literally on `[data-theme='dark']` (`react/styles/toast.module.css`,
-// `react/screens/SettingsConnectionsScreen.module.css`), so a dark preset
-// registered under any other key would take the dark tokens while leaving
-// those rules unfired — light chrome painted over a dark surface (#608 O).
-// `themes.test.ts` pins the invariant; adding a third preset means either
-// naming it `light`/`dark` (impossible) or moving those rules onto the
-// resolved kind first.
+// INVARIANT #608: registry key must equal its kind; test-pinned.
 export const themes = {
   light: lightTheme,
   dark: darkTheme,
@@ -55,7 +36,6 @@ export const themes = {
 
 export type ThemeName = keyof typeof themes;
 
-/** Display metadata for the theme picker. Order = render order. */
 export interface ThemePreset {
   name: ThemeName;
   label: string;

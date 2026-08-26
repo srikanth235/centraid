@@ -1,4 +1,4 @@
-// Secure storage adapter for sensitive keys (issue #468 J4).
+// Secure storage adapter for sensitive keys (#468).
 // Secrets (link ticket/secret, gateway token, device keys) live in
 // expo-secure-store. Non-secret prefs stay on AsyncStorage via Store.
 

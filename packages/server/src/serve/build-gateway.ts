@@ -1,32 +1,15 @@
 // governance: allow-repo-hygiene file-size-limit orchestration hub already at the cap; pending split of the route-handler wiring into a sibling module
 /*
- * `buildGateway()` — construct the host-agnostic centraid gateway core.
+ * `buildGateway()` — the host-agnostic gateway core (#280, #289).
  *
- * Issue #280 made the vault the unit; issue #289 made (gateway, vault) the
- * address. The gateway core is one stable object graph (runtime, dispatcher,
- * prefs, route chain) whose PERSONAL surfaces all resolve through the vault
- * the CURRENT REQUEST is addressed to: `composedHandler` resolves the
- * request's vault (explicit `x-centraid-vault` header, else the default
- * vault) and runs the whole chain inside that ambient scope (see
- * `vault-context.ts`), so the conversation ledger, per-app data dirs, code
- * store, and `ctx.vault` bridges all land on the request's vault. There is
- * no server-global active vault: switching is a client-side view change the
- * server never observes, and N clients ride N vaults concurrently.
+ * Every personal surface resolves through the vault the CURRENT REQUEST is
+ * addressed to, because `composedHandler` runs the whole chain inside that
+ * ambient scope. There is NO server-global active vault: switching is a
+ * client-side view change, and N clients ride N vaults concurrently.
  *
- * Two hosts mount the same core:
- *
- *   - Electron embed: `buildGateway()` (or `serve()`) in the main
- *     process, paths derived from `gateway-paths.ts`.
- *   - `centraid-gateway` daemon: `serve()`, paths derived from a
- *     `--data-dir` config.
- *
- * Construction (stores → prefs loader → chat runner → `Runtime` → route
- * handlers) runs in `buildGateway()`; the per-vault host bundle (code
- * store, draft resolver, unified chat runner, store-backed route handlers,
- * cron scheduler) is built lazily per vault and cached by vault id. The
- * returned `start(publicBaseUrl)` mounts every vault's workspace and
- * starts + reconciles each vault's scheduler (issue #149), so automations
- * in every vault fire regardless of which vault any client looks at.
+ * The per-vault host bundle is built lazily and cached by vault id.
+ * `start()` mounts every vault's workspace and starts each vault's scheduler,
+ * so automations fire in every vault regardless of what a client looks at.
  */
 
 import crypto from "node:crypto";
@@ -363,183 +346,98 @@ export type { DeviceAccess } from "./vault-context.js";
 const TIME_ENGINE_MODULE_URL = import.meta.resolve("@centraid/core/time");
 
 export interface BuildGatewayOptions {
-  /** On-disk slots the runtime reads/writes. Caller-derived. */
   paths: GatewayPaths;
-  /** Shared gateway.db handle when the host opened the process lock before constructing transports. */
   gatewayDatabase?: GatewayDatabase;
-  /**
-   * Optional shared-client OAuth courier coordinates. Hosts inject only
-   * public values; confidential Google/HMAC secrets remain Worker-only.
-   */
   assistOAuth?: AssistOAuthConfig;
-  /**
-   * Owner Resource mode (#521). When set (daemon config / tests), feeds
-   * hardware-profile resolution. Durable prefs (`gateway.resourceMode`) win
-   * over omission; `CENTRAID_RESOURCE_MODE` env still wins over both.
-   */
   resourceMode?: ResourceMode;
   /**
-   * Experimental feature gate (v0 early feedback). When a feature is off the
-   * gateway does not advertise its capability, mount its routes, or start
-   * its background work — durable data stays intact. Resolution per feature
-   * is env (`CENTRAID_EXPERIMENTAL`) > durable prefs
-   * (`gateway.experimental.*`) > this option > off; hosts and tests opt in
-   * here, mirroring `resourceMode`.
+   * When a feature is off the gateway does not advertise its capability,
+   * mount its routes, or start its background work — durable data stays
+   * intact. Resolution: `CENTRAID_EXPERIMENTAL` > durable prefs > this > off.
    */
   experimental?: Partial<ExperimentalFeatureSet>;
   /**
-   * The cron scheduler (issue #149) is gateway-owned and in-process: one
-   * scheduler PER VAULT (issue #289 — every vault's automations fire, not
-   * just the vault a client happens to look at), each a minute-boundary
-   * timer firing enabled cron automations through the same `runAutomation`
-   * path as "run now". There is no OS scheduler; missed minutes during
-   * downtime are skipped (n8n semantics — no backfill). When this override
-   * is injected (tests), it becomes the DEFAULT vault's scheduler; other
-   * vaults get fresh `automation.InProcessScheduler`s.
+   * One in-process cron scheduler PER VAULT (#149, #289), each a
+   * minute-boundary timer firing through the same `runAutomation` path as
+   * "run now". No OS scheduler, and missed minutes are skipped — no backfill.
+   * An injected override becomes the DEFAULT vault's scheduler only.
    */
   scheduler?: automation.LocalScheduler;
-  /** Logger forwarded to `Runtime`. Defaults to a `console.*` wrapper. */
   logger?: RuntimeLogger;
-  /**
-   * Tag prepended to log lines emitted by the gateway's own bootstrap
-   * paths (currently just the scheduler-reconcile log). Hosts use this
-   * to disambiguate multiple gateways in one process.
-   */
   logTag?: string;
-  /**
-   * Maps an app id to the draft-session id the unified chat runner edits.
-   * Defaults to a host-neutral `chat-<appId>`; the desktop injects
-   * `desktop-<appId>` so its renderer Code tab + local builder + gateway
-   * chat share ONE worktree.
-   */
+  /** Defaults to `chat-<appId>`; a host sharing the draft with another editor
+   *  injects its own scheme so both edit ONE worktree. */
   sessionIdFor?: (appId: string) => string;
-  /**
-   * Device-plane access control (issue #289 phase 2). The composed handler
-   * always resolves a real enrollment. A loopback embed that omits this seam
-   * receives a persisted host enrollment keyed by the gateway endpoint id.
-   */
+  /** A loopback embed omitting this seam gets a persisted host enrollment
+   *  keyed by the gateway endpoint id (#289). */
   deviceAccess?: DeviceAccess;
-  /** Host-selected custody backend for every gateway-level named secret. */
   keyStore?: KeyStore;
-  /**
-   * A host device EndpointId whose loopback requests are resolved by the
-   * supplied deviceAccess seam. It is enrolled as the owner of the vaults a
-   * fresh data dir auto-creates at construction (issue #603).
-   */
   hostDeviceEndpointId?: string;
   /**
-   * Direct host-custody check — an authenticated caller on this box that is
-   * NOT an iroh-forwarded request (whose upstream socket is loopback too).
-   * Gates the host-only lanes: pairing-ticket mint, owner administration,
-   * and the cross-vault scopes listing.
+   * An authenticated caller on this box that is NOT iroh-forwarded (whose
+   * upstream socket is loopback too). Gates the host-only lanes:
+   * pairing-ticket mint, owner administration, cross-vault scopes listing.
    */
   isHostCustody?: (req: IncomingMessage) => boolean;
-  /** Optional Rust byte-plane X-Sendfile handoff (issue #456 N3). */
   dataPlaneHttp?: DataPlaneHttpOptions;
-  /** Auth callback used only by the native iroh relay on loopback. */
   dataPlaneControl?: DataPlaneControlOptions;
-  /** Host-selected preview engine; daemon defaults to native sharp/libvips. */
   previewCodec?: PreviewCodec;
-  /**
-   * Enrollment/ticket plane used by proved iroh callers. HTTP ticket
-   * redemption and per-device bearers were removed by issue #555.
-   */
   devicePairing?: {
     enrollments: EnrollmentStore;
     tickets: PairingTicketStore;
-    /**
-     * The gateway's iroh EndpointTicket for a HTTP-minted pairing ticket's
-     * `gw` field (`POST /centraid/_gateway/devices/ticket`), read lazily at
-     * mint time. Undefined before the daemon has an endpoint.
-     */
     endpointTicket?: () => string | undefined;
-    /** Stable gateway identity derived from the endpoint secret. */
     endpointId?: () => string | undefined;
-    /** Close Rust-owned iroh transports after a device loses its final enrollment. */
     onEndpointRevoked?: (endpointId: string) => void | Promise<void>;
   };
   /**
-   * The gateway↔gateway peer lane (#726 P3 decision 6). Supplied by the host
-   * that owns the peer forwarder; absent means this build serves no peer
-   * plane at all, and every peer-marked request is `not_found`.
-   *
-   * `proof` is the per-boot secret ONLY the forwarder and the peer route
-   * layer know. Nothing else in this file may read it.
+   * The gateway↔gateway peer lane (#726). Absent means this build serves no
+   * peer plane and every peer-marked request is `not_found`. `proof` is the
+   * per-boot secret ONLY the forwarder and the peer route layer know —
+   * nothing else in this file may read it.
    */
   peerPlane?: {
     proof: string;
     localRoute: () => { endpointId?: string; relayHints: string[] };
-    /**
-     * Outbound peer-plane dialing (#726 P3 decision 7): what lets THIS
-     * gateway push a remote give, pull a closure back after a D9 'ask', and
-     * background-pull original bytes. Absent means this build can receive
-     * peer requests but never initiate one — a remote edge or a D9 accept
-     * parks rather than reaching for a dial capability that isn't wired.
-     * Production wiring of a real transport is a `packages/tunnel` concern,
-     * mirroring how `redeemLinkTicket`/`pushRouteAssertion` are unwired here
-     * too; tests inject the same in-process transport the link ceremony does.
-     */
+    /** Absent ⇒ this build can receive peer requests but never initiate one;
+     *  a remote edge or D9 accept parks instead of dialing (#726). */
     dial?: PeerDial;
-    /**
-     * Peer-plane background sweep cadence override (tests only; production
-     * uses the sweep's own default). Mirrors `notificationsDoorbellWindowMs`
-     * below — tests shorten it, hosts leave it alone.
-     */
     blobPullIntervalMs?: number;
   };
   /**
-   * Durable PWA control sessions (issue #376). When `controlsFile` is set,
-   * `WebControlSessions` persists CONTROL cookies there so a web pairing
-   * survives a gateway restart / the sliding 30-day idle window instead of
-   * forcing a fresh pairing ticket every 12h. `isDeviceValid` propagates
-   * `devices revoke` to live control/app cookies (a revoked device's cookie
-   * stops authorizing at once). Absent (desktop embed, tests) → in-memory
-   * control sessions with no revocation hook, exactly the prior behavior.
+   * When `controlsFile` is set, CONTROL cookies persist there so a web pairing
+   * survives a restart and the sliding 30-day idle window (#376).
+   * `isDeviceValid` propagates `devices revoke` to live cookies at once.
+   * Absent → in-memory control sessions with no revocation hook.
    */
   webSessions?: {
     controlStore?: WebControlSessionStore;
     controlsFile?: string;
     isDeviceValid?: (deviceKey: string) => boolean;
   };
-  /**
-   * Turn driver for the unified builder/chat runner. Defaults to real
-   * `runTurn` (ACP harnesses). Tests inject a stub so HTTP lifecycle paths
-   * (e.g. headless automation compile) finish without spawning a coding
-   * harness — issue #504 check:pr green on harnessless CI/local hosts.
-   */
+  /** A stub lets HTTP lifecycle paths finish without spawning a harness, so
+   *  check:pr stays green on harnessless hosts (#504). */
   runTurn?: RunTurnFn;
-  /**
-   * Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. When
-   * `enabled`, `buildGateway` constructs a `BackupService` (component
-   * `'backups'` on `health`), starts its hourly scheduler from `start()`,
-   * and stops it from `stop()`. Disposable work lives under `paths.cacheDir`
-   * (defaults to a `backup` sibling of `paths.vaultDir`).
-   */
   backup?: BackupConfig;
   /**
-   * Coalescing window for the Notifications doorbell (#647). Every journalled write
-   * commit could otherwise recompute the whole Notifications projection and ring SSE
-   * to every subscriber; a bulk connector sync would pay that per batch. The
-   * first commit after idle fires promptly, the rest of the burst collapses
-   * into one trailing recomputation. Tests shorten it; hosts leave it alone.
+   * Coalescing window for the Notifications doorbell (#647): otherwise every
+   * journalled commit recomputes the whole projection and rings SSE to every
+   * subscriber. First commit after idle fires promptly; the burst collapses
+   * into one trailing recomputation. Tests shorten it, hosts leave it alone.
    */
   notificationsDoorbellWindowMs?: number;
 }
 
-/** Fires one automation. Shared by the cron scheduler + the turn-now route. */
 export type FireAutomation = (
   automationRef: string,
   opts: {
     runId?: string;
     triggerKind: AutomationTriggerKind;
     triggerOrigin: AutomationTriggerOrigin;
-    /** Trigger payload surfaced to the handler as `ctx.input` (condition/data fires). */
     input?: unknown;
-    /** Human-readable trigger-gap/cursor note stored on the turn. */
     note?: string;
     /** Reuse a source-stable run id and replay an interrupted ledger turn. */
     idempotent?: boolean;
-    /** Let the cursor engine retain its pending receipt on infrastructure failure. */
+    /** Let the cursor engine retain its pending receipt on infra failure. */
     propagateError?: boolean;
   }
 ) => Promise<{
@@ -548,7 +446,6 @@ export type FireAutomation = (
   record?: automation.RunRecord;
 }>;
 
-/** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (
   req: IncomingMessage,
   res: ServerResponse
@@ -559,7 +456,6 @@ export interface RoutePrefixRegistration {
   readonly handler: RouteHandler;
 }
 
-/** Register a handler in the immutable prefix table built at gateway boot (#456 R1). */
 export function forRoutePrefixes(
   prefixes: string | readonly string[],
   handler: RouteHandler
@@ -579,11 +475,6 @@ function routeSegments(pathname: string): string[] {
   return pathname.split("/").filter(Boolean);
 }
 
-/**
- * Compile route families into a segment trie. Dispatch reads and strips the
- * request query exactly once, performs O(path-depth) map lookups, then invokes
- * only matching handlers from most-specific prefix to least-specific prefix.
- */
 export function createRoutePrefixDispatch(
   registrations: readonly RoutePrefixRegistration[]
 ): RouteHandler {
@@ -644,11 +535,9 @@ export function replicaDispatchOutcome(
     return denied
       ? { status: "denied", reason: result.structuredContent.message }
       : {
-          // HANDLER_ERROR includes a vault bridge failure after the canonical
-          // command committed but before journal finalization/transport
-          // completed. GATEWAY_BUSY and any future infrastructure error are
-          // likewise safe to retry. The route keeps the admitted intent in
-          // `sending`; deterministic intent-bound invocation ids dedupe it.
+          // HANDLER_ERROR can mean a bridge failure after the command
+          // committed, so retry is safe: the route keeps the intent in
+          // `sending` and deterministic intent-bound invocation ids dedupe it.
           status: "retryable",
           reason: result.structuredContent.message,
         };
@@ -692,13 +581,9 @@ export function replicaDispatchOutcome(
   };
 }
 
-// Prefixes the chat-history + prefs routes answer to, mirrored from
-// app-engine's http-server.ts so `composedHandler` matches the same URLs
-// `startRuntimeHttpServer` does.
 const CONVERSATIONS_PREFIX = "/_centraid-conversations";
 const USER_STORE_PREFIX = "/_centraid-user";
 
-/** The per-vault host bundle — one per vault, built lazily, cached by id. */
 interface VaultHost {
   vaultId: string;
   store: WorktreeStore;
@@ -708,108 +593,41 @@ interface VaultHost {
     sessionId: string
   ) => Promise<string | undefined>;
   runner: ConversationRunner;
-  /** Materialize the shipped recognition recipes into this vault's code store. */
   ensureSystemRecognitionRecipes: () => Promise<void>;
-  /** Store-backed route handlers (apps-store / lifecycle / automations). */
   handlers: RouteHandler[];
 }
 
 export interface BuiltGateway {
-  /** The constructed runtime (handles, dispatcher, change bus). */
   runtime: Runtime;
-  /**
-   * Component-level health, served at `GET /centraid/_gateway/health`.
-   * Hosts report components the gateway can't see from inside (the
-   * desktop's iroh tunnel, a daemon's disk watermark) via
-   * `health.reportOk/reportDegraded/reportError`, and wrap host-side
-   * loggers with `health.loggerFor(component, logger)` so their errors
-   * join the same structured tail.
-   */
   health: HealthRegistry;
-  /**
-   * The offsite backup service (PROTOCOL.md/FORMAT.md) — present only when
-   * `BuildGatewayOptions.backup?.enabled`. `cli/backup-admin.ts` builds its
-   * own instance from the same resolved config for one-shot CLI gestures;
-   * this is the live, scheduled one `start()`/`stop()` drive.
-   */
   backup?: BackupService;
-  /** Gateway-wide device preferences stored in `gateway.db`. */
   prefs: PrefsStore;
-  /** Run-summary rollup over the current request's journal.db. */
   analyticsStore: AnalyticsStore;
   conversationHistoryStore: ConversationHistoryStore;
-  /**
-   * The vault registry (duaility §12, #289): a warm map of mounted vault
-   * planes keyed by vaultId. Hosts drive owner acts (grants, confirmations)
-   * through this; vault create/delete are ADMIN acts (CLI); apps only ever
-   * reach the request's vault via `ctx.vault`.
-   */
   vaults: VaultRegistry;
-  /**
-   * The current request's vault's git-store backend (default vault outside
-   * a request scope). Callers (the publish endpoint, export/import, the
-   * desktop's file IPC) drive sessions + publishes through this. Async —
-   * the store materializes lazily per vault.
-   */
   appsStore: () => Promise<WorktreeStore>;
-  /**
-   * Resolves the current request's vault's live `main` worktree apps dir,
-   * rotating atomically per publish/rollback. Hosts that register their own
-   * automation surface resolve automation CODE through this. Throws before
-   * `start()` has mounted the vault's workspace.
-   */
+  /** The request vault's live `main` apps dir, rotating atomically per
+   *  publish/rollback. Throws before `start()` mounted the workspace. */
   codeAppsDir: () => string;
-  /**
-   * Re-sync one vault's app registry off its live `main` (ensureUploaded +
-   * enrollment + scheduler reconcile). `start()` runs this for every
-   * mounted vault; callers that seed the store OUT OF BAND (tests, import
-   * paths) call it to settle the registry without a restart.
-   */
   syncApps: (vaultId?: string) => Promise<void>;
-  /** Scoped cookie sessions used only by generated apps embedded in the browser PWA. */
   webControlSessions: WebControlSessions;
   /**
-   * Route handlers run after auth, before `runtime.handle` (vault routes,
-   * templates, agents, then the request vault's store-backed handlers).
-   * NOTE: these resolve the request's vault from the ambient context —
-   * mount them through `composedHandler` (which establishes it) unless the
-   * host establishes the scope itself.
+   * Handlers run after auth, before `runtime.handle`. They resolve the
+   * request's vault from the AMBIENT context, so mount them through
+   * `composedHandler` unless the host establishes that scope itself.
    */
   extraHandlers: RouteHandler[];
-  /**
-   * One handler owning the full chain: resolve the request's vault
-   * (`x-centraid-vault` header → enrollment check → default), then replay
-   * `conversation → prefs → extraHandlers[] → runtime.handle` inside that
-   * vault's ambient scope — MINUS the bearer check (cf. `app-engine`
-   * http-server.ts). Hosts that own auth themselves mount this on a single
-   * prefix route. Always resolves the response, so it returns `true`.
-   */
   composedHandler: RouteHandler;
   /**
-   * The `/_centraid-hook/<id>` webhook-trigger route (issue #96), mounted
-   * ahead of the bearer check (issue #304's `publicPathPrefixes`) — the
-   * shared secret in the request IS the auth. Resolves the slug to its
-   * OWNING vault across every mounted vault (webhook ids are globally
-   * unique), durably accepts authenticated ingress, and nudges that vault's
-   * cursor engine before answering 202. Returns `false` for any non-matching
-   * URL so the host can fall through to `composedHandler`.
+   * The `/_centraid-hook/<id>` route (#96), mounted AHEAD of the bearer check
+   * — the shared secret in the request IS the auth. Resolves the slug to its
+   * owning vault across every mounted vault, accepts ingress durably, and
+   * nudges that vault's cursor engine before answering 202. Returns `false`
+   * on a non-matching URL so the host falls through to `composedHandler`.
    */
   webhookHandler: RouteHandler;
-  /**
-   * The gateway's log ring buffer + live fan-out (realtime Logs surface).
-   * Every `logger.*` line lands here before the console. Hosts may
-   * `append()` their own lines (e.g. embed lifecycle) so they show up in
-   * the same client-visible stream.
-   */
   logs: GatewayLogStore;
-  /**
-   * Post-listener lifecycle. Call once the host has bound a socket,
-   * passing the live origin so post-turn webhook minting can build
-   * absolute `_centraid-hook` URLs. Mounts EVERY vault's workspace, then
-   * starts + reconciles each vault's cron scheduler.
-   */
   start: (publicBaseUrl: string) => Promise<void>;
-  /** Stop every vault's cron scheduler. Idempotent. */
   stop: () => Promise<void>;
 }
 
@@ -822,28 +640,15 @@ export async function buildGateway(
     options.gatewayDatabase ??
     GatewayDatabase.open(dataDir, { lock: "exclusive" });
   const instanceId = crypto.randomUUID();
-  // Every log line tees through the gateway log store (realtime Logs
-  // surface) before reaching the console/host logger — see logs-routes.ts.
-  // Persistence (issue #351) is opt-in via `paths.logsDir` — omitted, this
-  // is exactly the prior in-memory-only store (tests, disposable embeds).
   const logStore = new GatewayLogStore(
     undefined,
     paths.logsDir ? { dir: paths.logsDir } : {}
   );
   const logger = logStore.wrap(options.logger ?? defaultLogger(options.logTag));
 
-  // Component-level health (observability for self-hosters): subsystems
-  // report ok/error at their own success/failure points, warns/errors land
-  // in a structured ring buffer, and `GET /centraid/_gateway/health`
-  // aggregates it all. Hosts push externally-owned components (e.g. the
-  // desktop's iroh tunnel) through `BuiltGateway.health`.
   const health = new HealthRegistry();
-  // Push-only components must exist before their first error; otherwise a
-  // never-exercised registration is invisible to the R3 expected-list drill.
   health.registerExpectedPushComponents();
   const performanceMonitor = new GatewayPerformanceMonitor();
-  // Per-route duration histograms (issue #659 R5) — recorded in
-  // `composedHandler` below, read only when a health snapshot is taken.
   const routeLatency = new RouteLatencyMetrics();
   health.setPerformanceMetricsSource(
     () => ({
@@ -877,10 +682,6 @@ export async function buildGateway(
       ? { status: "degraded", detail }
       : { status: "ok", detail };
   });
-  // Resource mode (#521): durable prefs + optional daemon config feed the
-  // same profile resolver as CENTRAID_HARDWARE_PROFILE. Prefs open early so
-  // boot class matches what the owner last chose; a mode change after boot
-  // is durable and applies on the next serve (worker env is process-scoped).
   const prefsEarly = new PrefsStore({
     read: () =>
       Object.fromEntries(
@@ -900,17 +701,7 @@ export async function buildGateway(
     optionsMode: options.resourceMode,
     prefsMode: earlyPrefs[RESOURCE_MODE_PREF_KEY],
   });
-  // Durable per-knob UI overrides (#528 Phase F). The resolver keeps env > prefs
-  // > preset per knob; a knob change is durable and applies on the next serve,
-  // identical to mode. Running-vs-desired legibility is the client comparing
-  // health's structured profile with saved prefs — nothing extra here.
   const resourceKnobPrefs = parseResourceKnobPrefs(earlyPrefs);
-  // Experimental feature gate (v0 early feedback): automations + connectors
-  // ship in the binary but default OFF. Off hides surface — routes,
-  // capability advertisement, cron/event scheduling — never data. The engine
-  // seams stay wired regardless: capture OCR and semantic search fire
-  // system recognition recipes through `fireAutomation`, and the vault
-  // plane's consent outbox drains through the connection broker.
   const experimentalResolution = resolveExperimentalFeatures({
     env: process.env,
     prefs: earlyPrefs,
@@ -922,10 +713,6 @@ export async function buildGateway(
       `CENTRAID_EXPERIMENTAL names no known experimental feature: "${token}"`
     );
   }
-  // Ground-truth sizing (#528 Phase E): probe cgroup CPU/memory quotas and one
-  // cumulative CPU-steal sample so the resolver sizes the granted share of the
-  // host, not the raw machine. All reads are failure-tolerant → nulls on a
-  // plain host, which resolve to today's unchanged numbers.
   const hostLimits = probeHostLimits();
   const hardwareProfile = resolveGatewayHardwareProfile({
     ...(storageFsyncMs === undefined ? {} : { storageFsyncMs }),
@@ -935,13 +722,7 @@ export async function buildGateway(
     resourceMode,
     prefsOverrides: resourceKnobPrefs,
   });
-  // App-engine's worker/compression seams initialize lazily, after this boot
-  // probe. Publish the resolved class so slow storage and explicit overrides
-  // select the same actual limits that this health line reports.
   process.env.CENTRAID_RESOLVED_HARDWARE_PROFILE = hardwareProfile.class;
-  // Publish the exact resolved values, including validated operator
-  // overrides. Lazy consumers read these values instead of independently
-  // reclassifying the host and drifting from this health record.
   process.env.CENTRAID_WORKER_MAX_CONCURRENT = String(
     hardwareProfile.workerMaxConcurrent
   );
@@ -965,12 +746,8 @@ export async function buildGateway(
       WebControlSessionStore.open(gatewayDatabase),
   });
 
-  // Bundled blueprint apps (issue #434): the main client compiles their UI
-  // directly, while the gateway reads their shipped directories for metadata,
-  // declared scopes, and generic opaque-app compatibility. Their ids are
-  // RESERVED — a code-store app must never shadow one. The set is fixed for
-  // the process lifetime (it's the release's catalog), so resolve it once for
-  // the id-reservation guard and install/listing paths below.
+  // Bundled blueprint ids are RESERVED — a code-store app must never shadow
+  // one (#434). The set is the release's catalog, fixed for the process life.
   const bundledAppIds = new Set(
     (await listBundledAppTemplates()).map((t) => t.id)
   );
@@ -990,9 +767,6 @@ export async function buildGateway(
       `bundled recognition catalog is incomplete: missing ${missing.join(", ")}`
     );
   }
-  // Lifecycle creation/clone must not let member code shadow the stable ids
-  // capture and capability settings address. UI blueprints and recognition
-  // recipes differ in how they are installed, but both are shipped ids.
   const isBundledAppId = (id: string): boolean =>
     bundledAppIds.has(id) || recognitionTemplateIds.has(id);
 
@@ -1006,8 +780,6 @@ export async function buildGateway(
     health.reportOk("filesystem", "local filesystem");
   }
 
-  // Gateway-level storage state is in gateway.db; its credential-encryption
-  // key is a KeyStore envelope under keys/.
   const gatewayKeys =
     options.keyStore ??
     new KeyStore(path.join(dataDir, "keys"), {
@@ -1028,21 +800,10 @@ export async function buildGateway(
     options.backup?.enabled === true ||
     (await storageConnections.list()).length > 0;
   const recoveryKit = new RecoveryKitStateStore(gatewayDatabase);
-  // Provider usage cache (issue #367 §D1) — cache-with-TTL + stale-while-
-  // refresh in front of a provider connection's optional `usage` capability
-  // (PROTOCOL.md § Usage). Never polls on its own timer; see storage-usage.ts.
   const storageUsage = new StorageUsagePoller({ storageConnections });
-  // The owner's two local-disk limits (issue #544), stored beside the
-  // connections for the same reason. Loaded ONCE here so every later reader
-  // — the routes, the `storage-limit` probe, and each vault plane's sweep —
-  // shares one instance and sees a change without a restart.
   const storageLimits = new StorageLimitsStore(gatewayDatabase);
   await storageLimits.load();
 
-  // Model price catalog (issue #445) — seed the app-engine pricing seam from a
-  // fresh-enough disk cache and kick a background LiteLLM refresh. Costing works
-  // from the bundled snapshot regardless; this only overlays fresher rates. The
-  // cache file sits beside `model-catalog.json` when the host pins one.
   const pricingCacheFile =
     paths.modelPricingFile ??
     (paths.modelCatalogFile
@@ -1054,31 +815,13 @@ export async function buildGateway(
   });
   void pricingWarmer.boot();
 
-  // Vault registry (duaility §12, #289): the gateway is a landlord hosting
-  // N sovereign vaults — one plane per vault under the root, every request
-  // addressed to exactly one of them. Required: post-#280 the whole app
-  // surface (code, data, transcripts) is vault-scoped, so there is no
-  // vault-less mode.
-  // Planes are mounted before schedulers are constructed, so the injected
-  // commit-time doorbell closes over this late-bound host callback. A write
-  // during bootstrap simply drops the hint; the standing poll remains the
-  // crash/startup correctness backstop.
-  // Per-subsystem resource ACTUALS (#528 Phase C): a boot-time accounting
-  // instance every background subsystem reports completions to. Honest measured
-  // proxies only — counts, bytes, wall-clock, OS-reported CPU/RSS. Harness-run
-  // usage is MEASURED and labeled here, never throttled. Published on the health
-  // metrics source below; the worker-pool counters are read live from the
-  // app-engine admission gate (which must not depend on the gateway).
   const resourceAccounting = new ResourceAccounting({
     workerPoolStats: workerAdmissionStats,
   });
 
-  // Host power-context posture (#528 Phase D): a third, independent "not now"
-  // signal composed into the SAME safe-loop gate as the owner pause and the
-  // load-shed — never a durable mode flip, never touching the owner's pause.
-  // The boot probe reads the host battery; the Electron desktop pushes live
-  // state. Posture is a COURTESY, so the health component stays `ok` and only
-  // its detail changes as deferral toggles.
+  // A third "not now" signal in the SAME safe-loop gate as the owner pause
+  // and load-shed — never a durable mode flip. A COURTESY, so the health
+  // component stays `ok` and only its detail changes (#528).
   const powerContext = new PowerContextMonitor({
     onDeferringChange: (state) => {
       health.reportOk(
@@ -1091,10 +834,6 @@ export async function buildGateway(
   });
   health.reportOk("power-posture", formatPowerPostureNormalDetail());
 
-  // Wrap a turn driver so every harness turn's wall-clock (spawn→exit) is
-  // MEASURED and labeled (#528 Phase C) — recorded on success and failure
-  // alike, since the host consumed the time either way. This ONLY accounts;
-  // it never gates, defers, or throttles a run.
   const accountRunTurn =
     (base: RunTurnFn): RunTurnFn =>
     async (input, config) => {
@@ -1121,21 +860,16 @@ export async function buildGateway(
     string,
     { timer: NodeJS.Timeout; pending: boolean }
   >();
-  // Restore quarantine can create a fresh decision while the registry mounts,
-  // before the relay exists. Hold those content-free wakes until the relay is
-  // constructed instead of dropping the boot-time doorbell.
   const pendingNotificationsWakes = new Set<string>();
   let requestNotificationsWake: (vaultId: string) => void = (vaultId) => {
     pendingNotificationsWakes.add(vaultId);
   };
   let nudgeCommonsSweep = (): void => undefined;
   /**
-   * The replica executor a co-hosted Commons seat catches up through (#750
-   * invariant 7): the SEAT's own gateway on the canonical rail, seeded so a
-   * replayed command mints exactly the ids the steward minted. Host-only —
-   * assembled from locally mounted material, never reachable from member or
-   * app code, and never serialized. A vault that is not mounted cannot
-   * replay, which the caller answers by re-projecting from the closure.
+   * Seeded so a replayed command mints exactly the ids the steward minted
+   * (#750 invariant 7). Host-only: never reachable from member or app code,
+   * never serialized. An unmounted vault cannot replay, which the caller
+   * answers by re-projecting from the closure.
    */
   const commonsReplicaInvoke = (
     vaultId: string,
@@ -1156,15 +890,6 @@ export async function buildGateway(
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
     replicationConcurrency: hardwareProfile.replicationConcurrency,
-    // One memory ceiling for ALL mounted planes, divided among them (#659 L8).
-    // Previously mmap window and page cache were per-FILE constants, so a
-    // household with five vaults paid five times the memory of one — linear in
-    // vault count on exactly the small always-on box that cannot afford it.
-    // A single mounted vault still gets the default budget in full, so the
-    // common case is byte-identical; what changes is that the second vault no
-    // longer doubles the bill. A standard host gets twice the ceiling of a
-    // constrained one, because the constrained class IS the target hardware
-    // and the ceiling should not be set by the machine that can spare it.
     footprintBudget:
       hardwareProfile.class === "constrained"
         ? DEFAULT_VAULT_FOOTPRINT
@@ -1173,31 +898,23 @@ export async function buildGateway(
             cacheBytes: DEFAULT_VAULT_FOOTPRINT.cacheBytes * 2,
           },
     sweepIntervalMs: hardwareProfile.vaultSweepIntervalMs,
-    // Vault sweeps are a safe loop: defer under event-loop pressure, honor
-    // the owner's explicit background-pause, AND yield to host power-context
-    // posture — on battery / low battery / thermal (#528 Phase B + D).
-    // Durability loops (WAL, outbox) call `shouldDeferBackgroundWork` alone
-    // and are never paused or posture-gated.
+    // Sweeps are a safe loop: defer under pressure, honor the owner's pause,
+    // yield to power posture. Durability loops (WAL, outbox) call
+    // `shouldDeferBackgroundWork` alone and are never paused (#528).
     shouldDeferBackgroundWork: () =>
       health.shouldDeferBackgroundWork() ||
       health.shouldPauseBackgroundWork() ||
       powerContext.isDeferringBackgroundWork(),
-    // gateway.db owns the WAL lifecycle unconditionally. Only the capture
-    // clock sleeps when no backup destination exists, preserving the
-    // low-end no-unconfigured-spool contract without reviving lease gating.
+    // gateway.db owns the WAL lifecycle unconditionally; only the capture
+    // clock sleeps with no backup destination, keeping the low-end
+    // no-unconfigured-spool contract without reviving lease gating.
     walCaptureConfigured: () => walCaptureConfigured,
-    // Disposable harness cache lives outside the vault tree (defaults to a
-    // `-cache` sibling of `vaultDir` when the host doesn't pin one).
     cacheRootDir: paths.cacheDir ?? path.join(dataDir, "cache"),
     logger: health.loggerFor("vaults", logger),
     keyStore: gatewayKeys,
-    // Network mounts may not honor the local SQLite lock cross-host. Serving
-    // remains available, but destructive orphan GC fails safe.
     skipOrphanDelete: () => gatewayDatabase.networkFileSystem,
-    // Storage-connection-backed credential resolution (issue #367 §C3):
-    // supersedes the legacy `CENTRAID_S3_*` env-var lane for any vault whose
-    // `blob_store.connectionId` is set; vaults without one keep working off
-    // the env-var default (`vault-plane.ts`'s `defaultEnvS3Credentials`).
+    // Supersedes the `CENTRAID_S3_*` env lane for any vault whose
+    // `blob_store.connectionId` is set; others keep the env default (#367).
     s3Credentials: makeStorageCredentialsResolver(storageConnections),
     onProvenanceCommitted: (vaultId, entityTypes) =>
       provenanceDoorbell(vaultId, entityTypes),
@@ -1219,50 +936,20 @@ export async function buildGateway(
       notificationsEvents.publish(vaultId, wake);
       if (wake) requestNotificationsWake(vaultId);
     },
-    // Preview backstop codec (issue #405 §2): the gateway holds plaintext on
-    // ingest inside the owner's trust boundary, so generating tiny/medium
-    // derivatives here leaks nothing to the provider. One shared stateless
-    // codec instance fans out to every mounted plane's blob sweep, closing the
-    // "no raster codec in the runtime" gap for imported / weak-client /
-    // server-ingested images (capable clients still generate at capture).
     previewCodec: options.previewCodec ?? createImagePreviewCodec(),
-    // Resource actuals (#528 Phase C): a vault lifecycle sweep is both a sweep
-    // pass and a background timer fire; detached blob replication reports its
-    // own bytes/busyMs. Accounting only — never gates the sweep.
     onSweepPass: (info) => {
       resourceAccounting.recordSweepPass(info);
       resourceAccounting.recordBackgroundTimerFire();
     },
     onReplicationPass: (info) => resourceAccounting.recordReplicationPass(info),
-    // Size-triggered ledger archive (issue #544). Read through the shared
-    // store's in-memory copy so a limit change applies on the next sweep of
-    // every mounted plane without a remount, and without the sweep awaiting
-    // a file read inside its synchronous block.
     journalLimitBytes: () => storageLimits.current().journalLimitBytes,
   });
   /*
-   * Auto-found (issue #603). A gateway whose data dir carries no vault is
-   * not a state a human should have to resolve: there is no ceremony, no
-   * ticket, and no first-run wall. Constructing over a fresh dir creates the
-   * founder's one personal vault synchronously, before any route can observe a
-   * zero-vault gateway. Shared vaults are created later as an explicit owner
-   * action; founding no longer creates a household-sharing destination.
-   *
-   * The vault is marked at founding with the durable `personal` flag in its
-   * own `core_vault.settings_json`. Unscoped requests and a pair ticket
-   * minted without an explicit target land there. The marker survives the
-   * fresh path renaming "Personal" to the owner's display name.
-   *
-   * `isFresh()` reads the filesystem registry, which counts a vault dir that
-   * FAILED to mount — so corruption never re-founds over existing data. A
-   * non-fresh data dir is left exactly as it was found.
-   *
-   * The owners guard covers the other resurrection path: erasing every
-   * vault leaves the filesystem fresh but keeps `owners`/`devices` rows in
-   * gateway.db (only that vault's `vault_owners` row goes). A data dir that
-   * has EVER enrolled an owner is an inhabited gateway awaiting restore, not
-   * a fresh install — auto-founding over it would silently bury
-   * restore-after-erase under a brand-new personal vault.
+   * Auto-found (#603), synchronously, before any route can observe a
+   * zero-vault gateway. BOTH guards are load-bearing: `isFresh()` counts a
+   * vault dir that FAILED to mount, so corruption never re-founds over
+   * existing data, and the owners guard covers erase-then-restore — a data
+   * dir that ever enrolled an owner is inhabited, not fresh.
    */
   const neverInhabited = (): boolean => {
     const row = gatewayDatabase.db
@@ -1276,26 +963,10 @@ export async function buildGateway(
     vaultRegistry.isFresh() && neverInhabited()
       ? [vaultRegistry.create("Personal", { personal: true })]
       : [];
-  // The founded vault belongs to the founding owner (`vault_owners`, written
-  // by the enrollment below). There is no default share destination any more
-  // (#726) — a destination is a vault you own and create explicitly.
-
-  // Vault mounts are pull-checked at snapshot time — nothing pushes when a
-  // plane silently fails to open, so the probe asks the registry directly.
-  // `rescan()` here is what turns a failed mount from "gone until process
-  // restart" into "retried on the next health tick" (issue #351) — the
-  // backoff that keeps that cheap lives in `VaultRegistry` itself.
-  // A mounted plane whose directory carried a restore-quarantine marker
-  // (FORMAT.md restore rule 4) stays flagged here until an operator
-  // resolves it — outbox is auto-parked (vault-quarantine.ts), automations
-  // are NOT, deliberately (see that module's header).
-  //
-  // "ok" here used to mean only "the plane object is in memory" — it never
-  // proved the SQLite file behind it was still readable (issue #351). Each
-  // tick now runs one trivial statement against every mounted plane's
-  // `vault.db` handle; a plane whose file was corrupted or closed out from
-  // under the process (disk failure, external `rm`) fails this and flips
-  // the component red by vault id instead of staying silently "ok".
+  // `rescan()` turns a failed mount from "gone until restart" into "retried
+  // next health tick" (#351). "ok" is NOT "the plane is in memory": each tick
+  // runs one statement per plane, so a file corrupted or removed under the
+  // process flips the component red instead of staying silently ok.
   health.registerProbe("vaults", async () => {
     vaultRegistry.rescan();
     const planes = vaultRegistry.planesList();
@@ -1328,9 +999,6 @@ export async function buildGateway(
         .join("; ");
       return { status: "error", detail: `restored from backup — ${detail}` };
     }
-    // Zero mounted planes is not a legal steady state since #603 — a fresh
-    // data dir auto-founds, so an empty registry means every vault dir on
-    // disk was deleted out from under the process.
     return planes.length > 0
       ? {
           status: "ok",
@@ -1339,9 +1007,6 @@ export async function buildGateway(
       : { status: "error", detail: "no vault is mounted" };
   });
 
-  // Disk watermark (issue #351): free space on the vault volume, plus a
-  // cheap per-vault DB size so "which vault is eating the disk" doesn't
-  // need a shell. Thresholds live in disk-health.ts.
   health.registerProbe(
     "disk",
     createDiskHealthProbe({
@@ -1353,19 +1018,12 @@ export async function buildGateway(
     })
   );
 
-  // Local footprint by component (issue #544) — the other half of the disk
-  // story: `disk` above says how much room is LEFT, this says where Centraid's
-  // own bytes went. One scanner instance shared by `GET storage/local` and the
-  // `storage-limit` probe below, so the page and the health badge can never
-  // report different totals. The walk is TTL-cached; nothing puts it on a timer.
   const localUsage = new LocalUsageScanner({
     rootDir: dataDir,
     vaults: () =>
       vaultRegistry.planesList().map((p) => ({
         vaultId: p.boot.vaultId,
         dir: p.dir,
-        // The harness scratch lives OUTSIDE the vault tree; bill it to the
-        // vault it belongs to rather than to a nameless gateway bucket.
         ...(p.cacheDir && p.cacheDir !== p.dir ? { cacheDir: p.cacheDir } : {}),
       })),
     gatewayDirs: () => ({
@@ -1375,10 +1033,7 @@ export async function buildGateway(
     }),
   });
 
-  // The owner's disk budget (issue #544). Warn-only by design — see
-  // storage-limits.ts for why a soft budget must never refuse a write. With
-  // no limit set this is a permanent `ok`, so an owner who never opted in
-  // gains no new noise in their component list.
+  // Warn-only by design: a soft budget must never refuse a write (#544).
   health.registerProbe("storage-limit", async () => {
     const limits = storageLimits.current();
     if (limits.totalLimitBytes === null) {
@@ -1405,9 +1060,6 @@ export async function buildGateway(
     return { status: "ok", detail };
   });
 
-  // Connection health lives in each vault's DB (`needs-auth` flips there,
-  // not in broker memory) — surface "N connections need re-auth" so a dead
-  // OAuth token shows up here instead of as silent connector failures.
   health.registerProbe("connections", async () => {
     let total = 0;
     let needsAuth = 0;
@@ -1434,11 +1086,6 @@ export async function buildGateway(
     };
   });
 
-  // Broker credential health (issue #351 tier 2): narrower than `connections`
-  // above — specifically the ConnectionBroker's own custody of
-  // broker-carried (oauth2/api_key) credentials, naming which ones are dead
-  // or sitting on an overdue token nobody has refreshed yet. See
-  // `broker-health.ts` for why this is a separate signal from `connections`.
   health.registerProbe(
     "broker",
     createBrokerHealthProbe({
@@ -1449,20 +1096,12 @@ export async function buildGateway(
     })
   );
 
-  // The one journal handle per vault (`journal-stores.ts`) — the same
-  // `makeJournalDbProvider` binding `fire.ts` and the analytics stores use,
-  // so the conversation-ledger band (`automation_state` included) exists
-  // before anything reads/writes it, regardless of tick timing.
   const journalStoreFor = (vaultId: string): ConversationStore => {
     const plane = vaultRegistry.get(vaultId);
     if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
     return journalConversationStore(plane.workspace.journalDbFile);
   };
 
-  // Scheduler ledger (issue #351 tier 2): written from each vault's scheduler
-  // `onTick` hook below; read by the `scheduler` liveness probe and by
-  // `automations`'s reconcile push. Memoized so a health poll or a scheduler
-  // tick never reconstructs it.
   const schedulerLedgers = new Map<string, automation.SchedulerLedgerStore>();
   const schedulerLedgerFor = (
     vaultId: string
@@ -1476,8 +1115,6 @@ export async function buildGateway(
     return ledger;
   };
 
-  // Per-vault scheduler liveness + missed-run visibility (issue #351 tiers
-  // 2/3) — see scheduler-health.ts. Reads the SAME ledger `onTick` writes.
   health.registerProbe(
     "scheduler",
     createSchedulerHealthProbe({
@@ -1489,10 +1126,6 @@ export async function buildGateway(
     })
   );
 
-  // Enricher run health (issue #351 wave 4) — see enrichment-health.ts for
-  // why this is narrower than `automations`/`automation-runs`. Run history
-  // reads the shared per-vault journal store; it never reaches into
-  // scheduler-ledger.ts's private state.
   health.registerProbe(
     "enrichment",
     createEnrichmentHealthProbe({
@@ -1520,10 +1153,6 @@ export async function buildGateway(
     })
   );
 
-  // Blob custody-sweep health (issue #351 wave 4, #367 prep) — see
-  // blob-sweep-health.ts. `s3Configured`/`counts` are cheap synchronous
-  // reads (settings JSON + a GROUP BY over the custody mirror); `sweepStatus`
-  // reads `BlobCustody`'s own in-memory record of its last `reconcile()`.
   health.registerProbe(
     "blob-sweep",
     createBlobSweepHealthProbe({
@@ -1537,13 +1166,6 @@ export async function buildGateway(
     })
   );
 
-  // On-disk integrity (issue #374 tier 5b) — see vault-integrity-health.ts.
-  // Self-throttled per vault at a SIZE-SCALED cadence, one vault per tick
-  // (#659 L6); distinct from the `vaults` probe above, which only proves the
-  // file still opens. The startup grace keeps a full-file read out of boot —
-  // the first minutes after start are when the owner is actually waiting on the
-  // gateway, and corruption that has been there since the last shutdown will
-  // still be there five minutes later (#659 G10).
   health.registerProbe(
     "vault-integrity",
     createVaultIntegrityHealthProbe({
@@ -1557,10 +1179,6 @@ export async function buildGateway(
     })
   );
 
-  // Storage quota watermark (issue #367 §D2) — degraded/error off a
-  // provider-reported quota only (see storage-quota-health.ts); reads the
-  // SAME cache `GET storage/usage` serves, so this never issues its own
-  // network call beyond what that poller's TTL already allows.
   health.registerProbe(
     "storage-quota",
     createStorageQuotaHealthProbe({
@@ -1574,18 +1192,6 @@ export async function buildGateway(
     })
   );
 
-  // Numeric signals (issue #351 tier 3): outbox backlog, summed across
-  // mounted vaults — cheap COUNT(*) at snapshot time, same style as the
-  // `connections` probe above. `rssBytes`/`uptimeMs` need no wiring (see
-  // `HealthRegistry.snapshot`). `sseClients` sums three production SSE
-  // surfaces' live subscriber counts — `logsEventsSubscriberCount` /
-  // `turnEventsSubscriberCount` (issue #351's SSE subscriber-cap change,
-  // `sse-cap.ts`), each backed by the SAME `SseSubscriberCap` instance
-  // `makeLogsRouteHandler`/`makeAutomationsRouteHandler` admit through below,
-  // plus `@centraid/server/engine`'s `changesSubscriberCount()` — the per-appId
-  // `_changes` cap `Runtime.handle` admits every subscriber through — so
-  // this is the real live count across every SSE surface this process
-  // serves, not a separate tally.
   health.setMetricsSource(() => {
     let outboxPending = 0;
     for (const plane of vaultRegistry.planesList()) {
@@ -1606,28 +1212,15 @@ export async function buildGateway(
         logsEventsSubscriberCount() +
         turnEventsSubscriberCount() +
         changesSubscriberCount(),
-      // The denominator for rssBytes (#659 L8): plane memory RESERVATIONS are
-      // now flat in vault count, but residency is not, so this is what makes
-      // "five vaults cost more than one" visible rather than inferred.
       mountedVaults: vaultRegistry.planesList().length,
       hardwareProfileClass: hardwareProfile.class,
       resourceMode: hardwareProfile.resourceMode,
       resourceProfile: toStructuredResourceProfile(hardwareProfile),
-      // Measured per-subsystem actuals (#528 Phase C) — CPU/RSS read lazily
-      // here at the health-poll cadence, subsystem counters accumulated at
-      // their completion hooks.
       resourceUsage: resourceAccounting.snapshot(),
-      // Host power-context posture (#528 Phase D) — battery/mains/server and
-      // whether background work is being courteously deferred right now.
       powerContext: powerContext.snapshot(),
     };
   });
 
-  // Offsite backup engine (PROTOCOL.md/FORMAT.md). A static daemon config
-  // still takes precedence; otherwise the service resolves the provider
-  // storage connection marked for backup on every operation. This makes a
-  // connection created in the desktop immediately effective without a
-  // process restart or a second, hidden configuration source.
   const backupCacheDir = paths.cacheDir ?? path.join(dataDir, "cache");
   const sourceInstanceId = deriveBackupSourceInstanceId(
     gatewayKeys.loadOrCreate("endpoint-key.bin")
@@ -1643,21 +1236,17 @@ export async function buildGateway(
     logger: health.loggerFor("backups", logger),
     recoveryKit,
     storageConnections,
-    // Retention/reconciliation is a safe loop — yield to host power-context
-    // posture too (#528 Phase D). Threaded as a predicate so BackupService
-    // never imports the monitor. The WAL drain stays ungated (RPO durability).
+    // A predicate, so BackupService never imports the monitor. The WAL drain
+    // stays ungated — RPO durability (#528).
     shouldDeferPosture: () => powerContext.isDeferringBackgroundWork(),
-    // Resource actuals (#528 Phase C): each WAL drain is a backup pass and a
-    // backup-scheduler timer fire. Accounting only.
     onDrainAccounted: (info) => {
       resourceAccounting.recordBackupDrain(info);
       resourceAccounting.recordBackgroundTimerFire();
     },
-    // Owner-held backup (#726 P1): skip + report a vault this machine's
-    // backup configuration is not authorized for, instead of silently
-    // shipping someone else's data. `enrollmentStore`/`hostOwnerEndpointId`
-    // are declared below — safe, since these closures only run once a
-    // backup actually fires, well after boot completes.
+    // Skip + report a vault this machine's backup config is not authorized
+    // for, rather than silently shipping someone else's data (#726).
+    // `enrollmentStore`/`hostOwnerEndpointId` are declared below — safe,
+    // because these closures only run once a backup fires.
     ownerOf: (vaultId) => enrollmentStore.owners.ownerOf(vaultId),
     authorizedOwnerId: () =>
       hostOwnerEndpointId
@@ -1667,12 +1256,6 @@ export async function buildGateway(
 
   const enrollmentStore =
     options.devicePairing?.enrollments ?? EnrollmentStore.open(gatewayDatabase);
-  // The same-machine link ceremony a cross-owner edge needs (#726 P2 §3).
-  // The listener is what makes a link answerable from a VAULT query (#821):
-  // every settled link reconciles `share_party_vault_binding` in whichever
-  // side of it is mounted here. `vaultLinksStore` is captured by the closure
-  // rather than passed in, because the directory lookups it needs are the
-  // store's own — the binding is assigned on the next line.
   const vaultLinksStore: VaultLinksStore = new VaultLinksStore(
     gatewayDatabase,
     (link) =>
@@ -1684,31 +1267,18 @@ export async function buildGateway(
           vaultLinksStore.directoryEntry(vaultId)?.label ?? undefined,
       })
   );
-  /*
-   * The host's own device identity. A gateway the owner runs on their own
-   * box is reachable over loopback with no iroh pairing, so it needs a
-   * device key of its own to be enrolled under. The daemon injects one
-   * (`hostDeviceEndpointId`); a loopback-only embed derives one from the
-   * KeyStore-custodied endpoint key. Only a caller that supplies its own
-   * `deviceAccess` resolver opts out — it answers "who is this" itself.
-   */
   const embeddedEndpointId = options.deviceAccess
     ? undefined
     : (options.hostDeviceEndpointId ??
       kitlessHostIdentity(gatewayKeys.loadOrCreate("endpoint-key.bin")));
   const embeddedAccess: DeviceAccess | undefined = embeddedEndpointId
     ? {
-        // Deliberately `isLoopbackRequest`, not `isDirectHostRequest`: the
-        // desktop phone tunnel forwards a paired phone under the host bearer
-        // and has no device key of its own, so tightening this would sever
-        // phone-link entirely. Host-ONLY capabilities use the stricter gate
-        // (`isHostCustody` below); ordinary vault access does not.
-        //
-        // The peer lane is the one exception that must be excluded here: a
-        // peer forwarder also delivers to loopback, so without this check a
-        // linked gateway would resolve to the HOST's device key and inherit
-        // owner-tier reach. A link's reach is the peer plane or nothing —
-        // the same refusal the daemon's `deviceKeyFor` makes (#726 P3).
+        // Deliberately `isLoopbackRequest`, NOT `isDirectHostRequest`: the
+        // phone tunnel forwards a paired phone under the host bearer with no
+        // device key, so tightening this severs phone-link. Host-ONLY
+        // capabilities use the stricter `isHostCustody` gate. The peer lane
+        // MUST be excluded: a forwarder also delivers to loopback, and a
+        // linked gateway must never inherit the HOST's owner-tier reach.
         deviceKeyFor: (req) =>
           isLoopbackRequest(req) &&
           req.headers[PEER_ENDPOINT_HEADER] === undefined
@@ -1721,9 +1291,6 @@ export async function buildGateway(
   const hostOwnerEndpointId =
     options.hostDeviceEndpointId ?? embeddedEndpointId;
   if (autoFoundedVaults.length > 0 && hostOwnerEndpointId) {
-    // One founding owner, owner of the auto-founded personal vault, in ONE
-    // transaction (issue #603): the host that just founded it is its owner,
-    // and a fresh install has exactly one owner with zero unassigned bindings.
     gatewayDatabase.transaction(() =>
       enrollmentStore.enrollWithinTransaction({
         endpointId: hostOwnerEndpointId,
@@ -1735,14 +1302,6 @@ export async function buildGateway(
     );
   }
 
-  /*
-   * Every owner owns at least one vault (#726 P1). The host-custody
-   * `POST /owners` lane creates the person but not a vault, so boot mints
-   * "<label>'s vault" on THIS machine for anyone still ownerless. Naturally
-   * idempotent — an owner who already owns a vault (including one just
-   * minted above, or one this loop minted on a prior boot) is skipped.
-   * Devices stay enrolled to their owner; content stays where it is.
-   */
   for (const owner of enrollmentStore.owners.list()) {
     if (enrollmentStore.owners.vaultsOwnedBy(owner.ownerId).length > 0)
       continue;
@@ -1753,18 +1312,9 @@ export async function buildGateway(
   const currentWorkspace = (): VaultWorkspace =>
     vaultRegistry.currentWorkspace();
 
-  // Device prefs (`gateway.db`) + the request vault's ledger stores. The
-  // analytics/insights providers resolve the request's vault per call, so
-  // every client sees its own vault's ledger (#289). Reuse the early prefs
-  // handle opened for Resource mode so we don't re-read the same file.
   const prefs = prefsEarly;
   const journalProvider = () => currentWorkspace().journal();
   const harnessHealthStore = new HarnessHealthStore(journalProvider);
-  // `harness-failover` is reported degraded when a rung hands off. Nothing used
-  // to report it healthy again, so a single failover left `/health` degraded
-  // forever. A later harness turn that actually succeeded is the honest signal
-  // that the component recovered, so it is cleared here — and only when it was
-  // degraded, so a healthy gateway never registers the component at all.
   let failoverDegraded = false;
   const reportFailoverError = (detail: string): void => {
     failoverDegraded = true;
@@ -1778,10 +1328,9 @@ export async function buildGateway(
       harnessHealthStore.reportFailure(context, kind, failureClass, error, now),
     reportOk: (context, kind, now) => {
       harnessHealthStore.reportOk(context, kind, now);
-      // A completed turn is stronger evidence than a capability probe: the
-      // harness authenticated and answered. Auth breakers are otherwise
-      // indefinite and only ever closed by the harnesses route's explicit
-      // refresh, so a working harness could stay condemned indefinitely.
+      // A completed turn beats a capability probe: the harness authenticated
+      // and answered. Auth breakers are otherwise closed only by the harnesses
+      // route's explicit refresh, so a working harness could stay condemned.
       harnessHealthStore.reportPreflightOk(context, kind, now);
       if (failoverDegraded) {
         failoverDegraded = false;
@@ -1807,13 +1356,6 @@ export async function buildGateway(
   );
   const analyticsStore = new AnalyticsStore(journalProvider);
   const insightsStore = new InsightsStore(journalProvider);
-  // Lazy archive rehydration (issue #438 wave 3): opening a conversation whose
-  // cold ranges were custody-gated-pruned reads the sealed segment blobs back
-  // through the ACTIVE vault's CAS door (`db.blobs.open` — local hit or remote
-  // fetch → unseal → verify → promote). Resolved per call via `current()` — the
-  // SAME active-vault resolution `currentWorkspace` uses — so a vault switch
-  // reads the right file. The store degrades to `archiveUnavailable` if a fetch
-  // fails; the standalone http-server host wires no reader at all.
   const conversationHistoryStore = new ConversationHistoryStore(
     currentWorkspace,
     {
@@ -1821,16 +1363,6 @@ export async function buildGateway(
     }
   );
 
-  // Per-turn prefs loader. Re-reads `gateway.db` every conversation turn so a
-  // settings change lands without a restart.
-  //
-  // Harness selection is PER SUBSYSTEM: `harness.<subsystem>` pins one
-  // register (assistant/ask/builder/automations) to a harness; unpinned
-  // registers inherit `harness.kind`, which is now "the default harness"
-  // rather than "the one active harness". Callers that don't name a
-  // subsystem get the default harness — byte-identical to the old behavior,
-  // which is what keeps a prefs file with no `harness.*` keys working
-  // exactly as it did.
   const prefsLoader = async (
     subsystem?: ModelSubsystem,
     requestedHarness?: HarnessKind
@@ -1861,16 +1393,9 @@ export async function buildGateway(
     );
   };
 
-  // Per-subsystem model resolution (shared prefs contract): explicit
-  // (request/manifest) → `model.<harnessKind>.<subsystem>` → `model.<harnessKind>.default`
-  // → nothing (the backend's own built-in default).
-  //
-  // The harness is resolved FIRST, for THIS subsystem, and that kind is what
-  // scopes the model key. Model prefs are per harness (`model.<kind>.<sub>`),
-  // so reading them against the global kind while the subsystem actually runs
-  // on a different one hands the turn a model its backend has never heard of.
-  // Both halves come off the same per-turn `prefsLoader` every register reads,
-  // so a re-pin lands mid-session without a restart.
+  // The harness resolves FIRST, for THIS subsystem, and that kind scopes the
+  // model key: reading per-harness model prefs against the GLOBAL kind hands
+  // the turn a model its backend has never heard of.
   const resolveModel = async (
     subsystem: ModelSubsystem,
     explicit?: string,
@@ -1912,15 +1437,7 @@ export async function buildGateway(
     return resolveAutomationHarness(row?.manifest.requires ?? {});
   };
 
-  // One warmer owns host-capability enumeration — the model list, for every
-  // harness — shared by the boot probe and the status routes so concurrent
-  // warms dedupe (a client Refresh mid-boot joins the boot warm). The
-  // enumerator honors the active harness's binPath/extraArgs; inactive harnesss
-  // enumerate with defaults. (The tool surface this warmer once also tracked
-  // went away with the `ctx.tool` rail — issue #484.)
   const catalogPath = paths.modelCatalogFile;
-  // Catalog warms are best-effort; failures record as tagged warn events
-  // (visible in `_gateway/health`) without flipping any component red.
   const catalogLogger = health.loggerFor("catalog", logger);
   const warmer = catalogPath
     ? new CatalogWarmer({
@@ -1941,17 +1458,6 @@ export async function buildGateway(
       })
     : undefined;
 
-  // Read + refresh contract for a catalog surface: a Refresh (or a cold cache
-  // nobody has warmed yet) kicks the warmer fire-and-forget; the response
-  // carries whatever's cached now plus the tri-state so the client knows
-  // whether to poll. `ready` wins over `loading`, so a Refresh over an
-  // existing list keeps showing it.
-  //
-  // The `hasWarmed` guard is load-bearing: a harness that self-reports no
-  // models (opencode, grok) leaves the cache empty forever, and re-kicking a
-  // warm on every poll kept `isWarming` true at read time — `loading` that
-  // never resolved. Once the question has been asked, an empty cache reports
-  // `empty` and an explicit Refresh is the way to ask again.
   const resolveCatalogSurface = async <T>(
     surface: CatalogSurface,
     kind: HarnessKind,
@@ -1973,12 +1479,6 @@ export async function buildGateway(
     ? (kind: HarnessKind, refresh: boolean) =>
         resolveCatalogSurface("models", kind, refresh, readHarnessModels)
     : undefined;
-  // The binary the agents route should probe for a kind. Only the kind the
-  // owner actually configured carries an override (`harness.binPath` is
-  // one global slot, not a per-kind map) — the same "is this the active
-  // harness" rule the catalog warmer applies. This is what makes the custom
-  // `acp` kind reportable: it ships no default binary, so it stays
-  // unavailable until its path is configured and selected.
   const binPathForKind = (kind: HarnessKind): string | undefined => {
     const allPrefs = prefs.getAllPrefs();
     if (allPrefs["harness.kind"] !== kind) return undefined;
@@ -1997,15 +1497,6 @@ export async function buildGateway(
       : undefined;
   };
 
-  // Ask-model picker (kit Ask panel, subsystem `ask`) — GET/PUT
-  // `/centraid/<appId>/_turn/model`. Reads/writes the SAME
-  // `model.<harnessKind>.ask` prefs key `resolveModel` resolves at turn
-  // time — where `<harnessKind>` is ASK's resolved harness, not the default
-  // harness, so the picker never reads one key and writes another once the
-  // owner pins `harness.ask`. Off the SAME catalog surface the desktop's Settings → Agents
-  // picker reads (`resolveCatalogModels`) — one source of truth, no second
-  // store. A cold/empty catalog just means an empty `catalog` list; the
-  // picker still shows "Use default".
   const askModelPrefs = {
     get: async (): Promise<AskModelInfo> => {
       const harnessPrefs = (await prefsLoader("ask")) ?? {
@@ -2041,9 +1532,8 @@ export async function buildGateway(
     },
   };
 
-  // Cycle break: the chat runner needs the Runtime's dispatcher, but
-  // the Runtime is constructed *with* the chat runner. The runtimeRef
-  // holder resolves at call time, after the assignment below.
+  // Cycle break: the chat runner needs the Runtime's dispatcher, but the
+  // Runtime is constructed WITH the chat runner, so this resolves at call time.
   let runtimeRef: Runtime | undefined = undefined;
   const getDispatcher = (): Runtime["dispatcher"] => {
     const rt = runtimeRef;
@@ -2051,29 +1541,16 @@ export async function buildGateway(
       throw new Error("chat runner invoked before runtime was constructed");
     return rt.dispatcher;
   };
-  // The harness builds webhook URLs against the live server origin, known
-  // only after `startRuntimeHttpServer` resolves below — a turn only ever
-  // runs post-start, so this holder is populated by then.
   let serverUrl = "";
 
   // ── Per-vault host bundles (#280, #289) ───────────────────────────────
-  // Each vault owns its app world: a git code store under the vault dir,
-  // a draft resolver seeded from the vault's own live data, a unified chat
-  // runner over that store, and the store-backed route handlers. Built
-  // lazily per vault, cached by id; the request's one resolves per call.
   const hosts = new Map<string, Promise<VaultHost>>();
-  // Synchronous handles to MOUNTED hosts — the schedulers + the webhook
-  // route resolve code paths through these between requests (all only run
-  // post-start, when every boot-time vault is mounted).
   const settledHosts = new Map<string, VaultHost>();
-  // In-process bus for live run streaming (issue #158): a fire publishes via
-  // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
   const runEventBus = new RunEventBus();
   const automationConversationLocks = new Map<string, Promise<void>>();
-  // Detached automation lifecycle work started behind a 202 (compile,
-  // revision). `stop()` drains this before the vault registry closes its
-  // databases, so shutdown cannot land mid-`closeItem` or orphan an ACP
-  // child (issue #541 review).
+  // Detached work started behind a 202. `stop()` drains this BEFORE the vault
+  // registry closes its databases, so shutdown cannot land mid-`closeItem` or
+  // orphan an ACP child (#541).
   const detachedAutomationTasks = new Set<Promise<void>>();
   const trackDetachedAutomationTask = (
     task: Promise<void>,
@@ -2091,11 +1568,8 @@ export async function buildGateway(
     detachedAutomationTasks.add(tracked);
   };
 
-  // The connection broker (issue #304): resolves a connector's broker-carried
-  // credential (oauth2/api_key sealed on the connection row) per fire —
-  // refresh under a per-connection single-flight, values injected transport-
-  // side, never handed to handler code. Resolves the CURRENT vault's plane at
-  // call time, exactly like `vaultFor` below.
+  // Credential values are injected TRANSPORT-side, never handed to a handler
+  // (#304).
   const connectionBroker = new ConnectionBroker(
     () => vaultRegistry.current(),
     undefined,
@@ -2105,10 +1579,8 @@ export async function buildGateway(
     health.loggerFor("connections", logger)
   );
 
-  // The outbox executor (issue #306): the only writer on the broker's
-  // `allowWrites` lane, draining owner-approved / grant-matched items. It
-  // runs OUTSIDE the fire loop — kicked after owner approvals, after each
-  // fire (grant-matched items a connector just staged), and on a slow clock.
+  // The ONLY writer on the broker's `allowWrites` lane, and it runs OUTSIDE
+  // the fire loop.
   const outboxExecutor = new OutboxExecutor(
     connectionBroker,
     health.loggerFor("outbox", logger)
@@ -2124,9 +1596,7 @@ export async function buildGateway(
       });
   };
 
-  // Install-time scopes (issue #306 decision 2): enrolling an app grants the
-  // vault block its manifest declares — installing IS the consent. Read off
-  // the app's live `main` app.json; malformed or absent blocks grant nothing.
+  // Installing IS the consent (#306); a malformed block grants nothing.
   const grantScopesFromDir = async (
     plane: VaultPlane,
     appId: string,
@@ -2153,16 +1623,14 @@ export async function buildGateway(
     store: WorktreeStore,
     appId: string
   ): Promise<void> => {
-    // Code-store apps (scaffolds, clones, compiled automations): read the
-    // live `main` app.json.
     await grantScopesFromDir(
       plane,
       appId,
       await store.resolveActiveAppDir(appId)
     );
   };
-  // Installed bundled apps (issue #434) declare their scopes in the shipped
-  // blueprint's app.json — read it there, not from the (empty) code store.
+  // Bundled apps declare scopes in the SHIPPED blueprint's app.json, not in
+  // the (empty) code store (#434).
   const grantDeclaredBundledScopes = (
     plane: VaultPlane,
     appId: string
@@ -2177,7 +1645,6 @@ export async function buildGateway(
     outboxTimer.unref();
   };
   const runOutboxSweep = async (): Promise<void> => {
-    // Resource actuals (#528 Phase C): the outbox scheduler fired.
     resourceAccounting.recordBackgroundTimerFire();
     if (health.shouldDeferBackgroundWork()) {
       scheduleOutboxSweep(hardwareProfile.outboxIdleIntervalMs);
@@ -2213,14 +1680,7 @@ export async function buildGateway(
     scheduleOutboxSweep(nextDelay);
   };
 
-  // The one fire path, shared by "run now" (manual) and the cron schedulers
-  // (scheduled). Runs on THIS host with the gateway's own harness pref,
-  // against the CURRENT vault's live `main` code + its data tree, streaming
-  // each run over the event bus. Scheduled fires enter their vault's scope
-  // via `runWithVaultContext` (see schedulerFor); manual fires inherit the
-  // request's scope.
   const fireAutomation: FireAutomation = async (automationRef, opts) => {
-    // Mint the runId here so every fire (cron included) has a bus channel.
     const runId =
       opts.runId ??
       `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
@@ -2236,11 +1696,9 @@ export async function buildGateway(
       outcome: "success" | "failure" | "skipped",
       error?: string
     ): void => {
-      // Skips are silent (#647 D6 quiet-by-default). A paused or needs-auth
-      // connection is owner-chosen state, already carried by its own Notifications
-      // decision; minting a high-severity notice per cron tick would reset
-      // read state and wake devices forever. A skip also never becomes the
-      // stored "failure" a later success would announce a recovery from.
+      // Skips are SILENT (#647): the owner-chosen state behind them already
+      // carries its own decision, and a notice per cron tick would reset read
+      // state and wake devices forever.
       if (outcome === "skipped") return;
       const plane = vaultRegistry.current();
       const prior = plane.notices.getBySource("automation", automationRef);
@@ -2257,10 +1715,7 @@ export async function buildGateway(
         )
       )
         return;
-      // The manifest is the source of the display name; without it, humanize
-      // the ref rather than putting `<app>/<automation>` in front of the owner.
       const name = noticeContext?.name ?? humanizeAutomationRef(automationRef);
-      // D4: the headline says WHICH failure, not just that one happened.
       const gist = outcome === "failure" ? noticeGist(error) : undefined;
       plane.notices.put({
         kind: "automation",
@@ -2290,15 +1745,9 @@ export async function buildGateway(
         },
       });
     };
-    /**
-     * The one skip that is NOT silent (decision S9). Every other skip rests on
-     * state the owner already sees — a paused connection carries its own
-     * decision row. A tier refusal rests on a setting the owner may not know
-     * exists, so it gets a card that names the domain and points at the
-     * control, written ONCE per (domain, tier): re-putting an unchanged
-     * refusal would clear `read_at` on every enrichment tick and turn the
-     * explanation into the nag #647 D6 was written to prevent.
-     */
+    // The ONE skip that is not silent: a tier refusal rests on a setting the
+    // owner may not know exists. Written once per (domain, tier) — re-putting
+    // it clears `read_at` every tick and becomes the nag #647 forbids.
     const recordEnrichRefusalNotice = (
       refusal: { domain: string; tier?: string } | undefined
     ): void => {
@@ -2309,10 +1758,6 @@ export async function buildGateway(
       plane.notices.put(enrichRefusalNotice(refusal));
     };
     try {
-      // Cursor bootstrap runs while `hostFor()` is still awaiting scheduler
-      // reconciliation. The host is already mounted in `settledHosts` at that
-      // point; awaiting the outer host promise here would wait on ourselves
-      // and deadlock restart catch-up.
       const host = currentSettledHost();
       const ws = currentWorkspace();
       const parsedAutomation = automation.parseRef(automationRef);
@@ -2332,20 +1777,14 @@ export async function buildGateway(
         };
       }
       if (opts.idempotent && opts.runId) {
-        // The MEMOIZED per-journal store: a webhook/event/data-triggered
-        // automation can fire every few seconds, and a fresh
-        // `makeJournalDbProvider` per fire would leak an unclosed
-        // `DatabaseSync` (plus its 64 MiB mapping and an fd) each time —
-        // `ConversationStore.close()` cannot release a handle it does not own.
+        // MEMOIZED deliberately: a data-triggered automation can fire every
+        // few seconds, and a fresh provider per fire would leak an unclosed
+        // `DatabaseSync` (64 MiB mapping + an fd) each time.
         const ledger = journalConversationStore(ws.journalDbFile);
         const prior = ledger.getTurn(opts.runId);
-        // A terminal turn is the durable acknowledgement. If the gateway
-        // died after it finished but before the source cursor committed,
-        // replaying this source element is a no-op.
         if (prior?.endedAt !== undefined) return { turnId: runId };
-        // An interrupted turn can be retried under the exact same run id.
-        // Cascading removes its partial items; deterministic vault
-        // invocation ids then replay already-applied effects.
+        // An interrupted turn retries under the SAME run id: cascading removes
+        // its partial items and deterministic invocation ids replay effects.
         if (prior) ledger.deleteTurn(opts.runId);
       }
       const harnessSelection = await resolveAutomationHarnessForRef(
@@ -2364,8 +1803,6 @@ export async function buildGateway(
         journalDbFile: ws.journalDbFile,
         runTurn: accountedRunTurn,
         codeAppsDir: host.codeAppsDir(),
-        // Each fire's ctx.vault rides the automation's enrolled
-        // consent.agent credential, resolved per app id (duaility §12).
         vaultFor: async (appId: string, ref: string) => {
           const parsed = automation.parseRef(ref);
           const row = parsed
@@ -2385,17 +1822,10 @@ export async function buildGateway(
           );
         },
         resolveConnection: connectionBroker.resolveForFire,
-        // The enrichment gate's owner-plane read (privacy enforcement).
-        // `plane.db.vault` deliberately, NOT `agentBridgeFor` — the guard
-        // must not be answerable by the grants of the automation it guards.
-        // A throw here is a refusal, not a default: the fire spine catches it
-        // and skips the run with the reason stated.
-        //
-        // The tier and the cascade's rules come from ONE vault read (#807);
-        // the profile→egress lookup is the gateway's own registry, since a
-        // profile is gateway configuration and never vault state. `laneFor`
-        // answers with the firing enricher's own declared lane, which is the
-        // lane of the capability being resolved.
+        // `plane.db.vault` deliberately, NOT `agentBridgeFor`: the guard must
+        // not be answerable by the grants of the automation it guards. A throw
+        // is a REFUSAL, not a default. A profile is gateway configuration and
+        // never vault state, so its lookup is the gateway's registry (#807).
         resolveEnrichPolicy: (request) => {
           const snapshot = prefs.getAllPrefs();
           return {
@@ -2409,19 +1839,16 @@ export async function buildGateway(
               readEngineProfile(snapshot, profileId, request.capability, {
                 laneFor: () => request.lane,
               })?.egress,
-            // The same registry, asked the OTHER half of the profile: which
-            // engine computes this capability (#807 Wave 5). The fire path
-            // reads it only after the gate allowed the run, and turns it into
-            // the handler's `variant` — so binding `ocr` to a harness profile
-            // selects the delegate step, and no manifest is edited to do it.
+            // Read only AFTER the gate allowed the run, and turned into the
+            // handler's `variant` — so binding a capability to a profile
+            // selects the delegate step with no manifest edit (#807).
             engineForProfile: (profileId: string) =>
               readEngineProfile(snapshot, profileId, request.capability, {
                 laneFor: () => request.lane,
               })?.engine,
-            // The egress ANSWER, read from the same owner-plane vault handle
-            // and never from the automation's grants (#807 Wave 3). A read
-            // only: `enrich_consent` has exactly one writer, and it is the
-            // journalled `enrich.record_consent` command inside the vault.
+            // Read only, and never from the automation's grants: the sole
+            // writer of `enrich_consent` is the journalled
+            // `enrich.record_consent` command inside the vault (#807).
             egressConsent: (egress) =>
               readEnrichConsentForChain(vaultRegistry.current().db.vault, {
                 capability: request.capability,
@@ -2459,7 +1886,7 @@ export async function buildGateway(
         },
         harness: harnessSelection.harness,
         // Manifests are harness-writable, so a `requires.harness` pin that names
-        // a provider the user never chose is NOT consent for egress (#567 D13).
+        // a provider the user never chose is NOT consent for egress (#567).
         harnessSelectionSource: harnessSelection.selectionSource,
         triggerKind: opts.triggerKind,
         triggerOrigin: opts.triggerOrigin,
@@ -2497,8 +1924,6 @@ export async function buildGateway(
         result.outcome.error
       );
       recordEnrichRefusalNotice(result.outcome.enrichRefusal);
-      // Grant-matched outbox items the fire just staged drain now, not
-      // on the next clock tick (issue #306 phase 3).
       drainOutbox(vaultRegistry.current());
       health.reportOk("automation-runs");
       return { turnId: runId, outcome: result.outcome, record: result.record };
@@ -2529,21 +1954,12 @@ export async function buildGateway(
     return host;
   };
 
-  /** The current request's vault's mounted host (sync — post-mount paths only). */
   const currentSettledHost = (): VaultHost =>
     settledHostFor(vaultRegistry.current().boot.vaultId);
 
-  /** The current request's vault's host bundle, mounting it on first touch. */
   const currentVaultHost = (): Promise<VaultHost> =>
     hostFor(vaultRegistry.current());
 
-  /**
-   * Mount one vault's host bundle: build it, load its app registry into the
-   * runtime (identity enrollment included), then settle its scheduler. The
-   * whole mount runs inside the vault's ambient scope; cached by vault id,
-   * so a vault created by a stopped-daemon maintenance command mounts on first
-   * request.
-   */
   const hostFor = (plane: VaultPlane): Promise<VaultHost> => {
     const vaultId = plane.boot.vaultId;
     const cached = hosts.get(vaultId);
@@ -2557,29 +1973,15 @@ export async function buildGateway(
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
       });
-      // Every first-party app ships INSTALLED (issue #708). The catalogue that
-      // used to hand them out one at a time is retired, so a vault does not
-      // ACQUIRE its first-party apps — it has them, the way a phone has its
-      // camera. Mount is the right seam rather than vault creation: it is the
-      // one path every vault takes on every boot, so an older vault and a vault
-      // created while a release was mid-upgrade converge on the same catalog
-      // without a migration. `installApp` is idempotent (a `consent.app` row
-      // that already exists is returned, not rewritten), so the steady state is
-      // eight no-ops.
-      //
-      // Consequence, stated here because it is the reason the Uninstall verb
-      // left the app gear popover: a bundled app removed from a mounted vault
-      // would come back on the next mount, and a verb that undoes itself is a
-      // worse answer than no verb. Access is still reviewable and revocable —
-      // per-grant, in the Privacy ledger — which is the surface that question
-      // actually belongs on.
+      // Every first-party app ships INSTALLED (#708). MOUNT, not creation, is
+      // the seam — the one path every vault takes on every boot, so an old
+      // vault and a mid-upgrade one converge without a migration. Consequence:
+      // there is deliberately no Uninstall verb for a bundled app, since
+      // removing one would bring it back on the next mount.
       await forEachSequentially(bundledAppIds, async (appId) => {
         const meta = await readBundledAppMeta(bundledAppDir(appId));
         plane.installApp(appId, meta.name);
       });
-      // Bundled apps aren't in the git store, so the first loop misses them —
-      // register each from the enrollment record so its data plane and generic
-      // compatibility route recover after a gateway restart.
       await forEachSequentially(plane.installedAppIds(), async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
@@ -2588,8 +1990,8 @@ export async function buildGateway(
       await reconcileScheduler(vaultId);
       return host;
     }).catch((error) => {
-      // A failed mount must not poison the cache — drop it so the next
-      // request retries (e.g. after a transient git failure).
+      // A failed mount must not poison the cache — drop it so the next request
+      // retries after a transient failure.
       hosts.delete(vaultId);
       throw error;
     });
@@ -2597,7 +1999,6 @@ export async function buildGateway(
     return built;
   };
 
-  /** Re-sync one vault's registry off its live `main` (see BuiltGateway.syncApps). */
   const syncApps = async (vaultId?: string): Promise<void> => {
     const plane = vaultId
       ? vaultRegistry.get(vaultId)
@@ -2622,18 +2023,11 @@ export async function buildGateway(
   };
 
   /**
-   * Install a BUNDLED app into an EXPLICIT vault (issue #599 Phase 4) — the
-   * auto-mount seam behind `/centraid/_vault/scopes`: an app an owner already
-   * uses follows them into an audience vault they were added to.
-   *
-   * Same machinery as the `installBundledApp` lifecycle seam, with one
-   * critical difference: that seam closes over the AMBIENT request vault,
-   * while this one is handed a vault id. Everything vault-sensitive therefore
-   * runs inside `runWithVaultContext(vaultId, …)` — `registry.ensureUploaded`
-   * resolves `appsDir()` off the ambient scope, so calling it unscoped would
-   * install into whatever vault the caller happened to be on. Idempotent, and
-   * fail-soft: a refusal or failure resolves `false` rather than throwing, so
-   * the listing degrades to `installed: false` instead of a 500.
+   * Installs into an EXPLICIT vault id, so everything vault-sensitive runs
+   * inside `runWithVaultContext`: `registry.ensureUploaded` resolves
+   * `appsDir()` off the ambient scope, and an unscoped call would install into
+   * whatever vault the caller was on (#599). Fail-soft — a refusal resolves
+   * `false` and the listing degrades instead of 500ing.
    */
   const ensureBundledAppInstalled = async (
     vaultId: string,
@@ -2644,8 +2038,6 @@ export async function buildGateway(
     if (!plane) return false;
     if (plane.installedAppIds().has(appId)) return true;
     try {
-      // Mount the target vault's host first: the registry's providers read the
-      // ambient workspace, and the mount is cached per vault.
       await hostFor(plane);
       return await runWithVaultContext({ vaultId }, async () => {
         const meta = await readBundledAppMeta(bundledAppDir(appId));
@@ -2663,10 +2055,6 @@ export async function buildGateway(
     }
   };
 
-  // Drop an app from the registry AND delete its wrapper dir under the
-  // request's vault (`<apps>/<id>/` — logs, settings, blobs), then run the
-  // vault-side uninstall cascade (§11: revoke + retire enrollment — the
-  // ext band is RETAINED there; the owner purges it separately, #286).
   const deregisterAndCleanup = async (appId: string): Promise<void> => {
     const removed = await requireRuntime().registry.deregister(appId);
     if (removed)
@@ -2686,8 +2074,6 @@ export async function buildGateway(
     await store.init();
     const codeAppsDir = (): string =>
       path.join(store.getActiveMainLink(), "apps");
-    // The ext band (issue #286 phase 2): publish applies an app's declared
-    // extension tables to THIS vault; drafts branch a scratch band there.
     const ext: ExtBandOps = {
       applyAppExt: (appId, tables) => plane.applyAppExt(appId, tables),
       seedAppExtDraft: (appId, tables, seedOpts) =>
@@ -2699,16 +2085,8 @@ export async function buildGateway(
         ),
       dropAppExtDraft: (appId) => plane.dropAppExtDraft(appId),
     };
-    // Draft preview (#141, reshaped by #286): resolve an app's code dir to
-    // its OPEN session worktree and keep the vault's draft band in step
-    // with the draft manifest there.
     const draftCodeDir = makeDraftCodeDirResolver(store, ext);
 
-    // Unified chat (issue #141, Phase 3): every chat turn runs in the app's
-    // draft worktree with the union of native file tools + the vault
-    // register (`vault_sql`/`vault_invoke`, #286 phase 2) — one surface
-    // that both tweaks the app's code and looks at the real data it
-    // projects.
     const runner: ConversationRunner = makeUnifiedConversationRunner({
       store,
       prefsLoader,
@@ -2718,8 +2096,6 @@ export async function buildGateway(
       ext,
       ...makeVaultToolRunners(vaultRegistry),
       ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
-      // Test inject: finish headless compile without spawning a harness.
-      // Either way the driver is wrapped for resource accounting (#528 Phase C).
       runTurn: accountedRunTurn,
       harnessLadder,
       harnessHealth,
@@ -2727,9 +2103,9 @@ export async function buildGateway(
       providerEgressConsent,
       onFailover: onConversationRunnerFailover,
     });
-    // Headless compilation has its own outer automations ladder. Keep the
-    // injected conversation driver automations-scoped and single-rung so breaker selection
-    // can never jump providers inside one compile ledger turn.
+    // Headless compilation has its own outer automations ladder, so this
+    // driver stays automations-scoped and SINGLE-RUNG: breaker selection must
+    // never jump providers inside one compile ledger turn.
     const automationCompileRunner: ConversationRunner =
       makeUnifiedConversationRunner({
         store,
@@ -2746,10 +2122,6 @@ export async function buildGateway(
         providerEgressConsent,
         onFailover: onConversationRunnerFailover,
       });
-    // Interactive automation turns run in a scratch cwd (the route passes it
-    // as `dataDir`) and through an agent-plane dispatcher. This preserves the
-    // automation's enrolled `consent.agent` grant boundary while keeping native
-    // file tools away from the live automation source tree.
     const automationConversationRunnerFor = (
       block: InstallScopeBlock
     ): ConversationRunner => {
@@ -2771,10 +2143,6 @@ export async function buildGateway(
         onFailover: onConversationRunnerFailover,
       });
     };
-    // The headless compile, as an AWAITABLE task. Two callers need it: the
-    // fire-and-forget `compileAutomation` route seam, and `reviseAutomation`,
-    // which cannot know whether the compiled handler still matches the
-    // published prompt unless it sees the outcome (issue #541 review).
     const runAutomationCompileTask = async (input: {
       automationRef: string;
       runId: string;
@@ -2801,9 +2169,6 @@ export async function buildGateway(
         row.manifest.requires
       );
       const enabledBeforeCompile = row.enabled;
-      // Resolve core_link_anchor tokens before the model runs. The token
-      // contains only an opaque anchor id; row and field scopes come from
-      // the addressed vault's live link + selector.
       const anchorResolution = (() => {
         try {
           const anchors = resolveAutomationAnchors(
@@ -2819,11 +2184,8 @@ export async function buildGateway(
           };
         }
       })();
-      // Compiles are one-shot drafts. Reusing the interactive chat/edit
-      // worktree lets a failed publish leave a rebase in progress, which
-      // then poisons a later retry (and can conflict with UI edits).
-      // The compile run id is already unique; its final UUID segment is
-      // safe for WorktreeStore session ids.
+      // Compiles are one-shot drafts: reusing the interactive worktree lets a
+      // failed publish leave a rebase in progress that poisons a later retry.
       const compileLadder = resolveSubsystemHarnessLadder(
         prefs.getAllPrefs(),
         "automations",
@@ -2851,9 +2213,6 @@ export async function buildGateway(
           let attemptFailure: string | undefined;
           let attemptFailureClass: string | undefined;
 
-          // Each provider attempt owns a fresh worktree and ledger turn. A
-          // provider failure advances only after this turn has settled; compile
-          // output is never replayed into another stateful session.
           await runHeadlessAutomationCompile({
             runner: automationCompileRunner,
             journalDbFile: workspace.journalDbFile,
@@ -2870,9 +2229,6 @@ export async function buildGateway(
               ? { configPins: selection.configPins }
               : {}),
             providerEgressConsent,
-            // Rung 0 is the user's automations primary unless the manifest
-            // pinned a different provider, in which case the pin only counts if
-            // that harness is a live ladder member. Later rungs ARE the ladder.
             consentSource:
               index === 0 && selection.selectionSource !== "manifest"
                 ? "direct"
@@ -2920,8 +2276,6 @@ export async function buildGateway(
             onFailure: async (error, failureClass) => {
               attemptFailure = error;
               attemptFailureClass = failureClass;
-              // Discard a failed compile's isolated branch. This also clears an
-              // interrupted rebase before the next provider starts.
               await store.closeSession(sessionId).catch(() => undefined);
             },
           }).catch((error: unknown) => {
@@ -2987,22 +2341,14 @@ export async function buildGateway(
       },
       deregister: deregisterAndCleanup,
       reconcile: () => {
-        // The lifecycle interface is intentionally fire-and-forget here; the
-        // reconciler already reports the failure to health/logging. Awaited
-        // publish/start paths call reconcileScheduler directly and receive the
-        // rejection so a failed data-cursor bootstrap cannot look ready.
+        // Fire-and-forget on purpose: the reconciler already reports failures.
+        // Awaited publish/start paths call `reconcileScheduler` directly so a
+        // failed data-cursor bootstrap cannot look ready.
         void reconcileScheduler(vaultId).catch(() => undefined);
       },
-      // Bundled ids are reserved (issue #434): a scaffold/clone must never
-      // mint one, or a code-store app would shadow the shipped blueprint.
       isBundledAppId,
       isSystemManagedAutomation: isSystemRecognitionRef,
       isSystemManagedApp: (appId) => recognitionTemplateIds.has(appId),
-      // Install a bundled blueprint in place (issue #434): its UI is already
-      // part of the main client, so enroll with origin 'installed', register
-      // the data plane, and grant declared scopes — no git or id minting.
-      // Idempotent — an already-installed app returns its existing
-      // registration. Returns undefined for a non-bundled id (→ 404).
       installBundledApp: async (templateId) => {
         if (!bundledAppIds.has(templateId)) return undefined;
         const meta = await readBundledAppMeta(bundledAppDir(templateId));
@@ -3021,10 +2367,8 @@ export async function buildGateway(
           alreadyInstalled,
         };
       },
-      // Per-vault rename for an installed bundled app (issue #434): the code
-      // is read-only, so the name lands on the enrollment record, not app.json.
-      // Returns false when the id isn't an installed bundled app, so the meta
-      // route falls through to its code-store app.json rewrite.
+      // Bundled code is read-only, so the name lands on the enrollment record
+      // (#434); false lets the meta route fall through to app.json.
       renameBundledApp: (appId, name) => {
         if (!plane.installedAppIds().has(appId)) return false;
         plane.setAppLabel(appId, name);
@@ -3032,9 +2376,6 @@ export async function buildGateway(
       },
       ext,
       compileAutomation: (input) => {
-        // Fire-and-forget for the route seam; `stop()` still drains it, and a
-        // throw out of the body lands on `automation-runs` health instead of
-        // becoming an unhandled rejection.
         trackDetachedAutomationTask(
           runAutomationCompileTask(input).then(() => undefined),
           `compile ${input.automationRef}`
@@ -3064,9 +2405,6 @@ export async function buildGateway(
         const task = reviseAutomationInstructions({
           row,
           conversationLocks: automationConversationLocks,
-          // One publish of the standing instructions through the ordinary
-          // lifecycle seam — used for the revision AND for the roll-back, so
-          // both take the same validate + publish + reconcile path.
           publishPrompt: async (prompt, message) => {
             const sessionId = `revise-${parsed.appId}-${crypto.randomUUID().slice(0, 8)}`;
             await prepareLifecycleSession(store, sessionId, true);
@@ -3134,9 +2472,9 @@ export async function buildGateway(
               harnessSessionDir: workspace.harnessSessionDir,
               runTurn: accountedRunTurn,
               harnessPrefs,
-              // Steering is an attended owner action. The conversation row is
+              // Steering is an ATTENDED owner action. The conversation row is
               // ensured before TurnPlane asks for this proof, so the durable
-              // direct grant is both FK-safe and rechecked at the door.
+              // direct grant is FK-safe and rechecked at the door.
               egressConsent: () => {
                 providerEgressConsent.grant(
                   row.ref,
@@ -3190,10 +2528,9 @@ export async function buildGateway(
       },
     };
 
-    // Mount-time materialization happens before this host is published in
-    // `settledHosts`, so it must not call the runtime-registration callbacks
-    // that resolve code back through that map. The ordinary mount loop below
-    // registers, enrolls, grants and prewarms every newly published recipe.
+    // Mount-time materialization runs BEFORE this host reaches `settledHosts`,
+    // so it must not call the runtime-registration callbacks that resolve code
+    // back through that map; the mount loop registers every new recipe.
     const systemInstallLifecycleOpts: LifecycleRouteOptions = {
       store,
       codeAppsDir,
@@ -3201,9 +2538,6 @@ export async function buildGateway(
       deregister: async () => undefined,
       reconcile: () => undefined,
       ext,
-      // The generated recognition bundles contain vendored ML/PDF runtime
-      // code. Their human-owned sources are linted in the blueprint suite;
-      // this release-only lifecycle needs the matching validation profile.
       isSystemManagedApp: (appId) => recognitionTemplateIds.has(appId),
     };
     const ensureSystemRecognitionRecipe = async (
@@ -3234,10 +2568,6 @@ export async function buildGateway(
             )
           )
         : {};
-      // The member's own choice of recognition step survives a template
-      // upgrade. Since #807 this switch is one of two selectors — a resolved
-      // engine profile elects the delegate variant too — so preserving it
-      // carries the recipe's answer forward, not the run's.
       const currentVariant = current?.manifest.enrich?.delegateStep?.selected;
       const merged = automation.validateManifest({
         ...desired,
@@ -3284,9 +2614,8 @@ export async function buildGateway(
       if (sameFiles) return;
       const sessionId = `system-recognition-${template.id}`;
       await prepareLifecycleSession(store, sessionId, true);
-      // Release-owned recipes are exact snapshots. Clearing the session's
-      // app dir removes stale helper files from an older bundled version;
-      // the owner-controlled manifest state was merged above.
+      // Release-owned recipes are EXACT snapshots: clearing the app dir drops
+      // stale helpers from an older version. Owner state was merged above.
       const sessionAppDir = await store.snapshotSessionAppDir(
         sessionId,
         template.id
@@ -3317,17 +2646,12 @@ export async function buildGateway(
           await requireRuntime().registry.ensureUploaded(appId);
           vaultRegistry.enrollApp(appId);
           await grantDeclaredAppScopes(plane, store, appId);
-          // A publish/rollback may have added/removed/toggled an
-          // automation — resync THIS vault's cron scheduler off the new `main`.
           await reconcileScheduler(vaultId);
         },
         onAppDeleted: async (appId) => {
           await deregisterAndCleanup(appId);
           await reconcileScheduler(vaultId);
         },
-        // The listing union half (issue #434): installed bundled apps, with
-        // their metadata read from the shipped blueprint dir + the per-vault
-        // rename. Merged with the git code-store apps in GET /_apps.
         bundledApps: async () =>
           Promise.all(
             plane.installedApps().map(async ({ name, label }) => {
@@ -3350,12 +2674,7 @@ export async function buildGateway(
           ),
         ext,
       }),
-      // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
-      // scaffold / clone / update-meta / automation create+toggle+delete.
       makeLifecycleRouteHandler(lifecycleOpts),
-      // Automation runtime ops over HTTP (issue #141): list/read/turn-now,
-      // the run feed + per-run detail, and insights — all over THIS
-      // vault's conversation ledger (the journal.db ledger band).
       makeAutomationsRouteHandler({
         store,
         journalDbFile: workspace.journalDbFile,
@@ -3472,12 +2791,9 @@ export async function buildGateway(
   }
 
   // ── Schedulers (issue #149, #289) ─────────────────────────────────────
-  // One persistent in-process cron scheduler PER VAULT for the gateway's
-  // lifetime; `reconcileScheduler(vaultId)` (mount + every publish/delete)
-  // settles that vault's in-memory registry off ITS `main`. Coalesced per
-  // vault so concurrent publishes don't thrash it. Scheduled fires enter
-  // their vault's ambient scope, so `ctx.vault`, transcripts, and code all
-  // ride the vault the automation lives in.
+  // One persistent in-process scheduler PER VAULT; `reconcileScheduler` settles
+  // that vault's registry off ITS `main`, coalesced so concurrent publishes
+  // don't thrash it. Scheduled fires enter their vault's ambient scope.
   const schedulers = new Map<string, automation.LocalScheduler>();
   const triggerStores = new Map<string, AutomationTriggerStore>();
   const reconcileStates = new Map<
@@ -3543,13 +2859,10 @@ export async function buildGateway(
   };
 
   /**
-   * The ingress STORAGE key for a polled event source. It extends the
-   * engine's own `eventSourceKey` (`event:<connectorKind>:<event>`) with the
-   * bound connection id and a filter digest, because two automations on the
-   * same connector kind must not share one `trigger_ingress` lane — a
-   * multi-account connector would otherwise deliver account A's events to
-   * account B's automation. Deriving it from the engine helper keeps the
-   * shared prefix from drifting.
+   * Extends the engine's `eventSourceKey` with the bound connection id and a
+   * filter digest: two automations on the same connector kind must NOT share
+   * one `trigger_ingress` lane, or a multi-account connector delivers account
+   * A's events to account B's automation.
    */
   const eventIngressKey = (
     connectionId: string,
@@ -3643,15 +2956,11 @@ export async function buildGateway(
         position.ingressId,
         input.limit
       );
-      // Same invariant `readIngressCursor` holds (trigger-ingress-cursor.ts):
-      // the ingress half of this position only ever advances to the last row
-      // actually handed back. Rows past the cap are still in
-      // `trigger_ingress` and ride the next tick — surplus, not a gap.
-      // `polled.skipped` stays: a provider page limit or an expired Gmail
-      // history IS unrecoverable, because the source no longer holds them.
+      // The ingress half of this position only ever advances to the last row
+      // actually handed back; rows past the cap ride the next tick — surplus,
+      // not a gap. `polled.skipped` still counts: a provider page limit or an
+      // expired history IS unrecoverable, since the source no longer holds it.
       const deliveredId = records.at(-1)?.id ?? position.ingressId;
-      // A provider gap and a retention gap are both unrecoverable, so they sum;
-      // the provider reason leads because it names the upstream cause.
       const skipped = (polled.skipped ?? 0) + (retention?.skipped ?? 0);
       const gapReason = polled.gapReason ?? retention?.gapReason;
       return {
@@ -3729,9 +3038,6 @@ export async function buildGateway(
         changes: [input.element.payload],
       };
     } else if (trigger.kind === "webhook") {
-      // Preserve the established webhook handler contract: ctx.input is the
-      // authenticated request body, while gap metadata remains visible on
-      // the native turn itself.
       payload = input.element.payload;
     } else if (trigger.kind === "event") {
       payload = {
@@ -3766,10 +3072,9 @@ export async function buildGateway(
     const existing = schedulers.get(vaultId);
     if (existing) return existing;
     const created: automation.LocalScheduler =
-      // An injected scheduler belongs to the DEFAULT vault, whichever order
-      // it mounts in — the id check alone already makes that at most one
-      // vault (a `schedulers.size === 0` co-condition would silently drop the
-      // injection now that the default is not the first vault activated).
+      // An injected scheduler belongs to the DEFAULT vault, in whatever order
+      // it mounts. The id check alone bounds it to one vault; adding a
+      // `schedulers.size === 0` co-condition would silently drop the injection.
       options.scheduler && vaultId === vaultRegistry.defaultVaultId()
         ? options.scheduler
         : new automation.InProcessScheduler({
@@ -3794,15 +3099,13 @@ export async function buildGateway(
               health.reportError("automation-runs", message);
               logger.warn(message);
             },
-            // This legacy ledger now carries liveness only. Missed/source
-            // position and gap truth live solely in automation_trigger_cursor.
+            // Liveness ONLY: source position and gap truth live solely in
+            // `automation_trigger_cursor`.
             onTick: (at) => schedulerLedgerFor(vaultId).recordTick(at),
             onDormancyChange: (dormant, at) =>
               runWithVaultContext({ vaultId }, () => {
                 schedulerLedgerFor(vaultId).setDormant(dormant, at);
               }),
-            // Issue #570: gateway default cron zone (tier 2). Re-read prefs each
-            // register/reconcile so Settings changes apply without a restart.
             defaultCronTimeZone: () => {
               const raw =
                 prefs.getAllPrefs()[automation.CRON_DEFAULT_TIMEZONE_PREF];
@@ -3816,12 +3119,8 @@ export async function buildGateway(
     return created;
   };
 
-  // The Notifications doorbell is coalesced per vault (#647 review). Recomputing the
-  // projection costs a listOutbox scan plus three queries, and each SSE ring
-  // makes every subscribed client refetch the whole Notifications — a bulk connector
-  // sync commits far too often to pay that per commit. A burst therefore
-  // collapses to one recomputation per window instead of one per commit;
-  // the leading edge still fires immediately so a lone write feels instant.
+  // Coalesced per vault (#647): the LEADING edge fires immediately so a lone
+  // write feels instant, and a burst collapses to one recomputation.
   const fireNotificationsDoorbell = (vaultId: string): void => {
     notificationsEvents.publish(vaultId);
     const decisions = vaultRegistry
@@ -3857,22 +3156,13 @@ export async function buildGateway(
     armNotificationsDoorbellWindow(vaultId);
   };
 
-  /*
-   * The grant plane's reach on this host (#825): every mounted vault, and
-   * nothing else. `undefined` here is a fact about what this gateway has
-   * mounted, never about the grant — the engine reports it as such.
-   */
   const grantFulfillmentHost = {
     vaultFor: (vaultId: string) => vaultRegistry.get(vaultId)?.db,
     logger: health.loggerFor("share", logger),
   };
-  /*
-   * View grants sync forward (ruling G-view), so a committed write in an
-   * origin vault is what re-projects them. The doorbell coalesces a burst of
-   * commits into one pass and swallows its own failures: a share that could
-   * not be carried is durable state on the fulfillment rows, never a reason
-   * for the write that triggered it to look like it failed.
-   */
+  // View grants sync forward (ruling G-view). The doorbell swallows its own
+  // failures: an uncarried share is durable state on the fulfillment rows,
+  // never a reason for the triggering write to look failed.
   const grantRefreshDoorbell = createGrantRefreshDoorbell({
     host: grantFulfillmentHost,
   });
@@ -3903,10 +3193,6 @@ export async function buildGateway(
         const { rows } = await automation.list(
           settledHostFor(vaultId).codeAppsDir()
         );
-        // Every automation app acts through an enrolled consent.agent (duaility
-        // §12) — enroll identities in THIS vault as the desired set settles,
-        // and grant each automation's DECLARED scopes at the same moment
-        // (issue #306 decision 2: installing was the consent).
         const plane = vaultRegistry.get(vaultId);
         const nameByOwnerApp = new Map(rows.map((r) => [r.ownerApp, r.name]));
         for (const appId of new Set(rows.map((r) => r.ownerApp))) {
@@ -3934,18 +3220,15 @@ export async function buildGateway(
             );
           }
         }
-        // Disabled bundled recognition recipes remain durable app rows so
-        // Automations can show their owner-controlled toggles, but they must
-        // not occupy scheduler registrations or bootstrap data cursors until
-        // enabled. Ordinary disabled automations stay in `rows` so their
-        // cursor retention semantics remain unchanged.
+        // A disabled recognition recipe stays a durable app row for its
+        // toggle, but must NOT hold a scheduler registration or bootstrap a
+        // data cursor. Ordinary disabled automations stay in `rows` so their
+        // cursor retention semantics are unchanged.
         const schedulerRows = rows.filter((row) =>
           recognitionTemplateIds.has(row.ownerApp)
             ? row.enabled
-            : // User automations are the experimental surface (v0): with the
-              // gate off they never arm, while system recognition recipes
-              // above keep the photos pipeline (OCR, faces, embeddings)
-              // flowing through the same scheduler.
+            : // With the gate off, user automations never arm while
+              // recognition recipes keep the photos pipeline flowing.
               experimental.automations
         );
         const diff = await sched.reconcile(schedulerRows);
@@ -3981,17 +3264,10 @@ export async function buildGateway(
   };
 
   // ── Webhook trigger route (issue #96) ─────────────────────────────────
-  // The desktop/daemon gateway IS the always-on host, so it answers webhook
-  // POSTs directly. `makeWebhookRouteHandler`
-  // is single-apps-dir (it resolves against ONE `appsDir` closed over at
-  // construction), so one instance is built per vault, cached by id; a
-  // cheap pre-scan across every MOUNTED vault's `list()` (webhook ids are
-  // minted from 24 random bytes — cross-vault collision is not a realistic
-  // concern) resolves which vault owns the slug and delegates the WHOLE
-  // request to that vault's instance, so nothing `makeWebhookRouteHandler`
-  // already does (auth, rate limit, body cap, response shape) is
-  // reimplemented here. Accepted requests enter the durable ingress table;
-  // the same cursor engine that handles cron/data/condition drains them.
+  // `makeWebhookRouteHandler` closes over ONE `appsDir`, so one instance is
+  // built per vault and a pre-scan delegates the WHOLE request to the owning
+  // vault — auth, rate limit, body cap and response shape are never
+  // reimplemented here.
   const webhookHandlers = new Map<string, RouteHandler>();
 
   const webhookIngress = async (
@@ -4041,18 +3317,14 @@ export async function buildGateway(
   const webhookHandler: RouteHandler = async (req, res) => {
     if (!req.url || !req.url.startsWith(automation.WEBHOOK_ROUTE_PREFIX))
       return false;
-    // Automations experiment off: no webhook ingress. Fall through so the
-    // host's chain answers not-found instead of durably accepting a trigger
-    // that nothing will ever fire.
+    // Gate off: fall through to not-found rather than accepting a dead
+    // trigger.
     if (!experimental.automations) return false;
     const url = new URL(req.url, "http://x");
     const slug = url.pathname
       .slice(automation.WEBHOOK_ROUTE_PREFIX.length)
       .replace(/^\/+/u, "")
       .replace(/\/+$/u, "");
-    // Mirror `makeWebhookRouteHandler`'s own POST + slug-shape gate so a
-    // malformed request short-circuits to the default vault's 404/405
-    // without paying for a scan across every vault.
     const isPost = (req.method ?? "GET").toUpperCase() === "POST";
     const looksLikeSlug = /^[A-Za-z0-9_-]+$/u.test(slug);
     let targetVaultId = vaultRegistry.defaultVaultId();
@@ -4073,10 +3345,6 @@ export async function buildGateway(
     return webhookHandlerForVault(targetVaultId)(req, res);
   };
 
-  // Turn backpressure (issue #420, Wave 6): a modest per-vault ceiling on
-  // concurrently-running turns, shared by BOTH the per-app `_turn` route
-  // (via Runtime) and the vault-assistant route. One limiter per vault id so
-  // busy tabs on vault A never starve vault B; the auto-titler yields to it.
   const turnLimiters = new Map<string, TurnLimiter>();
   const turnLimiterForCurrentVault = (): TurnLimiter => {
     const id = vaultRegistry.current().boot.vaultId;
@@ -4089,34 +3357,18 @@ export async function buildGateway(
   };
 
   // ── The runtime ───────────────────────────────────────────────────────
-  // One Runtime for the gateway's lifetime; its apps dir, registry, chat
-  // runner, and session scratch all resolve through the request's vault
-  // (the Runtime keeps one registry per resolved apps dir, so N vaults get
-  // N registries).
   const runtime = new Runtime({
     appsDir: () => currentWorkspace().appsDir,
     timeModuleUrl: TIME_ENGINE_MODULE_URL,
     userStore: prefs,
     conversationHistoryStore,
     conversationRunner: {
-      // Facade over the request vault's unified runner (#280) — builder-
-      // capable, so turns persist as `kind='build'` (issue #181). EVERY
-      // ask turn rides the vault register (issue #286 phase 2: the vault
-      // is the only store) — the owner assistant wearing the app lens.
       runKind: "build",
       run: async (input) => {
-        // Model prefs plumbing: an explicit `input.model` (the `_turn` POST
-        // body) always wins; otherwise resolve off the register — `ask` is
-        // the per-app copilot, anything else (including unset) is the
-        // builder chat.
-        //
-        // The two runners below are built once at boot, but neither PICKS a
-        // harness kind at construction: each carries only its subsystem tag
-        // and calls `prefsLoader(subsystem)` inside every turn. So the same
-        // `input.register` fork that names the subsystem here also lands on
-        // a harness that resolves `harness.<subsystem>` fresh — the model key
-        // and the backend that receives it can't disagree, and a re-pin
-        // takes effect on the next turn with no restart.
+        // An explicit `input.model` always wins. Neither runner PICKS a
+        // harness at construction — each carries a subsystem tag and calls
+        // `prefsLoader(subsystem)` per turn, so the model key and the backend
+        // that receives it cannot disagree, and a re-pin needs no restart.
         const subsystem: ModelSubsystem =
           input.register === "ask" ? "ask" : "builder";
         const model = await resolveModel(
@@ -4141,9 +3393,6 @@ export async function buildGateway(
           hint: "Open Settings → Agents and pick Codex or Claude Code.",
         };
       }
-      // The model list is a pure catalog read; enumeration is owned by the
-      // warmer. A Refresh (or a cold cache) kicks a warm fire-and-forget and
-      // the client polls `modelsStatus` until it leaves `loading`.
       const status = await runPreflight(
         harnessPrefs,
         catalogPath ? { catalogPath } : {}
@@ -4160,13 +3409,6 @@ export async function buildGateway(
       return status;
     },
     logger,
-    // Compatibility resolver (issue #434): bundled system UI is compiled into
-    // the main client, but the generic opaque-app route can still resolve an
-    // installed blueprint's shipped directory (no per-vault copy). Everything
-    // else — compiled automations or future opaque app sources — resolves to
-    // the git code-store worktree. The installed check is per-vault so a
-    // legacy snapshot-cloned app keeps resolving from the store. The app-engine
-    // static-path sandbox applies identically to whichever dir is returned.
     codeDirOverride: async (appId: string) => {
       if (
         bundledAppIds.has(appId) &&
@@ -4178,11 +3420,10 @@ export async function buildGateway(
     },
     draftCodeDir: async (appId: string, sessionId: string) =>
       (await currentVaultHost()).draftCodeDir(appId, sessionId),
-    // Despite the plural name this is not a listing: `turn-routes` calls it
-    // per turn and then RUNS in the root it picks, defaulting builder turns to
-    // `draft`. Opening the editing session here is therefore load-bearing —
-    // deferring it would make the first builder turn silently run in the
-    // published `app` dir instead of the user's worktree.
+    // Not a listing despite the name: `turn-routes` calls it per turn and RUNS
+    // in the root it picks. Opening the editing session here is load-bearing —
+    // deferring it makes the first builder turn run in the published `app` dir
+    // instead of the user's worktree.
     conversationWorkspaceRoots: async (appId: string) => {
       const plane = vaultRegistry.current();
       const host = await currentVaultHost();
@@ -4206,15 +3447,11 @@ export async function buildGateway(
 
   runtimeRef = runtime;
 
-  // The vault assistant (shell-level Q&A over the whole vault): one
-  // runner for the gateway's lifetime — every turn resolves the request's
-  // vault (prompt, vault_sql credential, scratch cwd) at call time.
   const assistantRunner = makeAssistantConversationRunner({
     prefsLoader,
     subsystem: "assistant",
     getDispatcher,
     vaults: vaultRegistry,
-    // Measure + label every assistant harness run (#528 Phase C); never throttled.
     runTurn: accountedRunTurn,
     harnessLadder,
     harnessHealth,
@@ -4223,16 +3460,9 @@ export async function buildGateway(
     onFailover: onConversationRunnerFailover,
   });
 
-  // LLM auto-title (issue #420, Wave 3): after the first turn of a new
-  // assistant thread settles, a cheap one-shot inference names it — the
-  // claude.ai affordance that beats first-message truncation. Fire-and-forget:
-  // this closure returns void immediately and self-schedules; any failure is
-  // swallowed so a title miss never touches the turn. Provider-agnostic — the
-  // titler runs at the `fast` capability TIER (never a hardcoded model id;
-  // governance no-hardcoded-model-ids), overridable per harness via the
-  // `model.<harnessKind>.title` prefs slot. "User rename wins": the generated
-  // title is only applied when the stored title is STILL the exact derived
-  // truncation, re-checked after the (async) generation returns.
+  // Fire-and-forget: a title miss never touches the turn (#420). Runs at the
+  // `fast` capability TIER, never a hardcoded model id (governance
+  // no-hardcoded-model-ids), overridable via `model.<harnessKind>.title`.
   const generateAssistantTitle = (args: {
     conversationId: string;
     userMessage: string;
@@ -4240,9 +3470,6 @@ export async function buildGateway(
   }): void => {
     void (async () => {
       try {
-        // Yield to interactive turns (issue #420, Wave 6): the titler is a
-        // nice-to-have one-shot, so it skips generation whenever the vault is at
-        // its turn ceiling rather than competing for a slot.
         if (turnLimiterForCurrentVault().atCapacity()) return;
         const harnessPrefs = await prefsLoader();
         if (!harnessPrefs) return;
@@ -4257,9 +3484,6 @@ export async function buildGateway(
         const slot = prefs.getAllPrefs()[`model.${harnessPrefs.kind}.title`];
         const configured =
           typeof slot === "string" && slot.length > 0 ? slot : undefined;
-        // The `fast` tier is only meaningful on harnesses that understand the
-        // tier vocabulary (claude-code); on codex a bare tier token would be
-        // sent verbatim, so skip unless the owner configured an explicit slot.
         if (!configured && harnessPrefs.kind !== "claude-code") return;
         const title = await generateConversationTitle({
           runTurn: accountedRunTurn,
@@ -4277,8 +3501,6 @@ export async function buildGateway(
           timeoutMs: 20_000,
         });
         if (!title) return;
-        // Apply only if the thread still carries the derived truncation — a
-        // manual rename between record and generation wins.
         const meta = conversationHistoryStore.getSessionMeta(
           ASSISTANT_APP_ID,
           args.conversationId
@@ -4301,10 +3523,9 @@ export async function buildGateway(
     if (turnLimiterForCurrentVault().atCapacity()) return undefined;
     const harnessPrefs = await prefsLoader("assistant");
     if (!harnessPrefs) return undefined;
-    // Universal capture has no user-visible conversation, but provider
-    // consent is conversation-scoped and FK-backed. Keep one hidden build
-    // conversation per vault so the authenticated, attended classify action
-    // can leave a durable direct receipt before any text egresses.
+    // Capture has no user-visible conversation, but provider consent is
+    // conversation-scoped and FK-backed — hence one hidden build conversation
+    // per vault, so a durable receipt exists before any text egresses.
     const captureConversationId = "centraid:capture-classifier";
     const captureLedger = journalConversationStore(
       currentWorkspace().journalDbFile
@@ -4336,11 +3557,6 @@ export async function buildGateway(
     });
   };
 
-  // Ask-register lens metadata (issue #286 phase 2): the app copilot's
-  // `register: 'ask'` turns ARE the owner assistant wearing the app lens —
-  // name + description bias the prompt, never a permission boundary.
-  // Resolved per turn off the live `main` manifest so a publish lands
-  // without a restart.
   const askAppMeta = async (
     appId: string
   ): Promise<{ name?: string; description?: string }> => {
@@ -4365,15 +3581,11 @@ export async function buildGateway(
     }
   };
 
-  // The per-app ask register: the same assistant runner wearing the app
-  // lens — prompt-level bias, never a permission boundary (it is still
-  // the owner asking their own vault).
   const askRunner = makeAssistantConversationRunner({
     prefsLoader,
     subsystem: "ask",
     getDispatcher,
     vaults: vaultRegistry,
-    // Measure + label every ask-register harness run (#528 Phase C); never throttled.
     runTurn: accountedRunTurn,
     harnessLadder,
     harnessHealth,
@@ -4391,36 +3603,14 @@ export async function buildGateway(
     },
   });
 
-  // Diagnostics bundle assembly (issue #351): a closure so the route
-  // handler (`diagnostics-routes.ts`) stays thin wiring.
-  //
-  // The document IS the shareable support bundle (#846 P8). It used to be a
-  // second, hand-assembled structure that redacted only `config`, by key
-  // name — so the owner-authored vault name rode out verbatim in
-  // `vaults[].name` and the log tail was embedded raw, in the one artifact
-  // this module's own header told a person to attach to a support request.
-  // `support-bundle.ts` is allowlist-by-construction: every field is emitted
-  // through a declared leaf policy, so a field nobody added on purpose is
-  // absent rather than copied, and the serialized text is swept for literals
-  // harvested from this running system. There is now one document instead of
-  // two, and it is the safe one.
-  //
-  // Level `standard` rather than the builder's `strict` default: this route
-  // is behind the host bearer gate and answers the owner, so a scrubbed
-  // message skeleton is worth keeping next to the digest. The redaction
-  // policy is the same either way.
-  //
-  // `config` is whatever is useful for support — paths, the backup config,
-  // whether device access is enforced, the Commons instrumentation — and
-  // goes through `scrubUnknown`, which drops secret-shaped keys by name and
-  // refuses any value whose shape it does not recognise.
+  // `support-bundle.ts` is allowlist-by-construction: a field nobody added on
+  // purpose is absent rather than copied (#846). Level `standard`, not the
+  // builder's `strict` default, because this route answers the owner behind
+  // the host bearer gate; the redaction policy is the same either way.
   const buildDiagnostics = async (): Promise<string> => {
     const input = await collectSupportBundleInput({
       health,
       logs: logStore,
-      // The on-disk mirror when the host gave us a logs directory, empty
-      // otherwise. Read at build time so a bundle taken after a crash loop
-      // carries the ledger the previous process left behind.
       anomalies: {
         snapshot: () => (paths.logsDir ? readAnomalyLedger(paths.logsDir) : []),
       },
@@ -4436,18 +3626,12 @@ export async function buildGateway(
         nodeVersion: process.version,
       },
       generatedAtMs: Date.now(),
-      // One salt per bundle: identifiers stay correlatable inside a single
-      // document and are not comparable across two of them.
       salt: crypto.randomUUID(),
       level: "standard",
       config: {
         paths,
         backup: options.backup,
         deviceAccessEnabled: Boolean(options.deviceAccess),
-        // Steward-absence + local Commons sync instrumentation (#731):
-        // reachability, absence episodes, pull outcomes, op-log size, and
-        // member lag per grant — read-only, no network egress. See
-        // docs/logs.md.
         ...commonsObservabilitySection({
           vaults: vaultRegistry
             .planesList()
@@ -4464,8 +3648,6 @@ export async function buildGateway(
       ["/centraid/_web", "/centraid/_apps"],
       webControlSessions.handler
     ),
-    // Gateway identity + version handshake (issue #289): cheap static
-    // JSON, mounted first — health polling hits it every few seconds.
     forRoutePrefixes(
       "/centraid/_gateway/info",
       makeGatewayInfoRouteHandler({
@@ -4482,9 +3664,6 @@ export async function buildGateway(
           tunnel: Boolean(options.dataPlaneControl),
           backupWal: options.backup?.enabled === true,
           assistOAuth: Boolean(options.assistOAuth),
-          // Experimental gates (v0): a gated-off feature is absent from the
-          // handshake, so clients wall it in ONE place (C1) instead of
-          // discovering dead routes.
           automationTurns: experimental.automations,
           multiVaultReplica: true,
           crossVaultPlacements: true,
@@ -4503,9 +3682,6 @@ export async function buildGateway(
       : []),
     ...(options.devicePairing
       ? [
-          // Paired-device roster + revoke (issue #376): the wire twin of
-          // `cli/device-admin.ts`'s list/revoke. Every request is scoped to
-          // the caller's proved EndpointId and persisted enrollments.
           forRoutePrefixes(
             "/centraid/_gateway/devices",
             makeDevicesRouteHandler({
@@ -4515,20 +3691,14 @@ export async function buildGateway(
               ...(options.isHostCustody
                 ? { canMintPairingTicket: options.isHostCustody }
                 : {}),
-              // The mint target when the caller names no vault: the owner's
-              // PERSONAL vault, never Shared. The `OrUndefined` variant is
-              // used deliberately — this seam must not throw when every vault
-              // has been deleted.
+              // `OrUndefined` deliberately: this seam must not throw when
+              // every vault has been deleted.
               defaultVaultId: () => vaultRegistry.defaultVaultIdOrUndefined(),
               vaultIds: () =>
                 vaultRegistry.list().map((vault) => vault.vaultId),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
               vaultName: (id) => vaultRegistry.get(id)?.name,
-              // *Add someone* (#726 P1): mints the new vault (identity
-              // keypair included — `VaultRegistry.create` mints it).
               mintVaultForPerson: (name) => vaultRegistry.create(name),
-              // Cleanup twin (#750): a failed provision removes the vault it
-              // minted (dir + keys + mount), leaving zero durable state.
               unmintVaultForPerson: (vaultId) => vaultRegistry.delete(vaultId),
               onRevoked: (rows) => {
                 for (const row of rows) {
@@ -4539,8 +3709,6 @@ export async function buildGateway(
               },
             })
           ),
-          // The people on this gateway (#726): owners are the principals
-          // vaults belong to; the devices route above only binds hardware.
           forRoutePrefixes(
             "/centraid/_gateway/owners",
             makeOwnersRouteHandler({
@@ -4566,13 +3734,9 @@ export async function buildGateway(
               enrollments: options.devicePairing.enrollments,
             })
           ),
-          // The same-machine link ceremony a cross-owner edge needs (#726
-          // P2 §3): propose a link from a vault you own, the other owner's
-          // device approves. Same-owner edges never touch this surface.
-          // `peer` (audit #726 finding 1) is the SAME `peerPlane.dial` every
-          // other outbound peer capability in this file already gates on —
-          // absent, `ticket`/`redeem` answer a typed refusal instead of
-          // reaching for a transport that isn't wired.
+          // Cross-owner edges only (#726). `peer` gates on the SAME
+          // `peerPlane.dial` as every other outbound capability: absent,
+          // `ticket`/`redeem` answer a typed refusal.
           forRoutePrefixes(
             "/centraid/_gateway/links",
             makeVaultLinksRouteHandler({
@@ -4596,15 +3760,10 @@ export async function buildGateway(
           ),
         ]
       : []),
-    // Component-level health + structured error tail. `_gateway/info`
-    // is the liveness probe; this is the "what's actually wrong" surface.
     forRoutePrefixes(
       "/centraid/_gateway/health",
       makeHealthRouteHandler(health)
     ),
-    // Owner "pause background work" control (#528 Phase B): hot-applied,
-    // in-memory only, never a durable Resource-mode flip. Same bearer gate
-    // and owner-facing family as health.
     forRoutePrefixes(
       "/centraid/_gateway/resource",
       makeResourceRouteHandler(health, powerContext)
@@ -4623,19 +3782,10 @@ export async function buildGateway(
         ),
       })
     ),
-    // A single JSON document a user can save + hand to support: version,
-    // health snapshot, log tail, vault sizes, and a redacted config
-    // summary. Mounted right after health — same bearer gate, same
-    // "owner-facing diagnostics" family.
     forRoutePrefixes(
       "/centraid/_gateway/diagnostics",
       makeDiagnosticsRouteHandler(buildDiagnostics)
     ),
-    // Backup status + manual "run now" (issue #351): thin wiring over
-    // `BackupService`. `backupService` is `undefined` when
-    // `options.backup?.enabled` is false — the handler answers
-    // `{configured: false}` rather than 404 in that case. Same bearer
-    // gate, same owner-facing-diagnostics family as health/diagnostics.
     forRoutePrefixes(
       "/centraid/_gateway/backup",
       makeBackupRouteHandler({
@@ -4648,9 +3798,6 @@ export async function buildGateway(
           : {}),
       })
     ),
-    // Gateway-level storage connections (issue #367 §C1): CRUD + real
-    // connectivity probe + per-vault replication status. Same bearer gate,
-    // same owner-facing-diagnostics family as backup/health.
     forRoutePrefixes(
       "/centraid/_gateway/storage",
       makeStorageRouteHandler({
@@ -4670,19 +3817,11 @@ export async function buildGateway(
         },
       })
     ),
-    // Due task/event reminders, computed live — the desktop main process
-    // polls this to fire OS notifications (issue: Tasks/Agenda comparison
-    // flagged "no time-based alerts, anywhere").
     forRoutePrefixes(
       ["/centraid/_reminders", "/centraid/_brief"],
       makeRemindersRouteHandler(vaultRegistry, options.devicePairing)
     ),
-    // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
-    // the desktop's Settings → Logs screen streams from.
     forRoutePrefixes("/centraid/_logs", makeLogsRouteHandler(logStore)),
-    // The assistant's `_turn`/`resolve` surface — mounted BEFORE the
-    // generic `_vault` handler, which answers 404 for any sub-route it
-    // doesn't know (same prefix family).
     forRoutePrefixes(
       "/centraid/_vault/assistant",
       makeAssistantRouteHandler({
@@ -4695,15 +3834,10 @@ export async function buildGateway(
         limiter: turnLimiterForCurrentVault,
       })
     ),
-    // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
-    // Mounted BEFORE the generic `_vault` handler (same prefix family).
     forRoutePrefixes(
       "/centraid/_vault/demo",
       makeDemoRouteHandler(vaultRegistry, {
         codeAppsDir: () => currentSettledHost().codeAppsDir(),
-        // Same precedence as `codeDirOverride` above: a bundled app INSTALLED
-        // in this vault serves from the shipped blueprint tree, so that is
-        // where its scenario generator lives too.
         bundledAppDirs: () => {
           const installed = vaultRegistry.current().installedAppIds();
           return new Map(
@@ -4714,15 +3848,10 @@ export async function buildGateway(
         },
       })
     ),
-    // File-drop imports (issue #290 phase 2): stage → review → publish.
     forRoutePrefixes(
       "/centraid/_vault/imports",
       makeImportRouteHandler(vaultRegistry)
     ),
-    // Semantic photo search (issue #721 E3). Mounted BEFORE the generic
-    // `_vault` handler — and deeper than the owner's enrichment-settings
-    // surface at `/centraid/_vault/enrich`, which the generic handler still
-    // owns.
     forRoutePrefixes(
       SEMANTIC_SEARCH_PATH,
       makeEnrichSearchRouteHandler(vaultRegistry, {
@@ -4735,17 +3864,13 @@ export async function buildGateway(
           }),
       })
     ),
-    // The grant plane (#825): the owner's standing shares of this vault's
-    // subjects, and the fulfillment state behind each one. Mounted BEFORE the
-    // generic `_vault` handler (same prefix family).
     forRoutePrefixes(
       GRANTS_PATH,
       makeGrantRouteHandler({
         enrollments: enrollmentStore,
         currentVault: () => {
           // `current()` throws when this host has no vault for the request's
-          // scope; the grant route answers that as a state (409) rather than
-          // as a fault, because "nothing is mounted" is a fact about the host.
+          // scope; that is a STATE (409), not a fault.
           let plane;
           try {
             plane = vaultRegistry.current();
@@ -4761,16 +3886,10 @@ export async function buildGateway(
         host: grantFulfillmentHost,
       })
     ),
-    // Blob custody (issue #296): staged uploads in, consent-checked +
-    // Range-capable bytes out. Mounted BEFORE the generic `_vault`
-    // handler (same prefix family).
     forRoutePrefixes(
       "/centraid/_vault/blobs",
       makeBlobRouteHandler(vaultRegistry, options.dataPlaneHttp)
     ),
-    // Broker-carried connection credentials (issue #304): health list,
-    // configure, pause/resume, and the PKCE consent ceremony. Mounted
-    // BEFORE the generic `_vault` handler (same prefix family).
     ...(experimental.connectors
       ? [
           forRoutePrefixes(
@@ -4783,17 +3902,12 @@ export async function buildGateway(
           ),
         ]
       : []),
-    // Consent-derived offline replica protocol (#406). Mounted before the
-    // generic owner `_vault` handler because both share that prefix. The
-    // intent lane executes through the ordinary app dispatcher; the route
-    // only adds durable device-scoped admission/dedupe around it.
     forRoutePrefixes(
       ["/centraid/_vault/replica", "/centraid/_vault/changes"],
       makeReplicaRouteHandler(vaultRegistry, {
-        // The embedded desktop host is enrolled in the canonical store above
-        // even though it has no remote-pairing plane. Replica access must
-        // consult that same store or the host proves an EndpointId that the
-        // route can never resolve, producing replica_device_not_enrolled.
+        // The embedded desktop host is enrolled in the canonical store despite
+        // having no remote-pairing plane, so replica access MUST consult that
+        // same store or it proves an unresolvable EndpointId.
         enrollments: enrollmentStore,
         dispatchIntent: async (input) =>
           replicaDispatchOutcome(
@@ -4806,10 +3920,9 @@ export async function buildGateway(
           ),
       })
     ),
-    // Owner consent surface for the vault plane (grants, parked
-    // confirmations, rename/presentation). Its `_vault` prefix
-    // is disjoint from every other route family. Vault create/delete are
-    // ADMIN acts (server CLI) — they no longer ride HTTP (#289).
+    // The generic owner consent surface: it answers 404 for any `_vault`
+    // sub-route it does not know, so every specific handler above must stay
+    // ahead of it. Vault create/delete are ADMIN acts, never HTTP (#289).
     forRoutePrefixes(
       "/centraid/_vault",
       makeVaultRouteHandler(vaultRegistry, {
@@ -4817,8 +3930,6 @@ export async function buildGateway(
           ? { deviceAccess: effectiveDeviceAccess }
           : {}),
         onOutboxDecided: drainOutbox,
-        // Storage-connection attach flow (issue #367 §C1/§C4/§C10): resolves
-        // `blob_store.connectionId` and gates on the recovery-kit nudge.
         storageConnections,
         recoveryKit,
         enrollments: enrollmentStore,
@@ -4830,10 +3941,6 @@ export async function buildGateway(
         notificationsEvents,
         fenceVaultForErase: (vaultId) =>
           backupService.fenceVaultForErase(vaultId),
-        // fix (this session): agent-grant approval can be the FIRST enrollment
-        // touch for an automation's agent — resolve its real manifest name
-        // the same way reconcileScheduler does, so `approveAgentGrant` never
-        // has to fall back to a bare id-derived name.
         resolveAutomationName: async (appId) => {
           const { rows } = await automation.list(
             currentSettledHost().codeAppsDir()
@@ -4842,19 +3949,12 @@ export async function buildGateway(
         },
       })
     ),
-    // Template catalog (issue #141): the gateway owns it, so the renderer
-    // reads `GET /centraid/_templates` directly. Templates are SEEDS —
-    // gateway-level, read-only material instantiated INTO a vault (#280).
     forRoutePrefixes(
       "/centraid/_templates",
       makeTemplatesRouteHandler({
         ...(paths.templatesCacheDir
           ? { cacheDir: paths.templatesCacheDir }
           : {}),
-        // Catalog installed-state (issue #434): whether each bundled app is
-        // already installed in the request's vault, so the Discover card shows
-        // "Open" instead of "Install". Degrades to "nothing installed" if no
-        // vault is addressed — the catalog is readable before any vault exists.
         installedAppIds: () => {
           try {
             return vaultRegistry.current().installedAppIds();
@@ -4864,14 +3964,10 @@ export async function buildGateway(
         },
       })
     ),
-    // Engine profiles (issue #807): the derived built-ins plus whatever the
-    // member created, read straight off gateway prefs. Writes ride the generic
-    // prefs API, whose `validatePatch` below is the one gate.
     forRoutePrefixes(
       ENRICH_PROFILES_PREFIX,
       makeEnrichProfilesRouteHandler({ readPrefs: () => prefs.getAllPrefs() })
     ),
-    // Harness detection (codex/claude credentials on the gateway host).
     forRoutePrefixes(
       "/centraid/_harnesses",
       makeHarnessesRouteHandler({
@@ -4887,13 +3983,10 @@ export async function buildGateway(
               paths.cacheDir ?? path.join(dataDir, "cache"),
               "harness-capabilities"
             ),
-            // Only force a spawn on explicit refresh; otherwise serve cache.
-            // `probeIfMissing` delivers the "probe once on first read when
-            // cold" half of that promise — without it a cold gateway (fresh
-            // start, nothing persisted yet) answered `undefined` and an
-            // installed, authed harness showed no models until the user
-            // manually hit Refresh (#665). The in-flight de-dupe inside
-            // resolveAcpCapabilities keeps concurrent cold reads to one probe.
+            // Spawn only on explicit refresh; otherwise serve cache.
+            // `probeIfMissing` is what probes once on a cold first read —
+            // without it a fresh gateway answers `undefined` and an installed,
+            // authed harness shows no models until a manual Refresh (#665).
             refresh,
             probeIfMissing: true,
           });
@@ -4932,11 +4025,6 @@ export async function buildGateway(
         binPathFor: binPathForKind,
       })
     ),
-    // The request vault's store-backed handlers (apps-store / lifecycle /
-    // automations), resolved per request off the ambient vault scope. With
-    // the automations experiment off, only the apps prefix dispatches — the
-    // `_automations`/`_insights` families fall through to not-found while
-    // the mixed lifecycle handler stays mounted for apps.
     forRoutePrefixes(
       experimental.automations
         ? ["/centraid/_apps", "/centraid/_automations", "/centraid/_insights"]
@@ -4952,12 +4040,9 @@ export async function buildGateway(
     ),
   ];
 
-  // `composedHandler` owns the whole request: resolve the vault the request
-  // is addressed to (#289), then replay the chain `startRuntimeHttpServer`
-  // used to run — chat-history → prefs → extra handlers → `runtime.handle`
-  // — inside that vault's ambient scope. WITHOUT the bearer check, for
-  // hosts that own auth themselves. CORS is the host's job too: a fronting
-  // gateway emits its own.
+  // `composedHandler` owns the whole request: resolve the addressed vault
+  // (#289), then run chat-history → prefs → extra handlers → `runtime.handle`
+  // inside that vault's ambient scope. Auth and CORS are the host's job.
   const conversationHandler = makeConversationRouteHandler(
     () => conversationHistoryStore
   );
@@ -4983,8 +4068,8 @@ export async function buildGateway(
     () => currentWorkspace().ownerPartyId,
     {
       validatePatch: async (patch, before) => {
-        // Engine profiles first: the check is pure and cheap, so a malformed
-        // profile is refused without spawning a harness preflight (#807).
+        // Profiles FIRST: the check is pure, so a malformed profile is refused
+        // without spawning a harness preflight (#807).
         const profileRejection = validateEngineProfilePatch(patch);
         if (profileRejection) return profileRejection;
         const next = patchedPrefs(before, patch);
@@ -5032,8 +4117,6 @@ export async function buildGateway(
   ];
   assertRouteSecurityCoverage(compiledRouteEntries);
   const prefixDispatch = createRoutePrefixDispatch(compiledRouteEntries);
-  // Retain the public BuiltGateway seam as a one-entry compiled dispatcher;
-  // callers never receive or linearly walk the underlying route registry.
   const extraHandlers: RouteHandler[] = [prefixDispatch];
   const dispatchChain: RouteHandler = async (req, res) => {
     if (await prefixDispatch(req, res)) return true;
@@ -5041,9 +4124,8 @@ export async function buildGateway(
     return true;
   };
 
-  // Deliberately NOT in `routeEntries`: the scopes listing spans every vault
-  // the caller owns, so it is dispatched outside the per-vault scope (see
-  // its call site).
+  // Deliberately NOT in `routeEntries`: this listing spans every vault the
+  // caller owns, so it dispatches outside the per-vault scope.
   const scopesHandler = makeScopesRouteHandler({
     enrollments: enrollmentStore,
     listVaults: () => vaultRegistry.list(),
@@ -5153,15 +4235,9 @@ export async function buildGateway(
       });
     },
   });
-  // Owner-tier steward-absence recovery (#731): same enrollment-derived
-  // owner check and vault resolution as `commonsHandler` above — this is a
-  // sibling door onto the same Commons plane, not a new auth story.
   const commonsRecoveryHandler = makeCommonsRecoveryRouteHandler({
     enrollments: enrollmentStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    // Successor invitations ride the same peer push the ordinary commons
-    // door uses (issue #750), so the ceremony ends with members invited
-    // rather than with a steward of one.
     invitePeer: async (invitation) => {
       const link = vaultLinksStore.peerForVault(
         invitation.memberVaultId,
@@ -5172,12 +4248,8 @@ export async function buildGateway(
       return invitePeerToCommons({ dial, route: link.route, invitation });
     },
   });
-  /*
-   * The peer plane (#726 P3 decision 6). Mounted OUTSIDE the prefix registry
-   * on purpose: every route in there resolves a proved DEVICE first, and a
-   * peer is not a device. It reads the same `vault_links` rows an edge is
-   * judged against — one table, one answerer (D3).
-   */
+  // Mounted OUTSIDE the prefix registry on purpose: every route there resolves
+  // a proved DEVICE first, and a peer is not a device (#726).
   const peerPlaneHandler = options.peerPlane
     ? makePeerPlaneHandler({
         links: vaultLinksStore,
@@ -5203,16 +4275,9 @@ export async function buildGateway(
         },
       })
     : undefined;
-  /*
-   * Peer-plane background maintenance (#726 P3 gaps 2 & 3): drains
-   * the ONE share outbox (`share_effects` — since #825 a same-owner
-   * placement whose vaults were not both open when it was asked for)
-   * on the gateway's own clock
-   * rather than never — same posture as the outbox sweep below (bounded rows
-   * per tick, backs off on failure, never throws out of the timer). `dial`
-   * is read LIVE so a build that wires it after this point (or never) still
-   * behaves correctly — the sweep simply idles until one exists.
-   */
+  // Drains the ONE share outbox on the gateway's clock: bounded rows per tick,
+  // backs off on failure, never throws out of the timer. `dial` is read LIVE,
+  // so a build that wires it later (or never) still behaves — the sweep idles.
   const peerPlaneSweep = createPeerPlaneSweep({
     db: gatewayDatabase,
     links: vaultLinksStore,
@@ -5225,14 +4290,9 @@ export async function buildGateway(
         credential: plane.ownerCredential,
       })),
     dial: () => options.peerPlane?.dial,
-    /*
-     * Route re-assertion retry (issue #750 invariant 3). The eager push runs
-     * where the EndpointId is first learned (the daemon's endpoint host);
-     * this tick is the RETRY path — `announceLocalRoutes` is a no-op until
-     * the endpoint changes, and stays armed while any linked peer has not
-     * heard the change (the `gateway_meta` pin is only written on full
-     * delivery). Signed per LOCAL vault with its own identity seed.
-     */
+    // The RETRY path for route re-assertion (#750 invariant 3): a no-op until
+    // the endpoint changes, and armed while any linked peer has not heard it,
+    // because the `gateway_meta` pin is written only on full delivery.
     announceRoutes: async () => {
       const dial = options.peerPlane?.dial;
       const localRoute = options.peerPlane?.localRoute;
@@ -5300,31 +4360,19 @@ export async function buildGateway(
 
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
-    // Duration histogram per route (issue #659 R5). Recorded on response
-    // 'close' rather than on return, so a streamed body (SSE, blob range) is
-    // measured to the byte and not just to the handler's first await.
+    // Recorded on 'close', not on return, so a streamed body is measured to
+    // the byte and not just to the handler's first await (#659).
     const startedAt = performance.now();
     res.once("close", () =>
       routeLatency.record(url.pathname, performance.now() - startedAt)
     );
     /*
-     * The peer lane, before anything else can look at this request (#726 P3).
-     *
-     * TWO steps, and they are not the same guard. The handler matches on the
-     * RAW `req.url`, so `/centraid/_peer/../_gateway/devices` still reaches
-     * it — `url.pathname` above already resolved that `..` away — and its own
-     * confinement check refuses it. The second step is what closes the
-     * owner-tier hole: a peer-marked request that is not a peer-plane request
-     * at all cannot fall through to a bearer-authenticated route, where the
-     * forwarder's own upstream bearer would otherwise satisfy the gate. A
-     * peer must never satisfy an owner-tier check by ANY route, so the answer
-     * is the plane's own `not_found` rather than a 403 that would confirm the
-     * route exists.
-     *
-     * Path confinement itself lives in the FORWARDERS (`peer_target_allowed`
-     * in the Rust relay, `isPeerPlaneTarget` in the TS endpoint). Registering
-     * this route confines nothing on its own; it is the backstop for a future
-     * forwarder that forgets.
+     * TWO steps, and not the same guard (#726). The handler matches the RAW
+     * `req.url`, so a traversal reaches it and its own confinement check
+     * refuses it. The second closes the owner-tier hole: a peer-marked request
+     * that is not a peer-plane request must NEVER reach a bearer-authenticated
+     * route, where the forwarder's upstream bearer would satisfy the gate —
+     * hence `not_found`, not a 403 that would confirm the route exists.
      */
     if (peerPlaneHandler && (await peerPlaneHandler(req, res))) return true;
     // The backstop must judge EVERY peer identity name, not one of them
@@ -5335,11 +4383,9 @@ export async function buildGateway(
       PEER_IDENTITY_HEADERS.some((header) => req.headers[header] !== undefined)
     )
       return sendJson(res, 404, { state: "not_found" });
-    // Admin tier, enforced (#865 F2): a proved DEVICE plane never reaches the
-    // gateway-wide operator surfaces. Checked against the plane header BEFORE
-    // `deviceKeyFor` stamps `AUTHED_DEVICE_HEADER` below — every caller that
-    // survives that stamping, loopback bearer included, resolves to some
-    // device key, so only the credential plane separates them here.
+    // Admin tier (#865 F2): a proved DEVICE plane never reaches gateway-wide
+    // operator surfaces. Check the plane header BEFORE `deviceKeyFor` stamps
+    // AUTHED_DEVICE_HEADER — every surviving caller has some device key.
     if (
       req.headers[AUTHED_PLANE_HEADER] === "device" &&
       isAdminGatewayWidePath(url.pathname)
@@ -5350,10 +4396,8 @@ export async function buildGateway(
           "gateway-wide operator surfaces are not reachable with a proved device identity",
       });
     // The Rust-owned iroh relay calls this metadata-only control surface
-    // before it can inject the remote EndpointId into an upstream request.
-    // Requiring that not-yet-injected identity here is circular. The route's
-    // per-boot control secret (plus the outer loopback bearer in production)
-    // authenticates it, so dispatch it at gateway scope in every vault state.
+    // before it can inject the remote EndpointId. The route's per-boot control
+    // secret authenticates it, so dispatch at gateway scope in every vault state.
     if (
       (url.pathname === "/centraid/_gateway/info" ||
         url.pathname.startsWith("/centraid/_gateway/tunnel/")) &&
@@ -5361,18 +4405,10 @@ export async function buildGateway(
     ) {
       return true;
     }
-    // The CLI lane into ticket minting is always open, by design: the landlord
-    // has shell access on this box, and `centraid-gateway pair` carries no
-    // device identity — which is precisely what the route's own host-custody
-    // check (`canMintPairingTicket` → `isDirectHostRequest`) exists to
-    // authorize. Demanding a proved device HERE made that hatch unreachable,
-    // so a headless daemon could never enroll its FIRST device from the CLI.
-    //
-    // Skipping ahead grants nothing. The bearer was already enforced upstream
-    // by `startRuntimeHttpServer` (this path is not in `publicPaths`), and the
-    // route still applies host-custody-or-vault-owner itself. `isDirectHostRequest`
-    // keeps the skip narrow: an iroh-forwarded request arrives on loopback too
-    // but carries device headers, so it falls through to the identity gate.
+    // `centraid-gateway pair` carries no device identity, so demanding a
+    // proved device HERE would leave a headless daemon unable to enroll its
+    // FIRST device. The skip grants nothing: the bearer was enforced upstream
+    // and the route still applies host-custody-or-vault-owner.
     if (
       url.pathname === "/centraid/_gateway/devices/ticket" &&
       isDirectHostRequest(req) &&
@@ -5380,10 +4416,9 @@ export async function buildGateway(
     ) {
       return true;
     }
-    // A native merged grid cannot attach `x-centraid-vault` to an ordinary
-    // image URL. Carry the explicit scope in a gateway-plane URL, then rewrite
-    // it into the existing consent/range-capable blob lane before vault
-    // resolution. Authorization below remains exactly the same.
+    // A native merged grid cannot attach `x-centraid-vault` to an image URL,
+    // so the scope rides the path and is rewritten into the ordinary blob lane
+    // before vault resolution. Authorization below is unchanged.
     const scopedBlob =
       /^\/centraid\/_gateway\/blobs\/(?<vaultId>[^/]+)\/(?<contentId>[^/]+)$/u.exec(
         url.pathname
@@ -5394,15 +4429,9 @@ export async function buildGateway(
       req.headers[VAULT_HEADER] = decodeURIComponent(encodedVaultId);
       req.url = `/centraid/_vault/blobs/${encodedContentId}${url.search}`;
     }
-    // Resolve the request's vault (issue #289): a proved device enrollment
-    // scopes what it may address; the header picks within it. No identity is a
-    // hard refusal. Loopback embeds use the persisted host enrollment created
-    // above, not wildcard reach.
-    //
-    // Device-key resolution has one host-owned seam. The daemon endpoint host
-    // accepts either its per-boot proved iroh headers or the explicitly
-    // injected desktop EndpointId on a kernel-observed loopback socket.
-    // Direct bearer/device-token identity was removed in #555.
+    // A proved device enrollment scopes what may be addressed; the header
+    // picks within it, and no identity is a HARD refusal (#289). Loopback
+    // embeds use the persisted host enrollment, not wildcard reach.
     delete req.headers[COMPANION_GRANTS_HEADER];
     const rawHeader = req.headers[VAULT_HEADER];
     const requested = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
@@ -5423,10 +4452,8 @@ export async function buildGateway(
         message: "this device is not enrolled in any vault on this gateway",
       });
     }
-    // The scopes listing answers "which vaults may I work in", which is by
-    // definition not one vault, so it is dispatched HERE — after the device
-    // identity is proved, and BEFORE the single-vault `runWithVaultContext`
-    // scope below; the `x-centraid-vault` header is irrelevant to it.
+    // Cross-vault listings dispatch HERE: after the device identity is proved,
+    // BEFORE the single-vault scope below. The vault header is irrelevant.
     if (url.pathname === SCOPES_PATH && (await scopesHandler(req, res)))
       return true;
     if (
@@ -5458,14 +4485,9 @@ export async function buildGateway(
         message: "this device is not enrolled in the requested vault",
       });
     }
-    // No `x-centraid-vault` header → the gateway's DEFAULT vault (the owner's
-    // personal one), whenever this device is enrolled in it. Falling straight
-    // to `enrolled[0]` would put a headerless request in whichever vault the
-    // device's enrollment rows happen to rank first, disagreeing with
-    // `defaultVaultId()` and with every other unscoped seam. A device NOT
-    // enrolled in the default still
-    // lands in the first vault it actually holds (a ticket minted against a
-    // named vault ranks that vault first, so a targeted pair is unaffected).
+    // No header → the DEFAULT vault when this device is enrolled in it.
+    // `enrolled[0]` would rank by enrollment row order and disagree with
+    // `defaultVaultId()` and every other unscoped seam.
     const preferredVaultId = vaultRegistry.defaultVaultIdOrUndefined();
     const vaultId =
       requested ??
@@ -5499,12 +4521,9 @@ export async function buildGateway(
       {
         vaultId,
         deviceKey,
-        // L4 attribution (#599): resolve the ACTING OWNER once, here, from
-        // the device binding, so everything downstream reads "who did this"
-        // off the request scope instead of re-deriving it from hardware.
-        // `ownsVault` is the one write predicate (#726): the enrollment view
-        // only yields vaults the device's owner owns, so an un-revoked row
-        // IS ownership.
+        // Resolve the ACTING OWNER once, so downstream reads it off the
+        // request scope, never from hardware (#599). `ownsVault` is the ONE
+        // write predicate: the view yields only owned vaults (#726).
         ...(enrollment
           ? { ownerId: enrollment.ownerId, ownsVault: !enrollment.revoked }
           : {}),
@@ -5533,12 +4552,10 @@ export async function buildGateway(
   };
 
   const start = async (publicBaseUrl: string): Promise<void> => {
-    // Publish the live origin to the unified chat runner so post-turn
-    // webhook minting can build absolute `_centraid-hook` URLs.
     serverUrl = publicBaseUrl;
 
     // A vault arriving after boot can introduce an earlier WAL RPO than the
-    // currently armed timer and also needs its host/scheduler activated.
+    // armed timer, and also needs its host/scheduler activated.
     unsubscribeLateMount();
     unsubscribeLateMount = vaultRegistry.onMount((plane) => {
       pushWakeRelay.attach(plane);
@@ -5562,51 +4579,27 @@ export async function buildGateway(
       void task.finally(() => lateMountTasks.delete(task));
     });
     pushWakeRelay.start();
-    // Web/control session expiry reclamation on the gateway clock instead of
-    // on every HTTP request (issue #659 G3).
     webControlSessions.startSweeping();
-    // Peer-plane background delivery (#726 P3 gaps 2 & 3) on the gateway clock.
     peerPlaneSweep.start();
 
-    // Start the per-vault in-process cron schedulers as they mount. Under
-    // n8n semantics they only fire while running — downtime is not
-    // backfilled (issue #149). The schedulers run REGARDLESS of the
-    // automations experiment: system recognition recipes (photo OCR, faces,
-    // embeddings, transcripts) ride the same cursor engine, so photos keep
-    // indexing with the experiment off. The gate lives in reconcile's row
-    // set instead — user automations never arm while off.
+    // Schedulers run REGARDLESS of the automations gate: recognition recipes
+    // ride the same cursor engine, so photos keep indexing while it is off.
+    // The gate lives in reconcile's row set instead.
     schedulersStarted = true;
     for (const [, sched] of schedulers) sched.start();
 
-    // Mount EVERY vault's workspace (#289): host bundle, app registry sync
-    // + enrollment, scheduler reconcile — so each vault's automations fire
-    // and each client's first request finds its vault warm.
     await forEachSequentially(vaultRegistry.planesList(), (plane) =>
       hostFor(plane).then(() => undefined)
     );
-    // Commons mechanics are compiled state, not backup truth. A normal mount,
-    // restore, or restore-after-erase rebuilds every local member seat from
-    // the steward grants after all vaults are available.
     recompileMountedCommons();
 
-    // Vault standing duties on the gateway clock: a sweep now, then hourly.
     vaultRegistry.start();
 
-    // Adaptive backstop: active/deferred work retries quickly, an empty queue
-    // follows the hardware profile's idle cadence, and errors back off.
     scheduleOutboxSweep(hardwareProfile.outboxIdleIntervalMs);
 
-    // Warm the host-capability catalog — the model list — for each detected
-    // harness on EVERY gateway start, in the background so it never delays
-    // readiness. Best-effort; the warmer dedupes, so a client Refresh mid-boot
-    // joins this run.
     if (warmer) {
       const activeWarmer = warmer;
       void (async () => {
-        // Every registered harness kind, not a hardcoded pair. The probe is a
-        // single `<bin> --version` per kind (concurrent, and a kind with no
-        // configured binary short-circuits without spawning), and only the
-        // kinds that actually resolve go on to the far more expensive warm.
         const surface: CatalogSurface = "models";
         const checks = await Promise.all(
           HARNESS_KINDS.map(async (kind) => ({
@@ -5632,7 +4625,6 @@ export async function buildGateway(
       })();
     }
 
-    // Offsite backup engine: hourly scheduler, started only when enabled.
     backupService.start();
   };
 
@@ -5641,27 +4633,20 @@ export async function buildGateway(
     pushWakeRelay.stop();
     webControlSessions.stopSweeping();
     peerPlaneSweep.stop();
-    // A mount notification may already be building its code host. Let that
-    // bounded work settle before closing vault databases or removing temp
-    // roots; otherwise shutdown races git/SQLite initialization.
+    // A mount notification may already be building its code host; let that
+    // settle first or shutdown races git/SQLite initialization.
     await Promise.all(lateMountTasks);
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearTimeout(outboxTimer);
-    // A trailing Notifications doorbell must not outlive the registry it samples.
     for (const open of notificationsDoorbellWindows.values())
       clearTimeout(open.timer);
     notificationsDoorbellWindows.clear();
     grantRefreshDoorbell.stop();
-    // Await the in-flight backup run (if any): its post-registration steps
-    // write shipper + backup state, and the vault registry teardown below
-    // closes the very planes it would touch.
     await backupService.stop();
-    // Drain detached automation lifecycle work (compiles, revisions) and any
-    // in-flight interactive/steering turn before the vault databases close —
-    // otherwise shutdown can land mid-`store.closeItem` or orphan an ACP
-    // child (issue #541 review).
-    // Snapshotted before awaiting: each task's `finally` removes itself from
-    // the live set, and a queued lock tail can still append behind us.
+    // Drain detached lifecycle work before the vault databases close, or
+    // shutdown lands mid-`closeItem` or orphans an ACP child (#541).
+    // Snapshotted before awaiting: each task's `finally` removes itself, and a
+    // queued lock tail can still append behind us.
     const detached = Array.from(detachedAutomationTasks);
     const lockTails = Array.from(automationConversationLocks.values());
     await Promise.all(detached);
@@ -5669,10 +4654,7 @@ export async function buildGateway(
     const journalFiles = vaultRegistry
       .planesList()
       .map((plane) => plane.workspace.journalDbFile);
-    // Sweep clock down, WAL checkpoint, files closed. Idempotent.
     vaultRegistry.stop();
-    // Release THIS gateway's memoized `journal.db` handles (another gateway in
-    // the same process keeps its own).
     closeJournalConversationStores(journalFiles);
     performanceMonitor.close();
     gatewayDatabase.close();
@@ -5699,18 +4681,6 @@ export async function buildGateway(
   } satisfies BuiltGateway;
 }
 
-/**
- * Validate a manifest's declared vault block into an install-scope block
- * (issue #306). Manifests are app-authored input: anything malformed grants
- * nothing rather than something surprising.
- */
-/**
- * Display metadata for a bundled blueprint app, read from its shipped
- * `app.json` (issue #434). Mirrors the shape
- * `WorktreeStore.listAppsWithMeta` produces for code-store apps so the two
- * origins merge into one listing. A malformed/absent app.json degrades to
- * id-only — the app still lists, just without pretty metadata.
- */
 async function readBundledAppMeta(dir: string): Promise<{
   name?: string;
   description?: string;

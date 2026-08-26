@@ -1,24 +1,7 @@
-// People's WRITE side: every command this app dispatches, and what the frame's
-// one status line says afterwards.
-//
-// THREE RULES HOLD HERE, AND NOTHING ELSE DOES.
-//
-// 1. ONE DOOR. Every write is `window.centraid.write({action, input, intentId})`
-//    and every outcome is narrated through `publishOutcome` on the frame's
-//    single status line. No toast, no second line, no badge.
-//
-// 2. AN OUTCOME IS NOT A THROW. The action surface answers HTTP 200 with a
-//    denied/parked/queued body; only a transport failure rejects. So `executed`
-//    is checked, never assumed, and the four other terminal states each keep
-//    their own sentence — a queued write and a write awaiting approval are
-//    different facts about the member's data.
-//
-// 3. UNDO IS OFFERED ONLY WHERE A TRUE REVERSE WRITE EXISTS: star↔unstar,
-//    trash→restore, edit-person back to its previous values, set-cadence back
-//    to its previous number. Everything else reports what happened and stops.
-//    An `Undo` that would have to invent a compensating write — un-adding a
-//    note, un-logging a touch — is a button that lies about what the vault can
-//    do, and the vault is the thing this product is for.
+// People's writes: one door (`window.centraid.write` + `publishOutcome` on
+// the frame status line). An outcome is not a throw — check `executed`. Undo
+// only where a true reverse write exists; a compensating write would lie
+// about the vault.
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import type { InlineFrame } from "../inline-types.ts";
 import { OUTCOMES, REFUSALS } from "./people-copy.ts";
@@ -34,13 +17,12 @@ import type {
 interface WriteDeps {
   frame: InlineFrame;
   refresh: () => Promise<void>;
-  /** The status line is carrying an OUTCOME now, so the ambient sentence must
-   *  not overwrite it on the next render. Cleared by the next navigation. */
+  /** Outcome is on the status line; the ambient sentence must not overwrite it. Cleared by the next navigation. */
   hold: () => void;
   notice: (text?: string) => void;
 }
 
-/** What a non-executed outcome says. Each status keeps its own sentence. */
+/** Each non-executed status keeps its own sentence. */
 function refusal(outcome: VaultOutcome | undefined): string {
   if (outcome?.status === "parked") return REFUSALS.parked;
   if (outcome?.status === "queued" || outcome?.status === "in-flight")
@@ -50,8 +32,7 @@ function refusal(outcome: VaultOutcome | undefined): string {
 }
 
 export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
-  /** One command. The intent id is minted here so a pending write can be
-   *  recognised in the outbox as this app's own (`pending-projection.ts`). */
+  /** Intent id minted here so a pending write is recognisable as this app's (`pending-projection.ts`). */
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -68,8 +49,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     }
   }
 
-  /** Report an outcome and refresh. Returns whether the write landed, so a
-   *  caller can decide what to do next rather than guessing from a void. */
+  /** Report an outcome and refresh. Returns whether the write landed. */
   async function settle(
     outcome: VaultOutcome | undefined,
     text: string,
@@ -86,10 +66,6 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     return true;
   }
 
-  // ---------- The star ----------
-
-  /** Star and unstar are each other's reverse, so this is the clearest Undo in
-   *  the app: the same pair of commands, run the other way round. */
   async function toggleStar(person: {
     party_id: string;
     name: string;
@@ -117,8 +93,6 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     });
   }
 
-  // ---------- Trash and restore ----------
-
   async function trashPerson(person: {
     party_id: string;
     name: string;
@@ -139,17 +113,8 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.restored(person.name));
   }
 
-  // ---------- The person record ----------
-
-  /**
-   * Save the edit/new form.
-   *
-   * A NEW PERSON IS ONE COMMAND; an edit is up to two, because the vault keeps
-   * the cadence on its own command (`set-cadence`) — the same number reached
-   * two ways would be two places to change it. The undo restores the previous
-   * values through the same pair, which is why `previous` is asked for rather
-   * than read back afterwards: after the write, the previous values are gone.
-   */
+  // New person is one command; edit is two because cadence is `set-cadence`.
+  // Pass `previous` — after the write those values are gone.
   async function savePerson(
     draft: PersonDraft,
     previous: PersonDetail | null
@@ -201,8 +166,6 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     });
   }
 
-  /** The cadence on its own — the person screen's chip row, where the form is
-   *  not open. Its reverse is the previous number, which the caller holds. */
   async function setCadence(
     person: { party_id: string; name: string; cadence_days: number },
     cadenceDays: number
@@ -223,11 +186,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     });
   }
 
-  // ---------- The most repeated act in the app ----------
-
-  /** Logging stamps last-contacted to zero and prepends the touch to Recent.
-   *  No Undo: nothing in the contract un-logs an interaction, and a button
-   *  that silently logged a second one would be worse than none. */
+  /** No Undo: the contract has no un-log. */
   async function logTouch(draft: LogDraft, name: string): Promise<void> {
     const outcome = await act("log-interaction", {
       party_id: draft.party_id,
@@ -236,8 +195,6 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     });
     await settle(outcome, OUTCOMES.logged(draft.kind, name));
   }
-
-  // ---------- The person screen's sections ----------
 
   async function addNote(
     partyId: string,
@@ -263,10 +220,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.dated(name));
   }
 
-  /** The per-date reminder toggle. The command flips whatever it finds, so the
-   *  caller says which way it went for the sentence — and no Undo is offered,
-   *  because a second toggle is a new decision rather than a reversal of the
-   *  first one. */
+  /** No Undo: a second toggle is a new decision, not a reversal. */
   async function toggleReminder(
     dateId: string,
     label: string,
@@ -310,10 +264,7 @@ export function createWrites({ frame, refresh, hold, notice }: WriteDeps) {
     await settle(outcome, OUTCOMES.channelRemoved(channel.kind));
   }
 
-  // ---------- Merge ----------
-
-  /** The one act with no reverse at all, which is why it is behind a modal
-   *  confirm rather than behind an Undo. */
+  /** No reverse — modal confirm, not Undo. */
   async function mergePeople(
     source: PersonRow,
     target: { party_id: string; name: string }

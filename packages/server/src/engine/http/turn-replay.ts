@@ -1,27 +1,9 @@
-/*
- * Idempotency replay (issue #420, Wave 6). When a turn POST arrives with an
- * `idempotencyKey` that already names a recorded turn on the conversation, the
- * route must NOT re-run the model — it replays the recorded answer as a short
- * SSE stream the client consumes exactly like a fresh turn.
- *
- * `buildReplayEvents` turns a `RecordedTurnReplay` (ledger lookup) into the
- * `TurnStreamEvent` sequence to write. A completed turn replays its final text
- * (a single `assistant.delta` carrying the whole answer, then `final`, plus a
- * `usage` frame when the ledger froze token/cost rollups); an errored turn
- * replays its `error`. The driver appends the closing `event: end` frame.
- *
- * Pure + tiny so it is unit-testable without a live stream.
- */
+// Idempotency replay (#420): a seen idempotencyKey replays the recorded stream; never re-run the model.
 
 import type { RecordedTurnReplay } from "../conversation/history.js";
 import type { TurnStreamEvent } from "../conversation/runner.js";
 
-/**
- * The ordered `TurnStreamEvent`s that replay a recorded turn. Both chat
- * surfaces already fold this shape (`assistant.start` → `assistant.delta` →
- * `usage` → `final`, or a bare `error`), so a replay renders identically to
- * the turn's original stream.
- */
+/** The ordered `TurnStreamEvent`s that replay a recorded turn. */
 export function buildReplayEvents(
   recorded: RecordedTurnReplay
 ): TurnStreamEvent[] {

@@ -1,17 +1,18 @@
 /*
- * The admin CLIs against a PROTECTOR-FUL data directory (issue #568 item D).
+ * The admin CLIs against a PROTECTOR-FUL data directory (#568).
  *
  * `daemonKeyStore` always installs a protector, so every `keys/<id>.sealkey`
- * a running daemon writes is an `aes-256-gcm-v1` envelope. Four
- * `openVaultRegistry` calls in `vault-admin` / `device-admin` / `status-admin`
- * passed no `keyStore`, so their protector-less store threw
- * `unsupported_scheme`, `vault-registry.ts` swallowed it into
- * `failedMountsByDir`, and `list()` returned `[]`.
+ * a running daemon writes is an `aes-256-gcm-v1` envelope. Every
+ * `openVaultRegistry` call in `vault-admin` / `device-admin` / `status-admin`
+ * must therefore pass the `keyStore`: a protector-less store throws
+ * `unsupported_scheme`, `vault-registry.ts` swallows it into
+ * `failedMountsByDir`, and `list()` answers `[]`.
  *
- * The symptoms were silent, which is why a green CI shipped them: `vault list`
- * printed nothing, `status` reported zero vaults, `devices add --vault` failed
- * with "no vault matches" — and `devices revoke` opened `cleanupRegistry` for
- * the vault-local data-erasure step, found no vault, and SKIPPED IT.
+ * That failure is silent, which is why only a positive assertion catches it:
+ * `vault list` prints nothing, `status` reports zero vaults, `devices add
+ * --vault` fails with "no vault matches" — and `devices revoke` opens
+ * `cleanupRegistry` for the vault-local data-erasure step, finds no vault, and
+ * SKIPS IT.
  *
  * These drive the CLI verbs against a data dir whose sealing keys are
  * protected exactly as a daemon leaves them, and assert the revoke erasure

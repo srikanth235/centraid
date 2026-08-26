@@ -1,24 +1,14 @@
 /*
- * Golden-frame conformance for the tunnel wire protocol (issue #263 / #419).
+ * Golden-frame conformance for the tunnel wire protocol (#263 / #419): u32 BE
+ * length prefix + UTF-8 JSON header frame, implemented five times (Node,
+ * Swift, Kotlin, Rust/WASM, desktop/gateway twins). They must not drift; this
+ * test is the SOURCE OF TRUTH for `fixtures/wire-golden.json`, read
+ * identically by the Swift XCTest and Kotlin JUnit conformance tests.
  *
- * The framing — u32 big-endian length prefix + UTF-8 JSON header frame — is
- * implemented five times (Node here, Swift + Kotlin in
- * apps/mobile/modules/centraid-tunnel, Rust/WASM in apps/web/iroh-wasm, and
- * the Node desktop/gateway twins). They must not drift. This test is the
- * SOURCE OF TRUTH for `fixtures/wire-golden.json`: the same fixture is read
- * by the Swift XCTest and Kotlin JUnit conformance tests so every language
- * asserts against identical bytes.
- *
- * What is byte-exact across ALL languages: the framing of a fixed JSON byte
- * string (length prefix mechanics), the ALPN byte strings, and the caps.
- * JSON *object* encoding is not byte-comparable across serializers (key order
- * differs between JSON.stringify / JSONSerialization / org.json / serde_json),
- * so object encoding is checked by round-trip (encode → decode → compare
- * fields), while the on-wire framing is pinned to the fixture's canonical
- * `json` string. See fixtures/wire-golden.json `_readme`.
- *
- * Regenerate after an intentional vector change: `UPDATE_GOLDEN=1 vitest run
- * wire-conformance`. The fixture is committed and must stay byte-exact.
+ * Byte-exact across ALL languages: framing of a fixed JSON byte string, ALPN
+ * bytes, caps. JSON object encoding is round-trip-checked only (key order
+ * differs across serializers). Regenerate after an intentional vector change:
+ * `UPDATE_GOLDEN=1 vitest run wire-conformance`.
  */
 
 import fs from "node:fs";
@@ -59,9 +49,8 @@ const HOP_BY_HOP = [
 ];
 
 /**
- * Named logical vectors. The object is what an implementation builds in
- * memory; `encodeHeaderFrame` turns it into the canonical on-wire bytes. The
- * Node encoder (JSON.stringify, insertion order) defines the canonical form.
+ * Named logical vectors. The Node encoder (JSON.stringify, insertion order)
+ * defines the canonical on-wire form.
  */
 const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
   {
@@ -153,12 +142,9 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
       vaultName: "personal",
       vaultIds: ["vlt_42", "vlt_family"],
       version: "0.1.0",
-      // Stated against the shared constant, not a literal (issue #726
-      // Finding 8): this vector is the golden fixture's SOURCE OF TRUTH, so a
-      // stale literal here would keep signing off on a floor no build still
-      // serves. `GATEWAY_PROTOCOL_VERSION` is 3 today (unchanged byte output
-      // against the committed `fixtures/wire-golden.json`); regenerate with
-      // `UPDATE_GOLDEN=1` only for an intentional vector change.
+      // Shared constant, not a literal (#726 Finding 8): a stale literal here
+      // would sign off on a floor no build serves. UPDATE_GOLDEN=1 only for
+      // an intentional vector change.
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
     },
   },
@@ -327,10 +313,8 @@ describe.each(VECTORS)("wire vector $name", ({ name, value }) => {
 });
 
 describe("framing bounds", () => {
-  // The cap is enforced uniformly on the READ path in every implementation
-  // (protocol.ts readHeaderFrame, Swift/Kotlin readHeaderFrame). A length
-  // prefix over the cap is rejected before the body is read, so a crafted
-  // 4-byte prefix exercises it without allocating a 256 KiB frame.
+  // The cap is enforced uniformly on the READ path in every implementation;
+  // a crafted 4-byte over-cap prefix exercises it without allocating 256 KiB.
   it("rejects a header frame whose length prefix exceeds the cap", async () => {
     const prefix = Buffer.alloc(4);
     prefix.writeUInt32BE(MAX_HEADER_FRAME_BYTES + 1, 0);

@@ -1,5 +1,5 @@
 /*
- * The bundled-manifest scope-denial sweep (issue #839, G4) — part 1 of 3.
+ * The bundled-manifest scope-denial sweep (#839) — part 1 of 3.
  *
  * Loading checks and the positive half: every declared scope × verb is
  * evaluable and allowed. The shared loader, oracles, and vault fixture live in

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // `bun run --cwd packages/model-runtime setup` — the ONLY place that
-// touches the network or writes into runtime/ (issue #724 W8). It:
+// touches the network or writes into runtime/ (#724). It:
 //   1. runs `bun install` inside runtime/ (never at the repo root), which
 //      is the one place native/optional recognition dependencies get installed;
 //   2. downloads each capability's model weights + auxiliary files

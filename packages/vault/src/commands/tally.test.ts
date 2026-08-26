@@ -51,7 +51,7 @@ describe("tally", () => {
       .party_id;
   }
   function members(groupId: string): string[] {
-    // Membership lives on the group's circle (issue #310 S4).
+    // Membership lives on the group's circle (#310).
     return (
       db.vault
         .prepare(
@@ -316,7 +316,7 @@ describe("tally", () => {
     expect(invoke("tally.delete_group", { group_id: gid }).status).toBe(
       "failed"
     );
-    // delete_expense now soft-deletes (issue #441 A4). The decision: a TRASHED
+    // delete_expense now soft-deletes (#441). The decision: a TRASHED
     // (recoverable) expense STILL blocks group deletion until it purges — it is
     // money history the owner could restore, so the group cannot be torn out from
     // under it.
@@ -391,7 +391,7 @@ describe("tally", () => {
       .run("2000-01-01T00:00:00Z", xid);
     gw.sweep(owner);
     // The expense purged, and its memo annotation went with it — no dangling
-    // polymorphic pointer (previously leaked on the old hard-delete path).
+    // polymorphic pointer left behind.
     expect(
       (
         db.vault
