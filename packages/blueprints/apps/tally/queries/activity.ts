@@ -27,6 +27,9 @@ export default async function activityHandler({ ctx }: HandlerArgs) {
       }
       rows.push({
         kind: "expense",
+        // The ids the feed needs to open the expense it names (issue #872).
+        expense_id: e.expense_id,
+        group_id: e.group_id,
         date: e.spent_on,
         description: e.description,
         category: e.category,

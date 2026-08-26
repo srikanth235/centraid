@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "tests/matrix.json whole-file fingerprint is re-pinned by #864 because Wave 7 added the appScenarios ledger and M18 flipped product-bug cells to owned. No quality lost a gate, no gate lost its evidence, no classification was weakened, and the remaining governed fingerprints are unmoved.",
+  "approvedDeviation": "tests/matrix.json whole-file fingerprint is re-pinned by #872 because the Tally and Locker rebuild flipped their scenario, state and seat rows to owned owners and registered the umbrella issue in trackingIssues. The governed payload (qualities, demonstratedRed) is unmoved, no quality lost a gate, no gate lost its evidence, and no classification was weakened.",
   "matrixGovernanceFingerprint": "2f4acea8300a63b0fb407307840938bd29af4035239340a3addba62fc81e7b75",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "62893489b538f861feb46200dc69a53a7ce02b0809224b93f74e2f39fc32276d",
@@ -8,6 +8,6 @@
     "packages/server/src/serve/health-registry.ts": "d1f3fc416ecbe43af2ab4b091fecf3b1041590e52f2002a242e5031c65c9fd04",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "2b667efd1354071ab91043ab33f5ebd29cd79a11fcc4716edbe00aeada60f4bd",
-    "tests/matrix.json": "c5ee07f0652af2156ea0a36ddeb20f0097fff0c1999d7f96fcc09889adcd4bee"
+    "tests/matrix.json": "34c6b802f0bfa763f1932afc8591f64e34ec9d4ce1412deb07c7f3b986992a97"
   }
 }

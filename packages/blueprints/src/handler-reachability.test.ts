@@ -63,7 +63,7 @@ const WEBVIEW_APPS = new Set(["notes"]);
  */
 const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
   {
-    web: ["tally"],
+    web: [],
     mobile: ["tally"],
   };
 
@@ -80,6 +80,11 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
     kind: "extension-only",
     rationale:
       "The browser extension calls this per-origin reveal endpoint after user selection.",
+  },
+  "tally.action.add-receipt-expense": {
+    kind: "agent-only",
+    rationale:
+      "The action requires staged_sha and ocr_text from the origin seat's receipt capture; no web route holds a camera or the OCR pass, so the Receipt surface reconciles and simulates while the assistant carries the write (#872).",
   },
   "docs.action.edit": {
     kind: "agent-only",

@@ -459,7 +459,12 @@ describe("InlineAppRoute suite", () => {
           '[data-testid="inline-app-seat-refusal"]'
         );
         expect(refusal).toBeTruthy();
-        expect(refusal?.textContent ?? "").toMatch(/paired device/iu);
+        expect(refusal?.textContent ?? "").toMatch(
+          /does not open on a shared browser/iu
+        );
+        expect(refusal?.textContent ?? "").toMatch(/user-presence boundary/iu);
+        // The way in is named — a refusal without one reads as broken.
+        expect(refusal?.textContent ?? "").toMatch(/desktop app|your phone/iu);
         // The wall means "does not mount" — the app's lazy chunk is never
         // even fetched, not merely hidden after mounting.
         expect(loader).not.toHaveBeenCalled();

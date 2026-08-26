@@ -20,3 +20,19 @@ export const INLINE_APP_DISABLED_SEATS: Readonly<
 export function isDisabledOnSeat(appId: string, seat: string): boolean {
   return (INLINE_APP_DISABLED_SEATS[appId] ?? []).includes(seat);
 }
+
+/** An app's own words for its seat wall, where it has them. The body is the
+ *  app's sentence — Locker's is reconciled with `VIEWER_REFUSED` in
+ *  `packages/blueprints/apps/locker/view-copy.ts`, restated here for the same
+ *  reason the seat table itself is: the wall renders before any app chunk is
+ *  fetched. `wayIn` names how the thing gets done instead — a refusal that
+ *  names no way in reads as broken (v17 handoff, #872). */
+export const INLINE_APP_SEAT_REFUSALS: Readonly<
+  Record<string, { title: string; body: string; wayIn: string }>
+> = {
+  locker: {
+    title: "Locker does not open on a shared browser",
+    body: "A shared browser cannot hold the user-presence boundary this app depends on, so Locker refuses the seat outright.",
+    wayIn: "Use the desktop app beside your gateway, or your phone.",
+  },
+};

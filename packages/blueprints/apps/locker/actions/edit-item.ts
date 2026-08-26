@@ -21,6 +21,10 @@ const FIELDS = [
   "phone",
   "address",
   "network",
+  // The connector alias (issue #298 item 4, GAPS #15). Forwarded whenever it is
+  // present — including the empty string, which the command reads as "clear
+  // the alias", freeing it for another live item.
+  "alias",
 ] as const;
 
 export default async function editItem({ body, ctx }: HandlerArgs) {

@@ -3,7 +3,7 @@
   "id": "tally",
   "name": "Tally",
   "description": "Split, settled — a personal expense splitter as a projection of the vault. Track shared costs across groups and friends, see who owes whom, and settle up. A friend is a canonical core.party; a group is a social.circle (the vault's one audience mechanism) decorated by a tally.group with an emoji icon, membership on the circle (you included); an expense stores its resolved splits (equally, exact amounts or percentages), re-validated server-side to sum to the amount; a settlement is a real cash payment. Balances are NEVER stored — they are derived at read time by the balance engine. Adding, editing and deleting expenses, settling up, and managing groups and friends all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "iconKey": "Receipt",
   "colorKey": "indigo",
   "vault": {
@@ -651,6 +651,7 @@
           "friends": { "type": "array" },
           "groups": { "type": "array" },
           "trash": { "type": "array" },
+          "recurring": { "type": "array" },
           "owe_total_minor": { "type": "integer" },
           "owed_total_minor": { "type": "integer" },
           "vaultDenied": { "type": "object" }

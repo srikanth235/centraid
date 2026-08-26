@@ -26,6 +26,7 @@ export interface RawItem {
   url?: string | null;
   email?: string | null;
   network?: string | null;
+  expiry?: string | null;
   compromised?: number | boolean | null;
   updated_at?: string;
   purge_at?: string | null;
@@ -72,6 +73,14 @@ interface DecoratedItem {
   reused: boolean;
   compromised: boolean;
   severity: string;
+  /**
+   * Plain TEXT columns, NOT sealed (see SEALED_INPUT/SEALED_COLUMNS in
+   * packages/vault/src/commands/locker.ts: password, otp_seed, card_number,
+   * cvv, content). The Review surface reads them off the list row to
+   * self-heal, so carrying them here keeps the list payload secret-free.
+   */
+  url: string | null;
+  expiry: string | null;
   updated_at?: string;
   purge_at: string | null;
 }
@@ -147,6 +156,8 @@ export function decorate(
       reused,
       compromised,
       severity,
+      url: it.url ?? null,
+      expiry: it.expiry ?? null,
       updated_at: it.updated_at,
       purge_at: it.purge_at ?? null,
     };

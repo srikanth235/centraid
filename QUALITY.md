@@ -2,6 +2,12 @@
 
 ## Open
 
+- **`packages/blueprints/index.json` colorKeys disagree with the apps' own hues.** The
+  catalog lists Locker as `indigo` and Tally as `forest`, while the v17 handoff and both
+  `app.json` files say rose and indigo respectively. Pre-existing before #872 (that change
+  set touched only the `version` lines of those stanzas); whichever surface reads the
+  catalog colour draws the wrong hue. Surfaced by the #872 receipt audit.
+
 - **A second offline write never settles its promise.** With the gateway
   severed, the first `window.centraid.write` of a session resolves `queued` as
   it should; every write issued after it in the same session queues, applies

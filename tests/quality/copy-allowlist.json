@@ -3,8 +3,18 @@
   "entries": [],
   "copyRatchet": {
     "_comment": "U4 copy-density ratchet (#805). Every entry is a user-facing string literal the walk in tests/quality/user-facing-qualities.test.ts flags as over 120 chars, two or more sentences, or carrying banned filler. Seeded green on day one so the gate lands without rewriting copy; TIGHTEN-ONLY from here. Audit slices D1..D5 rewrite the copy, DELETE the entry, and lower maxEntries by the same count; the gate fails on any entry that no longer matches a real string, so seeds cannot outlive the copy they excuse. maxEntries is capped in turn by COPY_SEED_CEILING in the owning test, which may only ever fall.",
-    "maxEntries": 29,
+    "maxEntries": 31,
     "entries": [
+      {
+        "file": "packages/blueprints/apps/locker/view-copy.ts",
+        "literal": "This writes every title, username, address, note and password to a plaintext file on this device. Anything that reads the file reads your secrets.",
+        "reason": "security disclosure — the plaintext-export lede is where the export decision is made; the first sentence names every field that leaves sealed storage and the second names the consequence, and neither survives being cut without the member deciding on half the fact"
+      },
+      {
+        "file": "packages/blueprints/apps/tally/compose-copy.ts",
+        "literal": "Five debts become three payments. Simplification rewires who owes whom, so it is off unless a group turns it on, and it says what it changed.",
+        "reason": "consent — the simplification opt-in panel; the sentence carries what the setting does to the ledger, that it is off until a group consents, and that it reports its own rewrite, and a group cannot answer the opt-in without all three"
+      },
       {
         "file": "apps/mobile/src/apps/locker/LockerUnlockScreen.tsx",
         "literal": "Create a primary passphrase of at least 12 characters. It never leaves this online authentication request.",

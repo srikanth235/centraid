@@ -15,4 +15,4 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | TOTP generation | ✅ | — | — | `packages/blueprints/apps/locker/totp.test.ts` |
 | origin matching for autofill | ✅ | — | — | `packages/blueprints/apps/locker/origin-matching.test.ts` |
 | item type partition | ✅ | — | — | `packages/blueprints/apps/locker/locker-item-type.test.ts` |
-| list/detail derivation | ✅ | — | — | `packages/blueprints/apps/locker/logic.test.ts` |
+| row-recipe derivations | ✅ | — | — | `packages/blueprints/apps/locker/format.test.ts` |

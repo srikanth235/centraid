@@ -3,7 +3,7 @@
   "id": "locker",
   "name": "Locker",
   "description": "Everything, locked up — a personal password manager as a projection of the vault. Logins, cards, secure notes, identities, Wi-Fi and standalone passwords, each an owner-only locker.item. Secrets are sealed vault columns (ciphertext at rest, issue #293): opening an item exercises the app's reveal scope and is receipted per item; secrets never ride a list payload and are never journaled. One-time codes are real RFC-6238 TOTP computed client-side after the seed is read; the password generator runs entirely in the browser. Watchtower flags weak, reused and compromised passwords — weak and reused are derived inside the vault's sealed boundary by locker.watchtower, compromised is a stored breach flag. Favorites are the canonical flags-scheme star (a photo favorited in Photos shows in Starred here too); tags are free-form. Adding, editing, trashing, restoring, purging and starring all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "iconKey": "Lock",
   "colorKey": "rose",
   "vault": {
@@ -156,6 +156,9 @@
           },
           "network": {
             "type": "string"
+          },
+          "alias": {
+            "type": "string"
           }
         },
         "required": ["type", "title"],
@@ -248,6 +251,9 @@
             "type": "string"
           },
           "network": {
+            "type": "string"
+          },
+          "alias": {
             "type": "string"
           }
         },

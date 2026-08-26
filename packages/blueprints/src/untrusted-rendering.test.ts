@@ -21,6 +21,7 @@ import { LockerList } from "../apps/locker/components/List.tsx";
 import { NoteCard } from "../apps/notes/components/Library.tsx";
 import { Row as PeopleRow } from "../apps/people/components/Shared.tsx";
 import { MemoriesStrip } from "../apps/photos/components/Memories.tsx";
+import { LedgerRow } from "../apps/tally/components/LedgerRow.tsx";
 import { TaskRow } from "../apps/tasks/components/TaskRow.tsx";
 
 const VECTORS = [
@@ -44,10 +45,9 @@ type Renderer = (value: string) => string;
 const noop = () => undefined;
 
 // One row per app that draws member-supplied text. Agenda, Notes and Tasks
-// paid that debt back with their rebuilds (#834); Tally is still absent
-// because its interface is, not because it was excused — it owes this suite a
-// row again the moment it renders a vault string, and the vectors below are
-// what it must render inert.
+// paid that debt back with their rebuilds (#834); Tally and Locker paid it
+// with theirs (#872) — the one ledger-row recipe and the items list are the
+// components every list in each app reuses.
 const RENDERERS: Record<string, Renderer> = {
   // ONE row draws every list in Agenda: Schedule and Waiting on share it, and
   // the grid's rows are the same component fed a different window. Every
@@ -132,22 +132,23 @@ const RENDERERS: Record<string, Renderer> = {
   locker: (value) =>
     renderToStaticMarkup(
       createElement(LockerList, {
-        pool: [
+        rows: [
           {
             item_id: "item-1",
-            type: "login",
+            type: "login" as const,
             title: value,
             subtitle: value,
+            tags: [value],
           },
         ],
-        listTitle: "All items",
-        allCount: 1,
-        search: "",
-        selectedId: null,
-        onOpenSide: noop,
-        onSelect: noop,
-        onSearchInput: noop,
-        onClearSearch: noop,
+        windowCount: 1,
+        loaded: true,
+        truncated: false,
+        onOpen: noop,
+        onCopyUsername: noop,
+        onShowMore: noop,
+        onImport: noop,
+        onAdd: noop,
       })
     ),
   // The library card, which is also the search result and the notebook's row.
@@ -215,6 +216,23 @@ const RENDERERS: Record<string, Renderer> = {
             onOpen: noop,
           },
         ],
+      })
+    ),
+  // ONE recipe draws every ledger in Tally — Balances, Activity, a group's
+  // ledger, a friend's, Spending, Trash and Search all feed this row. The
+  // title, the one-sentence meta, the chip initials and the figure's sub-label
+  // are each member text: a description, a member's name and a group's name
+  // all arrive from rows other members wrote.
+  tally: (value) =>
+    renderToStaticMarkup(
+      createElement(LedgerRow, {
+        chip: { partyId: "party-1", initials: value },
+        title: value,
+        meta: value,
+        status: { label: value, tone: "seam" as const },
+        figure: { text: value, tone: "net" as const, sub: value },
+        acts: [{ label: value, run: noop }],
+        onOpen: noop,
       })
     ),
   // The task row appears in eight places and is one component, so covering it

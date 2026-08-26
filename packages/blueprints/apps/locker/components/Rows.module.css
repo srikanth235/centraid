@@ -1,0 +1,687 @@
+/* Locker's content vocabulary (README-Locker §5). Geometry, and the two
+   variants this app added to the shared row grammar:
+
+     * a SEALED VALUE — a letter-spaced dot run in the soft ink rung, which is
+       the existing field-row value with one variant, not a new register; and
+     * PER-FIELD VERBS — the same acts every row grammar has, moved to the end
+       of a field row so a member can act on one field without acting on the
+       item.
+
+   Everything else is the product's: the row, the section head with a count and
+   a text verb, the chip, the facts table, the confirm. Every colour, face and
+   rhythm is read from the shared token layer the shell injects; this file
+   declares none of its own. */
+
+/* ---------- Numerics ---------- */
+
+/* EVERY NUMBER IN THIS PRODUCT IS TABULAR AND BIDI-ISOLATED. Without the
+   isolate, `300 of 312` reorders under RTL and a member reads a window that
+   was never written — which is why the four properties travel together as one
+   class rather than as a `font:` a caller might take half of. */
+.num {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-soft);
+}
+
+/* ---------- The item row (§5) ---------- */
+
+.rowWrap {
+  border-block-end: 1px solid var(--line);
+}
+/* A pending row takes a 2px inline-start rule and says the words. The rule is
+   ink, never a colour: a queued star is not a warning. */
+.rowWrap[data-pending="true"] {
+  border-inline-start: 2px solid var(--text-faint);
+  padding-inline-start: var(--sp-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--density-row);
+}
+
+/* The type chip: two letters at the micro rung, in Locker's own rose. This is
+   the ONE place the identity hue appears inside the app, and it is a CONTENT
+   marker on a row rather than a control colour — no button in Locker spends
+   the identity. */
+.chip {
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--c-rose-text);
+  background: color-mix(in oklab, var(--c-rose) 14%, transparent);
+}
+@media (pointer: coarse) {
+  .chip {
+    inline-size: 28px;
+    block-size: 28px;
+  }
+}
+
+/* The row's own opening target — the title and the meta, as one control. */
+.open {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-hair);
+  text-align: start;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.title {
+  font: var(--t-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The meta sentence is CLAMPED TO ONE LINE. A second line of annotation is a
+   second row of noise for a fact nobody asked to read. */
+.meta {
+  font: var(--t-annot-label);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The one product-wide star, as a glyph and nothing more — never a control
+   colour, never a filled shape. */
+.star {
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}
+
+/* The verdict chip. `--net` for compromised, the seam for everything else, and
+   in both cases a BORDER and TYPE rather than a fill: nothing alarming in this
+   product is ever a large filled surface. */
+.status {
+  flex: none;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  padding-inline: var(--sp-1);
+}
+.status[data-tone="net"] {
+  color: var(--net);
+  border-color: var(--net);
+}
+.status[data-tone="seam"] {
+  color: var(--seam);
+  border-color: var(--seam);
+}
+
+/* ---------- Sections ---------- */
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding-block-start: var(--sp-3);
+}
+.section {
+  display: flex;
+  flex-direction: column;
+}
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-block: var(--sp-2);
+}
+.sectionLabel {
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.sectionMeta {
+  flex: 1;
+  min-inline-size: 0;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A BOUNDED WINDOW SAYS SO. Never styled as a footer to be overlooked: a cut
+   list that reads as everything is the defect this row closes. */
+.windowEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding-block: var(--sp-3);
+  border-block-start: 1px solid var(--line);
+}
+.windowEnd .num {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+/* ---------- The tool row's lenses ---------- */
+
+/* A horizontal chip scroller inside a nowrap tool row is `flex: none`, never
+   `flex: 1` — a chip row that grew would eat the count beside it. */
+.lenses {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.count {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* ---------- The item screen (§5, "Field row with verbs") ---------- */
+
+.item {
+  display: flex;
+  flex-direction: column;
+  max-inline-size: 760px;
+  padding-block: var(--sp-3) var(--sp-5);
+}
+.itemHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-block-end: var(--sp-3);
+}
+.itemTitle {
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  color: var(--text);
+  text-wrap: pretty;
+}
+.itemLede {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+
+.fieldRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.fieldKey {
+  flex: none;
+  inline-size: 140px;
+  padding-block-start: var(--sp-2);
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+.fieldBody {
+  flex: 1;
+  min-inline-size: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.fieldValue {
+  font: var(--t-body);
+  color: var(--text);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.fieldValue[data-numeric="true"] {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+}
+/* THE SEALED VALUE. A dot run at the soft ink rung, letter-spaced so the run
+   reads as a placeholder rather than as a word. The 0.14em is the run's own
+   typographic figure, not a spacing rung — it is tracking inside one string. */
+.fieldValue[data-sealed="true"] {
+  color: var(--text-soft);
+  letter-spacing: 0.14em;
+}
+/* A REVEALED SECRET IS A LITERAL, and literals take the code face — the one
+   role in this system that is not the numeric register. A password read off a
+   screen and typed on a keypad has to be the same password. */
+.fieldValue[data-revealed="true"] {
+  font-family: var(--font-code);
+  overflow-wrap: anywhere;
+}
+.fieldNote {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  text-wrap: pretty;
+  max-inline-size: 62ch;
+}
+/* The note that carries a countdown reads in the numeric register, because
+   half of it is a number that must not reorder under RTL. */
+.fieldNote[data-numeric="true"] {
+  font-variant-numeric: var(--t-mono-numeric);
+}
+.fieldActs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+  padding-block-start: var(--sp-1);
+}
+.strength {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.strength .num {
+  flex: none;
+}
+.meter {
+  flex: 1;
+  min-inline-size: 80px;
+  max-inline-size: 200px;
+}
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+}
+.life {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding-block-start: var(--sp-5);
+}
+/* Destructive is OUTLINED in `--net`, never filled — the one control in this
+   app that takes the tone at all. */
+.life [data-net="true"] {
+  border-color: var(--net);
+  color: var(--net);
+}
+
+/* ---------- The routes beyond the list ---------- */
+
+/* A screen's opening sentence. `ledeNet` is the export's — the ONE paragraph
+   in this app that carries `--net`, because it is the one act whose whole
+   subject is bytes leaving the device. Type and a rule, never a fill. */
+.lede {
+  font: var(--t-body);
+  color: var(--text-soft);
+  max-inline-size: 60ch;
+  text-wrap: pretty;
+}
+.ledeNet {
+  font: var(--t-body);
+  color: var(--net);
+  max-inline-size: 60ch;
+  text-wrap: pretty;
+  border-inline-start: 2px solid var(--net);
+  padding-inline-start: var(--sp-2);
+}
+
+/* A note's body on the add / edit form. Grows with what is typed rather than
+   scrolling a three-line box. */
+.formArea {
+  min-block-size: calc(var(--density-row) * 2);
+  resize: vertical;
+}
+
+/* The form's foot: where the write lands, said before the commit rather than
+   after it. The sentence takes the row; the verbs sit at its end. */
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding-block-start: var(--sp-5);
+}
+.footCopy {
+  flex: 1;
+  min-inline-size: 200px;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  text-wrap: pretty;
+}
+
+/* THE GENERATOR'S OUTPUT, at the display rung in a bordered container. A
+   literal, so it takes the code face — the same face a revealed secret takes,
+   because a string read off this screen and typed elsewhere has to be the
+   same string. */
+.genOut {
+  font: var(--t-display);
+  font-family: var(--font-code);
+  color: var(--text);
+  overflow-wrap: anywhere;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  margin: 0;
+}
+.genStrength {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding-block: var(--sp-2);
+  margin: 0;
+}
+
+/* Review's all-clear. A figure, when it was checked, and what was checked —
+   stated, never celebrated. */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-hair);
+  padding-block: var(--sp-5) var(--sp-3);
+}
+.heroFig {
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  color: var(--text);
+}
+.heroLabel {
+  font: var(--t-small-strong);
+  color: var(--text-soft);
+}
+.heroSub {
+  font: var(--t-body);
+  color: var(--text-faint);
+  max-inline-size: 60ch;
+  text-wrap: pretty;
+}
+
+/* A CHECK ROW. Its reason wraps to two lines where the item row's meta is
+   clamped to one: a verdict without its reason is a number, and the reason is
+   the whole point of this register. */
+.checkBody {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-hair);
+}
+.checkWhy {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  max-inline-size: 68ch;
+  text-wrap: pretty;
+}
+
+/* Trash: the row, and the destructive act under it rather than beside it —
+   two equally weighted verbs on one row ask a question. */
+.trashRow {
+  display: flex;
+  flex-direction: column;
+}
+.trashActs {
+  display: flex;
+  gap: var(--sp-2);
+  padding-block: var(--sp-1) var(--sp-2);
+}
+.trashActs [data-net="true"] {
+  border-color: var(--net);
+  color: var(--net);
+}
+
+/* The import verdicts, as a chip and its sentence. */
+.verdictList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.verdictLine {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/* The search field sits above the four-state scaffold, in the scroll host
+   rather than the tool row: a field this wide inside a nowrap tool row would
+   push the lenses off a narrow screen. */
+.searchField {
+  display: flex;
+  align-items: center;
+  padding-block: var(--sp-3) var(--sp-1);
+  max-inline-size: 520px;
+}
+
+/* One row of the More sheet: the surface's name and what it is for. */
+.moreRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-hair);
+  min-block-size: var(--density-row);
+  inline-size: 100%;
+  text-align: start;
+  background: none;
+  border: 0;
+  border-block-end: 1px solid var(--line);
+  padding: 0;
+}
+
+/* ---------- The lock and first-run gates ---------- */
+
+.gate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-inline-size: 460px;
+  padding-block: var(--sp-6);
+}
+.gateTitle {
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  color: var(--text);
+}
+.gateBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  max-inline-size: 54ch;
+  text-wrap: pretty;
+}
+.gateField {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-block-start: var(--sp-3);
+}
+/* The passphrase field takes the code face and its own tracking: what is typed
+   here is a literal, and the tracking is what makes a mistyped character
+   findable without ever unmasking the field. */
+.gateInput {
+  flex: 1;
+  min-inline-size: 0;
+  font-family: var(--font-code);
+  letter-spacing: 0.14em;
+}
+.gateActs {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding-block-start: var(--sp-3);
+}
+.gateError {
+  font: var(--t-annot-label);
+  color: var(--net);
+  text-wrap: pretty;
+}
+
+/* The facts table — a key column and a sentence, the shape the denied gate and
+   the lock screen both take. */
+.facts {
+  display: flex;
+  flex-direction: column;
+  padding-block-start: var(--sp-4);
+  margin: 0;
+}
+.fact {
+  display: flex;
+  gap: var(--sp-3);
+  padding-block: var(--sp-1);
+  border-block-start: 1px solid var(--line);
+}
+.factKey {
+  flex: none;
+  inline-size: 150px;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  margin: 0;
+}
+.factValue {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  text-wrap: pretty;
+  margin: 0;
+}
+
+/* ---------- Notices ---------- */
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-block: var(--sp-2);
+}
+.notice .num {
+  flex: 1;
+  min-inline-size: 200px;
+}
+
+/* ---------- The permit gate (the one sanctioned divergence) ---------- */
+
+/* A FULL-STOP OVERLAY, NOT AN INLINE CONFIRM. Registered as a divergence in
+   docs/design-divergences.md: nothing else in this product blocks a screen to
+   read one value. The reason is that the gate has to name the item, the field,
+   the permit's life and the receipt — more than a row can hold — and because a
+   reveal is the one act here whose cost the member must understand every
+   single time. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+  background: var(--scrim);
+}
+@media (pointer: coarse) {
+  .overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+}
+.panel {
+  inline-size: min(440px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+}
+.panelTitle {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+  text-wrap: pretty;
+  margin: 0;
+}
+.panelBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  text-wrap: pretty;
+  margin: 0;
+}
+.panelActs {
+  display: flex;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-2);
+}
+.panelActs > * {
+  flex: 1;
+  justify-content: center;
+}
+.panel [data-net="true"] {
+  border-color: var(--net);
+  color: var(--net);
+}
+
+/* ---------- The denied gate, and the empty blocks ---------- */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-inline-size: 560px;
+  padding-block: var(--sp-6);
+}
+.screenTitle {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+  text-wrap: pretty;
+}
+.screenBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  max-inline-size: 56ch;
+  text-wrap: pretty;
+}
+.screenActs {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding-block-start: var(--sp-3);
+}
+
+/* The Wave-2 stubs. Honest about being undrawn: a title, the sentence, and no
+   control at all, because there is nothing here yet to press. */
+.stub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-inline-size: 56ch;
+  padding-block: var(--sp-5);
+}
+.stubTitle {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+}
+.stubBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}

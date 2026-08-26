@@ -22,6 +22,10 @@ const FIELDS = [
   "phone",
   "address",
   "network",
+  // The connector alias (issue #298 item 4, GAPS #15): a non-empty value binds
+  // `locker:@<alias>:<column>` to this item. Blank is dropped by the guard
+  // below, matching the command, which only sets an alias when one is given.
+  "alias",
 ] as const;
 
 export default async function addItem({ body, ctx }: HandlerArgs) {

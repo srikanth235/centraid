@@ -1,0 +1,264 @@
+// ONE EXPENSE — what it cost, who paid, how it divided, what that makes yours,
+// and the revision list that is the reason an edit is safe (Tally spec §1, §4).
+//
+// THE FIELD ROWS CARRY THE GAPS WHERE THEY BITE. Multiple payers is stated on
+// *Paid by*, the three unbacked divisions on *Divided*, the assistant-only
+// memo and bank line on their own rows — each on the field it would change,
+// so a reviewer reads the scope off the surface (GAPS.md Tally §3).
+//
+// THE METHOD IS NOT CLAIMED. The vault stores an expense's SHARES, not the
+// rule that produced them, so *Divided* says how many shares there are and
+// points at the table. "Equally" inferred from three equal numbers would be a
+// guess presented as a fact, and the one case it is wrong is the case a member
+// opened this screen to check.
+//
+// UNDO IS THE VAULT'S OWN REVERSE WRITE. `queries/history.ts` reports each
+// revision's `undo_until`, and `undo-expense` applies that durable pre-edit
+// snapshot exactly once. So Undo appears on the revision it would undo, inside
+// the window, and nowhere else — never as a decoration on a status line.
+import type { ReactNode } from "react";
+
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
+import { displayText } from "../../_shared/untrusted.ts";
+import {
+  CONFLICT_BOTH,
+  CURRENCY_NOTE,
+  EXPENSE_NOTES,
+  EXPENSE_ROWS,
+  FIELD_KEYS,
+  LIFE_ACTS,
+  PENDING_STRIP,
+  PENDING_VIEW,
+  UNDO_SPENT,
+  UNDO_VERB,
+  dividedValue,
+  revisionCount,
+  splitFoot,
+} from "../compose-copy.ts";
+import { metaSentence, money, roleSubLabel } from "../format.ts";
+import type { LedgerEntry, Revision } from "../types.ts";
+import { paidBy } from "../view-copy.ts";
+import { Note, Rows, Section } from "./Blocks.tsx";
+import { ValueRow } from "./Fields.tsx";
+
+import styles from "./Compose.module.css";
+
+/** Is this revision's one-shot undo window still open? A window that has
+ *  closed, or a snapshot already applied, offers nothing. */
+export function undoIsLive(revision: Revision, nowIso: string): boolean {
+  if (revision.undone_at) return false;
+  const until = Date.parse(revision.undo_until);
+  const now = Date.parse(nowIso);
+  return !Number.isNaN(until) && !Number.isNaN(now) && now < until;
+}
+
+export interface ExpenseScreenProps {
+  entry: LedgerEntry;
+  groupName?: string;
+  currency: string;
+  me: string | null;
+  /** `null` while the history read has not landed — and then the section is
+   *  absent, not empty: "no revisions" is a claim nobody has checked. */
+  revisions: readonly Revision[] | null;
+  now: string;
+  narrow: boolean;
+  onEdit: () => void;
+  onItemise: () => void;
+  onTrash: () => void;
+  onWaiting: () => void;
+  onUndo: (revisionId: string) => void;
+}
+
+function currencyValue(entry: LedgerEntry): string {
+  const rate = entry.rate_scaled / 10 ** entry.rate_scale;
+  return metaSentence([
+    `${money(entry.original_amount_minor, entry.original_currency)} at ${rate}`,
+    entry.rate_source,
+    entry.rate_date,
+  ]);
+}
+
+export function ExpenseScreen(props: ExpenseScreenProps): ReactNode {
+  const { entry } = props;
+  const isMine = entry.paid_by === props.me && props.me !== null;
+  const pending = entry.pending === true;
+  const conflict = entry.intentStatus === "conflict";
+  const foreign = entry.original_currency !== entry.settlement_currency;
+  const revisions = props.revisions;
+
+  return (
+    <div className={styles.detail}>
+      {pending ? (
+        <div className={styles.strip}>
+          <span className={styles.stripCopy}>{PENDING_STRIP}</span>
+          <button
+            type="button"
+            className="kit-plain-btn"
+            onClick={props.onWaiting}
+          >
+            {PENDING_VIEW}
+          </button>
+          {/* Retry and Discard are the OUTBOX's verbs, drawn by the one shared
+              component every app uses, so a held write reads identically here
+              and in Tasks. */}
+          <PendingWriteActions
+            row={entry as unknown as Record<string, unknown>}
+          />
+        </div>
+      ) : null}
+
+      <div className={styles.detailHead}>
+        <span className={`${styles.detailFig} ${styles.num}`}>
+          {money(entry.amount_minor, props.currency)}
+        </span>
+        <h2 className={styles.detailTitle}>
+          {displayText(entry.description ?? "")}
+        </h2>
+        <p className={styles.detailLede}>
+          {metaSentence([
+            paidBy(entry.paid_by_name, isMine),
+            props.groupName,
+            entry.spent_on,
+          ])}
+        </p>
+      </div>
+
+      <ValueRow
+        label={FIELD_KEYS.paidBy}
+        value={`${entry.paid_by_name} · ${money(entry.amount_minor, props.currency)}`}
+        note={EXPENSE_NOTES.paidBy}
+        num
+      />
+      <ValueRow
+        label={FIELD_KEYS.divided}
+        value={dividedValue(entry.splits.length)}
+        note={EXPENSE_NOTES.divided}
+      />
+      <ValueRow
+        label={FIELD_KEYS.yourShare}
+        value={`${money(entry.your_amount_minor, props.currency)} · ${roleSubLabel(entry.your_role)}`}
+        note={EXPENSE_NOTES.yourShare}
+        num
+      />
+      <ValueRow label={FIELD_KEYS.category} value={entry.category ?? ""} />
+      <ValueRow
+        label={FIELD_KEYS.group}
+        value={props.groupName ?? ""}
+        note={EXPENSE_NOTES.group}
+      />
+      {foreign ? (
+        <ValueRow
+          label={FIELD_KEYS.currency}
+          value={currencyValue(entry)}
+          note={CURRENCY_NOTE}
+          num
+        />
+      ) : null}
+      {/* SURFACED, AND HONEST ABOUT ITS DOOR. The memo and the bank line are
+          real capabilities that only the assistant can write today; the row is
+          where they belong, and the note says so rather than a control
+          pretending otherwise. */}
+      <ValueRow
+        label={FIELD_KEYS.memo}
+        value={EXPENSE_ROWS.noMemo}
+        note={EXPENSE_NOTES.memo}
+      />
+      <ValueRow
+        label={FIELD_KEYS.bankLine}
+        value={EXPENSE_ROWS.noBankLine}
+        note={EXPENSE_NOTES.bankLine}
+      />
+
+      <Section
+        label={EXPENSE_ROWS.splitHead}
+        count={entry.splits.length}
+        narrow={props.narrow}
+      >
+        <Rows>
+          {entry.splits.map((split) => (
+            <div key={split.party_id} className={styles.allocRow}>
+              <span className={styles.allocName}>
+                {displayText(split.name)}
+              </span>
+              <span className={`${styles.allocValue} ${styles.num}`}>
+                {money(split.share_minor, props.currency)}
+              </span>
+              <span className={styles.allocNote}>
+                {split.party_id === entry.paid_by ? "paid it" : ""}
+              </span>
+            </div>
+          ))}
+        </Rows>
+        <Note>
+          {splitFoot(
+            money(entry.amount_minor, props.currency),
+            entry.splits.length
+          )}
+        </Note>
+      </Section>
+
+      {conflict ? <Note>{CONFLICT_BOTH}</Note> : null}
+
+      {revisions ? (
+        <Section
+          label={EXPENSE_ROWS.revisions}
+          meta={revisionCount(revisions.length)}
+          count={revisions.length}
+          empty={EXPENSE_ROWS.noRevisions}
+          narrow={props.narrow}
+        >
+          <Rows>
+            {revisions.map((revision) => (
+              <div key={revision.revision_id} className={styles.revision}>
+                <span className={`${styles.revWhen} ${styles.num}`}>
+                  {revision.recorded_at.slice(0, 16).replace("T", " ")}
+                </span>
+                <span className={styles.revWhat}>
+                  {displayText(revision.operation)}
+                </span>
+                <span className={styles.revActs}>
+                  {undoIsLive(revision, props.now) ? (
+                    <button
+                      type="button"
+                      className="kit-plain-btn"
+                      onClick={() => props.onUndo(revision.revision_id)}
+                    >
+                      {UNDO_VERB}
+                    </button>
+                  ) : (
+                    <span className={styles.note}>
+                      {revision.undone_at ? UNDO_SPENT : ""}
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </Rows>
+          <Note>{EXPENSE_NOTES.history}</Note>
+        </Section>
+      ) : null}
+
+      <div className={styles.foot}>
+        <span className={styles.footCopy} />
+        <span className={styles.footActs}>
+          <button type="button" className="kit-btn" onClick={props.onEdit}>
+            {LIFE_ACTS.edit}
+          </button>
+          {entry.receipt ? (
+            <button type="button" className="kit-btn" onClick={props.onItemise}>
+              {LIFE_ACTS.itemise}
+            </button>
+          ) : null}
+          {/* DESTRUCTIVE IS OUTLINED IN `--net`, never filled. */}
+          <button
+            type="button"
+            className="kit-btn destructive"
+            onClick={props.onTrash}
+          >
+            {LIFE_ACTS.trash}
+          </button>
+        </span>
+      </div>
+    </div>
+  );
+}
