@@ -4,13 +4,13 @@
 
 **Setup:** Locker ships **no** demo scenario (`packages/blueprints/apps/locker/` has no `seed.js`, which is why `ctx.ensureDemo("locker")` would fail by design), and that is the point: this journey is about the seal, not about content. It seeds **Docs** instead, for one structural reason only — Home draws the launcher grid only once some tile has content (`apps/mobile/src/screens/home/springboard-policy.ts`'s `springboardState`), and on a wholly empty vault Home renders the day-one treatment with no tiles at all. The flow then pairs via `ctx.configureGateway()`.
 
-**Steps:** from Home, observe the Locker tile's accessible name, open Locker, observe the cover's subtitle and the first-run unlock gate with its refusing control, restart the app process, return to Locker, and observe the same gate.
+**Steps:** from Home, observe the Locker tile's accessible name, open Locker, observe the app bar's ambient sentence and the first-run gate with its refusing control, restart the app process, return to Locker, and observe the same gate.
 
 **Expectations:**
 
 1. **Home withholds the count.** `Open Locker, locked` is the tile's accessible name: `LauncherGrid.tsx:152-156` speaks `countLabel` alone when `count` is `undefined`, and `useSpringboardTiles.ts:405-411` leaves Locker's count undefined **by design** — "no read, by design … a sealed Locker never votes the vault empty." A tile reading `Open Locker, 0 locked` would mean Home had started reading the one app it must not.
-2. **The cover states its own custody.** `Secrets stay online-only` (`LockerHome.tsx:559`) is the app header's subtitle and is published nowhere else.
-3. **The gate is the first thing, and it refuses at rest.** `Protect Locker` and the 12-character sentence (`LockerUnlockScreen.tsx:42`, `:44-48`) are the not-yet-configured state; `Create passphrase` (`:77`) is rendered **disabled** because the empty field is under the floor (`:73`). A gate that arrives enabled has a floor that is decoration.
+2. **The cover states its own boundary.** `Nothing is browsable until there is a passphrase` is the setup route's ambient sentence (`packages/blueprints/apps/locker/view-copy.ts` `ROUTE_STATUS.setup`), drawn by `apps/mobile/src/apps/locker/LockerScreen.tsx` into the app bar and published nowhere else. The v17 rebuild replaced the pre-v17 `Secrets stay online-only` subtitle with the design's per-route status line; the same fact — this app's own boundary, stated in words rather than implied by a glyph — is what both sentences carry.
+3. **The gate is the first thing, and it refuses at rest.** `Choose a passphrase` and the twelve-character sentence (`view-copy.ts` `SETUP_BODY`, drawn by `LockerWall.tsx`) are the not-yet-configured state; `Create it` (`view-copy.ts` `CREATE_PASSPHRASE`) is rendered **disabled** because the empty field is under `PASSPHRASE_MINIMUM`. A gate that arrives enabled has a floor that is decoration.
 4. **The seal survives the process.** After `stopApp` + relaunch the same gate is drawn — nothing about a Locker session crossed the process boundary.
 
 **Verdict:** PASS only if all four hold. The failure this exists to catch is Locker arriving on any surface other than its gate — a cached list, a zero count on Home, or an enabled control on an empty field.

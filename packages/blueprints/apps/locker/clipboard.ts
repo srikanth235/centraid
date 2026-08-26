@@ -28,6 +28,23 @@ export interface CopyOutcome {
 /** A copy this seat cannot perform. Stated, never silently swallowed. */
 export const COPY_UNAVAILABLE = "Copy is unavailable here.";
 
+/**
+ * THE TWO OUTCOME SENTENCES, as pure functions of the field's own word.
+ *
+ * §6's copy row is "Password copied · the clipboard clears itself in 30
+ * seconds", and the clause is the same sentence wherever the copy happened.
+ * The phone cannot share the DOOR below — `navigator.clipboard` does not exist
+ * under Hermes, so `apps/mobile/src/apps/locker/locker-clipboard.ts` drives
+ * `expo-clipboard` instead — but it must not restate the words. It calls these.
+ */
+export function copiedSecretCopy(label: string): string {
+  return `${label} copied · the clipboard clears itself in ${CLIPBOARD_CLEAR_SECONDS} seconds`;
+}
+
+export function copiedMetadataCopy(label: string): string {
+  return `${label} copied`;
+}
+
 let clearTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSecretCopied: string | null = null;
 
@@ -106,10 +123,7 @@ export async function copySecret(
 ): Promise<CopyOutcome> {
   if (!(await write(text))) return { ok: false, text: COPY_UNAVAILABLE };
   scheduleClipboardClear(text);
-  return {
-    ok: true,
-    text: `${label} copied · the clipboard clears itself in ${CLIPBOARD_CLEAR_SECONDS} seconds`,
-  };
+  return { ok: true, text: copiedSecretCopy(label) };
 }
 
 /** Copy a METADATA value — a username, an address. No timer, no sentence about
@@ -120,5 +134,5 @@ export async function copyMetadata(
   label: string
 ): Promise<CopyOutcome> {
   if (!(await write(text))) return { ok: false, text: COPY_UNAVAILABLE };
-  return { ok: true, text: `${label} copied` };
+  return { ok: true, text: copiedMetadataCopy(label) };
 }

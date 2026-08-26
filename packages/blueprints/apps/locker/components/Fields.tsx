@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 
 import { Meter } from "../../_shared/Meter.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
+import { SEALED_RUN } from "../item-fields.ts";
 import { concealsInSeconds, revealedForSeconds } from "../permits.ts";
 import { strength, useTotp } from "../totp.ts";
 import {
@@ -26,10 +27,6 @@ import {
 } from "../view-copy.ts";
 
 import styles from "./Rows.module.css";
-
-/** The dot run a sealed value wears. Fourteen, so no run's length leaks the
- *  secret's — a shorter password must not draw a shorter placeholder. */
-const SEALED_RUN = "••••••••••••••";
 
 export interface FieldAct {
   label: string;

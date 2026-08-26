@@ -3234,6 +3234,69 @@
             "layer": "unit",
             "status": "owned",
             "owner": "packages/blueprints/apps/locker/format.test.ts"
+          },
+          {
+            "id": "origin-boundary",
+            "label": "origin boundary — boots locked, locks on hide, wipes the bag",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/locker-store.test.ts"
+          },
+          {
+            "id": "origin-band",
+            "label": "origin band and More sheet tables",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/locker-band.test.ts"
+          },
+          {
+            "id": "origin-seat-model",
+            "label": "origin state precedence, window foot and elsewhere-surfaces",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/locker-view-model.test.ts"
+          },
+          {
+            "id": "origin-states",
+            "label": "origin designed states — dayone, offline, pending, window end",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/LockerItemsView.test.tsx"
+          },
+          {
+            "id": "origin-walls",
+            "label": "origin gates — first run, lock, denied",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/LockerWall.test.tsx"
+          },
+          {
+            "id": "origin-reveal",
+            "label": "origin sealed field, reveal countdown and permit gate",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/LockerFields.test.tsx"
+          },
+          {
+            "id": "origin-review",
+            "label": "origin review registers and all clear",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/LockerReviewView.test.tsx"
+          },
+          {
+            "id": "online-only-seat",
+            "label": "online-only write door on the origin seat",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/lib/replica/locker-online-only.test.ts"
+          },
+          {
+            "id": "otpauth",
+            "label": "otpauth seed grammar for the camera scan",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/otpauth.test.ts"
           }
         ]
       },

@@ -116,6 +116,10 @@ export interface AuthPayload {
   authenticated?: boolean;
   sessionToken?: string;
   itemToken?: string;
+  /** The id the vault minted for a device credential (`enroll-device`). It is
+   *  an IDENTIFIER, never the secret: the random material stays on the device
+   *  and only a vault-key-peppered verifier reaches the gateway. */
+  credentialId?: string;
   expiresAt?: string;
   retryAfterMs?: number;
   code?: string;

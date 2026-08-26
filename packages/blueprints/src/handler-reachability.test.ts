@@ -65,6 +65,40 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
     rationale:
       "The action requires staged_sha and ocr_text from the origin seat's receipt capture; no web route holds a camera or the OCR pass, so the Receipt surface reconciles and simulates while the assistant carries the write (#872).",
   },
+  // The #872 backend landed ahead of the surfaces that will call it: these
+  // capabilities exist, are consent-checked and reachable by the assistant,
+  // and the Waiting / Group / Settle / Export routes that dispatch them are
+  // the next slice. Each entry dies when its route wires up — never by a stub.
+  "tally.action.reallocate-receipt": {
+    kind: "awaiting-handoff",
+    rationale:
+      "The Receipt surface currently reconciles and refuses its commit because no command re-allocated an existing receipt; that command exists now, and wiring the commit is the UI slice (#872).",
+  },
+  "tally.action.set-group-simplification": {
+    kind: "awaiting-handoff",
+    rationale:
+      "The group tool-row toggle that turns simplification on is drawn against the ask with a disabled commit; the opt-in write and the derived proposal are served, and flipping the control is the UI slice (#872).",
+  },
+  "tally.action.leave-group": {
+    kind: "awaiting-handoff",
+    rationale:
+      "Groups draws leave as a row act with a confirm naming the consequence, and the commit is disabled pending this command; wiring the confirm is the UI slice (#872).",
+  },
+  "tally.action.archive-group": {
+    kind: "awaiting-handoff",
+    rationale:
+      "Archive is the second of the two Groups row acts drawn against the ask; the command and the archived-groups list are served, and wiring the confirm is the UI slice (#872).",
+  },
+  "tally.action.nudge": {
+    kind: "awaiting-handoff",
+    rationale:
+      "Remind is drawn on a stale Balances row with no live control, because a nudge parks for confirmation and the Waiting deep link is part of the same UI slice (#872).",
+  },
+  "tally.query.export": {
+    kind: "awaiting-handoff",
+    rationale:
+      "The Export route is drawn with its foot line and a disabled commit; the payload it will render is served now, and reading it into the route is the UI slice (#872).",
+  },
   "docs.action.edit": {
     kind: "agent-only",
     rationale:
@@ -190,6 +224,13 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
 const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   agenda: ["action.attach", "action.detach"],
   docs: ["action.tag", "action.untag", "action.replace", "query.activity"],
+  // Locker's seven item writes ARE dispatched by the phone (#872 follow-up:
+  // `apps/mobile/src/apps/locker/locker-writes.ts` issues each one). They stay
+  // listed because the SCAN cannot see them: the action names are literals in
+  // the SHARED write builders (`apps/locker/writes.ts`), which is exactly
+  // where the one-computation rule wants them, so the native tree names none
+  // of the seven. `query.search` and `query.trash` left this list in the same
+  // change — the phone's gateway door names those two itself.
   locker: [
     "action.add-item",
     "action.edit-item",
@@ -198,8 +239,6 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.purge-item",
     "action.star-item",
     "action.unstar-item",
-    "query.search",
-    "query.trash",
   ],
   photos: ["action.restore-album", "action.tag-asset", "action.untag-asset"],
   tally: [

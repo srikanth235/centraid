@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 
 import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { typeLabel, verdictOf } from "../format.ts";
+import { metadataFieldsFor, sealedFieldsFor } from "../item-fields.ts";
 import type { LockerDetail, LockerRow } from "../types.ts";
 import { COMPROMISED_WHY, TRASH_CONFIRM_BODY } from "../view-copy.ts";
 import { FieldRow, SealedField, StrengthField, TotpField } from "./Fields.tsx";
@@ -43,71 +44,6 @@ export interface ItemScreenProps {
   onTrash: () => void;
 }
 
-/** The sealed rows one type owns, in the order the screen draws them. */
-function sealedFields(
-  type: LockerDetail["type"]
-): Array<{ field: string; label: string; note?: string }> {
-  if (type === "card") {
-    return [
-      { field: "card_number", label: "Card number" },
-      {
-        field: "cvv",
-        label: "Security code",
-        note: "Three digits, sealed like any other secret.",
-      },
-    ];
-  }
-  if (type === "note") {
-    return [
-      {
-        field: "content",
-        label: "Note",
-        note: "Sealed at rest, and deliberately not searched — a note routinely holds recovery codes.",
-      },
-    ];
-  }
-  if (type === "wifi") {
-    return [
-      {
-        field: "password",
-        label: "Network password",
-        note: "Sealed · the network name is not.",
-      },
-    ];
-  }
-  if (type === "identity") return [];
-  return [{ field: "password", label: "Password" }];
-}
-
-/** The metadata rows one type owns. Plain values, no permit, and each says so
- *  once at the top rather than on every line. */
-function metadataFields(
-  detail: LockerDetail
-): Array<{ label: string; value: string; copy?: string }> {
-  const rows: Array<{ label: string; value: string; copy?: string }> = [];
-  if (detail.username) {
-    rows.push({ label: "Username", value: detail.username, copy: "Username" });
-  }
-  if (detail.type === "identity") {
-    if (detail.fullname) rows.push({ label: "Name", value: detail.fullname });
-    if (detail.email) {
-      rows.push({ label: "Email", value: detail.email, copy: "Email" });
-    }
-    if (detail.phone) rows.push({ label: "Phone", value: detail.phone });
-    if (detail.address) rows.push({ label: "Address", value: detail.address });
-  }
-  if (detail.type === "card") {
-    if (detail.cardholder) {
-      rows.push({ label: "Cardholder", value: detail.cardholder });
-    }
-    if (detail.brand) rows.push({ label: "Brand", value: detail.brand });
-  }
-  if (detail.type === "wifi" && detail.network) {
-    rows.push({ label: "Network", value: detail.network, copy: "Network" });
-  }
-  return rows;
-}
-
 export function ItemScreen(props: ItemScreenProps): ReactNode {
   const { detail } = props;
   const verdict = props.row ? verdictOf(props.row) : null;
@@ -134,7 +70,7 @@ export function ItemScreen(props: ItemScreenProps): ReactNode {
         <FieldRow label="Compromised" value="Flagged" note={COMPROMISED_WHY} />
       ) : null}
 
-      {metadataFields(detail).map((row) => (
+      {metadataFieldsFor(detail).map((row) => (
         <FieldRow
           key={row.label}
           label={row.label}
@@ -157,7 +93,7 @@ export function ItemScreen(props: ItemScreenProps): ReactNode {
         />
       ))}
 
-      {sealedFields(detail.type).map((field) => (
+      {sealedFieldsFor(detail.type).map((field) => (
         <SealedField
           key={field.field}
           label={field.label}

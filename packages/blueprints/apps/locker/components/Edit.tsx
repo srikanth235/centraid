@@ -27,6 +27,7 @@ import {
 } from "../draft.ts";
 import type { DraftField } from "../draft.ts";
 import { typeLabel } from "../format.ts";
+import { SEALED_RUN } from "../item-fields.ts";
 import {
   ALIAS_NONE,
   ALIAS_NOTE,
@@ -69,10 +70,6 @@ import { EDIT_LEDE, GENERATE, TYPE_LABEL, TYPE_ORDER } from "../view-copy.ts";
 import { FieldRow } from "./Fields.tsx";
 
 import styles from "./Rows.module.css";
-
-/** The dot run a stored secret wears on this form. The same run the item
- *  screen draws, for the same reason: its length never tracks the secret's. */
-const SEALED_RUN = "••••••••••••••";
 
 export interface EditScreenProps {
   seed: ItemDraftSeed;

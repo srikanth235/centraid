@@ -31,6 +31,7 @@ export const BAND_CLAIMING_APPS: readonly BandClaimingApp[] = [
   { id: "people", name: "People" },
   { id: "agenda", name: "Agenda" },
   { id: "tasks", name: "Tasks" },
+  { id: "locker", name: "Locker" },
 ];
 
 export interface BandOwnerState {

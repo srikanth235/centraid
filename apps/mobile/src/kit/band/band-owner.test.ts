@@ -100,6 +100,7 @@ describe("the band-owner latch", () => {
       "people",
       "agenda",
       "tasks",
+      "locker",
     ]);
     for (const app of BAND_CLAIMING_APPS) {
       expect(app.name.length).toBeGreaterThan(0);

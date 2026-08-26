@@ -64,7 +64,12 @@ export const LINKING: LinkingOptions<RootStackParamList> = {
           DocumentRead: "docs/:documentId",
         },
       },
-      Locker: "locker",
+      Locker: {
+        screens: {
+          LockerHome: "locker",
+          LockerItem: "locker/item/:itemId",
+        },
+      },
       Tasks: "apps/tasks",
       People: {
         screens: {

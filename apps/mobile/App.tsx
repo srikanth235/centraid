@@ -27,7 +27,6 @@ import {
   AssistantFullScreen,
   AutomationsScreen,
   InsightsScreen,
-  LockerHome,
   NotesHome,
   TallyHome,
   TasksHome,
@@ -42,6 +41,7 @@ import {
 import {
   AgendaNavigator,
   DocsNavigator,
+  LockerNavigator,
   PeopleNavigator,
   PhotosNavigator,
   SettingsNavigator,
@@ -316,7 +316,7 @@ export default function App(): React.JSX.Element | null {
                             />
                             <RootStack.Screen
                               name="Locker"
-                              component={LockerHome}
+                              component={LockerNavigator}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen

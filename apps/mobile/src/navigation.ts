@@ -68,6 +68,33 @@ export type DocsStackParamList = {
   DocsStorage: undefined;
 };
 
+export type LockerStackParamList = {
+  // The four band PLACES live on this one route; Item, Add/edit, Trash, Access
+  // history and the three elsewhere-surfaces are pushed, because each is a
+  // subject with a back row rather than a place. Longhand, not
+  // `Exclude<LockerBandDestinationKey, "more">`: the frame may not import an
+  // app (`scripts/check-import-boundaries.ts`); `LockerScreen.tsx`'s band
+  // handler pins the two.
+  LockerHome:
+    | { destination?: "items" | "watch" | "gen" | "search" }
+    | undefined;
+  // Title and type ride along so the app bar and the permit gate need no
+  // replica round-trip — and so the gate can name the field this TYPE seals
+  // before any read has happened.
+  LockerItem: {
+    itemId: string;
+    title: string;
+    type: "login" | "card" | "note" | "identity" | "wifi" | "password";
+  };
+  // No `itemId` means a new item. `generated` seeds the password field from
+  // the generator's "Put it on an item".
+  LockerEdit: { itemId?: string; generated?: string } | undefined;
+  LockerAccess: undefined;
+  LockerTrash: undefined;
+  // The surfaces whose door is on another seat, one screen, one param.
+  LockerSurface: { surface: "import" | "export" | "fill" };
+};
+
 export type PeopleStackParamList = {
   // Same longhand as `DocsHome.destination`.
   PeopleHome: { destination?: "people" | "touch" | "search" } | undefined;
@@ -109,7 +136,7 @@ export type RootStackParamList = {
   Photos: NavigatorScreenParams<PhotosStackParamList>;
   Docs: NavigatorScreenParams<DocsStackParamList>;
   Agenda: NavigatorScreenParams<AgendaStackParamList>;
-  Locker: undefined;
+  Locker: NavigatorScreenParams<LockerStackParamList>;
   Tasks: undefined;
   People: NavigatorScreenParams<PeopleStackParamList>;
   Notes: undefined;
@@ -136,7 +163,6 @@ export type RootScreenProps<T extends keyof RootStackParamList> =
 export type HomeScreenProps = RootScreenProps<"Home">;
 export type CaptureScreenProps = RootScreenProps<"Capture">;
 export type ScanScreenProps = RootScreenProps<"Scan">;
-export type LockerScreenProps = RootScreenProps<"Locker">;
 export type TasksScreenProps = RootScreenProps<"Tasks">;
 export type NotesScreenProps = RootScreenProps<"Notes">;
 export type TallyScreenProps = RootScreenProps<"Tally">;
@@ -170,6 +196,16 @@ export type DocsScreenProps<T extends keyof DocsStackParamList> =
 
 export type DocsShellNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<DocsStackParamList>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type LockerScreenProps<T extends keyof LockerStackParamList> =
+  CompositeScreenProps<NativeStackScreenProps<LockerStackParamList, T>, Root>;
+
+/** Via `useNavigation()`, never a prop — so `LockerScreen.tsx` can wrap any
+ *  Locker surface without widening each screen's type. */
+export type LockerShellNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<LockerStackParamList>,
   NativeStackNavigationProp<RootStackParamList>
 >;
 

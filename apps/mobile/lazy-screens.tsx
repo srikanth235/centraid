@@ -100,6 +100,21 @@ export const InsightsScreen = lazyScreen(
 export const LockerHome = lazyScreen(
   () => import("./src/apps/locker/LockerHome")
 );
+export const LockerItem = lazyScreen(
+  () => import("./src/apps/locker/LockerItemScreen")
+);
+export const LockerEdit = lazyScreen(
+  () => import("./src/apps/locker/LockerEditScreen")
+);
+export const LockerAccess = lazyScreen(
+  () => import("./src/apps/locker/LockerAccessScreen")
+);
+export const LockerTrash = lazyScreen(
+  () => import("./src/apps/locker/LockerTrashScreen")
+);
+export const LockerSurface = lazyScreen(
+  () => import("./src/apps/locker/LockerSurfaceScreen")
+);
 export const NotesHome = lazyScreen(() => import("./src/apps/notes/NotesHome"));
 export const PeopleHome = lazyScreen(
   () => import("./src/apps/people/PeopleHome")

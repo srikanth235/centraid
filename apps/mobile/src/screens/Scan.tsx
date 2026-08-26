@@ -50,6 +50,7 @@ import {
   scanOcrExtractionAllowed,
 } from "./scan-consent";
 import type { ScanOcrConsentRecord } from "./scan-consent";
+import { saveScannedCard } from "./scan-locker";
 import {
   ChoiceRows,
   CloseHeader,
@@ -309,20 +310,11 @@ export default function ScanScreen({
             route.params?.deleteSourceAfterSettle ?? false,
         });
       } else if (destination === "locker") {
-        const card = parseCard(extraction.text);
-        const outcome = await session.write("locker", {
-          action: "add-item",
-          input: {
-            type: "card",
-            title: receipt?.merchant || "Scanned card",
-            tags: ["scan"],
-            cardholder: card.cardholder,
-            card_number: card.cardNumber,
-            expiry: card.expiry,
-            notes:
-              "Captured with on-device OCR. The source image was not stored in Locker.",
-          },
-        });
+        const outcome = await saveScannedCard(
+          session,
+          parseCard(extraction.text),
+          receipt?.merchant ?? ""
+        );
         if (
           !surfaceWriteOutcome(outcome, {
             onParked: () =>
