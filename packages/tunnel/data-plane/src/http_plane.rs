@@ -227,6 +227,17 @@ async fn serve_blob(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, max-age=31536000, immutable"),
     );
+    // Blob bytes can be attacker-authored (imported attachments); the browser
+    // must not sniff a scriptable type, and any document it opens gets an
+    // opaque sandboxed origin. Mirrors the gateway blob route (issue #865).
+    output_headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    output_headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("sandbox"),
+    );
     output_headers.insert(
         header::CONTENT_LENGTH,
         HeaderValue::from_str(&length.to_string()).unwrap(),

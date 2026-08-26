@@ -1,12 +1,12 @@
 {
-  "approvedDeviation": "tests/matrix.json whole-file fingerprint is re-pinned by #864 because Wave 7 added the appScenarios ledger and M18 flipped product-bug cells to owned. No quality lost a gate, no gate lost its evidence, no classification was weakened, and the remaining governed fingerprints are unmoved.",
+  "approvedDeviation": "One governed fingerprint is re-pinned by #865. packages/vault/src/schema/sealed.ts: refresh_capability joins the sealed-column registry so the Assist HMAC rides the same six enforcement points as the refresh token it authenticates. That is a classification expansion, not a weakening — one file gained a sealed column it did not have, no quality lost a gate, no gate lost its evidence, and the remaining governed fingerprints are unmoved.",
   "matrixGovernanceFingerprint": "2f4acea8300a63b0fb407307840938bd29af4035239340a3addba62fc81e7b75",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "62893489b538f861feb46200dc69a53a7ce02b0809224b93f74e2f39fc32276d",
     "packages/server/src/automation/manifest/manifest.ts": "e1acf3c249bc869f0aaa19cad157d76a350f7b09c0597749280be8826b20276e",
     "packages/server/src/routes/route-security.ts": "c2fd8dcb6a9687552e4550e3496085b28c1498034472eb6f1173027b4300d82c",
     "packages/server/src/serve/health-registry.ts": "d1f3fc416ecbe43af2ab4b091fecf3b1041590e52f2002a242e5031c65c9fd04",
-    "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
+    "packages/vault/src/schema/sealed.ts": "e2878801b0998ce0ed6d855cbf37bf0769bea342c588ea37504f8f606d3918c9",
     "tests/quality/fault-points.ts": "2b667efd1354071ab91043ab33f5ebd29cd79a11fcc4716edbe00aeada60f4bd",
     "tests/matrix.json": "c5ee07f0652af2156ea0a36ddeb20f0097fff0c1999d7f96fcc09889adcd4bee"
   }

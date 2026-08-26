@@ -28,7 +28,8 @@ export function carryLoadedBodies(
 export function coalesceByKey<Args extends unknown[]>(
   fn: (...args: Args) => void | Promise<void>,
   keyOf: (...args: Args) => unknown,
-  ms: number
+  ms: number,
+  merge?: (previous: Args, next: Args) => Args
 ): { run: (...args: Args) => void; flush: () => Promise<void> } {
   let timer = 0;
   let pending: Args | null = null;
@@ -46,8 +47,14 @@ export function coalesceByKey<Args extends unknown[]>(
 
   return {
     run: (...args: Args) => {
-      if (pending && keyOf(...pending) !== keyOf(...args)) void fire();
-      pending = args;
+      if (pending && keyOf(...pending) !== keyOf(...args)) {
+        void fire();
+        pending = args;
+      } else if (pending && merge) {
+        pending = merge(pending, args);
+      } else {
+        pending = args;
+      }
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = 0;

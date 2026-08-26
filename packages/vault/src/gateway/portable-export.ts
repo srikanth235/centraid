@@ -25,6 +25,9 @@
 // channels the sweep erases after 30 days; no table, column, or CHECK
 // changed). `people_profile` and `people_important_date` were already carried
 // by the canonical table walk, so export completeness is unchanged.
+// Schema/export audit #865: `sync_connection_credential` gains
+// `refresh_capability`. Already-walked table; the column MUST be carried
+// (see the #865 block below).
 
 // Schema/export audit #724: `enrich_derivation` is a NEW TABLE — the
 // provenance stamp naming which capability, under which model, produced a
@@ -189,6 +192,19 @@
 // a column list. The column arrives on existing files as migration rung four,
 // whose rebuild backfills `delivered_at` from `updated_at` for rows already at
 // `delivered` or `remove_sent`.
+
+// Schema/export audit #865: `sync_connection_credential` gains one column,
+// `refresh_capability`, and it MUST be carried. It is the Worker-minted HMAC
+// a stored Assist refresh token is redeemable with — a restore that dropped
+// it would hand back tokens that `/refresh` refuses (missing capability),
+// so every Google connection would look like a withdrawn grant until the
+// owner re-ran the ceremony. No adapter and no content bytes: it is a sealed
+// cell on an already-walked table (`sync.connection_credential` in
+// schema/tables.ts). `exportVault` walks `SELECT *`, so the column rides
+// along with no code change here, which is why the audit is pinned by a
+// test: `portability.test.ts`'s "an Assist refresh capability survives
+// export and restore" fails if that walk ever becomes a column list. The
+// column arrives on existing files as migration rung five (plain ADD COLUMN).
 
 import { createHash } from "node:crypto";
 

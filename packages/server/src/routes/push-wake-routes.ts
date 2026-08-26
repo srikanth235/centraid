@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http";
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 import { subscribeReplicaCommits } from "@centraid/vault";
 
+import { assertPublicPushEndpoint } from "../push/endpoint-guard.js";
 import { createWebPushSender } from "../push/web-push.js";
 import type { WebPushSender } from "../push/web-push.js";
 import {
@@ -88,6 +89,17 @@ export function makePushRegistrationRouteHandler(
         auth.length < 8
       )
         return sendJson(res, 400, { error: "invalid_push_registration" });
+      // Issue #865: the endpoint is POSTed by the gateway on every wake, so a
+      // loopback/LAN https target registered here is replayed blind SSRF from
+      // the host. Resolve-and-refuse before anything touches storage.
+      try {
+        await assertPublicPushEndpoint(endpoint);
+      } catch (error) {
+        return sendJson(res, 400, {
+          error: "invalid_push_registration",
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
       gatewayDatabase.run(
         `INSERT INTO web_push_registrations
           (endpoint, device_id, p256dh, auth, updated_at)

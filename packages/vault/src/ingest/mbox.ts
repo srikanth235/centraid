@@ -156,9 +156,11 @@ function walkMime(
   if (filename) {
     into.attachments.push({
       filename,
-      mediaType:
-        contentType.split(";")[0]?.trim().toLowerCase() ||
-        "application/octet-stream",
+      // An email Content-Type header is attacker testimony (issue #865): a
+      // message can label an attachment `text/html` and the gateway would
+      // stage and later serve those bytes under that type. Declare nothing —
+      // staging sniffs the bytes and falls back to octet-stream.
+      mediaType: "application/octet-stream",
       data: decodePart(rawBody, encoding),
     });
     return;

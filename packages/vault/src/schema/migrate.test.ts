@@ -176,12 +176,12 @@ describe("schema/migrate", () => {
   });
 
   test("fresh vaults apply the composed baseline plus every rung above it", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(4);
+    expect(VAULT_MIGRATIONS).toHaveLength(5);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(4);
+    expect(version.user_version).toBe(5);
     for (const table of [
       "locker_auth_credential",
       "core_entity_revision",

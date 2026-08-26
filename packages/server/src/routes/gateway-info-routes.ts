@@ -80,6 +80,10 @@ export function makeGatewayInfoRouteHandler(
     const endpointTicket = authenticated
       ? options.endpointTicket?.()
       : undefined;
+    // The stable EndpointId is a dial address: serving it to anonymous
+    // callers turns the public handshake into a presence oracle and hands
+    // out a fingerprintable permanent identity (issue #865) — same gate as
+    // the ticket.
     return sendJson(
       res,
       200,
@@ -88,7 +92,7 @@ export function makeGatewayInfoRouteHandler(
         startedAt,
         uptimeMs: Date.now() - startedAt,
         authenticated,
-        ...(endpointId === undefined ? {} : { endpointId }),
+        ...(authenticated && endpointId !== undefined ? { endpointId } : {}),
         ...(endpointTicket === undefined ? {} : { endpointTicket }),
         ...(options.capabilities ? { capabilities: options.capabilities } : {}),
       })

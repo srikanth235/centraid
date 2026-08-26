@@ -70,7 +70,10 @@ function sandboxModuleUrl(base: string): string {
 }
 
 export interface SandboxBoot {
-  installWorkerSandbox: (policy: SandboxPolicy) => SandboxHandle;
+  installWorkerSandbox: (
+    policy: SandboxPolicy,
+    options?: { redactLaunchArgs?: boolean }
+  ) => SandboxHandle;
   appHandlerPolicy: () => SandboxPolicy;
   appSeedPolicy: (appDir: string) => SandboxPolicy;
   automationHandlerPolicy: () => SandboxPolicy;

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#865) every escape case runs a real hostile handler in a real worker; splitting the lanes would scatter the one enforcement story.
 /**
  * ESCAPE TESTS for the handler sandbox (issue #842 W7.1).
  *
@@ -335,6 +336,92 @@ describe("app-handler lane: process", () => {
     expect(value.canary).toBeNull();
     expect(value.keys).toBe(0);
   });
+
+  test("process.kill signal 0 still probes existence after F4 wrapping (#865)", async () => {
+    // Node and Electron worker internals use kill(pid, 0) as a liveness
+    // check. Revoking that along with SIGKILL hung the thread; the probe
+    // must still return so a handler can post its result.
+    const file = await handler(
+      "kill-zero.mjs",
+      `export default async () => {
+         process.kill(process.pid, 0);
+         return { alive: true };
+       };`
+    );
+    const result = await runAppHandler(file);
+    expect(result.ok).toBe(true);
+    expect(result.value).toStrictEqual({ alive: true });
+  });
+
+  test("process.kill and process.abort cannot take down the gateway (#865)", async () => {
+    // Worker threads share the gateway's PID: a successful SIGKILL here would
+    // end every lane at once, so the strongest assertion available is that this
+    // result was posted AT ALL — the process survived both attempts.
+    const file = await handler(
+      "self-destruct.mjs",
+      `export default async () => {
+         const out = [];
+         try { process.kill(process.pid, "SIGKILL"); out.push("kill:ALLOWED"); }
+         catch (error) { out.push("kill:" + (error.code === "CENTRAID_SANDBOX_DENIED" ? "refused" : "other")); }
+         try { process.abort(); out.push("abort:ALLOWED"); }
+         catch (error) { out.push("abort:" + (error.code === "CENTRAID_SANDBOX_DENIED" ? "refused" : "other")); }
+         return { denied: out.join(",") };
+       };`
+    );
+    const result = await runAppHandler(file);
+    expect(refusal(result)).toBe("kill:refused,abort:refused");
+  });
+
+  test("process.report.getReport() cannot read the real OS environ (#865)", async () => {
+    // getReport reads environ at call time, past any frozen process.env. The
+    // worker here genuinely carries CANARY_ENV in its OS environment — a
+    // native report would leak it. The stub must stay callable (Electron
+    // invokes it) and still post a result: throwing from getReport hung
+    // handler workers so desktop writes never settled.
+    const file = await handler(
+      "diagnostic-report.mjs",
+      `export default async () => {
+         const report = process.report.getReport();
+         const vars = report.environmentVariables ?? {};
+         const written = process.report.writeReport();
+         return {
+           leakedCanary: vars.${CANARY_ENV} ?? null,
+           leakedKeys: Object.keys(vars).length,
+           written,
+         };
+       };`
+    );
+    const result = await runAppHandler(file);
+    expect(result.ok).toBe(true);
+    const value = result.value as {
+      leakedCanary: string | null;
+      leakedKeys: number;
+      written: string;
+    };
+    expect(value.leakedCanary).toBeNull();
+    expect(value.leakedKeys).toBe(0);
+    expect(value.written).toBe("");
+  });
+
+  test("process.argv and process.execArgv are redacted in the handler thread (#865)", async () => {
+    // They echo how the gateway was launched; each worker owns its own copy,
+    // so the parent's command line must not be visible from in here.
+    const file = await handler(
+      "argv.mjs",
+      `export default async () => ({
+         argv: process.argv,
+         execArgv: process.execArgv,
+       });`
+    );
+    const result = await runAppHandler(file);
+    expect(result.ok).toBe(true);
+    const value = result.value as { argv: string[]; execArgv: string[] };
+    expect(value.execArgv).toStrictEqual([]);
+    // argv[0] is the worker binary (Electron reads it); nothing else, and
+    // never the canary that would have ridden a later slot.
+    expect(value.argv.length).toBeLessThanOrEqual(1);
+    expect(value.argv.join("\0")).not.toContain(CANARY_VALUE);
+  });
 });
 
 describe("app-handler lane: the allowlist is not a blanket ban", () => {
@@ -455,8 +542,13 @@ describe("automation lane: model-runtime read confinement", () => {
 
   test("a symlink planted inside the root cannot be followed out of it", async () => {
     const { symlink } = await import("node:fs/promises");
+    // A real file outside the granted root — `/etc/hostname` is missing on
+    // macOS, so realpath of the link threw ENOENT and the ancestor walk
+    // treated the link's parent (inside the root) as the probe.
+    const outside = path.join(path.dirname(dir), "sandbox-escape-outside.txt");
+    await writeFile(outside, "leaked-secret");
     const link = path.join(dir, "escape-link");
-    await symlink("/etc/hostname", link);
+    await symlink(outside, link);
     const file = await handler(
       "symlink-escape.mjs",
       `import { readFileSync } from "node:fs";

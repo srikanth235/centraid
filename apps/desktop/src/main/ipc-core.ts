@@ -149,6 +149,40 @@ export function keychainPromptExpected(host: {
 }
 
 /**
+ * Renderer-supplied app id gate for filesystem-bound app surfaces (issue
+ * #865): an appId is joined into on-disk paths (APPS_OPEN hands one to
+ * `shell.openPath`), so a traversal id like "../../" would open arbitrary
+ * directories and act as a filesystem existence oracle. Mirrors the gateway's
+ * grammar (`@centraid/blueprints` app-meta ID_RE) deliberately — store-created
+ * apps share it, so membership in the shipped inline set is NOT required.
+ */
+const APP_ID_GRAMMAR = /^[a-z0-9][a-z0-9-]{0,62}$/u;
+
+/** String-level guard; throws on anything outside the app-id grammar. */
+export function assertRevealableAppId(appId: string): void {
+  if (!APP_ID_GRAMMAR.test(appId) || appId.startsWith("_")) {
+    throw new Error(
+      `invalid app id ${JSON.stringify(
+        appId
+      )} — expected lowercase a-z / 0-9 / "-", no leading "_"`
+    );
+  }
+}
+
+/** Validate the raw IPC envelope of an app-scoped channel; returns the id. */
+export function parseRevealableAppId(input: unknown): string {
+  const id =
+    input && typeof input === "object"
+      ? (input as { id?: unknown }).id
+      : undefined;
+  if (typeof id !== "string") {
+    throw new Error("app open needs { id }");
+  }
+  assertRevealableAppId(id);
+  return id;
+}
+
+/**
  * Host-capability snapshot the preload exposes. Pure so the capability
  * flags stay unit-testable.
  *

@@ -67,6 +67,10 @@ export const SEALED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
     "client_secret",
     "access_token",
     "refresh_token",
+    // Issue #865: the Worker-minted HMAC a stored Assist refresh token is
+    // redeemable with — credential-adjacent, so it rides the same six
+    // enforcement points as the token it authenticates.
+    "refresh_capability",
     "api_key",
   ],
 };
@@ -163,6 +167,7 @@ export const SEALED_PAYLOAD_FIELDS: Readonly<
     "client_secret",
     "access_token",
     "refresh_token",
+    "refresh_capability",
     "api_key",
   ],
 };

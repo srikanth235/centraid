@@ -1,6 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (harness, conversation, apps, provider) once the surface stabilizes
 import { app, ipcMain, BrowserWindow, safeStorage, shell } from "electron";
 
+import { openAppFolder } from "./app-reveal-core.js";
 import { resolveAppRevealDir, resetAppSessions } from "./app-sessions.js";
 import { resetAppsStoreAuthCache } from "./apps-store-client.js";
 import { refreshAuthInjector } from "./auth-injector.js";
@@ -423,22 +424,20 @@ export function registerIpcHandlers(): void {
   // gateway owns clone/meta. APPS_OPEN stays on IPC — a deliberately
   // LOCAL-ONLY reveal-in-Finder that needs the on-disk session worktree.
 
-  ipcMain.handle(Channel.APPS_OPEN, async (_e, input: { id: string }) => {
+  ipcMain.handle(Channel.APPS_OPEN, (_e, input: unknown) =>
     // Reveal-in-Finder: opens the app's on-disk code — the live published
     // dir when available, else its editing-session worktree. One of the two
     // deliberately LOCAL-ONLY handlers (issue #141) — a remote gateway
     // exposes no worktree over the filesystem. The renderer hides this for
     // remote; `resolveAppRevealDir` (via `assertActiveGatewayLocal`) is the
     // backstop and throws a clear error if it's ever reached remotely.
-    const dir = await resolveAppRevealDir(input.id);
-    // `shell.openPath` reports failure by RESOLVING with a non-empty error
-    // string (it doesn't reject), so the previous `await` swallowed every
-    // failure and the handler always claimed success. Surface it instead, so
-    // the renderer's catch shows a real toast.
-    const openErr = await shell.openPath(dir);
-    if (openErr) throw new Error(`Could not open ${dir}: ${openErr}`);
-    return { ok: true };
-  });
+    // Issue #865: the renderer-supplied id is grammar-checked BEFORE any
+    // path join, so traversal ids can never reach shell.openPath.
+    openAppFolder(input, {
+      resolveDir: resolveAppRevealDir,
+      openPath: (dir) => shell.openPath(dir),
+    })
+  );
 
   // APPS_DELETE + APPS_UPDATE_META moved to the renderer's direct
   // HTTP client (renderer/gateway-client.ts): delete is a `DELETE /_apps/<id>`

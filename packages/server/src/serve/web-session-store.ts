@@ -201,7 +201,25 @@ export class WebControlSessionStore {
     const row = this.find(tokenHash);
     if (!row) return;
     const now = this.now();
-    const nextExpiry = now + CONTROL_IDLE_TTL_MS;
+    // The absolute TTL is enforced HERE, from the stored creation instant
+    // (issue #865): the cookie Max-Age is advisory — a stolen cookie file
+    // replays without any browser honoring it. The idle window can slide a
+    // session's expiry, but never past its creation + CONTROL_ABSOLUTE_TTL_MS.
+    const created = Date.parse(row.createdAt);
+    // A malformed createdAt (Date.parse → NaN) would otherwise write NaN
+    // into expires_at: Math.min(idle, NaN) is NaN, and NaN <= now is false.
+    if (Number.isNaN(created)) {
+      this.remove(tokenHash);
+      return;
+    }
+    const absolute = created + CONTROL_ABSOLUTE_TTL_MS;
+    const nextExpiry = Math.min(now + CONTROL_IDLE_TTL_MS, absolute);
+    // A row already past its absolute lifetime (e.g. written by an older
+    // build without the cap) dies on first touch instead of sliding.
+    if (nextExpiry <= now) {
+      this.remove(tokenHash);
+      return;
+    }
     if (nextExpiry - row.expiresAt < TOUCH_THROTTLE_MS) return;
     if (this.gatewayDatabase) {
       this.statements(this.gatewayDatabase).touch.run(
