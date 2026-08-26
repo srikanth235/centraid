@@ -76,6 +76,11 @@
         "verbs": "act"
       },
       {
+        "schema": "schedule",
+        "table": "delete_task",
+        "verbs": "act"
+      },
+      {
         "schema": "core",
         "table": "attach",
         "verbs": "act"
@@ -191,6 +196,37 @@
           }
         },
         "required": ["task_id", "status"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "delete",
+      "description": "Remove a task and its subtasks through schedule.delete_task. The row is gone; the Logbook keeps nothing.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["task_id"],
         "additionalProperties": false
       },
       "output": {

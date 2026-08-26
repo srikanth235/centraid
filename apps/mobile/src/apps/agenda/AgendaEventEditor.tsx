@@ -19,6 +19,7 @@ import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import { nativeEventBounds } from "../../kit/schedule/recurrence";
 import type { AgendaEventModel } from "../../kit/schedule/recurrence";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
@@ -131,6 +132,7 @@ export default function AgendaEventEditor({
     if (!summary.trim()) return;
     setSaving(true);
     const reminders = reminder === null ? [] : [{ minutes_before: reminder }];
+    const bounds = nativeEventBounds(start, end, allDay);
     const request: EditorWrite =
       isRecurring && scope !== "series"
         ? {
@@ -142,10 +144,15 @@ export default function AgendaEventEditor({
               original_start: event.originalStart,
               scope,
               action: "override",
-              dtstart: start.toISOString(),
-              dtend: end.toISOString(),
+              dtstart: bounds.dtstart,
+              dtend: bounds.dtend,
+              recurrence_semantics: bounds.recurrence_semantics,
               summary: summary.trim(),
               description,
+              calendar_id: calendarId,
+              reminders,
+              attendee_party_ids: [...guestIds],
+              ...(conference ? { conferencing_uri: conference } : {}),
             },
           }
         : {
@@ -154,9 +161,7 @@ export default function AgendaEventEditor({
               event_id: event.id,
               summary: summary.trim(),
               ...(description ? { description } : { clear_description: true }),
-              dtstart: start.toISOString(),
-              dtend: end.toISOString(),
-              recurrence_semantics: allDay ? "all-day" : "zoned",
+              ...bounds,
               ...(rrule ? { rrule } : { clear_rrule: true }),
               calendar_id: calendarId,
               ...(conference

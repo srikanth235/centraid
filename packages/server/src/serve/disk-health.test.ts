@@ -161,6 +161,30 @@ describe(createDiskHealthProbe, () => {
 });
 
 describe("createDiskHealthProbe: disk-full tracker (issue #351 wave 4)", () => {
+  it("a replacement probe still names ENOSPC after the previous health loop is dropped", async () => {
+    const tracker = new DiskFullTracker();
+    tracker.report(
+      Object.assign(new Error("no space left"), { code: "ENOSPC" }),
+      "blob CAS write"
+    );
+    createDiskHealthProbe({
+      rootDir: "/vaults",
+      vaults: () => [],
+      statfs: statfsReturning(50 * GIB, 100 * GIB),
+      diskFullTracker: tracker,
+    });
+    const replacement = createDiskHealthProbe({
+      rootDir: "/vaults",
+      vaults: () => [],
+      statfs: statfsReturning(50 * GIB, 100 * GIB),
+      diskFullTracker: tracker,
+    });
+    const result = await replacement();
+    expect(result.status).toBe("error");
+    expect(result.detail).toContain("ENOSPC observed at");
+    expect(result.detail).toContain("blob CAS write");
+  });
+
   it("forces error and names the event even when statfs looks fine", async () => {
     const tracker = new DiskFullTracker();
     tracker.report(

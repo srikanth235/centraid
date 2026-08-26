@@ -5,6 +5,8 @@
 
 import { formatBytes, formatRelativeTime } from "../format.js";
 
+export { localDayKey } from "../format.js";
+
 /** Minor units → localized currency string ("€12.34"), tolerant of gaps. */
 export function fmtMoney(
   minor: number | null | undefined,
@@ -25,14 +27,6 @@ export function fmtMoney(
   } catch {
     return `${value.toFixed(2)} ${code}`.trim();
   }
-}
-
-/** The viewer's local YYYY-MM-DD for an instant — never the UTC slice. */
-export function localDayKey(dateish: string | number | Date): string {
-  const d = dateish instanceof Date ? dateish : new Date(dateish);
-  if (Number.isNaN(d.getTime())) return String(dateish).slice(0, 10);
-  const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /** "5m" / "3h" / "2d" — the notifications-style relative timestamp. */

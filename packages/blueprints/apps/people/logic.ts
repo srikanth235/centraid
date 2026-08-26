@@ -16,7 +16,8 @@ import type {
   TrashedPerson,
 } from "./types.ts";
 
-const ROSTER_WINDOW = 200;
+/** Roster window size; matches the query's read max. `truncated` names a cap. */
+const ROSTER_WINDOW = 9_999;
 
 interface DeniedRead {
   vaultDenied?: { message?: string } | null;
@@ -300,9 +301,15 @@ export function createLogic({
           counts.people,
           counts.toLink,
           counts.due,
-          counts.starred
+          counts.starred,
+          data.truncated
         )
-      : STATUS.roster(counts.people, counts.due, counts.starred);
+      : STATUS.roster(
+          counts.people,
+          counts.due,
+          counts.starred,
+          data.truncated
+        );
   }
 
   return {

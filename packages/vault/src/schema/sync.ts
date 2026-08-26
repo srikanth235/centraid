@@ -133,3 +133,14 @@ CREATE TABLE IF NOT EXISTS sync_connection_health (
   updated_at    TEXT NOT NULL
 ) STRICT;
 `;
+
+// Issue #865: Assist refresh tokens are redeemable at the OAuth Worker only
+// with the exchange-minted HMAC capability over that exact token. The gateway
+// persists the capability sealed, beside the refresh token it authenticates,
+// and re-persists it whenever Google rotates the pair. The credential table
+// above predates the column, so it ships as its own migration rung (an ALTER
+// on a fresh file would collide with a column added to the CREATE) — see the
+// ladder in schema/migrate.ts.
+export const SYNC_CREDENTIAL_REFRESH_CAPABILITY_DDL = `
+ALTER TABLE sync_connection_credential ADD COLUMN refresh_capability TEXT;
+`;

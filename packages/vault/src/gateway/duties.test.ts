@@ -760,6 +760,80 @@ describe("duties", () => {
     expectPolyDependentsCleaned(deps, "tally.obligation", "poly-obligation");
   });
 
+  test("lapsed People trash erases the party, tags, and channels so they cannot notify (#864)", () => {
+    const now = new Date().toISOString();
+    const past = "2020-01-01T00:00:00Z";
+    db.vault
+      .prepare(
+        `INSERT INTO core_party
+         (party_id, kind, display_name, birth_date, created_at, updated_at, ontology_version)
+       VALUES ('erase-friend', 'person', 'Erase Friend', '--03-14', ?, ?, '1.3')`
+      )
+      .run(now, now);
+    db.vault
+      .prepare(
+        `INSERT INTO people_profile
+         (profile_id, party_id, role, avatar_color, cadence_days, last_contacted_at, met, created_at, deleted_at, purge_at)
+       VALUES ('erase-profile', 'erase-friend', 'friend', NULL, 14, NULL, NULL, ?, ?, ?)`
+      )
+      .run(past, past, past);
+    db.vault
+      .prepare(
+        `INSERT INTO core_party_identifier
+         (identifier_id, party_id, scheme, value, is_primary, valid_from)
+       VALUES ('erase-ident', 'erase-friend', 'email', 'erase-friend@example.com', 1, ?)`
+      )
+      .run(now);
+    db.vault
+      .prepare(
+        `INSERT INTO social_contact_channel
+         (channel_id, party_id, kind, label, value, normalized_value, is_preferred, created_at, updated_at)
+       VALUES ('erase-channel', 'erase-friend', 'email', NULL, 'erase-friend@example.com', 'erase-friend@example.com', 0, ?, ?)`
+      )
+      .run(now, now);
+    db.vault
+      .prepare(
+        `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_at)
+       VALUES ('erase-tag', 'core.party', 'erase-friend', ?, ?)`
+      )
+      .run(boot.concepts["anomaly"] as string, now);
+
+    const result = gw.sweep(owner);
+    expect(result.domainRowsPurged).toBeGreaterThanOrEqual(1);
+    expect(
+      db.vault
+        .prepare("SELECT 1 FROM people_profile WHERE party_id = 'erase-friend'")
+        .get()
+    ).toBeUndefined();
+    expect(
+      db.vault
+        .prepare("SELECT 1 FROM core_party WHERE party_id = 'erase-friend'")
+        .get(),
+      "purged person must not remain as a party the agenda can notify"
+    ).toBeUndefined();
+    expect(
+      db.vault
+        .prepare(
+          "SELECT 1 FROM core_party_identifier WHERE party_id = 'erase-friend'"
+        )
+        .get()
+    ).toBeUndefined();
+    expect(
+      db.vault
+        .prepare(
+          "SELECT 1 FROM social_contact_channel WHERE party_id = 'erase-friend'"
+        )
+        .get()
+    ).toBeUndefined();
+    expect(
+      db.vault
+        .prepare(
+          "SELECT 1 FROM core_tag WHERE target_type = 'core.party' AND target_id = 'erase-friend'"
+        )
+        .get()
+    ).toBeUndefined();
+  });
+
   function calendarAppWithEvent(): { cred: Credential; appId: string } {
     const app = enrollApp(db, { name: "agenda-widget", origin: "generated" });
     createGrant(db, {

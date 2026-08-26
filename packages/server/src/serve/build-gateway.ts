@@ -60,6 +60,7 @@ import {
   AnalyticsStore,
   ASSISTANT_APP_ID,
   AUTHED_DEVICE_HEADER,
+  AUTHED_PLANE_HEADER,
   COMPANION_GRANTS_HEADER,
   ConversationHistoryStore,
   AutomationTriggerStore,
@@ -89,6 +90,8 @@ import {
   createTokenBucket,
   PEER_ENDPOINT_HEADER,
   PEER_PLANE_BUDGET,
+  PEER_PROOF_HEADER,
+  PEER_VAULT_HEADER,
 } from "@centraid/tunnel";
 import {
   KeyStore,
@@ -219,7 +222,10 @@ import {
   readFileMap,
   sendJson,
 } from "../routes/route-helpers.js";
-import { assertRouteSecurityCoverage } from "../routes/route-security.js";
+import {
+  assertRouteSecurityCoverage,
+  ROUTE_SECURITY_REGISTRY,
+} from "../routes/route-security.js";
 import {
   makeScopesRouteHandler,
   SCOPES_PATH,
@@ -4324,6 +4330,34 @@ export async function buildGateway(
     pushWakeRelay.requestWake(vaultId);
   pendingNotificationsWakes.clear();
 
+  /** Every name a peer forwarder may stamp — the backstop refuses on ANY of them (#865 F9). */
+  const PEER_IDENTITY_HEADERS = [
+    PEER_ENDPOINT_HEADER,
+    PEER_PROOF_HEADER,
+    PEER_VAULT_HEADER,
+  ];
+
+  /*
+   * Gateway-wide operator surfaces (#865 F2). The registry's `admin` tier
+   * splits by vault scope on purpose: the `active` rows (backup/demo) operate
+   * inside one vault and already refuse per-request through
+   * `vaultOwnerRefusal`, so they must NOT be blanket-refused here. The
+   * remaining admin rows — resource/diagnostics/storage/logs plus owners —
+   * are gateway-wide reads with no vault context, and those are exactly the
+   * surfaces a proved DEVICE identity never reaches: the tier is enforced at
+   * this dispatch point against the plane `startRuntimeHttpServer` stamped,
+   * so a paired device (or a PWA proxy session that resolves to a device
+   * key) gets a 403 while the loopback bearer (`admin` plane — the owner's
+   * own path) still passes.
+   */
+  const ADMIN_GATEWAY_WIDE_PREFIXES = ROUTE_SECURITY_REGISTRY.filter(
+    (row) => row.auth === "admin" && row.vaultScope !== "active"
+  ).map((row) => row.prefix);
+  const isAdminGatewayWidePath = (pathname: string): boolean =>
+    ADMIN_GATEWAY_WIDE_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+    );
+
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
     // Recorded on 'close', not on return, so a streamed body is measured to
@@ -4341,8 +4375,29 @@ export async function buildGateway(
      * hence `not_found`, not a 403 that would confirm the route exists.
      */
     if (peerPlaneHandler && (await peerPlaneHandler(req, res))) return true;
-    if (req.headers[PEER_ENDPOINT_HEADER] !== undefined)
+    // The backstop must judge EVERY peer identity name, not one of them
+    // (#865 F9): the Rust relay's forwarder-owned set carries a peer-vault
+    // header too, so a future forwarder stamping only that name would
+    // otherwise slip past this refusal into bearer-authenticated dispatch.
+    if (
+      PEER_IDENTITY_HEADERS.some((header) => req.headers[header] !== undefined)
+    )
       return sendJson(res, 404, { state: "not_found" });
+    // Admin tier (#865 F2): a proved DEVICE plane never reaches gateway-wide
+    // operator surfaces. Check the plane header BEFORE `deviceKeyFor` stamps
+    // AUTHED_DEVICE_HEADER — every surviving caller has some device key.
+    if (
+      req.headers[AUTHED_PLANE_HEADER] === "device" &&
+      isAdminGatewayWidePath(url.pathname)
+    )
+      return sendJson(res, 403, {
+        error: "admin_plane_forbidden",
+        message:
+          "gateway-wide operator surfaces are not reachable with a proved device identity",
+      });
+    // The Rust-owned iroh relay calls this metadata-only control surface
+    // before it can inject the remote EndpointId. The route's per-boot control
+    // secret authenticates it, so dispatch at gateway scope in every vault state.
     if (
       (url.pathname === "/centraid/_gateway/info" ||
         url.pathname.startsWith("/centraid/_gateway/tunnel/")) &&

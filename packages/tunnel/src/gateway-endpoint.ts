@@ -34,6 +34,7 @@ import {
   PEER_ENDPOINT_HEADER,
   PEER_LINK_ALPN,
   PEER_PROOF_HEADER,
+  PEER_VAULT_HEADER,
   readBody,
   readHeaderFrame,
   sanitizeHeaders,
@@ -50,11 +51,14 @@ import {
 export const GW_PAIR_ALPN = "centraid/gw-pair/1";
 const DATA_PLANE_RELAY_HEADER = "x-centraid-data-plane-relay";
 
-/** Both planes: a client copy of ANY of these is dropped first. */
+/** Both planes: a client copy of ANY of these is dropped first. Mirrors the
+ * Rust relay's FORWARDER_OWNED_HEADERS one-for-one — including the peer-vault
+ * name this JS endpoint never stamps itself (#865). */
 const IDENTITY_HEADER_NAMES: readonly string[] = [
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER,
   PEER_ENDPOINT_HEADER,
+  PEER_VAULT_HEADER,
   PEER_PROOF_HEADER,
 ];
 

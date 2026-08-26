@@ -128,6 +128,64 @@ describe("merge", () => {
     expect(outcome.status).toBe("failed");
   });
 
+  function addPerson(
+    name: string,
+    extras?: { cadence_days: number; avatar_color?: string }
+  ): string {
+    const outcome = gw.invoke(owner, {
+      command: "people.add_person",
+      input: { display_name: name, cadence_days: 0, ...extras },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(outcome.status).toBe("executed");
+    return (outcome as { output: { party_id: string } }).output.party_id;
+  }
+
+  test("merge keeps the folded-in cadence, last-contacted, and colour (#864)", () => {
+    const keep = addPerson("Asha Rao");
+    const dupe = addPerson("Asha R.", {
+      cadence_days: 14,
+      avatar_color: "#7C5BD9",
+    });
+    expect(
+      gw.invoke(owner, {
+        command: "people.log_interaction",
+        input: { party_id: dupe, kind: "Call" },
+        purpose: "dpv:ServiceProvision",
+      }).status
+    ).toBe("executed");
+    const touched = (
+      db.vault
+        .prepare(
+          "SELECT last_contacted_at FROM people_profile WHERE party_id = ?"
+        )
+        .get(dupe) as { last_contacted_at: string }
+    ).last_contacted_at;
+
+    const outcome = merge(keep, dupe);
+    expect(outcome.status).toBe("executed");
+    const folded = db.vault
+      .prepare(
+        `SELECT cadence_days, last_contacted_at, avatar_color
+           FROM people_profile WHERE party_id = ?`
+      )
+      .get(keep) as {
+      cadence_days: number;
+      last_contacted_at: string | null;
+      avatar_color: string | null;
+    };
+    expect(folded).toMatchObject({
+      cadence_days: 14,
+      last_contacted_at: touched,
+      avatar_color: "#7C5BD9",
+    });
+    expect(
+      db.vault
+        .prepare("SELECT 1 AS x FROM people_profile WHERE party_id = ?")
+        .get(dupe)
+    ).toBeUndefined();
+  });
+
   // ── The convergence sweep (issue #310 C4) ──────────────────────────────
 
   test("find_duplicate_parties reports name collisions with identifier context", () => {

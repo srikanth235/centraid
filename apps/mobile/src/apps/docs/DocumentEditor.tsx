@@ -37,6 +37,7 @@ import {
   WHAT_CAN_BE_EDITED,
 } from "./editor-outcome";
 import type { EditorPosture } from "./editor-outcome";
+import { editorWrite } from "./editor-write";
 import { useDocument } from "./useDocs";
 import { useDocumentText } from "./useDocumentText";
 import { useVersionChain } from "./useVersionChain";
@@ -60,20 +61,20 @@ export default function DocumentEditor({
   // The drafts are DERIVED over the loaded body rather than seeded by an
   // effect: `null` means "not typed yet — show the loaded value". `baseline`
   // is what the byte-identical compare runs against; it starts as the loaded
-  // pair and moves forward on a Saved.
+  // pair and moves forward on a Saved. A missing body (`null`) is not an
+  // empty one — title-only must not invent `body_text`.
   const loadedTitle = doc?.title ?? "";
-  const loadedBody = body.text ?? "";
+  const loadedBody = body.text;
   const [savedBaseline, setSavedBaseline] = useState<{
     title: string;
-    body: string;
+    body: string | null;
   } | null>(null);
   const [typedTitle, setTypedTitle] = useState<string | null>(null);
   const [typedBody, setTypedBody] = useState<string | null>(null);
   const baseline = savedBaseline ?? { title: loadedTitle, body: loadedBody };
   const draftTitle = typedTitle ?? baseline.title;
-  const draftBody = typedBody ?? baseline.body;
-  const pristine =
-    savedBaseline === null && typedTitle === null && typedBody === null;
+  const draftBody = typedBody ?? baseline.body ?? "";
+  const bodyUnready = typedBody === null && baseline.body === null;
   // `null` = pristine: nothing typed, nothing claimed. A non-text kind is a
   // fact, not an event, so its Refused posture is derived, never stored.
   const [claimed, setClaimed] = useState<EditorPosture | null>(null);
@@ -92,7 +93,14 @@ export default function DocumentEditor({
 
   const save = async (): Promise<void> => {
     if (!doc || !session || !textKind) return;
-    if (draftBody === baseline.body && draftTitle === baseline.title) {
+    const intent = editorWrite({
+      documentId: doc.document_id,
+      baselineTitle: baseline.title,
+      typedTitle,
+      baselineBody: baseline.body,
+      typedBody,
+    });
+    if (intent.kind === "nochange") {
       // Byte-identical: NOTHING is dispatched. "A no-op is not a version."
       setClaimed({ id: "nochange" });
       return;
@@ -100,22 +108,23 @@ export default function DocumentEditor({
     setClaimed({ id: "saving" });
     try {
       const result = await session.write("docs", {
-        action: "edit",
-        input: {
-          document_id: doc.document_id,
-          body_text: draftBody,
-          ...(draftTitle.trim() && draftTitle !== baseline.title
-            ? { title: draftTitle.trim() }
-            : {}),
-        },
+        action: intent.action,
+        input: intent.input,
       });
       const next = postureFromResult(result);
       if (next.id === "saved") {
-        // The compare above proved the body differs from the current version,
-        // so an executed edit IS one new version on the chain.
-        next.savedVersion =
-          chain.chain === null ? null : chain.chain.versionCount + 1;
-        setSavedBaseline({ title: draftTitle, body: draftBody });
+        // An executed edit IS one new version. Rename does not grow the chain.
+        if (chain.chain !== null) {
+          next.savedVersion =
+            intent.action === "edit"
+              ? chain.chain.versionCount + 1
+              : chain.chain.versionCount;
+        }
+        setSavedBaseline({
+          title: draftTitle,
+          body:
+            intent.action === "edit" ? intent.input.body_text : baseline.body,
+        });
         void refresh();
         void chain.refresh();
       }
@@ -164,9 +173,9 @@ export default function DocumentEditor({
                   onChangeText={(title) => edit({ title })}
                   style={styles.titleField}
                 />
-                {body.loading && pristine ? (
+                {body.loading && bodyUnready ? (
                   <Text style={styles.note}>Fetching the text…</Text>
-                ) : body.unavailableReason && pristine ? (
+                ) : body.unavailableReason && bodyUnready ? (
                   <Text style={styles.note}>{body.unavailableReason}</Text>
                 ) : (
                   <TextInput

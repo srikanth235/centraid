@@ -225,7 +225,8 @@ function execute(req: WorkerRequest): void {
       const sandbox = sandboxApi.installWorkerSandbox(
         isSeed
           ? sandboxApi.appSeedPolicy(path.dirname(req.handlerFile))
-          : sandboxApi.appHandlerPolicy()
+          : sandboxApi.appHandlerPolicy(),
+        { redactLaunchArgs: true }
       );
       sandbox.taint(pathToFileURL(req.handlerFile).href);
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {

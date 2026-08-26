@@ -46,6 +46,9 @@ export const PEER_COMMONS_REFUSE_PATH = "/centraid/_peer/commons/refuse";
  * a paginated bootstrap frame (#750 defect d).
  */
 const PEER_COMMONS_SESSION_TTL_MS = 5 * 60 * 1000;
+/** Count bound on the transfer/bootstrap session store (#865 F9). TTL sweep
+ * reclaims only expired sessions; eviction is oldest-expiry-first. */
+export const PEER_COMMONS_SESSION_CAP = 256;
 /** Server-side ceiling for one bootstrap page; members may ask less, never more. */
 export const PEER_COMMONS_PAGE_BYTES = 1024 * 1024;
 
@@ -72,6 +75,11 @@ function openPeerCommonsSession(
   const nowMs = Date.now();
   for (const [token, held] of peerCommonsSessions)
     if (held.expiresAt <= nowMs) peerCommonsSessions.delete(token);
+  while (peerCommonsSessions.size >= PEER_COMMONS_SESSION_CAP) {
+    const oldest = peerCommonsSessions.keys().next().value;
+    if (oldest === undefined) break;
+    peerCommonsSessions.delete(oldest);
+  }
   const token = randomBytes(16).toString("hex");
   const expiresAt = nowMs + PEER_COMMONS_SESSION_TTL_MS;
   peerCommonsSessions.set(token, { ...session, expiresAt });
@@ -111,6 +119,15 @@ export interface PeerCommonsRouteDeps {
 function notFound(res: ServerResponse): true {
   return sendJson(res, 404, { state: "not_found" });
 }
+
+/**
+ * A member signature nonce is an opaque replay key the steward's command
+ * executor binds straight into SQLite (`signature_nonce`, #865 F9): a
+ * non-string or control-bearing value used to reach that binding and surface
+ * as a 500 instead of the route's normal refusal. Bounded printable strings
+ * only — every minted nonce (a uuidv7 or a member-local label) fits.
+ */
+const SIGNATURE_NONCE_GRAMMAR = /^[\x20-\x7E]{1,128}$/u;
 
 function pair(
   peer: PeerIdentity,
@@ -446,6 +463,10 @@ export async function handlePeerCommonsCommand(
     !body.input ||
     typeof body.input !== "object" ||
     !memberSignature ||
+    typeof memberSignature.nonce !== "string" ||
+    !SIGNATURE_NONCE_GRAMMAR.test(memberSignature.nonce) ||
+    typeof memberSignature.signature !== "string" ||
+    memberSignature.signature.length === 0 ||
     memberSignature.memberVaultId !== memberVaultId ||
     typeof basedOnSequence !== "number" ||
     !Number.isInteger(basedOnSequence) ||

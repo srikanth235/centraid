@@ -66,3 +66,18 @@ export function photosPurgeNote(days: number): string {
     ? "purges today"
     : `purges in ${days} ${days === 1 ? "day" : "days"}`;
 }
+
+/** The archived-shelf verb. Same word as the shelf, on every seat. */
+export const PHOTOS_ARCHIVE = "Archive";
+export const PHOTOS_UNARCHIVE = "Unarchive";
+export const PHOTOS_ARCHIVE_EMPTY = "Archive is empty.";
+
+export function photosArchiveVerb(archived: boolean): string {
+  return archived ? PHOTOS_UNARCHIVE : PHOTOS_ARCHIVE;
+}
+
+export function photosArchiveMoved(archiving: boolean): string {
+  return archiving
+    ? "Moved to Archive — the device original is untouched."
+    : "Back in your library.";
+}

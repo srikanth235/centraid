@@ -190,6 +190,27 @@ export function appAxesFor(appIds, stateIds = ["dayone"]) {
         ),
       })),
     },
+    appScenarios: {
+      trackingIssue: "839",
+      layers: [
+        { id: "unit", label: "U" },
+        { id: "component", label: "C" },
+        { id: "journey", label: "E" },
+      ],
+      apps: appIds.map((id) => ({
+        id,
+        doc: `docs/apps/${id}-scenarios.md`,
+        scenarios: [
+          {
+            id: "fixture-row",
+            label: "fixture scenario",
+            layer: "unit",
+            status: "gap",
+            trackingIssue: "839",
+          },
+        ],
+      })),
+    },
   };
 }
 
@@ -224,6 +245,15 @@ export function baseMatrix() {
     appStates: {
       trackingIssue: "839",
       states: [{ id: "dayone", label: "Day one" }],
+      apps: [],
+    },
+    appScenarios: {
+      trackingIssue: "839",
+      layers: [
+        { id: "unit", label: "U" },
+        { id: "component", label: "C" },
+        { id: "journey", label: "E" },
+      ],
       apps: [],
     },
     engineRegistry: [
@@ -287,6 +317,13 @@ export function makeFixtureRoot(options = {}) {
     "## Engine contracts\n\n## The three seats\n"
   );
   const fixtureMatrix = options.matrix ?? baseMatrix();
+  mkdirSync(path.join(root, "docs/apps"), { recursive: true });
+  for (const app of fixtureMatrix.appScenarios?.apps ?? []) {
+    if (!app?.doc) continue;
+    const docPath = path.join(root, app.doc);
+    mkdirSync(path.dirname(docPath), { recursive: true });
+    writeFileSync(docPath, `# ${app.id} scenarios\n\nfixture.\n`);
+  }
   // Every bundled app carries the states block grid D mirrors (#839 Wave 0),
   // so the synthetic manifests carry one too.
   const manifestStates = options.appManifestStates ?? {

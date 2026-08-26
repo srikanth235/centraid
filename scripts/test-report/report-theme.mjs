@@ -169,10 +169,15 @@ h2 .tag{color:var(--nw-ghost);margin-inline-end:8px}
 .adv .lrow{grid-template-columns:200px 90px 90px 110px 1fr}
 .lrow small{display:block}
 .lrow .quiet{color:var(--nw-ink3);font-size:12px}
+/* A ledger verdict speaks the same families the cells do (#864): a flaky law is
+   violet here and violet in §8, an unowned layer is the gap family and not the
+   grey that means "the evidence is absent". */
 .state{font-weight:600;font-size:11.5px}
 .state.ok{color:var(--nw-ok)}
 .state.red{color:var(--nw-danger)}
 .state.warn{color:var(--nw-attn)}
+.state.flaky{color:var(--nw-flaky)}
+.state.gap{color:var(--nw-gap)}
 .state.grey{color:var(--nw-ink3);font-style:italic}
 .budget{font-size:11px;color:var(--nw-ink3);margin:14px 0 6px;max-width:100ch}
 .budget b{color:var(--nw-ink);font-weight:600}
@@ -196,18 +201,23 @@ table.heat tbody tr:last-child th,table.heat tbody tr:last-child td{border-botto
 .cell:hover{outline:1px solid var(--nw-ink3);outline-offset:-1px}
 .cell small{font-weight:400;margin-inline-start:5px;color:inherit}
 
-/* The state register. Five families — ok, attention, danger, absence, and the
-   unstyled n/a — and inside a family each state still differs by weight, slope
-   or rule, so no two of the twelve share a treatment by accident.
-   Two collapses are deliberate and must stay byte-identical (they are asserted
-   in report-theme.test.mjs): infra-mismatch rides the consequence tone with
-   failed and is told apart by its word, and lane-did-not-run is the same
-   absence as stale — the legend prints them as one entry. */
+/* The state register — ONE HUE, ONE MEANING (#864).
+   Eight families, and a family answers exactly one question: ok (passed against
+   a solid claim), partial (passed, partial claim), danger (tonight's run went
+   wrong), flaky (unreliable, not broken), gap (no test exists), attn (the
+   report cannot vouch for its own evidence), grey (evidence absent), bug (the
+   product is known-broken — a declared defect, not a missing test). No tint
+   appears in two families, so a reader who has learned one hue has learned one
+   fact. Inside a family each state still differs by weight, slope or rule.
+   ONE cross-family collapse survives and is asserted by name in
+   report-theme.test.mjs: infra-mismatch rides the consequence tint with failed,
+   because both mean "the run went wrong tonight" and the word tells them apart.
+   Within grey, lane-did-not-run is byte-identical to stale — the legend prints
+   them as one entry — and that pair is asserted too. */
 .cell.passed{background:var(--nw-okbg);color:var(--nw-ok)}
-.cell.passed.assessment-partial{background:var(--nw-attnbg);color:var(--nw-attn)}
+.cell.passed.assessment-partial{background:var(--nw-partialbg);color:var(--nw-partial)}
 .cell.failed,.cell.infra-mismatch{background:var(--nw-dangerbg);color:var(--nw-danger)}
-.cell.gap{background:var(--nw-dangerbg);color:var(--nw-danger);font-weight:400}
-.cell.flaky{background:var(--nw-attnbg);color:var(--nw-attn)}
+.cell.flaky{background:var(--nw-flakybg);color:var(--nw-flaky)}
 .cell.owner-silent{background:var(--nw-attnbg);color:var(--nw-attn);font-style:italic}
 .cell.evidence-unmatched{background:var(--nw-attnbg);color:var(--nw-attn);font-style:italic;font-weight:400}
 .cell.stale,.cell.lane-did-not-run{background:var(--nw-greybg);color:var(--nw-ink3);font-style:italic}
@@ -215,20 +225,32 @@ table.heat tbody tr:last-child th,table.heat tbody tr:last-child td{border-botto
 .cell.expected-grey{background:var(--nw-greybg);color:var(--nw-ink3);font-style:italic;border-bottom:1px dashed var(--nw-grey)}
 .cell.skipped{background:transparent;color:var(--nw-ghost);font-weight:400}
 
-/* The app-axis grids speak DECLARATION, not health, so they keep an alphabet
-   of their own: an owned seat is neutral ink on raised paper, never the green
-   that on this page means "evidence ran and passed". */
+/* The app-axis grids speak DECLARATION, not health, so an owned seat is neutral
+   ink on raised paper, never the green that on this page means "evidence ran and
+   passed". The other two cells are not a private alphabet: "nobody owns this
+   yet" is the SAME fact §8 calls a gap, and it takes the same paint and the same
+   word on every grid (#864) — before, the matrix painted it red and the app
+   grids painted it grey, so the page contradicted itself about whether a missing
+   test was tonight's emergency or nobody's. "n/a" is likewise one treatment. */
 .cell.axis-declared{background:var(--nw-surf);color:var(--nw-ink)}
-.cell.axis-unowned{background:var(--nw-greybg);color:var(--nw-ink3);font-style:italic}
+.cell.gap,.cell.axis-unowned{background:var(--nw-gapbg);color:var(--nw-gap);font-weight:400}
 .cell.axis-skipped{background:transparent;color:var(--nw-ghost);font-weight:400}
+.cell.axis-bug{background:var(--nw-bugbg);color:var(--nw-bug);font-weight:600}
 
+/* The painted legend. The old keyline glossed the register in coloured TEXT
+   below one grid, which asked the reader to map a word's ink onto a cell's
+   tint — two different treatments for one state. A legend chip now carries the
+   cell's own classes, so it is the treatment rather than a description of it,
+   and it sits ABOVE every grid that uses the register instead of after one of
+   them. Only geometry is overridden here: an inline chip rather than a full
+   table cell, and no pointer, because nothing here is pressable. */
+.legend{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:11px;color:var(--nw-ink3);margin:0 0 8px;padding:0;list-style:none}
+.legend li{display:flex;align-items:baseline;gap:6px;max-width:46ch}
+.legend .cell{display:inline-block;width:auto;padding:2px 8px;cursor:default}
+
+/* §1's severity bands: prose about a ladder, not the cell register. */
 .keyline{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--nw-ink3);margin:8px 0 0}
 .keyline i{font-style:normal;font-weight:600}
-.keyline .k-ok{color:var(--nw-ok)}
-.keyline .k-attn{color:var(--nw-attn)}
-.keyline .k-danger{color:var(--nw-danger)}
-.keyline .k-grey{color:var(--nw-ink3);font-style:italic}
-.keyline .k-none{color:var(--nw-ghost);font-weight:400}
 
 /* The evidence inspector: a bottom sheet, closed until a cell is chosen.
    It is fixed rather than in-flow because every grid on the page opens it and
@@ -250,7 +272,8 @@ table.heat tbody tr:last-child th,table.heat tbody tr:last-child td{border-botto
 .result{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
 .result.passed{color:var(--nw-ok)}
 .result.failed,.result.infra-mismatch{color:var(--nw-danger)}
-.result.flaky,.result.owner-silent,.result.evidence-unmatched{color:var(--nw-attn)}
+.result.flaky{color:var(--nw-flaky)}
+.result.owner-silent,.result.evidence-unmatched{color:var(--nw-attn)}
 .result.skipped{color:var(--nw-ghost)}
 .result.missing,.result.stale,.result.lane-did-not-run,.result.expected-grey{color:var(--nw-ink3)}
 

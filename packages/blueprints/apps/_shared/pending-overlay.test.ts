@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 import { lockerPendingProjection } from "../locker/pending-projection.ts";
+import { photosPendingProjection } from "../photos/pending-projection.ts";
 import { tallyPendingProjection } from "../tally/pending-projection.ts";
 import { tasksPendingProjection } from "../tasks/pending-projection.ts";
 import {
@@ -59,6 +60,43 @@ describe("pending-write overlay law", () => {
         intentId: "intent-1",
       })
     ).toStrictEqual(task);
+  });
+
+  test("Photos update-asset projects only columns that live on media.asset", () => {
+    const recaption = projectPendingWrite(photosPendingProjection, {
+      appId: "photos",
+      action: "update-asset",
+      input: {
+        asset_id: "asset-e2e-readiness-probe",
+        title: "readiness-probe",
+      },
+      intentId: "photos-e2e-readiness-probe",
+    });
+    expect(recaption.optimistic).toStrictEqual([
+      {
+        op: "upsert",
+        entity: "media.asset",
+        rowId: "asset-e2e-readiness-probe",
+        values: {},
+      },
+    ]);
+
+    const favorite = projectPendingWrite(photosPendingProjection, {
+      appId: "photos",
+      action: "update-asset",
+      input: { asset_id: "asset-1", favorite: 1 },
+      intentId: "photos-favorite",
+    });
+    expect(favorite.optimistic[0]).toMatchObject({
+      entity: "media.asset",
+      rowId: "asset-1",
+      values: { favorite: 1 },
+    });
+    expect(
+      favorite.optimistic[0] &&
+        favorite.optimistic[0].op === "upsert" &&
+        "title" in favorite.optimistic[0].values
+    ).toBe(false);
   });
 
   test("Locker secrets are excluded while ordinary item actions remain visible", () => {

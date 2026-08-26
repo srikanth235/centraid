@@ -10,6 +10,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   WebControlSessionStore,
   hashControlToken,
+  CONTROL_ABSOLUTE_TTL_MS,
   CONTROL_IDLE_TTL_MS,
 } from "./web-session-store.js";
 
@@ -104,6 +105,41 @@ describe("web-session-store", () => {
     expect(rows()[0]?.expiresAt as number).toBeGreaterThan(firstExpiry);
   });
 
+  test("touch never slides a session past its absolute TTL, even with constant use (issue #865)", () => {
+    let now = 5_000_000;
+    const start = now;
+    const clock = (): number => now;
+    const hash = hashControlToken("t");
+    const store = WebControlSessionStore.open(file, clock);
+    store.establish({
+      tokenHash: hash,
+      vaultId: "v1",
+      shellOrigin: "http://shell",
+    });
+
+    // Continuous hourly use across the whole absolute lifetime. Without the
+    // server-side cap this slides expiry to ~now + idle forever; with it,
+    // the wall holds at creation + CONTROL_ABSOLUTE_TTL_MS even though every
+    // touch happens well inside the idle window.
+    const absoluteWall = start + CONTROL_ABSOLUTE_TTL_MS;
+    while (now + 60 * 60 * 1000 < absoluteWall) {
+      now += 60 * 60 * 1000;
+      store.touch(hash);
+    }
+    expect(rows()[0]?.expiresAt).toBe(absoluteWall);
+    expect(store.find(hash)).toBeDefined();
+
+    // Past the wall the session is dead no matter how recently it was used.
+    now = absoluteWall + 1;
+    expect(store.find(hash)).toBeUndefined();
+    store.touch(hash);
+    expect(rows()[0]?.expiresAt).toBe(absoluteWall);
+    // It cannot authorize again, and the next open sweeps it off disk.
+    const reopened = WebControlSessionStore.open(file, clock);
+    expect(reopened.find(hash)).toBeUndefined();
+    expect(reopened.list()).toHaveLength(0);
+  });
+
   test("the expiry sweep and the cookie lookup are both index-backed, not table scans", () => {
     const store = WebControlSessionStore.open(file);
     store.establish({
@@ -187,5 +223,24 @@ describe("web-session-store", () => {
     expect(store.find(hash)?.vaultId).toBe("v1");
     // Nothing was written under the temp dir.
     expect(store.list()).toHaveLength(1);
+  });
+
+  test("touch drops a row whose createdAt cannot be parsed instead of writing NaN expiry (issue #865)", () => {
+    const hash = hashControlToken("t");
+    const store = WebControlSessionStore.open(file);
+    store.establish({
+      tokenHash: hash,
+      vaultId: "v1",
+      shellOrigin: "http://shell",
+    });
+    const db = new DatabaseSync(path.join(dir, "gateway.db"));
+    db.prepare(
+      "UPDATE web_sessions SET created_at = 'not-a-timestamp' WHERE token_hash = ?"
+    ).run(hash);
+    db.close();
+    expect(store.find(hash)).toBeDefined();
+    store.touch(hash);
+    expect(store.find(hash)).toBeUndefined();
+    expect(rows()).toHaveLength(0);
   });
 });

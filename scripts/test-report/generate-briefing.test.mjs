@@ -301,6 +301,7 @@ describe("the detail shelf survives beneath the briefing", () => {
       "queue",
       "product",
       "states",
+      "scenarios",
       "consent",
       "joins",
       "journeys",

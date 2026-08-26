@@ -13,6 +13,7 @@
  */
 import { describe, expect, test, vi } from "vitest";
 
+import { expectedRefreshCapability } from "./refresh-capability-test-support.js";
 import { handleRequest } from "./worker.js";
 
 const NOW = Date.UTC(2026, 6, 23, 10, 0, 0);
@@ -451,7 +452,14 @@ describe("granted-scope comparison", () => {
           "content-type": "application/json",
           "cf-connecting-ip": "203.0.113.7",
         },
-        body: JSON.stringify({ provider: "google", refresh_token: "rt" }),
+        body: JSON.stringify({
+          provider: "google",
+          refresh_token: "rt",
+          refresh_capability: await expectedRefreshCapability(
+            "rt",
+            env.CALLBACK_RECEIPT_SECRET
+          ),
+        }),
       }),
       env,
       context,

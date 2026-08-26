@@ -73,6 +73,11 @@ interface RecurrenceOverride {
   end?: string;
   summary?: string;
   description?: string;
+  recurrence_semantics?: RecurrenceSemantics;
+  calendar_id?: string;
+  conferencing_uri?: string;
+  reminders?: { minutes_before: number }[];
+  attendee_party_ids?: string[];
 }
 interface EventRow extends RawEvent {
   calendar_id?: string | null;
@@ -298,6 +303,36 @@ function expandRecurringEvents(
         ...(override?.description === undefined
           ? {}
           : { description: override.description }),
+        ...(override?.recurrence_semantics === undefined
+          ? {}
+          : { recurrence_semantics: override.recurrence_semantics }),
+        ...(override?.calendar_id === undefined
+          ? {}
+          : { calendar_id: override.calendar_id }),
+        ...(override?.conferencing_uri === undefined
+          ? {}
+          : { conferencing_uri: override.conferencing_uri }),
+        ...(override?.reminders === undefined
+          ? {}
+          : { reminders_json: JSON.stringify(override.reminders) }),
+        ...(override?.attendee_party_ids === undefined
+          ? {}
+          : {
+              attendees: override.attendee_party_ids.map((partyId) => {
+                const existing = ev.attendees?.find(
+                  (guest) => guest.party_id === partyId
+                );
+                return (
+                  existing ?? {
+                    attendee_id: partyId,
+                    party_id: partyId,
+                    name: "Guest",
+                    partstat: "needs-action",
+                    is_you: false,
+                  }
+                );
+              }),
+            }),
         dtstart: startIso,
         dtend:
           override?.end ??

@@ -7,7 +7,10 @@
  *     are usually CJS. Taint spreads from the handler file down, so only
  *     tainted graphs are confined; the runner, TS loader and tests are not.
  * (2) AMBIENT-AUTHORITY REVOCATION covers what no module allowlist reaches:
- *     the network globals and the `process` loader/env escapes.
+ *     the network globals and the `process` loader/env escapes. Worker
+ *     threads share the gateway's PID (#865), so `process.kill`,
+ *     `process.abort`, and `process.report` are revoked, and `process.argv` /
+ *     `process.execArgv` are redacted inside worker threads.
  *
  * WHAT IT DOES NOT ENFORCE — never call a lane sandboxed without these:
  *  - Not an OS sandbox. Handlers share the process, fds and uid; a real
@@ -22,7 +25,7 @@
  *  - Node < 22.15 throws here rather than enforcing nothing.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -51,6 +54,19 @@ function bareUrl(url: string): string {
   return url.slice(0, cut);
 }
 
+/** File URL identity for the taint set. macOS tmpdirs are both
+ * `/var/folders/...` and `/private/var/folders/...`; an un-canonicalised mark
+ * never matches `parentURL` and the hook treats the handler as trusted. */
+function canonicalFileUrl(url: string): string {
+  const bare = bareUrl(url);
+  if (!bare.startsWith("file:")) return bare;
+  try {
+    return pathToFileURL(realpathSync(fileURLToPath(bare))).href;
+  } catch {
+    return bare;
+  }
+}
+
 /** Prefers compiled `.js` over `.ts`. */
 function siblingUrl(base: string): string {
   const js = new URL(`${base}.js`, import.meta.url);
@@ -58,13 +74,19 @@ function siblingUrl(base: string): string {
   return new URL(`${base}.ts`, import.meta.url).href;
 }
 
-const SANDBOX_DIR = new URL(".", import.meta.url).href;
+const SANDBOX_DIR = (() => {
+  const resolved = canonicalFileUrl(new URL(".", import.meta.url).href);
+  return resolved.endsWith("/") ? resolved : `${resolved}/`;
+})();
 
 let installed: SandboxHandle | undefined;
 
 /** Idempotent per thread; a DIFFERENT policy throws — re-pointing a live
  * sandbox at another lane is a containment bug wearing a convenience API. */
-export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
+export function installWorkerSandbox(
+  policy: SandboxPolicy,
+  options?: { redactLaunchArgs?: boolean }
+): SandboxHandle {
   if (installed) {
     if (installed.policy.lane !== policy.lane) {
       throw denied(
@@ -105,10 +127,13 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
     resolve(specifier, context, nextResolve) {
       const parent = context.parentURL;
       // The mirror is built on the real builtins: never taint sandbox modules.
-      if (parent !== undefined && bareUrl(parent).startsWith(SANDBOX_DIR)) {
+      if (
+        parent !== undefined &&
+        canonicalFileUrl(parent).startsWith(SANDBOX_DIR)
+      ) {
         return nextResolve(specifier, context);
       }
-      if (parent === undefined || !tainted.has(bareUrl(parent))) {
+      if (parent === undefined || !tainted.has(canonicalFileUrl(parent))) {
         return nextResolve(specifier, context);
       }
       const id = builtinId(specifier);
@@ -132,24 +157,28 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
           }
         }
       }
-      tainted.add(bareUrl(resolved.url));
+      tainted.add(canonicalFileUrl(resolved.url));
       return resolved;
     },
   });
 
-  revokeAmbientAuthority(policy);
+  revokeAmbientAuthority(policy, options?.redactLaunchArgs === true);
 
   installed = {
     policy,
     hostFetch,
     taint(url: string): void {
       tainted.add(
-        bareUrl(url.startsWith("file:") ? url : pathToFileURL(url).href)
+        canonicalFileUrl(
+          url.startsWith("file:") ? url : pathToFileURL(url).href
+        )
       );
     },
     isTainted(url: string): boolean {
       return tainted.has(
-        bareUrl(url.startsWith("file:") ? url : pathToFileURL(url).href)
+        canonicalFileUrl(
+          url.startsWith("file:") ? url : pathToFileURL(url).href
+        )
       );
     },
   };
@@ -160,7 +189,10 @@ export function resetWorkerSandboxForTests(): void {
   installed = undefined;
 }
 
-function revokeAmbientAuthority(policy: SandboxPolicy): void {
+function revokeAmbientAuthority(
+  policy: SandboxPolicy,
+  redactLaunchArgs: boolean
+): void {
   if (policy.network === "denied") {
     const revoke = (name: string) => () => {
       throw denied(
@@ -220,5 +252,152 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
       configurable: false,
       enumerable: true,
     });
+  }
+
+  // Worker threads share the gateway's PID (#865). `process.kill` and
+  // `process.abort` are process-wide — a SIGKILL from a handler would take
+  // down every lane, the vault, and the tunnels with it, and no pool can
+  // terminate its way out of that. No lane grants them; handlers are
+  // untrusted, and subprocess lanes shell out through `child_process`, which
+  // the allowlist already gates — never through these.
+  //
+  // Each assignment is try/caught: Electron (and some Node builds) freeze
+  // these properties. Throwing here would abort sandbox install and take
+  // down the handler worker — a louder failure than leaving a revoked
+  // method in place.
+  // Keep signal 0 (existence probe) — Node and Electron worker internals use
+  // it. Lethal signals from an untrusted handler still die here.
+  //
+  // The denial is keyed off THIS THREAD's globalThis, not a closed-over
+  // boolean. Electron's worker_threads can share the `process.kill` slot
+  // with the main thread; a wrapper that always threw made Electron unable
+  // to quit (desktop e2e FORCE-KILL) and left replica writes `in-flight`.
+  const SIGNALS_DENIED = Symbol.for("centraid.sandbox.signalsDenied");
+  (globalThis as Record<symbol, boolean>)[SIGNALS_DENIED] = true;
+  const originalKill = process.kill.bind(process);
+  try {
+    proc.kill = (pid: number, signal?: string | number) => {
+      if ((globalThis as Record<symbol, boolean>)[SIGNALS_DENIED] !== true)
+        return originalKill(pid, signal);
+      if (signal === 0) return originalKill(pid, 0);
+      throw denied(
+        "process.kill is revoked; worker threads share the gateway's PID, so a signal from an untrusted handler kills the whole gateway"
+      );
+    };
+  } catch {
+    /* already non-writable */
+  }
+  const originalAbort = process.abort.bind(process);
+  try {
+    proc.abort = () => {
+      if ((globalThis as Record<symbol, boolean>)[SIGNALS_DENIED] !== true) {
+        originalAbort();
+        return;
+      }
+      throw denied(
+        "process.abort is revoked; it crashes the shared gateway process, not just this handler's thread"
+      );
+    };
+  } catch {
+    /* already non-writable */
+  }
+
+  // `process.report.getReport()` reads the REAL OS environ at call time (#865),
+  // straight past the frozen-empty `process.env` above, and would hand a
+  // handler whatever the gateway process carries — S3 credentials, tunnel
+  // tokens, provider keys. Do not assign `process.report = undefined` and do
+  // not throw from getReport/writeReport: Electron's crash reporter reads the
+  // property and calls both methods; a throw here hung handler workers in
+  // the desktop e2e lane so `window.centraid.write` never settled. Stub the
+  // methods with a redacted report that carries no environ.
+  revokeDiagnosticReport(proc);
+
+  // argv and execArgv echo how the gateway was launched (#865). Emptyed in
+  // place, and only when the worker runner asked — this file also installs
+  // in-process under the vitest harness, where argv is the harness's own
+  // command line. Do not import `node:worker_threads` to detect that: loading
+  // it here caches the real module in the worker, and a tainted handler
+  // graph can then `import "node:worker_threads"` from cache past the hook.
+  if (redactLaunchArgs) {
+    for (const name of ["argv", "execArgv"] as const) {
+      const current = proc[name];
+      if (!Array.isArray(current)) continue;
+      if (name === "argv") {
+        // Keep argv[0] (the binary). Electron's worker loader reads it;
+        // emptying the array hung subsequent handler imports so writes
+        // stayed `in-flight`. Secrets live in later slots and execArgv.
+        const bin = current[0];
+        current.length = 0;
+        if (typeof bin === "string" && bin.length > 0) current.push(bin);
+      } else {
+        current.length = 0;
+      }
+    }
+  }
+}
+
+/**
+ * A diagnostic report with no OS environ, no command line, and no user
+ * limits. Shape matches Node's `getReport()` keys so Electron's crash
+ * reporter can traverse it; values are empty so a handler cannot read the
+ * gateway's secrets around the frozen `process.env`.
+ */
+function redactedDiagnosticReport(): Record<string, unknown> {
+  return {
+    header: { event: "centraid-sandbox-redacted", filename: "" },
+    javascriptStack: { message: "", stack: [] },
+    javascriptHeap: {},
+    nativeStack: [],
+    resourceUsage: {},
+    uvthreadResourceUsage: {},
+    libuv: [],
+    workers: [],
+    environmentVariables: Object.create(null) as Record<string, string>,
+    userLimits: {},
+    sharedObjects: [],
+  };
+}
+
+function revokeDiagnosticReport(proc: Record<string, unknown>): void {
+  const getReport = (): Record<string, unknown> => redactedDiagnosticReport();
+  // Node's writeReport returns the filename it wrote. Returning "" without
+  // touching the disk keeps the call from throwing (Electron waits on it)
+  // and from dumping environ onto disk from an untrusted handler.
+  const writeReport = (): string => "";
+  const installOn = (report: Record<string, unknown>): void => {
+    for (const [name, value] of [
+      ["getReport", getReport],
+      ["writeReport", writeReport],
+    ] as const) {
+      try {
+        report[name] = value;
+      } catch {
+        try {
+          Object.defineProperty(report, name, {
+            value,
+            writable: false,
+          });
+        } catch {
+          /* frozen DiagnosticReport method */
+        }
+      }
+    }
+  };
+  // Keep the host's report object if it has one (Electron's crash reporter
+  // and Node's `--report-on-uncaught-exception` path read the property).
+  const report = proc.report as Record<string, unknown> | undefined;
+  if (report && typeof report === "object") {
+    installOn(report);
+    return;
+  }
+  try {
+    Object.defineProperty(process, "report", {
+      value: { getReport, writeReport },
+      writable: false,
+      configurable: false,
+      enumerable: true,
+    });
+  } catch {
+    /* host forbids a report slot */
   }
 }

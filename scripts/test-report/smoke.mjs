@@ -103,6 +103,16 @@ try {
     "partial passed",
     "evidence unmatched",
     "owner silent",
+    // The legend is PAINTED since #864: a chip wears the cell's own classes, so
+    // it is the treatment rather than a description of one, and it sits above
+    // the grid it glosses. Pinned as a class-and-word pair — a chip that keeps
+    // its paint and loses its word is the register going silent again — and on
+    // the state whose whole point is that both grids now agree about it.
+    '<b class="cell gap">no owner</b>',
+    '<b class="cell axis-unowned">no owner</b>',
+    '<b class="cell axis-bug">product bug</b>',
+    "Scenarios · per-app verb ledger",
+    /<ul class="legend" aria-label="Cell register">[\s\S]*<div class="gridwrap">/u,
     "owner.latest.status",
     "duration(owner.latest.duration)",
     "report-data",

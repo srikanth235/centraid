@@ -165,37 +165,35 @@ const SITE_LAYER = `
 `;
 
 /**
- * The Night Watch palette — the surface, ink, rule and signal values the
- * nightly report's own layout is drawn in (issue #862).
+ * The Night Watch palette — the ground, ink, rule and signal values the nightly
+ * report's layout is drawn in (issue #862). The status ramp below says what a
+ * STATE is; this says what the PAGE is. Bounded the same way the ramp is: see
+ * docs/design-divergences.md#the-nightly-test-report. A rung is spelled ONCE, a
+ * `name light dark` triple read off by whitespace, so the theme's three blocks
+ * cannot drift; the `--nw-` prefix disambiguates from the product tokens
+ * (`--line`, `--danger`, `--link`) already in this sheet. Type rungs clear
+ * 4.5:1 and mark rungs 3:1 against their surface in both themes;
+ * `report-palette.test.mjs` recomputes every pairing off this table.
  *
- * The status ramp below says what a STATE is; this says what the PAGE is. The
- * two are separate because the report is a dense operational read — a person
- * scanning fifteen surfaces at a glance, before coffee — and the ground, the
- * three ink steps and the two rule weights it needs are finer than the shell's,
- * which is solved for reading-size prose in a window. That is a departure, and
- * it is bounded the same way the ramp below is: see
- * docs/design-divergences.md#the-nightly-test-report.
- *
- * A rung is spelled ONCE — a `name light dark` triple, in emission order, read
- * off this table by whitespace — so the three blocks the theme needs cannot
- * drift into disagreeing about it. The names carry an `--nw-` prefix because
- * three of the mockup's bare names (`--line`, `--danger`, `--link`) are already
- * product tokens in this sheet, and a report rule has to be able to say which
- * of the two it means.
- *
- * Type rungs clear 4.5:1 against the surface they sit on, in both themes, and
- * mark rungs clear 3:1. `ghost` inks the "n/a" cell, the section tags and the
- * footer, and `grey` is the whole of the quality light: both sit at that floor
- * rather than at the mockup's lighter greys, which cleared neither.
+ * EIGHT tone families, each meaning exactly ONE thing (issue #864): `ok`
+ * passed a solid claim; `partial` a partial claim; `danger` tonight went
+ * wrong; `flaky` green only on retry; `gap` no test exists; `attn` integrity;
+ * `grey` evidence absent; `bug` the product is known-broken (indigo, so a
+ * defect cannot share plum with a hole). `partial`/`flaky`/`gap` follow the
+ * ramp's identity hues. `attn` moved off the `--seam` literal it used to
+ * duplicate (at #B4441F it sat 8° from `danger`, and `--st-gap` pointed at
+ * the same value, carrying pending, attention and hole at once).
  */
 const NIGHT_WATCH_RAMP = `
   ground   #FDFDFC #0E0E0E  ink    #141414 #EDEDEC  ink2   #5A5A58 #9A9A98
   ink3     #6C6C69 #878785  ghost  #757572 #7B7B79  line   #E5E4E1 #232322
   lineS    #EFEEEB #1B1B1A  surf   #F5F4F2 #171716  sunken #F9F8F6 #121211
-  danger   #9A3B2E #E08878  attn   #B4441F #E0864F  link   #2D4BA8 #9DB0F0
+  danger   #9A3B2E #E08878  attn   #8A5A12 #E5B15E  link   #2D4BA8 #9DB0F0
   ring     #4A67C8 #8098E8  ok     #3E6B45 #7FA886  grey   #8B8A87 #666664
-  dangerbg #F7EBE8 #241614  attnbg #F8EFE7 #231A12  okbg   #EDF2EE #151D16
-  greybg   #F1F0EE #1A1A19
+  partial  #175F6A #69B3BD  flaky  #6B3E8C #C39BD8  gap    #8E2F63 #E094BA  bug #3A3A8C #C2BEEA
+  dangerbg #F7EBE8 #241614  attnbg #FAF2E2 #241D0E  okbg   #EDF2EE #151D16
+  greybg   #F1F0EE #1A1A19  partialbg #E9F2F3 #0F1E20
+  flakybg  #F2ECF8 #1D1726  gapbg  #FAEBF2 #26161F  bugbg  #EEEDF8 #1A1828
 `;
 
 /** One theme's rungs, indented to the block that carries them. Spaces only:
@@ -212,21 +210,14 @@ function nightWatchDecls(indent, theme) {
  * page's own layout is drawn in, whose dark rungs are spelled twice so a pinned
  * theme and a followed one agree. One template: the second reads the table.
  *
- * The nightly report is a heat map: fifteen product surfaces by eleven quality
- * dimensions, and a cell's whole job is to say which of twelve states it is in
- * at a glance. It answers in product tokens — every rung below resolves from
- * one — rather than in the palette of its own (`--green`, `--red`, `--amber`,
- * `--blue`, `--violet`, `--cyan`, `--grey` over a near-black ground, in Inter)
- * that carried a second design system on the same origin as the two sites #841
- * unified. The ramp introduces no colour, no face and no scale of its own;
- * what it introduces is NAMES, one per state, so a rule says which state it is
- * painting rather than which hue.
- *
- * Each state is named twice, once per role — a FILL rung and a TYPE rung —
- * because the two do not always want the same value: the `--c-*` identity hues
- * carry a solved `-text` sibling for exactly this, while the semantic roles are
- * already solved against the surfaces they land on. One name per state per role
- * means a rule never has to know which of the two cases it is in.
+ * The nightly report is a heat map: fifteen surfaces by eleven dimensions, a
+ * cell's job being to say which of twelve states it is at a glance. It answers
+ * in product tokens — every rung below resolves from one — not in a palette of
+ * its own, so the ramp introduces no colour, face or scale, only NAMES, one per
+ * state. Each state is named twice, a FILL rung and a TYPE rung, because the two
+ * do not always want the same value (the `--c-*` hues carry a solved `-text`
+ * sibling); one name per state per role means a rule never has to know which
+ * case it is in.
  *
  * A matrix cell paints no fill: it is the state's WORD on a quiet family tint
  * from the Night Watch palette above, so the fill rungs are declared and
@@ -247,7 +238,12 @@ const REPORT_LAYER = `
   --st-failed: var(--danger);
   --st-flaky: var(--c-violet);
   --st-na: var(--c-slate);
-  --st-gap: var(--seam);
+  /* \`--seam\` until #864: it resolved to the same literal the Night Watch
+     attention rung carried, so one value meant "pending", "attention" and
+     "no test exists" at once. \`gap\` takes the rose identity hue instead — the
+     family \`--nw-gap\` paints the cells in — so the ramp and the register
+     cannot disagree about which hue a hole is. */
+  --st-gap: var(--c-rose);
   --st-unmatched: var(--c-amber);
   --st-silent: var(--attention);
   --st-missing: var(--text-faint);
@@ -267,7 +263,7 @@ const REPORT_LAYER = `
   --st-failed-text: var(--danger);
   --st-flaky-text: var(--c-violet-text);
   --st-na-text: var(--c-slate-text);
-  --st-gap-text: var(--seam);
+  --st-gap-text: var(--c-rose-text);
   --st-unmatched-text: var(--c-amber-text);
   --st-silent-text: var(--attention);
   --st-missing-text: var(--text-faint);

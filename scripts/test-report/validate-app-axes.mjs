@@ -2,6 +2,7 @@ import { access, glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { MUTATION_SEEDS } from "../mutation/seeds.mjs";
+import { validateAppScenarios } from "./validate-app-scenarios.mjs";
 import { validateReportRegistries } from "./validate-report-registries.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -473,6 +474,14 @@ export async function validateAppAxes(matrix, options, flowIds) {
   if (checkFiles && options.checkReportRegistries !== false)
     errors.push(...(await validateReportRegistries(matrix, options)));
 
-  errors.push(...(await Promise.all(deferred)).filter(Boolean));
+  const scenarioErrors = await validateAppScenarios(
+    matrix,
+    { ...options, root: cwd },
+    { expectedApps, openIssue, issues }
+  );
+  errors.push(
+    ...scenarioErrors,
+    ...(await Promise.all(deferred)).filter(Boolean)
+  );
   return errors;
 }

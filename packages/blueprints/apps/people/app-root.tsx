@@ -325,7 +325,7 @@ export function Root({
         data.person && void writes.toggleStar(data.person)
       }
       onPickSource={(partyId) => {
-        state.mergeSourceId = partyId;
+        state.mergeSourceId = state.mergeSourceId === partyId ? null : partyId;
         bump();
       }}
       onRestore={(person) => void writes.restorePerson(person)}

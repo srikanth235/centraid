@@ -12,6 +12,9 @@ import { describe, afterEach, beforeEach, expect, test } from "vitest";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { GatewayPaths } from "../paths.js";
+import { EnrollmentStore } from "./enrollment-store.js";
+import { GatewayDatabase } from "./gateway-db.js";
+import { PairingTicketStore } from "./pairing-store.js";
 import { serve } from "./serve.js";
 import type { GatewayServeHandle } from "./serve.js";
 
@@ -27,8 +30,16 @@ function pathsUnder(dir: string): GatewayPaths {
 describe("authz-matrix.smoke scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`authz-smoke-${crypto.randomUUID()}-`);
+    // Pairing stores share the gateway's own database, so the owners surface
+    // (an `admin` registry row) is mounted for the tier-enforcement cases.
+    const database = GatewayDatabase.open(dataDir);
     handle = await serve({
       paths: pathsUnder(dataDir),
+      gatewayDatabase: database,
+      devicePairing: {
+        enrollments: EnrollmentStore.open(database),
+        tickets: PairingTicketStore.open(database),
+      },
       token: ADMIN,
     });
   });
@@ -132,6 +143,77 @@ describe("authz-matrix.smoke scenarios", () => {
     const passed =
       typeof c.expect === "function" ? c.expect(status) : status === c.expect;
     expect(passed, `status ${status} for ${c.route}`).toBe(true);
+  });
+
+  /*
+   * Admin tier at dispatch (#865 F2). The gateway-wide operator surfaces —
+   * resource, diagnostics, storage, logs, owners — are registry `admin` rows,
+   * and a proved DEVICE plane must get a 403 on each while the loopback
+   * bearer (the owner's own path) still answers normally.
+   */
+  const ADMIN_GATEWAY_WIDE_ROUTES: Array<{
+    route: string;
+    method?: string;
+  }> = [
+    { route: "/centraid/_gateway/resource/pause", method: "DELETE" },
+    { route: "/centraid/_gateway/diagnostics" },
+    { route: "/centraid/_gateway/storage/status" },
+    { route: "/centraid/_logs" },
+    { route: "/centraid/_gateway/owners" },
+  ];
+
+  test.each(ADMIN_GATEWAY_WIDE_ROUTES)(
+    "loopback bearer still answers $route",
+    async ({ route, method }) => {
+      const response = await hit(route, {
+        authorization: `Bearer ${ADMIN}`,
+        method,
+      });
+      expect(response).toBe(200);
+    }
+  );
+
+  /**
+   * A PWA proxy session resolves to the host device key
+   * (`WebControlSessions.authorize` → `{plane:'device'}`), which is exactly
+   * the proved-device identity the admin tier must refuse (#865 F2).
+   */
+  async function establishControlSession(): Promise<string> {
+    const shellOrigin = "http://shell.local";
+    const establish = await fetch(`${handle.url}/centraid/_web/control`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${ADMIN}`, origin: shellOrigin },
+    });
+    expect(establish.status).toBe(200);
+    const cookie = (establish.headers.get("set-cookie") ?? "").split(";")[0]!;
+    expect(cookie).toMatch(/^__centraid_control=/u);
+    return cookie;
+  }
+
+  test.each(ADMIN_GATEWAY_WIDE_ROUTES)(
+    "a proved device identity gets 403 on $route",
+    async ({ route }) => {
+      const cookie = await establishControlSession();
+      const proxied = await fetch(
+        `${handle.url}/centraid/_web/control?path=${encodeURIComponent(route)}`,
+        { headers: { cookie, origin: "http://shell.local" } }
+      );
+      expect(proxied.status).toBe(403);
+      await expect(proxied.json()).resolves.toMatchObject({
+        error: "admin_plane_forbidden",
+      });
+    }
+  );
+
+  test("the control-session proxy itself still works below the admin tier", async () => {
+    // The refusal above must be the admin TIER, not the proxy lane breaking:
+    // the same cookie reaches a device-tier route normally.
+    const cookie = await establishControlSession();
+    const health = await fetch(
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_gateway/health")}`,
+      { headers: { cookie, origin: "http://shell.local" } }
+    );
+    expect(health.status).toBe(200);
   });
 
   /*

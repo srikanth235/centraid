@@ -100,7 +100,11 @@ export default function TasksHome({
 
   const complete = useCallback(
     (task: Task) => {
-      void write("set-status", { task_id: task.task_id, status: "completed" });
+      void write(
+        "set-status",
+        { task_id: task.task_id, status: "completed" },
+        task.scope_id
+      );
     },
     [write]
   );
@@ -121,11 +125,15 @@ export default function TasksHome({
       const task = moving;
       if (!task) return;
       setMoving(null);
-      void write("organize-task", {
-        task_id: task.task_id,
-        sort_order: task.sort_order ?? 0,
-        project_id: projectId,
-      });
+      void write(
+        "organize-task",
+        {
+          task_id: task.task_id,
+          sort_order: task.sort_order ?? 0,
+          project_id: projectId,
+        },
+        task.scope_id
+      );
     },
     [moving, write]
   );
@@ -145,7 +153,11 @@ export default function TasksHome({
   const moveAllToToday = useCallback(
     (rows: readonly Task[]) => {
       for (const row of rows) {
-        void write("edit", { task_id: row.task_id, due_at: now.slice(0, 10) });
+        void write(
+          "edit",
+          { task_id: row.task_id, due_at: now.slice(0, 10) },
+          row.scope_id
+        );
       }
     },
     [now, write]

@@ -720,7 +720,7 @@
       "input": {
         "type": "object",
         "properties": {
-          "limit": { "type": "integer", "minimum": 20, "maximum": 2000 }
+          "limit": { "type": "integer", "minimum": 20, "maximum": 10000 }
         },
         "additionalProperties": false
       },

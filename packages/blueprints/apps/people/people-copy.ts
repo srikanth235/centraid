@@ -165,16 +165,22 @@ export const CONFIRMS = {
 
 /** Never a zero standing in for a number nobody could see. */
 export const STATUS = {
-  roster: (people: number, due: number, starred: number) =>
-    `${people} people · ${due} to reconnect · ${starred} starred`,
+  roster: (people: number, due: number, starred: number, truncated = false) =>
+    truncated
+      ? `${people} people shown · ${due} to reconnect · ${starred} starred`
+      : `${people} people · ${due} to reconnect · ${starred} starred`,
   rosterLinked: (
     linked: number,
     people: number,
     toLink: number,
     due: number,
-    starred: number
+    starred: number,
+    truncated = false
   ) =>
-    `${linked} vaults across ${people} people · ${toLink} to link · ${due} to reconnect · ${starred} starred`,
+    truncated
+      ? `${linked} vaults across ${people} people shown · ${toLink} to link · ${due} to reconnect · ${starred} starred`
+      : `${linked} vaults across ${people} people · ${toLink} to link · ${due} to reconnect · ${starred} starred`,
+  /** The roster's app-bar meta on a pointer surface. */
   barLinked: (linked: number, people: number) =>
     `${linked} of ${people} linked`,
   touch: (people: number, due: number) => `${people} people · ${due} overdue`,

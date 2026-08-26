@@ -221,6 +221,35 @@ describe("handler-pool", () => {
     expect(after.value).toBe("recovered");
   });
 
+  test("two concurrent dispatches both complete without sharing a result", async () => {
+    pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
+    pool.prewarm();
+    await tick();
+    const handlerFile = await writeHandler(
+      "echo.js",
+      `export default async ({ query }) => query;`
+    );
+    const [left, right] = await Promise.all([
+      dispatch({
+        handlerFile,
+        handlerKind: "query",
+        args: { query: { n: 1 } },
+        timeoutMs: 5_000,
+      }),
+      dispatch({
+        handlerFile,
+        handlerKind: "query",
+        args: { query: { n: 2 } },
+        timeoutMs: 5_000,
+      }),
+    ]);
+    expect(left.ok).toBe(true);
+    expect(right.ok).toBe(true);
+    const values = [left.value, right.value];
+    expect(values).toContainEqual({ n: 1 });
+    expect(values).toContainEqual({ n: 2 });
+  });
+
   test("workerPoolSizeFromEnv clamps and defaults sanely", () => {
     const standard = { CENTRAID_RESOLVED_HARDWARE_PROFILE: "standard" };
     expect(workerPoolSizeFromEnv(standard)).toBe(DEFAULT_WORKER_POOL_SIZE);

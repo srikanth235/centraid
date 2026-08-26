@@ -1,6 +1,6 @@
 {
   "_comment": "Growth-only corpus manifest for the schema-migration archaeology lane (umbrella #842 W1.5). `ladderLength` MUST equal packages/vault/src/schema/migrate.ts VAULT_MIGRATIONS.length, and `epochs` MUST be the contiguous 1..ladderLength. Adding a migration rung means bumping `ladderLength`, appending the new epoch here, and (if the seed changes) updating `expectedCensus` — that is how 'any PR touching migrations migrates every corpus member' is enforced. Never remove an epoch.",
-  "ladderLength": 4,
-  "epochs": [1, 2, 3, 4],
+  "ladderLength": 5,
+  "epochs": [1, 2, 3, 4, 5],
   "expectedCensus": { "party": 3, "content": 2, "media": 2, "receipt": 2 }
 }

@@ -9,7 +9,7 @@
       "test": "real launchctl bootstrap/print/bootout round-trip",
       "environment": "Red off darwin: the law drives real launchctl bootstrap/bootout, and no other platform has launchd to assert against.",
       "guard": "runtime-skip",
-      "issue": 790,
+      "issue": 864,
       "revisitTrigger": "Revisit if the service layer gains a systemd --user e2e rig — that would make the install/uninstall law assertable on linux runners (rig tracker: #790)."
     },
     "packages/server/src/cli/status-admin.test.ts#1": {
@@ -19,7 +19,7 @@
       "test": "status-admin scenarios",
       "environment": "Red on win32: the status probe shells out to launchctl/systemctl, which exist only on darwin and linux; four tests share this predicate via skipIf.",
       "guard": "skipIf",
-      "issue": 790,
+      "issue": 864,
       "revisitTrigger": "Revisit if the CLI grows a windows service adapter (sc.exe/SCM); until then win32 has no service surface for these four scenarios to assert (rig tracker: #790)."
     },
     "packages/vault/src/blob/disk-full.integration.test.ts#1": {
@@ -29,7 +29,7 @@
       "test": "FsBlobStore.putSync against a REAL full filesystem",
       "environment": "Red off darwin: the real full-filesystem ENOSPC rig is built with hdiutil, which only darwin ships.",
       "guard": "runtime-skip",
-      "issue": 790,
+      "issue": 864,
       "revisitTrigger": "Revisit if the nightly lane gains a linux loop-device/tmpfs ENOSPC rig — that would widen the environment where the real-disk law runs (rig tracker: #790)."
     },
     "packages/vault/src/wal-shipper-clone.test.ts#1": {
@@ -39,7 +39,7 @@
       "test": "the base clone is a reflink",
       "environment": "Red on ext4 runners: ext4 cannot reflink at all, so the cloning-consumes-no-new-disk assertion holds unconditionally only on APFS (darwin).",
       "guard": "skipIf",
-      "issue": 790,
+      "issue": 864,
       "revisitTrigger": "Revisit if CI gains a btrfs/xfs runner where reflink holds — the guard could then narrow from platform to filesystem capability (rig tracker: #790)."
     },
     "tests/perf/vault-write.perf.test.ts#1": {
@@ -49,7 +49,7 @@
       "test": "journalled vault writes stay within the nightly latency and fsync budget",
       "environment": "The fsync-per-write count is countable only via strace on linux; off linux the test asserts latency alone rather than failing on an unmeasurable law.",
       "guard": "reduced-assertion",
-      "issue": 790,
+      "issue": 864,
       "revisitTrigger": "Revisit if a darwin syscall counter usable without SIP friction (dtrace) becomes available to the perf lane; then the fsync gate can widen (rig tracker: #790)."
     },
     "tests/perf/vault-write.perf.test.ts#2": {
@@ -59,7 +59,7 @@
       "test": "journalled vault writes stay within the nightly latency and fsync budget",
       "environment": "The inverse arm of site #1: in linux CI, where strace is provisioned by e2e.yml, a missing strace throws rather than skipping the fsync gate into a false green.",
       "guard": "hard-fail",
-      "issue": 790,
+      "issue": 864,
       "revisitTrigger": "Stands as long as the nightly perf lane installs strace (.github/workflows/e2e.yml); revisit together with site #1 (rig tracker: #790)."
     }
   }

@@ -12,10 +12,15 @@ import type { ShelfId } from "./shelves.ts";
 
 export {
   duplicatesLede,
+  PHOTOS_ARCHIVE,
+  PHOTOS_ARCHIVE_EMPTY,
   PHOTOS_EMPTY_DUPLICATES,
   PHOTOS_EMPTY_FAVORITES,
   PHOTOS_SEARCH_PLACEHOLDER,
+  PHOTOS_UNARCHIVE,
   PLACE_UNNAMED,
+  photosArchiveMoved,
+  photosArchiveVerb,
 } from "./shared-copy.ts";
 
 /** `unit` is plural; frame.tsx singularises it for a count of one. */

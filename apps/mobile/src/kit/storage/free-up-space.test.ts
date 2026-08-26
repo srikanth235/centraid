@@ -52,6 +52,19 @@ describe("free-up-space eligibility", () => {
     ]);
   });
 
+  test("excludes a pin whose membership id is a folded copy, not the canonical assetId", () => {
+    const candidates = selectFreeUpCandidates(
+      [
+        backedUp("family", {
+          assetId: "asset-family",
+          assetIds: ["asset-personal", "asset-family"],
+        }),
+      ],
+      new Set(["asset-personal"])
+    );
+    expect(candidates).toStrictEqual([]);
+  });
+
   test("collects every device copy of one backed-up sha", () => {
     const [candidate] = selectFreeUpCandidates(
       [backedUp("dup", { localIds: ["local-a", "local-b"] })],

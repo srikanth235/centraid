@@ -36,10 +36,10 @@ window.CentraidTokens = {
   type: tokens.type,
 };
 
-// Surface the real package version for diagnostics / about UI (#468).
-// Vite injects __APP_VERSION__ from package.json.
-(window as unknown as { __CENTRAID_VERSION__?: string }).__CENTRAID_VERSION__ =
-  __APP_VERSION__;
+// Package version for diagnostics / about UI (#468 K9). Vite injects
+// __APP_VERSION__ from package.json. Object.assign so v8 coverage remap
+// (Rolldown) can parse this uncovered entry as a script.
+Object.assign(window, { __CENTRAID_VERSION__: __APP_VERSION__ });
 
 installWebHost();
 installWebChrome();

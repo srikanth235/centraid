@@ -58,13 +58,14 @@ import {
   SearchRoute,
 } from "./components/Screens.tsx";
 import { EmptyState, Notices } from "./components/States.tsx";
-import { dayKey, weekdayName } from "./format.ts";
+import { dayKey, priorityFromDigit, weekdayName } from "./format.ts";
 import { appBar, bandClaim } from "./frame.tsx";
 import {
   absence,
   allGroups,
   anytimeGroups,
   boardState,
+  catchUpWrites,
   inboxGroup,
   isOpen,
   landsToday,
@@ -103,6 +104,13 @@ import {
   doneNext,
   inboxMeta,
 } from "./view-copy.ts";
+import {
+  isPendingTaskId,
+  landedTask,
+  mountedWriteScope,
+  removeTaskWrite,
+  taskWrite,
+} from "./writes.ts";
 
 /** The vault entities this app's queries read — the shell's change-subscription
  *  filter. */
@@ -231,11 +239,20 @@ export function Root({
     async (
       action: string,
       input: Record<string, unknown>,
-      outcome?: string
+      extra?: { outcome?: string; scope?: string | null }
     ): Promise<void> => {
       try {
-        await window.centraid.write({ action, input });
-        if (outcome) publishOutcome(frame, { text: outcome });
+        await window.centraid.write(
+          taskWrite({
+            action,
+            input,
+            scopeId: mountedWriteScope(
+              extra?.scope,
+              mountedScopes().map((scope) => scope.id)
+            ),
+          })
+        );
+        if (extra?.outcome) publishOutcome(frame, { text: extra.outcome });
       } catch (error) {
         publishOutcome(frame, {
           text: String((error as { message?: string })?.message ?? error),
@@ -363,35 +380,73 @@ export function Root({
         task.rrule && task.next_due
           ? doneNext(weekdayName(task.next_due))
           : DONE;
-      void window.centraid
-        .write({
-          action: "set-status",
-          input: { task_id: task.task_id, status: "completed" },
-        })
-        .then(() => {
+      void (async () => {
+        const rows = () => [
+          ...dataRef.current.open,
+          ...dataRef.current.logbook,
+        ];
+        const pause = (): Promise<void> =>
+          new Promise((resolve) => {
+            window.setTimeout(resolve, 50);
+          });
+        const waitForLanded = async (deadline: number): Promise<Task> => {
+          const current = landedTask(task, rows()) ?? task;
+          if (!isPendingTaskId(current.task_id) || Date.now() >= deadline) {
+            return current;
+          }
+          await refresh();
+          const landed = landedTask(task, rows());
+          if (landed && !isPendingTaskId(landed.task_id)) return landed;
+          await pause();
+          return waitForLanded(deadline);
+        };
+        const target = await waitForLanded(Date.now() + 15_000);
+        if (isPendingTaskId(target.task_id)) {
+          publishOutcome(frame, { text: "This task has not landed yet." });
+          return;
+        }
+        try {
+          await window.centraid.write(
+            taskWrite({
+              action: "set-status",
+              input: { task_id: target.task_id, status: "completed" },
+              scopeId: mountedWriteScope(
+                target.scope_id,
+                mountedScopes().map((scope) => scope.id)
+              ),
+            })
+          );
           publishOutcome(frame, {
             text,
             // Undo IS reopening — the status goes back to needs-action rather
             // than a second, parallel notion of "undone".
             undo: () => {
-              void act("set-status", {
-                task_id: task.task_id,
-                status: "needs-action",
-              });
+              void act(
+                "set-status",
+                {
+                  task_id: target.task_id,
+                  status: "needs-action",
+                },
+                { scope: target.scope_id }
+              );
             },
           });
-          return refresh();
-        })
-        .catch((error: unknown) => {
+          await refresh();
+        } catch (error: unknown) {
           publishOutcome(frame, { text: String(error) });
-        });
+        }
+      })();
     },
     [act, frame, refresh]
   );
 
   const reopen = useCallback(
     (task: Task) => {
-      void act("set-status", { task_id: task.task_id, status: "needs-action" });
+      void act(
+        "set-status",
+        { task_id: task.task_id, status: "needs-action" },
+        { scope: task.scope_id }
+      );
     },
     [act]
   );
@@ -400,24 +455,31 @@ export function Root({
     (rows: readonly Task[]) => {
       const due = dayKey(now);
       for (const task of rows) {
-        void act("edit", { task_id: task.task_id, due_at: due });
+        void act(
+          "edit",
+          { task_id: task.task_id, due_at: due },
+          { scope: task.scope_id }
+        );
       }
     },
     [act, now]
   );
 
   const release = useCallback(
-    (taskId: string) => {
-      void act("set-status", { task_id: taskId, status: "cancelled" });
+    (task: Task) => {
+      void act(
+        "set-status",
+        { task_id: task.task_id, status: "cancelled" },
+        { scope: task.scope_id }
+      );
     },
     [act]
   );
 
   const removeTask = useCallback(
-    (taskId: string) => {
-      // The platform destroys on its own schedule; releasing a task is what a
-      // member means by "delete this" and what the vault records.
-      void act("set-status", { task_id: taskId, status: "cancelled" });
+    (task: Task) => {
+      const write = removeTaskWrite(task.task_id);
+      void act(write.action, write.input, { scope: task.scope_id });
     },
     [act]
   );
@@ -427,11 +489,15 @@ export function Root({
    *  rather than reset to zero behind the member's manual order. */
   const organize = useCallback(
     (task: Task, patch: Record<string, unknown>) => {
-      void act("organize-task", {
-        task_id: task.task_id,
-        sort_order: task.sort_order ?? 0,
-        ...patch,
-      });
+      void act(
+        "organize-task",
+        {
+          task_id: task.task_id,
+          sort_order: task.sort_order ?? 0,
+          ...patch,
+        },
+        { scope: task.scope_id }
+      );
     },
     [act]
   );
@@ -518,10 +584,14 @@ export function Root({
         case "3":
         case "4":
           if (focused) {
-            void act("edit", {
-              task_id: focused.task_id,
-              priority: Number(event.key) - 1,
-            });
+            void act(
+              "edit",
+              {
+                task_id: focused.task_id,
+                priority: priorityFromDigit(Number(event.key)),
+              },
+              { scope: focused.scope_id }
+            );
           }
           break;
         case "Escape":
@@ -695,7 +765,14 @@ export function Root({
           buckets={reentryBuckets(data.open, now, REENTRY_BUCKETS)}
           ctx={rowCtx}
           narrow={narrow}
-          onBulk={(bucket) => moveToToday(bucket.rows)}
+          onBulk={(bucket) => {
+            const writes = catchUpWrites(bucket.key, bucket.rows, dayKey(now));
+            bucket.rows.forEach((task, index) => {
+              const write = writes[index];
+              if (!write) return;
+              void act(write.action, write.input, { scope: task.scope_id });
+            });
+          }}
         />
       );
     }
@@ -746,13 +823,25 @@ export function Root({
           projects={data.projects}
           home={null}
           onTitle={(title) =>
-            void act("edit", { task_id: openTaskRow.task_id, title })
+            void act(
+              "edit",
+              { task_id: openTaskRow.task_id, title },
+              { scope: openTaskRow.scope_id }
+            )
           }
           onPriority={(priority) =>
-            void act("edit", { task_id: openTaskRow.task_id, priority })
+            void act(
+              "edit",
+              { task_id: openTaskRow.task_id, priority },
+              { scope: openTaskRow.scope_id }
+            )
           }
           onEffort={(effort_min) =>
-            void act("edit", { task_id: openTaskRow.task_id, effort_min })
+            void act(
+              "edit",
+              { task_id: openTaskRow.task_id, effort_min },
+              { scope: openTaskRow.scope_id }
+            )
           }
           onAnchor={(anchor) =>
             organize(openTaskRow, {
@@ -769,14 +858,32 @@ export function Root({
             )
           }
           onAddTag={(label) =>
-            void act("add-tag", { task_id: openTaskRow.task_id, label })
+            void act(
+              "add-tag",
+              { task_id: openTaskRow.task_id, label },
+              { scope: openTaskRow.scope_id }
+            )
           }
-          onRemoveTag={(tagId) => void act("remove-tag", { tag_id: tagId })}
+          onRemoveTag={(tagId) =>
+            void act(
+              "remove-tag",
+              { tag_id: tagId },
+              { scope: openTaskRow.scope_id }
+            )
+          }
           onAttach={() =>
-            void act("attach", { subject_id: openTaskRow.task_id })
+            void act(
+              "attach",
+              { subject_id: openTaskRow.task_id },
+              { scope: openTaskRow.scope_id }
+            )
           }
           onDetach={(attachmentId) =>
-            void act("detach", { attachment_id: attachmentId })
+            void act(
+              "detach",
+              { attachment_id: attachmentId },
+              { scope: openTaskRow.scope_id }
+            )
           }
           onPromote={() =>
             void act("save-project", { name: openTaskRow.title })
@@ -837,11 +944,15 @@ export function Root({
             const title = captureRef.current?.value.trim();
             if (!title) return;
             closeOverlay();
-            void act("add", {
-              title,
-              // add_task does not take project_id; membership is organize-task.
-              ...(shelf === null ? { due_at: dayKey(now) } : {}),
-            });
+            void act(
+              "add",
+              {
+                title,
+                // add_task does not take project_id; membership is organize-task.
+                ...(shelf === null ? { due_at: dayKey(now) } : {}),
+              },
+              { scope: stateRef.current.landsIn }
+            );
           }}
         />
       );
@@ -854,8 +965,15 @@ export function Root({
           onCancel={closeOverlay}
           onConfirm={() => {
             closeOverlay();
-            if (overlay.kind === "release") release(taskId);
-            else removeTask(taskId);
+            const row =
+              data.open.find((task) => task.task_id === taskId) ??
+              data.logbook.find((task) => task.task_id === taskId) ??
+              data.open
+                .flatMap((task) => task.children ?? [])
+                .find((task) => task.task_id === taskId);
+            if (!row) return;
+            if (overlay.kind === "release") release(row);
+            else removeTask(row);
           }}
         />
       );

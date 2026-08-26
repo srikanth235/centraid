@@ -5,9 +5,12 @@
  * hostile handlers in real worker threads and asserts the refusals.
  */
 
+import { realpathSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   appHandlerPolicy,
@@ -175,6 +178,17 @@ describe("read-root normalization", () => {
       path.resolve("/a/one"),
       path.resolve("/b/two"),
     ]);
+  });
+
+  test("realpath aliases of the same directory collapse to one root", () => {
+    const dir = tempDirSync("sandbox-root-");
+    const canonical = realpathSync(dir);
+    const roots = normalizeRoots([dir, canonical]);
+    expect(roots).toHaveLength(1);
+    expect(roots[0]).toBe(canonical);
+    expect(isPathWithinRoots(path.join(canonical, "weights.bin"), roots)).toBe(
+      true
+    );
   });
 });
 

@@ -120,8 +120,43 @@ export function keychainPromptExpected(host: {
   return false;
 }
 
-// `compute.transcript` stays `false` (#724) but the key stays in the wire
-// shape (`DeviceComputeCapabilities`) — do not drop it.
+/**
+ * Renderer-supplied app id gate for filesystem-bound app surfaces (#865):
+ * an appId is joined into on-disk paths (APPS_OPEN → `shell.openPath`), so a
+ * traversal id must never reach the filesystem. Mirrors the gateway's
+ * app-meta ID_RE — store-created apps share it, so membership in the shipped
+ * inline set is NOT required.
+ */
+const APP_ID_GRAMMAR = /^[a-z0-9][a-z0-9-]{0,62}$/u;
+
+/** String-level guard; throws on anything outside the app-id grammar. */
+export function assertRevealableAppId(appId: string): void {
+  if (!APP_ID_GRAMMAR.test(appId) || appId.startsWith("_")) {
+    throw new Error(
+      `invalid app id ${JSON.stringify(
+        appId
+      )} — expected lowercase a-z / 0-9 / "-", no leading "_"`
+    );
+  }
+}
+
+/** Validate the raw IPC envelope of an app-scoped channel; returns the id. */
+export function parseRevealableAppId(input: unknown): string {
+  const id =
+    input && typeof input === "object"
+      ? (input as { id?: unknown }).id
+      : undefined;
+  if (typeof id !== "string") {
+    throw new Error("app open needs { id }");
+  }
+  assertRevealableAppId(id);
+  return id;
+}
+
+// Host-capability snapshot (pure, unit-testable). `compute.transcript` stays
+// `false` (#724 W6) — on-device ASR is gone; transcription is the gateway
+// `transcript` automation. The key stays in the `DeviceComputeCapabilities`
+// wire shape — do not drop it.
 export function hostCapabilities(): {
   platform: "desktop";
   compute: {

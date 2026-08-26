@@ -435,4 +435,32 @@ describe("tasks", () => {
     });
     expect(both.status).toBe("failed");
   });
+
+  test("delete_task removes the row and its subtasks, not a cancelled status", () => {
+    const parent = addTask({ title: "Plan the trip" });
+    const child = addTask({ title: "Book flights", parent_task_id: parent });
+    const outcome = gw.invoke(owner, {
+      command: "schedule.delete_task",
+      input: { task_id: parent },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(outcome.status).toBe("executed");
+    const rows = db.vault
+      .prepare(
+        "SELECT task_id, status FROM schedule_task WHERE task_id IN (?, ?)"
+      )
+      .all(parent, child) as { task_id: string; status: string }[];
+    expect(rows).toStrictEqual([]);
+  });
+
+  test("delete_task on an unknown task is refused by precondition", () => {
+    const outcome = gw.invoke(owner, {
+      command: "schedule.delete_task",
+      input: { task_id: "ghost" },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(outcome.status).toBe("failed");
+    assert(outcome.status === "failed");
+    expect(outcome.predicate).toContain("task_exists");
+  });
 });

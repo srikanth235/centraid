@@ -3,6 +3,7 @@
  * JavaScript in THIS THREAD, never what has escaped it. Read `install.ts`.
  */
 
+import { realpathSync } from "node:fs";
 import { builtinModules } from "node:module";
 import path from "node:path";
 
@@ -135,7 +136,16 @@ export function normalizeRoots(roots: readonly string[]): readonly string[] {
   const seen = new Set<string>();
   for (const root of roots) {
     if (typeof root !== "string" || root.trim() === "") continue;
-    seen.add(path.resolve(root));
+    const absolute = path.resolve(root);
+    let real = absolute;
+    try {
+      // macOS tmpdirs are `/var/folders` and `/private/var/folders` for the
+      // same directory; confinement compares realpath(target) to these roots.
+      real = realpathSync(absolute);
+    } catch {
+      // Granted before the directory exists — keep the resolved form.
+    }
+    seen.add(real);
   }
   return Object.freeze([...seen].sort());
 }

@@ -464,19 +464,103 @@ function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
   for (const t of DOMAIN_TRASH_TABLES) {
     const lapsed = db.vault
       .prepare(
-        `SELECT "${t.idCol}" AS id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?`
+        t.physical === "people_profile"
+          ? `SELECT "${t.idCol}" AS id, party_id AS party_id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?`
+          : `SELECT "${t.idCol}" AS id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?`
       )
-      .all(now) as { id: string }[];
+      .all(now) as { id: string; party_id?: string }[];
     for (const row of lapsed) {
       writeProvenance(db.journal, owner, t.entity, row.id, "sweep.purge");
       db.vault
         .prepare(`DELETE FROM "${t.physical}" WHERE "${t.idCol}" = ?`)
         .run(row.id);
       cleanupPolyRefs(db.vault, now, t.entity, row.id);
+      if (t.physical === "people_profile" && row.party_id)
+        erasePurgedPerson(db, owner, now, row.party_id);
       purged += 1;
     }
   }
   return purged;
+}
+
+/** Engine FKs onto `core_party`, discovered live — same method merge uses. */
+function partyFkColumns(db: VaultDb): {
+  table: string;
+  column: string;
+  notnull: number;
+}[] {
+  const tables = db.vault
+    .prepare(
+      `SELECT name FROM sqlite_master WHERE type = 'table'
+        AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%' AND name != 'core_party'`
+    )
+    .all() as { name: string }[];
+  const refs: { table: string; column: string; notnull: number }[] = [];
+  for (const { name } of tables) {
+    const fks = db.vault
+      .prepare(`PRAGMA foreign_key_list(${JSON.stringify(name)})`)
+      .all() as { table: string; from: string }[];
+    const cols = db.vault
+      .prepare(`PRAGMA table_info(${JSON.stringify(name)})`)
+      .all() as { name: string; notnull: number }[];
+    for (const fk of fks) {
+      if (fk.table !== "core_party") continue;
+      const col = cols.find((c) => c.name === fk.from);
+      refs.push({
+        table: name,
+        column: fk.from,
+        notnull: col?.notnull ?? 0,
+      });
+    }
+  }
+  return refs;
+}
+
+/** After a People profile's grace window lapses: hard-erase the person —
+ * party, identifiers, tags, channels — not a hide that keeps notifying (#864). */
+function erasePurgedPerson(
+  db: VaultDb,
+  owner: Identity,
+  now: string,
+  partyId: string
+): void {
+  const ownerRow = db.vault
+    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+    .get() as { owner_party_id: string } | undefined;
+  if (!ownerRow || ownerRow.owner_party_id === partyId) return;
+  const party = db.vault
+    .prepare("SELECT kind FROM core_party WHERE party_id = ?")
+    .get(partyId) as { kind: string } | undefined;
+  if (!party || party.kind !== "person") return;
+
+  writeProvenance(db.journal, owner, "core.party", partyId, "sweep.purge");
+  db.vault
+    .prepare("DELETE FROM core_party_identifier WHERE party_id = ?")
+    .run(partyId);
+  db.vault
+    .prepare("DELETE FROM people_important_date WHERE party_id = ?")
+    .run(partyId);
+  cleanupPolyRefs(db.vault, now, "core.party", partyId);
+  for (const ref of partyFkColumns(db)) {
+    if (ref.table === "core_vault" || ref.table === "people_profile") continue;
+    if (ref.notnull) {
+      try {
+        db.vault
+          .prepare(`DELETE FROM "${ref.table}" WHERE "${ref.column}" = ?`)
+          .run(partyId);
+      } catch {
+        // Nested FKs can refuse one child; remaining refs are cleared below
+        // or the party delete is the last gate for this pass.
+      }
+    } else {
+      db.vault
+        .prepare(
+          `UPDATE "${ref.table}" SET "${ref.column}" = NULL WHERE "${ref.column}" = ?`
+        )
+        .run(partyId);
+    }
+  }
+  db.vault.prepare("DELETE FROM core_party WHERE party_id = ?").run(partyId);
 }
 
 /** Derived copies first (#711). Self-FK: never hand SQLite a delete it will refuse. Skip a lapsed source whose child is not lapsed. */

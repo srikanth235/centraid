@@ -70,7 +70,11 @@ import {
   SHARE_GRANT_BACKFILL_DDL,
   SHARE_GRANT_DDL,
 } from "./share-grant.js";
-import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
+import {
+  SYNC_CREDENTIAL_DDL,
+  SYNC_CREDENTIAL_REFRESH_CAPABILITY_DDL,
+  SYNC_DDL,
+} from "./sync.js";
 import { TIME_ORGANIZE_DDL } from "./time-organize.js";
 
 /**
@@ -172,6 +176,12 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // also a faithful no-op on a fresh file that got the column from the
   // baseline; see the DDL for the backfill and foreign-key reasoning.
   SHARE_FULFILLMENT_DELIVERY_MEMORY_DDL,
+  // Rung five (issue #865): `sync_connection_credential.refresh_capability`,
+  // the Worker-minted HMAC a stored Assist refresh token is redeemable with.
+  // A plain ADD COLUMN rung — unlike rung four there is no baseline copy of
+  // this column, so both fresh and stamped files reach the same shape by
+  // walking exactly this ALTER once.
+  SYNC_CREDENTIAL_REFRESH_CAPABILITY_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

@@ -4,15 +4,39 @@ import { showsEmptyState } from "../_shared/view-state-kit.ts";
 import { daysBetween, isOverdue } from "./format.ts";
 import type { BoardData, ReentryBucket, Task, TaskGroup } from "./types.ts";
 import { GROUPS, inboxMeta, overdueMeta } from "./view-copy.ts";
-import { landsToday } from "./when.ts";
+import { isOpenStatus, landsToday } from "./when.ts";
 
-// Re-exported so every caller of logic.ts has one definition (#834).
-export { landsToday } from "./when.ts";
-
-const OPEN = new Set(["needs-action", "in-process"]);
+// `landsToday` and family nesting live in `when.ts` (#834) and are
+// re-exported so every caller of `logic.ts` still has one definition.
+export { landsToday, nestTaskFamilies } from "./when.ts";
 
 export function isOpen(task: Task): boolean {
-  return OPEN.has(task.status);
+  return isOpenStatus(task.status);
+}
+
+/** One Catch-up bulk verb → the writes it actually fires. Sitting is Release
+ *  all: cancel, never stamp Today onto an undated someday row. */
+export function catchUpWrites(
+  key: ReentryBucket["key"],
+  rows: readonly Pick<Task, "task_id">[],
+  today: string
+): Array<{ action: string; input: Record<string, unknown> }> {
+  if (key === "sitting") {
+    return rows.map((row) => ({
+      action: "set-status",
+      input: { task_id: row.task_id, status: "cancelled" },
+    }));
+  }
+  if (key === "repeating") {
+    return rows.map((row) => ({
+      action: "set-status",
+      input: { task_id: row.task_id, status: "completed" },
+    }));
+  }
+  return rows.map((row) => ({
+    action: "edit",
+    input: { task_id: row.task_id, due_at: today },
+  }));
 }
 
 /** Date-only first, then moment, then title — a date-only task has no moment

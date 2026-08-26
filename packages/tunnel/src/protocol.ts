@@ -32,6 +32,13 @@ export const PEER_PLANE_PREFIX = "/centraid/_peer/";
 
 export const PEER_ENDPOINT_HEADER = "x-centraid-peer-endpoint";
 export const PEER_PROOF_HEADER = "x-centraid-peer-proof";
+/**
+ * Peer vault hint named by the Rust relay's forwarder-owned set
+ * (`data-plane/src/iroh_wire.rs::FORWARDER_OWNED_HEADERS`). The TS endpoint
+ * deliberately never stamps it, but strips client copies on every lane so a
+ * caller cannot smuggle a peer-vault claim past the HTTP layer (#865).
+ */
+export const PEER_VAULT_HEADER = "x-centraid-peer-vault";
 
 /**
  * Constraints mirrored BYTE-FOR-BYTE in Rust (#846). Well-formed UTF-16: a Rust

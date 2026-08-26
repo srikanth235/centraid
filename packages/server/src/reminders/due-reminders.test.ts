@@ -132,6 +132,34 @@ describe("due-reminders", () => {
     );
   });
 
+  test("a recurring event's reminder fires on each occurrence", () => {
+    const outcome = invoke("schedule.propose_event", {
+      summary: "Weekly standup",
+      dtstart: "2026-07-06T09:00:00.000Z",
+      dtend: "2026-07-06T09:15:00.000Z",
+      calendar_id: calendarId,
+      rrule: "FREQ=WEEKLY",
+      reminders: [{ minutes_before: 10 }],
+    });
+    expect(outcome.status).toBe("executed");
+    const eventId = (outcome as { output: { event_id: string } }).output
+      .event_id;
+
+    const nextWeek = computeDueReminders(db, "2026-07-13T08:50:00.000Z");
+    expect(nextWeek).toHaveLength(1);
+    expect(nextWeek[0]).toMatchObject({
+      kind: "event",
+      id: eventId,
+      minutesBefore: 10,
+      at: "2026-07-13T09:00:00.000Z",
+    });
+    expect(nextWeek[0]?.key).toContain("2026-07-13T09:00:00.000Z");
+
+    expect(nextReminderFireAt(db, "2026-07-07T12:00:00.000Z")).toBe(
+      "2026-07-13T08:50:00.000Z"
+    );
+  });
+
   test("a cancelled event never reminds", () => {
     const outcome = invoke("schedule.propose_event", {
       summary: "Cancel me",

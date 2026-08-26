@@ -14,6 +14,7 @@ import {
 import { tallyDedupes } from "./components/Import.tsx";
 import type { ImportResult } from "./components/Import.tsx";
 import { $ } from "./dom.ts";
+import { filesFromDataTransfer } from "./import-drop.ts";
 import { act, narrate, notice, writeTarget } from "./outcomes.ts";
 import { thumbHashFromImage } from "./thumbhash.ts";
 
@@ -449,8 +450,9 @@ export function wireUpload({
     e.preventDefault();
     dragDepth = 0;
     $("dropOverlay").hidden = true;
-    const files = [...(e.dataTransfer?.files ?? [])];
-    if (files.length > 0) void uploadFiles(files);
+    void filesFromDataTransfer(e.dataTransfer).then((files) => {
+      if (files.length > 0) void uploadFiles(files);
+    });
   });
 
   window.addEventListener("paste", (e) => {

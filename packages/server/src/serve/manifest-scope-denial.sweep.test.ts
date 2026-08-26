@@ -47,7 +47,7 @@ describe("bundled manifest scope-denial sweep (#839 G4)", () => {
       // `release-notes-drafter` declares no vault block at all — see its own
       // case below, which pins what that means for consent.
       withScopes: 36,
-      declaredScopes: 247,
+      declaredScopes: 248,
     });
     // Every scope-carrying manifest rides the one defaulted DPV purpose.
     expect([

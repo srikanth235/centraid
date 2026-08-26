@@ -1,12 +1,13 @@
 /**
  * The people window as a bounded recent view: the CRM people are the rows of
  * people.profile (each a 1:1 enrichment of a canonical core.party), newest
- * first, caller-sized (default 200). Each row is decorated with its party's
+ * first, caller-sized (default the read max). Each row is decorated with its party's
  * display name, its list (one lists-scheme tag, the same mechanism Docs
  * folders use), its canonical favorite star (the flags-scheme tag on the
  * party, #274), and its active reminder dates so the sidebar can derive
  * Reconnect / Upcoming / Favorites client-side exactly like the prototype.
- * `truncated` means older people exist beyond the window — grow it or search.
+ * `truncated` means older people exist beyond the window and is named on the
+ * status line — never a silent drop.
  *
  * Each row also carries the sharing plane's answer to "is this person linked
  * to a vault of their own?" (`linked` / `vault_count`, via ./_shared.ts). Those
@@ -69,17 +70,22 @@ interface Reminder {
 
 const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
+/** Gateway read max is 10_000; look-ahead needs one spare row. */
+const ROSTER_MAX = 9_999;
 
 export default async function peopleHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
-  const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
+  const window = Math.min(
+    Math.max(Number(input?.limit) || ROSTER_MAX, 20),
+    ROSTER_MAX
+  );
   try {
     const [profiles, concepts, schemes] = await Promise.all([
       ctx.vault.read({
         entity: "people.profile",
         where: [{ column: "deleted_at", op: "is-null" }],
         orderBy: { column: "created_at", dir: "desc" },
-        limit: window,
+        limit: window + 1,
         purpose,
       }),
       ctx.vault.read({ entity: "core.concept", purpose }),
@@ -108,7 +114,9 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         )?.concept_id ?? null)
       : null;
 
-    const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
+    const fetched = (profiles.rows ?? []) as unknown as RawProfile[];
+    const truncated = fetched.length > window;
+    const profileRows = truncated ? fetched.slice(0, window) : fetched;
     const partyIds = profileRows.map((p) => p.party_id);
     if (partyIds.length === 0)
       return {
@@ -193,7 +201,7 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
     return {
       people,
       lists,
-      truncated: profileRows.length >= window,
+      truncated,
       window,
       links_available: linksAvailable,
     };

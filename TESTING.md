@@ -238,7 +238,7 @@ The smallest reusable record is:
 
 Every vault action records its happy-path postcondition, refusal/partial-failure behavior, and owning contract file. Every structural exclusion records why the engine is impossible and cites `docs/blueprint-seats.md#engine-contracts`. The shared profile is paid for once per platform; a byte-bearing app's journey owns its budget and PR filter.
 
-The reusable table shape is [docs/app-scenario-layer-template.md](docs/app-scenario-layer-template.md); per-app instances live in `docs/apps/` (Docs: [docs/apps/docs-scenarios.md](docs/apps/docs-scenarios.md)).
+The reusable table shape is [docs/app-scenario-layer-template.md](docs/app-scenario-layer-template.md); per-app instances live in `docs/apps/` and are promoted into `tests/matrix.json#appScenarios` (Docs: [docs/apps/docs-scenarios.md](docs/apps/docs-scenarios.md); Photos: [docs/apps/photos-scenarios.md](docs/apps/photos-scenarios.md); Notes, Tasks, Agenda, People, Locker, Tally: the matching `docs/apps/<app>-scenarios.md`). The nightly report renders that ledger as §3b.
 
 ### Photos native renderer contract (#716)
 

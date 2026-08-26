@@ -4,17 +4,23 @@
 // components, never `Z` instants — only a local constructor makes a wall-clock
 // assertion hold in every runner zone.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import {
+  eventBounds,
   fmtDay,
   fmtHour,
   fmtTime,
   localDayKey,
   rangeLabel,
   startOfWeek,
+  toIsoUtc,
+  toLocalInput,
 } from "./format.ts";
 
 /** ICU varies U+202F/U+0020/U+00A0 spacing: pin the LOCALE, not the runner. */
@@ -171,5 +177,38 @@ describe(rangeLabel, () => {
     expect(rangeLabel("month", AFTERNOON)).toBe(
       rangeLabel("month", AFTERNOON, undefined)
     );
+  });
+});
+
+describe(eventBounds, () => {
+  it("sends the viewer's zone so a weekly series keeps wall-clock time across DST", () => {
+    const bounds = eventBounds("2026-03-08T09:00", "2026-03-08T10:00", false);
+    expect(bounds.start_tz).toBe(
+      Intl.DateTimeFormat().resolvedOptions().timeZone
+    );
+    expect(bounds.recurrence_semantics).toBe("zoned");
+    expect(bounds.dtstart).toBe(toIsoUtc("2026-03-08T09:00"));
+  });
+
+  it("stores an all-day event as the civil date it names", () => {
+    const bounds = eventBounds("2026-11-15T00:00", "2026-11-15T23:59", true);
+    expect(bounds.dtstart).toBe("2026-11-15");
+    expect(bounds.dtend).toBe("2026-11-15");
+    expect(bounds.recurrence_semantics).toBe("all-day");
+    expect(toLocalInput("2026-11-15").slice(0, 10)).toBe("2026-11-15");
+  });
+});
+
+describe("Metro reachability", () => {
+  it("does not import the DOM-only elements subpath", () => {
+    // The phone's day list imports this file. `@centraid/design/elements` has
+    // no `react-native` condition and resolves only through `dist/`, which
+    // mobile-smoke never builds.
+    const source = readFileSync(
+      fileURLToPath(new URL("format.ts", import.meta.url)),
+      "utf8"
+    );
+    expect(source).not.toMatch(/from\s+"@centraid\/design\/elements"/u);
+    expect(source).toMatch(/from\s+"@centraid\/design"/u);
   });
 });

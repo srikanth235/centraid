@@ -9,6 +9,7 @@ import { nextOccurrence } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { cleanupPolyRefs } from "../schema/poly-refs.js";
 
 const ADD_TASK: CommandDefinition = {
   name: "schedule.add_task",
@@ -477,8 +478,77 @@ function editTask(ctx: HandlerCtx): Record<string, unknown> {
   return { task_id: input.task_id };
 }
 
+const DELETE_TASK: CommandDefinition = {
+  name: "schedule.delete_task",
+  ownerSchema: "schedule",
+  inputSchema: {
+    type: "object",
+    required: ["task_id"],
+    additionalProperties: false,
+    properties: { task_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["task_id", "removed"],
+    properties: {
+      task_id: { type: "string" },
+      removed: { type: "integer" },
+    },
+  },
+  preconditions: [
+    {
+      name: "task_exists",
+      sql: "SELECT count(*) AS n FROM schedule_task WHERE task_id = :task_id",
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "task_and_subtasks_gone",
+      sql: `SELECT count(*) AS n FROM schedule_task
+             WHERE task_id = :task_id OR parent_task_id = :task_id`,
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+  ],
+  idempotency: "once",
+  risk: "medium",
+  handler: deleteTask,
+};
+
+function purgeTask(ctx: HandlerCtx, taskId: string): void {
+  ctx.db
+    .prepare(
+      "UPDATE home_maintenance_plan SET current_task_id = NULL WHERE current_task_id = ?"
+    )
+    .run(taskId);
+  cleanupPolyRefs(ctx.db, ctx.now, "schedule.task", taskId);
+  ctx.db.prepare("DELETE FROM schedule_task WHERE task_id = ?").run(taskId);
+  ctx.wrote("schedule.task", taskId);
+}
+
+function deleteTask(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { task_id: string };
+  const children = ctx.db
+    .prepare("SELECT task_id FROM schedule_task WHERE parent_task_id = ?")
+    .all(input.task_id) as { task_id: string }[];
+  for (const child of children) purgeTask(ctx, child.task_id);
+  purgeTask(ctx, input.task_id);
+  ctx.cite({
+    claim: `task ${input.task_id} removed with ${children.length} subtasks`,
+    entityType: "schedule.task",
+    entityId: input.task_id,
+  });
+  return { task_id: input.task_id, removed: 1 + children.length };
+}
+
+/** Register the schedule domain's task commands on a gateway. */
 export function registerTaskCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_TASK);
   gateway.registerCommand(SET_TASK_STATUS);
   gateway.registerCommand(EDIT_TASK);
+  gateway.registerCommand(DELETE_TASK);
 }

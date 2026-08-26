@@ -8,17 +8,9 @@ import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 import { authHeader } from "../../lib/gateway";
+import { EXPORT_FOLDER, exportName } from "./docs-export-name";
 import type { MobileDriveDoc } from "./docs-projection";
 import { decodeTextDataUri, docBytesUrl } from "./document-read-model";
-
-const EXPORT_FOLDER = "docs-export";
-
-/** A cache-safe file name that keeps the member's own title (and its
- *  extension, which is what the receiving app keys off). */
-function exportName(title: string): string {
-  const safe = title.replace(/[/\\:*?"<>|]+/gu, " ").trim();
-  return safe || "document";
-}
 
 export class DocumentBytesUnavailableError extends Error {
   constructor() {

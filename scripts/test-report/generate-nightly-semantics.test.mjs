@@ -69,6 +69,15 @@ function baseMatrix() {
       states: [{ id: "dayone", label: "Day one" }],
       apps: [],
     },
+    appScenarios: {
+      trackingIssue: "839",
+      layers: [
+        { id: "unit", label: "U" },
+        { id: "component", label: "C" },
+        { id: "journey", label: "E" },
+      ],
+      apps: [],
+    },
     engineRegistry: [
       {
         id: "engine",

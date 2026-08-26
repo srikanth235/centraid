@@ -3,10 +3,13 @@
  * open tasks by task_id (UUIDv7 creation order, caller-sized window, default
  * 500) plus the 50 most recently closed — exactly what the logbook shows;
  * beyond the window use FTS or grow it (`truncated` offers that). Open tasks
- * sort due-first, then priority (1 highest, 0 unset), then title, subtasks
- * nested; closed top-level tasks form the logbook. Everything comes from the
- * vault — no rows of its own; consent denial is first-class, receipt included.
+ * sort due-first, then priority (higher more urgent, 0 unset), then title,
+ * subtasks nested; unfinished children of a completed or released parent
+ * are promoted onto the open board (`nestTaskFamilies`). Closed top-level
+ * tasks form the logbook. Everything comes from the vault — no rows of its
+ * own; consent denial is first-class, receipt included.
  */
+import { nestTaskFamilies } from "../when.ts";
 
 /** Raw schedule.task row as the vault projects it (unread columns ride the index signature). */
 interface RawTask {
@@ -343,26 +346,15 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       });
     }
 
-    const childrenOf = new Map<string, RawTask[]>();
-    for (const task of rows) {
-      if (!task.parent_task_id) continue;
-      if (!childrenOf.has(task.parent_task_id))
-        childrenOf.set(task.parent_task_id, []);
-      childrenOf.get(task.parent_task_id)!.push(task);
-    }
-
-    // Priority per RFC 5545: 1 highest, 0 unset (sorts after 9).
-    const prio = (t: RawTask) => {
-      const p = Number(t.priority ?? 0);
-      return p > 0 ? p : 10;
-    };
+    // Priority per Todoist: higher is more urgent, 0 is unset (sorts last).
+    const prio = (t: RawTask) => Number(t.priority ?? 0);
     const byUrgency = (a: RawTask, b: RawTask) => {
       if (a.due_at == null && b.due_at != null) return 1;
       if (a.due_at != null && b.due_at == null) return -1;
       if (a.due_at != null && a.due_at !== b.due_at) {
         return String(a.due_at).localeCompare(String(b.due_at));
       }
-      if (prio(a) !== prio(b)) return prio(a) - prio(b);
+      if (prio(a) !== prio(b)) return prio(b) - prio(a);
       return String(a.title).localeCompare(String(b.title));
     };
 
@@ -405,29 +397,22 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       ...withRecurrence(task),
     });
 
-    const withChildren = (task: RawTask) => {
-      const children = (childrenOf.get(task.task_id) ?? [])
-        .toSorted(byUrgency)
-        .map(withAttachments);
+    const withChildren = (task: RawTask, children: RawTask[]) => {
+      const nested = children.toSorted(byUrgency).map(withAttachments);
       return {
         ...withAttachments(task),
-        children,
-        done_children: children.filter((c) => !OPEN.has(c.status)).length,
+        children: nested,
+        done_children: nested.filter((c) => !OPEN.has(c.status)).length,
       };
     };
 
-    const topLevel = rows.filter((t) => !t.parent_task_id);
-    const open = topLevel
-      .filter((t) => OPEN.has(t.status))
-      .toSorted(byUrgency)
-      .map(withChildren);
-    const logbook = topLevel
-      .filter((t) => !OPEN.has(t.status))
+    const families = nestTaskFamilies(rows, withChildren);
+    const open = families.open.toSorted(byUrgency);
+    const logbook = families.logbook
       .toSorted((a, b) =>
         String(b.completed_at ?? "").localeCompare(String(a.completed_at ?? ""))
       )
-      .slice(0, 50)
-      .map(withChildren);
+      .slice(0, 50);
 
     // Counts describe what was fetched, not the whole table; `truncated`
     // tells the UI to offer "Show more".

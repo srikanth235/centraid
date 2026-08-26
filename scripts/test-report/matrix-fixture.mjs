@@ -51,6 +51,31 @@ function appSeatsFixture() {
   };
 }
 
+/** Wave 7: every bundled app owes a scenario block and at least one row. */
+function appScenariosFixture() {
+  return {
+    trackingIssue: "839",
+    layers: [
+      { id: "unit", label: "U" },
+      { id: "component", label: "C" },
+      { id: "journey", label: "E" },
+    ],
+    apps: BUNDLED_APPS.map((id) => ({
+      id,
+      doc: `docs/apps/${id}-scenarios.md`,
+      scenarios: [
+        {
+          id: "fixture-row",
+          label: "fixture scenario",
+          layer: "unit",
+          status: "gap",
+          trackingIssue: "839",
+        },
+      ],
+    })),
+  };
+}
+
 /** Grid D: every bundled app owes a cell for each canonical designed state. */
 function appStatesFixture() {
   return {
@@ -89,6 +114,7 @@ export function baseMatrix(overrides = {}) {
     })),
     appSeats: appSeatsFixture(),
     appStates: appStatesFixture(),
+    appScenarios: appScenariosFixture(),
     engineRegistry: [
       {
         id: "core",

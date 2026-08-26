@@ -1,6 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (harness, conversation, apps, provider) once the surface stabilizes
 import { app, ipcMain, BrowserWindow, safeStorage, shell } from "electron";
 
+import { openAppFolder } from "./app-reveal-core.js";
 import { resolveAppRevealDir, resetAppSessions } from "./app-sessions.js";
 import { resetAppsStoreAuthCache } from "./apps-store-client.js";
 import { refreshAuthInjector } from "./auth-injector.js";
@@ -315,15 +316,15 @@ export function registerIpcHandlers(): void {
 
   // Harness detection belongs on the gateway — never add a desktop-side probe.
 
-  // App lifecycle is HTTP, not IPC. APPS_OPEN stays LOCAL-ONLY (#141).
-
-  ipcMain.handle(Channel.APPS_OPEN, async (_e, input: { id: string }) => {
-    const dir = await resolveAppRevealDir(input.id);
-    // `shell.openPath` RESOLVES with an error string — a bare await swallows failure.
-    const openErr = await shell.openPath(dir);
-    if (openErr) throw new Error(`Could not open ${dir}: ${openErr}`);
-    return { ok: true };
-  });
+  // App lifecycle is HTTP, not IPC. APPS_OPEN is Reveal-in-Finder, LOCAL-ONLY
+  // (#141). Grammar-check the id before any path join (#865) so traversal ids
+  // never reach `shell.openPath`.
+  ipcMain.handle(Channel.APPS_OPEN, (_e, input: unknown) =>
+    openAppFolder(input, {
+      resolveDir: resolveAppRevealDir,
+      openPath: (dir) => shell.openPath(dir),
+    })
+  );
 
   ipcMain.handle(
     Channel.PUBLISH_STATUS,

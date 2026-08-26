@@ -29,6 +29,19 @@
 //    build may hold values this build's CHECKs refuse, and that is deliberate
 //    (#750).
 
+// Schema/export audit #865: `sync_connection_credential` gains one column,
+// `refresh_capability`, and it MUST be carried. It is the Worker-minted HMAC
+// a stored Assist refresh token is redeemable with — a restore that dropped
+// it would hand back tokens that `/refresh` refuses (missing capability),
+// so every Google connection would look like a withdrawn grant until the
+// owner re-ran the ceremony. No adapter and no content bytes: it is a sealed
+// cell on an already-walked table (`sync.connection_credential` in
+// schema/tables.ts). `exportVault` walks `SELECT *`, so the column rides
+// along with no code change here, which is why the audit is pinned by a
+// test: `portability.test.ts`'s "an Assist refresh capability survives
+// export and restore" fails if that walk ever becomes a column list. The
+// column arrives on existing files as migration rung five (plain ADD COLUMN).
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";

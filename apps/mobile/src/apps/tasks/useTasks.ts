@@ -4,6 +4,7 @@
 
 import { useCallback, useMemo } from "react";
 
+import { nestTaskFamilies } from "@centraid/blueprints/apps/tasks/logic";
 import type {
   Project,
   Section,
@@ -55,29 +56,18 @@ export function useTasks(): UseTasksResult {
 
   const queryState = combineReplicaQueryStates([tasks, projects, sections]);
 
-  // Children travel nested under their parent on every seat.
+  // Children nest under their parent on every seat — same nest as the pointer
+  // `board` query, so completing a parent promotes unfinished children.
   const board = useMemo(() => {
     const rows = tasks.rows as unknown as Task[];
-    const childrenOf = new Map<string, Task[]>();
-    for (const row of rows) {
-      if (!row.parent_task_id) continue;
-      if (!childrenOf.has(row.parent_task_id))
-        childrenOf.set(row.parent_task_id, []);
-      childrenOf.get(row.parent_task_id)?.push(row);
-    }
-    return rows
-      .filter((row) => !row.parent_task_id)
-      .map((row) => {
-        const children = childrenOf.get(row.task_id) ?? [];
-        return {
-          ...row,
-          children,
-          done_children: children.filter(
-            (child) =>
-              child.status === "completed" || child.status === "cancelled"
-          ).length,
-        };
-      });
+    const families = nestTaskFamilies(rows, (row, children) => ({
+      ...row,
+      children,
+      done_children: children.filter(
+        (child) => child.status === "completed" || child.status === "cancelled"
+      ).length,
+    }));
+    return [...families.open, ...families.logbook];
   }, [tasks.rows]);
 
   const refresh = async (): Promise<void> => {
@@ -112,7 +102,8 @@ export function useTasks(): UseTasksResult {
  */
 export type TasksWrite = (
   action: string,
-  input: Record<string, ReplicaValue>
+  input: Record<string, ReplicaValue>,
+  scopeId?: string | null
 ) => Promise<NativeWriteResult | undefined>;
 
 export function useTasksWrite(
@@ -120,10 +111,14 @@ export function useTasksWrite(
 ): TasksWrite {
   const { session } = useReplica();
   return useCallback(
-    async (action, input) => {
+    async (action, input, scopeId) => {
       if (!session) return undefined;
       try {
-        const result = await session.write(APP_ID, { action, input });
+        const request = { action, input };
+        const result =
+          scopeId && session.writeTo
+            ? await session.writeTo(scopeId, APP_ID, request)
+            : await session.write(APP_ID, request);
         if (
           !surfaceWriteOutcome(result, {
             onParked: () =>

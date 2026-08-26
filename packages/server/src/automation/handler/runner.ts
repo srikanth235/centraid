@@ -399,8 +399,9 @@ export async function runHandler(
     };
   };
 
-  // The anti-exfiltration pin (#304): an injected request may only point where
-  // the CONNECTION says its credential may go. https only, loopback excepted.
+  // Destination pin for EVERY ctx.fetch (#304, #865): https only (loopback
+  // excepted), and when a broker credential rides this fire, only toward its
+  // allowed_hosts.
   const hostAllowed = (url: URL): boolean =>
     (opts.connectionAuth?.allowedHosts ?? []).some((entry) =>
       entry.startsWith("*.")
@@ -413,24 +414,29 @@ export async function runHandler(
     url.hostname === "127.0.0.1" ||
     url.hostname === "::1";
   const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+  const assertFetchDestination = (rawUrl: string): void => {
+    const url = new URL(rawUrl);
+    if (url.protocol !== "https:" && !isLoopback(url)) {
+      throw new Error(
+        `ctx.fetch refuses non-https destination ${url.hostname} (issue #304)`
+      );
+    }
+    if (opts.connectionAuth && !hostAllowed(url)) {
+      throw new Error(
+        `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(", ")} (issue #304)`
+      );
+    }
+  };
   const assertInjectable = (
     rawUrl: string,
     method: string,
     body?: string
   ): void => {
+    assertFetchDestination(rawUrl);
     const url = new URL(rawUrl);
-    if (url.protocol !== "https:" && !isLoopback(url)) {
-      throw new Error(
-        `injected fetch refuses non-https destination ${url.hostname} (issue #304)`
-      );
-    }
-    if (!hostAllowed(url)) {
-      throw new Error(
-        `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(", ")} (issue #304)`
-      );
-    }
-    // Read-only ceiling (#304): the error names the outbox (#306), so a model can
-    // self-correct instead of retrying.
+    // Read-only ceiling (#304): broker credentials inject toward SAFE methods
+    // only; writes ride the outbox (#306). The error names that path (#308)
+    // so a model can self-correct instead of retrying.
     const normalizedMethod = method.toUpperCase();
     if (
       !SAFE_METHODS.has(normalizedMethod) &&
@@ -472,16 +478,16 @@ export async function runHandler(
   }
 
   // Never auto-follow redirects: a cross-host Location would carry the
-  // Authorization header past the pin.
+  // Authorization header past the pin; the handler sees the 3xx and follows.
   const fetchOnce = async (
     spec: FetchSpecWire,
-    injected: boolean
+    manualRedirects: boolean
   ): Promise<FetchWireResult> => {
     const response = await fetch(spec.url, {
       method: spec.method ?? "GET",
       ...(spec.headers ? { headers: spec.headers } : {}),
       ...(spec.body === undefined ? {} : { body: spec.body }),
-      ...(injected ? { redirect: "manual" as const } : {}),
+      ...(manualRedirects ? { redirect: "manual" as const } : {}),
       signal: dispatchCtx.abortSignal,
     });
     const text = (await response.text()).slice(0, 2 * 1024 * 1024);
@@ -498,8 +504,9 @@ export async function runHandler(
   };
 
   /** Broker-injected fetches only (#304): 429/5xx → backoff; 401 → one forced
-   *  refresh, then retry; 401 again or a 403 naming scopes → flip needs-auth,
-   *  because re-consent is an owner act, not a retry. */
+   *  refresh, then retry; 401 again or a 403 naming scopes → flip needs-auth
+   *  (re-consent is an owner act). Non-injected fetches stay single-shot past
+   *  the shared destination pin (#865). */
   const executeFetch = async (
     rawSpec: FetchSpecWire
   ): Promise<FetchWireResult> => {
@@ -509,7 +516,13 @@ export async function runHandler(
     );
     let { spec } = substituted;
     const { injected } = substituted;
-    if (!injected) return fetchOnce(spec, false);
+    // Issue #865: the destination pin used to run ONLY when a placeholder was
+    // substituted, so a placeholder-free template bypassed the https/host-pin
+    // checks entirely — a blind egress rail. Every ctx.fetch rides the same
+    // validation regardless of injection; secret/connection substitution is
+    // untouched.
+    assertFetchDestination(spec.url);
+    if (!injected) return fetchOnce(spec, true);
     assertInjectable(spec.url, spec.method ?? "GET", spec.body);
     const auth = opts.connectionAuth!;
     const gated = (s: FetchSpecWire): Promise<FetchWireResult> =>

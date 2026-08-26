@@ -1,7 +1,16 @@
 // Pure derivations, so `views.test.ts` asserts product rules directly. The
 // grid is only for things with a time cost: day context decorates, never rows.
+// A multi-day event is visible on every local day it spans (`bucketByDay`).
 
-import { localDayKey, startOfDay, startOfWeek, DAY_MS } from "./format.ts";
+import {
+  civilMidnight,
+  DAY_MS,
+  localDayKey,
+  namedDay,
+  spanLocalDays,
+  startOfDay,
+  startOfWeek,
+} from "./format.ts";
 import type { AgEvent, DaySegment, LaidSegment, ViewKind } from "./types.ts";
 
 export const VIEWS: readonly ViewKind[] = [
@@ -112,34 +121,52 @@ export function isAllDay(ev: AgEvent): boolean {
   return ev.recurrence_semantics === "all-day";
 }
 
-/** One local day per event: multi-day and zone-crossing events get a single
- *  `clamped` start-day row, never a bar spanning columns. */
+/** One row per local day an event occupies. All-day civil `dtend` is inclusive;
+ *  timed `dtend` is the end instant. `clamped` means the run continues past midnight. */
 export function bucketByDay(
   list: readonly AgEvent[]
 ): Map<string, DaySegment[]> {
   const map = new Map<string, DaySegment[]>();
   for (const ev of list) {
-    const start = new Date(ev.dtstart);
+    const civilStart =
+      isAllDay(ev) && !ev.dtstart.includes("T") ? namedDay(ev.dtstart) : null;
+    const start = civilStart ? civilMidnight(civilStart) : new Date(ev.dtstart);
     if (Number.isNaN(start.getTime())) continue;
-    let end = ev.dtend ? new Date(ev.dtend) : start;
+    const civilEnd =
+      isAllDay(ev) && ev.dtend && !ev.dtend.includes("T")
+        ? namedDay(ev.dtend)
+        : null;
+    let end = civilEnd
+      ? new Date(civilMidnight(civilEnd).getTime() + DAY_MS)
+      : ev.dtend
+        ? new Date(ev.dtend)
+        : start;
     if (Number.isNaN(end.getTime()) || end < start) end = start;
-    const key = localDayKey(start);
-    const dayStart = startOfDay(start).getTime();
-    const dayEnd = dayStart + DAY_MS;
-    const segment: DaySegment = {
-      ev,
-      segStart: Math.max(start.getTime(), dayStart),
-      segEnd: Math.min(end.getTime(), dayEnd),
-      startsHere: true,
-      endsHere: end.getTime() <= dayEnd,
-      spansAll:
-        isAllDay(ev) ||
-        (start.getTime() <= dayStart && end.getTime() >= dayEnd),
-      clamped: end.getTime() > dayEnd,
-    };
-    const bucket = map.get(key);
-    if (bucket) bucket.push(segment);
-    else map.set(key, [segment]);
+    const eventStart = start.getTime();
+    const eventEnd = end.getTime();
+    for (const cursor of spanLocalDays(start, end)) {
+      const dayStart = cursor.getTime();
+      const next = new Date(
+        cursor.getFullYear(),
+        cursor.getMonth(),
+        cursor.getDate() + 1
+      );
+      const dayEnd = next.getTime();
+      const key = localDayKey(cursor);
+      const segment: DaySegment = {
+        ev,
+        segStart: Math.max(eventStart, dayStart),
+        segEnd: Math.min(eventEnd, dayEnd),
+        startsHere: eventStart >= dayStart && eventStart < dayEnd,
+        endsHere: eventEnd <= dayEnd,
+        spansAll:
+          isAllDay(ev) || (eventStart <= dayStart && eventEnd >= dayEnd),
+        clamped: eventEnd > dayEnd,
+      };
+      const bucket = map.get(key);
+      if (bucket) bucket.push(segment);
+      else map.set(key, [segment]);
+    }
   }
   for (const bucket of map.values())
     bucket.sort((a, b) => a.segStart - b.segStart);

@@ -89,11 +89,20 @@ export function ageLabel(task: Task, now: string): string | null {
   return daysBetween(born, now) >= 90 ? sittingSince(monthName(born)) : null;
 }
 
-/** The four member-facing priority levels over RFC 5545's 1–9 (0 is unset). */
+/**
+ * The four member-facing priority levels. Todoist (the north star) stores 1
+ * as the lowest set priority and 4 as the highest; 0 is unset. The editor's
+ * chips write the same scale (Soon=1, Next=2, Now=3).
+ */
 export function priorityLevel(priority: number | undefined): 0 | 1 | 2 | 3 {
   const value = Number(priority ?? 0);
   if (value <= 0) return 0;
-  if (value <= 2) return 3;
-  if (value <= 5) return 2;
-  return 1;
+  if (value >= 3) return 3;
+  return value as 1 | 2;
+}
+
+/** Todoist digits 1–4: 1 is Now (highest), 4 is unset. */
+export function priorityFromDigit(digit: number): number {
+  if (digit < 1 || digit > 4) return 0;
+  return 4 - digit;
 }

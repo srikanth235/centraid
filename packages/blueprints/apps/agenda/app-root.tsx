@@ -23,6 +23,7 @@ import type { ReadSubscription } from "@centraid/design/elements";
 
 import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
 import { readPendingOverlay } from "../_shared/pending-overlay.ts";
+import { libraryReachability } from "../_shared/view-state-kit.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { DayRibbon, DayShelf, LayerToggles } from "./components/DayContext.tsx";
@@ -576,8 +577,15 @@ export function Root({
     );
   }
 
-  // Renders only where there is something to declare.
-  const offline = typeof navigator !== "undefined" && !navigator.onLine;
+  // Renders only where there is something to declare. Offline is the host
+  // `data-gateway-status` stamp via `libraryReachability` (#864), never
+  // `navigator.onLine` — a desktop with no network still reaches the local
+  // gateway. `readFailedState` still takes precedence below.
+  const offline =
+    libraryReachability({
+      hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
+      readFailed: readFailedState,
+    }) === "unreachable";
   const stateRow: ReactNode =
     readFailedState || offline || deniedCalendars.length > 0 ? (
       <>
@@ -668,6 +676,7 @@ export function Root({
               summary: draft.title,
               dtstart: draft.start.toISOString(),
               dtend: draft.end.toISOString(),
+              start_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
               calendar_id: data.calendars[0]?.calendar_id ?? "",
             });
           }}
@@ -684,8 +693,18 @@ export function Root({
           parties={data.parties}
           onClose={closeOverlays}
           onCreate={(payload) => {
-            closeOverlays();
-            void logic.proposeEvent(payload);
+            void (async () => {
+              const outcome = await logic.proposeEvent(payload);
+              const status = outcome?.status;
+              if (
+                status === "executed" ||
+                status === "parked" ||
+                status === "queued" ||
+                status === "in-flight"
+              ) {
+                closeOverlays();
+              }
+            })();
           }}
           onEdit={(payload) => {
             closeOverlays();

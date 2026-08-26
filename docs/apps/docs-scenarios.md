@@ -22,6 +22,8 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | device-side PDF text extraction with gateway degradation | ✅ | — | — | `packages/blueprints/src/docs-media.test.ts` |
 | edit in place / version restore lands the exact restored bytes | ✅ | — | — | vault `core.edit_document` / `restore_document_version` command contracts (`packages/vault`); the journey exercises upload only — versions in a journey are a #781 follow-up |
 | pending writes: replica ⊕ outbox overlay on Docs actions | ✅ | — | — | `packages/blueprints/apps/docs/pending-projection.ts` via the shared `_shared/pending-overlay.test.ts` law; the shared record-only replica journey owns the cross-app E proof |
+| title-only edit on phone does not write an empty body | ✅ | — | — | `apps/mobile/src/apps/docs/editor-write.test.ts`: title-only while the body is absent (or unchanged) dispatches `rename` and never sends `body_text` |
+| export filename cannot traverse out of the share folder | ✅ | — | — | `apps/mobile/src/apps/docs/docs-export.test.ts`: `exportName("../../x")` is the leaf `x`; `..` / `../` stay inside `docs-export` |
 
 Vault-facing actions (`actions/*.ts`) all funnel through typed `ctx.vault.invoke` commands and return the gateway's own refusal reason on failure; the handler contracts live with the vault command suites (`packages/vault/src/gateway/gateway.contract.test.ts`) and the engine-conformance lint.
 

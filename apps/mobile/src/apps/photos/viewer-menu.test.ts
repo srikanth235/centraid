@@ -110,21 +110,21 @@ describe("viewerOverflowMenuGroups — the row set", () => {
   });
 });
 
-describe("viewerOverflowMenuGroups — Hide / Unhide", () => {
-  test("labels the row Hide when the photograph is not archived", () => {
+describe("viewerOverflowMenuGroups — Archive / Unarchive", () => {
+  test("labels the row Archive when the photograph is not archived", () => {
     const rows = flatten(
       viewerOverflowMenuGroups(baseInput({ archived: false }))
     );
     const row = rows.find((candidate) => candidate.key === "hide");
-    expect(row?.label).toBe("Hide");
+    expect(row?.label).toBe("Archive");
   });
 
-  test("labels the row Unhide when the photograph is already archived", () => {
+  test("labels the row Unarchive when the photograph is already archived", () => {
     const rows = flatten(
       viewerOverflowMenuGroups(baseInput({ archived: true }))
     );
     const row = rows.find((candidate) => candidate.key === "hide");
-    expect(row?.label).toBe("Unhide");
+    expect(row?.label).toBe("Unarchive");
   });
 });
 
@@ -171,14 +171,14 @@ describe("viewerOverflowMenuGroups — the read-only grant", () => {
     }
   });
 
-  test("Hide is enabled and plainly labelled when the vault will take the write", () => {
+  test("Archive is enabled and plainly labelled when the write will land", () => {
     const rows = flatten(viewerOverflowMenuGroups(baseInput()));
     const row = rows.find((candidate) => candidate.key === "hide");
     expect(row?.disabled).toBeFalsy();
-    expect(row?.label).toBe("Hide");
+    expect(row?.label).toBe("Archive");
   });
 
-  test("Hide disables with READ_ONLY_VAULT_REASON reaching the row's own label on a read-only grant", () => {
+  test("Archive disables with READ_ONLY_VAULT_REASON reaching the row's own label on a read-only grant", () => {
     const rows = flatten(
       viewerOverflowMenuGroups(baseInput({ writable: false }))
     );
@@ -187,7 +187,7 @@ describe("viewerOverflowMenuGroups — the read-only grant", () => {
     expect(row?.label).toContain(READ_ONLY_VAULT_REASON);
   });
 
-  test("Hide disables with its own reason when the photograph has no vault row yet", () => {
+  test("Archive disables with its own reason when the photograph has no row yet", () => {
     const rows = flatten(
       viewerOverflowMenuGroups(baseInput({ hasVaultAsset: false }))
     );

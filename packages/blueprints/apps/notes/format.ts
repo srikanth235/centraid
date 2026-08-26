@@ -81,8 +81,12 @@ export interface Promoted {
   preview: string;
 }
 
-/** UNTITLED covers a missing title AND a title equal to the first line, the
- *  shape `create_note` leaves behind. The preview starts below the heading. */
+/** Stored name for a note that has no title of its own. */
+export const UNTITLED_NOTE = "Untitled note";
+
+/** UNTITLED covers a missing title, the empty-note sentinel, AND a title
+ *  equal to the first line — the shape `create_note` leaves behind. The
+ *  preview starts below the heading. */
 export function promote(note: {
   title?: unknown;
   preview?: unknown;
@@ -96,10 +100,11 @@ export function promote(note: {
   const firstLine =
     firstIndex === -1 ? "" : stripInline(lines[firstIndex]).trim();
   const typed = stripInline(note.title).trim();
-  const untitled = typed === "" || typed === firstLine;
+  const untitled =
+    typed === "" || typed === firstLine || typed === UNTITLED_NOTE;
   const rest = firstIndex === -1 ? [] : lines.slice(firstIndex + 1);
   return {
-    heading: untitled ? firstLine : typed,
+    heading: untitled ? firstLine || typed : typed,
     untitled,
     preview: (untitled ? rest : lines)
       .join("\n")

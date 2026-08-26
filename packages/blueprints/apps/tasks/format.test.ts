@@ -14,6 +14,7 @@ import {
   isOverdue,
   metaParts,
   monthName,
+  priorityFromDigit,
   priorityLevel,
   timeOfDay,
   weekdayName,
@@ -169,9 +170,14 @@ describe("the age signal", () => {
 });
 
 describe("the small conversions", () => {
-  it("keeps a civil day key stable across a date-only and a timed value", () => {
-    expect(dayKey("2026-08-21T17:00:00Z")).toBe("2026-08-21");
+  it("keeps a date-only civil key as written, and a timed value on the local day", () => {
     expect(dayKey("2026-08-21")).toBe("2026-08-21");
+    const timed = "2026-08-21T17:00:00Z";
+    const local = new Date(timed);
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    expect(dayKey(timed)).toBe(
+      `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`
+    );
   });
 
   it("counts whole civil days in both directions", () => {
@@ -184,11 +190,36 @@ describe("the small conversions", () => {
     expect(monthName("2026-03-02")).toBe("March");
   });
 
-  it("maps iCal 1–9 onto the four member-facing levels, 0 meaning unset", () => {
+  it("maps the north-star scale onto the four chips, 0 meaning unset", () => {
+    // Todoist stores 1 as the lowest set priority and 4 as the highest.
+    // The editor's chips write the same numbers (Soon=1, Next=2, Now=3).
     expect(priorityLevel(undefined)).toBe(0);
     expect(priorityLevel(0)).toBe(0);
-    expect(priorityLevel(1)).toBe(3);
-    expect(priorityLevel(5)).toBe(2);
-    expect(priorityLevel(9)).toBe(1);
+    expect(priorityLevel(1)).toBe(1);
+    expect(priorityLevel(2)).toBe(2);
+    expect(priorityLevel(3)).toBe(3);
+    expect(priorityLevel(4)).toBe(3);
+  });
+
+  it("maps Todoist digits 1–4 onto Now through unset", () => {
+    expect(priorityFromDigit(1)).toBe(3);
+    expect(priorityFromDigit(2)).toBe(2);
+    expect(priorityFromDigit(3)).toBe(1);
+    expect(priorityFromDigit(4)).toBe(0);
+  });
+});
+
+describe("Today is the member's day, not UTC", () => {
+  it("keys a timed due on the local calendar day even when UTC has already rolled", () => {
+    // Named zone, not `process.env.TZ`: Node does not apply TZ after boot, so
+    // a post-start mutation is a no-op on UTC CI and the member's day collapses
+    // to the UTC prefix.
+    const zone = "Pacific/Kiritimati";
+    expect("2026-08-21T23:00:00Z".slice(0, 10)).toBe("2026-08-21");
+    expect(dayKey("2026-08-21T23:00:00Z", zone)).toBe("2026-08-22");
+    expect(dueLabel("2026-08-21", "2026-08-21T23:00:00Z", zone)).toBe(
+      "yesterday"
+    );
+    expect(dueLabel("2026-08-22", "2026-08-21T23:00:00Z", zone)).toBe("today");
   });
 });

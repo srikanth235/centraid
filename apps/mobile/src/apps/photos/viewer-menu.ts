@@ -17,6 +17,8 @@
 // Delete is here AND on the toolbar chip, as it is on iOS. The safety is the
 // confirm step behind it, never the row being hard to find.
 
+import { photosArchiveVerb } from "@centraid/blueprints/apps/photos/shared-copy";
+
 import type { MenuGroup } from "../../kit/components/AnchoredMenu";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
@@ -27,8 +29,8 @@ export const NOT_IN_A_VAULT_YET_REASON =
   "This photograph is not in a vault yet.";
 
 /** The ONE refusal ladder every writing row here climbs: read-only beats
- *  no-vault-row, either beats a plain grant. Spelled out once so it cannot
- *  drift into re-typed copies. */
+ *  no-vault-row, either beats a plain grant. Add to Album and Archive refuse
+ *  for the same two reasons — spelled out once so it cannot drift. */
 function writeRefusalReason(input: {
   writable: boolean;
   hasVaultAsset: boolean;
@@ -42,7 +44,7 @@ export interface ViewerOverflowMenuInput {
   /** `PhotoAsset.canWrite`, the same flag the bottom toolbar reads. */
   writable: boolean;
   hasVaultAsset: boolean;
-  /** `PhotoAsset.archived` — which label the row shows, Hide or Unhide. */
+  /** `PhotoAsset.archived` — which label the row shows, Archive or Unarchive. */
   archived: boolean;
   /** THIS photograph's own album memberships (#721). Empty ⇒ "Make key photo"
    *  is omitted entirely, never shown permanently disabled: a row with nothing
@@ -79,9 +81,9 @@ export function viewerOverflowMenuGroups(
   const canAddToAlbum = addToAlbumReason === undefined;
   const hideReason = writeRefusalReason(input);
   const canHide = hideReason === undefined;
-  const hideVerb = input.archived ? "Unhide" : "Hide";
-  // Album MEMBERSHIP is a separate, third gate — not a write refusal, so it
-  // omits the row below rather than folding into this reason string.
+  const archiveVerb = photosArchiveVerb(input.archived);
+  // Same refusal ladder as Add to Album. Album MEMBERSHIP is a third gate —
+  // not a write refusal, so it omits the row below rather than folding in.
   const makeKeyPhotoReason = writeRefusalReason(input);
   const canMakeKeyPhoto = makeKeyPhotoReason === undefined;
 
@@ -91,7 +93,8 @@ export function viewerOverflowMenuGroups(
       rows: [
         {
           key: "hide",
-          label: canHide ? hideVerb : `${hideVerb} — ${hideReason}`,
+          // One text slot — refusal rides after an em dash, same as Add to Album.
+          label: canHide ? archiveVerb : `${archiveVerb} — ${hideReason}`,
           icon: "Archive",
           disabled: !canHide,
           onSelect: input.onHide,

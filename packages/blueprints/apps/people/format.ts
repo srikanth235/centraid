@@ -1,7 +1,6 @@
 // Shared overdue arithmetic. Match `queries/dashboard.ts`:
-// `daysSince(last_contacted_at ?? created_at) - cadence_days >= 0`.
-// Do not re-derive `> cadence` in a view — roster and Touch would differ by
-// one day for every person.
+// `daysSince(last_contacted_at ?? created_at) > cadence_days` — overdue
+// only after the cadence day, not on it. Do not re-derive in a view.
 
 const DAY = 86_400_000;
 
@@ -44,7 +43,7 @@ export function isOverdue(
 ): boolean {
   const cadence = Number(person.cadence_days ?? 0);
   if (!(cadence > 0)) return false;
-  return daysSinceContact(person, now) - cadence >= 0;
+  return daysSinceContact(person, now) > cadence;
 }
 
 export function agoLabel(days: number): string {
@@ -64,6 +63,8 @@ export function monthDayLabel(monthDay: string): string {
   return name && day ? `${day} ${name}` : String(monthDay);
 }
 
+/** Days to the next annual occurrence of an `MM-DD` (0 = today). February 29
+ *  clamps to 28 Feb in common years so a leap-day birthday still fires. */
 export function daysUntilMonthDay(monthDay: string, now = Date.now()): number {
   const [month, day] = String(monthDay).split("-").map(Number);
   if (!month || !day) return Number.MAX_SAFE_INTEGER;
@@ -73,8 +74,14 @@ export function daysUntilMonthDay(monthDay: string, now = Date.now()): number {
     today.getMonth(),
     today.getDate()
   );
-  let next = new Date(today.getFullYear(), month - 1, day);
-  if (next < midnight) next = new Date(today.getFullYear() + 1, month - 1, day);
+  const occurrence = (year: number): Date => {
+    const candidate = new Date(year, month - 1, day);
+    return candidate.getMonth() === month - 1
+      ? candidate
+      : new Date(year, month, 0);
+  };
+  let next = occurrence(today.getFullYear());
+  if (next < midnight) next = occurrence(today.getFullYear() + 1);
   return Math.round((next.getTime() - midnight.getTime()) / DAY);
 }
 

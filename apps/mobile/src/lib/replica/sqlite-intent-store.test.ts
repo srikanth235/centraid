@@ -69,6 +69,22 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
     await expect(store.claimNext()).resolves.toBeUndefined();
   });
 
+  test("two actors racing claimNext on one queued intent yield a single winner", async () => {
+    const store = makeStore();
+    await store.add(newIntent());
+    const [left, right] = await Promise.all([
+      store.claimNext(),
+      store.claimNext(),
+    ]);
+    expect(
+      [left, right]
+        .map((intent) => intent?.intentId)
+        .filter((intentId) => intentId !== undefined)
+    ).toStrictEqual(["intent-1"]);
+    expect((await store.get("intent-1"))?.state).toBe("sending");
+    await expect(store.claimNext()).resolves.toBeUndefined();
+  });
+
   test("transition enforces the allowed states and clears reason on undefined", async () => {
     const store = makeStore();
     await store.add(newIntent());

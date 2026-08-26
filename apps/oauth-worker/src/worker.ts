@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit #526 Keep the reviewed security boundary cohesive.
 /**
  * Centraid Assist OAuth courier (#526, Model B).
  *
@@ -5,6 +6,9 @@
  * cookie is a signed, short-lived browser-binding envelope with no OAuth
  * material or identity. Google secrets are Worker bindings; authorization
  * codes and refresh tokens exist only in request memory and are never logged.
+ * A refresh token is redeemable at /refresh only with the HMAC capability
+ * minted for it at /exchange (issue #865) — possession of a stolen token
+ * alone proves nothing.
  */
 // governance: allow-repo-hygiene file-size-limit #526 Keep the reviewed security boundary cohesive.
 
@@ -36,6 +40,12 @@ const RESTRICTED_GOOGLE_SCOPES = new Set([
 interface PreparedGrant {
   form: URLSearchParams;
   expectedScopes?: readonly string[];
+}
+
+/** A refusal minted before any upstream call carries its own status. */
+interface GrantRefusal {
+  error: string;
+  status: number;
 }
 
 interface WorkerDependencies {
@@ -398,10 +408,11 @@ async function tokenProxy(
   const grant =
     route === "exchange"
       ? await exchangeForm(body, env, dependencies.now())
-      : refreshForm(body, env);
+      : await refreshForm(body, env);
   if ("error" in grant) {
-    metric(env, route, grant.error, 400);
-    return responseJson(400, grant);
+    metric(env, route, grant.error, grant.status);
+    // Only the error code leaves; the status is transport, not body.
+    return responseJson(grant.status, { error: grant.error });
   }
   let upstream: Response;
   try {
@@ -458,7 +469,16 @@ async function tokenProxy(
     token_type: "Bearer",
   };
   const refreshToken = bounded(payload.refresh_token, 16 * 1024);
-  if (refreshToken) result.refresh_token = refreshToken;
+  if (refreshToken) {
+    result.refresh_token = refreshToken;
+    // Issue #865: the capability travels with the token it authenticates —
+    // on first mint at /exchange and re-minted whenever Google rotates the
+    // refresh token, so the gateway always holds a matching pair.
+    result.refresh_capability = await mintRefreshCapability(
+      refreshToken,
+      env.CALLBACK_RECEIPT_SECRET
+    );
+  }
   if (
     typeof payload.expires_in === "number" &&
     Number.isFinite(payload.expires_in) &&
@@ -506,8 +526,9 @@ async function exchangeForm(
   body: Record<string, unknown>,
   env: Env,
   now: number
-): Promise<PreparedGrant | { error: string }> {
-  if (body.provider !== "google") return { error: "unsupported_provider" };
+): Promise<PreparedGrant | GrantRefusal> {
+  if (body.provider !== "google")
+    return { error: "unsupported_provider", status: 400 };
   const code = bounded(body.code, 4096);
   const verifier = bounded(body.code_verifier, 128);
   const redirectUri = bounded(body.redirect_uri, 512);
@@ -530,7 +551,7 @@ async function exchangeForm(
     !/^[A-Za-z0-9_-]{43}$/u.test(browserBinding) ||
     !scopes
   ) {
-    return { error: "invalid_body" };
+    return { error: "invalid_body", status: 400 };
   }
   const bindingHash = await sha256(browserBinding);
   const receiptStatus = await verifyReceipt(
@@ -541,7 +562,7 @@ async function exchangeForm(
     env.CALLBACK_RECEIPT_SECRET,
     now
   );
-  if (receiptStatus !== "valid") return { error: receiptStatus };
+  if (receiptStatus !== "valid") return { error: receiptStatus, status: 400 };
   return {
     form: new URLSearchParams({
       grant_type: "authorization_code",
@@ -555,13 +576,45 @@ async function exchangeForm(
   };
 }
 
-function refreshForm(
+/**
+ * Issue #865: a stolen Google refresh token must not be redeemable here by an
+ * anonymous caller. The gateway can only obtain a refresh token through
+ * /exchange, so /exchange mints a deterministic HMAC capability over the
+ * refresh token (domain-separated from the receipt/browser-binding MACs) and
+ * /refresh requires it back — verified timing-safely BEFORE any Google call.
+ */
+const REFRESH_CAPABILITY_DOMAIN = "centraid/oauth-refresh-capability/v1";
+
+async function refreshCapabilityMessage(refreshToken: string): Promise<string> {
+  return `${REFRESH_CAPABILITY_DOMAIN}\n${await sha256(refreshToken)}`;
+}
+
+async function mintRefreshCapability(
+  refreshToken: string,
+  secret: string
+): Promise<string> {
+  return hmac(await refreshCapabilityMessage(refreshToken), secret);
+}
+
+async function refreshForm(
   body: Record<string, unknown>,
   env: Env
-): PreparedGrant | { error: string } {
-  if (body.provider !== "google") return { error: "unsupported_provider" };
+): Promise<PreparedGrant | GrantRefusal> {
+  if (body.provider !== "google")
+    return { error: "unsupported_provider", status: 400 };
   const refreshToken = bounded(body.refresh_token, 16 * 1024);
-  if (!refreshToken) return { error: "invalid_body" };
+  if (!refreshToken) return { error: "invalid_body", status: 400 };
+  // The capability check gates the client secret: without it the presented
+  // token was never minted by this Worker's /exchange. Refusal is 401-class
+  // and precedes every upstream side effect (no token-validity oracle).
+  const capability = bounded(body.refresh_capability, 128);
+  if (!capability) return { error: "missing_capability", status: 401 };
+  const valid = await verifyHmac(
+    await refreshCapabilityMessage(refreshToken),
+    capability,
+    env.CALLBACK_RECEIPT_SECRET
+  );
+  if (!valid) return { error: "invalid_capability", status: 401 };
   return {
     form: new URLSearchParams({
       grant_type: "refresh_token",

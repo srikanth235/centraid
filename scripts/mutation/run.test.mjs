@@ -79,6 +79,7 @@ describe("MUTATION_SEEDS", () => {
         "packages/blueprints/apps/_shared/selection",
         "packages/blueprints/apps/_shared/triage",
         "packages/blueprints/apps/_shared/search-scaffold",
+        "packages/blueprints/apps/_shared/untrusted",
         "apps/mobile",
       ].sort()
     );
