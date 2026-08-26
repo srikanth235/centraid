@@ -224,4 +224,23 @@ describe("web-session-store", () => {
     // Nothing was written under the temp dir.
     expect(store.list()).toHaveLength(1);
   });
+
+  test("touch drops a row whose createdAt cannot be parsed instead of writing NaN expiry (issue #865)", () => {
+    const hash = hashControlToken("t");
+    const store = WebControlSessionStore.open(file);
+    store.establish({
+      tokenHash: hash,
+      vaultId: "v1",
+      shellOrigin: "http://shell",
+    });
+    const db = new DatabaseSync(path.join(dir, "gateway.db"));
+    db.prepare(
+      "UPDATE web_sessions SET created_at = 'not-a-timestamp' WHERE token_hash = ?"
+    ).run(hash);
+    db.close();
+    expect(store.find(hash)).toBeDefined();
+    store.touch(hash);
+    expect(store.find(hash)).toBeUndefined();
+    expect(rows()).toHaveLength(0);
+  });
 });

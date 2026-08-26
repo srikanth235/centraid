@@ -1,8 +1,8 @@
 /*
  * Push-endpoint SSRF guard (issue #865): registration must refuse reserved
- * ranges — loopback, RFC1918, link-local, unique-local, 0.0.0.0, IPv4-mapped
- * IPv6 — whether the host is an IP literal or a DNS name resolving into one,
- * and fail closed on resolution failure.
+ * ranges — loopback, RFC1918, link-local, CGNAT, Class E, unique-local,
+ * 0.0.0.0, IPv4-mapped IPv6 — whether the host is an IP literal or a DNS
+ * name resolving into one, and fail closed on resolution failure.
  */
 
 import { promises as dns } from "node:dns";
@@ -19,6 +19,20 @@ const lookup = () => vi.spyOn(dns, "lookup");
 describe("assertPublicPushEndpoint (issue #865)", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("refuses CGNAT, IETF protocol-assignment, and Class E IPv4 literals", async () => {
+    await Promise.all(
+      [
+        "https://100.64.0.1/fcm",
+        "https://192.0.0.8/fcm",
+        "https://240.0.0.1/fcm",
+      ].map(async (endpoint) => {
+        await expect(assertPublicPushEndpoint(endpoint)).rejects.toThrow(
+          /IP literal/u
+        );
+      })
+    );
   });
 
   it("accepts a public https endpoint that resolves to public addresses", async () => {
@@ -41,6 +55,9 @@ describe("assertPublicPushEndpoint (issue #865)", () => {
           ["172.16.0.9", "https://evil.example/wake"],
           ["192.168.1.10", "https://evil.example/wake"],
           ["169.254.7.7", "https://evil.example/wake"],
+          ["100.64.0.1", "https://evil.example/wake"],
+          ["192.0.0.8", "https://evil.example/wake"],
+          ["240.0.0.1", "https://evil.example/wake"],
           ["0.0.0.0", "https://evil.example/wake"],
           ["::1", "https://evil.example/wake"],
           ["fd00::5", "https://evil.example/wake"],
@@ -78,6 +95,9 @@ describe("assertPublicPushEndpoint (issue #865)", () => {
         "https://192.168.2.2/fcm",
         "https://[fd12:3456:789a::1]/fcm",
         "https://169.254.169.254/latest/meta-data",
+        "https://100.127.255.254/fcm",
+        "https://192.0.0.1/fcm",
+        "https://255.0.0.1/fcm",
         "https://0.0.0.0/",
         "https://[::ffff:10.0.0.5]/fcm",
       ].map(async (endpoint) => {
@@ -130,6 +150,9 @@ describe("endpointHostIsPublicSync (issue #865 send-time backstop)", () => {
     expect(endpointHostIsPublicSync("https://127.0.0.1:3000/x")).toBe(false);
     expect(endpointHostIsPublicSync("https://[::1]/x")).toBe(false);
     expect(endpointHostIsPublicSync("https://192.168.1.4/x")).toBe(false);
+    expect(endpointHostIsPublicSync("https://100.64.1.1/x")).toBe(false);
+    expect(endpointHostIsPublicSync("https://192.0.0.8/x")).toBe(false);
+    expect(endpointHostIsPublicSync("https://240.1.2.3/x")).toBe(false);
     expect(endpointHostIsPublicSync("not-a-url")).toBe(false);
   });
 });

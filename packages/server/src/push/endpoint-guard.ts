@@ -6,8 +6,11 @@
  * at loopback/LAN HTTPS targets is blind SSRF replayed automatically from the
  * gateway host. Every registered endpoint must resolve to public internet
  * space: https only, no credentials-in-URL, no private/loopback/link-local/
- * unique-local addresses (IP-literal OR resolved via DNS), fail-closed on
- * resolution failure.
+ * unique-local/CGNAT/Class-E addresses (IP-literal OR resolved via DNS),
+ * fail-closed on resolution failure. Send-time is a sync IP-literal
+ * backstop only — hostnames are not re-resolved, so a name that was public
+ * at registration and later rebinds to loopback would still wake (named
+ * residual, not a closed gap).
  */
 
 import { promises as dns } from "node:dns";
@@ -31,18 +34,23 @@ function parseIpv4(text: string): Ipv4 | undefined {
 
 /**
  * The reserved ranges a push endpoint must never point at (issue #865):
- * 0.0.0.0/8, RFC1918 10/8 + 172.16/12 + 192.168/16, loopback 127/8, and
- * link-local 169.254/16.
+ * 0.0.0.0/8, RFC1918 10/8 + 172.16/12 + 192.168/16, loopback 127/8,
+ * link-local 169.254/16, CGNAT 100.64/10 (RFC 6598), IETF protocol
+ * assignments 192.0.0.0/24, and Class E 240/4. Cloud-metadata
+ * 169.254.169.254 is inside link-local.
  */
 function ipv4IsReserved(parts: Ipv4): boolean {
-  const [a, b] = parts;
+  const [a, b, c] = parts;
   return (
     a === 0 ||
     a === 10 ||
     a === 127 ||
+    a >= 240 ||
+    (a === 100 && b >= 64 && b <= 127) ||
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168)
+    (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && c === 0)
   );
 }
 
@@ -131,7 +139,12 @@ function ipIsReserved(literal: IpLiteral): boolean {
  * Synchronous subset used at SEND time (issue #865): rows persisted before the
  * registration guard existed (or written by an older build) must not get a
  * wake POST when their endpoint is an obvious reserved-range IP literal or a
- * non-https scheme. Hostname endpoints rely on the registration-time DNS check.
+ * non-https scheme. Hostnames are not re-resolved here — DNS on every vault
+ * commit would put a network round-trip on the wake path, and a name that
+ * resolved public at registration can still rebind to loopback later
+ * (DNS-rebinding TOCTOU). Real Web-Push endpoints are FCM/Mozilla, not
+ * attacker DNS; the residual is named in the #865 receipt rather than
+ * implied closed.
  */
 export function endpointHostIsPublicSync(endpoint: string): boolean {
   let url: URL;

@@ -86,7 +86,10 @@ reconnect note instead of redeeming anonymously.
 revocations: `process.kill`/`process.abort` throw the lane's `denied(...)` error
 (worker threads share the gateway PID; `worker.terminate()` cannot save a
 SIGKILL'd host), `process.report` is defined non-writable as `undefined` so
-`getReport()` can never leak the real OS environ around the frozen `env`, and
+`getReport()` can never leak the real OS environ around the frozen `env`
+(Node internals read this property under `--report-on-uncaught-exception`;
+no current gateway or Electron launch flag sets that, so undefined stays
+correct; a future report-flagged lane would need a stub), and
 `argv`/`execArgv` are frozen to empty arrays inside worker threads only
 (`isMainThread` guard keeps the vitest harness's own argv intact). No lane
 needs `process.kill` — the only subprocess lane shells out through the
@@ -97,12 +100,18 @@ allowlisted `child_process` builtin.
 New `packages/server/src/push/endpoint-guard.ts`;
 `push-wake-routes.ts`, `web-push.ts`, `automation/handler/runner.ts`.
 Registration refuses push endpoints that are non-https, credential-bearing, or
-resolve (DNS or IP literal) to loopback/link-local/private/unique-local/
-IPv4-mapped/NAT64/multicast space, failing closed on resolution failure; send
-time applies a synchronous reserved-IP-literal backstop so rows persisted by
-older builds cannot wake. The runner no longer skips https/host-pin/redirect
-validation when a template injects no placeholders — validation is
-unconditional; injection semantics are unchanged.
+resolve (DNS or IP literal) to loopback/link-local/private/CGNAT
+(`100.64.0.0/10`)/IETF-protocol-assignment (`192.0.0.0/24`)/Class-E
+(`240.0.0.0/4`)/unique-local/IPv4-mapped/NAT64/multicast space, failing
+closed on resolution failure; send time applies a synchronous
+reserved-IP-literal backstop so rows persisted by older builds cannot wake.
+Send-time does **not** re-resolve hostnames — a name that resolved public at
+registration and later rebinds to loopback would still wake (DNS-rebinding
+TOCTOU). Practical risk is low because real Web-Push endpoints are
+FCM/Mozilla, not attacker DNS; the gap is named here rather than implied
+closed. The runner no longer skips https/host-pin/redirect validation when a
+template injects no placeholders — validation is unconditional; injection
+semantics are unchanged.
 
 ### F6 — APPS_OPEN traversal gate
 
@@ -124,8 +133,11 @@ being a presence oracle handing out a permanent identity.
 `packages/server/src/serve/web-session-store.ts`. `touch()` caps the sliding
 idle extension at creation-instant + `CONTROL_ABSOLUTE_TTL_MS` (the constant
 existed; nothing enforced it server-side). A row already past its wall dies on
-first touch; the cookie Max-Age was always advisory against a stolen cookie
-file and no longer carries the guarantee alone.
+first touch; a row whose `createdAt` is not a parseable timestamp is dropped
+rather than persisting `NaN` as expiry (`Date.parse` → `NaN`, `Math.min` with
+`NaN` is `NaN`, and `NaN <= now` is false). The cookie Max-Age was always
+advisory against a stolen cookie file and no longer carries the guarantee
+alone.
 
 ### F9 — peer-plane asymmetries
 
@@ -163,6 +175,11 @@ symmetric transport contract.
 - The macOS-only failures noted below are test-environment bugs in suites we
   did not otherwise touch; fixing their `/etc/hostname` and symlink-realpath
   assumptions belongs to a follow-up issue.
+- Send-time DNS re-resolution of Web-Push hostnames. Registration resolves
+  and refuses reserved ranges; send-time only re-checks scheme, credentials,
+  and IP literals. A hostname that was public at registration and later
+  rebinds to loopback (DNS-rebinding TOCTOU) would still receive a wake POST.
+  Real Web-Push endpoints are FCM/Mozilla, not attacker DNS.
 
 ## Decisions
 
@@ -182,7 +199,11 @@ symmetric transport contract.
   it: authenticated clients use it for dialing; the public handshake keeps only
   what pairing needs.
 - **F8 removes dead rows lazily** (touch-time removal for capped rows, sweep on
-  open for expired ones) rather than adding a second sweeper pass.
+  open for expired ones) rather than adding a second sweeper pass. A
+  `createdAt` that `Date.parse` cannot read is treated as already dead, so
+  `touch()` cannot persist `NaN` as `expires_at`.
+- **Re-pin `packages/vault/src/schema/sealed.ts` in the classification ratchet.**
+  One governed fingerprint is re-pinned by #865. packages/vault/src/schema/sealed.ts: refresh_capability joins the sealed-column registry so the Assist HMAC rides the same six enforcement points as the refresh token it authenticates. That is a classification expansion, not a weakening — one file gained a sealed column it did not have, no quality lost a gate, no gate lost its evidence, and the remaining governed fingerprints are unmoved.
 
 ## Evidence
 
@@ -213,6 +234,9 @@ symmetric transport contract.
   nonce grammar; Assist custody table and confused-deputy section describe the
   refresh capability; handler-sandbox gate row lists the new revocations.
 - `docs/oauth-assist.md`: ceremony steps 6–7 cover mint/seal/present/re-mint.
+- `CHANGELOG.md` Unreleased/Fixed: the nine audit closures, in the product
+  voice, including the CGNAT/Class-E wake refusals and the unparseable
+  `createdAt` drop.
 
 ## Verification
 
@@ -222,7 +246,10 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
 ```
 
 - Root gates: `bun run lint`, `bun run format`, `bun run typecheck`
-  (turbo 25/25) — clean.
+  (turbo 25/25) — clean. `lint:quality-knobs` re-pins
+  `packages/vault/src/schema/sealed.ts` after `refresh_capability` joined
+  `SEALED_COLUMNS` (the prior PR run failed `gates` on a stale fingerprint;
+  the knob is regenerated, not weakened).
 - Full `bun run test`: green across packages/blueprints (4803), client (2312),
   mobile (1660), desktop (323), tunnel (123+2 skip), oauth-worker (42),
   vault (1386+1 skip), and the full quality matrix (`test:qualities` 65).
@@ -234,6 +261,21 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
   local pre-push gate was therefore run with those suites' known-darwin
   failures accepted (`SKIP_CHECK_PR=1` on push); CI enforces the same gates on
   Linux where they are green.
+- Linux `client-e2e / desktop-e2e` on PR run 32865846745 failed four tests
+  that did not exist on this branch when it opened: `notes` / `people` /
+  `photos` / `tasks` custodian journeys landed on `main` in #864, and GitHub
+  CI ran them against the merge. In that same Linux job, Agenda's matching
+  "survives an Electron reload" journey passed, as did locker, docs,
+  automations, onboarding, and settings. Notes failed with `no-such-note`
+  (library query miss after the heading painted); People never filled the
+  status line; Photos' write-rail probe stayed `replica-not-ready` for 60s;
+  Tasks matched the Notes/People pattern. The two changes in this PR that
+  could touch Electron reload — schema rung five (`refresh_capability` ALTER
+  on `sync_connection_credential`, a table those journeys never write) and
+  worker-thread `process.argv` freeze — would have taken Agenda and the
+  handler-backed apps with them if they were systemic. This follow-up
+  rebases onto that `main` so CI is linear; if those four stay red they
+  belong to the #864 journeys, not to a replica that cannot migrate.
 - Rust byte plane: `cargo test` (4 passed) and `cargo clippy --all-targets`
   clean after the header additions.
 - One blueprints unhandled-timer flake observed once under full parallel load;
@@ -291,7 +333,9 @@ cargo test && cargo clippy --all-targets   # in packages/tunnel/data-plane
 - packages/tunnel/data-plane/src/http_plane.rs
 - packages/test-kit/src/year3-vault.ts
 - scripts/corpora/schema-epoch-census.json
+- tests/quality/classification-ratchet.json
 - SECURITY.md
+- CHANGELOG.md
 - docs/oauth-assist.md
 
 Gate-corpus follow-ons forced by the new schema rung and the worker.ts edit:

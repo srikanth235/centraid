@@ -296,7 +296,10 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
   // straight past the frozen-empty `process.env` above, and would hand a
   // handler whatever the gateway process carries — S3 credentials, tunnel
   // tokens, provider keys. Undefined rather than stubbed so there is nothing
-  // left on the object to reach.
+  // left on the object to reach. Node itself reads this property under
+  // `--report-on-uncaught-exception` / `--report-uncaught-exception`; no
+  // gateway or Electron launch flag currently sets those, so the hole stays
+  // closed. A future report-flagged lane would need a stub, not undefined.
   Object.defineProperty(process, "report", {
     value: undefined,
     writable: false,
