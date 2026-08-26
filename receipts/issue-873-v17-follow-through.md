@@ -5,6 +5,9 @@
 - [x] Delete the pre-v17 Expo Locker UI and rebuild it against the v17 design
 - [x] Draw every custodian/origin Locker route the surface inventory lists
 - [x] Close the online-only write hole on the native replica session
+- [x] Build the Expo Tally cover against the v17 design, and end its handoff suspension
+- [x] Own the Receipt surface on the origin seat, where capture lives
+- [x] Give the phone's offline expense its missing `tally.expense_payer` shape
 - [ ] Autofill native extensions (a later slice)
 - [ ] Backend doors — access-history query, alias read-back, items-window total, import bridge (other slices)
 
@@ -127,6 +130,89 @@ why the seven item writes stay; `docs/mobile-offline.md` states the online-only
 write door; `tests/quality/copy-allowlist.json` drops the seed for the deleted
 `LockerUnlockScreen.tsx` and lowers `maxEntries` 31 → 30.
 
+
+**Slice: the Expo Tally cover, built (v17, origin seat).**
+
+*New, under `apps/mobile/src/apps/tally/`* — the band triple
+`apps/mobile/src/apps/tally/tally-band.ts`,
+`apps/mobile/src/apps/tally/TallyBand.tsx`,
+`apps/mobile/src/apps/tally/TallyMoreSheet.tsx`; the read plane
+`apps/mobile/src/apps/tally/tally-gateway.ts`,
+`apps/mobile/src/apps/tally/tally-store.ts`,
+`apps/mobile/src/apps/tally/useTallyVault.ts`; the write door
+`apps/mobile/src/apps/tally/tally-writes.ts`; the pure seat tables
+`apps/mobile/src/apps/tally/tally-view-model.ts` and
+`apps/mobile/src/apps/tally/tally-seat-copy.ts`; the §5 component recipes
+`apps/mobile/src/apps/tally/TallyParts.tsx`,
+`apps/mobile/src/apps/tally/TallyEntryRow.tsx`,
+`apps/mobile/src/apps/tally/TallyChips.tsx`,
+`apps/mobile/src/apps/tally/TallyNotice.tsx`,
+`apps/mobile/src/apps/tally/TallyAskSheet.tsx`; the frame
+`apps/mobile/src/apps/tally/TallyScreen.tsx` and its denied gate
+`apps/mobile/src/apps/tally/TallyGate.tsx`; the four band places
+`apps/mobile/src/apps/tally/TallyHome.tsx` (rewritten from the empty cover),
+`apps/mobile/src/apps/tally/BalancesView.tsx`,
+`apps/mobile/src/apps/tally/ActivityView.tsx`,
+`apps/mobile/src/apps/tally/GroupsView.tsx`,
+`apps/mobile/src/apps/tally/WaitingView.tsx`; the pushed surfaces
+`apps/mobile/src/apps/tally/TallyGroupScreen.tsx`,
+`apps/mobile/src/apps/tally/TallyFriendScreen.tsx`,
+`apps/mobile/src/apps/tally/TallyExpenseScreen.tsx`,
+`apps/mobile/src/apps/tally/TallyAddScreen.tsx`,
+`apps/mobile/src/apps/tally/TallyReceiptScreen.tsx`,
+`apps/mobile/src/apps/tally/TallySettleScreen.tsx`,
+`apps/mobile/src/apps/tally/TallyRecurringScreen.tsx`,
+`apps/mobile/src/apps/tally/TallySpendingScreen.tsx`,
+`apps/mobile/src/apps/tally/TallyTrashScreen.tsx`,
+`apps/mobile/src/apps/tally/TallySearchScreen.tsx`,
+`apps/mobile/src/apps/tally/TallySurfaceScreen.tsx`; and the five suites
+`apps/mobile/src/apps/tally/tally-band.test.ts`,
+`apps/mobile/src/apps/tally/tally-view-model.test.ts`,
+`apps/mobile/src/apps/tally/tally-store.test.ts`,
+`apps/mobile/src/apps/tally/BalancesView.test.tsx` and
+`apps/mobile/src/apps/tally/WaitingView.test.tsx`.
+
+*Registration.* `apps/mobile/src/navigation.ts` gains `TallyStackParamList`
+(longhand union, no mapped types), `TallyScreenProps<T>` and
+`TallyShellNavigation`, and `Tally` becomes a `NavigatorScreenParams` stack;
+`apps/mobile/navigators.tsx` gains `TallyNavigator` over twelve routes;
+`apps/mobile/lazy-screens.tsx` lazily loads eleven new screens;
+`apps/mobile/App.tsx` mounts the navigator in place of the empty cover;
+`apps/mobile/src/deep-links.ts` maps `apps/tally`, `apps/tally/group/:groupId`,
+`apps/tally/friend/:partyId` and `apps/tally/expense/:expenseId`;
+`apps/mobile/src/screens/Home.tsx` and `apps/mobile/src/lib/notifications.tsx`
+address the cover by screen now that it is a stack;
+`apps/mobile/src/kit/band/band-owner.ts` adds Tally to `BAND_CLAIMING_APPS` and
+`apps/mobile/src/kit/band/band-owner.test.ts` pins the roster.
+
+*The origin seat's own half of Receipt.* `apps/mobile/src/screens/scan-tally.ts`
+is new — the reviewed capture's payload as a table, the way `scan-locker.ts` is
+— and `apps/mobile/src/screens/Scan.tsx` calls it instead of folding the
+allocations inline.
+
+*The missing offline shape.*
+`apps/mobile/src/lib/replica/multi-vault-reader.test.ts` gains the
+`tally.expense_payer` entity on the journey's Tally shape, so the optimistic
+payer rows the pending projection emits have somewhere to land and a queued
+expense no longer reads as unpaid after a restart.
+
+*Hoisted, shared.* `packages/blueprints/apps/tally/entry-facts.ts` is a new
+pure module holding `entryFacts`, `feedFacts` and `entryMeta` — the expense
+row's one sentence — because `components/EntryRow.tsx` is a web component and a
+native seat cannot reach the narrowings beside it.
+
+*Ledgers and docs.* `tests/agent-e2e-mobile/flows/tally-derived.mjs` and
+`tests/agent-e2e-mobile/flows/tally-derived.md` are the origin-seat journey;
+`tests/agent-e2e-mobile/run-home-apps-suite.mjs` and
+`tests/agent-e2e-mobile/flows/home-apps-budget.md` take it as the seventh
+member and carry the twelfth minute's arithmetic; `tests/matrix.json` gains six
+owned Tally scenarios, hands the origin seat its journey and raises the suite
+budget; `docs/apps/tally-scenarios.md` mirrors them and records the seat and
+read-plane facts; `docs/mobile-offline.md` states how Tally splits the plane —
+ordinary queued writes, gateway-derived reads, one withheld verb;
+`packages/blueprints/src/handler-reachability.test.ts` empties
+`AWAITING_HANDOFF.mobile` and rewrites `NATIVE_FALLBACK.tally`.
+
 ## Out of scope
 
 Autofill native extensions. The backend doors this interface is drawn against
@@ -136,6 +222,43 @@ showing rather than the design's `300 of 312`), and the import client bridge.
 Desktop and web Locker, every other app, and the frame's band geometry.
 
 ## Decisions
+
+**Tally slice.**
+
+- **Reads are the gateway's, writes are the replica's.** `queries/dashboard.ts`
+  holds the app's one balance engine, so folding balances out of replica rows on
+  the phone would be a second derivation of "who owes whom". Reads therefore go
+  through `appQuery`; writes go through `session.write`, project optimistically
+  and queue. That is what "record-only and fully offline-capable" means on this
+  seat, and the offline notice names the one exception.
+- **`materialize-recurring-expense` is withheld offline, not offered and
+  refused.** Its occurrence id is minted by the canonical recurrence engine and
+  the pending projection excludes it by construction, so Due next swaps the verb
+  for Skip — which does project — and states §6's due-occurrence line.
+- **Waiting draws no Approve and no Decline.** The gateway has a per-intent
+  decide door (`commonsIntentDecidePath`), but no mobile transport reaches it
+  and nothing on this device reads another member's commons intents;
+  `TALLY_CONTRIB_DOORS.decide` is `false`, the surface says whose writes it is
+  showing, and a steward-only act hands over to the shell's Approvals inbox.
+- **The window's foot has an honest variant.** §6's `60 of 194` needs a
+  denominator the activity, group and friend payloads do not carry, so
+  `tallyWindowFoot` renders the §6 sentence where a real total exists and
+  `windowFootNoTotal` where none does. The exact wording returns with no edit
+  the day a query serves a total.
+- **`NATIVE_FALLBACK.tally` grew while `AWAITING_HANDOFF.mobile` emptied.**
+  Every Tally write is dispatched from `tally-writes.ts`, but the action names
+  are literals in the SHARED `apps/tally/writes.ts` builders — where the
+  one-computation rule wants them — so the reachability scan cannot see them.
+  Every QUERY left the list (the phone's gateway door names all seven), and
+  `add-receipt-expense` left it too (the capture flow names it in
+  `lib/upload/media-producer.ts`).
+- **`entry-facts.ts` was hoisted rather than duplicated, and web has not
+  converged on it yet.** U1 owns `components/EntryRow.tsx`; the new module is
+  additive and the web component should be pointed at it in a follow-up.
+- **The Home tile still says "spent this month", not a net balance.**
+  SURFACES.md wants a net there, but `useSpringboardTiles` fills tiles from
+  replica rows OFFLINE and never asks a query — deriving a net there would be
+  the second balance engine this app forbids. Recorded rather than guessed at.
 
 - **The four band places share one route.** `LockerHome` takes a `destination`
   param the way `TasksHome` does; Item, Add/edit, Trash, Access history and the
@@ -184,6 +307,17 @@ bun run test:matrix
 cd packages/blueprints && bunx vitest run apps/locker/ src/locker-online-only.test.ts src/handler-reachability.test.ts src/one-computation.test.ts src/untrusted-rendering.test.ts
 ```
 
+Tally slice, same gates:
+
+```sh
+bun run --cwd apps/mobile typecheck && bun run --cwd apps/mobile lint
+bunx vitest run --root apps/mobile src/apps/tally src/lib/replica/multi-vault-reader.test.ts
+bun run lint:mobile-design && bun run lint:hairline
+bun run lint:logical-insets && bun run lint:type-floor
+node scripts/lint-e2e-flows.mjs && bun run test:matrix
+bunx vitest run --root packages/blueprints src/handler-reachability.test.ts
+```
+
 Checklist crosswalk, item by item. *Delete the pre-v17 Expo Locker UI and
 rebuild it against the v17 design* — the five deleted files and the twenty-one
 new ones are listed above, and `LockerHome.tsx` is a different file end to end.
@@ -206,6 +340,29 @@ one. Deleted UI is proved gone by the deletions above; the rebuilt boundary,
 the band tables, the designed states, the gates, the reveal countdown, the
 permit gate, the review registers, the online-only write door and the otpauth
 grammar are proved by the nine matrix rows this change registers.
+
+Tally checklist crosswalk. *Build the Expo Tally cover against the v17 design,
+and end its handoff suspension* — the thirty new files under
+`apps/mobile/src/apps/tally/` draw every origin-seat route of the surface
+inventory's Tally table, and `AWAITING_HANDOFF.mobile` is now empty with
+`handler-reachability.test.ts` green over the whole manifest. *Own the Receipt
+surface on the origin seat, where capture lives* — `TallyReceiptScreen.tsx`
+carries the capture verb no other seat has, allocates through the shared
+`receipt-model.ts` and commits `reallocate-receipt`, and `scan-tally.ts` builds
+the origin capture's `add-receipt-expense` payload. *Give the phone's offline
+expense its missing `tally.expense_payer` shape* — the entity is on the journey
+shape in `multi-vault-reader.test.ts`, which now passes.
+
+`apps/mobile` is 215 files / 1790 tests green (was 1741 with one red before this
+slice); the five new Tally suites are 48 tests over the band tables, the seat
+model, the read plane, Balances and Waiting. Every design gate is green
+(`lint:mobile-design`, `lint:hairline`, `lint:logical-insets`,
+`lint:type-floor`), as are `lint:e2e-flows`, `test:matrix` and the reachability
+gate. NOT fixed here and reported instead:
+`packages/blueprints/apps/_shared/pending-overlay.test.ts` expects an expense
+projection without payer rows and is red against the concurrent backend slice's
+`pending-projection.ts` — the same defect family as the shape above, on the
+other side of the boundary.
 
 ## Audit
 

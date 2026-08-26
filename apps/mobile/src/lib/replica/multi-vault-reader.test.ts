@@ -124,6 +124,15 @@ const JOURNEY_SHAPES = [
         primaryKey: "__centraid_row_id",
         columns: ["__centraid_row_id", "expense_id", "party_id", "share_minor"],
       },
+      // Several payers is the ordinary shape now, so the offline expense
+      // projects payer rows too (`apps/tally/pending-projection.ts`). Without
+      // this entity in the shape the optimistic write has nowhere to land and
+      // the queued expense reads as unpaid after a restart.
+      {
+        entity: "tally.expense_payer",
+        primaryKey: "__centraid_row_id",
+        columns: ["__centraid_row_id", "expense_id", "party_id", "paid_minor"],
+      },
     ],
   },
   {

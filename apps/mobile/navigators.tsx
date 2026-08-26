@@ -59,6 +59,18 @@ import {
   PhoneStorageScreen,
   SettingsScreen,
   SharingScreen,
+  TallyHome,
+  TallyGroup,
+  TallyFriend,
+  TallyExpense,
+  TallyAdd,
+  TallyReceipt,
+  TallySettle,
+  TallyRecurring,
+  TallySpending,
+  TallyTrash,
+  TallySearch,
+  TallySurface,
 } from "./lazy-screens";
 import { useTheme } from "./src/kit/theme";
 import type {
@@ -68,6 +80,7 @@ import type {
   PeopleStackParamList,
   PhotosStackParamList,
   SettingsStackParamList,
+  TallyStackParamList,
 } from "./src/navigation";
 
 const PhotosStack = createNativeStackNavigator<PhotosStackParamList>();
@@ -76,6 +89,7 @@ const LockerStack = createNativeStackNavigator<LockerStackParamList>();
 const PeopleStack = createNativeStackNavigator<PeopleStackParamList>();
 const AgendaStack = createNativeStackNavigator<AgendaStackParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
+const TallyStack = createNativeStackNavigator<TallyStackParamList>();
 
 export function PhotosNavigator(): React.JSX.Element {
   const { colors } = useTheme();
@@ -172,6 +186,38 @@ export function LockerNavigator(): React.JSX.Element {
       <LockerStack.Screen name="LockerTrash" component={LockerTrash} />
       <LockerStack.Screen name="LockerSurface" component={LockerSurface} />
     </LockerStack.Navigator>
+  );
+}
+
+/**
+ * Tally's own stack. Fifteen surfaces on the design's route table, twelve
+ * routes here: the four band PLACES share `TallyHome` (a band tap swaps what is
+ * drawn, never pushes), and the denied gate is not a route at all — every
+ * surface wraps `TallyScreen.tsx`, which withdraws the children and the band
+ * while the grant is gone.
+ */
+export function TallyNavigator(): React.JSX.Element {
+  const { colors } = useTheme();
+  return (
+    <TallyStack.Navigator
+      screenOptions={{
+        contentStyle: { backgroundColor: colors.bg },
+        headerShown: false,
+      }}
+    >
+      <TallyStack.Screen name="TallyHome" component={TallyHome} />
+      <TallyStack.Screen name="TallyGroup" component={TallyGroup} />
+      <TallyStack.Screen name="TallyFriend" component={TallyFriend} />
+      <TallyStack.Screen name="TallyExpense" component={TallyExpense} />
+      <TallyStack.Screen name="TallyAdd" component={TallyAdd} />
+      <TallyStack.Screen name="TallyReceipt" component={TallyReceipt} />
+      <TallyStack.Screen name="TallySettle" component={TallySettle} />
+      <TallyStack.Screen name="TallyRecurring" component={TallyRecurring} />
+      <TallyStack.Screen name="TallySpending" component={TallySpending} />
+      <TallyStack.Screen name="TallyTrash" component={TallyTrash} />
+      <TallyStack.Screen name="TallySearch" component={TallySearch} />
+      <TallyStack.Screen name="TallySurface" component={TallySurface} />
+    </TallyStack.Navigator>
   );
 }
 

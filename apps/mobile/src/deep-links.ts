@@ -78,7 +78,14 @@ export const LINKING: LinkingOptions<RootStackParamList> = {
         },
       },
       Notes: "apps/notes",
-      Tally: "apps/tally",
+      Tally: {
+        screens: {
+          TallyHome: "apps/tally",
+          TallyGroup: "apps/tally/group/:groupId",
+          TallyFriend: "apps/tally/friend/:partyId",
+          TallyExpense: "apps/tally/expense/:expenseId",
+        },
+      },
       Assistant: "assistant",
       Automations: "automations",
       Insights: "insights",

@@ -43,7 +43,7 @@ const WEBVIEW_APPS = new Set(["notes"]);
 const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
   {
     web: [],
-    mobile: ["tally"],
+    mobile: [],
   };
 
 const AWAITING_HANDOFF_RATIONALE =
@@ -64,40 +64,6 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
     kind: "agent-only",
     rationale:
       "The action requires staged_sha and ocr_text from the origin seat's receipt capture; no web route holds a camera or the OCR pass, so the Receipt surface reconciles and simulates while the assistant carries the write (#872).",
-  },
-  // The #872 backend landed ahead of the surfaces that will call it: these
-  // capabilities exist, are consent-checked and reachable by the assistant,
-  // and the Waiting / Group / Settle / Export routes that dispatch them are
-  // the next slice. Each entry dies when its route wires up — never by a stub.
-  "tally.action.reallocate-receipt": {
-    kind: "awaiting-handoff",
-    rationale:
-      "The Receipt surface currently reconciles and refuses its commit because no command re-allocated an existing receipt; that command exists now, and wiring the commit is the UI slice (#872).",
-  },
-  "tally.action.set-group-simplification": {
-    kind: "awaiting-handoff",
-    rationale:
-      "The group tool-row toggle that turns simplification on is drawn against the ask with a disabled commit; the opt-in write and the derived proposal are served, and flipping the control is the UI slice (#872).",
-  },
-  "tally.action.leave-group": {
-    kind: "awaiting-handoff",
-    rationale:
-      "Groups draws leave as a row act with a confirm naming the consequence, and the commit is disabled pending this command; wiring the confirm is the UI slice (#872).",
-  },
-  "tally.action.archive-group": {
-    kind: "awaiting-handoff",
-    rationale:
-      "Archive is the second of the two Groups row acts drawn against the ask; the command and the archived-groups list are served, and wiring the confirm is the UI slice (#872).",
-  },
-  "tally.action.nudge": {
-    kind: "awaiting-handoff",
-    rationale:
-      "Remind is drawn on a stale Balances row with no live control, because a nudge parks for confirmation and the Waiting deep link is part of the same UI slice (#872).",
-  },
-  "tally.query.export": {
-    kind: "awaiting-handoff",
-    rationale:
-      "The Export route is drawn with its foot line and a disabled commit; the payload it will render is served now, and reading it into the route is the UI slice (#872).",
   },
   "docs.action.edit": {
     kind: "agent-only",
@@ -239,24 +205,57 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.purge-item",
     "action.star-item",
     "action.unstar-item",
+    // The #872 surface, same reason as the seven above and one more: the
+    // phone's Locker cover draws the list, the item and the unlock, and does
+    // not yet draw an archive shelf, a duplicate act, a custom-field editor, a
+    // passkey slot or an export. Each is reachable through the Assistant with
+    // the same consent and receipt contract, and each entry dies when the
+    // phone draws its control.
+    "action.archive-item",
+    "action.unarchive-item",
+    "action.duplicate-item",
+    "action.set-field",
+    "action.remove-field",
+    "action.set-addresses",
+    "action.set-passkey",
+    "action.clear-passkey",
+    "action.export",
+    "query.access",
   ],
   photos: ["action.restore-album", "action.tag-asset", "action.untag-asset"],
+  // Tally's writes ARE dispatched by the phone (#873 U3:
+  // `apps/mobile/src/apps/tally/tally-writes.ts` issues every one of them).
+  // They stay listed for exactly the reason Locker's seven do: the SCAN cannot
+  // see them, because the action names are literals in the SHARED write
+  // builders (`apps/tally/writes.ts`), which is where the one-computation rule
+  // wants them, so the native tree names none of them itself.
+  //
+  // `add-receipt-expense` is the exception in the other direction and is NOT
+  // listed: the origin seat's capture flow dispatches it by name through
+  // `apps/mobile/src/lib/upload/media-producer.ts`, which the mobile scan
+  // reads. Every QUERY left this list in the same change — the phone's gateway
+  // door (`apps/mobile/src/apps/tally/tally-gateway.ts`) names all seven.
   tally: [
-    "action.add-receipt-expense",
+    "action.add-expense",
     "action.edit-expense",
     "action.delete-expense",
     "action.undo-expense",
     "action.restore-expense",
     "action.settle-up",
     "action.add-friend",
+    "action.create-group",
     "action.rename-group",
     "action.add-group-member",
     "action.remove-group-member",
     "action.delete-group",
-    "query.friend",
-    "query.activity",
-    "query.search",
-    "query.history",
+    "action.leave-group",
+    "action.archive-group",
+    "action.set-group-simplification",
+    "action.reallocate-receipt",
+    "action.nudge",
+    "action.save-recurring-expense",
+    "action.materialize-recurring-expense",
+    "action.edit-recurring-expense-occurrence",
   ],
   tasks: [
     "action.edit",

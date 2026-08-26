@@ -28,7 +28,6 @@ import {
   AutomationsScreen,
   InsightsScreen,
   NotesHome,
-  TallyHome,
   TasksHome,
   CaptureScreen,
   ConnectorsScreen,
@@ -45,6 +44,7 @@ import {
   PeopleNavigator,
   PhotosNavigator,
   SettingsNavigator,
+  TallyNavigator,
 } from "./navigators";
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
@@ -336,7 +336,7 @@ export default function App(): React.JSX.Element | null {
                             />
                             <RootStack.Screen
                               name="Tally"
-                              component={TallyHome}
+                              component={TallyNavigator}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen

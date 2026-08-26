@@ -2660,9 +2660,9 @@
         "id": "tally",
         "seats": {
           "origin": {
-            "status": "skip",
-            "reason": "The v17 web interface shipped (#872); the seat's end-to-end journey is not yet written. The app.json doors and the drawn surface are covered by unit and component owners; a seat journey lands with the e2e follow-up on the umbrella issue.",
-            "citation": "#872"
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs",
+            "tier": "e2e"
           },
           "custodian": {
             "status": "owned",
@@ -3580,6 +3580,48 @@
             "layer": "unit",
             "status": "owned",
             "owner": "packages/blueprints/apps/tally/writes.test.ts"
+          },
+          {
+            "id": "derived-origin",
+            "label": "derived origin journey — read-time figures and no verb this seat cannot fire",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs"
+          },
+          {
+            "id": "origin-band",
+            "label": "origin band, Waiting slot and More sheet tables",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/tally-band.test.ts"
+          },
+          {
+            "id": "origin-seat-model",
+            "label": "origin state precedence, honest window foot and the outbox's Waiting rows",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/tally-view-model.test.ts"
+          },
+          {
+            "id": "origin-read-plane",
+            "label": "origin read plane — denial as data, search races, forgetting a payload",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/tally-store.test.ts"
+          },
+          {
+            "id": "origin-balances",
+            "label": "origin Balances — hero derivation, All settled, day one and the sign convention",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/BalancesView.test.tsx"
+          },
+          {
+            "id": "origin-waiting",
+            "label": "origin Waiting — the doors this transport has, and the two verbs it does not",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/WaitingView.test.tsx"
           }
         ]
       },
@@ -4080,7 +4122,7 @@
         "label": "Home apps",
         "runner": "tests/agent-e2e-mobile/run-home-apps-suite.mjs",
         "budgetDoc": "tests/agent-e2e-mobile/flows/home-apps-budget.md",
-        "budgetMinutes": 11,
+        "budgetMinutes": 12,
         "flows": [
           {
             "id": "docs-drive",
@@ -4110,6 +4152,12 @@
             "id": "people-roster",
             "label": "People roster",
             "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs",
+            "flow": null
+          },
+          {
+            "id": "tally-derived",
+            "label": "Tally derived",
+            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs",
             "flow": null
           },
           {

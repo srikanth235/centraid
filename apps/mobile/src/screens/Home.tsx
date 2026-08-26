@@ -194,7 +194,7 @@ export default function HomeScreen({
           navigation.navigate("Notes");
           break;
         case "tally":
-          navigation.navigate("Tally");
+          navigation.navigate("Tally", { screen: "TallyHome" });
           break;
       }
     },
