@@ -37,17 +37,10 @@ import {
 } from "./settingsDiagnosticsData.js";
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
-// React-owned Gateway route — the runtime page over the main-process
-// heartbeat monitor, plus the component-health poll and the log stream
-// (folded in as the Components/Logs tabs — see GatewayScreen.tsx). Heartbeat
-// data arrives as pushed snapshots (useGatewayRuntime); component health has
-// no push channel and is polled (useGatewayHealth). The only writes are the
-// down-alert settings, saved through the standard settings surface (main
-// clamps + re-broadcasts immediately, so the screen reflects the change on
-// the next pushed snapshot). A 1s local ticker drives the running counters
-// (gateway uptime, "for 2h 14m") between polls.
-/** The shell-root half of the Connections section — just the acts; the rows
- *  come from this route's own `loadConnectionRows`. */
+// React-owned Gateway route over the main-process heartbeat monitor:
+// pushed snapshots (useGatewayRuntime), polled health (useGatewayHealth).
+/** Shell-root half of the Connections section — acts only; rows come from
+ *  this route's own `loadConnectionRows`. */
 export interface GatewayConnectionsProps {
   refreshKey: number;
   onTest: (gatewayId: string, label: string) => void;
@@ -70,10 +63,8 @@ export default function GatewayRoute({
     | "restart";
   focus?: "backups" | "capacity";
   cause?: "backup-alert";
-  /** Host plumbing for the Components tab's Connections section (issue #665).
-   *  The three acts open modals the shell root owns (they must sit above every
-   *  page), so App hands the callbacks down rather than this route wiring
-   *  them; `refreshKey` is bumped once one commits so the list re-reads. */
+  /** #665 host plumbing: acts open shell-root-owned modals, so App hands
+   *  callbacks down; `refreshKey` bumps once one commits. */
   connections?: GatewayConnectionsProps;
 } = {}): JSX.Element {
   const { navigate, showToast } = useShellActions();
@@ -81,14 +72,11 @@ export default function GatewayRoute({
   const { health, refresh: refreshHealth } = useGatewayHealth();
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  // Launch-at-login (issue #351) isn't part of the pushed runtime snapshot —
-  // it's a plain settings field, read once on mount via the generic
-  // getSettings() surface (same one saveSettings writes through).
+  // Launch-at-login (#351) isn't in the pushed snapshot — read once on mount.
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [savingLaunchAtLogin, setSavingLaunchAtLogin] = useState(false);
 
-  // 1s uptime ticker, suspended while the tab is hidden (issue #528 Phase D
-  // wakeup hygiene) so a backgrounded window stops waking the machine.
+  // 1s uptime ticker, suspended while the tab is hidden (#528 Phase D).
   useEffect(() => startVisibilityTicker(() => setNow(Date.now())), []);
 
   useEffect(() => {
@@ -120,7 +108,7 @@ export default function GatewayRoute({
   const saveLaunchAtLogin = async (enabled: boolean) => {
     setSavingLaunchAtLogin(true);
     const prev = launchAtLogin;
-    setLaunchAtLogin(enabled); // optimistic — matches the alert toggle's feel
+    setLaunchAtLogin(enabled);
     try {
       await window.CentraidApi.saveSettings({ launchAtLogin: enabled });
     } catch (error) {
@@ -133,8 +121,7 @@ export default function GatewayRoute({
     }
   };
 
-  // Stable identity so ResourceModeCard does not re-fetch prefs on every
-  // 1s uptime tick (or any other parent re-render).
+  // Stable so ResourceModeCard doesn't re-fetch prefs on every tick.
   const loadResourceMode = useCallback(
     async (): Promise<ResourceMode> =>
       parseResourceModePref(await getUserPrefs()),
@@ -143,8 +130,7 @@ export default function GatewayRoute({
   const saveResourceMode = useCallback(async (mode: ResourceMode) => {
     await saveUserPrefs({ [RESOURCE_MODE_PREF_KEY]: mode });
   }, []);
-  // L3 "Tune" rung knob overrides (issue #528 Phase F) — plain prefs read/write.
-  // Stable identities so the 1s uptime tick doesn't re-fetch or re-create them.
+  // L3 "Tune" rung knob overrides (#528); stable identities vs the 1s tick.
   const loadKnobPrefs = useCallback(
     async (): Promise<ResourceKnobPrefs> =>
       parseResourceKnobPrefs(await getUserPrefs()),
@@ -160,9 +146,7 @@ export default function GatewayRoute({
     },
     []
   );
-  // Pause/resume hot-apply, then nudge the health poll so the paused state
-  // reconciles quickly. Stable identities (same discipline as loadResourceMode)
-  // so the 1s uptime tick doesn't re-create the callbacks.
+  // Pause/resume hot-apply, then nudge health so paused state reconciles.
   const pauseBackground = useCallback(
     async (durationMs?: number) => {
       const res = await pauseBackgroundWork(durationMs);
@@ -176,12 +160,9 @@ export default function GatewayRoute({
     refreshHealth();
     return res;
   }, [refreshHealth]);
-  // A DRILL-IN IS A HISTORY ENTRY. System's pages used to be local state with a
-  // "‹ System · Back" row drawn at the top of each one — a second back control
-  // sitting under the frame's own back arrow and pointing at the same place.
-  // Routing them means the arrow already works, and a page can be deep-linked.
-  // `routeKey` keys gateway routes by tab, so each is a distinct entry rather
-  // than a repeat of the one before it.
+  // A DRILL-IN IS A HISTORY ENTRY: System pages are ROUTES, not local state
+  // under a second back control; `routeKey` keys routes by tab so each is
+  // a distinct entry.
   const openTab = useCallback(
     (
       tab: "overview" | "components" | "storage" | "logs" | "alerts" | "restart"
@@ -202,12 +183,9 @@ export default function GatewayRoute({
 
   return (
     <PageScroll>
-      {/* NO `backup` PROP, so System draws no Backups section. Offsite backup
-          is not part of v0, and a section that states "no backup has ever run
-          · nothing has been copied off this machine" on every gateway is an
-          alarm about a feature that has not shipped. `BackupCard` and its
-          gateway calls are intact; restoring the section is restoring one
-          prop. */}
+      {/* NO `backup` PROP: System draws no Backups section — offsite backup
+          isn't part of v0, and a perpetual nothing-has-run section alarms.
+          Restoring it restores one prop. */}
       <GatewayScreen
         snapshot={snapshot}
         now={now}

@@ -322,7 +322,7 @@ function importWorkout(ctx: HandlerCtx): Record<string, unknown> {
     );
   ctx.wrote("core.activity", activityId);
   // The workout remark is a memo annotation on the canonical activity
-  // (issue #274) — never an activity column.
+  // (#274) — never an activity column.
   if (input.note) annotate(ctx, "core.activity", activityId, input.note);
   const workoutId = ctx.newId();
   ctx.db
@@ -570,7 +570,6 @@ function summarizeTrends(ctx: HandlerCtx): Record<string, unknown> {
   };
 }
 
-/** Register the health domain's commands on a gateway. */
 export function registerHealthCommands(gateway: Gateway): void {
   gateway.registerCommand(LOG_VITAL);
   gateway.registerCommand(VOID_VITAL);

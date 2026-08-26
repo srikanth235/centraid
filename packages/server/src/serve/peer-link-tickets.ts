@@ -1,38 +1,24 @@
 /*
- * `peer_link_tickets` — the one-time capability the REMOTE half of the link
- * ceremony runs on (issue #726 P3 decision 3).
- *
- * A ticket is short-lived by design: a ceremony is a live moment, not a
- * standing invitation. The secret is returned once and stored only as a
- * sha256, so a stolen gateway.db yields nothing redeemable. Claiming is a
- * conditional DELETE — the affected row count, not an in-process mutex, is
- * the single-use authority — and the caller runs it inside the SAME
- * transaction that writes the link, so a crash between the two cannot leave a
- * burned ticket with no link or a link with a live ticket.
- *
- * Local pairs (both vaults on this gateway) never touch this table: their
- * ceremony is two owners' devices approving, with no secret to carry.
+ * Remote link ticket (#726 P3): secret returned once, sha256-only;
+ * minting IS consent; claim = conditional DELETE in the SAME transaction
+ * as the link write. Local pairs never touch this table.
  */
 
 import crypto from "node:crypto";
 
 import type { GatewayDatabase } from "./gateway-db.js";
 
-/** A ceremony is a live moment. */
 export const DEFAULT_LINK_TICKET_TTL_MS = 15 * 60 * 1000;
 
 export interface MintedLinkTicket {
   ticketId: string;
-  /** Returned ONCE — never recoverable from the row. */
   secret: string;
   expiresAt: number;
 }
 
 export interface ClaimedLinkTicket {
   vaultId: string;
-  /** The identity key the ticket promised, which the link then records. */
   vaultPublicKey: string;
-  /** Minting IS this side's approval of the link (P3 decision 3). */
   createdAt: string;
 }
 
@@ -68,11 +54,7 @@ export class PeerLinkTicketStore {
     return { ticketId, secret, expiresAt };
   }
 
-  /**
-   * Is a ceremony live right now? The peer ALPN admits an unknown endpoint
-   * ONLY while this is true or a link already exists, so the plane has no
-   * permanently open door.
-   */
+  /** Peer ALPN admits an unknown endpoint ONLY while this is true or a link exists. */
   hasPending(now = Date.now()): boolean {
     return (
       this.gatewayDatabase.db
@@ -81,11 +63,7 @@ export class PeerLinkTicketStore {
     );
   }
 
-  /**
-   * Burn `ticketId` if `secret` matches and it has not expired. Unknown,
-   * expired, wrong-secret, and already-burned are ONE outcome — `undefined` —
-   * so a presenter learns nothing about tickets it does not hold.
-   */
+  /** Every failure is ONE outcome (`undefined`) — a presenter learns nothing. */
   claim(ticketId: string, secret: string): ClaimedLinkTicket | undefined {
     const row = this.gatewayDatabase.db
       .prepare(

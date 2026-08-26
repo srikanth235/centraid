@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
-// The blob routes (issue #296) over a real vault plane: stream bytes in,
+// The blob routes (#296) over a real vault plane: stream bytes in,
 // claim them through a command, and serve them back with ETag/Range — the
 // full staged-upload loop an app performs.
 import http from "node:http";

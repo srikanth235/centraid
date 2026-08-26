@@ -7,10 +7,9 @@
 // host-relative type units (rem, so 200% OS text scale works), and the fact
 // that an app owns an identity hue while the shell owns none.
 //
-// The surface ramp used to be parameterised by `--app-hue`, so every app's
-// neutrals leaned toward its own identity. That is retired: `--app-hue` is now
-// only the app's slot on the OKLCH identity wheel, and the neutrals are the
-// system's literal paper.
+// The surface ramp is NOT parameterised by `--app-hue`: that hue is only the
+// app's slot on the OKLCH identity wheel, and the neutrals are the system's
+// literal paper.
 
 import {
   DENSITY_TIERS,

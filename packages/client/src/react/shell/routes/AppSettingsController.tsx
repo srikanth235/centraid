@@ -80,7 +80,7 @@ export interface AppSettingsControllerProps {
   onShare: () => void;
   onReveal: () => void;
   onDelete: () => void;
-  /** Bundled install serving in place (issue #434) — danger action is Uninstall. */
+  /** Bundled install serving in place (#434) — danger action is Uninstall. */
   bundled?: boolean;
   /** The inline app's root element — knob edits push straight to it. */
   inlineRoot?: HTMLElement | null;
@@ -88,12 +88,11 @@ export interface AppSettingsControllerProps {
 }
 
 /**
- * The app-settings popover, ported to React (issue #325, R4). Successor to the
- * deleted app-appview.ts `openAppSettingsReact`: it owns the gateway I/O (knob
+ * The app-settings popover's controller: it owns the gateway I/O (knob
  * persistence + live inline push, automation run/toggle) and pushes a snapshot
- * into AppSettingsPanel, while the two deep sub-trees — the run-history list and
- * the vault consent pane — mount into the host divs the panel provides, as their
- * own React roots (RunsPane / VaultScreen).
+ * into AppSettingsPanel, while the two deep sub-trees — the run-history list
+ * and the vault consent pane — mount into the host divs the panel provides, as
+ * their own React roots (RunsPane / VaultScreen).
  */
 export default function AppSettingsController({
   app,
@@ -343,7 +342,7 @@ export default function AppSettingsController({
             <VaultScreen
               {...buildVaultProps(appId, block, {
                 // No frame to reload since the served-app plane retired
-                // (issue #799): an inline app reads the vault through the
+                // (#799): an inline app reads the vault through the
                 // live change feed, so a grant edit lands without a remount.
                 onParkedCount: (count) => {
                   vaultBadge.current = count === 0 ? null : count;

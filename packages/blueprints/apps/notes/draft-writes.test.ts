@@ -42,4 +42,30 @@ describe("a keyed debounce flushes the previous note immediately", () => {
     await clock.advance(600);
     expect(seen).toStrictEqual(["n1", "n2"]);
   });
+
+  it("merges successive patches for the same key so a title is not dropped", async () => {
+    const clock = useFakeClock();
+    const seen: Array<{ title?: string; body_text?: string }> = [];
+    const { run, flush } = coalesceByKey(
+      (_id: string, patch: { title?: string; body_text?: string }) => {
+        seen.push(patch);
+      },
+      (id) => id,
+      600,
+      (previous, next) => {
+        const merged: [string, { title?: string; body_text?: string }] = [
+          previous[0],
+          { ...previous[1], ...next[1] },
+        ];
+        return merged;
+      }
+    );
+    run("n1", { title: "Lease terms" });
+    run("n1", { body_text: "The deposit clause" });
+    await clock.advance(600);
+    await flush();
+    expect(seen).toStrictEqual([
+      { title: "Lease terms", body_text: "The deposit clause" },
+    ]);
+  });
 });

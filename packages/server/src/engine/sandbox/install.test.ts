@@ -1,32 +1,17 @@
 /*
- * Installing the sandbox, in this thread (#842 W7.1).
- *
- * `install.ts` is the enforcement core — the module hook that refuses a
- * builtin, the taint set that decides which graph is confined, and the
- * ambient-authority revocation. It was reachable only through real worker
- * threads (`sandbox-escape.test.ts` spawns them), which V8 coverage does not
- * instrument, so the single most security-critical file in the slice was
- * measured at 0%.
- *
- * WHY IT IS SAFE TO INSTALL HERE. Installation is thread-wide and one-way:
- * globals are revoked and never restored, which is why the runner discards a
- * worker after one handler. Vitest runs each test FILE in its own isolated
- * environment, so this file owns the thread it dirties and no other suite
- * inherits it. `resetWorkerSandboxForTests` exists for exactly this, and this
- * file is deliberately the only caller — keep it that way, and keep this file
- * free of anything that needs a live `fetch` or `process.env` after the first
- * install.
- *
- * WHAT THIS FILE CANNOT REACH. The resolve hook's own body stays uncovered
- * here, and deliberately so: Vitest routes `import()` inside a test through its
- * own module runner, so `registerHooks` never sees the specifier and a
- * confinement assertion written against it would pass whether the hook worked
- * or not. That path is owned by `sandbox-escape.test.ts`, which spawns real
- * worker threads and is the only honest place to assert it. A vacuous test
- * here would be worse than the gap.
+ * Installing the sandbox in THIS thread (#842). Installation is thread-wide and
+ * one-way; Vitest isolates each file, so this one owns the thread it dirties —
+ * keep it the only caller of `resetWorkerSandboxForTests`. The resolve hook's
+ * body is not coverable here; `sandbox-escape.test.ts` owns it.
  */
 
+import { realpathSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { SandboxDeniedError } from "./denied.js";
 import { installWorkerSandbox, resetWorkerSandboxForTests } from "./install.js";
@@ -37,16 +22,11 @@ describe(installWorkerSandbox, () => {
     resetWorkerSandboxForTests();
     const before = globalThis.fetch;
     const handle = installWorkerSandbox(appHandlerPolicy());
-    // The runner hands network reach out through the governed `ctx` rail. If
-    // the handle did not capture the real fetch BEFORE revocation, that rail
-    // would be wired to the revoked stub and every granted call would throw.
     expect(handle.hostFetch).toBe(before);
     expect(handle.policy.lane).toBe("app-handler");
   });
 
   test("revokes ambient network authority in a denied lane", () => {
-    // Same thread, already installed above — revocation is one-way, so this
-    // observes the state the first install left.
     expect(() => globalThis.fetch("https://example.invalid")).toThrow(
       SandboxDeniedError
     );
@@ -58,14 +38,28 @@ describe(installWorkerSandbox, () => {
     expect(handle.isTainted(url)).toBe(false);
     handle.taint(url);
     expect(handle.isTainted(url)).toBe(true);
-    // A loader may append `?query#hash` to a specifier; identity must survive
-    // it, or a handler could shed its taint by importing itself with a suffix.
+    // Identity survives `?query#hash`, or a handler sheds its taint.
     expect(handle.isTainted(`${url}?v=2`)).toBe(true);
     expect(handle.isTainted(`${url}#frag`)).toBe(true);
-    // A sibling that was never marked stays trusted.
     expect(handle.isTainted("file:///tmp/centraid-untrusted/other.js")).toBe(
       false
     );
+  });
+
+  test("taint identity survives macOS /var vs /private aliases of the same file", () => {
+    // os.tmpdir() on macOS is `/var/folders/...` while Node's loader reports
+    // `file:///private/var/folders/...`. The desktop e2e vault lives there;
+    // a taint mark that does not round-trip through realpath never matches
+    // parentURL and the handler graph runs unsandboxed.
+    const handle = installWorkerSandbox(appHandlerPolicy());
+    const dir = tempDirSync("sandbox-taint-");
+    const file = path.join(dir, "handler.js");
+    writeFileSync(file, "");
+    const logical = pathToFileURL(file).href;
+    const canonical = pathToFileURL(realpathSync(file)).href;
+    handle.taint(logical);
+    expect(handle.isTainted(logical)).toBe(true);
+    expect(handle.isTainted(canonical)).toBe(true);
   });
 
   test("a second install for the SAME lane returns the same handle", () => {
@@ -75,9 +69,6 @@ describe(installWorkerSandbox, () => {
   });
 
   test("REFUSAL: re-installing for a DIFFERENT lane throws", () => {
-    // Silently re-pointing a live sandbox at another lane is a containment bug
-    // wearing a convenience API: the graph already loaded under the old lane
-    // would keep running with the new lane's grants.
     expect(() =>
       installWorkerSandbox(appSeedPolicy("/tmp/centraid-seed"))
     ).toThrow(/already sandboxed for lane "app-handler"/u);
@@ -85,28 +76,14 @@ describe(installWorkerSandbox, () => {
 });
 
 describe("ambient-authority revocation", () => {
-  // These observe the state the install in the block above left behind:
-  // revocation is thread-wide and one-way, which is the whole reason a pooled
-  // worker runs one handler and is then discarded.
-
   test("process.getBuiltinModule re-filters through the same allowlist", () => {
-    // The documented loader bypass: it returns a builtin WITHOUT consulting any
-    // module hook. If it were left alone, `process.getBuiltinModule("fs")`
-    // would hand an untrusted graph the real filesystem past every check in
-    // this file, so it is re-filtered rather than revoked.
+    // A documented loader bypass: it consults no module hook.
     const get = process.getBuiltinModule.bind(process);
-    // Allowed by the computational floor.
     expect(get("path")).toBeDefined();
     expect(get("node:path")).toBeDefined();
-    // Refused: the app-handler lane grants no filesystem.
     expect(() => get("fs")).toThrow(/getBuiltinModule\("fs"\) is refused/u);
     expect(() => get("node:fs")).toThrow(SandboxDeniedError);
-    // Refused for the same reason a hook would refuse it — reaching internals.
     expect(() => get("child_process")).toThrow(SandboxDeniedError);
-    // Not a builtin at all: passed straight through to the real function,
-    // which answers `undefined`. The filter must neither claim it as a refusal
-    // nor invent a module — a relative specifier is the loader hook's business,
-    // not this bypass's.
     expect(get("./local.js")).toBeUndefined();
     expect(get("lodash")).toBeUndefined();
   });
@@ -120,10 +97,35 @@ describe("ambient-authority revocation", () => {
     expect(() => proc.dlopen()).toThrow(/may not load native addons/u);
   });
 
+  test("kill, abort, and report are revoked in every lane (#865)", () => {
+    // Worker threads share the gateway's PID, so kill/abort/report cannot be a
+    // lane grant at all — the same way getBuiltinModule is re-filtered rather
+    // than trusted. These observe the one install this thread already carries.
+    const proc = process as unknown as {
+      kill: (...args: unknown[]) => unknown;
+      abort: () => unknown;
+      report: unknown;
+    };
+    expect(() => proc.kill(process.pid, "SIGKILL")).toThrow(SandboxDeniedError);
+    expect(() => proc.kill(process.pid, "SIGKILL")).toThrow(
+      /share the gateway's PID/u
+    );
+    // Existence probes (signal 0) stay live — worker internals use them.
+    expect(() => proc.kill(process.pid, 0)).not.toThrow();
+    expect(() => proc.abort()).toThrow(SandboxDeniedError);
+    expect(() => proc.abort()).toThrow(/crashes the shared gateway process/u);
+    // getReport stays callable (Electron's crash reporter invokes it) but
+    // must not dump the real OS environ around the frozen process.env.
+    const report = proc.report as {
+      getReport: () => { environmentVariables?: Record<string, string> };
+      writeReport: () => string;
+    };
+    const dumped = report.getReport();
+    expect(Object.keys(dumped.environmentVariables ?? {})).toHaveLength(0);
+    expect(report.writeReport()).toBe("");
+  });
+
   test("the environment is replaced with a frozen empty object", () => {
-    // Not merely emptied: a writable `{}` would let a handler stash state
-    // across the one run it gets, and a configurable property would let it
-    // restore the real env.
     expect(Object.keys(process.env)).toHaveLength(0);
     expect(Object.isFrozen(process.env)).toBe(true);
     const descriptor = Object.getOwnPropertyDescriptor(process, "env");

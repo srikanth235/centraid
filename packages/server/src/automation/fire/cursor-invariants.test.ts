@@ -1,5 +1,5 @@
 /*
- * The cursor invariants themselves (issue #541 review): a committed position
+ * The cursor invariants themselves (#541 review): a committed position
  * never runs ahead of a delivered element, a disable never destroys a
  * watermark, a failed batch never swallows a doorbell, and a quiet minute
  * never costs a write. Cron enumeration and gap collapse belong to

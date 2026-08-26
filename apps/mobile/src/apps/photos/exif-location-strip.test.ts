@@ -1,31 +1,18 @@
-// Proving the location is out of the BYTES, not just off the screen (#816).
-//
-// The acceptance criterion this file answers is a claim about a file somebody
-// else opens, so the test builds a photograph that genuinely carries a fix —
-// an Exif APP1 with a populated GPS directory, an XMP packet naming the same
-// coordinate in ASCII, and a Photoshop/IPTC block naming the town — runs it
-// through the walker, and then reads the result back with a parser written
-// here, independently of the one under test. Two things follow that a "we did
-// not render it" test could never say: the digits are gone from the bytes, and
-// the photograph still opens the right way up.
-//
-// The fixture is hand-built rather than checked in as a binary: a JPEG in the
-// repo would be a file nobody can diff, and the layout below is the part of
-// the format the walker actually has to understand.
+// Proves location leaves the BYTES (#816): the fixture carries a real fix (Exif GPS, XMP, IPTC)
+// and assertions use the independent parser below — "digits gone from bytes", not a render claim.
 
 import { describe, expect, it } from "vitest";
 
 import { isJpeg, stripJpegLocation } from "./exif-location-strip";
 
-/** The NUL that terminates several of the tags below. Written as an escape
- *  so no source file in this repo carries a literal zero byte. */
+/** NUL terminating tags below — escaped so no repo file carries a literal zero byte. */
 const NUL = "\u0000";
 
 const MARKER = 0xff;
 const SOI = [MARKER, 0xd8];
 const EOI = [MARKER, 0xd9];
 
-/** Big-endian 16- and 32-bit words, the way TIFF writes them under `MM`. */
+/** Big-endian TIFF words under `MM`. */
 const be16 = (value: number): number[] => [(value >> 8) & 0xff, value & 0xff];
 const be32 = (value: number): number[] => [
   (value >>> 24) & 0xff,
@@ -47,7 +34,7 @@ interface ByteOrder {
 const BIG: ByteOrder = { mark: ascii("MM"), u16: be16, u32: be32 };
 const LITTLE: ByteOrder = { mark: ascii("II"), u16: le16, u32: le32 };
 
-/** One 12-byte IFD entry. `value` is padded to the four bytes it gets. */
+/** One 12-byte IFD entry; `value` padded to its four bytes. */
 function entry(
   order: ByteOrder,
   tag: number,
@@ -64,8 +51,7 @@ function entry(
   ];
 }
 
-/** A GPS coordinate as the three rationals EXIF stores: degrees, minutes,
- *  seconds — each a numerator over a denominator. */
+/** GPS coordinate as EXIF's three rationals: degrees, minutes, seconds. */
 function rationals(order: ByteOrder, parts: [number, number][]): number[] {
   return parts.flatMap(([numerator, denominator]) => [
     ...order.u32(numerator),
@@ -74,8 +60,7 @@ function rationals(order: ByteOrder, parts: [number, number][]): number[] {
 }
 
 const CAPTURED = `2026:08:17 09:41:00${NUL}`;
-/** 37° 26' 30.84" N — the latitude the fixture carries, and the digits the
- *  strip has to make disappear. */
+/** 37° 26' 30.84" N — the digits the strip must make disappear. */
 const LATITUDE: [number, number][] = [
   [37, 1],
   [26, 1],
@@ -88,8 +73,7 @@ const LONGITUDE: [number, number][] = [
   [348, 10],
 ];
 
-// The fixture's TIFF layout, fixed by construction so every pointer below is
-// a named number rather than an arithmetic surprise.
+// Fixed TIFF layout: every pointer is a named number.
 const IFD0_AT = 8;
 const IFD0_ENTRIES = 3;
 const CAPTURED_AT = IFD0_AT + 2 + IFD0_ENTRIES * 12 + 4; // 50
@@ -98,15 +82,14 @@ const GPS_ENTRIES = 4;
 const GPS_DATA_AT = GPS_IFD_AT + 2 + GPS_ENTRIES * 12 + 4; // 124
 const LONGITUDE_AT = GPS_DATA_AT + 24;
 
-/** A TIFF block with an orientation, a capture time and a real GPS directory. */
+/** TIFF block with an orientation, a capture time and a real GPS directory. */
 function tiff(order: ByteOrder): number[] {
   return [
     ...order.mark,
     ...order.u16(42),
     ...order.u32(IFD0_AT),
     ...order.u16(IFD0_ENTRIES),
-    // Orientation 6: "rotate this frame a quarter turn". The tag the walker
-    // exists to leave alone.
+    // Orientation 6 — the tag the walker must leave alone.
     ...entry(order, 0x0112, 3, 1, order.u16(6)),
     ...entry(order, 0x0132, 2, CAPTURED.length, order.u32(CAPTURED_AT)),
     ...entry(order, 0x8825, 4, 1, order.u32(GPS_IFD_AT)),
@@ -123,7 +106,7 @@ function tiff(order: ByteOrder): number[] {
   ];
 }
 
-/** Any APP segment, with the two-byte length JPEG puts in front of a payload. */
+/** Any APP segment + the two-byte length JPEG prepends. */
 function segment(marker: number, payload: number[]): number[] {
   return [MARKER, marker, ...be16(payload.length + 2), ...payload];
 }
@@ -141,7 +124,7 @@ const IPTC_BLOCK = [
   ...ascii("Menlo Park  "),
 ];
 
-/** The compressed photograph. Never metadata, and never touched. */
+/** The compressed image — never metadata, never touched. */
 const SCAN = [
   ...segment(0xda, [0x00, 0x03, 0x01, 0x00, 0x3f, 0x00]),
   0x12,
@@ -180,9 +163,7 @@ function unlocatedPhotograph(): Uint8Array {
   ]);
 }
 
-// ── An independent reader ────────────────────────────────────────────────────
-// Written against the format rather than against the module under test, so a
-// walker that "removed" the GPS by breaking its own parser could not pass.
+// ── Independent reader: against the format, not the module under test ──
 
 interface ExifRead {
   orientation?: number;
@@ -266,7 +247,7 @@ describe("what a shared copy no longer says", () => {
     expect(readExif(stripped!.bytes)?.gpsEntries).toBe(0);
     expect(contains(stripped!.bytes, rationals(BIG, LATITUDE))).toBe(false);
     expect(contains(stripped!.bytes, rationals(BIG, LONGITUDE))).toBe(false);
-    // The reference letters go too — "N" and "W" are half of a coordinate.
+    // The reference letters go too — "N"/"W" are half a coordinate.
     expect(contains(stripped!.bytes, ascii(`N${NUL}`))).toBe(false);
   });
 
@@ -317,9 +298,7 @@ describe("bytes with nothing to remove", () => {
   });
 
   it("refuses a container it cannot walk, rather than passing it through", () => {
-    // A HEIC, a PNG, an MP4 — anything that does not open as a JPEG. The null
-    // is what makes `photo-share.ts` re-encode or refuse instead of sending
-    // the original with its fix intact.
+    // Not-JPEG container: the null makes `photo-share.ts` re-encode or refuse rather than ship the fix.
     expect(
       stripJpegLocation(new Uint8Array([0, 0, 0, 24, 102, 116]))
     ).toBeNull();

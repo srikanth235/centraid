@@ -177,7 +177,7 @@ describe("commons hardening", () => {
       now,
     });
     // media.asset has no actable-registry entry, so the resolver must
-    // still route the command to the commons rail (previously it fell through).
+    // still route the command to the commons rail.
     expect(
       commonsGrantForCommand(origin.vault, "media.update_asset", {
         asset_id: photo.assetId,

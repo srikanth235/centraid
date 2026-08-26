@@ -1,54 +1,14 @@
-// HTTP surface for the gateway-owned app *lifecycle* (issue #141).
+// HTTP surface for the gateway-owned app lifecycle (#141): the deterministic
+// builder lives in the gateway, so a local and a remote gateway behave alike.
+// Each verb returns `false` so the apps-store and automations handlers keep
+// their own routes.
 //
-// Phase 2 of the thin-client pivot: the deterministic builder lives in
-// the gateway, not the desktop. Cloning a template, editing an app's
-// name/description, and creating/toggling/deleting automations were all
-// desktop orchestration (harness scaffolders + app-engine webhook minting,
-// pushed up over IPC-relayed session writes). They move here so the renderer
-// states intent and the gateway does the work — identical for a local or
-// remote gateway. Scaffolding a blank app went with the served-app plane it
-// produced pages for (issue #799).
+// STAGE VS PUBLISH. Every mutation stages into a session worktree. A falsy
+// `publish` (the default, #141/C6) only REGISTERS the app so its draft
+// previews; true validates, merges onto `main`, and reconciles cron.
 //
-// Surface (mounted via `serve()`'s `extraHandlers`, after the bearer
-// check; each verb returns `false` so the apps-store / automations
-// handlers keep their own routes):
-//
-//   POST   /centraid/_apps/_clone              clone a bundled template
-//          body {templateId, sessionId?, publish?}
-//   POST   /centraid/_apps/_install            install a bundled blueprint in place (#434)
-//          body {templateId} → {app:{id,name?,description?,iconKey?,colorKey?}, installed:true, alreadyInstalled}
-//   POST   /centraid/_apps/<id>/meta           edit name/description
-//          body {name?, description?, sessionId?, publish?}
-//   POST   /centraid/_automations              scaffold an automation app
-//          body {id, name?, description?, prompt?, triggers?, vault?, apps?, …, publish?}
-//   POST   /centraid/_automations/set-enabled?ref=<ref>   toggle enabled
-//   POST   /centraid/_automations/update?ref=<ref>   edit name/prompt/triggers
-//          body {name?, prompt?, triggers?, sessionId?, publish?} — 404 if the ref doesn't
-//          exist, 400 on an invalid patch; mints a webhook (returned once, like create) only
-//          when `triggers` adds one where none existed before
-//   POST   /centraid/_automations/compile?ref=<ref>  hidden builder compile → {runId}
-//   POST   /centraid/_automations/rotate-webhook?ref=<ref>  mint a fresh webhook secret
-//          body {sessionId?, publish?} — 404 if the ref doesn't exist, 400 if it has no webhook trigger
-//   POST   /centraid/_automations/enrichment    {enabled} — batch-toggle every installed enricher (issue #306)
-//          body {enabled, publish?}
-//   DELETE /centraid/_automations?ref=<ref>&publish=      remove an automation
-//
-// **Stage vs publish.** Every mutation stages into a git-store session
-// worktree (the draft). When `publish` is falsy (the default — extends
-// the explicit-publish model, #141/C6) the change stays in the session
-// and the app is only *registered* (`ensureRegistered` → data dir +
-// registry entry) so its draft is previewable through the runtime. When
-// `publish` is true the session is validated + merged onto `main` and
-// the in-process cron scheduler is reconciled — the renderer passes this
-// for now to preserve "new app is immediately live". Either way the
-// orchestration is the gateway's.
-//
-// Webhook secrets are minted gateway-side (create + clone): the plaintext
-// is returned once in the response, only the hash is written into the
-// manifest that lands on `main`. The app handlers (create/clone/meta)
-// live here; the automation handlers live in `lifecycle-automation-routes`
-// and the stage/publish + error helpers in `lifecycle-shared` — split to
-// keep each module under the repo file-size limit.
+// Webhook secrets are minted gateway-side: the plaintext returns ONCE and only
+// the hash reaches the manifest on `main`.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -85,11 +45,6 @@ import { readFileMap, readJson, sendJson } from "./route-helpers.js";
 
 export type { LifecycleRouteOptions } from "../lifecycle/lifecycle-shared.js";
 
-/**
- * Build the lifecycle route handler bound to a live `WorktreeStore`. Returns
- * a function suitable for `startRuntimeHttpServer`'s `extraHandlers`:
- * resolves `true` when it owned the request, `false` otherwise.
- */
 export function makeLifecycleRouteHandler(
   opts: LifecycleRouteOptions
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
@@ -161,8 +116,6 @@ export function makeLifecycleRouteHandler(
   };
 }
 
-// ---- POST /centraid/_apps/_clone (clone a bundled template) ----
-
 async function handleClone(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
@@ -178,10 +131,8 @@ async function handleClone(
   }
   const publish = body.publish === true;
 
-  // A bundled blueprint APP is installed in place, never cloned (issue #434):
-  // clone forks it into the git code store, which is exactly the per-vault
-  // copy the install-in-place model removes. Automation templates aren't
-  // bundled app ids, so they still clone (the hidden builder is the compiler).
+  // A bundled blueprint APP installs in place, never clones (#434); a clone
+  // would fork it into the code store. Automation templates still clone.
   if (opts.isBundledAppId?.(templateId)) {
     throw new AppScaffoldError(
       "already_exists",
@@ -200,8 +151,6 @@ async function handleClone(
       `Unknown template "${templateId}".`
     );
 
-  // Pick a unique (id, name) pair against the apps already on `main`, then
-  // rewrite the template's files in memory for the new identity.
   const existing = await opts.store.listAppsWithMeta();
   const { id: newAppId, name: newName } = suggestCloneIdentityFrom(
     existing,
@@ -214,16 +163,12 @@ async function handleClone(
     templateFiles,
     newName,
     newDesc: tmpl.desc,
-    // Catalog tile identity (issue #263) — backfills app.json when the
-    // template's own copy predates the keys; an app.json that already
-    // declares them wins inside cloneTemplateFiles.
+    // Backfill only (#263): a declaring app.json wins in `cloneTemplateFiles`.
     iconKey: tmpl.iconKey,
     colorKey: tmpl.colorKey,
   });
 
-  // Mint any pending webhook triggers (automation templates ship
-  // `{kind:'webhook',pending:true}`). The plaintext secret is returned
-  // once; the manifest persists only the hash.
+  // Templates ship `{kind:'webhook',pending:true}`; only the hash persists.
   const { files: provisioned, minted } = provisionPendingWebhooksInFiles(
     cloned,
     newAppId
@@ -272,8 +217,6 @@ async function handleClone(
   });
 }
 
-// ---- POST /centraid/_apps/_install (install a bundled blueprint in place) ----
-
 async function handleInstall(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
@@ -301,12 +244,9 @@ async function handleInstall(
     );
   }
   const { alreadyInstalled, ...app } = installed;
-  // 200 (not 201): install is idempotent — a re-install returns the existing
-  // registration rather than erroring, matching app-store reinstall semantics.
+  // 200, not 201: install is idempotent.
   return sendJson(res, 200, { app, installed: true, alreadyInstalled });
 }
-
-// ---- POST /centraid/_apps/<id>/meta (edit name/description) ----
 
 async function handleMeta(
   opts: LifecycleRouteOptions,
@@ -330,11 +270,8 @@ async function handleMeta(
     typeof body.description === "string" ? body.description : undefined;
   const publish = body.publish === true;
 
-  // Installed bundled app (issue #434): its code is read-only, so a rename
-  // can't rewrite app.json — set the per-vault label override instead. A null
-  // name clears the override. (Description edits aren't supported for bundled
-  // apps; the manifest description is authoritative.) Returns false when the
-  // id isn't an installed bundled app, falling through to the code-store path.
+  // A bundled app's code is read-only (#434): a rename sets the per-vault
+  // label override, null clears it, and false falls through to the code store.
   if (name !== undefined && opts.renameBundledApp?.(appId, name)) {
     return sendJson(res, 200, { ok: true, staged: false });
   }
@@ -368,8 +305,7 @@ async function handleMeta(
       ephemeralSession,
     });
   } else if (ephemeralSession) {
-    // No metadata change to publish, but we may have opened a fresh
-    // throwaway session above — close it so it doesn't orphan a worktree.
+    // A throwaway session may be open above: close it or it orphans a worktree.
     await opts.store.closeSession(sessionId);
   }
   return sendJson(res, 200, { ok: true, staged: !publish });

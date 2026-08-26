@@ -1,34 +1,9 @@
-// What the Notifications place SAYS (#765, spec §2). Pure: no React, no
-// gateway, no renderer — every word a block carries is decided here, so the
-// copy contract is under test without mounting anything. Same split as
-// `kit/components/health-line.ts` and `screens/connectors/connectors-model.ts`.
-//
-// The reference's rows are sample data; the sentences that state a RULE are
-// verbatim, because they are the product's promises about what a decision
-// does. A promise that drifts between two surfaces is a promise broken on one
-// of them — so the desktop screen (`packages/client/.../ApprovalsScreen.tsx`)
-// and this file carry the same strings, deliberately duplicated rather than
-// shared: `packages/client` is a browser bundle this app does not import.
-//
-// THREE MISMATCHES BETWEEN THE REFERENCE AND THE PRODUCT, resolved the way
-// desktop resolved them:
-//
-//  1. KIND BADGES BECOME WORDS. The prototype paints a coloured pill per kind.
-//     In a system whose one chromatic ink means "this leaves the device", a
-//     classifier pill would spend colour on taxonomy; the same fact reads
-//     better as English in the line that already names the actor
-//     (`callerPhrase`), with the row's one state word (`Staged`, `Lapsed`,
-//     `High risk`, `New scope`) carrying the rest.
-//  2. NOTICES FOLD INTO THE QUEUE. The old phone screen had a source-type
-//     filter (Automations / Agents / Apps / Archived) over a flat notice list.
-//     A notice that demands something (warning/high) is a thing waiting on
-//     you, so it becomes an "Also waiting" row; an info notice is news, so it
-//     sits under `Updates`; archived ones keep their own section. Nothing is
-//     unreachable — what changed is that the queue narrows by what a thing
-//     NEEDS rather than by who filed it.
-//  3. BUSY WITHDRAWS THE VERB. A control mid-flight is not disabled-and-still-
-//     inviting; the verb is taken away until the write lands, so a second tap
-//     cannot stage a second decision.
+// What the Notifications place SAYS (#765, spec §2). Pure — no React, gateway
+// or renderer — so the copy contract is under test without mounting anything.
+// Three standing rules: kind badges are WORDS, never coloured pills (the one
+// chromatic ink means "this leaves the device"); notices fold into the queue by
+// what they NEED, never behind a source-type filter; and a busy control loses
+// its verb entirely, so a second tap cannot stage a second decision.
 
 import {
   APPROVALS_CANNOT_EDIT_KEY as CANNOT_EDIT_KEY,
@@ -54,15 +29,11 @@ import type {
   ParkedInvocation,
 } from "../../lib/gateway";
 
-// ── Copy that states a rule ────────────────────────────────────────────────
+// ─── copy that states a rule ───────
 //
-// Every sentence below that desktop also renders now comes from
-// `@centraid/client/approvals-copy` (issue #805). The header's old claim —
-// that `packages/client` is "a browser bundle this app does not import" —
-// stopped being true when this app started importing
-// `@centraid/client/replica/native` and `@centraid/client/home-copy`, and one
-// promise written twice is a promise that can be broken on one surface.
-// Re-exported under this file's own names so no caller or test moves.
+// Any sentence desktop also renders comes from `@centraid/client/approvals-copy`
+// (#805) — one promise written twice can be broken on one surface. Re-exported
+// under this file's own names.
 
 export {
   APPROVALS_ALWAYS_TITLE as ALWAYS_TITLE,
@@ -87,13 +58,10 @@ export {
 } from "@centraid/client/surface-copy";
 export const ALWAYS_SUB =
   "Future writes matching this actor, verb and target send without stopping here.";
-/** The one sentence that says where the reconnection ceremony finishes. */
 export const RECONNECT_NOTE =
   "Opens a secure browser inside Centraid — stay here until it closes.";
-/** This phone is not paired: an error, with the one way forward stated. */
 export const NOT_PAIRED = "This phone is not paired with a gateway yet.";
 
-/** The waiting-queue filter (spec §2 `full`), ids first, copy second. */
 export const WAITING_CHIPS = [
   { key: "all", label: "Everything" },
   { key: "risk", label: "High risk" },
@@ -103,8 +71,7 @@ export const WAITING_CHIPS = [
 
 export type WaitingFilter = (typeof WAITING_CHIPS)[number]["key"];
 
-/** Which chip a waiting item answers to. One item, one chip — an item that
- *  matched two would make "showing 3 of 12" a lie in one of them. */
+/** One item, one chip: matching two makes "showing 3 of 12" a lie. */
 export type WaitingKind = "staged" | "auth" | "risk";
 
 export function matchesFilter(
@@ -114,7 +81,7 @@ export function matchesFilter(
   return filter === "all" || filter === kind;
 }
 
-// ── Phrasing ───────────────────────────────────────────────────────────────
+// ─── phrasing ───────
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -134,8 +101,6 @@ function parsed(iso: string | null | undefined): number | undefined {
   return Number.isNaN(at) ? undefined : at;
 }
 
-/** How long ago, in the register a queue uses: minutes and hours while it is
- *  still today, a named day after that. Never a bare ISO string. */
 export function agoPhrase(at: number, now: number): string {
   const ago = now - at;
   if (ago < MINUTE) return "just now";
@@ -147,8 +112,8 @@ export function agoPhrase(at: number, now: number): string {
   });
 }
 
-/** `staged 4 minutes ago`, or nothing at all when the stamp is unreadable —
- *  an invented time on a consent surface is worse than a missing one. */
+/** Nothing when the stamp is unreadable: an invented time on a consent surface
+ *  is worse than a missing one. */
 export function stampPhrase(
   iso: string | null | undefined,
   now: number,
@@ -158,9 +123,6 @@ export function stampPhrase(
   return at === undefined ? undefined : `${verb} ${agoPhrase(at, now)}`;
 }
 
-/**
- * WHO staged or asked, as words rather than a coloured chip (mismatch 1).
- */
 export function callerPhrase(kind: string, caller: string | null): string {
   const name = caller ?? kind;
   switch (kind) {
@@ -175,11 +137,8 @@ export function callerPhrase(kind: string, caller: string | null): string {
   }
 }
 
-/**
- * What KIND of outbound write this is, from the verb and connection the
- * gateway staged it under. Never guesses beyond those two: an unrecognised
- * verb is "Outbound write", which is true of every item here.
- */
+/** Never guesses past verb and connection kind: an unrecognised verb is
+ * "Outbound write", true of every item here. */
 export function outboundLabel(row: {
   verb: string;
   connection: { kind: string };
@@ -199,8 +158,6 @@ export function outboundLabel(row: {
   return "Outbound write";
 }
 
-/** Severity as a WORD, not a coloured rail. `info` gets nothing: a quiet
- *  update needs no label. */
 export function noticeSeverityLabel(
   kind: string,
   severity: MobileNotice["severity"]
@@ -217,12 +174,7 @@ function spanWords(ms: number): string {
   return countWord(Math.max(1, Math.round(ms / MINUTE)), "minute");
 }
 
-/**
- * Collapsed-notice duration phrase. A day-plus run of failures reads as
- * "failing for 6 days" — the thing the owner actually needs; anything shorter,
- * or merely informational, keeps the neutral "×6 over 3 hours". `undefined`
- * for an uncollapsed notice, which has no span to tell.
- */
+/** `undefined` for an uncollapsed notice, which has no span to tell. */
 export function noticeSpanPhrase(
   row: Pick<MobileNotice, "count" | "firstAt" | "lastAt" | "severity">
 ): string | undefined {
@@ -244,9 +196,8 @@ export function noticeSub(notice: MobileNotice, now: number): string {
   ]);
 }
 
-// ── The queue ──────────────────────────────────────────────────────────────
+// ─── the queue ───────
 
-/** A notice that DEMANDS something, rather than one that reports (mismatch 2). */
 export function isAttention(notice: MobileNotice): boolean {
   return notice.archivedAt === null && notice.severity !== "info";
 }
@@ -257,7 +208,6 @@ export function activeNotices(
   return notices.filter((notice) => notice.archivedAt === null);
 }
 
-/** Everything that is waiting on the owner, across all five wire shapes. */
 export function waitingTotal(data: MobileNotifications): number {
   const { decisions } = data;
   return (
@@ -269,11 +219,7 @@ export function waitingTotal(data: MobileNotifications): number {
   );
 }
 
-/**
- * Where `ready` becomes `full` — the queue length at which the filter chips
- * start earning their space. Four chips over four items is furniture; the
- * reference's own `ready` fixture is 3 rows and its `full` one is 7.
- */
+/** Where `ready` becomes `full`: four chips over four items is furniture. */
 export const FULL_AT = WAITING_CHIPS.length;
 
 export function opsStateFor(
@@ -285,15 +231,13 @@ export function opsStateFor(
   return waiting > FULL_AT ? "full" : "ready";
 }
 
-/** The section's count line: what is on screen, and what is not. */
 export function waitingMeta(shown: number, total: number): string {
   return shown < total
     ? `showing ${String(shown)} of ${String(total)}`
     : `${String(total)} waiting`;
 }
 
-/** The standing line. No inline verb, ever: the page's whole content IS the
- *  thing to act on, so a verb in the status line would point at itself. */
+/** No inline verb, ever: the page's content IS the thing to act on. */
 export function approvalsHealth(waiting: number): HealthCopy {
   return {
     detail: HEALTH_DETAIL,
@@ -304,7 +248,7 @@ export function approvalsHealth(waiting: number): HealthCopy {
   };
 }
 
-// ── The staged write ───────────────────────────────────────────────────────
+// ─── the staged write ───────
 
 const TITLE_KEYS = ["subject", "title", "name"];
 const BODY_KEYS = ["body", "text", "message"];
@@ -321,7 +265,7 @@ function readString(
   return undefined;
 }
 
-/** One artifact value as a readable string — never `[object Object]`. */
+/** Never `[object Object]`. */
 export function factValue(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value))
@@ -333,7 +277,6 @@ export function stagedTitle(row: MobileOutboxRow): string {
   return readString(row.artifact, TITLE_KEYS) ?? row.target;
 }
 
-/** The words somebody else wrote, which is why the panel quotes them. */
 export function stagedBody(row: MobileOutboxRow): string {
   return readString(row.artifact, BODY_KEYS) ?? row.target;
 }
@@ -346,12 +289,8 @@ export function stagedEyebrow(row: MobileOutboxRow, now: number): string {
   ]);
 }
 
-/**
- * Every fact about where this write is going, in the order an envelope is
- * read, then everything else the artifact carries — nothing staged is hidden
- * from the person approving it. The irreversibility fact is last and `net`,
- * because it is the one that changes what approving MEANS.
- */
+/** Nothing staged is hidden from the approver. The irreversibility fact stays
+ * last and `net`: it changes what approving MEANS. */
 export function stagedFacts(row: MobileOutboxRow): PanelFact[] {
   const facts: PanelFact[] = [];
   const used = new Set([
@@ -388,31 +327,21 @@ export function stagedFacts(row: MobileOutboxRow): PanelFact[] {
   return facts;
 }
 
-// ── Waiting rows ───────────────────────────────────────────────────────────
+// ─── waiting rows ───────
 
-/** One queue row, already worded. The screen binds the handler. */
 export interface WaitingRowCopy {
   key: string;
   kind: WaitingKind;
   title: string;
   sub: string;
-  /** The one state word beside the title. */
   meta: string;
-  /** Metadata takes `net` — this is about something leaving the device, or a
-   *  connection to the outside that has failed. */
+  /** `net` only for bytes leaving the device or an outside link that failed. */
   net: boolean;
   action: string;
 }
 
-/**
- * Bind a worded row to what its verb actually does.
- *
- * The copy model names the verb and the screen owns the handler, which is why
- * `action` here is a bare word rather than a control. `hint` is composed in one
- * place because it is the same sentence on every row — the verb plus the thing
- * it acts on — and that sentence is what tells ten identical "Open" controls
- * apart for a screen reader (#708 B.4).
- */
+/** `action` stays a bare word: the screen owns the handler. `hint` keeps ten
+ * identical "Open" controls distinct to a screen reader (#708 B.4). */
 export function rowVerb(
   copy: { title: string; action?: string },
   onPress: () => void,
@@ -518,7 +447,6 @@ export function noticeRowCopy(
   };
 }
 
-/** One standing `(actor, verb, target)` rule, as the vault stores it. */
 export interface OutboxGrant {
   grantId: string;
   actor: string | null;

@@ -1,52 +1,7 @@
-// THE STAGE'S CHROME (issue #712 P18, extracted from ./PhotoLightbox).
-//
-// THE SEAM. `PhotoLightbox` owns the viewer's STATE — which photograph, which
-// mode (viewing / editing / slideshow), what the last write did, whether the
-// full-quality bytes have been unlocked. The chrome that frames the stage owns
-// none of it: what floats above the photograph and the status line below it are
-// pure views over values the screen has already decided. Pulling them out is
-// what makes that division visible rather than merely true, and it is the seam a
-// future viewer engine claims — the same shapes on every media surface.
-//
-// ANATOMY: THERE IS NO TOP BAR. A 52px full-width strip was a second ground laid
-// over the photograph, and it charged the stage its own height on every screen
-// whether or not there was anything to say. The head of the stage now carries
-// THREE FLOATING ELEMENTS standing on it (`VIEWER_TOP_CHROME`):
-//
-//   chip     round, leading — a back chevron. It is `chevron-left`, not `✕`,
-//            because this viewer is pushed onto a stack and pressing it RETURNS
-//            to the grid the photograph was opened from; `✕` promises a thing
-//            that closes over nothing, which is what a modal does. The
-//            swipe-down still dismisses, and now the mark agrees with the swipe
-//            as well as with the effect.
-//   stamp    centred capsule, WHEN over WHEN-and-WHERE. Not a control, which is
-//            why it sits in the middle: a member scanning for something to press
-//            skips the centre. See `captureStamp` for why the date outranks the
-//            caption it replaced — the caption is still this element's ACCESSIBLE
-//            NAME, and its editable home is the info sheet's Caption row.
-//   chip     round, trailing — the `···` overflow, or the slideshow's one
-//            labelled way out.
-//
-// The stage runs UNDER all three. That is the point of floating: the photograph
-// is the screen, and the controls are things standing on it.
-//
-// NO TAP-TO-TOGGLE. Hiding the chrome on a tap is tempting and is deliberately
-// not here: a tap that hides every control also hides its own way back, so the
-// gesture would be the only route to the state it created — exactly what §15
-// forbids, and what `GESTURE_POINTER_EQUIVALENTS` exists to make impossible to
-// merge by accident.
-//
-// EVERY ELEMENT HERE IS ON THE STAGE, AND THAT IS A TOKEN RULE, NOT A LOOK. The
-// stage is one colour in BOTH themes, so ink comes from `--on-stage` /
-// `--on-stage-soft` and hairlines from `--stage-line`. A page token would land
-// at 2.85:1 in light mode. The plates the chips and capsules stand on take
-// `--stage-sunken`, the stage ramp's own second rung, edged in `--stage-line`:
-// an OPAQUE plate, never glass. The reason is the one `PhotosBand` states — a
-// translucent plate over an unpredictable photograph makes contrast a property
-// of what the member photographed — and it is why this app carries no blur.
-// That constraint is why these pieces live together in one module instead of one
-// file each: they are the only ones that must be read against the stage, and the
-// rule is stated once here.
+// Stage chrome — `PhotoLightbox` owns viewer STATE; this is a pure view.
+// NO TOP BAR: a full-width strip is a second ground. Head is three FLOATING elements (`chevron-left`, not `✕` — this viewer is stacked).
+// NO TAP-TO-TOGGLE: hiding every control hides the way back (§15).
+// Token rule, not a look: `--on-stage` / `--stage-line` / `--stage-sunken`. Plates are OPAQUE — glass makes contrast a property of the photograph.
 
 import React from "react";
 import { Pressable, View } from "react-native";
@@ -59,17 +14,7 @@ import type { ThemeColors } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import { SLIDESHOW_ACTION, VIEWER_CHROME_INSET } from "./viewer-model";
 
-/**
- * The plate every floating element stands on. One shape for both: a chip is
- * simply a plate whose only child is one square target, so `radii.pill` rounds
- * it to a circle, and a capsule is the same plate grown by its contents. Two
- * styles would be two chances for the edge, the ground or the radius to drift.
- *
- * `forwardRef`'d so the ONE plate an `AnchoredMenu` hangs off (the `···` chip)
- * can be measured on the press that opens it — `useMenuAnchor`'s own
- * `measureInWindow` call needs the native node, not a style prop. Every other
- * plate ignores the ref; `View` accepts a `null` one for free.
- */
+/** One plate shape for chip and capsule. `forwardRef` so `useMenuAnchor.measureInWindow` can see the `···` node. */
 export const ViewerChromePlate = React.forwardRef<
   RNView,
   { colors: ThemeColors; children: React.ReactNode }
@@ -86,13 +31,7 @@ export const ViewerChromePlate = React.forwardRef<
 ));
 ViewerChromePlate.displayName = "ViewerChromePlate";
 
-/**
- * One icon target inside a plate. Icon-only, because the iOS arrangement this
- * copies drops the words — which is only allowed because the accessible name is
- * still `label`, read from the SAME field the old visible label was drawn from
- * (WCAG 4.1.2). Where a label carried a REASON rather than a name, the reason
- * stays on screen: see the toolbar's inline read-only sentence.
- */
+/** Icon-only only because `label` is still the accessible name (WCAG 4.1.2). A label carrying a REASON stays on screen. */
 export function ViewerChromeTarget({
   colors,
   icon,
@@ -101,8 +40,7 @@ export function ViewerChromeTarget({
   hint,
   selected,
   tone,
-  /** Inside a capsule a target takes the bar's 56 — neighbours at 44 is where
-   *  mis-taps start. A lone chip IS its plate, so it takes the 44 floor. */
+  /** 56 inside a capsule (neighbours at 44 mis-tap). A lone chip IS its plate — 44 floor. */
   wide,
   onPress,
 }: {
@@ -116,10 +54,7 @@ export function ViewerChromeTarget({
   wide?: boolean;
   onPress: () => void;
 }): React.JSX.Element {
-  // A disabled target takes `--on-stage-soft`, NOT `--text-disabled`: the page
-  // ramp's disabled ink is mixed against paper and disappears on the stage, so
-  // the control would read as absent rather than as refused — and a refused
-  // control that cannot be seen cannot be asked why.
+  // `--on-stage-soft`, NOT `--text-disabled`: page-ramp disabled ink vanishes on the stage, so the control would read as absent.
   const ink = disabled
     ? colors.onStageSoft
     : tone === "net" || selected === true
@@ -140,24 +75,13 @@ export function ViewerChromeTarget({
   );
 }
 
-/**
- * The three floating elements at the head of the stage. Absolutely positioned
- * and `box-none`, so the photograph beneath keeps every touch that does not land
- * on a plate — a full-width transparent row that swallowed the swipe would cost
- * the pager a strip of screen for nothing.
- */
+/** `box-none` so the photograph keeps every touch that misses a plate. */
 export function ViewerTopChrome({
   colors,
   insets,
-  /** The stamp's first line: the capture date, or the photograph's name when
-   *  there is no capture time, or the mode's title while editing / in a show. */
   title,
-  /** Its second: the clock and the place, the editor's live sentence, or the
-   *  slideshow's position. */
   meta,
-  /** What the photograph answers to. Never drawn — it is the stamp's accessible
-   *  name, so a screen reader still hears the caption the eye now reads as a
-   *  date (and as the Caption row of the info sheet). */
+  /** Never drawn: stamp's accessible name so a reader still hears the caption the eye now reads as a date. */
   name,
   editing,
   slideshow,
@@ -176,8 +100,6 @@ export function ViewerTopChrome({
   onClose: () => void;
   onLeaveSlideshow: () => void;
   onOverflow: () => void;
-  /** The `···` plate's own node — measured on the press that opens the
-   *  anchored menu hanging off it (`useMenuAnchor`). */
   overflowRef?: React.RefObject<RNView | null>;
 }): React.JSX.Element {
   return (
@@ -209,7 +131,7 @@ export function ViewerTopChrome({
           >
             {title}
           </Text>
-          {/* `--on-stage-soft`, never `--text-soft` — see the file header. */}
+          {/* `--on-stage-soft`, never `--text-soft`. */}
           {meta ? (
             <Text
               numberOfLines={1}
@@ -221,14 +143,7 @@ export function ViewerTopChrome({
         </View>
       </ViewerChromePlate>
 
-      {/* The slideshow's ONE action, LABELLED. It used to wear a pause glyph
-          and exit the slideshow — a control whose mark promised one thing and
-          whose press did another. Label and effect are now read from the same
-          value (`SLIDESHOW_ACTION`), so they cannot drift apart again; the
-          missing transport is a recorded non-goal, stated beside that value.
-          The editor suppresses this slot entirely: its way out is `Cancel`,
-          beside the commit it is the alternative to — and the slot still takes
-          its width, or the stamp would slide off centre between modes. */}
+      {/* LABELLED, never a pause glyph. Label and effect both from `SLIDESHOW_ACTION`. Editor keeps the slot's width or the stamp slides off centre. */}
       {editing ? (
         <View style={styles.chromeSpacer} />
       ) : slideshow ? (
@@ -260,20 +175,11 @@ export function ViewerTopChrome({
   );
 }
 
-/** `Ana on the sea wall · 10 October 2009 · 02:39`, with the name dropped when
- *  it IS the first line — a screen reader saying it twice is a stutter, not
- *  emphasis. */
+/** Drop the name when it IS the first line — a reader saying it twice is a stutter. */
 function stampName(name: string, title: string, meta: string): string {
   return [name, title === name ? "" : title, meta].filter(Boolean).join(" · ");
 }
 
-/**
- * One status line inside the stage: what is true about the bytes, with the
- * single inline action. No toast, no spinner. While the editor is open it
- * carries the editor's live sentence instead — `Crop 3 : 2 · rotation −2° ·
- * nothing written yet` — which is the promise the whole mode rests on
- * (proto 4632–4645).
- */
 export function ViewerStatusLine({
   colors,
   text,
@@ -282,10 +188,7 @@ export function ViewerStatusLine({
 }: {
   colors: ThemeColors;
   text: string;
-  /** The ONE offer to spend the bytes (proto 4645), or null when there is
-   *  none to make. The page used to render a second `Load the original` chip
-   *  over the photograph; two controls for one fetch is two states to keep in
-   *  step, and they did not stay in step. */
+  /** The one offer to spend the bytes, or null — two controls for one fetch is two states to keep in step. */
   actionLabel: string | null;
   onAction: () => void;
 }): React.JSX.Element {

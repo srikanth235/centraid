@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// SHARING AN ALBUM, END TO END INSIDE THE SEAT (issue #825, wave 6).
+// SHARING AN ALBUM, END TO END INSIDE THE SEAT (#825).
 //
 // The e2e capture proves this in a real browser; this suite proves the same
 // path where it can run on every push — the shipped album bar, the shipped

@@ -1,11 +1,5 @@
-/*
- * Device credential custody (issue #555).
- *
- * A desktop connection has one secret: this device's own iroh key. The
- * non-secret connection row lives in connections.json; all connection keys
- * are encoded inside one safeStorage ciphertext owned by Electron main. No
- * credential is ever written into the gateway data directory.
- */
+// Device credential custody (#555): keys live in one safeStorage ciphertext
+// owned by Electron main, never in the gateway data directory.
 
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -38,13 +32,8 @@ function emptySecrets(): DeviceSecrets {
 }
 
 /**
- * Dev/test escape hatch (docs/dev-environment.md).
- *
- * A dev build is ad-hoc signed, so macOS re-prompts for the login password on
- * every restart — which makes restart-heavy scenarios impossible to automate.
- * This reuses the Linux/no-libsecret plaintext path rather than adding a second
- * format. `app.isPackaged` is the hard stop: a shipped build ignores the
- * variable outright, so a real user's custody can never be downgraded.
+ * Dev/test plaintext fallback (docs/dev-environment.md); `app.isPackaged` is
+ * the hard stop — shipped builds ignore the variable.
  */
 function insecureSecretsRequested(): boolean {
   return (
@@ -109,11 +98,8 @@ function readSecrets(): DeviceSecrets {
   const text = ciphertext.toString("utf8");
   if (text.startsWith(FILE_FALLBACK_MAGIC)) {
     const secrets = parseSecrets(text.slice(FILE_FALLBACK_MAGIC.length), file);
-    // Adopt the fallback into OS custody as soon as custody is available again;
-    // no operator migration step and no plaintext residue. Asking
-    // shouldUseFileFallback — rather than isEncryptionAvailable — is what stops
-    // a hatched dev run from rewriting the store on every single read, and it
-    // still warns on Linux and throws on an unavailable macOS keychain.
+    // Adopt into OS custody when available; asking shouldUseFileFallback —
+    // not isEncryptionAvailable — stops a hatched dev run rewriting per read.
     if (!shouldUseFileFallback()) writeSecrets(secrets);
     return secrets;
   }
@@ -192,15 +178,8 @@ export function storeLocalLoopbackToken(
   writeSecrets(current);
 }
 
-/**
- * Whether this device already holds a wrapping key for `connectionId` —
- * i.e. whether {@link getOrCreateGatewayWrappingKey} would MINT a new one.
- *
- * Minting is correct for a brand-new gateway and silently fatal for an
- * existing data directory (the fresh key cannot open envelopes written under
- * the old one), so callers that own a data dir must ask this first; see
- * `deviceCustodyGap` in detached-gateway-core.ts.
- */
+/** Minting is silently fatal against an existing data dir; ask first — see
+ * `deviceCustodyGap` in detached-gateway-core.ts. */
 export function hasGatewayWrappingKey(connectionId: string): boolean {
   return readSecrets().gatewayWrappingKeys[connectionId] !== undefined;
 }
@@ -216,11 +195,8 @@ export function getOrCreateGatewayWrappingKey(connectionId: string): Buffer {
   return key;
 }
 
-/**
- * Embedded-gateway custody backed by this desktop installation's OS keychain.
- * The wrapping key is device-local, so copying only the gateway data directory
- * to another machine cannot open its KeyStore envelopes.
- */
+/** Wrapping key is device-local: a copied data dir cannot open its KeyStore
+ * envelopes on another machine. */
 export function desktopGatewayKeyStore(
   dataDir: string,
   connectionId: string

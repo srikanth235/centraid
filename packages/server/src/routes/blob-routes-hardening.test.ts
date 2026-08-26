@@ -74,13 +74,14 @@ describe("blob-routes-hardening", () => {
   async function stageAndClaim(
     base: string,
     plane: VaultPlane,
-    filename: string
+    filename: string,
+    bytes: Uint8Array = PNG_BYTES
   ): Promise<string> {
     const staged = (await (
       await fetch(`${base}?filename=${filename}`, {
         method: "POST",
         headers: { "content-type": "application/octet-stream" },
-        body: new Uint8Array(PNG_BYTES),
+        body: new Uint8Array(bytes),
       })
     ).json()) as { sha256: string };
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
@@ -156,6 +157,38 @@ describe("blob-routes-hardening", () => {
       headers: { [DATA_PLANE_RELAY_HEADER]: "not-the-secret" },
     });
     expect(forged.status).toBe(200);
+  });
+
+  test("web-executable blob types are forced to attachment with nosniff + sandbox (issue #865)", async () => {
+    const { base, plane } = await fixture();
+    const page =
+      "<html><body><script>fetch('/centraid/_gateway/owners')</script></body></html>";
+    const contentId = await stageAndClaim(
+      base,
+      plane,
+      "page.html",
+      Buffer.from(page)
+    );
+
+    // A stored HTML blob is attacker-authorable (imported email attachment):
+    // served inline it would be stored XSS in the shell's origin, so it
+    // downloads instead — and even a mislabeled type cannot be sniffed into
+    // a scriptable one or escape the sandbox.
+    const page_ = await fetch(`${base}/${contentId}`);
+    expect(page_.headers.get("content-type")).toBe("text/html");
+    expect(page_.headers.get("content-disposition")).toMatch(/^attachment;/u);
+    expect(page_.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(page_.headers.get("content-security-policy")).toBe("sandbox");
+    await expect(page_.text()).resolves.toBe(page);
+
+    // Benign types keep their inline disposition but carry the same guards.
+    const pngId = await stageAndClaim(base, plane, "guarded.png");
+    const guarded = await fetch(`${base}/${pngId}`);
+    expect(guarded.headers.get("content-disposition")).toBe(
+      'inline; filename="guarded.png"'
+    );
+    expect(guarded.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(guarded.headers.get("content-security-policy")).toBe("sandbox");
   });
 
   test("returns a clean uncached 404 when metadata exists but custody bytes are missing", async () => {

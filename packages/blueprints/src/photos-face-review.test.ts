@@ -1,26 +1,9 @@
 // @vitest-environment jsdom
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
-// The Face review surface (apps/photos/components/FaceReview.tsx, issue
-// #711, v4 handoff 4305-4318). Same regression net as photos-faces.test.ts,
-// for the full vault-wide surface rather than the lightbox's mini-list:
-//
-//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285) — nothing rendered
-//      here may contain a `%` character.
-//   2. ONE FACE AT A TIME (v4 3967) — exactly one panel (`Is this someone
-//      you know?`) is on screen at once, never a list.
-//   3. AN UNMATCHED FACE HAS A FORWARD ACTION — the mobile bug this surface
-//      must not repeat (see PR review notes on FaceReview.tsx's old
-//      `partyId ? <Confirm/> : null`): a proposal with no proposed person
-//      still offers Not this person / Someone else / Unknown person / Skip.
-//   4. THE QUEUE CAN BE FINISHED (issue #712) — "Keep unnamed" writes a real
-//      `dismiss` answer instead of setting an apologetic note, Skip is the
-//      only control that still writes nothing, and an empty queue reaches
-//      "No faces need review right now." rather than cycling the ones the
-//      member kept skipping.
-//
-// `outcomes.ts` mocked by string specifier — see photos-faces.test.ts's own
-// note on why (TS6059/TS2307 if imported typed).
+// Face review (#711): never a `%`; one panel at a time; unmatched still has
+// a forward action; Keep unnamed writes `dismiss` (#712). Mock `outcomes.ts`
+// by string specifier (TS6059/TS2307 if imported typed).
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -53,7 +36,6 @@ const QUEUE = [
       height: 1000,
     },
   },
-  // No proposed person at all — the primary "no forward action" bug case.
   {
     region_id: "r2",
     bbox: null,
@@ -80,11 +62,7 @@ function stubCentraid(queue: typeof QUEUE): void {
   });
 }
 
-// A `relativePath` PARAMETER, not an inlined literal — see photos-faces.test.ts's
-// own note (mirroring photos-media.test.ts's `importFixture`): tsc resolves
-// and typechecks a literal specifier in a dynamic `import()` even inside a
-// plain value position, which pulls `apps/` into this package's
-// `src`-rooted TS program (TS6059).
+// Parameter, not a literal: tsc typechecks a literal `import()` (TS6059).
 const FACE_REVIEW_PATH = "../apps/photos/components/FaceReview.tsx";
 const importFaceReview = (relativePath: string) => import(relativePath);
 
@@ -99,7 +77,6 @@ async function mount(queue: typeof QUEUE): Promise<{
   const root = createRoot(container);
   await act(async () => {
     root.render(createElement(FaceReview, {}));
-    // Flush the two chained promises `load()` awaits (read + state updates).
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -132,12 +109,8 @@ describe("Face review surface", () => {
   });
 
   it("an unmatched face (no proposed person) still has a forward action", async () => {
-    // The SECOND queue entry has no party_id — mount with it alone so it is
-    // the one and only proposal shown.
     const { container } = await mount([QUEUE[1]]);
     expect(container.textContent).toMatch(/No proposed match/u);
-    // No "Confirm as X" (there is no name to confirm), but every escape
-    // route is still present and clickable.
     expect(container.textContent).not.toMatch(/Confirm as/u);
     const buttons = [...container.querySelectorAll("button")].map(
       (b) => b.textContent
@@ -158,8 +131,6 @@ describe("Face review surface", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    // ONE action, carrying the answer as its discriminant — not a second
-    // endpoint, and not the note this button used to set instead of writing.
     expect(acts).toStrictEqual([
       { action: "answer-face", input: { region_id: "r1", answer: "dismiss" } },
     ]);
@@ -182,9 +153,6 @@ describe("Face review surface", () => {
   });
 
   it("a fully answered library reaches the zero-remaining state", async () => {
-    // Nothing left to review is a state this surface must be able to REACH —
-    // before issue #712 a skipped stranger had no answer that removed it, so
-    // the queue was only ever empty on a vault that had never proposed a face.
     const { container } = await mount([]);
     expect(container.textContent).toMatch(/No faces need review right now\./u);
     expect(container.textContent).toMatch(/0 to go/u);
@@ -199,7 +167,6 @@ describe("Face review surface", () => {
       skip!.click();
     });
     expect(acts).toHaveLength(0);
-    // Cycled to the second (unmatched) proposal.
     expect(container.textContent).toMatch(/No proposed match/u);
   });
 });

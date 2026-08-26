@@ -1,5 +1,3 @@
-// Authoring prompt composition (issue #545 B7).
-
 import { describe, expect, test } from "vitest";
 
 import { buildAuthoringExtraPrompt } from "./authoring-prompt.js";
@@ -18,8 +16,8 @@ describe("authoring-prompt", () => {
 
   test("buildAuthoringExtraPrompt for an app adds no authoring contract (#799)", () => {
     // App front ends are written in this repo, not authored by a harness: the
-    // app-authoring skill and its UI grounding retired with the served-app
-    // plane, so an `app` turn gets its preamble and nothing else.
+    // there is no app-authoring skill and no UI grounding, so an `app` turn
+    // gets its preamble and nothing else.
     const prompt = buildAuthoringExtraPrompt({
       baseExtra: "## App context\n\nid: notes",
       appKind: "app",

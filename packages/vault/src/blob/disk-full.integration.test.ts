@@ -1,20 +1,7 @@
 import { execFileSync } from "node:child_process";
-/*
- * REAL disk-full round-trip (issue #351 wave 4). The rest of this package's
- * disk-full coverage (../errors.test.ts) induces failures via `PRAGMA
- * max_page_count` (a genuine SQLITE_FULL — no sqlite mocking) or, for the
- * blob-cleanup unit test only, an injected `writeSync` failure (ESM's
- * `node:fs` can't be `vi.spyOn`-ed per-export, and reliably filling a real
- * filesystem needs the same disk-image dance as here). This test closes
- * that last gap: `FsBlobStore.putSync` against an ACTUAL full filesystem —
- * a tiny (5 MiB) APFS volume, attached via `hdiutil` — so the failure is a
- * genuine kernel ENOSPC, not a simulation.
- *
- * Gated behind `CENTRAID_DISKFULL_E2E=1` (darwin only, skips otherwise) —
- * it shells out to `hdiutil create`/`attach`/`detach` and leaves scratch
- * files under `os.tmpdir()`, always cleaned up (detach + rm) in a `finally`
- * even when an assertion throws.
- */
+// REAL disk-full round-trip (#351): putSync against an ACTUAL full APFS
+// volume (hdiutil) — genuine ENOSPC. Gated behind CENTRAID_DISKFULL_E2E=1
+// (darwin only); hdiutil scratch is always cleaned up in a finally.
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
@@ -79,9 +66,7 @@ describe("disk-full", () => {
       attached = true;
 
       const store = new FsBlobStore(mount);
-      // Fill the volume with distinct 1 MiB blobs until one write genuinely
-      // ENOSPCs (the volume is 5 MiB total, so this reliably fails well
-      // before 64 writes).
+      // Fill with distinct 1 MiB blobs until one write genuinely ENOSPCs.
       let failure: unknown;
       for (let i = 0; i < 64 && failure === undefined; i++) {
         const sha = i.toString(16).padStart(64, "0");
@@ -97,8 +82,7 @@ describe("disk-full", () => {
       expect(failure).toBeInstanceOf(VaultDiskFullError);
       expect((failure as VaultDiskFullError).context).toBe("blob CAS write");
 
-      // No stray `.tmp` file anywhere under the fan-out tree — the failed
-      // write's temp file was cleaned up before the error propagated.
+      // No stray `.tmp` anywhere under the fan-out tree.
       const strayTmp = listFilesRecursive(mount).filter((f) =>
         f.endsWith(".tmp")
       );

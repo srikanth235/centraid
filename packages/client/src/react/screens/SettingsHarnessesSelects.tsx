@@ -6,9 +6,7 @@ import { cx } from "../ui/cx.js";
 import selectCss from "../styles/select.module.css";
 import styles from "./SettingsHarnessesScreen.module.css";
 
-// The select primitives shared by Settings → Agents' two sections: the routing
-// lanes pick a harness and a model, the inventory picks each harness's default
-// model, and all three are the same control.
+// Shared select primitive for Settings → Agents (routing picks + defaults).
 
 const TIER_ORDER = ["smart", "balanced", "fast"] as const;
 const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
@@ -28,7 +26,7 @@ export function Select({
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
-  /** Mutes the control — this lane reads its value from the default lane. */
+  /** Muted: this lane reads its value from the default lane. */
   inherited?: boolean;
   ariaLabel: string;
   children: ReactNode;
@@ -83,14 +81,9 @@ function modelOptions(card: HarnessCardDTO): JSX.Element[] {
 }
 
 /**
- * Human label for a model id, for use inside an inherited-option label.
- *
- * WITH NO PIN IT NAMES THE MODEL THAT WILL ACTUALLY RUN. It used to answer
- * "agent default", which is the name of the *rule* rather than the answer: a
- * lane caption reading "inherits Codex · agent default · xhigh" tells a member
- * nothing they did not already know. The harness's own probe marks one model
- * `default`, so that is the model named; a harness whose probe has reported
- * nothing yet has no name to give and keeps the words.
+ * Human label for a model id, inside an inherited-option label. WITH NO PIN
+ * IT NAMES THE MODEL THAT WILL RUN (the probe-marked default): "agent
+ * default" names the rule, not the answer.
  */
 export function modelLabel(
   card: HarnessCardDTO | undefined,
@@ -102,11 +95,7 @@ export function modelLabel(
   return fallback.name ?? fallback.id;
 }
 
-/**
- * How a level reads in the harness's own vocabulary. A harness that offers no
- * `thought_level` at all has no level to state, which is what "no thinking"
- * says — the same words `NoThinkingPick` renders where the control would be.
- */
+/** A harness offering no `thought_level` has no level to state. */
 export function effortLabel(
   card: HarnessCardDTO | undefined,
   value: string
@@ -153,16 +142,10 @@ export function ModelSelect({
   );
 }
 
-/**
- * The reasoning levels this harness's live probe offers, in its own vocabulary.
- *
- * REASONING LEVEL IS A PROPERTY OF THE MODEL, and this is as close as the wire
- * gets to saying so: ACP reports one `thought_level` option per SESSION
- * (`packages/server/src/acp/backends/acp/session-config.ts`), refreshed by
- * `config_option_update`, and `HarnessModelDTO` carries no per-model levels at
- * all. So the offered set is read from the probe rather than invented here, and
- * a level outside it is treated as a level the model cannot do.
- */
+/** The reasoning levels this harness's live probe offers. REASONING LEVEL IS
+ *  A PROPERTY OF THE MODEL, but ACP reports one `thought_level` per SESSION
+ *  and `HarnessModelDTO` carries no per-model levels — the set is read from
+ *  the probe; a level outside it is one the model cannot do. */
 export function effortValues(card: HarnessCardDTO): string[] {
   const option = card.configOptions?.find(
     (entry) => entry.category === "thought_level"
@@ -170,20 +153,13 @@ export function effortValues(card: HarnessCardDTO): string[] {
   return (option?.values ?? []).map((entry) => entry.value);
 }
 
-/**
- * A stored level the newly-picked model cannot do is dropped back to inherit —
- * a pin the harness would silently ignore is a control lying about its effect.
- * Returns the value to store, which is `saved` whenever the level still fits.
- */
+/** A stored level the new model cannot do drops back to inherit. */
 export function clampEffort(card: HarnessCardDTO, saved: string): string {
   if (!saved) return "";
   return effortValues(card).includes(saved) ? saved : "";
 }
 
-/**
- * A pick with nothing to open, stated rather than offered: a model with no
- * thinking budget gets this line, not a disabled select that looks openable.
- */
+/** Stated pick for models with no thinking budget. */
 export function NoThinkingPick(): JSX.Element {
   return <span className={styles.inertPick}>no thinking</span>;
 }

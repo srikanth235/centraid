@@ -4,11 +4,10 @@
  * stored on the content item; captured_at, favorite and archived live on the
  * asset. Risk low.
  *
- * `archived` was declared in app.json's schema and applied by the vault
- * command (which writes `media_asset.archived_at`) but dropped here, so
- * every hide request returned 200 and changed nothing. The archived shelf and
- * its count have existed on the client the whole time with no door that
- * worked; forwarding the field is that door.
+ * Every optional field app.json's schema declares is forwarded — `archived`
+ * included, which the vault command writes as `media_asset.archived_at`. A
+ * field dropped here returns 200 and changes nothing, which is the Archived
+ * shelf with no door that works.
  *
  * @type {import('@centraid/server/engine').ActionHandler}
  */

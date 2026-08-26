@@ -1,4 +1,4 @@
-// The first-run camera-roll import's batching/resume logic (issue #724 A2).
+// The first-run camera-roll import's batching/resume logic (#724).
 //
 // The vault-side publisher is untouched here — `mediaAssetPublisher`
 // (`packages/vault/src/ingest/publishers.ts`) already carries its own

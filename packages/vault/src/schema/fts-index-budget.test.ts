@@ -1,4 +1,4 @@
-// Per-document FTS index budget + rebuild path (issue #367 §E3): a body
+// Per-document FTS index budget + rebuild path (#367): a body
 // over FTS_BODY_INDEX_BUDGET_CHARS still gets a live note/document row with
 // its FULL canonical body — only the SEARCH INDEX is capped. Real vaults,
 // real triggers, no mocks.

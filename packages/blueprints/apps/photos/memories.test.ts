@@ -29,7 +29,7 @@ describe("web memories", () => {
     expect(cards[0]).toMatchObject({
       key: "trip-1",
       // No member of this trip carries a place, so the ladder has nothing to
-      // name and the vault's own hint still titles the card (issue #816).
+      // name and the vault's own hint still titles the card (#816).
       title: "Three days in Mysuru",
       coverUri: "member.jpg",
     });

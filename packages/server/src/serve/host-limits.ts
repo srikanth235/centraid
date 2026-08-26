@@ -1,19 +1,6 @@
 /*
- * Host resource limits probe (#528 Phase E) — reads the cgroup CPU/memory
- * quota and one cumulative CPU-steal sample at gateway boot so the hardware
- * profile sizes the *granted share of the host*, not the raw machine. A
- * container capped at 2 vCPU on a 64-core box should be sized like a 2-core
- * host; a noisy-neighbour VM losing a tenth of its CPU to steal should be
- * treated as constrained.
- *
- * Every read is failure-tolerant: a missing file, a parse miss, or a
- * non-Linux host all resolve to `null` (no limit known), which the resolver
- * treats as a plain unconstrained host. The fs reader and steal sampler are
- * injectable so the parsing is unit-testable without a real cgroup mount.
- *
- * The steal sampler is REUSED from power-context.ts (#528 Phase D) rather than
- * writing a second `/proc/stat` parser — this module only converts its one
- * cumulative `{steal,total}` sample into a boot-time percent.
+ * Host limits probe (#528): cgroup CPU/memory quota + CPU-steal sample at boot,
+ * sizing the GRANTED host share. Any read failure → null = unconstrained host.
  */
 
 import { readFileSync } from "node:fs";
@@ -33,7 +20,7 @@ export interface HostLimits {
 export interface HostLimitsReaders {
   /** Read a file to text, or null on any error (missing/permission/etc.). */
   readText?: (path: string) => string | null;
-  /** One cumulative `/proc/stat` steal sample; defaults to the Phase D sampler. */
+  /** One cumulative `/proc/stat` steal sample. */
   stealSample?: () => CpuStealSample | null;
   platform?: NodeJS.Platform;
 }
@@ -46,9 +33,7 @@ const CGROUP_V1_CPU_QUOTA = "/sys/fs/cgroup/cpu/cpu.cfs_quota_us";
 const CGROUP_V1_CPU_PERIOD = "/sys/fs/cgroup/cpu/cpu.cfs_period_us";
 const CGROUP_V1_MEMORY_LIMIT = "/sys/fs/cgroup/memory/memory.limit_in_bytes";
 
-// cgroup v1 writes a near-2^63 sentinel for "no limit"; JS parseInt of that
-// string lands well above 2^53, so anything that large is treated as unset.
-// No real container caps memory at petabytes.
+// cgroup v1's ~2^63 "no limit" sentinel exceeds JS safe ints: treat as unset.
 const MEMORY_NO_LIMIT_FLOOR = 2 ** 53;
 
 function defaultReadText(path: string): string | null {
@@ -59,7 +44,6 @@ function defaultReadText(path: string): string | null {
   }
 }
 
-/** Parse cgroup v2 `cpu.max` ("max" | "<quota> <period>") to fractional cores. */
 function parseCpuMaxV2(text: string): number | null {
   const [quota, period] = text.trim().split(/\s+/u);
   if (quota === undefined || quota === "max") return null;
@@ -70,7 +54,7 @@ function parseCpuMaxV2(text: string): number | null {
   return q / p;
 }
 
-/** Parse cgroup v1 quota/period (quota -1 ⇒ unlimited) to fractional cores. */
+/** quota -1 ⇒ unlimited. */
 function parseCpuCfsV1(
   quotaText: string | null,
   periodText: string | null
@@ -111,17 +95,11 @@ function readCgroupMemoryLimit(
   return v1 === null ? null : parseMemoryLimit(v1);
 }
 
-/** Convert one cumulative steal sample into a boot-time percent since host boot. */
 function stealPercentFromSample(sample: CpuStealSample | null): number | null {
   if (!sample || sample.total <= 0) return null;
   return Math.max(0, Math.min(100, (sample.steal / sample.total) * 100));
 }
 
-/**
- * Read the granted-share limits once at boot. Failure-tolerant end to end:
- * any unreadable file or non-Linux host yields nulls, which the hardware
- * profile treats as an unconstrained plain host.
- */
 export function probeHostLimits(readers: HostLimitsReaders = {}): HostLimits {
   const platform = readers.platform ?? process.platform;
   const readText = readers.readText ?? defaultReadText;

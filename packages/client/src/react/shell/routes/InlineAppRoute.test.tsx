@@ -109,7 +109,7 @@ vi.mock(
     })),
   })
 );
-// The scope set is resolved over HTTP (issue #599); this route's suite is about
+// The scope set is resolved over HTTP (#599); this route's suite is about
 // mounting, so it gets one ready scope rather than a gateway round-trip.
 vi.mock(import("./useAppScopes.js") as Promise<unknown>, () => {
   const ready = {
@@ -265,10 +265,10 @@ describe("InlineAppRoute suite", () => {
       expect(
         host!.querySelector('[data-testid="tasks-root"]')?.textContent
       ).toBe("Buy milk");
-      // THE FRAME CONTRIBUTES NOTHING TO THE BAR (InlineAppRoute.tsx). The
-      // settings gear used to sit ahead of the app's own actions; every bundled
-      // app now draws its bar to a design handoff and none of those handoffs
-      // has a frame control in it. What the gear opened is unreachable until a
+      // THE FRAME CONTRIBUTES NOTHING TO THE BAR (InlineAppRoute.tsx). No
+      // settings gear sits ahead of the app's own actions; every bundled app
+      // draws its bar to a design handoff and none of those handoffs has a
+      // frame control in it. What a gear would open is unreachable until a
       // door is designed - recorded there, and pinned here.
       expect(host!.querySelector('[aria-label="App settings"]')).toBeNull();
       // Offline first paint: no gateway tool route touched.

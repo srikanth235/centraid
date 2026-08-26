@@ -1,7 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit one cohesive People channel command contract whose validation, normalization, revision snapshots, and registration must stay reviewable together
 // Issue #630 People organization contract: normalized contact channels and
 // duplicate warnings. Party identity merge is NOT forked here — folding a
-// duplicate person is `core.merge_party` (issue #290), the single ontology
+// duplicate person is `core.merge_party` (#290), the single ontology
 // primitive that re-points every FK and deletes the merged party.
 
 import type { Gateway } from "../gateway/gateway.js";

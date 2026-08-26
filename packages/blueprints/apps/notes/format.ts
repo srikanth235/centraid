@@ -1,16 +1,7 @@
-// Pure projections over a note. No app state, no vault IO, no JSX — every
-// function here is a plain function of its arguments, so the card, the row,
-// the search result, the chip and the tests can all call the same one.
-//
-// THE UNTITLED NOTE IS THE DEFAULT CASE (Notes spec §1's second ruling).
-// Over half the corpus has no title of its own, so `promote` is the single
-// answer every surface reads: the first line stands in the title slot at the
-// reading rung and the preview picks up from the second. There is no separate
-// shape for the titled case, and no surface may derive its own.
+// Pure projections over a note — no app state, no vault IO, no JSX. THE
+// UNTITLED NOTE IS THE DEFAULT CASE (Notes spec §1): `promote` is the single
+// answer every surface reads, and no surface may derive its own.
 
-/** One parsed markdown-lite block. The body grammar is unchanged from the
- *  app's own `commonmark.ts` neighbourhood: `#`/`##`/`###` headings,
- *  `- `/`* `/`1. ` lists, `- [ ]`/`- [x]` checklists, everything else prose. */
 export type Block =
   | { kind: "check"; checked: boolean; text: string; line: number }
   | { kind: "h"; level: number; text: string; line: number }
@@ -59,8 +50,7 @@ export function parseBlocks(body: unknown): Block[] {
   return out;
 }
 
-/** Inline emphasis is STRIPPED rather than styled, so a body never becomes
- *  parsed markup: everything a note renders is a text node. */
+/** Emphasis is STRIPPED, never styled: a note renders only text nodes. */
 export function stripInline(text: unknown): string {
   return String(text ?? "")
     .replace(/\*\*(?<bold>.+?)\*\*/gu, "$<bold>")
@@ -77,8 +67,6 @@ export function checkStats(body: unknown): { total: number; done: number } {
   };
 }
 
-/** The card's checklist tally — `14 of 22` — or null where a note has no
- *  boxes at all. Numerals are tabular wherever this lands. */
 export function tallyLabel(check?: {
   total: number;
   done: number;
@@ -88,28 +76,17 @@ export function tallyLabel(check?: {
 }
 
 export interface Promoted {
-  /** What stands in the title slot, at the reading rung. */
   heading: string;
-  /** True where the heading came from the body rather than from a typed
-   *  title — the card draws it in `--body` rather than `--label-on`. */
   untitled: boolean;
-  /** The preview, picked up AFTER the promoted line. */
   preview: string;
 }
 
 /** Stored name for a note that has no title of its own. */
 export const UNTITLED_NOTE = "Untitled note";
 
-/**
- * First-line promotion, the one implementation.
- *
- * A note is UNTITLED when it carries no title of its own, when the stored
- * name is the empty-note sentinel, and also when its title IS its first
- * line — which is what a note created from a body alone ends up with, since
- * `create_note` will not accept an empty name. Both cases read the same on
- * screen and neither repeats the line twice, because the preview starts
- * below whatever the heading took.
- */
+/** UNTITLED covers a missing title, the empty-note sentinel, AND a title
+ *  equal to the first line — the shape `create_note` leaves behind. The
+ *  preview starts below the heading. */
 export function promote(note: {
   title?: unknown;
   preview?: unknown;
@@ -136,23 +113,12 @@ export function promote(note: {
   };
 }
 
-/** One run of the body as the editor draws it: prose the member types into,
- *  or one checklist line with a real box. */
 export type Segment =
   | { kind: "text"; from: number; to: number; text: string }
   | { kind: "check"; line: number; checked: boolean; text: string };
 
-/**
- * Split a body into the runs the editor draws.
- *
- * A CHECKLIST LINE IS A CONTROL, and the rest of the body is prose. Rather
- * than a second rendered copy of the note beside the writing surface — two
- * places showing the same sentence, one of them lying whenever the other is
- * mid-keystroke — the editor draws the box lines as rows and everything
- * between them as the text the member writes into. `from`/`to` are the run's
- * character offsets in the body, so an edit and an anchor both address the
- * same string.
- */
+/** A CHECKLIST LINE IS A CONTROL, never a second rendered copy beside the
+ *  writing surface. `from`/`to` are character offsets into the body. */
 export function bodySegments(body: string): Segment[] {
   const lines = body.split("\n");
   const out: Segment[] = [];
@@ -185,8 +151,6 @@ export function bodySegments(body: string): Segment[] {
   return out;
 }
 
-/** Quick create derives a name from the first line, so a note never reaches
- *  the vault nameless and never shows that derivation to the member. */
 export function deriveTitle(title: unknown, body: unknown): string {
   const typed = String(title ?? "").trim();
   if (typed) return typed;
@@ -213,11 +177,7 @@ const MONTHS = [
 
 const DAY_MS = 86_400_000;
 
-/**
- * The age signal every surface prints beside a note. A FACT, NOT A
- * REPRIMAND: an old note says when it last changed and nothing more, which
- * is the whole of the year-three state (§4).
- */
+/** A FACT, NOT A REPRIMAND: an old note says only when it last changed. */
 export function ageLabel(when: unknown, now: number = Date.now()): string {
   const stamp = Date.parse(String(when ?? ""));
   if (Number.isNaN(stamp)) return "";
@@ -231,9 +191,7 @@ export function ageLabel(when: unknown, now: number = Date.now()): string {
   return `not changed since ${month}`;
 }
 
-/** How long a trashed note has left, from the purge date the vault stamped.
- *  Null where the row carries none — this app never counts down from a date
- *  it had to invent. */
+/** Null where no purge date — never count down from an invented one. */
 export function daysLeft(
   purgeAt: unknown,
   now: number = Date.now()
@@ -243,16 +201,8 @@ export function daysLeft(
   return Math.max(0, Math.ceil((stamp - now) / DAY_MS));
 }
 
-/**
- * Did two writes land on this note at the same instant?
- *
- * This is the ONE observable form of "two devices changed this passage" the
- * vault actually hands over: the version chain is append-only and each link
- * carries when it was asserted, so two entries stamped identically are two
- * writes that did not see each other. The conflict panel is drawn from THIS
- * and never from a guess — a state nobody can verify is a state this app may
- * not claim.
- */
+/** The ONE observable form of "two devices changed this passage": identical
+ *  `asserted_at` stamps. The conflict panel is drawn from this, never a guess. */
 export function hasConcurrentVersions(
   versions: ReadonlyArray<{ asserted_at: string }>
 ): boolean {
@@ -264,8 +214,6 @@ export function hasConcurrentVersions(
   return false;
 }
 
-/** What a card with no text to preview is holding instead (§5's placeholder
- *  rule) — the gallery never becomes a wall of broken thumbnails. */
 export type Placeholder = "screenshot" | "link-only" | "audio" | null;
 
 export function placeholderOf(note: {
@@ -282,8 +230,6 @@ export function placeholderOf(note: {
   return null;
 }
 
-/** The label a placeholder block carries. The content type is STATED — a
- *  paste dump that says what it is stops being a paste dump. */
 export function placeholderLabel(kind: Exclude<Placeholder, null>): string {
   if (kind === "audio") return "audio note";
   if (kind === "screenshot") return "screenshot";

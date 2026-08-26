@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit one suite over the whole sync command surface — staging consent (#290) and broker-credential lifecycle (#304) share the connection fixture, so the scenarios stay together
-// The one-shot pull consent story (issue #290 phase 3): an agent stages
+// The one-shot pull consent story (#290): an agent stages
 // parsed rows freely (risk low), but PUBLISHING them exceeds every agent's
 // ceiling and parks for the owner — the pause between draft and send.
 
@@ -618,6 +618,7 @@ describe("sync", () => {
           connection_id: connectionId,
           access_token: "ya29.first",
           refresh_token: "1//refresh-original",
+          refresh_capability: "cap-for-original",
           expires_at: "2026-07-06T13:00:00Z",
         },
         purpose: "dpv:ServiceProvision",
@@ -625,11 +626,17 @@ describe("sync", () => {
       expect(first.status).toBe("executed");
       let row = db.vault
         .prepare(
-          "SELECT access_token, refresh_token FROM sync_connection_credential"
+          "SELECT access_token, refresh_token, refresh_capability FROM sync_connection_credential"
         )
-        .get() as { access_token: string; refresh_token: string };
+        .get() as {
+        access_token: string;
+        refresh_token: string;
+        refresh_capability: string;
+      };
       expect(row.access_token).toMatch(/^sealed:v1:/u);
       expect(row.refresh_token).toMatch(/^sealed:v1:/u);
+      // Issue #865: the capability seals beside the token it authenticates.
+      expect(row.refresh_capability).toMatch(/^sealed:v1:/u);
       expect(
         (
           db.vault.prepare("SELECT status FROM sync_connection").get() as {
@@ -642,6 +649,7 @@ describe("sync", () => {
         db.vault.prepare("SELECT auth_note FROM sync_connection_health").get()
       ).toBeUndefined();
       const originalRefreshCipher = row.refresh_token;
+      const originalCapabilityCipher = row.refresh_capability;
 
       // A non-rotating refresh: no refresh_token in the response.
       const second = gw.invoke(owner, {
@@ -656,11 +664,23 @@ describe("sync", () => {
       expect(second.status).toBe("executed");
       row = db.vault
         .prepare(
-          "SELECT access_token, refresh_token FROM sync_connection_credential"
+          "SELECT access_token, refresh_token, refresh_capability FROM sync_connection_credential"
         )
-        .get() as { access_token: string; refresh_token: string };
+        .get() as {
+        access_token: string;
+        refresh_token: string;
+        refresh_capability: string;
+      };
+      // A non-rotating refresh keeps BOTH the stored token and its capability.
       expect(row.refresh_token).toBe(originalRefreshCipher);
+      expect(row.refresh_capability).toBe(originalCapabilityCipher);
       expect(row.access_token).toMatch(/^sealed:v1:/u);
+
+      // The append-only journal carries hash tokens, never the capability.
+      const journal = db.journal
+        .prepare("SELECT input_json FROM agent_command_invocation")
+        .all() as { input_json: string }[];
+      expect(JSON.stringify(journal)).not.toContain("cap-for-original");
     });
 
     test("store_tokens refuses a connection that is not oauth2-kind", () => {

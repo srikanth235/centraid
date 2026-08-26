@@ -1,5 +1,5 @@
 /**
- * Names sqlite-worker.ts (issue #545 B8). The module is a web-worker entry
+ * Names sqlite-worker.ts (#545). The module is a web-worker entry
  * that binds message handlers on load; we assert it registers a listener
  * without opening a database, and that unopened ops fail closed.
  */

@@ -18,43 +18,13 @@ import HouseholdRoute from "./HouseholdRoute.js";
 
 import styles from "./VaultRoute.module.css";
 
-// Vault — the custody surface (v11). ONE page for what used to be two.
-//
-// Data answered "what is in here" and Copies answered "which machines hold it",
-// and a member with a question about their own data had to know which of those
-// two words the answer had been filed under. They are one question asked three
-// ways, so they are one page with three sections, in the order the question
-// narrows:
-//
-//   What it holds   — the census, kind by kind, with a bar for scale.
-//   Who can reach it— pointers to where consent is actually answered.
-//   Where it lives  — vaults, devices, people, and everything across a wire.
-//
-// This route is the seam. It owns:
-//   - the one column everything stacks in (the two halves draw no page frame),
-//   - the three disclosures (one closed/open decision, not two),
-//   - the ONE publish to the frame's app bar and status line. Two publishers on
-//     two channels is two answers behind one bar, and the bar can only draw
-//     one; the halves report to this route instead.
-//
-// `page` is which persisted key mounted it. Both `atlas` and `household`
-// resolve here so old pins and old deep links land, and only one is ever
-// mounted, so there is only ever one live channel.
+// Vault custody surface (v11). One page, one publish to the app bar.
+// `atlas` and `household` both resolve here so old pins land.
 
 export interface VaultRouteProps {
-  /** The persisted route key this surface was reached by. */
   page?: OpsPage;
 }
 
-/**
- * The surface's state, from its two halves.
- *
- * The STORE is the page's subject, so its error is the page's error; the
- * machines answer separately and still list beneath it, which is the whole
- * "what failed, what is still safe" shape. Loading only while BOTH are still
- * reading — whichever answers first paints, and neither can blank the page by
- * being slow.
- */
 function mergedState(
   census: OpsState | undefined,
   roster: OpsState | undefined
@@ -74,9 +44,6 @@ export default function VaultRoute({
   const { navigate } = useShellActions();
   const [census, setCensus] = useState<AtlasReport | null>(null);
   const [roster, setRoster] = useState<HouseholdReport | null>(null);
-  // One decision for all three, taken once on mount: on touch they start
-  // closed, because "What it holds" alone is forty rows and it would put the
-  // section a member came for six screens down.
   const [closed, setClosed] = useState<Record<string, boolean>>(() => {
     const start = sectionsStartCollapsed();
     return { holds: start, lives: start, reach: start };
@@ -87,14 +54,9 @@ export default function VaultRoute({
 
   const state = mergedState(census?.state, roster?.state);
 
-  // ONE count line for the surface: what it holds, then what holds it. Each
-  // clause is omitted rather than guessed while its half is still reading.
   const count = [census?.count, roster?.custody].filter(Boolean).join(" · ");
 
-  // The status line takes the roster's sentence when something is waiting on a
-  // decision, and the census's otherwise: a pending pairing is the only thing
-  // here a member has to act on, and a health line that reported "Everything
-  // is readable" over an unanswered request would bury it.
+  // A pending pairing is the only thing here a member has to act on.
   const health = useMemo(
     () =>
       roster && roster.pendingCount > 0

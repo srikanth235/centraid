@@ -1,4 +1,4 @@
-// Orphan-grace GC invariant (issue #439 R4). Two halves: the OrphanTombstoneIndex
+// Orphan-grace GC invariant (#439). Two halves: the OrphanTombstoneIndex
 // (first-observed-orphaned bookkeeping) and reconcileCustody's grace gate — a
 // genuine orphan is HELD for the recovery window N before the client-owned CAS
 // delete may evict it, so a PITR that lands between two snapshots can still reach
@@ -24,7 +24,7 @@ function memDb(): DatabaseSync {
   return db;
 }
 
-// ---------- OrphanTombstoneIndex ----------
+// ────────── OrphanTombstoneIndex ──────────
 
 describe("orphan-grace", () => {
   test("markFirstSeen stamps once and is idempotent — the grace clock never resets", () => {
@@ -46,7 +46,7 @@ describe("orphan-grace", () => {
     expect(orphans.markFirstSeen(sha, 5000)).toBe(5000);
   });
 
-  // ---------- reconcileCustody grace gate ----------
+  // ────────── reconcileCustody grace gate ──────────
 
   interface Harness {
     ctx: ReconcileContext;

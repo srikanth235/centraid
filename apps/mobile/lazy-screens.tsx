@@ -1,10 +1,5 @@
 // The lazily-evaluated screen registry for the root and nested navigators.
 //
-// Split out of `App.tsx` (#765): that file crossed the repo's 625-line ceiling
-// once Connectors, Data and Devices got covers of their own, and this block is
-// the one part of it with a single job and no coupling to the rest — every
-// binding here is reached exclusively through a `component=` prop.
-//
 // It lives beside `App.tsx` rather than under `src/` on purpose. This file is
 // part of the composition root: it names every app, and `scripts/check-import-
 // boundaries.ts` forbids anything under `src/` from importing `src/apps/*`
@@ -172,15 +167,13 @@ export const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
 export const ApprovalsScreen = lazyScreen(
   () => import("./src/screens/Approvals")
 );
-// A FRAME screen since issue #712 B2 — it moved out of the Photos stack whole.
 export const BackupHealthScreen = lazyScreen(
   () => import("./src/screens/BackupHealth")
 );
 export const CaptureScreen = lazyScreen(() => import("./src/screens/Capture"));
-// The three places promoted to covers of their own (issue #765). Interim
-// shells until the per-screen agents land — the ROUTE is what stage 2 owes,
-// so that Home's Connectors/Data/Devices rows stop landing on Settings or on
-// nothing at all.
+// Interim shells for the three places that became covers of their own: the
+// ROUTE is what these owe, so that Home's Connectors/Data/Devices rows stop
+// landing on Settings or on nothing at all (#765).
 export const ConnectorsScreen = lazyScreen(
   () => import("./src/screens/connectors/Connectors")
 );

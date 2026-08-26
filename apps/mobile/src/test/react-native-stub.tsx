@@ -1,35 +1,14 @@
-// One React Native stub, shared by every kit-block test (#765 stage 1).
-//
-// The kit's block tests run in the plain node project (only PhotosHome.test.tsx
-// gets the real Metro-transformed renderer), so each of them mocks
-// `react-native` the way `AnchoredMenu.test.tsx` and `SearchOverlay.test.tsx`
-// already do. Eleven copies of that mock would be eleven chances for one of
-// them to drift into stubbing a primitive differently from the surface under
-// test, so the mock lives here once and every test spreads it:
-//
+// One RN stub for every kit-block test (#765); spread it:
 //   vi.mock(import("react-native"), async () =>
 //     (await import("../../test/react-native-stub")).reactNativeStub());
-//
-// `useTheme()` reaches the Appearance preference, which reaches AsyncStorage,
-// so a block test stubs that module too (`asyncStorageStub()` below) — the
-// same one-liner `lib/daily-brief.test.ts` already writes.
-//
-// The theme is deliberately NOT stubbed: `@centraid/design/native` resolves
-// under vitest (see `kit/theme/native.test.ts`), so a block test asserts the
-// REAL lowered token — a 44pt row, an 11px floor, the `net` ink — rather than
-// a fixture that would pass whatever the component happened to render.
-//
-// Style is carried onto the DOM as a serialized `data-style` attribute instead
-// of a real DOM `style`, so a test can read a flattened React Native style
-// (including values React DOM would reject, like `fontVariant: [...]`) exactly
-// as the renderer would see it.
+// Theme NOT stubbed: tests assert the real lowered token; style rides `data-style`.
 
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 
 type Props = Record<string, unknown> & { children?: React.ReactNode };
 
-/** Collapse RN's array/nested style into the one record the renderer applies. */
+/** Collapse RN array/nested style to applied values. */
 export function flattenStyle(style: unknown): Record<string, unknown> {
   if (!style) return {};
   if (Array.isArray(style)) {
@@ -42,7 +21,7 @@ export function flattenStyle(style: unknown): Record<string, unknown> {
   return {};
 }
 
-/** The flattened style a rendered node carried, read back off `data-style`. */
+/** Node's flattened style, read off `data-style`. */
 export function styleOf(
   node: HTMLElement | null | undefined
 ): Record<string, unknown> {
@@ -79,8 +58,7 @@ function domProps(props: Props): Props {
     ...(typeof accessibilityLabel === "string"
       ? { "aria-label": accessibilityLabel }
       : {}),
-    // Surfaced so a test can assert it: the hint is what distinguishes ten
-    // identical verbs for a screen reader, and it is invisible on screen.
+    // For assertions; invisible on screen.
     ...(typeof accessibilityHint === "string"
       ? { "data-hint": accessibilityHint }
       : {}),
@@ -125,7 +103,7 @@ const noopAnimation = {
   reset: () => undefined,
 };
 
-/** The stubbed module object. Spread into a `vi.mock` factory. */
+/** Stubbed module object; spread into the factory above. */
 export function reactNativeStub(): Record<string, unknown> {
   const Animated = {
     View: (props: Props) => host("div", props),
@@ -173,7 +151,7 @@ export function reactNativeStub(): Record<string, unknown> {
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-/** The AsyncStorage stub the Appearance store needs to import. */
+/** AsyncStorage stub for the Appearance store import. */
 export function asyncStorageStub(): { default: Record<string, unknown> } {
   return {
     default: {
@@ -184,14 +162,14 @@ export function asyncStorageStub(): { default: Record<string, unknown> } {
   };
 }
 
-/** `react-native-svg`, for a block that reaches the icon set. */
+/** `react-native-svg`, for blocks reaching the icon set. */
 export function svgStub(): Record<string, unknown> {
   const glyph = (props: Props) =>
     React.createElement("svg", { "data-glyph": true }, props.children);
   return { default: glyph, Path: () => null, Svg: glyph };
 }
 
-/** Mount a block into a jsdom container; returns it plus its unmount. */
+/** Mount a block into a jsdom container. */
 export function mountBlock(node: React.ReactNode): {
   container: HTMLElement;
   unmount: () => void;
@@ -213,7 +191,7 @@ export function mountBlock(node: React.ReactNode): {
   };
 }
 
-/** Every rendered node of one stubbed primitive, in document order. */
+/** Rendered nodes of one stubbed primitive, document order. */
 export function nodesOf(container: HTMLElement, tag: string): HTMLElement[] {
   return [...container.querySelectorAll(tag)] as HTMLElement[];
 }

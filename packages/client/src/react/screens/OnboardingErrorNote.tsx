@@ -8,7 +8,7 @@ import styles from "./OnboardingScreen.module.css";
  * their first minute in the product tells them nothing they can do.
  *
  * Every onboarding step renders failures through this one shape, so a step
- * cannot accidentally lead with the exception (issue #660 UX-1).
+ * cannot accidentally lead with the exception (#660 UX-1).
  */
 export function ErrorNote({
   summary,

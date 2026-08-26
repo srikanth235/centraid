@@ -5,7 +5,7 @@ import { fc } from "@centraid/test-kit/fast-check";
 import { mergeAllowedHosts, parseAllowedHostsEnv } from "./allowed-hosts.js";
 
 /**
- * Property defense for Host allowlist merge (#545 D6 gateway mutation seed).
+ * Property defense for Host allowlist merge (#545).
  *
  * Model: output hostnames are lowercased non-empty tokens; CLI order is
  * preserved ahead of env; duplicates (case-insensitive) appear once.

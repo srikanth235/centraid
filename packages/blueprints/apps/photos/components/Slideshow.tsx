@@ -1,22 +1,8 @@
-// The slideshow (v4 handoff §7.3) — A DIFFERENT MODE FROM THE VIEWER, not the
-// viewer with its chrome hidden.
-//
-// What it does not have is the point: no filmstrip, no info panel, no action
-// bar. One transport, a determinate position (`12` / `184`), and a status line
-// that says what leaving does — because the one thing a member wonders while a
-// slideshow runs is whether stopping loses their place. It does not: the
-// viewer keeps the photograph they stopped on, and this says so rather than
-// making them find out.
-//
-// It stands on the same STAGE as the viewer and the editor: `--stage` in both
-// themes, ink `--on-stage`, hairlines `--stage-line`. The wrapper below paints
-// it edge to edge inside the host container, so the stage covers the whole
-// frame here exactly as it does in the viewer.
-//
-// Videos are skipped, during auto-advance and manual stepping alike: there is
-// no reliable "finished playing" signal to hang the 4s timer off, and a
-// silently autoplaying video would need a mute/sound decision this app does
-// not otherwise make. Open a video from the grid or the viewer to play it.
+// The slideshow (v4 handoff §7.3) — a mode DISTINCT FROM THE VIEWER: no
+// filmstrip, info panel or action bar; one transport, determinate position,
+// and a status line saying stopping keeps your place. Same STAGE tokens.
+// Videos are skipped (no reliable end signal; autoplay needs a mute
+// decision this app does not make) — open them to play them.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { scopeAttr } from "../../_shared/scope-kit.ts";
@@ -44,8 +30,7 @@ export function SlideshowView({
 }: {
   list: Asset[];
   startAssetId: string | null;
-  /** Carries the photograph the run stopped on, so the viewer can reopen
-   *  there — which is what the status line promises (§7.3). */
+  /** Carries the photograph the run stopped on, so the viewer reopens there (§7.3). */
   onClose: (stoppedOn: Asset | null) => void;
 }) {
   const photos = list.filter(
@@ -69,16 +54,14 @@ export function SlideshowView({
     [photos.length]
   );
 
-  // Escape and the Exit button agree on where the run stopped because both go
-  // through here, and it reads the CURRENT index off the render that closed —
-  // never a ref written during render, which React may discard.
+  // Escape and Exit close through here, reading the CURRENT index off the
+  // closing render.
   const leave = useCallback(
     () => onClose(photos[idx] ?? null),
     [onClose, photos, idx]
   );
 
-  // Re-arms the 4s clock on every idx/paused change — a manual step resets the
-  // wait, which is the behaviour a slideshow remote would give you too.
+  // Re-arms the 4s clock on every idx/paused change.
   useEffect(() => {
     if (paused || photos.length <= 1) return undefined;
     timerRef.current = setTimeout(() => step(1), ADVANCE_MS);
@@ -121,8 +104,7 @@ export function SlideshowView({
   return (
     <div className={styles.stage}>
       {/* No backdrop-shield onClick on the image or the bar: `#slideshow`'s
-          native close listener already gates on `e.target === e.currentTarget`
-          (see slideshow.tsx), so a click on either never reached it. */}
+          native close listener gates on `e.target === e.currentTarget`. */}
       <div className={styles.mediaWrap}>
         <img
           key={`${asset.scope_id ?? ""}:${asset.asset_id}`}
@@ -130,8 +112,7 @@ export function SlideshowView({
           style={{ aspectRatio: String(assetRatio(asset)) }}
           src={src ?? undefined}
           alt={displayText(asset.title ?? "Photograph")}
-          /* A run steps through the merged list, so consecutive slides can
-             come from different scopes; each names its own (issue #599). */
+          /* Consecutive slides can come from different scopes (#599). */
           data-scope={scopeAttr(asset.scope_id)}
         />
       </div>
@@ -161,8 +142,7 @@ export function SlideshowView({
       </button>
 
       <div className={styles.foot}>
-        {/* ONE transport (§7.3). The pause control is always present — a run
-            you cannot stop is not a control, it is an animation. */}
+        {/* ONE transport (§7.3); pause is always present. */}
         <div className={styles.transport}>
           <button
             type="button"
@@ -174,8 +154,7 @@ export function SlideshowView({
           >
             {paused ? <PlayIcon size={16} /> : <PauseIcon size={16} />}
           </button>
-          {/* Determinate, with exact counts — never a spinner (§14). A real
-              `<progress>`, so the indeterminate state is not expressible. */}
+          {/* Determinate exact counts — never a spinner (§14). */}
           <progress
             className={styles.track}
             aria-label="Position"
@@ -189,8 +168,7 @@ export function SlideshowView({
             Exit
           </button>
         </div>
-        {/* The status line, inside the stage. It answers the one question a
-            running slideshow raises. Verbatim (§7.3). */}
+        {/* Status line, inside the stage. Verbatim (§7.3). */}
         <p className={styles.status}>{SLIDESHOW_STATUS}</p>
       </div>
     </div>

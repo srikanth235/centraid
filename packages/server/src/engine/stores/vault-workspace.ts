@@ -1,57 +1,20 @@
 /*
- * `VaultWorkspace` — the per-vault world an app-engine runtime operates in
- * (issue #280: the vault is the unit).
- *
- * Everything personal lives inside one vault's directory: the conversation
- * ledger (the ledger band of `journal.db`, which also carries the
- * `run_summary` rollup — the old standalone `transcripts.db` folded in),
- * the per-app state dirs (`apps/<id>/` logs + blobs), and the chat
- * harness's per-conversation scratch files. The gateway resolves the ACTIVE
- * vault and hands app-engine this view of it; a vault switch makes the
- * provider return a different workspace on the next call, and every store
- * that consumes one re-resolves per call so the switch lands without any
- * reconstruction.
- *
- * app-engine never opens a vault itself — the shape is defined here (the
- * lower layer) so stores can type against it without a dependency on the
- * gateway or vault packages.
+ * Per-vault world an app-engine runtime operates in (#280). app-engine never opens a vault — stores type against this shape without depending on gateway or vault packages. Consumers re-resolve per call so a vault switch lands without reconstruction.
  */
 
 import type { DatabaseProvider } from "./gateway-db.js";
 
 export interface VaultWorkspace {
-  /** The vault's id (`core_vault.vault_id`) — the cache key across switches. */
+  /** Cache key across vault switches (`core_vault.vault_id`). */
   vaultId: string;
-  /**
-   * The vault owner's party id (`core_vault.owner_party_id`). Conversations
-   * are stamped with this — the vault owner IS the user; there is no separate
-   * gateway-side identity (issue #280 kills `identity.sqlite`).
-   */
+  /** Conversations stamp this — the vault owner IS the user; no separate gateway identity (#280). */
   ownerPartyId: string;
-  /**
-   * Directory of the vault's per-app data folders — `<plane>/apps/<appId>/`
-   * holds per-app runtime state + the attachment blob CAS. Survives code swaps.
-   */
   appsDir: string;
-  /**
-   * Lazy provider for the vault's `journal.db` ledger band — conversations,
-   * turns, items, attachments, automation state, and the `run_summary`
-   * rollup. The handle is the SAME file the vault's audit stream lives in;
-   * the ledger band is ensured before the provider hands it out.
-   */
+  /** Same file as the vault's audit stream; the ledger band is ensured before the handle is handed out. */
   journal: DatabaseProvider;
-  /** Absolute path of `journal.db` (for hosts that spawn workers). */
   journalDbFile: string;
-  /**
-   * Disposable scratch dir for the harness's per-conversation session
-   * files (resume state). Derived cache — journal.db is the authoritative
-   * ledger — so the gateway homes it OUTSIDE the vault dir; still per-vault.
-   */
+  /** Derived cache OUTSIDE the vault dir — `journal.db` is the authoritative ledger. */
   harnessSessionDir: string;
 }
 
-/**
- * Resolves the ACTIVE vault's workspace at call time. Injected by the
- * gateway; stores re-resolve per call so a vault switch lands immediately.
- */
 export type WorkspaceProvider = () => VaultWorkspace;

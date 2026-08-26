@@ -1,4 +1,4 @@
-// The Vault Atlas — Browse read side (issue #441 Part B, B3). A vault-aware
+// The Vault Atlas — Browse read side (#441). A vault-aware
 // table editor's read surface: the table picker, a keyset-paginated row grid,
 // single-row reads, per-column metadata (declared type, notnull, pk, FK
 // target, sealed flag), an FK reference-picker search, and the dependent
@@ -10,7 +10,7 @@
 //      denial, never a query. Column names in ORDER BY / keyset predicates are
 //      validated against the live `PRAGMA table_info` whitelist. Values are
 //      always bound parameters.
-//   2. Sealed columns (issue #293) are masked on read — the same
+//   2. Sealed columns (#293) are masked on read — the same
 //      `SEALED_PLACEHOLDER` the consent-checked read path shows. Plaintext
 //      takes the `reveal` verb, never a Browse read.
 //
@@ -29,14 +29,14 @@ import { sealedColumnsOf } from "./sealed.js";
 import { resolveEntity } from "./tables.js";
 import type { EntityRef } from "./tables.js";
 
-/** Hard cap on a Browse page — some tables are 40k+ rows (issue #441 B3). */
+/** Hard cap on a Browse page — some tables are 40k+ rows (#441). */
 export const BROWSE_MAX_LIMIT = 100;
 export const BROWSE_DEFAULT_LIMIT = 50;
 /** Cap on the FK reference-picker result set. */
 export const BROWSE_REF_SEARCH_LIMIT = 20;
 
 /**
- * The display-field heuristic the whole Browse surface shares (issue #441 B3):
+ * The display-field heuristic the whole Browse surface shares (#441):
  * the human-facing label of a row is the first present of these columns, else
  * the primary key. Lives here so the FK reference-picker and the column
  * metadata agree on what a row "reads as".
@@ -152,9 +152,9 @@ export class BrowseError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Table picker
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface BrowseTableEntry {
   logical: string;
@@ -164,7 +164,7 @@ export interface BrowseTableEntry {
   packKind: AtlasPackKind;
   label: string;
   rows: number;
-  /** Machinery bands are read-only by default (issue #441 B3). */
+  /** Machinery bands are read-only by default (#441). */
   machinery: boolean;
   /** True when the table has a single TEXT pk (the common keyset case). */
   singlePk: boolean;
@@ -191,9 +191,9 @@ export function browseTableList(vault: DatabaseSync): BrowseTableEntry[] {
     }));
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Column metadata
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface BrowseColumn {
   name: string;
@@ -208,7 +208,7 @@ export interface BrowseColumn {
   fkColumn: string | null;
   /** The FK target's logical `schema.table`, for the reference picker. */
   fkLogical: string | null;
-  /** Sealed cell (issue #293): never editable/displayed in plaintext. */
+  /** Sealed cell (#293): never editable/displayed in plaintext. */
   sealed: boolean;
 }
 
@@ -262,9 +262,9 @@ export function browseColumns(
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Row list — keyset pagination
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface BrowseRowsParams {
   table: string;
@@ -427,9 +427,9 @@ export function browseRows(
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Single row
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface BrowseRowResult {
   logical: string;

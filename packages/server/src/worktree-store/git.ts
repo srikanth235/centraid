@@ -1,60 +1,20 @@
-// Thin promisified wrapper around the system `git` binary.
-//
-// We shell out instead of pulling in a JS git library for three
-// reasons: the surface we need is small (~10 subcommands), the
-// embedded Electron host already ships git, and the system binary is
-// the reference implementation — no semantic-drift risk against a
-// porcelain we can't audit. The standalone gateway daemon documents
-// the git binary requirement in its README; if a JS-only path
-// becomes necessary later, swapping the implementation behind this
-// module is the change.
-//
-// The wrapper is intentionally minimal:
-//   - one `run()` entry point that spawns `git -C <cwd> <args>` and
-//     buffers stdout/stderr,
-//   - non-zero exit codes throw `GitError` carrying the args, exit
-//     code, and stderr (so callers don't have to format their own
-//     error messages),
-//   - stdout is returned trimmed (every porcelain command we use
-//     ends in a trailing newline we don't want to thread through
-//     parsers).
-//
-// Environment scrubbing: we explicitly set committer + author
-// identity to the Centraid harness on every commit-producing call.
-// That way the host's `~/.gitconfig` user.name/email never leak
-// into the app repo's history — every commit is attributable to the
-// harness identity per the issue's "Commit authorship" decision.
+// System `git` binary (not a JS library): Electron already ships it, and the
+// system binary is the reference. Identity is forced to the Centraid harness
+// so the host's `~/.gitconfig` user.name/email never leak into app history.
 
 import { spawn } from "node:child_process";
 
-/** Author + committer identity stamped on every commit. */
 export const HARNESS_IDENTITY = {
   name: "Centraid Harness",
   email: "bot@centraid",
 } as const;
 
 export interface GitRunOptions {
-  /**
-   * Repo or worktree the command runs against. Equivalent to
-   * `git -C <cwd>`. Required because we never assume `process.cwd()`.
-   */
+  /** Required: we never assume `process.cwd()`. */
   cwd: string;
-  /**
-   * Extra environment variables. Merged on top of the scrubbed
-   * default (which forces the harness identity and disables every
-   * interactive prompt).
-   */
   env?: NodeJS.ProcessEnv;
-  /**
-   * Bytes-on-stdin. When provided, written to the child's stdin and
-   * closed; useful for `commit -F -` and similar.
-   */
   stdin?: string;
-  /**
-   * Don't throw on non-zero exit. The caller gets `{ code, stdout,
-   * stderr }` and decides. Used by `revParse` and `existsRef` style
-   * probes where "missing" is an expected outcome.
-   */
+  /** Don't throw on non-zero. Used by probes where "missing" is expected. */
   allowNonZero?: boolean;
 }
 
@@ -78,11 +38,6 @@ export class GitError extends Error {
   }
 }
 
-/**
- * Spawn `git` with the given args. Throws `GitError` on non-zero
- * exit unless `allowNonZero` is set. Returns the trimmed stdout
- * (full result via `runRaw` when callers need stderr too).
- */
 export async function run(
   args: readonly string[],
   opts: GitRunOptions
@@ -101,16 +56,13 @@ export function runRaw(
   return new Promise<GitRunResult>((resolve, reject) => {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      // Force the harness identity on every commit-producing call. The
-      // alternative — `git -c user.name=... -c user.email=...` on
-      // every commit — is noisier and easier to forget on a new
-      // call site.
+      // Force harness identity on every commit-producing call — `git -c user.*`
+      // on each commit is easier to forget on a new call site.
       GIT_AUTHOR_NAME: HARNESS_IDENTITY.name,
       GIT_AUTHOR_EMAIL: HARNESS_IDENTITY.email,
       GIT_COMMITTER_NAME: HARNESS_IDENTITY.name,
       GIT_COMMITTER_EMAIL: HARNESS_IDENTITY.email,
-      // No interactive prompts (askpass, credential helpers, editor)
-      // — every operation has to be fully scripted.
+      // No interactive prompts (askpass, credential helpers, editor).
       GIT_TERMINAL_PROMPT: "0",
       GIT_ASKPASS: "true",
       GIT_EDITOR: "true",
@@ -141,11 +93,7 @@ export function runRaw(
   });
 }
 
-/**
- * `git rev-parse <ref>` returning the sha, or `undefined` if the
- * ref doesn't resolve. Used as the canonical "does this ref exist"
- * probe — `for-each-ref` works too but rev-parse is a single fork.
- */
+/** `git rev-parse <ref>` → sha, or `undefined` if the ref doesn't resolve. */
 export async function revParse(
   cwd: string,
   ref: string

@@ -260,7 +260,7 @@ describe("documents", () => {
     };
     expect(doc.deleted_at).not.toBeNull();
     expect(doc.purge_at).not.toBeNull();
-    // Retention stance (issue #352): the wrapper trashes, the bytes stay live.
+    // Retention stance (#352): the wrapper trashes, the bytes stay live.
     const content = db.vault
       .prepare("SELECT deleted_at FROM core_content_item WHERE content_id = ?")
       .get(contentId) as { deleted_at: string | null };
@@ -324,7 +324,7 @@ describe("documents", () => {
     ).toBe("failed");
   });
 
-  /** Count of starred flags-scheme tags on a document (issue #274/#352). */
+  /** Count of starred flags-scheme tags on a document (#274/#352). */
   function starCount(documentId: string): number {
     const row = db.vault
       .prepare(

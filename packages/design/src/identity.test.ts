@@ -1,10 +1,5 @@
-// The person-identity derivation every client shares (issue #708).
-//
-// A face circle is FILLED — the handoff draws saturated identity discs with
-// inverse ink, not near-white rings with grey initials — so two things have to
-// hold at once and are asserted here rather than in either client: the hue is
-// the same for the same person on every surface and every launch, and the ink
-// the circle carries actually clears AA on it in BOTH themes.
+// Shared person-identity derivation (#708): hue stable per person everywhere;
+// the circle's inverse ink clears AA in BOTH themes.
 
 import { describe, expect, test } from "vitest";
 
@@ -19,8 +14,7 @@ const AA = 4.5;
 describe(identityHueKey, () => {
   test("every key is a real point on the shipped hue wheel", () => {
     for (const key of IDENTITY_HUE_KEYS) expect(APP_HUES).toHaveProperty(key);
-    // The ink default (`IDENTITY_COLORS[0]`, BRAND) is deliberately absent —
-    // see the export's comment — so this is the wheel exactly.
+    // The BRAND ink default is deliberately absent (see identity.ts).
     expect([...IDENTITY_HUE_KEYS].sort()).toStrictEqual(
       Object.keys(APP_HUES).sort()
     );
@@ -36,15 +30,11 @@ describe(identityHueKey, () => {
     const keys = new Set(
       Array.from({ length: 40 }, (_, i) => identityHueKey(`party_${i}`))
     );
-    // Eight buckets over forty ids: collisions are expected and fine, one
-    // bucket for everybody is the failure this guards (a hash that ignores
-    // most of its input, or a constant).
+    // One bucket for everybody is the failure this guards.
     expect(keys.size).toBeGreaterThan(4);
   });
 
   test("an id is not its display name — renaming cannot move the circle", () => {
-    // Both spellings of one person's NAME are irrelevant; the party id is what
-    // the derivation reads, so the hue survives the rename.
     expect(identityHueKey("party_ana")).toBe(identityHueKey("party_ana"));
     expect(identityHueKey("Ana Ruiz")).not.toBe(identityHueKey("party_ana"));
   });
@@ -69,10 +59,7 @@ describe(identityFill, () => {
   });
 
   test("carries `textInv` at AA in both themes", () => {
-    // The rung question the whole change turns on: the `--c-*` ring, NOT the
-    // solved `--c-*-text` rung (which solves hue-on-type over a 12% wash of
-    // itself — a different problem — and in dark theme is byte-identical to
-    // the ring anyway).
+    // The `--c-*` ring, NOT the solved `--c-*-text` rung.
     for (const [theme, scheme] of [
       [lightTheme, "light"],
       [darkTheme, "dark"],

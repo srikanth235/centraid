@@ -1,17 +1,5 @@
-// The 11px floor (issue #708 §B.1) — the ramp's own header in typography.ts
-// says it plainly: "Nothing falls below 11px." This test is what enforces
-// that promise on the two things an app actually reads: the emitted CSS
-// (`toCss()`) and the native lowering (`toNativeTheme()`), not the source
-// object a future edit could bypass.
-//
-// `--t-<role>` is a font SHORTHAND (`500 0.8125rem/1.1875rem var(--font-sans)`
-// as of #708's rem conversion — "Emit `rem`, not `px`, so 200% OS text scale
-// works"), not a bare size — the floor has to be parsed OUT of it, the same
-// way a browser would, rather than assumed from the separate
-// `--t-<role>-size` rung that happens to sit next to it in the sheet. Both
-// halves are converted rem→px (×16, the root this repo never overrides — see
-// `REM_BASE_PX` in typography.ts) so the floor this test enforces is a REAL
-// 11px, not an 0.6875rem that would silently shrink under a smaller root.
+// The 11px floor (#708), enforced on emitted CSS and native lowering; sizes
+// parsed OUT of the --t-<role> font shorthand.
 import { describe, expect, test } from "vitest";
 
 import { toCss } from "./css.js";
@@ -20,14 +8,10 @@ import { REM_BASE_PX, type } from "./typography.js";
 
 const FLOOR = 11;
 
-/** `rem` is the bare numeric string from the CSS (e.g. `"0.8125"`), not `"0.8125rem"`. */
 const remToPx = (rem: string): number => Number(rem) * REM_BASE_PX;
 
-/** Pull every `--t-<role>: <weight> <size>rem/<lineHeight>rem var(...);`
- *  declaration's size out of the `font` shorthand — deliberately NOT reading
- *  `--t-<role>-size`, which is a different (deduplicated) property this test
- *  must not depend on to prove the shorthand itself is correct. Converts
- *  rem→px so the FLOOR constant stays a real pixel value. */
+/** Sizes parsed from each `--t-<role>` font shorthand — never from
+ *  `--t-<role>-size`, a different property. */
 function shorthandSizesFromCss(css: string): Record<string, number> {
   const sizes: Record<string, number> = {};
   const re =
@@ -47,12 +31,8 @@ describe("the 11px floor", () => {
     const css = toCss();
     const sizes = shorthandSizesFromCss(css);
 
-    // Silent-no-op guard: a floor test that parsed zero roles is a floor
-    // test that is checking nothing.
+    // Zero parses checks nothing; a missing role means regex drift.
     expect(Object.keys(sizes).length).toBeGreaterThan(0);
-    // Every role this package declares must show up in the parsed set —
-    // otherwise the regex above has drifted from the shorthand's real shape
-    // and the floor below is silently checking a partial list.
     for (const key of Object.keys(type)) {
       const role = key
         .replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, "$<lower>-$<upper>")

@@ -139,6 +139,7 @@ export function seedYear3Vault(
     "client_secret",
     "access_token",
     "refresh_token",
+    "refresh_capability",
     "api_key",
   ];
   const credentialValues = credentialColumns.map((column) =>
@@ -153,8 +154,8 @@ export function seedYear3Vault(
     .prepare(
       `INSERT INTO sync_connection_credential
        (connection_id, cred_kind, provider, client_secret, access_token,
-        refresh_token, api_key, allowed_hosts, updated_at)
-       VALUES (?, 'oauth2', 'quality-canary', ?, ?, ?, ?, '[]', ?)`
+        refresh_token, refresh_capability, api_key, allowed_hosts, updated_at)
+       VALUES (?, 'oauth2', 'quality-canary', ?, ?, ?, ?, ?, '[]', ?)`
     )
     .run(connectionId, ...credentialValues, at(2));
   target.vault.exec("COMMIT");
@@ -250,6 +251,9 @@ export function year3VaultProfile(
       ),
       "sync.connection_credential.refresh_token": sentinel(
         "sync.connection_credential.refresh_token"
+      ),
+      "sync.connection_credential.refresh_capability": sentinel(
+        "sync.connection_credential.refresh_capability"
       ),
       "sync.connection_credential.api_key": sentinel(
         "sync.connection_credential.api_key"

@@ -1,15 +1,6 @@
-// Centraid Light + Dark — the shipping defaults, in the Binding Layer.
-//
-// Both ramps are LITERAL. The dark ramp used to derive every surface from a
-// single `--bg-l` anchor through `hsl(0 0% calc(...))`, which was the right
-// mechanism for a pure-greyscale ramp; the Binding Layer's dark surfaces are
-// warm-tinted paper (`#171716`, not `hsl(0 0% 9%)`), so a one-knob greyscale
-// calc can no longer express them and has been retired rather than faked with
-// a saturation parameter. A surface is now a value you can read.
-//
-// The surface order is PAPER, not elevation: in light the raised surface is
-// DARKER than the page, in dark it is LIGHTER. A tile is a sheet laid on the
-// page, not a plane floating above it.
+// Literal ramps — do not derive dark from `hsl(0 0% calc(...))`; `#171716`
+// is warm paper, not greyscale. Paper, not elevation: light raised is
+// darker than the page, dark raised is lighter.
 
 import { palette, paletteDark } from "../palette";
 import {
@@ -56,42 +47,23 @@ export const lightTheme: Theme = {
   accentLight: ACCENT_LIGHT,
   accentText: BRAND,
   attention: ATTENTION,
-  // ONE PAGE. The shell and every app in it share this one colour — see
-  // `PAGE`/`WALL` in shared.ts for why the per-app tone axis was retired.
   bg: PAGE.light,
-  // The wall behind the frame is the deepest paper the system paints, which
-  // is also why `WALL` is the surface every solved ink rung is scored
-  // against.
   bgApp: WALL.light,
-  // `surf` — tiles, the today cell, the hover ground.
   bgElev: "#F5F4F2",
-  // A recessed track sits between the page and the raised paper: deep enough
-  // to read as a groove, light enough that `--text-faint` still clears AA on
-  // it. Deeper than this and the metadata ramp starts failing.
+  // Deeper than this and `--text-faint` on the groove fails AA.
   bgSunken: "#F9F8F6",
   bgWall: WALL.light,
   deviceWall:
     "repeating-linear-gradient(0deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), " +
     "repeating-linear-gradient(90deg, transparent 0 23px, rgba(20,20,20,.035) 23px 24px), " +
     "linear-gradient(180deg, #EAE9E6 0%, #E1E0DC 100%)",
-  // The ground a photo tile paints before its bytes arrive — deeper than
-  // `--bg-elev` (a card) because an absence is not a card.
   skel: "#E4E3E0",
-  // Measured against the page: text 18.1:1, soft 6.8:1, faint 5.2:1,
-  // ghost 3.5:1 — and against `WALL` (`--bg-app`), the deepest paper and so
-  // the hardest surface in the system: 16.0 / 6.0 / 4.6 / 3.1. The retired
-  // `mat` tone this used to name was one of five per-app surface tones; there
-  // is one page now, and `WALL` is what replaced it as the worst case.
-  // `contrast.test.ts` re-measures both off the emitted CSS.
   text: INK_RAMP.light.text,
   textSoft: INK_RAMP.light.soft,
   textFaint: INK_RAMP.light.faint,
   textGhost: INK_RAMP.light.ghost,
   textDisabled: INK_RAMP.light.disabled,
-  // Ink ON a filled ink control — the page colour, not pure white.
   textInv: PAGE.light,
-  // `line` is the hairline (separators, tile borders); `lineStrong` is the
-  // explicit boundary (control borders, section rules).
   line: "#EFEEEB",
   lineStrong: "#E5E4E1",
   link: LINK,
@@ -100,19 +72,12 @@ export const lightTheme: Theme = {
   netWash: NET_WASH,
   ring: RING,
   seam: SEAM,
-  // The veil, at the handoff's own strength (v4 line 5101,
-  // `dark?'rgba(0,0,0,.62)':'rgba(26,24,21,.3)'`). Two corrections in one:
-  // the ALPHA was 0.48, half again as heavy as specified, and the TINT was
-  // the cool `20,20,20` ink rather than the warm `26,24,21` the ink-on-paper
-  // flip settled on. A veil is meant to say "the thing behind this is still
-  // there"; at 48% on a warm paper it read as a cold grey plate.
+  // Warm 0.3 — do not "fix" to cool ink or 0.48 (reads as a grey plate).
   scrim: "rgba(26,24,21,0.3)",
   palette,
   shadowLg: "0 24px 48px -16px rgba(20,20,20,.16)",
   shadowMd: "0 8px 24px -8px rgba(20,20,20,.10)",
   shadowSm: "0 1px 2px rgba(20,20,20,.06)",
-  // The stem is chrome, and chrome is paper. No glass, no gloss, no gradient:
-  // the metaphor is a tinted paper label, not a button under a lens.
   sidebarBg: "#F5F4F2",
   sidebarBlur: "none",
   sidebarDivider: "1px solid #E5E4E1",
@@ -132,8 +97,7 @@ export const darkTheme: Theme = {
   attention: ATTENTION_DARK,
   bg: PAGE.dark,
   bgApp: WALL.dark,
-  // `surf` — LIGHTER than the page here, which is why `--text-faint` is
-  // validated against this surface and not against `--bg`.
+  // Lighter than the page — validate `--text-faint` against this, not `--bg`.
   bgElev: "#171716",
   bgSunken: "#121211",
   bgWall: WALL.dark,
@@ -156,8 +120,7 @@ export const darkTheme: Theme = {
   netWash: NET_WASH_DARK,
   ring: RING_DARK,
   seam: SEAM_DARK,
-  // 0.62, the handoff's dark value (v4 line 5101) — was 0.72, which on an
-  // already near-black page left almost nothing of the surface behind it.
+  // 0.62 — do not raise toward 0.72 (near-black page would vanish).
   scrim: "rgba(0,0,0,0.62)",
   palette: paletteDark,
   shadowLg: "0 30px 70px -24px rgba(0,0,0,.7)",

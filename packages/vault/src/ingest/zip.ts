@@ -1,4 +1,4 @@
-// Minimal ZIP reading (issue #290 phase 2) — enough for a Google Takeout
+// Minimal ZIP reading (#290) — enough for a Google Takeout
 // archive: central-directory walk, stored (0) and deflated (8) entries via
 // node:zlib. No zip64, no encryption, no data descriptors beyond what the
 // central directory already records — Takeout archives satisfy all three.

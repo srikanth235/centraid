@@ -76,9 +76,8 @@ export function evaluateBackupHealth(opts: {
       notes.push(`${vaultId}: ${target.lastVerifyError ?? target.lastError}`);
       continue;
     }
-    // Either a confirmed WAL drain OR a newer full snapshot satisfies the
-    // recovery-point bound. Prefer the newest protection event; an old WAL
-    // timestamp must not repaint a just-completed snapshot as data loss.
+    // A confirmed WAL drain or newer full snapshot satisfies the RPO bound;
+    // an old WAL stamp must not repaint a fresh one.
     const walBaselineMs = Math.max(
       ...[target.lastWalDrainAt, target.lastBackupAt, target.firstBackupAt]
         .filter((value): value is string => value !== undefined)
@@ -109,10 +108,8 @@ export function evaluateBackupHealth(opts: {
       if (worst !== "error") worst = "degraded";
       notes.push(`${vaultId}: verification is stale`);
     }
-    // Issue #408 G9: a FAILED restore-verification (damaged wal object,
-    // integrity failure) is persisted state until the next success — real
-    // evidence the backup does not restore cleanly, so it alarms at ERROR
-    // immediately, not after the staleness window below.
+    // Issue #408 G9: a failed restore-verification is persisted state until
+    // the next success — alarms at ERROR immediately, not on staleness.
     if (target.lastRestoreVerifyError) {
       worst = "error";
       notes.push(
@@ -120,11 +117,8 @@ export function evaluateBackupHealth(opts: {
       );
       continue;
     }
-    // Issue #408 G8: the last restore-verification SUCCEEDED but found
-    // receipts naming vault rows the restored vault does not have. Legitimate
-    // when the rows were hard-deleted after their receipt; evidence of a
-    // capture-ordering bug otherwise — so it survives here, in persisted
-    // state, rather than in a pushed report the next probe would overwrite.
+    // Issue #408 G8: dangling receipts are persisted state (legitimate after
+    // hard-deleted rows), not a pushed report the next probe would overwrite.
     const dangling = target.lastRestoreVerifyDangling ?? 0;
     if (dangling > 0) {
       if (worst !== "error") worst = "degraded";
@@ -132,18 +126,10 @@ export function evaluateBackupHealth(opts: {
         `${vaultId}: last restore-verification found ${dangling} receipt(s) referencing absent vault rows`
       );
     }
-    // Issue #411 action 1: the WAL shipper detected a FOREIGN checkpoint —
-    // something other than the shipper checkpointed one of this vault's
-    // databases, forcing a generation break (base re-clone). Correctness is
-    // intact (verification caught it and re-based), so this is DEGRADED, not
-    // error: it is a churn/perf signal that something else is checkpointing our
-    // databases — most likely a stray connection with `wal_autocheckpoint`
-    // unset — and someone should find it. Persisted in target state so the
-    // probe recomputes it (a pushed report would be repainted green next probe).
-    // Aged out on the LAST occurrence: a foreign checkpoint that stopped
-    // recurring clears after 24 h, while an ongoing one keeps refreshing `atMs`
-    // and stays degraded — simpler and self-clearing versus a "nonzero forever"
-    // rule that would pin a months-old transient at degraded permanently.
+    // Issue #411 action 1: a FOREIGN checkpoint (stray connection with
+    // `wal_autocheckpoint` unset) forces a generation break; verification
+    // re-based it — DEGRADED, not error. Persisted for the probe; aged out
+    // after 24h only if the foreign checkpoint stopped.
     const lastForeign = target.walLastForeignCheckpoint;
     if (lastForeign && opts.now - lastForeign.atMs < DAY_MS) {
       if (worst !== "error") worst = "degraded";
@@ -153,11 +139,8 @@ export function evaluateBackupHealth(opts: {
           `this vault's databases`
       );
     }
-    // Issue #408 G9: "a vault that has not been successfully restored within
-    // N days raises an alert" — a backup that has never been restored is a
-    // hypothesis, so restore-verification staleness alarms at ERROR, not
-    // degraded. Baseline falls back to first-backup time so a fresh target
-    // gets its 14-day grace instead of alarming immediately.
+    // Issue #408 G9: a never-restored backup is a hypothesis — restore
+    // staleness alarms at ERROR; the first-backup baseline gives fresh targets grace.
     const restoreBaseline =
       target.lastRestoreVerifiedAt ??
       target.firstBackupAt ??

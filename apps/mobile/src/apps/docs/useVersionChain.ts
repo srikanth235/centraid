@@ -1,7 +1,7 @@
-// The version chain, read live off this device's replica (issue #821 §10).
+// The version chain, read live off this device's replica (#821).
 //
-// Adds the ONE entity read the foundation left to this slice: `core.link`
-// (the scope is granted and replicates — INTEGRATION-NOTES.md). The walk
+// The ONE entity read behind it is `core.link` (the scope is granted and
+// replicates — INTEGRATION-NOTES.md). The walk
 // itself is `docs-versions.ts`, pure; this hook only feeds it rows and
 // carries the honesty state so the screen can tell "no versions" apart from
 // "could not read the links".

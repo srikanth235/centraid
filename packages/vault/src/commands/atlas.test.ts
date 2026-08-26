@@ -1,4 +1,4 @@
-// The Vault Atlas Browse backend (issue #441 Part B, B3): read side + the
+// The Vault Atlas Browse backend (#441): read side + the
 // journalled write trio. Proves the acceptance criteria for Browse —
 // keyset pagination stability, unknown-table rejection, sealed mask on read +
 // refusal on write, machinery read-only behind an unlock flag, polymorphic
@@ -368,7 +368,7 @@ describe("atlas", () => {
     expect(out.status).toBe("executed");
     // The row is gone…
     expect(() => browseRow(db.vault, "core.party", "p3")).toThrow(BrowseError);
-    // …and its tag was swept, not left dangling (issue #441 A1 hygiene).
+    // …and its tag was swept, not left dangling (#441 A1 hygiene).
     const tags = db.vault
       .prepare(
         `SELECT COUNT(*) AS n FROM core_tag WHERE target_type = 'core.party' AND target_id = 'p3'`

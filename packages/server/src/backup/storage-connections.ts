@@ -1,4 +1,4 @@
-/* eslint-disable max-classes-per-file -- error and encrypted store form one persistence boundary (#408) */
+/* oxlint-disable max-classes-per-file -- error and encrypted store form one persistence boundary (#408) */
 /*
  * Gateway-level storage connections (issues #367, #436, #555).
  *

@@ -5,11 +5,12 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 // governance: allow-repo-hygiene file-size-limit #526 Keep broker custody and Assist regression scenarios together.
-// The connection broker (issue #304): token custody correctness. The three
+// The connection broker (#304): token custody correctness. The three
 // rot points each get a scenario — rotated pair persisted before use,
 // single-flight refresh under concurrency, invalid_grant flips needs-auth
 // with an owner-readable note while a 5xx stays transient (no flip).
 import { tempDir } from "@centraid/test-kit/temp-dir";
+import { sealAad, unsealValue } from "@centraid/vault";
 
 import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from "./assist-oauth.js";
 import { ConnectionBroker } from "./connection-broker.js";
@@ -918,6 +919,7 @@ describe("connection-broker", () => {
     storeTokens(plane, connectionId, {
       access_token: "ya29.assist-stale",
       refresh_token: "1//assist-original",
+      refresh_capability: "cap-for-original",
       expires_at: new Date(Date.now() - 1000).toISOString(),
     });
     const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
@@ -930,6 +932,7 @@ describe("connection-broker", () => {
         return Response.json({
           access_token: "ya29.assist-fresh",
           refresh_token: "1//assist-rotated",
+          refresh_capability: "cap-for-rotated",
           expires_in: 3600,
         });
       }
@@ -954,12 +957,126 @@ describe("connection-broker", () => {
     expect(requests).toStrictEqual([
       {
         path: "/refresh",
-        body: { provider: "google", refresh_token: "1//assist-original" },
+        body: {
+          provider: "google",
+          refresh_token: "1//assist-original",
+          refresh_capability: "cap-for-original",
+        },
       },
     ]);
     expect(JSON.stringify(requests)).not.toContain("client_secret");
     const row = connectionRow(plane, connectionId);
     expect(String(row.access_token)).toMatch(/^sealed:v1:/u);
     expect(String(row.refresh_token)).toMatch(/^sealed:v1:/u);
+  });
+
+  // Issue #865 regression: the capability round-trips sealed at rest —
+  // stored beside the refresh token, unsealed only to be sent to the Worker,
+  // and re-stored when Google rotates the pair.
+  test("the Assist refresh capability round-trips sealed: stored, sent, rotated, re-stored", async () => {
+    const plane = openPlane(await tempDir());
+    const connectionId = configureAssist(plane);
+    storeTokens(plane, connectionId, {
+      access_token: "ya29.stale",
+      refresh_token: "1//original",
+      refresh_capability: "cap-v1",
+      expires_at: new Date(Date.now() - 1000).toISOString(),
+    });
+    const requests: Array<Record<string, unknown>> = [];
+    let call = 0;
+    const fetchImpl = vi.fn<typeof fetch>(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        requests.push(
+          JSON.parse(String(init?.body)) as Record<string, unknown>
+        );
+        call += 1;
+        return Response.json(
+          call === 1
+            ? {
+                access_token: "ya29.fresh",
+                refresh_token: "1//rotated",
+                refresh_capability: "cap-v2",
+                expires_in: 3600,
+              }
+            : { access_token: "ya29.again", expires_in: 3600 }
+        );
+      }
+    );
+    const broker = new ConnectionBroker(
+      () => plane,
+      500,
+      {
+        workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
+        googleClientId: "centraid-shared.apps.googleusercontent.com",
+        restrictedScopesEnabled: false,
+      },
+      fetchImpl as typeof fetch
+    );
+    await broker.resolveForFire({
+      kind: "pull.gcal",
+      label: "Centraid Assist",
+    });
+    expect(requests[0]).toMatchObject({ refresh_capability: "cap-v1" });
+    const capabilityOf = (): string =>
+      (
+        plane.db.vault
+          .prepare(
+            "SELECT refresh_capability FROM sync_connection_credential WHERE connection_id = ?"
+          )
+          .get(connectionId) as { refresh_capability: string }
+      ).refresh_capability;
+    // The rotated capability persisted sealed with the rotated token.
+    const storedCipher = capabilityOf();
+    expect(storedCipher).toMatch(/^sealed:v1:/u);
+    expect(
+      unsealValue(
+        plane.db.sealKey,
+        sealAad(
+          "sync_connection_credential",
+          "refresh_capability",
+          connectionId
+        ),
+        storedCipher
+      )
+    ).toBe("cap-v2");
+    // The NEXT refresh presents the re-stored capability for the rotated token.
+    await broker.ensureFreshToken(plane, connectionId, true);
+    expect(requests[1]).toMatchObject({
+      refresh_token: "1//rotated",
+      refresh_capability: "cap-v2",
+    });
+  });
+
+  test("an Assist pair without its refresh capability is auth-dead (reconnect required)", async () => {
+    const plane = openPlane(await tempDir());
+    const connectionId = configureAssist(plane);
+    storeTokens(plane, connectionId, {
+      access_token: "ya29.legacy",
+      refresh_token: "1//legacy-no-capability",
+      expires_at: new Date(Date.now() - 1000).toISOString(),
+    });
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      Response.json({ error: "missing_capability" }, { status: 401 })
+    );
+    const broker = new ConnectionBroker(
+      () => plane,
+      500,
+      {
+        workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
+        googleClientId: "centraid-shared.apps.googleusercontent.com",
+        restrictedScopesEnabled: false,
+      },
+      fetchImpl as typeof fetch
+    );
+    const auth = await broker.resolveForFire({
+      kind: "pull.gcal",
+      label: "Centraid Assist",
+    });
+    expect(auth && "refused" in auth ? auth.refused : undefined).toMatch(
+      /missing_capability/u
+    );
+    const row = connectionRow(plane, connectionId);
+    expect(row.status).toBe("needs-auth");
+    expect(String(row.auth_note)).toMatch(/Reconnect/u);
   });
 });

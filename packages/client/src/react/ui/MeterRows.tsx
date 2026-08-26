@@ -4,60 +4,28 @@ import Button from "../ui/Button.js";
 
 import styles from "./MeterRows.module.css";
 
-// The meter row — a row list where every row also draws its own share.
-//
-// A list where every row is the same shape as its neighbour answers "what is in
-// here" one name at a time; a member reading forty of them still cannot say
-// which two hold the vault. So the row grows a bar, and the bar is a SHARE OF
-// THE LARGEST ROW rather than of the total — a total-share bar on a long tail
-// is forty invisible slivers, which is a picture of nothing.
-//
-// PROMOTED FROM `screens/AtlasMeterRows` (issue #814). It was the census's own
-// row, kept out of the kit on the stated condition that "a fifth shared block
-// earns its place only once a second surface needs it". System's Capacity is
-// that surface: it holds the same shape of question — several things sharing
-// one measure, where the ordering is the finding — and the alternative was a
-// second implementation of the same row twenty files away. `RowsBlock` still
-// cannot carry it: a row there is title/sub/meta/one verb, and a proportional
-// bar is none of those.
-//
-// A row with nothing behind it keeps its place — "we hold nothing of that
-// sort" is an answer these pages owe — and its trailing cell is INERT TEXT,
-// never a disabled button. A verb that does nothing is worse than a stated
-// fact.
+// Share-of-largest bar (#814). Do not fold into `RowsBlock`. Empty rows keep
+// their place; trailing cell is inert text, never a disabled button.
 
 export interface MeterRowDef {
   id: string;
-  /** The row's curated name — "Documents", not `core.document`. */
   name: string;
-  /** What it belongs to — its pack, its owner, its host. It leads the row's
-   *  second line because it is the one thing that says WHOSE this is, and forty
-   *  rows with no owner beside them are forty rows to recognise by name alone. */
   pack: string;
-  /** Bar length, 0–100, as a share of the largest row. */
+  /** 0–100, share of the largest row — not of the total. */
   share: number;
-  /** `1,908 records · 1.2 GB`, in the numeric register. */
   count: string;
-  /** When it was last touched. Omitted when the source cannot say. */
   when?: string | undefined;
-  /** Absent for a row with nothing behind it: the row then states its inert
-   *  cell instead of drawing a control. */
   onOpen?: () => void;
 }
 
 export interface MeterRowsProps {
   rows: readonly MeterRowDef[];
-  /** Names the list for assistive tech beneath its section head. */
   ariaLabel: string;
-  /** The line under the block — what is shown, and what the bar means. */
   caption?: string;
-  /** The trailing verb's word. "Browse" on the census, "Open" elsewhere. */
   actionLabel?: string;
-  /** What a row with no verb says instead. */
   inertLabel?: string;
 }
 
-/** The list, one thing a row, each with a proportional bar. */
 export default function MeterRows({
   rows,
   ariaLabel,
@@ -78,9 +46,7 @@ export default function MeterRows({
             </span>
             <span className={styles.pack}>{row.pack}</span>
           </span>
-          {/* The bar is a MARK, not a meter control: it reports a share the
-              row already states in words beside it, so it carries no value
-              semantics of its own and nothing announces it twice. */}
+          {/* Mark, not a meter control — the row already states the share. */}
           <span aria-hidden="true" className={styles.track}>
             <span
               className={styles.fill}

@@ -24,7 +24,7 @@ const TOKEN = crypto.randomBytes(16).toString("hex");
 
 // A stand-in for the loopback gateway: bearer-gated HTML + module
 // subresource + JSON echo + SSE — the exact request shapes that were broken
-// on mobile (issue #263 P0s #2 and #3).
+// on mobile (#263 P0s #2 and #3).
 function startFakeGateway(): Promise<{ server: http.Server; baseUrl: string }> {
   const server = http.createServer((req, res) => {
     if ((req.headers.authorization ?? "") !== `Bearer ${TOKEN}`) {

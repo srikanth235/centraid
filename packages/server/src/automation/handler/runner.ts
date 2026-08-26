@@ -1,21 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit the parent-side handler orchestrator is one message-pump — delegate/fetch/state/vault dispatch plus the #293 secret and #304 connection injection all share the one worker-boundary protocol, so splitting scatters the wire contract
 /**
- * Parent-side orchestrator for automation handlers.
- *
- * Issue #98: an automation is a self-contained unit that lives inside an
- * app folder (`<appCodeDir>/automations/<id>/`). The generated handler is a
- * single `handler.js` in that directory, executed in a worker thread
- * that exposes `ctx.delegate` / `ctx.fetch` / `ctx.vault` / `ctx.state` /
- * `ctx.runs`. Cross-run persistence is `ctx.state` (the `automation_state`
- * KV keyed by the automation id).
- *
- *   - Worker entry is `worker/runner.js`.
- *   - The parent supplies `delegateDispatcher` (the one billed rail — a bounded
- *     model turn); `ctx.vault` / `ctx.fetch` / `ctx.state` / `ctx.runs` are
- *     serviced here, in-process, against the vault bridge and SQLite.
- *   - Every ctx surface call becomes one `run_nodes` audit row. There is no
- *     runtime retry — a failed call rejects the handler Promise.
- *   - Retention runs at end-of-run per `manifest.history.keep`.
+ * Parent-side orchestrator for automation handlers (#98). Only
+ * `delegateDispatcher` (the one billed rail) comes from the host; the rest of
+ * the ctx surface is serviced here in-process. Every ctx call becomes one
+ * `run_nodes` audit row, and there is NO runtime retry.
  */
 
 import { randomUUID } from "node:crypto";
@@ -57,21 +45,17 @@ import {
 import type { AuditState } from "./ctx.js";
 
 function resolveWorkerFile(): string {
-  // `here` is the dir of this module (`src/handler` → `dist/handler` once
-  // built); the worker runner lives one level up under `worker/`.
   const here = import.meta.dirname;
   const jsPath = path.join(here, "..", "worker", "runner.js");
   if (existsSync(jsPath)) return jsPath;
-  // Running tests via tsx from src/ where .js isn't emitted — fall back to
-  // the .ts source. tsx propagates its loader to spawned Workers via
-  // NODE_OPTIONS, so this works under `tsx --test`.
+  // Under tsx no .js is emitted; its loader reaches spawned Workers via
+  // NODE_OPTIONS, so the .ts fallback works.
   return path.join(here, "..", "worker", "runner.ts");
 }
 
 const WORKER_FILE = resolveWorkerFile();
 let automationWorkerPoolInstance: WorkerPool | undefined;
 
-/** Resolve only after gateway boot publishes its storage-aware profile. */
 function automationWorkerPool(): WorkerPool {
   if (!automationWorkerPoolInstance) {
     automationWorkerPoolInstance = new WorkerPool(
@@ -84,11 +68,6 @@ function automationWorkerPool(): WorkerPool {
   return automationWorkerPoolInstance;
 }
 
-/**
- * One resolved vault derivative riding beside a `ctx.delegate` prompt (issue
- * #299): already consent-checked and receipted by the vault bridge. `base64`
- * for binary variants (thumb/preview), `text` for the text variant.
- */
 export interface DelegateAttachment {
   readonly name: string;
   readonly mediaType: string;
@@ -99,18 +78,10 @@ export interface DelegateAttachment {
 export interface DelegateCall {
   readonly prompt: string;
   readonly json?: unknown;
-  /** Optional per-call harness override; never silently fails over. */
   readonly harness?: string;
   readonly model?: string;
   readonly configPins?: Readonly<Record<string, string>>;
-  /** Vault derivatives to hand the model with the prompt (issue #299). */
   readonly attachments?: readonly DelegateAttachment[];
-  /**
-   * Token-stream sink (issue #158, Phase 2). When a harness routes
-   * `ctx.delegate` through the streaming turn plane, each `TurnStreamEvent`
-   * is forwarded here; the harness wraps it as an `item.delta` on the owning
-   * delegate item. Absent for dispatchers still on the collect-on-exit path.
-   */
   readonly onEvent?: (ev: TurnStreamEvent) => void;
 }
 
@@ -126,160 +97,68 @@ export interface DispatchContext {
 }
 
 export interface RunHandlerOptions {
-  /** Id of the automation app (its directory name). */
   automationId: string;
-  /**
-   * The automation's display name (manifest `name`), recorded on the
-   * execution conversation's `title` so a later-deleted automation's runs
-   * still carry their last-known name instead of just the raw ref.
-   */
   automationName?: string;
-  /** The automation app directory — handler logs are written here. */
   automationDir: string;
-  /** Absolute path to the generated `handler.js`. */
   handlerFile: string;
-  /**
-   * Containment lane from the automation's manifest (#846 P9). Absent is the
-   * strict `automation-handler` floor, which is what the worker installs when
-   * this is not set — never "no sandbox".
-   */
+  /** Absent is the strict `automation-handler` floor, never "no sandbox". */
   sandboxLane?: "model-runtime" | "media-transcode";
-  /** Absolute read roots for the two filesystem-granting lanes. */
   sandboxReadRoots?: readonly string[];
-  /** Resolved model-runtime directory; see the worker's field of the same name. */
   sandboxRuntimeDir?: string;
   runId: string;
-  /** ISO fire-start instant fixed by the caller; defaults to handler admission time. */
   now?: string;
   delegateDispatcher: DelegateDispatcher;
-  /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
   runsStore: ConversationStore;
-  /**
-   * Host-owned binding/watermark update. Runs synchronously in the exact
-   * transaction that settles this handler turn.
-   */
   finalizeTurn?: (
     store: ConversationStore,
     conversationId: string,
     turnId: string,
     ok: boolean
   ) => void;
-  /** Fixed harness owner for this automation conversation. */
   harnessKind?: string;
-  /** Effective model when a usage event omits its model id. */
   model?: string;
-  /**
-   * Host-injected `ctx.vault` executor, bound to this automation's enrolled
-   * `consent.agent` credential (duaility §12). Absent → every `ctx.vault` call
-   * fails closed with `VAULT_UNAVAILABLE`.
-   */
+  /** Bound to this automation's enrolled agent credential; absent → every
+   *  `ctx.vault` call fails closed with `VAULT_UNAVAILABLE`. */
   vault?: VaultBridge;
-  /**
-   * Live turn-stream sink. Receives `turn.start` / `item.start` /
-   * `item.end` / `turn.end` as the turn unfolds, alongside `onLog`. Wired by
-   * the host to its `runId`-keyed bus; omit for a non-streamed fire (the
-   * durable ledger still records everything).
-   */
   onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
   triggerKind?: AutomationTriggerKind;
-  /** Source that fired the run (`cron` / `webhook` / `manual`). */
   triggerOrigin?: AutomationTriggerOrigin;
-  /** Human-readable trigger-gap/cursor note stored on the turn. */
   note?: string;
-  /** Durable reader-facing boundary notice when this is a failover attempt. */
   failoverNotice?: string;
   input?: unknown;
   parentRunId?: string;
   outputSchema?: OutputSchema;
   history?: HistoryConfig;
   timeoutMs?: number;
-  /**
-   * Connector confinement (issue #290 phase 4). When present, this run is a
-   * published connector: `ctx.delegate` is forbidden entirely (agents write
-   * code, not data — the LLM appears at authoring/repair time, never in the
-   * per-sync loop), and `ctx.fetch` is the connector's only external rail.
-   *
-   * `secrets` (issue #293) is the allowlist for `{{secret:…}}` placeholders
-   * in `ctx.fetch` — `locker:<item_id>:<column>` refs the manifest declared.
-   */
+  /** Connector confinement (#290): `ctx.delegate` is forbidden entirely and
+   *  `ctx.fetch` is the only external rail. `secrets` is the allowlist for
+   *  `{{secret:…}}` placeholders (#293). */
   connector?: {
-    /** Manifest-owned identity; handler code cannot override either field. */
     readonly kind: string;
     readonly label: string;
     readonly secrets?: readonly string[];
-    /**
-     * Durable owner-selected connection binding (#524). The parent injects
-     * this id into sync.begin_run/sync.stage_rows after the worker boundary,
-     * so published handler code cannot accidentally fork a label-based
-     * shadow connection when the owner renamed or custom-labelled the row.
-     */
+    /** Injected past the worker boundary (#524), so published handler code
+     *  cannot fork a label-based shadow connection after a rename. */
     readonly connectionId?: string;
   };
-  /**
-   * Host-injected secret resolution for connector `ctx.fetch` (issue #293):
-   * ref → plaintext, backed by the automation agent's `reveal` grant. The
-   * value substitutes into the request at THIS side of the worker boundary
-   * and is scrubbed from every recorded string as a backstop.
-   */
+  /** ref → plaintext (#293). Substitution happens on THIS side of the worker
+   *  boundary, and the value is scrubbed from every recorded string. */
   resolveSecret?: (ref: string) => Promise<string>;
-  /**
-   * Broker-resolved connection credential (issue #304): the values behind
-   * `{{connection:…}}` placeholders in `ctx.fetch`, plus the host pin they
-   * may be injected toward. Provided by the gateway's connection broker when
-   * the connector's connection carries an `oauth2`/`api_key` credential;
-   * absent on the harness-ambient lane.
-   */
   connectionAuth?: ConnectionAuth;
-  /**
-   * Transient-failure backoff schedule for INJECTED fetches (429/5xx), in
-   * ms. Tests shrink it; the default is [1000, 4000].
-   */
   fetchRetryDelaysMs?: readonly number[];
 }
 
-/**
- * A broker-resolved connection credential riding one fire (issue #304).
- * The token itself never crosses the worker boundary: `values` substitute
- * into the request parent-side (like `{{secret:…}}`), `allowedHosts` is the
- * anti-exfiltration pin (injection refuses any other destination), and the
- * three hooks are how the fetch taxonomy talks back to the broker.
- */
+/** The token never crosses the worker boundary (#304): `values` substitute
+ *  parent-side and `allowedHosts` is the anti-exfiltration pin. */
 export interface ConnectionAuth {
-  /** Placeholder name → plaintext, e.g. `{ access_token: 'ya29…' }`. */
   readonly values: Readonly<Record<string, string>>;
-  /**
-   * Hosts the credential may be injected toward: exact hostnames or
-   * `*.suffix` wildcards (`*.googleapis.com`).
-   */
   readonly allowedHosts: readonly string[];
-  /**
-   * Force-refresh after a 401 — resolves replacement `values`. Rejects when
-   * the credential is dead (the broker has already flipped needs-auth).
-   * Absent for `api_key` credentials (nothing to refresh).
-   */
   readonly refresh?: () => Promise<Readonly<Record<string, string>>>;
-  /**
-   * The credential is dead upstream (401 after refresh, scope withdrawn):
-   * flip the connection to needs-auth with an owner-readable reason.
-   */
   readonly onAuthDead?: (reason: string) => Promise<void>;
-  /**
-   * Per-connection rate gate every injected request passes through, shared
-   * across concurrent fires on the same connection.
-   */
   readonly limit?: <T>(fn: () => Promise<T>) => Promise<T>;
-  /**
-   * Whether this credential may be injected toward MUTATING methods (issue
-   * #304 phase 5). Default (unset) = read-only: a POST/PUT/PATCH/DELETE
-   * injected request is refused. Connector fires never set this — external
-   * writes ride `outbox.stage` → the gateway executor's `allowWrites` lane
-   * (issue #306), never raw ctx.fetch.
-   */
+  /** Default (unset) = READ-ONLY. Connector fires never set this: external
+   *  writes ride `outbox.stage` (#306), never raw ctx.fetch. */
   readonly allowWrites?: boolean;
-  /**
-   * Exact provider endpoints whose APIs model read operations as POST.
-   * Broker-owned policy only: handler code cannot grant itself a target.
-   */
   readonly readOnlyPosts?: readonly {
     readonly host: string;
     readonly path: string;
@@ -306,9 +185,7 @@ export function isBrokerReadOnlyPost(
     ) {
       return false;
     }
-    // Strip comments and strings before looking for operation keywords.
-    // Erring closed here is preferable to letting a connector smuggle a
-    // GraphQL mutation through the read-only POST exception.
+    // Erring closed: no GraphQL mutation through the read-only POST exception.
     const document = (parsed as { query: string }).query
       .replace(/#[^\r\n]*/gu, "")
       .replace(/"""[\s\S]*?"""/gu, '""')
@@ -341,30 +218,16 @@ function bindConnectorVaultPayload(
 
 export interface HandlerOutcome {
   ok: boolean;
-  /**
-   * The fire ended BEFORE the handler ran, on owner-chosen or already-surfaced
-   * state — a paused / needs-auth connection, an unavailable secret, a broker
-   * refusal. Not a failure of the automation: hosts must not report a skip as
-   * one (it would spam a fresh high-severity notice every cron tick for as
-   * long as the owner leaves the connection paused — #647 review).
-   */
+  /** The fire ended BEFORE the handler ran, on state the owner chose or has
+   *  seen. NOT a failure: reporting a skip as one spams a notice every tick
+   *  while a connection stays paused (#647). */
   skipped?: boolean;
-  /**
-   * Set when the skip was the ENRICHMENT TIER GATE refusing the fire
-   * (`fire.ts`, decision S9). Structured rather than left for a host to
-   * pattern-match out of `error`, because the host has to name the domain in
-   * a member-facing surface and point at the control that changes it — and a
-   * privacy refusal that only exists as prose in a log is the silent failure
-   * the gate was supposed to end.
-   *
-   * Absent on every other skip: a paused connection is already carried by its
-   * own decision row and must not be re-announced.
-   */
+  /** Set when the ENRICHMENT TIER GATE refused the fire. Structured, not
+   *  pattern-matched out of `error`, because the host must name the domain and
+   *  the control that changes it. Absent on every other skip. */
   enrichRefusal?: {
     domain: string;
-    /** The enricher's capability id (`faces`, `captions`, …). */
     capability: string;
-    /** The tier in force, or `undefined` when it could not be read at all. */
     tier?: string;
   };
   value?: unknown;
@@ -426,10 +289,8 @@ type WorkerToParentMessage =
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
-/**
- * Handler actions mutate one run's durable state and must remain in author
- * order. Independent work belongs behind an explicit concurrent helper.
- */
+/** Handler actions must stay in author order; independent work belongs behind
+ *  an explicit concurrent helper. */
 function applyInOrder<T>(
   values: Iterable<T>,
   apply: (value: T, index: number) => void | PromiseLike<void>
@@ -457,20 +318,14 @@ export async function runHandler(
     abortSignal: abortController.signal,
   };
 
-  // No tool rail exists any more — the field stays for the run record shape,
-  // pinned at 0 (a fire never dispatches a tool batch).
   const toolBatches = 0;
   let delegateCalls = 0;
 
-  // Secret values resolved for ctx.fetch this run (issue #293). Substitution
-  // is transport-level; this set powers the backstop scrub over everything
-  // the run RECORDS — logs, summary, output, errors.
+  // Transport-level substitution; this set powers the backstop scrub (#293).
   const resolvedSecretValues = new Set<string>();
   const scrub = (text: string): string => {
     let out = text;
     for (const value of resolvedSecretValues) {
-      // Both the raw form and its JSON-escaped form — a secret embedded in
-      // stringified output would otherwise slip the net.
       for (const needle of [value, JSON.stringify(value).slice(1, -1)]) {
         if (needle) out = out.replaceAll(needle, "«secret»");
       }
@@ -506,10 +361,8 @@ export async function runHandler(
         }
         out = out.replaceAll(`{{secret:${ref}}}`, resolved.get(ref)!);
       });
-      // Broker-injected connection values (issue #304): the placeholder
-      // names what the credential carries (`access_token` / `api_key`);
-      // an unknown name — or no broker credential at all — is a handler
-      // bug surfaced as an error, never an empty substitution.
+      // An unknown placeholder name — or no broker credential — is a handler
+      // bug surfaced as an error, never an empty substitution (#304).
       for (const match of out.matchAll(CONNECTION_REF_RE)) {
         const name = match.groups!.name!;
         const value = connectionValues[name];
@@ -546,10 +399,9 @@ export async function runHandler(
     };
   };
 
-  // The anti-exfiltration pin (issue #304 decision 2): an injected request
-  // may only point where the CONNECTION says its credential may go. Exact
-  // hostnames or `*.suffix` wildcards; https only, loopback excepted (tests
-  // and the desktop's local bridges).
+  // Destination pin for EVERY ctx.fetch (#304, #865): https only (loopback
+  // excepted), and when a broker credential rides this fire, only toward its
+  // allowed_hosts.
   const hostAllowed = (url: URL): boolean =>
     (opts.connectionAuth?.allowedHosts ?? []).some((entry) =>
       entry.startsWith("*.")
@@ -562,26 +414,29 @@ export async function runHandler(
     url.hostname === "127.0.0.1" ||
     url.hostname === "::1";
   const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+  const assertFetchDestination = (rawUrl: string): void => {
+    const url = new URL(rawUrl);
+    if (url.protocol !== "https:" && !isLoopback(url)) {
+      throw new Error(
+        `ctx.fetch refuses non-https destination ${url.hostname} (issue #304)`
+      );
+    }
+    if (opts.connectionAuth && !hostAllowed(url)) {
+      throw new Error(
+        `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(", ")} (issue #304)`
+      );
+    }
+  };
   const assertInjectable = (
     rawUrl: string,
     method: string,
     body?: string
   ): void => {
+    assertFetchDestination(rawUrl);
     const url = new URL(rawUrl);
-    if (url.protocol !== "https:" && !isLoopback(url)) {
-      throw new Error(
-        `injected fetch refuses non-https destination ${url.hostname} (issue #304)`
-      );
-    }
-    if (!hostAllowed(url)) {
-      throw new Error(
-        `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(", ")} (issue #304)`
-      );
-    }
-    // Read-only ceiling (issue #304 phase 5): a broker credential injects
-    // toward SAFE methods only inside a fire. The write half shipped as the
-    // outbox (issue #306) — the error names the actual path (issue #308 B1)
-    // so a model that hits the ceiling can self-correct instead of retrying.
+    // Read-only ceiling (#304): broker credentials inject toward SAFE methods
+    // only; writes ride the outbox (#306). The error names that path (#308)
+    // so a model can self-correct instead of retrying.
     const normalizedMethod = method.toUpperCase();
     if (
       !SAFE_METHODS.has(normalizedMethod) &&
@@ -622,18 +477,17 @@ export async function runHandler(
     text: string;
   }
 
-  // One HTTP round trip. Injected requests never auto-follow redirects — a
-  // cross-host Location would carry the Authorization header somewhere the
-  // pin never approved; the handler sees the 3xx and follows deliberately.
+  // Never auto-follow redirects: a cross-host Location would carry the
+  // Authorization header past the pin; the handler sees the 3xx and follows.
   const fetchOnce = async (
     spec: FetchSpecWire,
-    injected: boolean
+    manualRedirects: boolean
   ): Promise<FetchWireResult> => {
     const response = await fetch(spec.url, {
       method: spec.method ?? "GET",
       ...(spec.headers ? { headers: spec.headers } : {}),
       ...(spec.body === undefined ? {} : { body: spec.body }),
-      ...(injected ? { redirect: "manual" as const } : {}),
+      ...(manualRedirects ? { redirect: "manual" as const } : {}),
       signal: dispatchCtx.abortSignal,
     });
     const text = (await response.text()).slice(0, 2 * 1024 * 1024);
@@ -649,15 +503,10 @@ export async function runHandler(
     };
   };
 
-  /**
-   * The failure taxonomy for broker-injected fetches (issue #304 decision 5):
-   * 429/5xx → bounded backoff retry; 401 → one forced token refresh, then
-   * retry; 401 again (or with nothing to refresh) → the credential is dead,
-   * flip needs-auth and hand the response back; 403 that names scopes →
-   * same flip (re-consent is an owner act, not a retry). Non-injected
-   * fetches keep the raw single-shot behavior — their errors belong to the
-   * handler.
-   */
+  /** Broker-injected fetches only (#304): 429/5xx → backoff; 401 → one forced
+   *  refresh, then retry; 401 again or a 403 naming scopes → flip needs-auth
+   *  (re-consent is an owner act). Non-injected fetches stay single-shot past
+   *  the shared destination pin (#865). */
   const executeFetch = async (
     rawSpec: FetchSpecWire
   ): Promise<FetchWireResult> => {
@@ -667,7 +516,13 @@ export async function runHandler(
     );
     let { spec } = substituted;
     const { injected } = substituted;
-    if (!injected) return fetchOnce(spec, false);
+    // Issue #865: the destination pin used to run ONLY when a placeholder was
+    // substituted, so a placeholder-free template bypassed the https/host-pin
+    // checks entirely — a blind egress rail. Every ctx.fetch rides the same
+    // validation regardless of injection; secret/connection substitution is
+    // untouched.
+    assertFetchDestination(spec.url);
+    if (!injected) return fetchOnce(spec, true);
     assertInjectable(spec.url, spec.method ?? "GET", spec.body);
     const auth = opts.connectionAuth!;
     const gated = (s: FetchSpecWire): Promise<FetchWireResult> =>
@@ -694,8 +549,6 @@ export async function runHandler(
       }
       if (result.status === 401 && auth.refresh && !refreshed) {
         refreshed = true;
-        // A refusal here means the broker already flipped needs-auth — the
-        // thrown message is what the run records.
         const values = await auth.refresh();
         ({ spec } = await substituteSecrets(rawSpec, values));
         return attempt();
@@ -733,9 +586,8 @@ export async function runHandler(
     emit,
   };
 
-  // Every fire appends to the automation's stable canonical conversation.
-  // Harness sessions are per-harness resume bindings beneath this identity,
-  // so A → B → A never forks execution history.
+  // Harness sessions are per-harness resume bindings BENEATH one canonical
+  // conversation, so A → B → A never forks execution history.
   const slash = audit.automationId.indexOf("/");
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
   const execConversationId = audit.store.ensureAutomationConversation(
@@ -756,9 +608,8 @@ export async function runHandler(
     ...(opts.parentRunId ? { parentTurnId: opts.parentRunId } : {}),
     startedAt,
   });
-  // The trigger payload is the inbound `message_in` item (ordinal 0) — the
-  // same shape a chat turn records (issue #190, criterion 4). Trace items
-  // (tool/delegate) then start at ordinal 1.
+  // The trigger payload is `message_in` at ordinal 0, the shape a chat turn
+  // records (#190); trace items start at 1.
   if (opts.input !== undefined) {
     audit.store.insertMessageIn({
       turnId: audit.runId,
@@ -784,8 +635,6 @@ export async function runHandler(
     });
     audit.ordinal += 1;
   }
-  // `turn.start` opens the live stream; a viewer that joins later replays it
-  // from the ledger instead. Guarded — a wedged sink must not fail the run.
   try {
     emit({ type: "turn.start", turnId: audit.runId });
   } catch {
@@ -811,7 +660,7 @@ export async function runHandler(
   if (timeoutMs > 0) {
     timeoutHandle = setTimeout(() => {
       abortController.abort("timeout");
-      // eslint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
       worker.postMessage({ type: "abort", reason: "timeout" });
       setTimeout(() => {
         worker.terminate().catch(() => {});
@@ -820,7 +669,7 @@ export async function runHandler(
   }
 
   const send = (msg: unknown): void => {
-    // eslint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
+    // oxlint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
     worker.postMessage(msg);
   };
 
@@ -950,9 +799,7 @@ export async function runHandler(
       if (state.resolved) return;
       state.resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      // Backstop scrub (issue #293): nothing a run RECORDS may carry a
-      // resolved secret — transport injection is the mechanism, this is the
-      // net under it.
+      // Backstop scrub: nothing a run RECORDS may carry a secret (#293).
       if (resolvedSecretValues.size > 0) {
         if (outcome.error) outcome.error = scrub(outcome.error);
         if (outcome.summary) outcome.summary = scrub(outcome.summary);
@@ -974,9 +821,8 @@ export async function runHandler(
           turnId: audit.runId,
           endedAt: Date.now(),
           ok: outcome.ok,
-          // A finalization failure is the host's, not the handler's. It is
-          // recorded on the turn so it is visible, but it never rewrites a
-          // handler outcome — the handler's own error still wins the column.
+          // A finalization failure is the host's: recorded on the turn, but it
+          // never rewrites the handler's own error.
           ...(outcome.error
             ? { error: outcome.error }
             : finalizationError
@@ -999,10 +845,8 @@ export async function runHandler(
           );
         });
       } catch (error) {
-        // The rollback took the `finishTurn` with it, so without a second,
-        // non-transactional write this turn would stay `running` forever while
-        // the handler had in fact completed. Binding/watermark finalization is
-        // what failed; the run itself is settled honestly.
+        // The rollback took `finishTurn` with it, so without this second,
+        // non-transactional write the turn stays `running` forever.
         const finalizationError =
           error instanceof Error ? error.message : String(error);
         try {
@@ -1025,8 +869,6 @@ export async function runHandler(
           audit.ordinal += 1;
           settleTurn(finalizationError);
         } catch (settleError) {
-          // The ledger itself is unreachable — there is nothing durable left
-          // to write, so surface it on the returned outcome instead.
           outcome = {
             ...outcome,
             ok: false,
@@ -1053,14 +895,12 @@ export async function runHandler(
       worker.terminate().catch(() => {});
       if (persistedEntries.length > 0)
         void appendLogs(opts.automationDir, persistedEntries);
-      // eslint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
+      // oxlint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
       resolve(outcome);
     };
 
     worker.on("message", (msg: WorkerToParentMessage) => {
       if (msg.type === "delegate") {
-        // Connectors are deterministic code — no LLM turn ever runs inside
-        // a sync loop (issue #290: agents write code, not data).
         if (opts.connector) {
           send({
             type: "delegate-reply",
@@ -1089,10 +929,8 @@ export async function runHandler(
         return;
       }
       if (msg.type === "fetch") {
-        // Transport-level secret injection (issue #293): connector-only —
-        // the recorded spec keeps its placeholders; substitution happens
-        // here, past the worker boundary, and the response rides back to
-        // the handler without ever being journaled.
+        // Connector-only (#293): the recorded spec keeps its placeholders, and
+        // the response is never journaled.
         if (!opts.connector) {
           send({
             type: "fetch-reply",
@@ -1197,9 +1035,7 @@ export async function runHandler(
           try {
             let rawValue = msg.value;
             if (!msg.ok) {
-              // Finishing the bookkeeping run is best-effort on an already
-              // failed handler path. A vault close failure must not replace
-              // the provider/handler error that actually caused the run.
+              // Best-effort: a close failure must not replace the real error.
               await closeConnectorRun(
                 false,
                 {},
@@ -1276,8 +1112,6 @@ export async function runHandler(
     });
 
     worker.on("error", (err) => {
-      // @types/node 26 types this callback's argument as `unknown` — a worker
-      // can reject with any value, not only an Error.
       const message = err instanceof Error ? err.message : String(err);
       persistedEntries.push({
         ts: Date.now(),
@@ -1317,8 +1151,6 @@ export async function runHandler(
       }
     });
 
-    // The acquired spare has already paid thread/module boot. It remains
-    // single-use: this kickoff is its only handler, and finish() terminates it.
     send({ type: "run", request: workerRequest });
   });
 }

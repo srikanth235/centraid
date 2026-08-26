@@ -377,7 +377,7 @@ describe("photo-ocr handler", () => {
   });
 
   // ── the engine profile the run belongs to (issue #807, Wave 5) ──────────
-  // Selection moved from the manifest to policy, so the fire hands the
+  // Selection lives in policy, not the manifest, so the fire hands the
   // handler the profile it resolved. The handler's job is to keep the LEDGER
   // honest about it: stamp the profile, key the cursor by it, and never
   // stamp a prompt revision it did not send.

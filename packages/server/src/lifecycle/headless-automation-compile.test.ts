@@ -389,7 +389,7 @@ describe("headless-automation-compile suite", () => {
       const journalDbFile = path.join(dir, "journal.db");
       const run = vi.fn<ConversationRunner["run"]>();
       // The live automations ladder does not contain claude-code, so a manifest
-      // pin naming it is not consent for unattended egress (#567 D13).
+      // pin naming it is not consent for unattended egress (#567).
       const consent = new ProviderEgressConsentStore(
         makeJournalDbProvider(journalDbFile),
         () => false

@@ -1,12 +1,7 @@
-// Wire-rail command-tail replay (issue #750 invariant 7): a member reached
-// only over the peer plane receives the EXECUTABLE operation tail
-// (`exportCommonsIncrement`) and re-runs it (`applyCommonsIncrement`) inside
-// one transaction with its cursor advance. A tail this replica cannot replay
-// is unusable — never a park, never fatal — and the full frame converges.
-//
-// The state-proof bound lives here too: replay-produced rows are exactly as
-// unproven as the rows the old closure delta produced, so a seat may stand at
-// most one checkpoint interval of them on top of the state it last proved.
+// Wire-rail command-tail replay (#750 invariant 7): a peer-plane-only member
+// replays the exported executable tail in one transaction with its cursor
+// advance; an unreplayable tail is unusable — never a park — and the full
+// frame converges.
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -50,9 +45,8 @@ interface WireFixture {
   title: () => string | undefined;
 }
 
-/** A commons whose member is reached only over the WIRE: the steward compiles
- * no local seat for it, so every catch-up is an exported frame the member
- * applies exactly like a peer. */
+/** A commons whose member is caught up only via exported frames applied like
+ *  a peer's — no local steward seat exists. */
 function wireCommons(documentCount: number): WireFixture {
   const fixture = folderCommons(documentCount);
   const detached: CommonsMemberInput[] = [];
@@ -179,8 +173,7 @@ describe("Commons command-tail replay, wire rail (issue #750 invariant 7)", () =
           ORDER BY document_id`
       )
       .all();
-    // The seat's cursor is the idempotency boundary: a redelivered frame whose
-    // head it already holds changes nothing and re-executes nothing.
+    // The seat's cursor is the idempotency boundary.
     apply();
     expect(
       wire.fixture.home.audience.vault
@@ -227,7 +220,6 @@ describe("Commons command-tail replay, wire rail (issue #750 invariant 7)", () =
       refusal = error;
     }
     expect(isCommonsIncrementUnusable(refusal)).toBe(true);
-    // Rolled back whole: nothing from the replayable prefix survived.
     expect(wire.title()).toBe("Booking 0");
     expect(
       readCommonsCursor(
@@ -236,7 +228,6 @@ describe("Commons command-tail replay, wire rail (issue #750 invariant 7)", () =
         MEMBER_VAULT
       )?.sequence
     ).toBe(0);
-    // What the caller does with that refusal: pull the full frame.
     wire.rebaseline();
     expect(wire.title()).toBe("Before the skew");
   });
@@ -267,14 +258,10 @@ describe("Commons command-tail replay, wire rail (issue #750 invariant 7)", () =
 });
 
 /**
- * State proof is bounded, not continuous (issue #750 invariant 7): the one
- * attested state digest covers the STEWARD's closure bytes, which a member —
- * whose projection re-owns and may re-id what it stores — cannot recompute
- * from its own rows. So a seat may stand at most one checkpoint interval of
- * increments on top of the state it last proved; past that it refuses and
- * re-baselines through the full frame, whose digest it CAN assert. Rows a
- * replayed command produced are exactly as unproven as the rows the old
- * closure delta produced, so the bound applies to them unchanged.
+ * State-proof bound (#750 invariant 7): the one attested digest covers the
+ * STEWARD's closure bytes, which a member cannot recompute from its own rows,
+ * so a seat stands at most one checkpoint interval of increments atop its last
+ * proof point; past that it refuses and re-baselines through the full frame.
  */
 describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
   afterEach(closeOpenVaults);
@@ -296,8 +283,7 @@ describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
       )?.sequence
     ).toBe(head);
     expect(wire.title()).toBe(`Revision ${head}`);
-    // Honest about what that proved: the history, not the state. The seat's
-    // proof point is still where the last full frame left it.
+    // Proved the history, not the state: the proof point stays put.
     expect(wire.provenSequence()).toBe(0);
   });
 
@@ -306,13 +292,9 @@ describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
     const audience = wire.fixture.home.audience;
     const head = COMMONS_CHECKPOINT_INTERVAL;
     for (let sequence = 1; sequence <= head; sequence += 1)
-      // The last write skips the compile, so the steward cuts no new
-      // checkpoint: nothing but this seat's own bound stops it from riding a
-      // full interval of unproven operations.
+      // Last write skips compile so no checkpoint cuts the window short.
       wire.write(`Revision ${sequence}`, { compile: sequence !== head });
-    // Drift the replica under a row no operation in the window names: replay
-    // carries no command for it, so the tail itself would apply cleanly and
-    // leave the seat holding rows the steward does not have.
+    // Drift under a row no operation names: the tail would apply cleanly.
     audience.vault
       .prepare(
         "UPDATE core_document SET title = 'drifted' WHERE document_id = ?"
@@ -325,11 +307,9 @@ describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
     } catch (error) {
       refusal = error;
     }
-    // The re-baseline-triggering kind, not a park: the member must be able to
-    // heal itself through the full frame.
+    // Re-baseline-triggering kind, not a park.
     expect(isCommonsIncrementUnusable(refusal)).toBe(true);
-    // Rolled back whole: cursor, verified head, proof point and domain rows
-    // are exactly what they were before the increment was offered.
+    // Rolled back whole: cursor, verified head, proof point and domain rows.
     expect(
       readCommonsCursor(audience.vault, wire.fixture.grantId, MEMBER_VAULT)
         ?.sequence
@@ -338,9 +318,7 @@ describe("Commons increment state-proof bound (issue #750 invariant 7)", () => {
     expect(wire.provenSequence()).toBe(0);
     expect(wire.title()).toBe("Booking 0");
 
-    // The full frame re-projects from a snapshot whose digest is asserted
-    // inside the apply, so the drift is gone and the seat's proof point moves
-    // up to the head — the bound starts again from proven state.
+    // The full frame asserts its digest inside apply: drift gone, proof at head.
     wire.rebaseline();
     expect(
       (

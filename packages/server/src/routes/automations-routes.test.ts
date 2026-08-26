@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * Automation/insights HTTP routes (issue #141). Drives
+ * Automation/insights HTTP routes (#141). Drives
  * `makeAutomationsRouteHandler` with mock req/res, real (empty) stores
  * over a tempdir, and a stub `runAutomation` so turn-now is observable
  * without spawning a CLI.
@@ -377,8 +377,8 @@ describe("automations-routes suite", () => {
     expect(r.body).not.toBeNull();
   });
 
-  // Issue #351: run/events SSE was unbounded — a small cap (2) makes the
-  // "cap+1" scenario cheap to exercise. `subscribeTurnEvents` is wired to a
+  // The run/events SSE subscriber count is capped (#351) — a small cap (2)
+  // makes the "cap+1" scenario cheap to exercise. `subscribeTurnEvents` is wired to a
   // no-op unsub (never fires `turn.end`) so the stream stays open under test,
   // same as a real live run being watched.
   interface SseMockClient {

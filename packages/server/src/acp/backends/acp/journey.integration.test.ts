@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 /**
- * Harness-turn journey (#496 P1): message → side effect → transcript.
+ * Harness-turn journey (#496): message → side effect → transcript.
  *
  * Owns `agent-runtime.journey`. Drives the real `runAcpTurn` against
  * `fake-acp-harness.mjs` (same seam as backend tests) so the primary loop is

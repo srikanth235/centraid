@@ -6,20 +6,9 @@ import {
   triageCurrent,
 } from "../_shared/triage-session.ts";
 import type { TriageSession } from "../_shared/triage-session.ts";
-// The duplicates surfaces' render orchestrator (issue #352 phase 3) — same
-// shape as toolbar.jsx: owns its own private state (the loaded clusters, which
-// asset ids are checked, where the review has got to) and renders into the
-// SAME `gridRoot` the library/trash views use, since selecting the Duplicates
-// chip swaps what `#grid` shows exactly the way selecting Trash already does
-// (app.tsx's renderGrid()). Loaded lazily — the query walks up to 4000 live
-// assets, so it only runs once the owner actually opens this shelf, not on
-// every refresh() the way the (bounded, cheap) library window does.
-//
-// TWO SURFACES, ONE STATE (v4 handoff proto :4291, the `dupereview` tab).
-// The SHELF lists the clusters; the REVIEW steps through them one at a time
-// and resolves each. Both render into the same slot and both trash through
-// `trashDuplicateAssets`, so there is one loaded list, one scope, and one
-// write — the review is a mode over the shelf's data, not a second copy of it.
+// The duplicates orchestrator (#352), rendered into the SAME `gridRoot` the
+// library uses. Loaded LAZILY: the query walks up to 4000 assets. TWO
+// SURFACES, ONE STATE — the review is a mode, never a second copy.
 import { DuplicateReviewView } from "./components/DuplicateReview.tsx";
 import { DuplicatesView } from "./components/Duplicates.tsx";
 import { trashDuplicateAssets } from "./duplicates-actions.ts";
@@ -28,14 +17,7 @@ import type { DuplicateCluster } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
 
-// Duplicates stay OWN-SCOPE (issue #599): near-duplicate clusters are computed
-// by a query that walks one scope's assets, and "which copy do I keep?" is only
-// a meaningful question inside the space the member controls. The shelf's one
-// write therefore lands in the member's own scope, which `ownScope` resolves.
-// TILE SIZE IS ONE MEMBER PREFERENCE (§4.2), so this shelf reads the same one
-// the timeline does rather than pinning itself to a size the member never
-// chose. It is a getter, not a value: the preference can change (the stepper,
-// a pinch) between one render of this shelf and the next.
+// Own-scope (#599). `rung` is a getter: tile size can change (§4.2).
 export function createDuplicates({
   gridRoot,
   refresh,
@@ -51,26 +33,10 @@ export function createDuplicates({
   let loading = false;
   const selected = new Set<string>();
 
-  // ---- the review queue ----
-  //
-  // A SNAPSHOT, taken when the review opens, and NOT the live `clusters` list.
-  // The queue's length is the denominator the member reads on every step
-  // ("cluster 2 of 6 · 4 clusters after this one"); resolving a cluster
-  // shortens the live list, and a denominator that shrank under the member
-  // between two steps would be telling them the queue got shorter than the one
-  // they agreed to walk.
-  //
-  // That snapshot-plus-frozen-denominator dance is exactly what the Face
-  // review was also doing by hand, so it lives in `_shared/triage-session.ts`
-  // both flows read it from there. What stays different — and what that
-  // module deliberately does NOT unify — is durability: a face answer is a
-  // vault write, whereas resolving a cluster persists nothing but the trash
-  // batch itself, so this session is genuinely ephemeral by design.
-  // `null` = not reviewing.
+  // A SNAPSHOT, never the live `clusters` list: a denominator that shrank
+  // under the member would report a shorter queue than they agreed to walk.
   let session: TriageSession<DuplicateCluster> | null = null;
   let busy = false;
-  /** The copy the member chose to keep, per cluster key. A cluster with no
-   *  entry takes `decideCluster`'s own proposal. */
   const keptByCluster = new Map<string, string>();
 
   function renderDuplicates() {
@@ -119,8 +85,7 @@ export function createDuplicates({
     );
   }
 
-  /** Take the trashed ids out of the loaded list, and drop any cluster left
-   *  with fewer than two live copies — a cluster of one is not a question. */
+  /** Drops clusters left under two copies: a cluster of one is no question. */
   function dropTrashed(ids: readonly string[]): void {
     const trashedIds = new Set(ids);
     clusters = (clusters ?? [])
@@ -131,9 +96,6 @@ export function createDuplicates({
       .filter((c) => c.assets.length >= 2);
   }
 
-  /** Record how this cluster was resolved and step to the next one, or leave
-   *  the review when the queue is done — the member is returned to the shelf
-   *  they came from rather than left on a cluster that no longer exists. */
   function advance(outcome: "trashed" | "kept-all"): void {
     if (!session) return;
     const stepped = triageAnswer(session, outcome);
@@ -141,9 +103,7 @@ export function createDuplicates({
     renderDuplicates();
   }
 
-  /** Trash this cluster's redundant copies, then step on. The panel stays put
-   *  and goes inert while the batch runs (§14) — the counts ride the frame's
-   *  one status line, and a second press cannot start a second pass. */
+  /** Inert while the batch runs, so no second press starts a second pass. */
   async function resolveCluster(
     cluster: DuplicateCluster,
     assetIds: string[]
@@ -161,8 +121,6 @@ export function createDuplicates({
     advance("trashed");
   }
 
-  // Called from renderGrid() every time the Duplicates chip is showing —
-  // a no-op once loaded (or while a load is already in flight).
   async function ensureLoaded() {
     if (clusters != null || loading) return;
     loading = true;
@@ -181,10 +139,6 @@ export function createDuplicates({
     renderDuplicates();
   }
 
-  /** Open the review on the first loaded cluster (proto :4803 — the shelf's
-   *  own app-bar primary, `Review duplicates`). A no-op with nothing loaded
-   *  to review, which is why the control that calls it is only offered once
-   *  `count()` has answered with a positive number. */
   function openReview(): void {
     const loaded = clusters ?? [];
     if (loaded.length === 0) return;
@@ -194,7 +148,6 @@ export function createDuplicates({
     renderDuplicates();
   }
 
-  /** Leave the review without resolving anything, back to the shelf. */
   function exitReview(): void {
     if (!session) return;
     session = null;
@@ -202,14 +155,10 @@ export function createDuplicates({
     renderDuplicates();
   }
 
-  /** Is the review the surface on screen? The app bar's title reads off this
-   *  (proto :3964 — `Duplicate review`). */
   function reviewing(): boolean {
     return session != null;
   }
 
-  // Forces the next visit to re-fetch — called when leaving the shelf, so a
-  // trash/upload done elsewhere doesn't leave a stale cluster list behind.
   function invalidate() {
     clusters = null;
     selected.clear();
@@ -217,9 +166,6 @@ export function createDuplicates({
     keptByCluster.clear();
   }
 
-  // The app bar's count (§3, proto 3943 `Duplicates · 6 clusters`) — `null`
-  // until the first load lands, same "not yet answered" contract the rest of
-  // the shelves' counts follow (app-root.tsx's `countFor`).
   function count(): number | null {
     return clusters?.length ?? null;
   }

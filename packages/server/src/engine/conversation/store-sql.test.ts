@@ -1,7 +1,6 @@
 /**
- * Direct unit tests for the conversation-ledger SQL layer (issue #545 B4).
  * Pins row mappers and the prepared-statement block independently of
- * ConversationStore orchestration.
+ * `ConversationStore` orchestration.
  */
 
 import path from "node:path";

@@ -1,7 +1,3 @@
-/**
- * Direct unit tests for the handler worker TS loader hooks (issue #545 B5).
- */
-
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";

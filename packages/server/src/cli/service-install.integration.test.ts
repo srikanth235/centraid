@@ -1,5 +1,5 @@
 /*
- * REAL launchd round-trip for `centraid-gateway service` (issue #351 wave
+ * REAL launchd round-trip for `centraid-gateway service` (#351 wave
  * 4). Everything else in this directory tests unit-content generation and
  * `--dry-run` output against a faked $HOME; this test shells out to the
  * ACTUAL `launchctl` on the box.

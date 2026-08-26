@@ -1,5 +1,5 @@
 /**
- * Compatibility name for the single vault cursor scheduler (issue #541).
+ * Compatibility name for the single vault cursor scheduler (#541).
  * Existing hosts construct `InProcessScheduler`; all trigger work now runs
  * inside `VaultCursorEngine`.
  */

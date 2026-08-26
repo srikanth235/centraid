@@ -71,8 +71,8 @@ export function openPrompt(opts: PromptOpts): Promise<string | null> {
     saveBtn.addEventListener("click", commit);
 
     const actions = document.createElement("div");
-    // `sheet-actions` was a dead class (no rule survived the carve); the
-    // modal module's actions row is the styled equivalent confirm.ts uses.
+    // There is no `sheet-actions` rule to reach for; the modal module's
+    // actions row is the styled equivalent `confirm.ts` uses.
     actions.className = modalCss.actions ?? "";
     actions.append(cancelBtn, saveBtn);
     card.append(closeBtn, heading, input, actions);

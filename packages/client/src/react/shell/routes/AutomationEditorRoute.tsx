@@ -55,16 +55,12 @@ import { loadHarnesses } from "./settingsHarnessesData.js";
 
 export { vaultForTriggers } from "./automationEditorTriggers.js";
 
-// React-owned automation editor — the instructions-first create/edit form
-// (Automations UI revamp, see receipts/issue-387-automations-ui-revamp.md). This is a real
-// wrapper, not a stub: it wires `AutomationEditorScreen`'s full bridge-prop
-// surface against `loadAutomationEditorData` + the existing
-// create/update/enable/run/delete/webhook client fns, reusing
-// `deriveAutomationHero`/`filterConsentForAutomation` so the webhook URL and
-// standing-consent list are derived exactly once, the same way the thread
-// does. Lane B (editor) owns this file going forward — the screen it renders
-// is still the AutomationEditorScreen placeholder until Lane B lands the
-// real form.
+// The automation editor route — the instructions-first create/edit form
+// (#387). It wires `AutomationEditorScreen`'s bridge-prop surface against
+// `loadAutomationEditorData` + the create/update/enable/run/delete/webhook
+// client fns, reusing `deriveAutomationHero`/`filterConsentForAutomation` so
+// the webhook URL and standing-consent list are derived exactly once, the same
+// way the thread does — do not re-derive either here.
 // Canonical entity-type list is small and static per gateway — fetch once and
 // reuse across every @-search keystroke.
 let entityTypeCache: string[] | null = null;

@@ -1,6 +1,6 @@
 /**
  * Remove a document's star through core.unstar_document — deletes the
- * flags-scheme tag on the canonical content item (issue #274). Idempotent;
+ * flags-scheme tag on the canonical content item (#274). Idempotent;
  * refuses trashed documents (a trashed document keeps its star through
  * restore). Risk low.
  */

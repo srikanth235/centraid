@@ -1,4 +1,4 @@
-// The tiny DOM builders every blueprint app used to copy from Docs.
+// The tiny DOM builders shared by every blueprint app.
 
 /** Parse an HTML string and return its first element. */
 export function el(html: string): HTMLElement {

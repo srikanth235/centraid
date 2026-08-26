@@ -1,8 +1,5 @@
-// Verifiable commons history (issue #731). The steward's per-grant op log is a
-// hash chain; every checkpoint carries a signed digest of the projected state.
-// A member verifies both before it applies anything, so a steward that rewound
-// (restore-from-backup), forked, or shipped a mutated op becomes a NAMED fault
-// instead of silent divergence.
+// Verifiable commons history (#731): hash-chained op log; checkpoints carry signed state digests.
+// Members verify before applying — rewound/forked/mutated stewards become NAMED faults.
 
 import { createHash } from "node:crypto";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
@@ -18,8 +15,7 @@ const CHECKPOINT_DOMAIN = "centraid:commons-checkpoint:v1";
 const STATE_DOMAIN = "centraid:commons-state:v1";
 const GENESIS_DOMAIN = "centraid:commons-chain-genesis:v1";
 
-/** The two ways a member can find the steward's history unusable. Both PARK
- * the grant: the replica is left exactly as it was, never scrubbed. */
+/** Both faults PARK the grant: replica left exactly as it was, never scrubbed. */
 export type CommonsHistoryFaultTag = "history-diverged" | "digest-mismatch";
 
 export class CommonsHistoryError extends VaultShareError {
@@ -54,14 +50,12 @@ function sha256(value: unknown): string {
     .digest("hex");
 }
 
-/** The chain's genesis: what sequence 1 links back to. Every grant is chained
- * from its creation, so this is the only unlinked hash in a commons history. */
+/** The chain's genesis — the only unlinked hash in a commons history. */
 export function commonsGenesisHash(grantId: string): string {
   return sha256({ domain: GENESIS_DOMAIN, grantId });
 }
 
-/** The op fields the chain commits to. Text columns travel verbatim (never
- * re-serialized) so steward and member hash byte-identical inputs. */
+/** Op fields the chain commits to; text columns travel verbatim so both sides hash byte-identical inputs. */
 export interface CommonsOpChainFields {
   grantId: string;
   sequence: number;
@@ -115,8 +109,7 @@ export interface CommonsChainHead {
   hash: string;
 }
 
-/** The head survives compaction: it lives on the grant row, not on the last
- * surviving op, so pruning the verbose tail never loses the chain. */
+/** Lives on the grant row, not the last op — pruning the tail never loses the chain. */
 export function readCommonsChainHead(
   db: DatabaseSync,
   grantId: string
@@ -136,8 +129,7 @@ export function readCommonsChainHead(
   };
 }
 
-/** Insert one op already chained to the grant's head and advance both the
- * logical sequence and the chain head in the same statement pair. */
+/** Insert one op chained to the grant's head; sequence + chain head advance together. */
 export function insertChainedCommonsOp(
   db: DatabaseSync,
   fields: CommonsOpChainFields
@@ -175,9 +167,7 @@ export function insertChainedCommonsOp(
   return opHash;
 }
 
-/** SHA-256 over the canonical form of the closure the steward projects. The
- * member digests the same closure it stored, so the two agree byte for byte
- * without either side re-deriving the other's row order. */
+/** SHA-256 over the canonical closure; both sides hash byte-identical inputs. */
 export function commonsStateDigest(closure: unknown): string {
   return sha256({ domain: STATE_DOMAIN, closure });
 }
@@ -190,8 +180,7 @@ export interface CommonsCheckpointAttestation {
   signature: string;
 }
 
-/** Exactly the fields the steward attests to — never the seed or the
- * signature itself, which are not part of what is being signed. */
+/** Exactly the attested fields — never the seed or the signature itself. */
 function checkpointBytes(input: {
   grantId: string;
   sequence: number;
@@ -255,9 +244,7 @@ export function verifyCommonsCheckpoint(
   }
 }
 
-/** Sign the (op_hash, state_digest, sequence) triple for a snapshot the
- * steward is about to store or ship. A snapshot that cannot be attested is
- * never shipped unsigned — it is a steward-side failure. */
+/** Sign the (op_hash, state_digest, sequence) triple for a snapshot; never shipped unsigned. */
 export function signCommonsCheckpoint(input: {
   db: DatabaseSync;
   identitySeed: Buffer;
@@ -381,8 +368,7 @@ export function readCommonsVerified(
     : undefined;
 }
 
-/** Monotonic: a verified point never moves backward, so a later frame cannot
- * quietly lower the bar a rewound steward has to clear. */
+/** Monotonic: a verified point never moves backward — later frames cannot lower the bar. */
 export function recordCommonsVerified(input: {
   db: DatabaseSync;
   grantId: string;
@@ -403,9 +389,7 @@ export function recordCommonsVerified(input: {
     .run(input.grantId, input.sequence, input.opHash, input.now);
 }
 
-/** The steward vault's Ed25519 public key as this seat already knows it.
- * Preferring the seat's own binding over the incoming frame means a rewound
- * or impersonating steward cannot hand us the key that validates its story. */
+/** Steward's Ed25519 key as this seat already knows it — a rewound steward cannot hand us a validating key. */
 export function stewardIdentityKey(
   db: DatabaseSync,
   stewardVaultId: string
@@ -423,8 +407,7 @@ function diverged(message: string): never {
   throw new CommonsHistoryError("history-diverged", message);
 }
 
-/** Hashes this seat already holds, by sequence — the tail rows a previous
- * frame landed. Overlapping sequences must agree hash-for-hash. */
+/** Hashes this seat already holds, by sequence — overlapping sequences must agree. */
 function heldHashes(db: DatabaseSync, grantId: string): Map<number, string> {
   const rows = db
     .prepare(
@@ -435,16 +418,16 @@ function heldHashes(db: DatabaseSync, grantId: string): Map<number, string> {
 }
 
 export interface CommonsFrameHistory {
-  /** Sequence + hash to record once the frame has been applied intact. */
+  /** Sequence + hash to record once the frame applies intact. */
   verified: CommonsVerifiedPoint;
-  /** Digest the member must be able to recompute over its own replica. */
+  /** Digest the member must recompute over its own replica. */
   stateDigest: string;
 }
 
 /**
- * Verify a frame's history against what this seat already proved, BEFORE any
- * destructive apply. Throws `CommonsHistoryError` — never returns a partial
- * verdict — so the caller's park path is the only outcome of a bad frame.
+ * Verify a frame's history against what this seat already proved, BEFORE any destructive apply.
+ * Throws `CommonsHistoryError` — never a partial verdict; the caller's park path is the only
+ * outcome of a bad frame.
  */
 export function verifyCommonsFrameHistory(input: {
   seat: DatabaseSync;
@@ -454,8 +437,7 @@ export function verifyCommonsFrameHistory(input: {
   snapshotSequence: number;
   tail: readonly Record<string, unknown>[];
   checkpoint?: CommonsCheckpointAttestation;
-  /** Keys the frame carries, used on a first bootstrap when this seat holds
-   * no binding for the steward yet. */
+  /** Keys the frame carries, for first bootstrap when no binding is held yet. */
   bindings?: readonly Record<string, unknown>[];
 }): CommonsFrameHistory {
   const verified = readCommonsVerified(input.seat, input.grantId);
@@ -502,8 +484,7 @@ export function verifyCommonsFrameHistory(input: {
     diverged(
       `commons frame ends at ${previous.sequence}, not its declared head ${input.currentSequence}`
     );
-  // A steward whose head is BEHIND a point we already verified has lost
-  // history (restore-from-backup); there is no honest frame like this.
+  // Head BEHIND a verified point = lost history (restore-from-backup); no honest frame like this.
   if (verified && input.currentSequence < verified.sequence)
     diverged(
       `commons steward head ${input.currentSequence} is behind verified ${verified.sequence}`
@@ -515,15 +496,10 @@ export function verifyCommonsFrameHistory(input: {
 }
 
 /**
- * Verify an increment's ops-since-cursor against the point this seat already
- * PROVED, before anything is applied (issue #750 invariant 7). The anchor is
- * the seat's own `share_commons_verified` head — which itself chains back to
- * a signed checkpoint from the last full bootstrap — so an increment needs no
- * checkpoint of its own: it either extends the proven chain hash-for-hash or
- * it throws `CommonsHistoryError` and the caller parks, exactly as a bad full
- * frame would. The caller must have already matched `anchor.sequence` to the
- * frame's `fromSequence`; a frame built for another cursor is a FALLBACK
- * (re-baseline), not a fault, and never reaches this function.
+ * Verify an increment's ops-since-cursor against the point this seat already PROVED, before any
+ * apply (#750 invariant 7). Anchor = the seat's own verified head; extend hash-for-hash or throw
+ * and park. Caller matched anchor.sequence to fromSequence —
+ * fallback frames never reach this function.
  */
 export function verifyCommonsIncrementHistory(input: {
   seat: DatabaseSync;
@@ -563,8 +539,7 @@ export function verifyCommonsIncrementHistory(input: {
   return { sequence: previous.sequence, opHash: previous.hash };
 }
 
-/** One sequence, two different hashes — the steward's log was rewound or
- * forked under a point this seat already holds or already proved. */
+/** One sequence, two hashes — the log was rewound or forked under a held/proved point. */
 function rewound(
   held: Map<number, string>,
   verified: CommonsVerifiedPoint | undefined,
@@ -594,8 +569,7 @@ function frameKey(
     : undefined;
 }
 
-/** Recompute the state digest over what this seat actually stored and refuse
- * to keep a replica whose bytes disagree with the signed checkpoint. */
+/** Recompute the digest over what this seat stored; refuse replicas disagreeing with the checkpoint. */
 export function assertCommonsStateDigest(input: {
   seat: DatabaseSync;
   grantId: string;
@@ -616,8 +590,7 @@ export function assertCommonsStateDigest(input: {
     );
 }
 
-/** Copy chain columns verbatim between vaults (same-machine compile, tail
- * projection). Recomputing here would launder a tampered op into a valid one. */
+/** Copy chain columns verbatim between vaults; recomputing would launder a tampered op into a valid one. */
 export function chainColumns(
   row: Record<string, unknown>
 ): [SQLInputValue, SQLInputValue] {

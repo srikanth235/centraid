@@ -1,7 +1,6 @@
 // The "may I fetch N bytes now?" answer: a policy-aware decision, with no
-// opinion on UI. Generalised out of photos' `full-quality-gate.ts` so Docs'
-// "available offline" pin fetch and Photos' "load the original" ask the same
-// question through the same function.
+// opinion on UI. Docs' "available offline" pin fetch and Photos' "load the
+// original" ask the same question through the same function.
 //
 // The answer is binary and stated, never silent: `needs-choice` means the
 // caller must render the explicit-choice UI (see `FetchChoice.tsx`) and wait

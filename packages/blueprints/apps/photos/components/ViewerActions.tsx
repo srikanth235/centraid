@@ -1,20 +1,5 @@
-// The viewer's actions, in both of the two places they appear (v4 handoff
-// §7.1, §D).
-//
-// ONE SET, TWO ARRANGEMENTS. The desktop bar and the phone's bottom bar carry
-// the same names and the same marks; what differs is which five/six are in
-// reach and where the row sits. So the caller describes each action ONCE, as
-// data, and this file lays it out — rather than two components drifting apart
-// on what *Copy to ⟨vault⟩* is called.
-//
-// LABELS ARE A FUNCTION OF WIDTH, NOT OF SURFACE (viewer.ts's
-// LABEL_BREAKPOINT). Below 840px OF BAR the actions go icon-only with the
-// label carried as `aria-label` and `title` — which is why `labelled` is a
-// prop here and not a `@media` query in the stylesheet: the same 1420px window
-// crosses the threshold when the info rail opens.
-//
-// Every control is labelled either way (§18), and every mark is `aria-hidden`
-// — the registry adapter in icons.tsx sets that on the element it renders.
+// Viewer actions (v4 §7.1, §D). Labels follow bar width (`labelled` prop).
+// `reason` on the control, not a tooltip (§6). Trash is outlined `--net` (§18).
 import type { FC, ReactElement } from "react";
 
 import type { PhoneActionId, ViewerActionId } from "../viewer.ts";
@@ -22,31 +7,21 @@ import { ACTION_LABELS } from "../viewer.ts";
 
 import styles from "./Lightbox.module.css";
 
-/** One action, described once. `href` makes it an anchor (Download is a real
- *  link, so it keeps the browser's own save behaviour and its context menu). */
 export interface ViewerActionSpec {
   id: ViewerActionId | PhoneActionId;
   icon: FC<{ size?: number; filled?: boolean }>;
-  /** Overrides `ACTION_LABELS` where the caption is per-destination — the
-   *  copy action's `Copy to ⟨label⟩` (sharing.ts `copyActionLabel`). */
   label?: string;
-  /** Set where the mark itself carries state — the favourite heart fills. */
   filled?: boolean;
   onRun?: () => void;
   href?: string;
   download?: string;
   scope?: string;
   disabled?: boolean;
-  /** Why it is disabled. A read-only vault states the reason on the control
-   *  rather than in a tooltip that never appears on a touch surface (§6). */
   reason?: string;
-  /** A toggle that is currently on — `Info`, and `Favorite`. */
   pressed?: boolean;
-  /** Trash. An outlined `--net` button, never a filled one (§18). */
   destructive?: boolean;
 }
 
-/** The accessible name, which is the label whether or not it is drawn. */
 function nameOf(spec: ViewerActionSpec): string {
   return spec.label ?? ACTION_LABELS[spec.id];
 }
@@ -56,12 +31,6 @@ function Mark({ spec }: { spec: ViewerActionSpec }): ReactElement {
   return <Glyph size={18} filled={spec.filled ?? false} />;
 }
 
-/**
- * The top bar's action row: outlined stage buttons. An action with an `href`
- * renders as an anchor so the browser owns the download; everything else is a
- * button, and a button that cannot fire is DISABLED rather than firing and
- * apologising.
- */
 export function ViewerBarActions({
   specs,
   labelled,
@@ -77,10 +46,7 @@ export function ViewerBarActions({
         const label = labelled ? (
           <span className={styles.actionLabel}>{name}</span>
         ) : null;
-        // An icon-only control names itself twice on purpose: `aria-label` for
-        // a screen reader, `title` for a pointer that hovers and wonders.
-        // Labelled, the visible text IS the name, so `title` only carries the
-        // reason a disabled control cannot fire.
+        // Icon-only: `aria-label` + `title`. Labelled, `title` is only the disable reason.
         const title = spec.reason ?? (labelled ? undefined : name);
         const handleRun = spec.onRun;
         if (spec.href !== undefined) {
@@ -119,11 +85,7 @@ export function ViewerBarActions({
   );
 }
 
-/**
- * The phone's bottom bar (§D): five 56px targets where a thumb is. Never
- * labelled — at 390px there is no width for six words — so every one of them
- * carries its name on the element instead.
- */
+/** Never labelled — name lives on the element. */
 export function ViewerBottomBar({
   specs,
 }: {

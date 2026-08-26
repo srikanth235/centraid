@@ -1,9 +1,5 @@
-// Secret crypto: real RFC-6238 TOTP, password strength scoring and the
-// in-browser password generator — the app's only crypto surface, ported
-// byte-for-byte from the Lit original (app.js's "Secret helpers" section).
-// base32 decode → HMAC-SHA1 over the big-endian 30s counter → dynamic
-// truncation → 6 digits. Cached per (seed, 30s-step) so the once-a-second
-// tick is cheap; the seed and code never get logged.
+// Real RFC-6238 TOTP, strength scoring, in-browser generator — the app's only
+// crypto surface; seed and code are never logged.
 import { useEffect, useState } from "react";
 
 export function base32Decode(
@@ -39,7 +35,6 @@ export async function computeTotp(
   if (!key) return null;
   const counter = new ArrayBuffer(8);
   const view = new DataView(counter);
-  // 8-byte big-endian counter; step fits in the low 32 bits for any real clock.
   view.setUint32(0, Math.floor(step / 0x100000000));
   view.setUint32(4, step >>> 0);
   try {
@@ -77,31 +72,17 @@ function cacheKey(seed: string, step: number): string {
   return `${seed}|${step}`;
 }
 
-/**
- * React hook: the live TOTP code + ring offset for a seed. Ticks once a
- * second via its own interval scoped to the calling component (never a
- * top-level app render) — the React analogue of app.js's original shortcut
- * of bumping only the mounted detail component's `tick` property so the
- * once-a-second countdown never disturbs the sidebar/list/overlays the
- * owner might be mid-interaction with (typing in search, editing a modal).
- */
+/** Live TOTP code + ring offset for a seed, ticking once a second. */
 export function useTotp(seed: string | null | undefined): {
   code: string | null;
   offset: number;
 } {
-  // The code is derived during render, never synced into state by an effect
-  // (#573). `computed` carries the last value this hook resolved asynchronously,
-  // so a fresh 30s step keeps showing the previous code until its replacement
-  // lands — the same continuity the old `code` state gave. The tick value itself
-  // is never read: bumping it is what re-renders the countdown ring each second.
+  // Derived during render, never synced by an effect (#573); `computed` keeps
+  // the previous code visible until the fresh step resolves.
   const [, setTick] = useState(0);
   const [step, setStep] = useState(() => Math.floor(Date.now() / 30000));
   const [computed, setComputed] = useState<string | null>(null);
 
-  // One interval drives both: `tick` re-renders for the countdown ring, `step`
-  // rolls the 30s window over within a second of the real one — the same
-  // once-a-second re-check the old `[seed, tick]` effect performed, but as
-  // state the render can read purely.
   useEffect(() => {
     if (!seed) return undefined;
     const id = setInterval(() => {
@@ -112,9 +93,7 @@ export function useTotp(seed: string | null | undefined): {
   }, [seed]);
 
   const key = seed ? cacheKey(seed, step) : null;
-  // A cached entry wins even when it is null (a failed compute is cached as
-  // null, exactly as the old effect stored it); only a cache miss falls back to
-  // the previous resolved code.
+  // Cached null wins too; only a miss falls back to the last resolved code.
   const code = key
     ? OTP_CACHE.has(key)
       ? (OTP_CACHE.get(key) ?? null)
@@ -140,8 +119,6 @@ export function useTotp(seed: string | null | undefined): {
   return { code, offset: totpOffset() };
 }
 
-// ---------- Strength + generator (also real crypto: getRandomValues) ----------
-
 export interface Strength {
   ratio: number;
   tone: string;
@@ -149,9 +126,7 @@ export interface Strength {
   color: string;
 }
 
-// Length + character-class score, 0..5 → { ratio, tone, label, color } for a
-// `Meter` + label. Mirrors the server's strengthScore so the meter agrees
-// with Watchtower's "weak".
+// Length + character-class score 0..5, mirroring the server's strengthScore.
 export function strength(pw: string | null | undefined): Strength {
   if (!pw) return { ratio: 0, tone: "", label: "", color: "var(--text-faint)" };
   let s = 0;

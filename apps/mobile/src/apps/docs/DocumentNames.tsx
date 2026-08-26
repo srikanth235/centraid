@@ -1,4 +1,4 @@
-// Who this document names (Docs handoff Part 2 §12; issue #821) — the
+// Who this document names (Docs handoff Part 2 §12; #821) — the
 // `names` capability's product screen, rendered HONESTLY EMPTY.
 //
 // The sample shows two links, each carrying the passage it was read from —

@@ -1,4 +1,4 @@
-// The fold of the gateway's custody rollup (#712 B3). What is pinned here is
+// The fold of the gateway's custody rollup (#712). What is pinned here is
 // the one property the whole block exists for: an UNCOUNTED vault contributes
 // nothing and is NAMED, rather than being summed in as a row of zeroes.
 

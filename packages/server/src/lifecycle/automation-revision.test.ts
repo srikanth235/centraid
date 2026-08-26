@@ -1,5 +1,5 @@
 /*
- * Revise serialization + prompt/handler atomicity (issue #541 review).
+ * Revise serialization + prompt/handler atomicity (#541 review).
  *
  * Regressions guarded:
  *  - two revises interleaving, so the second publish drops the first;

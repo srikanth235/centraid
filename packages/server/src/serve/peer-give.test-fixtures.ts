@@ -1,10 +1,6 @@
-// Shared fixture vocabulary for the "two gateways, one process" peer-give
-// suites (#726 P3): `peer-remote-give.test.ts` (decisions 7/9) and
-// `share-refusal-outbox.test.ts` (decision 9's refusal-reaches-origin gap).
-// Both stand up the SAME shape of fixture — a gateway.db + vault pair linked
-// over the in-process `transportTo` double `peer-link-ceremony.test.ts`
-// establishes — so splitting the suites by concern should not mean
-// copy-pasting this setup into each file.
+// Shared fixture vocabulary for the "two gateways, one process" peer suites
+// (#726): the same gateway.db + vault pair linked over the in-process
+// `transportTo` double `peer-link-ceremony.test.ts` establishes.
 import crypto from "node:crypto";
 import { mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -52,18 +48,16 @@ export interface Side {
   ownerPartyId: string;
   ownerId: string;
   deviceId: string;
-  /** The vault's own `Gateway`, with the task commands registered — what a
-   *  write-capable live edge invokes through (#726 P5). */
+  /** The vault's real `Gateway` with task commands registered — what a
+   *  write-capable live edge invokes through (#726). */
   gateway: VaultGateway;
-  /** The founding owner-device credential (#726 P5) — what confirms a
-   *  parked invocation. */
+  /** Founding owner-device credential (#726) — confirms a parked invocation. */
   ownerCredential: { kind: "device"; deviceId: string; deviceKey: string };
 }
 
-/** The gateway-level identity two co-hosted vaults SHARE: one `gatewayDb`
- *  (so one `vault_links` table), one endpoint id, one peer proof — an iroh
- *  endpoint is per-GATEWAY, not per-vault (D1 invariant 2), so this is the
- *  actual production shape of "two people's vaults hosted on one machine". */
+/** Gateway-level identity two co-hosted vaults SHARE: one `gatewayDb`, one
+ *  endpoint id, one peer proof — an iroh endpoint is per-GATEWAY, not
+ *  per-vault (D1 invariant 2). */
 export interface HostFixture {
   gatewayDb: GatewayDatabase;
   links: VaultLinksStore;
@@ -83,10 +77,8 @@ function makeHost(name: string): HostFixture {
 }
 
 /**
- * A vault fixture. `host` is optional and lets two (or more) `makeSide` calls
- * share ONE gateway (see `makeCoHostedSides`) instead of each minting its own
- * — everything else (the vault dir, the owner, the device enrollment) stays
- * per-vault, matching how a real household gateway hosts several owners.
+ * A vault fixture. Optional `host` lets multiple `makeSide` calls share ONE
+ * gateway (`makeCoHostedSides`); everything else stays per-vault.
  */
 export function makeSide(name: string, host?: HostFixture): Side {
   const root = tempDirSync(`centraid-remote-give-${name}-`);
@@ -130,9 +122,8 @@ export function makeSide(name: string, host?: HostFixture): Side {
 }
 
 /**
- * Two vaults co-hosted on ONE gateway (audit #726 finding 2's exact shape):
- * same `gatewayDb`/`links`/`endpointId`/`proof`, different owners. Whoever
- * links to either of these sees the SAME endpoint for both — the ambiguity
+ * Two vaults co-hosted on ONE gateway (audit #726 finding 2's shape): same
+ * `gatewayDb`/`links`/`endpointId`/`proof`, different owners — the ambiguity
  * `linkForPeer`/`peer.linkFor` exist to resolve.
  */
 export function makeCoHostedSides(
@@ -144,10 +135,8 @@ export function makeCoHostedSides(
   return [makeSide(nameA, host), makeSide(nameB, host)];
 }
 
-/** Wrap an already-built handler as the `PeerRequest` the relay would
- *  deliver, over the given endpoint/proof — shared by `transportTo` (one
- *  vault) and `transportToHost` (several co-hosted vaults answering as one
- *  gateway). */
+/** Wrap an already-built handler as the `PeerRequest` the relay would deliver,
+ *  shared by `transportTo` (one vault) and `transportToHost` (co-hosted). */
 function wireHandler(
   handler: ReturnType<typeof makePeerPlaneHandler>,
   callerEndpointId: string,
@@ -204,12 +193,9 @@ export function transportTo(side: Side, callerEndpointId: string): PeerRequest {
 }
 
 /**
- * Like `transportTo`, but for TWO OR MORE vaults co-hosted on one gateway —
- * `makeCoHostedSides`' shape. `vaultFor`/`vaultPublicKey`/`gatewayFor` widen
- * to recognize ANY of `sides` as local, matching how one real gateway
- * process serves every vault it hosts; `links`/`gatewayDb`/`endpointId` are
- * already shared (that IS what "co-hosted" means here) so any one side names
- * them.
+ * Like `transportTo`, but for two or more vaults co-hosted on one gateway:
+ * `vaultFor`/`vaultPublicKey`/`gatewayFor` recognize ANY of `sides` as local;
+ * `links`/`gatewayDb`/`endpointId` are already shared, so any one side names them.
  */
 export function transportToHost(
   sides: readonly [Side, ...Side[]],

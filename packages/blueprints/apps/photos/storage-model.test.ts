@@ -1,4 +1,4 @@
-// The Storage screen's custody arithmetic (issue #711) — DOM-free, exactly as
+// The Storage screen's custody arithmetic (#711) — DOM-free, exactly as
 // the model is. Two things are being pinned here: that the totals are sums of
 // the buckets the gateway wrote and nothing else, and that a free-up offer is
 // gated on PROVEN custody, never on a plausible-looking number.

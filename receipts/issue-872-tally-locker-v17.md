@@ -24,6 +24,13 @@ everywhere" is not the shipped truth, and the box stays honest about it.
 
 ## What changed
 
+**Merge of `origin/main` (PR #873 conflict resolution):** keep the rebuilt
+Locker/Tally tree over #861's comment-only edits to the deleted Locker files
+(`components/Detail.tsx`, `EditModal.tsx`, `ItemFields.tsx`, `Sidebar.tsx`,
+`logic.ts`). Combined both sides of `QUALITY.md`; recorded the #861/#865 and
+#872 fingerprint moves in `tests/quality/classification-ratchet.json`; kept
+the #872 seat-wall copy and Tally/Locker untrusted-rendering rows.
+
 **Wave 1 — Tally** (`packages/blueprints/apps/tally/`): rebuilt `app-root.tsx` (was the
 empty #831 cover; `CHANGE_TABLES` re-exported from `ledger-reads.ts`, same contract). Added
 `Chrome.tsx`, `Chrome.module.css`, `frame.tsx`, `shelves.ts` (all 15 routes), `types.ts`,

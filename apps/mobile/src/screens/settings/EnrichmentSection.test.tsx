@@ -1,4 +1,4 @@
-// Settings → Enrichment, rendered (#807 Wave 6). Three states and one law.
+// Settings → Enrichment, rendered (#807). Three states and one law.
 //
 // What this pins is what a future edit is likeliest to undo quietly:
 //

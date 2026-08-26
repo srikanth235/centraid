@@ -1,9 +1,9 @@
 /**
  * Retry delays for work that fails because the gateway is unreachable.
  *
- * A fixed interval is the wrong shape for "the phone left wifi": the intent
- * drainer retried every 2 s forever, so a night out of coverage was thousands of
- * radio wake-ups that could not have succeeded. Doubling to a ceiling keeps the
+ * A fixed interval is the wrong shape for "the phone left wifi": a 2 s retry
+ * forever makes a night out of coverage thousands of radio wake-ups that could
+ * not have succeeded. Doubling to a ceiling keeps the
  * first few retries fast — the common case is a blip — while an outage settles
  * into an idle poll. Reachability changes still reset the sequence, so a real
  * reconnect is not made to wait out the current delay.

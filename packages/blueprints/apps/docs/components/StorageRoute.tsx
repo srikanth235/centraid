@@ -1,22 +1,8 @@
-// "Storage" — what the drive weighs, and where the bytes are (Docs spec §4.5).
-//
-// COUNTED, NOT ESTIMATED, AND SAID SO. The spec's screen leads with six custody
-// figures: the total, what is on this device only, what is on both, what is on
-// the gateway only, what is provably backed up, and what could be released. Of
-// those, this seat can count exactly ONE honestly — the total across the rows
-// it has read — and even that carries a caveat when the fetched window is
-// truncated, because summing a window and calling it a library is how a member
-// ends up trusting a number that is smaller than their drive.
-//
-// The custody split (`custody_state` per content item) is a per-row fact the
-// drive already reads, so the on-this-device count is real and is drawn. The
-// backup figure, the gateway-only figure and "what could be released" need the
-// blob custody rollup, which this projection does not read; they are named as
-// not counted rather than shown as zero.
-//
-// "Before the sweep has run the answer is 'not counted yet', never a zero."
-// (spec §4.5, verbatim.) That rule is why every unread figure below is a
-// sentence and not a number.
+// "Storage" — what the drive weighs (Docs spec §4.5). COUNTED, NOT ESTIMATED:
+// countable here: only the total across read rows (caveated when truncated)
+// and the on-this-device figure (`custody_state`); backup/gateway-only/
+// releasable need the blob rollup this projection never reads — a sentence,
+// never a zero.
 import type { ReactNode } from "react";
 
 import { fmtBytes } from "../format.ts";
@@ -24,19 +10,15 @@ import type { DriveDoc } from "../types.ts";
 import { Note, Panel, Rows, Screen, Section } from "./Blocks.tsx";
 import type { Row } from "./Blocks.tsx";
 
-/** The custody state a row carries when its bytes are on this device and
- *  nowhere else — the one custody fact a member can LOSE something to. */
 const DEVICE_ONLY = "device_only";
 
 export function StorageRoute({
   docs,
   truncated,
 }: {
-  /** Every row this drive has read — trashed ones included, because they are
-   *  still occupying the disk until their purge date. */
+  /** Every row read — trashed included; they occupy disk until purge. */
   docs: readonly DriveDoc[];
-  /** The read stopped at its window, so these totals are of what was fetched
-   *  and not of the library. */
+  /** Totals cover the fetch window, not the whole library. */
   truncated: boolean;
 }): ReactNode {
   const bytes = docs.reduce((sum, d) => sum + (d.byte_size ?? 0), 0);
@@ -104,9 +86,8 @@ export function StorageRoute({
 
       <Rows ariaLabel="Storage actions" rows={rows} />
 
-      {/* OUT OF ROOM is the state this screen exists for, so it is described
-          even while it is not happening — a member who meets it for the first
-          time should already know what the product will and will not do. */}
+      {/* OUT OF ROOM is described even while not happening — first contact
+          knows the promises. */}
       <Section
         label="If this device runs out of room"
         meta="what will and will not happen"

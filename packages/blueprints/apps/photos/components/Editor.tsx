@@ -1,26 +1,7 @@
-// The editor (v4 handoff §7.4) — NON-DESTRUCTIVE, AND LEGIBLE ABOUT IT.
-//
-// Crop and rotate only. Not a reduced feature set awaiting filters: an edit
-// this app cannot express as "a new photograph beside the original" is an edit
-// it does not offer, because the alternative is overwriting bytes the member
-// cannot get back.
-//
-// The commit is worded as what it DOES — `Save as a new photograph` — and it
-// is the ONE filled ink element in this view (§18). The sentence explaining
-// that the original is untouched sits BESIDE it, at the point of decision,
-// rather than in a confirmation afterwards: a member deciding whether to press
-// a button needs the consequence before the press, not after it.
-//
-// There is deliberately no "also move the original to trash" here any more.
-// The commit's own copy promises "The original is not touched, and nothing is
-// overwritten"; a checkbox that trashes it in the same gesture makes that
-// sentence false.
-//
-// Rendering is entirely client-side on a <canvas> — the same raster path
-// upload.ts's thumb pipeline uses. Rotation redraws the whole frame at the
-// total angle (90° steps plus straighten) into its rotated bounding box; crop
-// is a drag-anywhere rectangle in fractions of the CURRENT frame, so it always
-// lines up with what is on screen.
+// Editor (§7.4) — non-destructive. Crop and rotate only; commit is a new
+// photograph beside the original. No "also trash the original" — that would
+// falsify the copy. Consequence sits BESIDE the one filled commit (§18).
+// Canvas raster; crop is fractions of the CURRENT frame.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 
@@ -49,28 +30,18 @@ interface Crop {
   h: number;
 }
 
-/** How far one press of Straighten turns the frame. Small enough that the
- *  control is for levelling a horizon, not for rotating a photograph — that
- *  is what Rotate 90° is for. */
+/** Horizon levelling, not rotation — that's Rotate 90°. */
 const STRAIGHTEN_STEP = 1;
 const STRAIGHTEN_LIMIT = 15;
 
-/** The rectangle `Crop` starts from: centred, inset a tenth on every side, so
- *  there is something to drag before a drag has happened. Cropping used to be
- *  reachable ONLY by dragging across the canvas, which is no control at all on
- *  a keyboard — the handoff lists `Crop` among the tool row's buttons
- *  (proto 4621), and this is what pressing it does. */
+/** Keyboard-reachable Crop (proto 4621): centred inset, not drag-only. */
 const DEFAULT_CROP: Crop = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
 
-/** A tool label as the handoff writes it (proto 4621, 4624): `3 : 2` carries
- *  spaces, and every label with a `:` or a `°` in it is set in MONO — the
- *  numeric register, because those labels ARE numbers. `EDITOR_RATIOS` keeps
- *  its unspaced ids (viewer.ts owns them, and they are compared, not read). */
+/** Display label: `3 : 2` spaced; ids stay unspaced for comparison. */
 function ratioLabel(ratio: EditorRatio): string {
   return ratio === "3:2" ? "3 : 2" : ratio;
 }
 
-/** Does this label read as a number (and so take the mono face)? */
 function isNumericLabel(label: string): boolean {
   return label.includes(":") || label.includes("°");
 }
@@ -79,7 +50,6 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
-/** A NEW canvas holding only the fractional `crop` region of `source`. */
 function cropCanvas(source: HTMLCanvasElement, crop: Crop): HTMLCanvasElement {
   const sx = Math.round(crop.x * source.width);
   const sy = Math.round(crop.y * source.height);
@@ -92,8 +62,7 @@ function cropCanvas(source: HTMLCanvasElement, crop: Crop): HTMLCanvasElement {
   return out;
 }
 
-/** The bounding box a `w × h` frame occupies once turned by `deg`. Straighten
- *  is not a multiple of 90°, so the box grows rather than merely swapping. */
+/** Bounding box after `deg`. Straighten is not 90°, so the box grows. */
 function rotatedBox(
   w: number,
   h: number,
@@ -135,9 +104,7 @@ export function EditorView({
     const img = imgRef.current;
     const canvas = canvasRef.current;
     if (!img || !canvas) return;
-    // The source is a MOUNTED element now, so it exists from the first render
-    // — before it holds any pixels. `naturalWidth` is the load's own signal,
-    // and drawing without it would size the canvas from a 0×0 frame.
+    // Mounted before it has pixels — wait for `naturalWidth` or the canvas is 0×0.
     if (!img.complete || img.naturalWidth === 0) return;
     const box = rotatedBox(img.naturalWidth, img.naturalHeight, angle);
     canvas.width = box.width;
@@ -192,8 +159,7 @@ export function EditorView({
   }
   function onPointerUp() {
     dragRef.current = null;
-    // A near-zero-area drag (an accidental tap) discards itself rather than
-    // leaving a sliver crop nobody meant to draw.
+    // Accidental tap: discard a sliver crop.
     setCrop((c) => (c && c.w > 0.02 && c.h > 0.02 ? c : null));
   }
 
@@ -227,9 +193,7 @@ export function EditorView({
       const file = new File([blob], `${baseName}-edited.jpg`, {
         type: "image/jpeg",
       });
-      // A new photograph lands beside the original, so it lands in the
-      // ORIGINAL's scope (issue #599) — never in the chip selection, which
-      // could be a different audience entirely.
+      // New photo lands in the ORIGINAL's scope (#599), never the chip selection.
       const scope = asset.scope_id ?? undefined;
       const staged = await stageFileBytes(file, "", scope ? { scope } : {});
       const outcome = await act(
@@ -237,12 +201,7 @@ export function EditorView({
         {
           staged_sha: staged.sha256,
           kind: "photo",
-          // Both halves of what the commit's sentence promises (issue #711):
-          // dated TODAY, and "with this one recorded as its source" — which is
-          // now a real column (`media_asset.source_asset_id`) rather
-          // than a claim with nowhere to land. The lineage is what lets the
-          // editor's own meta line say where an edited copy came from instead
-          // of reading its save date back as a capture date.
+          // Dated today + `source_asset_id` (#711) — else meta reads save as capture.
           captured_at: new Date().toISOString(),
           source_asset_id: asset.asset_id,
           title: asset.title || "Edited photograph",
@@ -271,26 +230,13 @@ export function EditorView({
   const straightenLabel = `Straighten ${straighten > 0 ? `+${straighten}` : straighten}°`;
 
   return (
-    // `data-editor="open"` is how the ORCHESTRATOR knows an edit is in
-    // progress (lightbox.tsx `isEditing`) without a second copy of this
-    // component's state living somewhere it can go stale. It is what stops
-    // ←/→ from stepping the viewer out from under an unsaved crop.
+    // `data-editor="open"` is lightbox `isEditing` — stops ←/→ under an unsaved crop.
     <div className={styles.editor} data-editor="open">
-      {/* THE SOURCE IS PAINTED THROUGH THE DOM, NOT THROUGH `new Image()`.
-          A `/centraid/_vault/blobs/…` path carries no credential on its own.
-          Inline — the shell document, and desktop's `file://` — it is not the
-          gateway at all: it falls through to the SPA's own index.html, the
-          element receives HTML and fires `error`. What makes it load is the
-          shell's authorizer (`inline-blob-images.ts`), a MutationObserver over
-          the mounted app subtree that swaps each blob reference for an authed
-          `blob:` object URL. A detached `new Image()` is in no subtree, so no
-          observer ever saw it and every edit opened on the failure copy.
-
-          `BLOB_PENDING_ATTR` is the other half of that contract: while an
-          authorization is in flight the stamp is set, and an `error` under it
-          is not a verdict — it is the raw path failing before the swap lands.
-          The authorizer re-fires `error` once it gives up for real, with the
-          stamp cleared, which is the branch below that ends in `loadError`. */}
+      {/* Paint through the DOM, not `new Image()`. Blob paths have no credential;
+          the shell authorizer (`inline-blob-images.ts`) swaps mounted subtree
+          refs for authed `blob:` URLs. Detached images never get that swap.
+          `error` under `BLOB_PENDING_ATTR` is not a verdict — wait for the swap
+          or a re-fired error with the stamp cleared. */}
       <img
         ref={imgRef}
         className={styles.source}
@@ -322,10 +268,7 @@ export function EditorView({
           <canvas ref={canvasRef} className={styles.canvas} />
         )}
         {crop ? (
-          // A 1px rectangle, everything outside it dimmed by one enormous
-          // shadow, and a dashed thirds grid inside (§7.4). The mask colour is
-          // the stage at 55% — the handoff's own `rgba(11,11,11,.55)`, said in
-          // the token that owns that value.
+          // 1px rectangle; outside dimmed; mask is the stage token at 55% (§7.4).
           <div
             className={styles.cropBox}
             style={{
@@ -338,16 +281,10 @@ export function EditorView({
         ) : null}
       </div>
 
-      {/* ONE WRAPPING BAR (proto 4617-4630): the tools, the sentence that
-          explains the commit, and the commit itself are the same row, wrapping
-          together. They were two stacked rows, which put the explanation and
-          the button it explains on opposite sides of a rule — the sentence is
-          only doing its job at the POINT OF DECISION. */}
+      {/* One wrapping bar: tools, explanation, and commit at the point of decision. */}
       <div className={styles.editBar}>
         <div className={styles.tools} role="toolbar" aria-label="Edit">
-          {/* `Crop` is a BUTTON, not a label over a gesture (proto 4621). It
-              was a `<span>`, which meant the only way to crop anything was to
-              drag across the canvas — nothing at all on a keyboard. */}
+          {/* Crop is a button (proto 4621) — not a drag-only gesture. */}
           <button
             type="button"
             className={styles.tool}
@@ -366,10 +303,7 @@ export function EditorView({
             disabled={busy}
             onClick={() => {
               setQuarters((q) => (q + 1) % 4);
-              // A rectangle drawn against the OLD orientation no longer lines
-              // up. Cleared here, with the rotation, rather than from the
-              // redraw effect — rotating is the only thing that invalidates a
-              // crop.
+              // Old-orientation crop no longer lines up. Clear here, not in redraw.
               setCrop(null);
               setRatio("Original");
             }}
@@ -377,14 +311,7 @@ export function EditorView({
             Rotate 90°
           </button>
 
-          {/* STRAIGHTEN IS BUTTONS (proto 4621), not a label plus a −/+
-              stepper with a readout beside it — that stepper was invented
-              here, and its readout duplicated a number the stage's own status
-              line is supposed to carry (`rotation −2°`, proto 4643). Two
-              buttons rather than the prototype's frozen one, because a horizon
-              tilts both ways; the live total rides their accessible names, so
-              nothing is lost while the status line is out of this component's
-              reach. */}
+          {/* Straighten is two buttons (proto 4621); live total rides aria-label. */}
           <button
             type="button"
             className={`${styles.tool} ${styles.numeric}`}
@@ -432,15 +359,12 @@ export function EditorView({
 
         <p className={styles.explanation}>{SAVE_AS_NEW_EXPLANATION}</p>
 
-        {/* Cancel THEN Save (proto 2891-2906): the way back stands before the
-            commit, and the commit is the last thing in the row. */}
+        {/* Cancel then Save (proto 2891-2906): way back before the commit. */}
         <div className={styles.commitActions}>
           <button
             type="button"
             className={styles.tool}
-            // The key handler cancels an edit THROUGH this button
-            // (lightbox.tsx `cancelEdit`), so Escape and a click can never
-            // mean two different things.
+            // lightbox `cancelEdit` clicks this — Escape and click stay one act.
             data-editor-cancel=""
             disabled={busy}
             onClick={onCancel}
@@ -449,9 +373,7 @@ export function EditorView({
           </button>
           <button
             type="button"
-            // The ONE filled ink element in this view — and a DISABLED commit
-            // is never filled (§18), which the stylesheet enforces on the same
-            // class rather than by swapping it.
+            // One filled ink; disabled is never filled (§18) — stylesheet, same class.
             className={styles.commit}
             disabled={busy || loadError}
             onClick={() => void handleSave()}

@@ -1,8 +1,8 @@
 // DATA — every store the vault keeps (#765, spec §6).
 //
-// Net-new on the phone: Home's Data row used to be a stated no-op, because
-// nothing here could read the vault's own tables. It now reads the four owner
-// census endpoints in `lib/atlas.ts` and shows exactly what they answer.
+// Home's Data row lands here. It reads the four owner census endpoints in
+// `lib/atlas.ts` and shows exactly what they answer — nothing on this screen
+// is derived from anything but the vault's own tables.
 //
 // TWO VERBS THE REFERENCE HAS AND THIS BAR DOES NOT:
 //  • the filled commit — the reference sets `a1:''` for this page on purpose

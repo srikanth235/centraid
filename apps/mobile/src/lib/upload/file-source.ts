@@ -1,8 +1,8 @@
-// Bounded random-access reads over a local file (#419 M0.4).
+// Bounded random-access reads over a local file (#419.4).
 //
 // Injected rather than imported so the queue and sealer stay testable under
 // vitest: `expo-file-system` is a native module. The expo-backed implementation
-// lives in `expo-file-source.ts`, which only app boot imports.
+// is `expoFileSource`, which only device-side wiring imports.
 
 export interface FileSource {
   readonly size: number;

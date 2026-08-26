@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive automation lifecycle suite shares one production HTTP and scheduler fixture
 import { promises as fs } from "node:fs";
 /*
- * Automation CRUD over HTTP (issue #141, C7). The desktop no longer
- * mutates an automation in a local worktree — it reads the app's draft
+ * Automation CRUD over HTTP (#141). The desktop does not
+ * mutate an automation in a local worktree — it reads the app's draft
  * over HTTP, applies the file-map transform (toggle / delete), writes the
  * changed/removed files back through the git-store session routes, and
  * publishes. The gateway reconciles the OS scheduler on publish, so the
@@ -187,7 +187,7 @@ describe("automation-lifecycle-over-http scenarios", () => {
     expect(manifest.enabled).toBe(true);
   });
 
-  // ---- create-route WIRING (#656 1D) --------------------------------------
+  // ──── create-route WIRING (#656 1D) ──────────────────────────────────────
   // Which trigger shapes are legal is the manifest validator's law, owned by
   // `packages/server/src/automation/manifest/manifest.test.ts`. The tests below prove
   // only what the route itself does: the kind pre-check, the cron default, the

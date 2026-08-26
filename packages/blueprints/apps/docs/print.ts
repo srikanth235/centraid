@@ -1,30 +1,14 @@
-// PRINTING, and the honest boundary of it (§7's `Print` on the stage).
+// PRINTING and its honest boundary (§7): the only document this app can hand
+// the browser is one it laid out — a picture, or text it holds. PDFs keep the
+// browser viewer's own print control; sound and video have no sheet. Both
+// refuse ON THE CONTROL (§6) through `printRefusal`, never by firing first.
 //
-// The browser prints A DOCUMENT, and the only document this app can hand it is
-// one this app laid out itself. That is the whole rule, and it is why `Print`
-// is live for exactly two kinds:
+// Build the sheet with DOM calls into a same-origin `about:blank` frame, never
+// an HTML string: nothing to escape, and it inherits the page's CSP.
 //
-//   * A PICTURE — one `<img>` on a sheet, which is a layout.
-//   * TEXT THIS APP HOLDS — the same characters the reading view sets, in the
-//     same reading register, which is also a layout.
-//
-// A PDF is laid out by the BROWSER'S OWN VIEWER inside the stage's frame, and
-// that viewer carries its own print control — a second one out here would be
-// two controls for one job, and the outer one could not drive the inner
-// document anyway. Sound and moving pictures have no sheet at all. Both say so
-// ON THE CONTROL (§6) rather than firing and apologising, which is what
-// `printRefusal` is for.
-//
-// The sheet is built with DOM calls into a same-origin `about:blank` frame,
-// never an HTML string: no escaping to get wrong, and the frame inherits the
-// page's own CSP.
-//
-// THE PICTURE IS PASSED IN, NOT RE-DERIVED. Off the gateway origin a document's
-// `content_uri` is a relative vault path that carries no credential — the shell
-// authorizes it in the app's own tree and hands the element a `blob:` URL. The
-// print sheet is a DIFFERENT document, outside that watch, so re-using the raw
-// path there would print a broken image. The caller passes the src the stage is
-// ALREADY showing, which is same-origin and loads in the sheet unchanged.
+// THE PICTURE IS PASSED IN, NOT RE-DERIVED — a `content_uri` is a
+// credential-less vault path off the gateway origin, and the sheet sits
+// outside the shell's `blob:` resolution.
 import { loadBlobText } from "./blob-text.ts";
 import { PRINT_REFUSALS } from "./document-copy.ts";
 import {
@@ -37,14 +21,12 @@ import {
 } from "./format.ts";
 import type { DriveDoc } from "./types.ts";
 
-/** What this app can lay onto a sheet, or `null` if it cannot. */
 export type PrintKind = "image" | "text";
 
 export function printKind(doc: DriveDoc): PrintKind | null {
   if (isImage(doc)) return "image";
-  // THE KIND, not "did an inline data URI happen to decode". A text document
-  // whose bytes live in the vault's CAS prints exactly as well as one carried
-  // inline — it is one authorized read away, and `printDoc` does that read.
+  // Judge THE KIND, not whether an inline data URI decodes: CAS-backed text is
+  // one authorized read away, and `printDoc` does it.
   if (isTextKind(doc)) return "text";
   return null;
 }
@@ -60,9 +42,8 @@ export function printRefusal(doc: DriveDoc): string {
   return PRINT_REFUSALS.unrendered;
 }
 
-/** The print sheet's own stylesheet. Paper is white and ink is black HERE and
- *  nowhere else in the product: the sheet is not a surface the theme owns, and
- *  a stage-dark page would come out of a printer as a solid black rectangle. */
+/** Paper is white and ink black HERE and nowhere else: the theme does not own
+ *  the sheet, and a dark page prints as a solid black rectangle. */
 const SHEET_CSS = `
   @page { margin: 18mm; }
   html, body { margin: 0; padding: 0; background: #fff; color: #000; }
@@ -75,24 +56,15 @@ const SHEET_CSS = `
   }
 `;
 
-/** The document's own characters, from wherever this seat can reach them. */
 async function textOf(doc: DriveDoc): Promise<string> {
   const uri = doc.content_uri ?? "";
   if (uri.startsWith("data:")) return decodeDataUri(uri) ?? "";
   return loadBlobText(uri);
 }
 
-/**
- * Lay the document onto a sheet and open the browser's print dialog.
- *
- * `imageSrc` is the src the stage is currently showing for a picture — see the
- * note at the top of this file. It is ignored for text.
- *
- * The frame is removed on `afterprint` AND on a timer, because `afterprint`
- * does not fire on every engine when the dialog is dismissed — a hidden frame
- * left in the tree would hold the picture's bytes alive for the rest of the
- * session.
- */
+/** `imageSrc` is the src the stage already shows; ignored for text. The frame
+ *  goes on `afterprint` AND on a timer — `afterprint` misfires on some engines
+ *  and a left-behind frame holds the picture's bytes for the session. */
 export function printDoc(doc: DriveDoc, imageSrc?: string | null): void {
   const kind = printKind(doc);
   if (!kind) return;
@@ -118,9 +90,7 @@ export function printDoc(doc: DriveDoc, imageSrc?: string | null): void {
     frame.remove();
   };
 
-  // The printed page's own title is what most engines put in the header and
-  // offer as the filename of a print-to-PDF, so it is the document's title
-  // and not `about:blank`.
+  // The page header and the print-to-PDF filename; never `about:blank`.
   sheet.title = doc.title || "Document";
   const style = sheet.createElement("style");
   style.textContent = SHEET_CSS;
@@ -129,8 +99,7 @@ export function printDoc(doc: DriveDoc, imageSrc?: string | null): void {
   const run = () => {
     view.focus();
     view.print();
-    // Long enough for a modal print dialog to have taken its snapshot of the
-    // frame; the `afterprint` listener below usually gets there first.
+    // Long enough for a modal dialog to snapshot the frame.
     window.setTimeout(clean, 1000);
   };
   view.addEventListener("afterprint", clean);
@@ -138,8 +107,7 @@ export function printDoc(doc: DriveDoc, imageSrc?: string | null): void {
   if (kind === "image") {
     const img = sheet.createElement("img");
     img.alt = doc.title || "";
-    // Decoded before the dialog opens: printing an `<img>` that has no pixels
-    // yet prints an empty box.
+    // Print only once decoded: an `<img>` with no pixels prints an empty box.
     img.addEventListener("load", run);
     img.addEventListener("error", clean);
     img.src = imageSrc || doc.content_uri || "";
@@ -154,7 +122,6 @@ export function printDoc(doc: DriveDoc, imageSrc?: string | null): void {
       pre.textContent = text;
       run();
     })
-    // A read that did not land prints nothing rather than an empty sheet: the
-    // dialog would offer to commit a blank page to paper.
+    // A failed read prints nothing: a dialog would offer a blank page.
     .catch(clean);
 }

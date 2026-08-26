@@ -1,21 +1,9 @@
 /*
- * @centraid/server
- *
- * Host-agnostic centraid gateway. `serve()` wires `app-engine` +
- * the historical `agent-runtime` package + stores + conversation runner against injected paths and
- * secrets, and starts an HTTP server in front of it. Two callers ship
- * today:
- *
- *   - `apps/desktop` embeds it in the Electron main process (paths
- *     under `<userData>/gateways/<id>/`, secrets read from
- *     `safeStorage`).
- *   - The `centraid-gateway` CLI in this package runs it as a
- *     standalone daemon (paths under a config-file `dataDir`, secrets
- *     read from a sealed file).
- *
- * No new wire protocol — the daemon serves the exact same routes the
- * Electron embed does, so desktop and mobile clients reach it through
- * their existing remote-gateway flow.
+ * @centraid/server — host-agnostic centraid gateway. `serve()` wires
+ * app-engine, the ACP harness layer, stores and the conversation runner
+ * against injected paths/secrets and fronts it with HTTP. Callers:
+ * `apps/desktop` (Electron main) and the `centraid-gateway` CLI daemon. No new
+ * wire protocol — the daemon serves the same routes as the Electron embed.
  */
 
 export {
@@ -39,9 +27,8 @@ export {
   type AssistOAuthConfig,
   type AssistOAuthEnvironment,
 } from "./serve/assist-oauth.js";
-// Component-level health (self-hosting observability): hosts push their
-// own components (tunnel, disk) through `BuiltGateway.health`; clients
-// read the aggregate at `GET /centraid/_gateway/health`.
+// Component-level health: hosts push components (tunnel, disk) through
+// `BuiltGateway.health`; clients read `GET /centraid/_gateway/health`.
 export {
   HealthRegistry,
   type ComponentHealth,
@@ -125,8 +112,7 @@ export {
   makeVaultLinksRouteHandler,
   LINKS_PATH,
 } from "./routes/vault-links-routes.js";
-// The gateway↔gateway lane (#726 P3 decision 6). A host mounts this with the
-// peer proof its own forwarder minted; nothing else may read that proof.
+// Gateway↔gateway lane (#726 P3 D6): mounted with the forwarder-minted peer proof.
 export {
   makePeerPlaneHandler,
   PEER_LINK_HELLO_PATH,
@@ -134,15 +120,13 @@ export {
   PEER_ROUTE_ASSERT_PATH,
   type PeerPlaneDeps,
 } from "./routes/peer-plane.js";
-// One table, one answerer for "may an edge cross to vault X" — same rows for
-// a vault on this machine and a vault across the world (D3).
+// One table, one answerer for "may an edge cross to vault X" (D3).
 export { VaultLinksStore } from "./serve/vault-links-store.js";
 export {
   type LinkChangeListener,
   type LinkChangeReason,
 } from "./serve/vault-link-row.js";
-// …and the vault-side shadow of those rows, so "is this person linked?" is a
-// question a vault query can answer (#821).
+// Vault-side shadow of those rows: "is this person linked?" via vault query (#821).
 export {
   reconcileLinkBindings,
   type LinkBindingDeps,
@@ -159,9 +143,8 @@ export {
   PUSH_REGISTRATIONS_PATH,
   PushWakeRelay,
 } from "./routes/push-wake-routes.js";
-// The vault-register tool runners, giving chat turns `vault_sql` /
-// `vault_invoke` / `vault_content` capability through the same
-// consent/receipt pipeline the Codex/Claude harnesses use (issue #319).
+// Vault-register tool runners: vault_sql/vault_invoke/vault_content via the
+// harness consent/receipt pipeline (#319).
 export {
   makeVaultToolRunners,
   assistantCwd,
@@ -173,10 +156,8 @@ export {
   type VaultRequestContext,
   type DeviceAccess,
 } from "./serve/vault-context.js";
-// The preview ladder's raster codec (issue #405 §2): pure-JS jpeg-js/pngjs
-// downscaler the host injects into vault planes so the blob sweep's backstop
-// can generate missing tiny/medium derivatives for imported / weak-client /
-// server-ingested images.
+// Preview raster codec (#405): pure-JS downscaler hosts inject for the blob
+// sweep's backstop derivatives.
 export { createImagePreviewCodec } from "./preview/codec.js";
 export { createWasmImagePreviewCodec } from "./preview/wasm-codec.js";
 export {
@@ -188,11 +169,8 @@ export {
   platformDefaultDataDir,
   type DefaultDataDirOptions,
 } from "./cli/data-dir.js";
-// How the desktop reaches a daemon it did not spawn — an OS-service install
-// derives its loopback bearer from custody rather than an env pin (#568 F).
+// Desktop → unspawned daemon: loopback bearer derived from custody (#568 F).
 export { landlordBearerForDataDir } from "./cli/landlord-auth.js";
-// Host-only capability gate (issue #568 items A/B). Embedders wire this into
-// `serve({isHostCustody})` so the host-only lanes — pairing-ticket mint,
-// owner administration, scopes — refuse anything a forwarder delivered to
-// loopback.
+// Host-only gate (#568 A/B): wire into serve({isHostCustody}) so host lanes
+// refuse anything a forwarder delivered to loopback.
 export { isDirectHostRequest } from "./routes/route-helpers.js";

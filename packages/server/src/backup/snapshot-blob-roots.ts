@@ -1,37 +1,24 @@
 /*
- * GC-pins-snapshots reachability (issue #436 §6).
+ * GC-pins-snapshots reachability (#436).
  *
- * NORMATIVE INVARIANT. A client that owns CAS garbage collection MUST treat
- * every blob referenced by any RETAINED (unpruned, still inside the retention
- * window) snapshot manifest as a LIVE GC root — even when that blob is no
- * longer referenced by the live vault model. CAS has no history of its own:
- * the backup class's snapshot manifests ARE the attachment history, so a blob
- * that only a past-but-retained snapshot still names is exactly the byte a
- * recovery-to-N would need. Delete it and the recovery-window number N becomes
- * a lie for the bytes users care most about. This helper is the one place that
- * computes that root set, shared by the observability reconciliation pass and
- * by any future client-owned CAS GC, so the two can never disagree about what
- * "reachable" means.
+ * A client that owns CAS garbage collection MUST treat every blob referenced
+ * by any RETAINED snapshot manifest as a LIVE GC root — even when that blob
+ * is no longer in the live vault. CAS has no history of its own: snapshot
+ * manifests ARE the attachment history. This helper is the one place that
+ * computes that root set, so observability and client-owned CAS GC cannot
+ * disagree about "reachable".
  *
- * The number N (recovery window) may only ever be surfaced in a UI because
- * this invariant holds: the roots computed here are what make N true.
- *
- * Mirrors `pruneWalGenerations`' manifest-keep-set logic: manifests are opened
- * and AUTHENTICATED (never trusted by bare key), and an unreadable manifest
- * THROWS rather than silently shrinking the root set — deleting a blob because
- * we could not read who references it is exactly backwards.
+ * Manifests are opened and AUTHENTICATED (never trusted by bare key). An
+ * unreadable manifest THROWS rather than silently shrinking the root set.
  */
 
 import { openManifest } from "@centraid/backup";
 import type { BackupProvider, Keyring, ManifestEntry } from "@centraid/backup";
 
 /**
- * The blob shas a single manifest's entries reference. A `blob` entry's
- * content sha is the final segment of its content-addressed
- * `blobs/sha256/<fan>/<sha>` path — the same parse the restore engine uses to
- * key its lazy-restore `skipBlob` predicate. Only `kind: 'blob'` entries name
- * CAS objects; `db`/`git-bundle`/`seal-key` entries are the snapshot's own
- * parts, not attachments.
+ * A `blob` entry's content sha is the final path segment of
+ * `blobs/sha256/<fan>/<sha>` — the same parse the restore engine uses for
+ * `skipBlob`. Only `kind: 'blob'` entries name CAS objects.
  */
 export function blobShasFromManifestEntries(
   entries: readonly ManifestEntry[]
@@ -46,16 +33,12 @@ export function blobShasFromManifestEntries(
 }
 
 /**
- * Every CAS blob sha referenced by a RETAINED snapshot manifest — the live GC
- * root set. `listSnapshots` (default) returns only unpruned rows, so a blob
- * whose last reference was a snapshot that has since aged out of the retention
- * window is (correctly) NOT a root: it is a genuine deletion candidate once no
- * retained snapshot names it.
+ * `listSnapshots` (default) returns only unpruned rows, so a blob whose last
+ * reference has aged out of the retention window is NOT a root.
  *
  * `manifestBlobCache` is a `manifestHash → blob shas` memo. Manifests are
- * immutable and content-addressed, so the caller hands the same Map back every
- * run and only NEW manifests get fetched + opened — the same amortization
- * `pruneWalGenerations` uses for its generation keep-set.
+ * immutable; hand the same Map back every run so only NEW manifests are
+ * fetched.
  */
 export async function snapshotReferencedBlobShas(opts: {
   provider: BackupProvider;
@@ -89,9 +72,7 @@ export async function snapshotReferencedBlobShas(opts: {
         row.manifestHash
       );
     } catch (error) {
-      // An unreadable retained manifest must FAIL the root computation, never
-      // shrink it: a caller that then deletes "unreferenced" CAS blobs would be
-      // deleting bytes it simply failed to prove were still reachable.
+      // Unreadable retained manifest must FAIL the root set, never shrink it.
       throw new Error(
         `snapshot roots: cannot read manifest seq ${row.seq}: ${error instanceof Error ? error.message : String(error)}`,
         { cause: error }

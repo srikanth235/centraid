@@ -20,7 +20,7 @@ import { getActiveVaultId, subscribeVaultLinks } from "../../lib/vault-links";
 import ColorSwatchRow from "./ColorSwatchRow";
 import SettingsSection from "./SettingsSection";
 
-// Settings → Vault — a port of desktop's Settings → Vault (issue #382), scoped
+// Settings → Vault — a port of desktop's Settings → Vault (#382), scoped
 // to the ACTIVE (gateway, vault) tuple the Vaults switcher has selected (lib/
 // vaults). Falls back to the first visible vault when nothing is active yet.
 // Edits the vault's presentation only: name, colour, icon, description. Creating

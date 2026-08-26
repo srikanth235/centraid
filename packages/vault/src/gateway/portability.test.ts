@@ -344,6 +344,61 @@ describe("portability", () => {
     restored.close();
   });
 
+  /*
+   * The schema/export audit for the column #865 added.
+   *
+   * `sync_connection_credential.refresh_capability` is the HMAC a stored
+   * Assist refresh token is redeemable with. A restore that dropped the
+   * column would restore tokens the Worker refuses (missing capability), so
+   * every Google connection would look withdrawn until the owner re-ran the
+   * ceremony.
+   *
+   * `exportVault` walks `SELECT *` over every registered canonical table, so
+   * the column rides along with no code change. That is exactly why it is
+   * asserted rather than assumed: nothing else would notice if the walk ever
+   * became a column list.
+   */
+  test("an Assist refresh capability survives export and restore (issue #865)", () => {
+    const connectionId = uuidv7();
+    const capability = "cap-must-survive-export";
+    db.vault
+      .prepare(
+        `INSERT INTO sync_connection
+         (connection_id, kind, label, status, trust, created_at)
+         VALUES (?, 'gmail', 'assist-export', 'active', 'staged', ?)`
+      )
+      .run(connectionId, "2026-08-26T00:00:00.000Z");
+    db.vault
+      .prepare(
+        `INSERT INTO sync_connection_credential
+         (connection_id, cred_kind, oauth_mode, provider, refresh_token,
+          refresh_capability, allowed_hosts, updated_at)
+         VALUES (?, 'oauth2', 'assist', 'google', 'sealed:v1:token',
+          ?, '[]', ?)`
+      )
+      .run(connectionId, capability, "2026-08-26T00:00:00.000Z");
+
+    const { artifact } = gw.exportVault(owner);
+    expect(artifact.tables["sync.connection_credential"]).toContainEqual(
+      expect.objectContaining({
+        connection_id: connectionId,
+        refresh_capability: capability,
+      })
+    );
+
+    const restored = openVaultDb();
+    importVaultExport(restored, artifact);
+    expect(
+      restored.vault
+        .prepare(
+          `SELECT refresh_capability FROM sync_connection_credential
+           WHERE connection_id = ?`
+        )
+        .get(connectionId)
+    ).toMatchObject({ refresh_capability: capability });
+    restored.close();
+  });
+
   test("tampered artifact is rejected by hash verification", () => {
     seedLife();
     const { artifact } = gw.exportVault(owner);

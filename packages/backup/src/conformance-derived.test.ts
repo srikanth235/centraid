@@ -1,5 +1,5 @@
 /**
- * Direct naming of conformance-derived.ts (issue #545 B12).
+ * Direct naming of conformance-derived.ts (#545).
  * Runs the derived cases against LocalBackupProvider (same as the suite spread).
  */
 

@@ -3,16 +3,10 @@
  *
  * governance: allow-repo-hygiene file-size-limit (#608) cohesive enrollment aggregate owns atomic owner, device, ownership, checkpoint, and rename invariants
  *
- * A `devices` row is a pure BINDING of a proved iroh EndpointId to an owner
- * (`owner-store.ts`), and authority is ownership: a vault has exactly one
- * owner (`vault_owners`), and a device reaches exactly the vaults its owner
- * owns. A `DeviceEnrollment` is therefore a DERIVED view — one per
- * (device, vault) the device's owner owns — not a stored row. That keeps
- * "may this device act in this vault" answerable in one lookup while leaving
- * exactly one place where the fact is authored.
- *
- * Rows live in `gateway.db`; deleting a device cascades its durable web
- * sessions and replica checkpoints.
+ * A `devices` row is a pure BINDING of a proved iroh EndpointId to an owner,
+ * and authority is ownership: a `DeviceEnrollment` is a DERIVED view over the
+ * (device, owner's vaults) pairs, not a stored row. Deleting a device cascades
+ * its durable web sessions and replica checkpoints.
  */
 
 import crypto from "node:crypto";
@@ -28,18 +22,14 @@ export { VaultOwnedError } from "./vault-owned-error.js";
 export interface DeviceEnrollment {
   enrollmentId: string;
   endpointId: string;
-  /** The principal this device acts as — the key attribution uses. */
+  /** Attribution principal. */
   ownerId: string;
-  /** Display label of that owner; never a key. */
+  /** Display label; never a key. */
   ownerLabel: string;
   vaultId: string;
   label: string;
   platform?: string;
-  /**
-   * The device-level tombstone — "this phone was stolen". Never a role: the
-   * owner keeps their vaults on paper and this binding none of them in
-   * practice.
-   */
+  /** Device-level tombstone ("this phone was stolen") — never a role. */
   revoked: boolean;
   rememberDevice: boolean;
   grantProfile?: string[];
@@ -80,14 +70,9 @@ export interface EnrollInput {
   grantProfile?: string[];
   /** Bind to this existing owner. */
   ownerId?: string;
-  /** …or create an owner with this label first (founding / host lanes). */
+  /** …or create an owner with this label first. */
   ownerLabel?: string;
-  /**
-   * Vaults this enrollment lands the owner in, in the CALLER's order (the
-   * first is the redeeming device's landing vault — scenario B12). An
-   * unowned vault is claimed for the owner; a vault owned by someone ELSE
-   * refuses the whole enrollment. Omitted → the owner's existing vaults.
-   */
+  /** Caller order matters (`enrolled[0]` is the redeeming device's landing vault, B12); unowned → claimed for the owner, foreign-owned → the whole enrollment refuses; omitted → existing vaults. */
   vaultIds?: readonly string[];
 }
 
@@ -119,8 +104,7 @@ const ENROLLMENT_VIEW_SQL = `
 
 function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
   if (source instanceof GatewayDatabase) return source;
-  // Callers pass a gateway.db path (or a legacy registry file under the same
-  // root). Always open the containing directory — never the file itself.
+  // Open the containing directory, never the file itself.
   return GatewayDatabase.open(path.dirname(path.resolve(source)));
 }
 
@@ -188,7 +172,7 @@ export class EnrollmentStore {
     return this.list().filter((row) => row.vaultId === vaultId);
   }
 
-  /** The principal a proved EndpointId acts as, tombstone excluded. */
+  /** Principal a proved EndpointId acts as, tombstone excluded. */
   ownerFor(endpointId: string): Owner | undefined {
     const row = this.gatewayDatabase.db
       .prepare(
@@ -225,11 +209,7 @@ export class EnrollmentStore {
     });
   }
 
-  /**
-   * Shared by ticket redemption so the burn, the ownership rows, and the
-   * device binding all commit as ONE transaction — a partial redemption
-   * leaves zero enrollment rather than a half-paired device.
-   */
+  /** Shared by ticket redemption so burn, ownership rows, and device binding commit as ONE transaction — a partial redemption leaves zero enrollment. */
   enrollWithinTransaction(input: EnrollInput): DeviceEnrollment[] {
     const ownerId = this.resolveOwnerWithinTransaction(input);
     const label = this.uniqueDeviceLabel(input.label, input.endpointId);
@@ -237,8 +217,7 @@ export class EnrollmentStore {
     for (const vaultId of requested) {
       const current = this.owners.ownerOf(vaultId);
       if (current === undefined) {
-        // An unowned vault is claimed for this owner — founding, `vault
-        // create`, and the stopped-daemon host lane all land here.
+        // Founding, `vault create`, and the stopped-daemon host lane land here.
         this.owners.setOwner(vaultId, ownerId);
       } else if (current !== ownerId) {
         throw new VaultOwnedError(vaultId);
@@ -301,9 +280,8 @@ export class EnrollmentStore {
     const vaultIds = new Set(
       requested.length > 0 ? requested : this.owners.vaultsOwnedBy(ownerId)
     );
-    // Row order is the CALLER's vault order, not the registry's: the
-    // redeeming device lands in `enrolled[0]`, so the ticket's primary vault
-    // must stay first (scenario B12 — `pair --vault Personal`).
+    // Row order is the CALLER's vault order: `enrolled[0]` is the ticket's
+    // primary vault (scenario B12).
     const rank = new Map(
       requested.map((vaultId, index) => [vaultId, index] as const)
     );
@@ -319,11 +297,7 @@ export class EnrollmentStore {
       );
   }
 
-  /**
-   * Rows must remain distinguishable even when two clients submit the same
-   * generated default. The gateway is the only participant with the complete
-   * live roster, so resolve collisions atomically at enrollment.
-   */
+  /** Collision resolution is atomic here — the gateway alone has the full live roster. */
   private uniqueDeviceLabel(requested: string, endpointId: string): string {
     const used = new Set(
       (
@@ -421,11 +395,7 @@ export class EnrollmentStore {
     return row;
   }
 
-  /**
-   * Revoke a DEVICE: tombstone the binding and drop its replica checkpoints.
-   * The owner and their other devices are untouched — removing a person is
-   * `OwnerStore.remove`, a different verb on a different layer.
-   */
+  /** Revoke a DEVICE (tombstone + checkpoint drop); removing a person is `OwnerStore.remove`, a different layer. */
   revoke(idOrEndpointId: string): DeviceEnrollment[] {
     return this.gatewayDatabase.transaction(() => {
       const removed = this.list().filter(
@@ -458,8 +428,7 @@ export class EnrollmentStore {
     return row;
   }
 
-  /** Remove a person and every binding they own — the L2 revocation verb.
-   *  Refused (`OwnerRemovalError`) while they still own vaults. */
+  /** L2 revocation: remove the person and every binding; refused while they still own vaults. */
   removeOwner(ownerId: string): DeviceEnrollment[] {
     const removed = this.list().filter((row) => row.ownerId === ownerId);
     this.owners.remove(ownerId);
@@ -484,9 +453,9 @@ export class EnrollmentStore {
     this.gatewayDatabase.db
       .prepare("DELETE FROM device_checkpoints WHERE endpoint_id = ?")
       .run(endpointId);
-    // The binding survives as a tombstone, so the web_sessions FK cascade
-    // (which fires on DELETE) never runs. Kill the durable browser sessions
-    // here instead, or a revoked laptop keeps its cookie alive.
+    // The tombstone survives, so the DELETE-time web_sessions FK cascade
+    // never runs; kill durable browser sessions here or a revoked laptop
+    // keeps its cookie alive.
     this.gatewayDatabase.db
       .prepare("DELETE FROM web_sessions WHERE device_key = ?")
       .run(endpointId);
@@ -505,9 +474,7 @@ export class EnrollmentStore {
       .prepare("SELECT owner_id FROM devices WHERE endpoint_id = ?")
       .get(input.endpointId) as { owner_id: string } | undefined;
     if (bound) return bound.owner_id;
-    // The host-custody lane (`devices add`, loopback host enrollment) names
-    // no person, so the device becomes its own owner — the honest answer for
-    // a communal box, and never an "Unassigned" bucket.
+    // Host-custody lane names no person: the device becomes its own owner.
     return this.owners.createWithinTransaction(input.label).ownerId;
   }
 

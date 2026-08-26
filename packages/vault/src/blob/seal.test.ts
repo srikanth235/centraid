@@ -1,4 +1,4 @@
-// Framed seal format (issue #405 §1): whole-object round-trips across the
+// Framed seal format (#405): whole-object round-trips across the
 // frame-boundary sizes, entropy-gated compression mixing compressible and
 // incompressible frames in one blob, and tamper-evidence — a flipped byte, a
 // swapped frame, or a truncated directory must all fail closed.

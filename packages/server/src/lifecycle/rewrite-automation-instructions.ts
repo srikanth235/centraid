@@ -1,5 +1,5 @@
 /*
- * Conversational automation revision (issue #541, Wave 7).
+ * Conversational automation revision (#541).
  *
  * A tool-less, cheap-tier ACP turn rewrites only the standing instruction
  * text. The host persists the returned prompt through its ordinary lifecycle

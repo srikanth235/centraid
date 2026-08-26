@@ -1,41 +1,26 @@
-// Device enrichment work leases (issue #414 D11).
+// Device enrichment work leases (#414): the vault-local, synchronous queue
+// routes call. Claim is one atomic UPDATE with a scalar SELECT, so two gateway
+// connections cannot receive the same job. Expiry is availability — a vanished
+// device needs no cleanup tick. Completion is token + device bound.
 //
-// Routes authenticate/advertise devices; this module is the vault-local,
-// synchronous queue primitive they call. Claim is one atomic UPDATE with a
-// scalar SELECT, so two gateway connections cannot receive the same job.
-// Expiry is availability: a vanished device needs no cleanup tick before a
-// second device can claim the row. Completion is token + device bound and an
-// already-completed duplicate is a harmless `false`.
-//
-// THE LANE SPLIT (issue #724). This queue leases exactly the work a BROWSER
-// can do with the platform it already has: rasterize a preview, grab a video
-// poster frame, pull text out of a PDF. Everything model-shaped — OCR,
-// transcription, embedding — left this lane and now runs on the gateway's one
-// self-contained recognition automations.
-//
-// Why not both lanes: a capability offered in two places is a capability with
-// two answers to "which model produced this row, and is it current?" — the
-// device lane has no model identity at all, so a transcript a phone
-// contributed could never be found by a version bump. One lane per
-// capability, and the model-shaped ones belong where the model is versioned.
-// The device lane keeps the three rungs that are pure format conversion, where
-// "which implementation ran" genuinely does not change the answer.
+// THE LANE SPLIT (#724). This queue leases only what a BROWSER can do with
+// its platform: preview rasterize, video poster, PDF text. Model-shaped work
+// (OCR, transcription, embedding) runs solely on the gateway's recognition
+// automations — one lane per capability; model-shaped work belongs where the
+// model is versioned.
 //
 // The `enrich_request.required_capability` CHECK in `schema/enrich.ts` still
-// accepts `ocr`/`transcript`/`embedding` and is deliberately NOT narrowed:
-// that is a pre-release, single-rung, edit-in-place schema, so an already
-// created table keeps the CHECK it was created with no matter what the DDL
-// text says, and rows queued by an earlier build must stay a legal SELECT
-// forever — the gateway sweep reads exactly those rows. Application code
-// narrows; the CHECK refuses to be the thing that turns an old row unreadable.
-// (Same argument, same words, as the `enrich_policy` tier rename above it.)
+// accepts `ocr`/`transcript`/`embedding`, deliberately NOT narrowed: SQLite
+// keeps a table's original CHECK regardless of later DDL text, and rows queued
+// by an earlier build must stay a legal SELECT forever — it must not make an
+// old row unreadable.
 
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import type { DerivativeVariant } from "../blob/derivatives.js";
 
-/** What a paired DEVICE may lease. See the lane split in the header. */
+/** What a paired DEVICE may lease (browser-lane rungs only). */
 export const ENRICHMENT_CAPABILITIES = [
   "previews",
   "poster",
@@ -165,10 +150,8 @@ export function queueDeviceEnrichmentRequest(
     );
 }
 
-// Audio has no row here any more: its only device rung was `transcript`, which
-// is now the transcript automation's (see the lane split). A recording therefore
-// queues no device job at all, and its transcript arrives from the gateway's
-// own sweep rather than from whichever phone happened to be charging.
+// Audio has no device rung (`transcript` moved to the automation lane): a
+// recording queues no device job; its transcript comes from the gateway sweep.
 const DEVICE_DERIVATIVE_RULES: readonly {
   matches: (mediaType: string) => boolean;
   sqlPredicate: string;
@@ -211,12 +194,7 @@ const DEVICE_BACKLOG_SQL = DEVICE_DERIVATIVE_RULES.map(
     `(${rule.sqlPredicate} AND (${rule.wanted.map(missingDerivativeSql).join(" OR ")}))`
 ).join(" OR ");
 
-/**
- * Queue only the device rungs one claimed content item still lacks. The
- * opaque detail is intentionally self-contained: a worker needs the parent
- * sha to submit `variant_of`, while the entity id remains the canonical
- * content id used by the backstop and UI.
- */
+/** Queue only the device rungs one claimed content item still lacks. The opaque detail is self-contained: the worker needs the parent sha for `variant_of`; the entity id stays the canonical content id. */
 export function queueMissingDeviceEnrichmentRequests(
   vault: DatabaseSync,
   input: DeviceEnrichmentSource & {
@@ -261,10 +239,7 @@ export function queueMissingDeviceEnrichmentRequests(
   return queued;
 }
 
-/**
- * Bounded standing backfill for libraries created before a capable device
- * was paired. Re-running is idempotent over open jobs and existing variants.
- */
+/** Bounded standing backfill for pre-pairing libraries; idempotent over open jobs and existing variants. */
 export function queueMissingDeviceEnrichmentBacklog(
   vault: DatabaseSync,
   input: { newId: () => string; requestedAt?: string | Date; limit?: number }
@@ -335,11 +310,7 @@ export function leaseNextEnrichmentRequest(
   return row ? leaseOf(row) : null;
 }
 
-/**
- * Finish a still-live lease only after its typed derivative exists. A buggy
- * client that reports completion before contribution loses ownership so the
- * job can be retried; duplicate/wrong/expired completion remains a no-op.
- */
+/** Finish a still-live lease only after its typed derivative exists — a client reporting completion before contribution loses ownership so the job can retry. */
 export function completeEnrichmentLease(
   vault: DatabaseSync,
   input: {
@@ -366,8 +337,8 @@ export function completeEnrichmentLease(
     )
     .run(now, input.requestId, input.deviceId, input.token, now).changes;
   if (Number(changed) === 1) return true;
-  // A matching live owner that simply failed to contribute must not pin the
-  // job until TTL. Wrong tokens/devices cannot release somebody else's work.
+  // A live owner that failed to contribute must not pin the job until TTL;
+  // wrong tokens/devices cannot release somebody else's work.
   vault
     .prepare(
       `UPDATE enrich_request

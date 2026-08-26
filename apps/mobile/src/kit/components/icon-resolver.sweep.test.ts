@@ -1,20 +1,5 @@
-// EVERY icon literal in the app must resolve — checked against the source, not
-// against a list someone remembers to update.
-//
-// `resolveIconName` THROWS on an unknown name, and an icon is rendered deep
-// inside real screens, so a missing alias is not a wrong glyph: it is a render
-// error that takes the whole screen down. Three separate spellings shipped that
-// way (`list`, `file`, then `map-pin`), each found only by a member walking
-// onto the screen that used it, because nothing connected "the spellings the
-// call sites use" to "the spellings the resolver knows".
-//
-// This test is that connection. It greps the mobile source for icon literals
-// and resolves every one. It cannot prove a glyph is the RIGHT glyph — that is
-// a judgement — but it makes "this screen crashes on open" impossible to merge.
-//
-// Only literals are reachable this way. A computed name (`icon={someVar}`)
-// still escapes, which is an argument for keeping icon names literal at the
-// call site.
+// Every icon literal must resolve — a missing alias is a render crash.
+// Computed names escape; keep call sites literal.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -25,16 +10,7 @@ import { resolveIconName } from "./icon-resolver";
 
 const SRC = path.join(__dirname, "../..");
 
-/**
- * Two shapes reach the resolver, and only two:
- *
- *   - an `icon` prop or record field — `icon="x"`, `icon: "x"` — which is how
- *     every row table and wrapper component passes one through;
- *   - `<Icon name="x" …>`, the component's own prop.
- *
- * A bare `name="x"` is NOT included: most of them are accessibility labels and
- * route names, which have nothing to do with the glyph registry.
- */
+// `icon` props and `<Icon name>` only.
 const ICON_PROP = /\bicon(?:=|:\s*)"(?<name>[a-zA-Z0-9_-]+)"/gu;
 const ICON_ELEMENT = /<Icon\b[^>]*?\bname="(?<name>[a-zA-Z0-9_-]+)"/gsu;
 
@@ -58,8 +34,7 @@ describe("icon call sites", () => {
           if (match.groups?.name) used.add(match.groups.name);
     }
 
-    // A guard on the guard: if the pattern stops matching, the test would pass
-    // by finding nothing.
+    // Fail loudly if a pattern goes quiet.
     expect(used.size).toBeGreaterThan(40);
 
     const unresolved: string[] = [];

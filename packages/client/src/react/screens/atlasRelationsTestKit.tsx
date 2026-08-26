@@ -11,7 +11,7 @@ import type { AtlasDetailLevel } from "./atlasOrreryGeometry.js";
 import AtlasRelationsTab from "./AtlasRelationsTab.js";
 import type { AtlasRelationsTabProps } from "./AtlasRelationsTab.js";
 
-// Shared test kit for the Relations "Map" suites (issue #519). Fixtures, the
+// Shared test kit for the Relations "Map" suites (#519). Fixtures, the
 // mount harness, and the DOM query helpers live here so the pure-geometry suite
 // (atlasOrreryGeometry.test) and the component suite (AtlasRelationsTab.test)
 // share one payload and one set of selectors — and neither file grows unwieldy.

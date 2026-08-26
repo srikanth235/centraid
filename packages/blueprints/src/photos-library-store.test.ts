@@ -1,4 +1,4 @@
-// The Photos multi-scope data layer (issue #599, apps/photos/library-store.ts).
+// The Photos multi-scope data layer (#599, apps/photos/library-store.ts).
 // Two behaviours carry the whole feature and are pinned here:
 //
 //  * a change-feed burst tagged with ONE scope refetches THAT scope only —

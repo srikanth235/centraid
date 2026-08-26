@@ -1,33 +1,7 @@
-// Places on the phone, in two modes (Photos v4 handoff §14, §18; issue #816).
-//
-// A shelf reached from the Places grid's Map chip, not a destination of its
-// own. The map is the content; everything this screen adds is a header that
-// names the shelf and states its size exactly — a count is a numeral, so it
-// reads in mono.
-//
-// The empty state is the shelf's own: a place is not something a member forgot
-// to do, it is something a photograph either carries or does not.
-//
-// TWO MAPS, ONE PROJECTION. The default is the phone's real basemap
-// (`PlacesRealMap` — MapKit on iOS, MapLibre over OpenFreeMap on Android, both
-// keyless), and the switch beside the title swaps it for the private sketch
-// (`PlacesSketchMap`), the graticule the web shelf draws from coordinates the
-// vault already holds. Both are handed the same places and both run
-// `place-map.ts`, so what the switch changes is the GROUND, never which places
-// are one pin or what a pin means at a given scale.
-//
-// THE DISCLOSURE IS A LINE ON THIS SCREEN, not a gate in front of it
-// (docs/decisions.md, P-egress). A basemap is fetched by tile and a tile is an
-// area, so the provider learns which neighbourhoods were opened; it is handed
-// nothing else, because the pins are drawn over it by this app. That is stated
-// under the map in whichever mode is on, permanently, beside the control that
-// answers it — a member is told, not asked.
-//
-// AND THE PIN IS THE PHOTOGRAPH, on both grounds. The first cut drew dots on a
-// graticule labelled in degrees, which is a chart, not a map: nobody remembers
-// a weekend as 39.0°N. The numbers came off the margins and each pin became a
-// picture taken there. The web shelf made the same change at the same time,
-// off the same projection.
+// Places shelf (§14/§18; #816), two modes sharing place-map.ts: the switch swaps
+// the GROUND only, never which places plot or what a pin means. Tiles tell the
+// provider which areas opened — disclosed permanently under the map (P-egress):
+// told, not asked. Pins are photographs; dots labelled in degrees are a chart.
 
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -66,9 +40,7 @@ export default function PlacesMap({
   const [reading, setReading] = useState<MapPin | null>(null);
   const [mode, setMode] = usePlacesMapMode();
   const [modeOpen, setModeOpen] = useState(false);
-  // Destructured, never held as one object: `anchorRef` goes to a `ref` prop,
-  // and anything reachable through a ref-carrying value reads as a ref access
-  // during render. Same shape `PhotosHome` uses for the Library chip.
+  // Destructured: anchorRef feeds a ref prop; reachable-through-ref reads as ref access during render.
   const {
     anchor: modeAnchor,
     anchorRef: modeAnchorRef,
@@ -80,13 +52,8 @@ export default function PlacesMap({
   );
   const { assets } = usePhotoTimeline();
 
-  // One PlacePoint per place, counted over the loaded window — the arithmetic
-  // lives in `places-model.ts` beside the shelf's own, where the two groupings
-  // can be read (and falsified) side by side. The id→row lookup is built
-  // inside it rather than in a memo of its own: hoisting it out rebuilt it
-  // every render, which made it useless as a dependency and forced a lint
-  // suppression to paper over that; the rows are what actually decide whether
-  // this recomputes.
+  // Id→row lookup stays inside the memo: hoisted out, it rebuilt every render
+  // and was useless as a dependency.
   const points = useMemo(
     () => placePoints(assets, places.rows),
     [assets, places.rows]
@@ -133,17 +100,12 @@ export default function PlacesMap({
           <Icon name="chevron-left" size={24} color={colors.text} />
         </Pressable>
         <Text style={styles.title}>Places</Text>
-        {/* Stated exactly, in mono: how many geotagged photographs are drawn,
-            and out of how many the library holds. Never a badge. */}
+        {/* Geotagged plotted, of library total. */}
         <Text style={styles.count}>
           {points.reduce((sum, point) => sum + point.count, 0)} of{" "}
           {assets.length}
         </Text>
-        {/* The mode lives on the screen it governs, in the app's own settings
-            idiom — an anchored menu of checked rows, the same one the Library
-            chip opens for the tile-size rung. A control that cannot act on
-            what is on screen is the failure `photos-library-menu.ts` names;
-            this one acts on nothing else. */}
+        {/* Acts on what is on screen. */}
         <Pressable
           accessibilityLabel="Map mode"
           accessibilityRole="button"
@@ -180,9 +142,7 @@ export default function PlacesMap({
         ) : (
           <Text style={styles.readout}>Plotted from your own photographs.</Text>
         )}
-        {/* `net` is the role for anything that leaves the device, so the ink
-            itself carries the difference between the two modes: the sketch's
-            line is ordinary faint chrome because nothing leaves. */}
+        {/* `net` marks what leaves the device. */}
         <Text
           style={[
             styles.note,

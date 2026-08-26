@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The Memories screen's trip block (issue #816) — the phone is the primary
+// The Memories screen's trip block (#816) — the phone is the primary
 // surface, so this is where "the seeded roll yields the Tahoe trip as a NAMED
 // card" is actually checked.
 //
@@ -7,9 +7,9 @@
 // and `memories-model.test.ts` owns the grouping. What this file owns is the
 // seat around them, which no cheaper layer can falsify:
 //
-//   1. THE BLOCK IS HEADED BY A SENTENCE. It used to print the place row's raw
-//      name — which is the coordinate `findOrCreatePlaceTx` minted until
-//      somebody renames it — or "Away from home" when even that was missing.
+//   1. THE BLOCK IS HEADED BY A SENTENCE — never the place row's raw name,
+//      which is the coordinate `findOrCreatePlaceTx` mints until somebody
+//      renames it, and never a bare "Away from home".
 //   2. THE TRIP CARRIES A SKETCH. Dots for the stops and a line through them in
 //      capture order, from the same projection the Places map runs.
 //   3. THE SCREEN FETCHES NOTHING TO DRAW EITHER. No basemap, no tile, no

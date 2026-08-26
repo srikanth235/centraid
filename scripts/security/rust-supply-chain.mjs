@@ -46,7 +46,16 @@ export const RUST_SUPPLY_CHAIN_TOOLS = Object.freeze([
   Object.freeze({
     id: "cargo-audit",
     subcommand: "audit",
-    argsFor: () => ["audit", "--deny", "warnings"],
+    argsFor: () => [
+      "audit",
+      "--deny",
+      "warnings",
+      // Same two unmaintained iroh transitives as deny.toml [advisories].ignore.
+      "--ignore",
+      "RUSTSEC-2023-0089",
+      "--ignore",
+      "RUSTSEC-2024-0436",
+    ],
     install: "cargo install cargo-audit --locked",
     covers: "RustSec advisories against the crate's Cargo.lock",
   }),

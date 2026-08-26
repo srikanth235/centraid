@@ -1,14 +1,10 @@
 // Client half of HTTP conditional requests for the phone's gateway calls.
-//
-// Home re-fetches the same three endpoints on mount, on focus and on every SSE
-// doorbell, and none of those responses usually changed. Unconditional GETs made
-// the phone pay the full body every time — over a metered link, over a relay,
-// for bytes it already had. `If-None-Match` turns the unchanged case into a 304
-// with no body while leaving the freshness guarantee exactly where it was: the
-// gateway still decides, and a changed resource still returns in full.
-//
-// This is a bandwidth cache, not a store. It holds bodies in memory only, is
-// bounded, and a miss is always safe — the request simply goes out unconditional.
+// Home re-fetches the same endpoints on mount, focus and every SSE doorbell;
+// `If-None-Match` turns unchanged responses into a body-less 304 instead of
+// paying the full body over a metered link for bytes already held. A
+// bandwidth cache, not a store: memory-only, bounded, and a miss is always
+// safe — the request goes out unconditional. The gateway still decides
+// freshness; a changed resource still returns in full.
 
 export interface ConditionalBody {
   body: string;
@@ -34,12 +30,7 @@ export class ConditionalBodyCache {
     this.#maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
   }
 
-  /**
-   * GET `href`, revalidating against the stored ETag when there is one.
-   *
-   * `key` separates responses that share a URL but not a scope — the active
-   * vault header is part of what the answer depends on.
-   */
+  /** GET `href`, revalidating against the stored ETag. `key` separates responses sharing a URL but not a scope (active-vault header). */
   async fetch(
     href: string,
     init: RequestInit,
@@ -57,10 +48,8 @@ export class ConditionalBodyCache {
         : init
     );
     if (response.status === 304) {
-      // The entry can only be missing if it was evicted between the request
-      // being built and this line, which cannot happen on one JS thread — but a
-      // gateway that 304s an unconditional request would otherwise strand the
-      // caller with no body, so re-ask without the validator.
+      // A gateway that 304s an unconditional request would strand the caller
+      // with no body — re-ask without the validator.
       if (cached) {
         this.#touch(key, cached);
         return { body: cached.body, status: 200, ok: true, reused: true };
@@ -86,9 +75,8 @@ export class ConditionalBodyCache {
     if (etag) {
       this.#entries.delete(key);
       this.#entries.set(key, { etag, body });
-      // Insertion order is least-recently-used order, so the oldest key is
-      // first. A handful of endpoints never reaches this, but an unbounded map
-      // keyed by URL is a leak waiting for a query string.
+      // Insertion order is LRU order; evict oldest — an unbounded map keyed
+      // by URL is a leak waiting for a query string.
       while (this.#entries.size > this.#maxEntries) {
         const [oldest] = this.#entries.keys();
         if (oldest === undefined) break;

@@ -69,7 +69,7 @@ export {
   zstdAvailable,
 } from "./compress.js";
 
-// WAL segments (FORMAT.md § WAL segments — /1, issue #408).
+// WAL segments (FORMAT.md § WAL segments — /1, #408).
 export {
   isWalGeneration,
   lastCommitBoundary,
@@ -179,9 +179,8 @@ export type {
   VerifySnapshotResult,
 } from "./engine.js";
 
-// Recovery kit reader + password wrapper (issue #439 R1, #555). The plaintext
-// `writeRecoveryKit` emitter was removed in #568 item J — a kit is always
-// password-wrapped now, and the reader refuses anything else.
+// Recovery kit reader + password wrapper (#439, #555). A kit is always
+// password-wrapped; the reader refuses anything else.
 export {
   parseRecoveryKit,
   recoveryKitFingerprint,
@@ -193,7 +192,7 @@ export type {
   WrappedRecoveryKitDocument,
 } from "./recovery-kit.js";
 
-// Targeted blob re-pin (issue #439 R5) — materialize specific shas from a
+// Targeted blob re-pin (#439) — materialize specific shas from a
 // snapshot, for the adopt-time inventory reconcile.
 export { materializeSnapshotBlobs } from "./materialize.js";
 export type {

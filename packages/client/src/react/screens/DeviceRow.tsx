@@ -11,18 +11,10 @@ import { replicaClause, seenAge } from "./vault-custody.js";
 import styles from "./HouseholdScreen.module.css";
 
 /*
- * One hardware binding, as a row in the Devices page's row block (#726, #765).
- *
- * The v9 row carries a title, one explanatory sub line, one state word, and
- * ONE trailing action. Everything a device can have done to it — rename,
- * compute, revoke — is more than one verb, so the trailing action opens the
- * row's own detail underneath it (`RowDef.children`) rather than the row
- * growing a second and a third button.
- *
- * "Revoke device" is still the narrow verb — this phone was lost, the person
- * keeps their access and their other devices. Removing the PERSON is a
- * host-custody act on this machine (`owners-routes.ts`), never a verb this
- * page offers.
+ * One hardware binding, as a row in the Devices page's row block (#726,
+ * #765): title, sub line, state word, ONE trailing action opening the row's
+ * detail — never second/third buttons. Removing the PERSON is host-custody,
+ * never a verb this page offers.
  */
 
 /** A device unseen for this long reads as `Dormant` rather than `Fine`. */
@@ -42,25 +34,18 @@ export interface DeviceRowOptions extends DeviceRowActions {
   device: GroupedDevice;
   /** Live clock (the route ticks it) — drives the humanized ages. */
   now: number;
-  /** Name the person this device acts as. Set for everyone but yourself: in
-   *  your own section the answer is always "you", and saying it on every row
-   *  would be the loudest thing in the block. */
+  /** Name the person this device acts as; set for everyone but yourself. */
   showOwner?: boolean;
   open: boolean;
   onToggle: () => void;
 }
 
-/**
- * A bare age, live-ticked each minute — "just now", "an hour ago", "2 days
- * ago". Re-exported from the custody model so a row, a tombstone and the
- * custody line above them all read the same clock.
- */
+/** A bare live-ticked age — shared by row, tombstone and custody line. */
 export function ageLabel(iso: string | undefined, now: number): string {
   return seenAge(iso, now);
 }
 
-/** The day something happened, in the reader's own locale ("3 March"). A
- *  pairing is remembered as a date; only "last seen" is read as an age. */
+/** The day something happened, in the reader's own locale ("3 March"). */
 export function dateLabel(iso: string | undefined): string {
   if (!iso) return "";
   const at = Date.parse(iso);
@@ -91,9 +76,7 @@ function subLine(
       ? "contributing compute"
       : "not contributing compute"
     : undefined;
-  // THE CLAUSES ARE ASSEMBLED, NOT CONCATENATED. A device that IS this device
-  // gets no "seen" clause — it is being seen — and a device the gateway has
-  // never heard from says so instead of reporting an age it does not have.
+  // Assembled, not concatenated: no self-seen clause; never-used says so.
   const seen = device.current
     ? ""
     : device.lastUsedAt
@@ -104,9 +87,7 @@ function subLine(
     showOwner ? device.ownerLabel : "",
     device.current ? "This device" : "",
     compute ?? "",
-    // The same string the custody line counts, so a row can never say a
-    // machine holds a copy while the line above it counts it as one that
-    // does not.
+    // The same string the custody line counts.
     replicaClause(device),
     device.platform ?? "",
     paired,
@@ -154,9 +135,7 @@ export function deviceRowDef(options: DeviceRowOptions): RowDef {
 }
 
 /**
- * One tombstone, as an OFF row. It stays in the list rather than behind a
- * disclosure because a revoked binding is how a past write still resolves to
- * the device that made it — present for audit, inert, and out of every count.
+ * One tombstone, an OFF row: present for audit, inert, out of every count.
  */
 export function tombstoneRowDef(device: GroupedDevice, now: number): RowDef {
   const sub = [
@@ -186,8 +165,7 @@ export function DeviceRowDetail({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Set only once the gateway has refused: this device is the last live one
-  // of the vault's last owner, so the confirm escalates in place.
+  // Set once the gateway refused: last owner device — confirm escalates.
   const [strandedVault, setStrandedVault] = useState<string | null>(null);
   const [computeBusy, setComputeBusy] = useState(false);
   const [name, setName] = useState(device.label);
@@ -198,7 +176,6 @@ export function DeviceRowDetail({
     setError(null);
     try {
       await onRevoke(device, confirmLastDevice);
-      // On success the parent drops the row; nothing more to do here.
     } catch (caughtError) {
       const stranded = lastDeviceVault(caughtError);
       if (stranded !== undefined && confirmLastDevice === undefined) {
@@ -248,9 +225,7 @@ export function DeviceRowDetail({
 
   return (
     <div className={styles.detail}>
-      {/* Every vault this device reaches — it holds one enrollment per vault,
-          and naming only the first read as "paired to Shared" for a device
-          that also reached Personal. */}
+      {/* Every vault this device reaches — one enrollment per vault. */}
       <ul className={styles.detailVaults}>
         {device.vaults.map((vault) => (
           <li key={vault.vaultId}>
@@ -285,9 +260,7 @@ export function DeviceRowDetail({
         </form>
       ) : null}
 
-      {/* The same replica string the row and the custody line quote — the
-          drill-in restates it because this is where a member decides whether
-          losing this machine costs them anything. */}
+      {/* The same replica string the row and the custody line quote. */}
       <p className={styles.detailNote}>
         What it holds · {replicaClause(device)}
       </p>

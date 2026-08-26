@@ -209,7 +209,7 @@ describe("route-helpers scenarios", () => {
   });
 
   /*
-   * `isDirectHostRequest` — the real host-only capability gate (issue #568
+   * `isDirectHostRequest` — the real host-only capability gate (#568
    * items A/B). Route tests stub `isHostCustody: () => true`, so
    * without this nothing exercises the predicate the product actually installs.
    *
@@ -266,8 +266,8 @@ describe("route-helpers scenarios", () => {
     });
 
     it("is strictly stronger than the bare-loopback gate it replaced", () => {
-      // The pre-#566 gate that `buildGateway` still fell back to for the
-      // embedded desktop (item B) said yes to exactly this request.
+      // The bare-loopback gate says yes to exactly this request; the
+      // host-custody gate does not (#566).
       const forwarded = fakeRequest("127.0.0.1", {
         [TUNNEL_FORWARDED_HEADER]: "1",
       });

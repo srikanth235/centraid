@@ -12,7 +12,7 @@
 //    cleanly fit draft-then-send. v1 stamps issued_on at draft creation;
 //    revisit as a migration only if the loose semantics bite.
 //  - business_invoice_line.qty_scaled now carries its paired qty_scale column
-//    (issue #441 A3), the pair finance_holding already uses. Time-entry lines
+//    (#441), the pair finance_holding already uses. Time-entry lines
 //    bill HOURS × 100 (hundredths of an hour), so qty_scale is a fixed 2 and
 //    amount_minor = qty_scaled × unit_price_minor / 100.
 //
@@ -368,7 +368,7 @@ function logTime(ctx: HandlerCtx): Record<string, unknown> {
     );
   ctx.wrote("core.activity", activityId);
   // The session remark is a memo annotation on the canonical activity
-  // (issue #274) — never an activity column.
+  // (#274) — never an activity column.
   if (input.note) annotate(ctx, "core.activity", activityId, input.note);
   // Rate defaults from the client so an entry is billable the moment it
   // lands, not after a back-fill pass.
@@ -534,7 +534,7 @@ function createDraftInvoice(ctx: HandlerCtx): Record<string, unknown> {
         new Date(row.started_at).getTime()) /
       3_600_000;
     // qty_scaled = hours × 100 (hundredths of an hour, see header comment), so
-    // the paired scale is a fixed 2 (issue #441 A3).
+    // the paired scale is a fixed 2 (#441).
     const qtyScaled = Math.max(1, Math.round(hours * 100));
     const qtyScale = 2;
     const amount = Math.round((qtyScaled * (row.rate_minor as number)) / 100);
@@ -625,7 +625,7 @@ const SEND_INVOICE: CommandDefinition = {
   ],
   idempotency: "once",
   // The moment an internal draft becomes an outward commitment to a client
-  // for a specific amount — Tier 3 semantic egress (issue #306): loud on
+  // for a specific amount — Tier 3 semantic egress (#306): loud on
   // purpose, parks for every non-owner caller.
   risk: "high",
   confirm: true,
@@ -719,7 +719,6 @@ function markInvoicePaid(ctx: HandlerCtx): Record<string, unknown> {
   return { invoice_id: input.invoice_id, status: "paid" };
 }
 
-/** Register the business domain's commands on a gateway. */
 export function registerBusinessCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_CLIENT);
   gateway.registerCommand(UPDATE_CLIENT);

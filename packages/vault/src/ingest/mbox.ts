@@ -1,6 +1,6 @@
 // Minimal RFC 4155 MBOX parsing — enough for the mail people actually export
 // (Google Takeout, Thunderbird): `From ` separator lines, unfolded headers,
-// MIME multiparts walked for the text body AND the attachments (issue #296:
+// MIME multiparts walked for the text body AND the attachments (#296:
 // the import spine is the real volume source of blobs — an mbox door that
 // drops attachments would re-open the gap the staging band closes).
 
@@ -156,9 +156,11 @@ function walkMime(
   if (filename) {
     into.attachments.push({
       filename,
-      mediaType:
-        contentType.split(";")[0]?.trim().toLowerCase() ||
-        "application/octet-stream",
+      // An email Content-Type header is attacker testimony (issue #865): a
+      // message can label an attachment `text/html` and the gateway would
+      // stage and later serve those bytes under that type. Declare nothing —
+      // staging sniffs the bytes and falls back to octet-stream.
+      mediaType: "application/octet-stream",
       data: decodePart(rawBody, encoding),
     });
     return;

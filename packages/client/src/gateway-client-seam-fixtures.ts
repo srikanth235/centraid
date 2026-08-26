@@ -181,7 +181,7 @@ const ROUTES: Record<string, Responder> = {
         egressCeiling: "on-device",
       },
     }),
-  // The egress-consent ledger (#807 Wave 3). The POST answers with the row the
+  // The egress-consent ledger (#807). The POST answers with the row the
   // VAULT holds — the route reads it back after the one writer wrote it.
   "GET /centraid/_vault/enrich/consent": () =>
     json({
@@ -214,7 +214,7 @@ const ROUTES: Record<string, Responder> = {
       },
     }),
 
-  // ── backup engine (#351 wave 4 / #436) ──
+  // ── backup engine (#351 / #436) ──
   "GET /centraid/_gateway/backup": () =>
     json({
       configured: true,
@@ -237,7 +237,7 @@ const ROUTES: Record<string, Responder> = {
   "POST /centraid/_gateway/backup/kit-confirmed": () =>
     json({ ok: true, confirmedAt: 1_700_000_000 }),
 
-  // ── vault atlas + browse (#441 Part B) ──
+  // ── vault atlas + browse (#441) ──
   "GET /centraid/_vault/atlas/stats": () =>
     json({ method: "dbstat", packs: [], totals: { rows: 0 } }),
   "GET /centraid/_vault/atlas/graph": () =>

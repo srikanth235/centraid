@@ -1,5 +1,5 @@
 /*
- * The peer lane where it meets the composed handler (issue #726 P3).
+ * The peer lane where it meets the composed handler (#726).
  *
  * `mountUnauthed` is the honest model of the hole this file closes: the
  * gateway's own bearer is checked ABOVE the composed handler, and every
@@ -18,7 +18,11 @@ import path from "node:path";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { PEER_ENDPOINT_HEADER, PEER_PROOF_HEADER } from "@centraid/tunnel";
+import {
+  PEER_ENDPOINT_HEADER,
+  PEER_PROOF_HEADER,
+  PEER_VAULT_HEADER,
+} from "@centraid/tunnel";
 
 import { isDirectHostRequest } from "../routes/route-helpers.js";
 import { buildGateway } from "./build-gateway.js";
@@ -91,6 +95,24 @@ describe("peer lane at the composed handler", () => {
       state: "not_found",
     });
   });
+
+  /* (#865 F9) The backstop used to judge only the endpoint header; the Rust
+   * relay's forwarder-owned set carries a peer-vault name too, so each of
+   * them alone must be enough to refuse. */
+  test.each([
+    { [PEER_ENDPOINT_HEADER]: "ep-peer" },
+    { [PEER_PROOF_HEADER]: PEER_PROOF },
+    { [PEER_VAULT_HEADER]: "vlt_peer" },
+  ])(
+    "any single peer identity header triggers the backstop",
+    async (headers) => {
+      const response = await fetch(`${base}/centraid/_apps`, { headers });
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toStrictEqual({
+        state: "not_found",
+      });
+    }
+  );
 
   test("the gateway control lanes refuse a peer-marked request too", async () => {
     await Promise.all(

@@ -1,16 +1,7 @@
 /*
- * Compile-workbench data layer.
- *
- * A compile is an ordinary automation turn (`triggerKind: 'compile'`) whose
- * ledger items are the compiler's working: the tools it called, the model
- * steps it took, and — when it failed — the error that stopped it. Nothing
- * new is fetched here; this module only reads those existing turns as STEPS
- * rather than as chat messages, because "did stage 4 pass, and why not" is
- * the question the compile screen exists to answer.
- *
- * The run screen never calls into this file. Compile turns belong to the
- * compiler; keeping the derivation here is what stops them leaking back into
- * the run history (see automationThreadData.ts).
+ * Compile-workbench data layer: a compile is an ordinary automation turn read
+ * as STEPS, not chat messages. The run screen never calls this file — that
+ * keeps compile turns out of run history.
  */
 import { relativeTime } from "../../../app-format.js";
 import {
@@ -25,10 +16,7 @@ import type {
   TurnWatchOutcome,
 } from "../../screen-contracts.js";
 
-/** How much of a tool payload or assistant sentence a step row carries. Long
- *  enough to recognise the step, short enough that ten of them still read as
- *  a list rather than a transcript — the full text is one click away in the
- *  run viewer. */
+/** Step-row detail length: recognisable, still a list; full text one click away. */
 const DETAIL_CHARS = 160;
 
 function clip(text: string): string {
@@ -38,9 +26,7 @@ function clip(text: string): string {
     : flat;
 }
 
-/** First readable line out of a tool payload — the JSON `{"path": …}` blob a
- *  compiler tool call carries is noise at this altitude, so prefer a plain
- *  string field over the raw envelope. */
+/** First readable line of a tool payload — not the raw JSON envelope noise. */
 function payloadDetail(raw: string | undefined): string | null {
   if (!raw) return null;
   try {
@@ -67,11 +53,8 @@ function stepLabel(item: CentraidAutomationItem): string {
   return "Step";
 }
 
-/**
- * One ledger item → one step row. `message_in` items are dropped: that item
- * is the instructions the compiler was handed, and those are already the
- * left-hand pane of the screen showing this list.
- */
+/** One ledger item → one step row; `message_in` items are dropped (already
+ *  the left-hand pane of this screen). */
 export function compileStepOf(
   item: CentraidAutomationItem
 ): CompileStepDTO | null {
@@ -128,20 +111,17 @@ export async function loadCompileAttempts(
     .map(compileAttemptOf);
 }
 
-/** Cold read of one turn's steps — used for a finished attempt the owner
- *  scrolls back to, and as the first paint before a live stream takes over. */
+/** Cold read of one turn's steps: finished-attempt scrollback, and first
+ *  paint before a live stream takes over. */
 export async function loadTurnSteps(turnId: string): Promise<CompileStepDTO[]> {
   const expanded = await readAutomationTurnExpanded({ turnId });
   return compileSteps(expanded.items);
 }
 
 /**
- * Watch a compile (or test-run) turn as STEPS.
- *
- * Mirrors `automationTurnWatch.ts`'s contract exactly — same `settled`/`ok`
- * semantics, same single authoritative post-stream ledger re-read — but folds
- * events into ledger-shaped items instead of chat messages, so a step can go
- * `running → ok/fail` in place while the compiler is still working.
+ * Watch a compile (or test-run) turn as STEPS. Mirrors `automationTurnWatch.ts`'s
+ * contract exactly (same settled/ok semantics, same single authoritative
+ * post-stream ledger re-read) but folds events into ledger-shaped items.
  */
 export async function watchTurnSteps(
   turnId: string,

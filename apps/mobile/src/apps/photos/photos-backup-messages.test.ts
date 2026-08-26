@@ -9,9 +9,9 @@ import { inCloudMessage, nothingToBackUpMessage } from "./photos-backup-copy";
 
 describe(nothingToBackUpMessage, () => {
   it("says nothing happened, and why, instead of confirming success", () => {
-    // The defect: a selection of vault-resident photographs filters to empty,
-    // the run completes with no transfers, and the old code fell through to a
-    // SUCCESS haptic — a confirmation buzz for work that never happened.
+    // A selection of vault-resident photographs filters to empty and the run
+    // completes with no transfers. That must never reach the SUCCESS haptic —
+    // a confirmation buzz for work that never happened.
     const one = nothingToBackUpMessage(1);
     expect(one).toContain("already on the gateway");
     expect(one).toContain("no copy on this device");

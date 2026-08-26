@@ -19,9 +19,8 @@ import {
 const appDir = path.join(path.resolve(import.meta.dirname, ".."), "apps");
 
 /**
- * Custom-property namespaces owned by `packages/design`. An app that declares
- * one of these is shadowing the design system's own token, so its value wins
- * locally and the app stops tracking theme changes.
+ * Custom-property namespaces owned by `packages/design`. An app declaring
+ * one shadows the design system's token and stops tracking theme changes.
  */
 const RESERVED_PREFIXES = [
   "--c-",
@@ -34,8 +33,7 @@ const RESERVED_PREFIXES = [
 
 const CONTRACT_PROPS = new Set<string>(BLUEPRINT_TOKEN_CONTRACT);
 
-// `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`. Longest alternative first so a
-// 6-digit literal is never reported as a 3-digit one plus trailing junk.
+// `#rgb`/`#rgba`/`#rrggbb`/`#rrggbbaa`; longest alternative first.
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b/gu;
 const FUNCTIONAL = /\b(?:rgba?|hsla?)\(/gu;
 const FONT_FAMILY = /(?:^|[;{])\s*font-family\s*:(?<value>[^;}]*)/gmu;
@@ -54,16 +52,14 @@ function listModuleCss(dir: string, out: string[] = []): string[] {
 
 /**
  * Count the violations in one stylesheet. Comments are stripped first so a
- * documented "was #fff" note doesn't read as a live literal. Note that
- * `color-mix(in oklab, #fff 20%, var(--bg))` is still a violation: the hex
- * endpoint is matched regardless of the function wrapping it.
+ * documented "was #fff" note doesn't read as a live literal.
  */
 function scan(source: string): TokenPurityBudget {
   const css = source.replace(/\/\*[\s\S]*?\*\//gu, "");
 
   const fontFamily = [...css.matchAll(FONT_FAMILY)].filter((match) => {
-    // A value assembled purely out of `var()` (plus CSS-wide keywords,
-    // whitespace, and commas) is exactly the compliant form.
+    // A value purely out of `var()` (+ CSS-wide keywords, whitespace, commas)
+    // is exactly the compliant form.
     const residue = (match.groups?.value ?? "")
       .replace(VAR_REFERENCE, "")
       .replace(FONT_KEYWORDS, "")
@@ -106,8 +102,7 @@ describe("blueprint app CSS token purity", () => {
   }
 
   it("finds the blueprint stylesheets it claims to police", () => {
-    // Guards against the walker silently matching nothing (a green suite that
-    // asserts nothing is the failure mode this whole test exists to prevent).
+    // Guards against the walker silently matching nothing.
     expect(files.length).toBeGreaterThan(50);
   });
 
@@ -137,18 +132,10 @@ describe("blueprint app CSS token purity", () => {
   });
 
   it("resolves every fallback-less var() an app references", () => {
-    // A `var(--x)` with no fallback that names nothing declared is invalid at
-    // computed-value time: the declaration is dropped and the property falls
-    // back to inherited/initial. Nothing throws, nothing logs — the rule just
-    // silently does not apply, which is how a stale rename survives review.
-    // An app may resolve a name from the contract, from kit.css (the element
-    // layer's stylesheet, loaded once for every app), or from anywhere in its
-    // OWN stylesheets, since an app's Chrome declares tokens its components
-    // inherit.
-    //
-    // The reader itself is shared with the shell's twin of this gate
-    // (packages/client/src/shell-var-resolution.test.ts) so the two cannot
-    // drift on what counts as a declaration or a reference (#686).
+    // A fallback-less `var(--x)` naming nothing declared drops its
+    // declaration silently — how a stale rename survives review. Names may
+    // resolve from the contract, kit.css, or the app's own stylesheets; the
+    // reader is shared with the shell's twin gate (#686).
     const kitDeclared = declaredCustomProps(
       readFileSync(
         path.join(appDir, "..", "..", "design", "src", "elements", "kit.css"),

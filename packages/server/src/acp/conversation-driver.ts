@@ -1,20 +1,7 @@
 /*
- * Conversation driver — the plain per-app data-chat configuration.
- *
- * The turn runs with cwd = `input.dataDir` (the resolved
- * `appDataDir(entry)`) and the route's app-context preamble passed through
- * verbatim. It wires no vault runners, so the turn carries no data tools —
- * hosts with a vault mount their own harness configs instead. No draft
- * worktree, no authoring grounding, no post-turn side effects — those are
- * the builder chat's job (`makeUnifiedConversationRunner`).
- *
- * It is a thin config over `makeConversationRunnerCore` (issue #147, Concern 1):
- * the shared per-turn spine lives there; this file only supplies the
- * data-chat seams (cwd = data dir, default prompt pass-through).
- *
- * Note: this is one of two in-process `ConversationRunner` implementations. The
- * other (`makeUnifiedConversationRunner`, gateway) is also a config over the same
- * core.
+ * Data-chat config over `makeConversationRunnerCore` (#147). cwd =
+ * `input.dataDir`; no vault runners, no draft worktree, no post-turn side
+ * effects (those belong to `makeUnifiedConversationRunner`).
  */
 
 import { makeConversationRunnerCore } from "@centraid/server/engine";
@@ -29,26 +16,13 @@ import { runTurn } from "./runtime.js";
 import type { HarnessKind, HarnessPrefs } from "./types.js";
 
 export interface MakeConversationRunnerOptions {
-  /** Loader for the user's persisted harness prefs. Called per turn so
-   *  the driver picks up settings changes without a runtime restart.
-   *  Receives `subsystem` when one is configured, so a host that scopes
-   *  harness selection per subsystem can answer with the right kind. */
   prefsLoader: (
     subsystem?: ModelSubsystem,
     harnessKind?: HarnessKind
   ) => Promise<HarnessPrefs | undefined>;
-  /** Which subsystem's harness/model prefs this data-chat driver rides. Unset →
-   *  the host's default harness (the pre-existing behavior). */
   subsystem?: ModelSubsystem;
-  /**
-   * Resolve the shared app-engine dispatcher. The conversation driver threads
-   * this into the per-turn `ToolContext` so the harness's three structured
-   * tools dispatch through the same code path as HTTP callers. Hosts
-   * typically return `runtime.dispatcher`. Called per turn so a host can
-   * cycle-break on first use (see local-runtime).
-   */
+  /** Per turn so a host can cycle-break on first use (local-runtime). */
   getDispatcher: () => Dispatcher;
-  /** Required host-owned durable provider-egress gate. */
   providerEgressConsent: ProviderEgressConsentController;
 }
 
@@ -60,11 +34,7 @@ export function makeConversationRunner(
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: opts.getDispatcher,
     providerEgressConsent: opts.providerEgressConsent,
-    // The local codex/claude turn driver.
     runTurn,
-    // Data chat runs in the app's data dir; the route preamble is passed
-    // through unchanged (no authoring grounding) and there's no post-turn
-    // side effect, so those seams are left at their defaults.
     resolveCwd: (input) => input.dataDir,
   });
 }

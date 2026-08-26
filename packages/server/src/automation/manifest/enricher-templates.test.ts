@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit one suite over the whole enricher-template contract — each template’s manifest validity, determinism lint, and stub-ctx spine behavior share the one fixture (#299)
 /*
- * The enricher automation templates (issue #299 phases 1–2): their
+ * The enricher automation templates (#299 phases 1–2): their
  * manifests must parse under the runtime's real validator (vault block +
  * data trigger coherence), their handlers must pass the determinism lint,
  * and — driven with a stub ctx — they must enforce the spine's contract:
@@ -285,11 +285,11 @@ describe("enricher template hygiene", () => {
 
   it.each([
     ["photo-ocr", true],
-    // The docs domain's delegate-capable enricher (issue #807, Wave 5).
+    // The docs domain's delegate-capable enricher (#807).
     ["doc-text-extractor", true],
     ["embed-image", false],
     ["embed-text", false],
-    // Faces has no delegate variant anywhere, structurally (#807 Q3).
+    // Faces has no delegate variant anywhere, structurally (#807).
     ["faces", false],
   ] as const)("%s declares its delegate step honestly", (id, expected) => {
     const manifest = parseManifest(
@@ -740,7 +740,7 @@ describe("recognition automation spine", () => {
 });
 
 describe("recognition automation: honest failure vs honest skip (issue #731)", () => {
-  // The recognition automations now run self-contained local inference
+  // The recognition automations run self-contained local inference
   // (no HTTP enrichment service): the only I/O a batch can fail on is the
   // `ctx.vault.content` byte/text fetch. These tests drive that fetch
   // directly through the stub's `content` hook rather than `fetch`.

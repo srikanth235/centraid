@@ -1,9 +1,4 @@
-// World mechanics for the Commons deterministic simulator (issue #731). This
-// half owns the seeded PRNG and the physical world — real on-disk vaults, their
-// grants, the single write rail, the pull rail, crash-restart, and snapshot /
-// stale-restore. The schedule and the golden invariants live in
-// `commons-sim.test-fixtures.ts`; keeping them apart is what stops the model and the oracle
-// from quietly agreeing with each other.
+// Commons sim world (#731): seeded PRNG, on-disk vaults, write/pull rails, crash-restart. Schedule lives in commons-sim.test-fixtures.ts.
 
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
@@ -41,11 +36,8 @@ import {
   settleCommonsIntent,
 } from "./commons.js";
 
-/** Every `now` the simulator hands the vault. Wall-clock time never decides
- * anything a seed is supposed to decide. */
 export const NOW = "2031-05-06T07:08:09.000Z";
 
-/** mulberry32 — small, fast, and identical on every platform. */
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -84,14 +76,8 @@ export interface Seat {
   credential: Credential;
   sealKey: Buffer;
   identitySeed: Buffer;
-  /** `dpv:ServiceProvision`, the purpose every seeded consent grant names. */
   purposeConceptId: string;
-  /**
-   * Commands this seat has marked loud-on-purpose (issue #839). Registration
-   * REWRITES `agent_capability.requires_confirmation` from the definition, so
-   * a crash-restart re-registers the tally pack and would silently disarm the
-   * gate; `attach` re-arms from this list instead.
-   */
+  // Crash-restart re-registers tally and would disarm confirmation; attach re-arms from this list.
   confirmGated: string[];
 }
 
@@ -105,11 +91,8 @@ export interface Grant {
   grantId: string;
   groupId: string;
   steward: Seat;
-  /** Every seat that has ever held a place in this grant. */
   cast: Seat[];
-  /** Current roster the model believes in, keyed by seat index. */
   roster: Map<number, CommonsCapability>;
-  /** Steps remaining in an open steward-transfer window. */
   awayFor: number;
   expected: Map<string, ExpenseFact>;
   refused: Set<string>;
@@ -130,16 +113,9 @@ export interface World {
   parked: ParkedIntent[];
   trace: string[];
   failures: string[];
-  /**
-   * Invariant breaks the oracle has PINNED to a named, still-open product
-   * defect (issue #839) instead of failing on. Every entry names the defect;
-   * an unpinned break is always a failure. The list is printed with the
-   * report so a run never hides what it tolerated.
-   */
   pinned: string[];
   stats: Record<string, number>;
   step: number;
-  /** The share-grant plane (issue #839), when this program asked for one. */
   plane?: GrantPlane;
 }
 
@@ -148,10 +124,6 @@ export interface SimOptions {
   actions: number;
   seats: number;
   grants: number;
-  /**
-   * Build the share-grant plane and admit its verbs into the schedule (issue
-   * #839). Off by default so the #731 seeds keep their exact programs.
-   */
   grantPlane?: boolean;
 }
 
@@ -159,7 +131,6 @@ export interface SimReport {
   seed: number;
   trace: string[];
   failures: string[];
-  /** See `World.pinned` — tolerated breaks, each naming its open defect. */
   pinned: string[];
   stats: Record<string, number>;
 }
@@ -201,7 +172,6 @@ function openSeat(root: string, index: number): Seat {
   };
 }
 
-/** Mark one command Tier 3/4 at this seat: a non-owner caller parks on it. */
 export function armConfirmGate(seat: Seat, commandName: string): void {
   if (!seat.confirmGated.includes(commandName))
     seat.confirmGated.push(commandName);
@@ -225,8 +195,6 @@ function attach(seat: Seat): void {
     armConfirmGate(seat, commandName);
 }
 
-/** Crash-restart: drop the SQLite handles mid-program and come back from the
- * files alone. Anything the vault only held in memory is gone. */
 export function reopenSeat(seat: Seat): void {
   seat.db.close();
   attach(seat);
@@ -237,9 +205,6 @@ export function snapshotSeat(seat: Seat): void {
   seat.hasSnapshot = true;
 }
 
-/** Restore a member's whole SQLite file from an earlier point in the program:
- * the cursor rewinds, the replica loses rows, and the next pull has to repair
- * it without replaying from zero. */
 export function staleRestoreSeat(seat: Seat): void {
   seat.db.close();
   for (const [source, target] of [
@@ -280,8 +245,6 @@ export function seatInput(
   };
 }
 
-/** The steward's own seat, and only it: every other replica has to earn its
- * state by pulling, which is what makes the schedule interesting. */
 export function stewardOnly(grant: Grant): CommonsMemberInput[] {
   return [seatInput(grant.steward, "read+write")];
 }
@@ -320,7 +283,6 @@ function createGrant(steward: Seat, index: number, memberSeats: Seat[]): Grant {
     expected: new Map(),
     refused: new Set(),
   };
-  // One initial push so every seat starts from the same projected truth.
   compileCommons({
     steward: steward.db,
     stewardVaultId: steward.vaultId,
@@ -342,8 +304,6 @@ export function createWorld(options: SimOptions): World {
   for (const host of seats)
     for (const other of seats) if (host !== other) knowParty(host, other);
   const grants: Grant[] = [];
-  // Overlapping membership on purpose: grant g is stewarded by seat g and
-  // carries every other seat, so one vault is steward of A and member of B.
   for (let index = 0; index < options.grants; index += 1)
     grants.push(
       createGrant(
@@ -370,7 +330,7 @@ export function closeWorld(world: World): void {
     try {
       seat.db.close();
     } catch {
-      // A seat may already be closed by a crash-restart leg mid-teardown.
+      // Already closed by a crash-restart leg.
     }
   }
   rmSync(world.root, { recursive: true, force: true });
@@ -383,10 +343,6 @@ export interface Dump {
   members: Record<string, unknown>[];
 }
 
-/** Canonical, ordered, table-level dump of one grant's live domain state. This
- * is deliberately domain rows only — never frame internals, op rows, or chain
- * hashes — so additive changes to the wire shape cannot break the oracle. Soft
- * deleted rows are excluded here; their absence is asserted separately. */
 export function dumpGrant(db: VaultDb, groupId: string): Dump {
   const rows = (sql: string, ...params: string[]): Record<string, unknown>[] =>
     (db.vault.prepare(sql).all(...params) as Record<string, unknown>[]).map(
@@ -429,10 +385,6 @@ export function dumpKey(db: VaultDb, groupId: string): string {
   return JSON.stringify(dumpGrant(db, groupId));
 }
 
-/** The one write rail the simulator uses: park the intent locally first, sign
- * as the member (or act as the steward), execute at the steward, then settle
- * the local intent the way a host would. Only the steward's own seat is
- * compiled, so every replica has to pull for itself. */
 export function submit(
   world: World,
   grant: Grant,
@@ -479,8 +431,6 @@ export function submit(
     invocationId: nonce,
     now: NOW,
   });
-  // The fork guard is the one refusal a host must treat as "come back later"
-  // rather than "no": the write was never sequenced anywhere.
   const parked = decision.reason?.includes("not the current steward") === true;
   if (isMember)
     settleCommonsIntent({
@@ -494,11 +444,6 @@ export function submit(
   return decision;
 }
 
-/** One member pull, exercising BOTH rails (#750): the seat asks with its own
- * cursor, replays an ops-since-cursor increment when its cursor sits on the
- * chain, and re-baselines through the full snapshot frame when the increment
- * is unusable or its tail cannot be re-executed against this replica. Returns
- * whether the seat's domain state actually moved. */
 export function pull(grant: Grant, seat: Seat): boolean {
   const before = dumpKey(seat.db, grant.groupId);
   const cursor = readCommonsCursor(seat.db.vault, grant.grantId, seat.vaultId);
@@ -540,7 +485,6 @@ export function pull(grant: Grant, seat: Seat): boolean {
         applyCommand: replicaExecutor(seat),
       });
     } catch (error) {
-      // Unusable-for-this-replica shapes re-baseline; faults still propagate.
       if (!isCommonsIncrementUnusable(error)) throw error;
       applyFull(frameFor());
     }
@@ -548,8 +492,6 @@ export function pull(grant: Grant, seat: Seat): boolean {
   return dumpKey(seat.db, grant.groupId) !== before;
 }
 
-/** The host seam a replica catches up through: the seat's own gateway, on the
- * canonical Commons rail, seeded so replayed commands mint the steward's ids. */
 export function replicaExecutor(
   seat: Seat
 ): (
@@ -574,9 +516,6 @@ export function currentMembers(world: World, grant: Grant): Seat[] {
   return [...grant.roster.keys()].map((index) => world.seats[index]!);
 }
 
-/** Seats that steward nothing may be snapshotted and rewound; rewinding a
- * steward would destroy the single-writer log itself, which is outside the
- * model's contract. */
 export function replicaOnlySeats(world: World): Seat[] {
   const stewards = new Set(world.grants.map((grant) => grant.steward.index));
   return world.seats.filter((seat) => !stewards.has(seat.index));

@@ -7,13 +7,12 @@ import type { ShellMenuAnchor } from "../contextMenu.js";
 import css from "./AssistantConversations.module.css";
 
 // The conversation ledger — "Recents" — as APP CONTENT owned by the assistant
-// route (issue #707, Phase 4).
+// route (#707).
 //
-// It used to be the bottom two thirds of the shell sidebar, which made the
-// shell's navigation column responsible for one app's data model: pinning,
-// archiving, per-row rename/delete menus. The Binding Layer's stem holds the
-// product mark, Search and the launcher and nothing else, so the ledger came
-// here, beside the transcript it addresses.
+// The Binding Layer's stem holds the product mark, Search and the launcher and
+// nothing else, so the ledger lives here, beside the transcript it addresses.
+// A shell navigation column has no business owning one app's data model:
+// pinning, archiving, per-row rename/delete menus.
 //
 // Presentational on purpose: it owns grouping, the cap, and the two disclosure
 // states, and NOTHING about fetching, sorting, or mutating conversations. The
@@ -25,12 +24,12 @@ export interface AssistantConversationEntry {
   id: string;
   title: string;
   timeLabel: string;
-  /** Pinned threads render in a group above the rest (issue #420). */
+  /** Pinned threads render in a group above the rest (#420). */
   pinned?: boolean;
   /** Archived threads render behind a collapsed group at the bottom. */
   archived?: boolean;
   /** The vault this conversation reads, when it is NOT the member's own
-   *  (issue #599). A conversation is pinned to one vault for life, so the row
+   *  (#599). A conversation is pinned to one vault for life, so the row
    *  says which — but only when that is news. */
   scopeLabel?: string;
 }

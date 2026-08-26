@@ -130,9 +130,9 @@ describe("stream-events suite", () => {
   });
 
   test("an harness’s own rawOutput.content survives the renderable-content merge", () => {
-    // The merge used to spread rawOutput and then overwrite `content` with our
-    // renderable projection, silently destroying the payload the harness chose to
-    // return under that key.
+    // The merge must not spread rawOutput and then overwrite `content` with our
+    // renderable projection: that silently destroys the payload the harness
+    // chose to return under that key.
     const { mapper, events } = harness();
     handle(mapper, {
       update: {

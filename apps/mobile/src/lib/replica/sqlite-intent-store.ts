@@ -321,7 +321,7 @@ export class SqliteIntentStore implements IntentRecordStore {
 
 /** JSON round-trip clone; every stored intent is JSON-safe by contract. */
 function clone<T>(value: T): T {
-  // eslint-disable-next-line unicorn/prefer-structured-clone -- (#419) React Native 0.81/Hermes ships no structuredClone; intents are JSON-safe by contract and are persisted as JSON anyway; governance: allow-no-unjustified-suppressions runtime capability gap
+  // oxlint-disable-next-line unicorn/prefer-structured-clone -- (#419) React Native 0.81/Hermes ships no structuredClone; intents are JSON-safe by contract and are persisted as JSON anyway; governance: allow-no-unjustified-suppressions runtime capability gap
   return JSON.parse(JSON.stringify(value)) as T;
 }
 

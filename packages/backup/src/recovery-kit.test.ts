@@ -1,14 +1,14 @@
 import crypto from "node:crypto";
 /*
- * The recovery-kit READER (issue #439 R1) — the counterpart to
+ * The recovery-kit READER (#439) — the counterpart to
  * `wrapRecoveryKit`. A kit is the ONLY thing standing between a blank machine
  * and a vault, so the parser is strict: a wrong kind, an unsupported version, a
  * malformed keyring, or a target missing its addressing is refused HERE, not
  * three phases into a restore. These pin exactly that.
  *
- * Since issue #568 item J there is no unwrapped acceptance path, so the
- * document validator is reached through `wrapRecoveryKit` (which validates
- * before sealing) and through a successful unwrap.
+ * There is no unwrapped acceptance path (#568), so the document validator is
+ * reached through `wrapRecoveryKit` (which validates before sealing) and
+ * through a successful unwrap.
  */
 import path from "node:path";
 
@@ -58,11 +58,10 @@ describe("recovery-kit", () => {
   });
 
   /*
-   * Issue #568 item J. The removed branch accepted an unwrapped document AND
-   * silently ignored the password, so `vaults:restore`,
-   * `vaults:initialize/verify`, and the kit-confirmed transition each had a
-   * password-free acceptance path. Anyone holding the plaintext kit file — a
-   * synced Downloads folder, a backup of it — could pass all three.
+   * An unwrapped-document branch silently ignores the password, so
+   * `vaults:restore`, `vaults:initialize/verify` and the kit-confirmed
+   * transition would each gain a password-free acceptance path — passable by
+   * anyone holding the plaintext kit file (#568).
    */
   test("refuses an unwrapped kit even with the right shape and a password", async () => {
     const keyring = await createKeyring(await tempFile("keyring.json"));
@@ -176,9 +175,9 @@ describe("recovery-kit", () => {
     ).not.toBe(recoveryKitFingerprint(base));
   });
 
-  // The document validator now runs on the way IN to a wrapped kit (and again
-  // on the decrypted plaintext), so `wrapRecoveryKit` is where these refusals
-  // are observable from outside the module.
+  // The document validator runs on the way IN to a wrapped kit (and again on
+  // the decrypted plaintext), so `wrapRecoveryKit` is where these refusals are
+  // observable from outside the module.
   const wrap =
     (document: unknown): (() => unknown) =>
     () =>

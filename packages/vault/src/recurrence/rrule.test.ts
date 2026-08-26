@@ -91,9 +91,9 @@ describe("rrule", () => {
   });
 
   test("expandRrule parses UNTIL in RFC basic form (ICS verbatim)", () => {
-    // ICS ingest stores UNTIL as `20260703T000000Z`; Date.parse rejects it, so
-    // the bound used to silently degrade to unbounded. Basic and extended must
-    // clip the series identically.
+    // ICS ingest stores UNTIL as `20260703T000000Z`, which Date.parse rejects
+    // — a bound read through it degrades silently to unbounded. Basic and
+    // extended must clip the series identically.
     const basic = expandRrule(
       "FREQ=DAILY;UNTIL=20260703T000000Z",
       "2026-07-01T00:00:00.000Z",

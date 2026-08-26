@@ -1,4 +1,4 @@
-// Unit tests for the assistant rich-answer renderer (issue #420) against its
+// Unit tests for the assistant rich-answer renderer (#420) against its
 // default class names; the React shell's assistantRich.test.ts covers the same
 // surface through the shell's scoped CSS-module class map.
 import { describe, expect, it, vi } from "vitest";

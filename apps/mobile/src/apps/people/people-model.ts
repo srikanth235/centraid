@@ -1,21 +1,11 @@
-// People's read-side projection, as pure functions over replica rows.
+// People's read-side projection: pure functions over replica rows.
 //
-// THE WEB QUERY EMITTERS ARE THE CONTRACT. The phone reads the vault's local
-// replica entity by entity (`useReplicaQuery`), so the joins the gateway-side
-// handlers perform (`packages/blueprints/apps/people/queries/*.ts`) are
-// re-stated here over the same tables, producing the SAME row shapes
-// (`packages/blueprints/apps/people/types.ts`). A projection that invented a
-// column would be a screen drawing a fact nobody stored, so every field below
-// names the query file it mirrors.
+// THE WEB QUERY EMITTERS ARE THE CONTRACT — restate the joins of
+// `blueprints/apps/people/queries/*.ts` and invent no column.
 //
 // THE SHARING PLANE DEGRADES TO ABSENT, NEVER TO EMPTY (decisions.md #821
-// L-read, `queries/_shared.ts`). The share reads deny independently of the
-// roster — People's `share.*` scopes may be parked for the owner's approval —
-// so the callers hand this module `null` row sets for a read that failed, and
-// `linked` is then null (`links_available: false`), never a false "unlinked".
-//
-// React-free and replica-free on purpose: rows arrive as plain records, so the
-// rules are unit-testable without a renderer (`people-model.test.ts`).
+// L-read): a failed share read arrives as `null` rows, so `linked` is null,
+// never a false "unlinked".
 
 import {
   daysSinceContact,
@@ -54,24 +44,15 @@ const truthy = (row: Row, key: string): boolean => Boolean(row[key]);
 const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 
-// ---------------------------------------------------------------------------
-// The avatar colour, round-tripped with the web surface.
-// ---------------------------------------------------------------------------
-
-/** The stored spelling the web editor writes for a chosen hue. It is a CSS
- *  custom-property EXPRESSION because the ring moves between light and dark;
- *  the phone stores the same spelling and RESOLVES it through its own scheme
- *  (`colors.c<Key>`). Built in two halves so this module never contains the
- *  one sequence the mobile design gate forbids a consumer to CONSUME — this
- *  is vault data interchange with the web renderer, not a style read. */
+/** The spelling the web editor writes for a hue: a CSS custom-property
+ *  expression the phone RESOLVES through `colors.c<Key>`. Built in halves so
+ *  the mobile design gate does not read it as a style consumption. */
 const CSS_VAR_OPEN = "var(";
 
 export function storedHueValue(key: ColorKey): string {
   return `${CSS_VAR_OPEN}--c-${key})`;
 }
 
-/** The hue key a stored `var(--c-<key>)` names, or null for anything else
- *  (a legacy hex, a value we cannot read). */
 export function storedHueKey(
   value: string | null | undefined
 ): ColorKey | null {
@@ -82,14 +63,8 @@ export function storedHueKey(
     : null;
 }
 
-/**
- * The fill a person's disc paints, resolved for the current scheme.
- *
- * A stored hue expression resolves through the theme's identity ring; a stored
- * hex is honoured verbatim (it is the member's own choice — `identityInk`
- * keeps it legible); a person with no stored colour takes their place on the
- * shared wheel, keyed by `party_id` so a rename never moves them.
- */
+/** Stored hue → theme ring; stored hex → verbatim; nothing stored → a wheel
+ *  place keyed by `party_id`, so a rename never moves them. */
 export function avatarFill(
   person: { party_id: string; avatar_color?: string | null },
   ringFor: (key: ColorKey) => string
@@ -101,10 +76,7 @@ export function avatarFill(
   return ringFor(identityHueKey(person.party_id));
 }
 
-// ---------------------------------------------------------------------------
-// The roster window (`queries/people.ts`) and trash (`queries/trash.ts`).
-// ---------------------------------------------------------------------------
-
+// Mirrors `queries/people.ts` and `queries/trash.ts`.
 export interface RosterInput {
   /** Every `people.profile` row in the replica, trashed ones included. */
   profiles: readonly Row[];
@@ -113,8 +85,7 @@ export interface RosterInput {
   concepts: readonly Row[];
   schemes: readonly Row[];
   dates: readonly Row[];
-  /** Live `share.party_vault_binding` rows, or null when that read failed —
-   *  the sharing plane is then ABSENT, not empty. */
+  /** Live `share.party_vault_binding` rows; null = ABSENT, not empty. */
   bindings: readonly Row[] | null;
 }
 
@@ -215,7 +186,7 @@ export function projectRoster(input: RosterInput): RosterProjection {
         vault_count: vaultCountByParty.get(partyId) ?? 0,
       };
     })
-    // Newest first — the query's own order (`orderBy created_at desc`).
+    // Newest first — the query's order (`orderBy created_at desc`).
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   const trash: TrashedPerson[] = gone
@@ -243,14 +214,9 @@ export function projectRoster(input: RosterInput): RosterProjection {
   return { people, trash, lists, linksAvailable };
 }
 
-// ---------------------------------------------------------------------------
-// The roster filter and the row's second line — the web renderer's own rules
-// (`components/RosterRoute.tsx`), restated here because that module is a
-// render file this app may not import.
-// ---------------------------------------------------------------------------
+// Filter and subtitle restate `components/RosterRoute.tsx` (unimportable).
 
-/** A row whose link fact is unknown answers NEITHER link chip: unknown is not
- *  "unlinked", and a shelf that quietly counted it as one would be guessing. */
+/** A row whose link fact is unknown answers NEITHER chip: unknown ≠ unlinked. */
 export function applyRosterFilter(
   people: readonly PersonRow[],
   filter: RosterFilter,
@@ -266,21 +232,16 @@ export function applyRosterFilter(
   return [...people];
 }
 
-/** `Linked · architect`, or the role alone — the vault leads a linked row's
- *  second line. The word `Linked` stands where the handoff put the vault's
- *  name, because a binding carries only an id and an id is not a name. */
+/** `Linked · architect`, or the role alone — a binding carries only an id, so
+ *  `Linked` stands where a vault name cannot. */
 export function rosterSub(person: PersonRow): string {
   if (person.linked !== true) return person.role;
   return person.role ? `${LINK.linked} · ${person.role}` : LINK.linked;
 }
 
-/**
- * Full-text over the window in hand: name + role + notes, case-insensitive
- * substring (handoff § Screens 3). The web shelf asks the vault's FTS5 index;
- * the phone's replica exposes no People search shape yet, so the roster window
- * plus the party-note annotations already replicated ARE the searchable text —
- * stated in `INTEGRATION-NOTES.md` as a departure, not hidden.
- */
+/** Name + role + notes, case-insensitive substring. The replica exposes no
+ *  People search shape, so the window in hand is the whole corpus — a
+ *  departure from the web FTS5 shelf, logged in `INTEGRATION-NOTES.md`. */
 export function searchRoster(
   people: readonly PersonRow[],
   notesByParty: ReadonlyMap<string, readonly string[]>,
@@ -295,24 +256,19 @@ export function searchRoster(
     const note = (notesByParty.get(person.party_id) ?? []).find((text) =>
       text.toLocaleLowerCase("en-US").includes(needle)
     );
-    // The matched passage rides as the snippet — it answers "why is this row
-    // here" better than the role the member already knows.
     return note ? [{ ...person, snippet: note }] : [];
   });
 }
 
-// ---------------------------------------------------------------------------
-// The keep-in-touch summary (`queries/dashboard.ts`), client-side over the
-// same window — the same judgment, so Touch and the roster cannot disagree.
-// ---------------------------------------------------------------------------
-
+// The keep-in-touch summary (`queries/dashboard.ts`), judged over the roster
+// window so Touch and the roster cannot disagree.
 export interface DashboardInput {
   people: readonly PersonRow[];
   linksAvailable: boolean;
   /** `core.link` rows joining activities to parties. */
   activityLinks: readonly Row[];
   activities: readonly Row[];
-  /** `knowledge.annotation` rows on activities — a touch's own note. */
+  /** `knowledge.annotation` rows on activities. */
   activityNotes: readonly Row[];
   concepts: readonly Row[];
   now?: number;
@@ -416,19 +372,13 @@ export function projectDashboard(input: DashboardInput): DashboardData {
   };
 }
 
-// ---------------------------------------------------------------------------
-// One person in full (`queries/person.ts`), from the replica's own tables.
-// Only the sections the handoff draws are projected — channels, dates, notes,
-// interactions and the sharing plane. The query also answers lists, tasks,
-// gifts, debts and relationships; the handoff excludes them and bans their
-// placeholders, so nothing here carries them.
-// ---------------------------------------------------------------------------
-
+// One person (`queries/person.ts`), down to channels, dates, notes,
+// interactions, sharing plane. Lists, tasks, gifts, debts and relationships
+// are excluded; their placeholders are banned.
 export interface PersonDetailInput {
-  /** The person's roster row — name, role, star, cadence come from it. */
   person: PersonRow;
-  /** Every `social.contact_channel` row in hand: theirs become the section,
-   *  everyone else's feed the duplicate-value warning. */
+  /** ALL `social.contact_channel` rows — other parties' rows feed the
+   *  duplicate-value warning. */
   channels: readonly Row[];
   /** `party_id → display_name`, for naming a duplicate's holder. */
   partyNames: ReadonlyMap<string, string>;

@@ -1,5 +1,5 @@
 /*
- * Gateway iroh endpoint (issue #289 phase 3).
+ * Gateway iroh endpoint (#289).
  *
  * Boots a real gateway endpoint on loopback (relays disabled — offline),
  * fronted by a fake HTTP gateway that records the headers it receives,
@@ -14,8 +14,10 @@
  */
 
 import crypto from "node:crypto";
+import fs from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -38,6 +40,7 @@ interface SeenRequest {
   url: string;
   device?: string;
   proof?: string;
+  peerVault?: string;
   authorization?: string;
   cookie?: string;
   tunnelAuthMode?: string;
@@ -71,6 +74,9 @@ function startFakeGateway(
         : {}),
       ...(typeof req.headers["x-centraid-device-proof"] === "string"
         ? { proof: req.headers["x-centraid-device-proof"] }
+        : {}),
+      ...(typeof req.headers["x-centraid-peer-vault"] === "string"
+        ? { peerVault: req.headers["x-centraid-peer-vault"] }
         : {}),
     });
     res.setHeader("content-type", "application/json");
@@ -228,9 +234,14 @@ describe("gateway endpoint", () => {
       method: "GET",
       target: "/centraid/_apps",
       // A malicious client claims to be another device — must be stripped.
+      // The peer-vault name is in the strip set even though this forwarder
+      // never stamps it, matching the Rust relay's owned-header list (#865).
       headers: {
         "x-centraid-device": "someone-else",
         "x-centraid-device-proof": "forged",
+        "x-centraid-peer-endpoint": "ep-forged-peer",
+        "x-centraid-peer-vault": "v-forged-peer-vault",
+        "x-centraid-peer-proof": "f".repeat(64),
       },
     });
     expect(res.status).toBe(200);
@@ -240,6 +251,7 @@ describe("gateway endpoint", () => {
       device: device.endpointId,
       proof: PROOF,
     });
+    expect(seen[0]?.peerVault).toBeUndefined();
   });
 
   it("defers generated-app auth to its scoped web session and strips the mode marker", async () => {
@@ -283,5 +295,44 @@ describe("gateway endpoint", () => {
       });
     }).rejects.toThrow(/reason: b"revoked"/u);
     enrolled.add(device.endpointId);
+  });
+});
+
+/*
+ * Strip-parity pin (#865 F9). The Rust relay strips five forwarder-owned
+ * headers; this JS forwarder used to strip four, so a client-supplied
+ * peer-vault claim survived forwarding. Nothing ties the two lists together
+ * at build time, so — same posture as alpn-parity.test.ts — this test reads
+ * the Rust source and pins the TS strip set against it.
+ */
+describe("forwarder owned-header parity", () => {
+  const rust = fs.readFileSync(
+    fileURLToPath(new URL("../data-plane/src/iroh_wire.rs", import.meta.url)),
+    "utf8"
+  );
+  const ts = fs.readFileSync(
+    fileURLToPath(new URL("gateway-endpoint.ts", import.meta.url)),
+    "utf8"
+  );
+
+  it("strips every header the Rust relay owns, and vice versa", () => {
+    const rustNames =
+      /FORWARDER_OWNED_HEADERS: \[&str; \d+\] = \[(?<body>[^\]]+)\]/u
+        .exec(rust)
+        ?.groups?.body?.matchAll(/(?<name>[A-Z_]+)/gu) ?? [];
+    const declared = [...rustNames].map((match) => match.groups!.name!);
+    expect(declared).toStrictEqual([
+      "DEVICE_IDENTITY_HEADER",
+      "DEVICE_PROOF_HEADER",
+      "PEER_ENDPOINT_HEADER",
+      "PEER_VAULT_HEADER",
+      "PEER_PROOF_HEADER",
+    ]);
+
+    const stripList = /IDENTITY_HEADER_NAMES[^=]*= \[(?<body>[^\]]+)\]/u.exec(
+      ts
+    )?.groups?.body;
+    expect(stripList).toBeDefined();
+    for (const name of declared) expect(stripList).toContain(name);
   });
 });

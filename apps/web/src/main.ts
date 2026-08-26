@@ -19,7 +19,7 @@ installIrohServiceWorkerBridge();
 // The bundled `@font-face` rules ride AHEAD of the token CSS in the same
 // string, because `theme-vars.ts` prepends `cssText` as one <style> before
 // anything resolves `--font-sans` — a face declared after the first var()
-// lookup would let the shell paint a frame in the UA default (issue #707).
+// lookup would let the shell paint a frame in the UA default (#707).
 // `__CENTRAID_FONT_FACE_CSS__` points at this origin's own `/fonts/`; the
 // `centraid-fonts` Vite plugin serves and emits the files there.
 window.CentraidTokens = {
@@ -36,9 +36,9 @@ window.CentraidTokens = {
   type: tokens.type,
 };
 
-// Surface the real package version for diagnostics / about UI (issue #468 K9).
-// Vite injects __APP_VERSION__ from package.json. Assignment is JS-legal so
-// v8 coverage remap (Rolldown) can parse this uncovered entry as a script.
+// Package version for diagnostics / about UI (#468 K9). Vite injects
+// __APP_VERSION__ from package.json. Object.assign so v8 coverage remap
+// (Rolldown) can parse this uncovered entry as a script.
 Object.assign(window, { __CENTRAID_VERSION__: __APP_VERSION__ });
 
 installWebHost();
@@ -54,6 +54,6 @@ void import("@centraid/client/react/boot");
 
 // After first paint, and only when this page will actually dial over the WASM
 // transport: bring it up during idle rather than in front of the first request
-// that needs it (issue #659 C3). The service worker holds the binary across
+// that needs it (#659). The service worker holds the binary across
 // visits, so this is paid once per build, not once per visit.
 window.addEventListener("load", warmIrohTransport);

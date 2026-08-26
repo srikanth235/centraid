@@ -4,8 +4,8 @@
  * `fetch` + `node:crypto` — no AWS SDK, per the zero-new-dependencies rule.
  *
  * Region: `S3Grant.region` (PROTOCOL.md) is REQUIRED — the provider states
- * its own SigV4 region. Cloudflare R2's profile is `"auto"`, which remains a
- * valid value; it is no longer hardcoded here.
+ * its own SigV4 region, and this client never hardcodes one. Cloudflare R2's
+ * profile is `"auto"`, itself a valid value.
  */
 
 import { createHash, createHmac } from "node:crypto";

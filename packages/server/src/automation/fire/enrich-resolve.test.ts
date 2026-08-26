@@ -1,5 +1,5 @@
 /*
- * The policy cascade's fold (issue #807, Wave 2). Four things are pinned here,
+ * The policy cascade's fold (#807). Four things are pinned here,
  * because each of them is a promise someone can read on a screen:
  *
  *  - INHERITANCE. A level that says nothing changes nothing.

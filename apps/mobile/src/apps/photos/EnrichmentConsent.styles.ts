@@ -1,6 +1,6 @@
 // Geometry and type for the enrichment consent surface's CHROME (header,
 // status line, scroll padding) — the panels themselves moved to
-// `kit/components/ConsentGate.styles.ts` (issue #712 C1). COLOURLESS on
+// `kit/components/ConsentGate.styles.ts` (#712). COLOURLESS on
 // purpose, like PhotosLibrary.styles.ts: every colour comes from `useTheme()`
 // at the call site, so one sheet serves light and dark.
 

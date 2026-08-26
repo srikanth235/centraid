@@ -154,7 +154,6 @@ export async function resolveAcpCapabilities(
   return run;
 }
 
-/** Test helper. */
 export function clearCapabilitiesCache(): void {
   cache.clear();
   inflight.clear();

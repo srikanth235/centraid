@@ -11,8 +11,7 @@
 // It is a static row above the band rather than the transient host in
 // kit/components/StatusLine — that one is the imperative channel a `.catch()`
 // handler posts into, and it goes quiet. This never does: it is an ambient
-// sentence about the route, which is precisely the thing the shell's status
-// line has and mobile did not.
+// sentence about the route.
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet } from "react-native";

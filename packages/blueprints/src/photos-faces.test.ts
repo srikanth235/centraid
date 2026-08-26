@@ -1,24 +1,13 @@
 // @vitest-environment jsdom
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
-// The lightbox's own face mini-list (apps/photos/faces.ts, issue #711).
+// Lightbox face mini-list (apps/photos/faces.ts, #711); two rules pinned:
+//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285) — count, not `%`.
+//   2. ONE FACE AT A TIME (v4 3967) — one interactive row, never N.
 //
-// Two rules were broken before this suite existed and are pinned here as a
-// regression net, not a styling snapshot — see faces.ts's own header for the
-// full account:
-//
-//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285). The unconfirmed row
-//      must never contain a `%` character; it reports a match COUNT instead.
-//   2. ONE FACE AT A TIME (v4 3967). With N unconfirmed regions on one
-//      photograph, the panel renders exactly ONE interactive row (one
-//      `<select>`), never N.
-//
-// `outcomes.ts` is mocked by STRING specifier (matching faces.ts's own
-// `./outcomes.ts` import), same reason photos-media.test.ts mocks
-// `format.js` that way: the typed `vi.mock(import(...), …)` form would pull
-// `apps/` into this package's `src`-rooted TS program (TS6059/TS2307 — see
-// that file's comment). `window.centraid` is stubbed directly since faces.ts
-// reads it as a global, not an import.
+// String-specifier mock + global centraid stub: typed vi.mock(import(…))
+// pulls apps/ into this package's TS program (TS6059/TS2307 — see
+// photos-media.test.ts); faces.ts reads window.centraid as a global.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- see header
@@ -30,11 +19,8 @@ vi.mock("../apps/photos/outcomes.ts", () => ({
   narrate: () => true,
 }));
 
-// A `relativePath` PARAMETER, not an inlined literal — see photos-media.test.ts's
-// `importFixture` for why: a literal specifier in a dynamic `import()` is
-// something tsc resolves and typechecks at compile time even inside a plain
-// value position, which pulls `apps/` into this package's `src`-rooted TS
-// program (TS6059, same failure `vi.mock`'s string-specifier form avoids).
+// Parameter, not literal: a literal inside import() gets typechecked, pulling
+// apps/ into this package (TS6059; see photos-media.test.ts).
 const FACES_PATH = "../apps/photos/faces.ts";
 const importFaces = (relativePath: string) => import(relativePath);
 
@@ -78,8 +64,7 @@ describe("photos faces mini-list", () => {
         person_name: "Ana",
         confidence: 0.92, // a similarity score — must never surface as 92%
       },
-      // A second proposal for the SAME person, on this photograph, is
-      // exactly what the match count counts.
+      // A second proposal for the SAME person is what the match count counts.
       {
         region_id: "r2",
         party_id: "party-ana",

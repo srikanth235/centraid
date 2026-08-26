@@ -2,10 +2,6 @@
 //
 // The page has ONE parameter (the window) and NO commit: it counts what
 // already happened, so its bar carries a single quiet verb and nothing filled.
-// The old shape — a status hero, a five-tile KPI grid, an SVG area chart with
-// a gradient fill, and four meter-bar panels — is gone; what survives is the
-// data, re-said in the block vocabulary.
-//
 // The window chips are shown in EVERY state that has a page (ready and empty),
 // unlike every other operational screen's filter row, because the window is
 // not a filter over rows — it is the question the page is answering, and a

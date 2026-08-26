@@ -1,4 +1,4 @@
-// The custody rollup (issue #711): the arithmetic, and — the part that
+// The custody rollup (#711): the arithmetic, and — the part that
 // matters — the free-up safety rule. A byte with no PROVEN copy elsewhere is
 // never counted as freeable, and every one of the five vetoes is exercised
 // individually, because a predicate that is right for the wrong reason stops

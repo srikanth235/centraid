@@ -1,11 +1,11 @@
-// THE ENRICHMENT CONSENT MOMENT, NATIVE (v4 handoff §8, issue #711).
+// THE ENRICHMENT CONSENT MOMENT, NATIVE (v4 handoff §8, #711).
 //
-// Two rules are load-bearing, and both were BROKEN on this client before this
-// suite existed — this is a privacy regression net, not a styling snapshot:
+// Two rules are load-bearing, and both are cheap to break — this is a privacy
+// regression net, not a styling snapshot:
 //
 //   1. NO ENRICHMENT WRITE MAY BE ISSUED WITHOUT AN EXPLICIT ANSWER. Library's
-//      `Enrichment` row used to call `request-enrichment` straight from its
-//      `onPress`: one tap, one write, no panels and no facts. The surface now
+//      `Enrichment` row may not call `request-enrichment` straight from its
+//      `onPress` — one tap, one write, no panels and no facts. The surface
 //      routes every answer through a callback, and only the `Run on this
 //      device` control may reach it.
 //   2. THE EGRESS DISCLOSURE MUST BE ON SCREEN. The cloud panel is the only

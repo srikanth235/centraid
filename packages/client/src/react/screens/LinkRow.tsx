@@ -15,11 +15,11 @@ import deviceStyles from "./DevicesCard.module.css";
 import styles from "./SharingCard.module.css";
 
 /**
- * One link row. It carried a per-link "Receive gives" control until #825
- * (ruling G-copy) retired copy-as-share: nothing arrives over a link for a
- * preference to govern any more, because a grant is a standing permission the
- * audience accepts through its channel invitation, not a push it
- * pre-authorizes. The link's own standing is what remains to say.
+ * One link row. There is no per-link "Receive gives" control (#825, ruling
+ * G-copy): nothing arrives over a link for a preference to govern, because a
+ * grant is a standing permission the audience accepts through its channel
+ * invitation, not a push it pre-authorizes. The link's own standing is what
+ * there is to say.
  */
 export default function LinkRow({
   link,

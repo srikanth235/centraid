@@ -1,5 +1,5 @@
 /**
- * Output-schema validator for automation handlers (issue #80).
+ * Output-schema validator for automation handlers (#80).
  *
  * The handler's optional `return { summary, output }` is validated
  * against `manifest.outputSchema`. We keep the schema deliberately

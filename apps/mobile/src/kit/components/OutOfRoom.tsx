@@ -1,19 +1,6 @@
-// `out of room` — the fourth designed state (Binding Layer brief, "States"),
-// mirroring packages/client/src/react/ui/states.tsx's OutOfRoom structurally:
-// cause, consequence, one action. Never edit that file from here — read it
-// for structure only.
-//
-// Mobile had the sentence (../../lib/replica/replica-storage-error.ts) with
-// no component consuming it (issue #708 gap). This is that component, wired
-// to ReplicaProvider's `storageFull` flag, itself set from the real
-// `isReplicaStorageFullError` signal raised by the op-sqlite driver.
-//
-// Desktop's variant also plots a bounded quota (used/limit bytes, a meter).
-// The mobile signal is an OS ENOSPC/SQLITE_FULL error with no knowable device
-// quota to plot, so the meter is optional here — supplied only when a caller
-// actually has used/limit figures. Cause and consequence are mandatory
-// either way; the consequence line still outranks the cause, same as
-// desktop.
+// The fourth designed state (Binding Layer brief), mirroring
+// packages/client/src/react/ui/states.tsx's OutOfRoom. NEVER edit that file
+// from here — read it for structure only.
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
@@ -21,16 +8,13 @@ import { borders, t, useTheme, radii } from "../theme";
 import { Text } from "./NativeText";
 
 export interface OutOfRoomProps {
-  /** The CAUSE, stated plainly. "Phone storage is full." */
   cause: string;
-  /** The CONSEQUENCE — the line that matters, and the largest thing here. */
   consequence: string;
-  /** Optional numeric line + meter, only when a real used/limit is known. */
   usedLabel?: string;
   limitLabel?: string;
-  /** 0–1. Above 1 the meter takes the danger tone rather than overflowing. */
+  /** 0–1; above 1 the meter takes the danger tone. */
   fractionUsed?: number;
-  /** ONE action. A list of remedies is a way of not choosing one. */
+  /** ONE action, never a list of remedies. */
   actionLabel: string;
   onAction: () => void;
 }
@@ -57,7 +41,7 @@ export default function OutOfRoom({
       accessibilityRole="summary"
     >
       <Text style={[styles.cause, { color: colors.textSoft }]}>{cause}</Text>
-      {/* THE line that matters — largest thing in the block on purpose. */}
+      {/* THE line that matters — largest on purpose. */}
       <Text style={[styles.consequence, { color: colors.text }]}>
         {consequence}
       </Text>
@@ -79,8 +63,7 @@ export default function OutOfRoom({
           </Text>
         </>
       ) : null}
-      {/* An outlined action, never a filled surface — this state is not a
-          confirm flow, and nothing here is destructive. */}
+      {/* Outlined, never filled: not a confirm flow. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={actionLabel}

@@ -1,5 +1,5 @@
 /*
- * The bundled-manifest scope-denial sweep (issue #839, G4) — part 2 of 3.
+ * The bundled-manifest scope-denial sweep (#839) — part 2 of 3.
  *
  * The negative half: every undeclared combination fails CLOSED with the exact
  * grammar, and one positive case per deny class proves the closed grammar is

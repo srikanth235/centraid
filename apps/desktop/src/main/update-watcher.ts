@@ -1,16 +1,7 @@
 /*
- * Relaunch-to-update — electron wiring around the pure core in
- * update-check.ts. Polls the built `dist/` on a slow unref'd timer; when a
- * new build settles on disk it broadcasts UPDATE_AVAILABLE to every window
- * so the sidebar can show the "Relaunch to update" pill. The pill's click
- * lands on `relaunchToUpdate()` (via IPC in ipc.ts), which restarts the
- * process with the same argv/cwd — the relaunched Electron loads the new
- * bundles.
- *
- * Issue #468 I4–I6 / #501: every announce path gates through {@link admitUpdate}
- * (pure staged-rollout math). Unpackaged dev still uses dist mtime detection;
- * packaged builds call {@link startPackagedUpdateChecker} which downloads after
- * admit and only then marks ready-to-install (quitAndInstall).
+ * Electron wiring around update-check.ts. Unpackaged: poll dist mtime.
+ * Packaged: download after {@link admitUpdate} (#501), then ready-to-install.
+ * Broadcast UPDATE_AVAILABLE; `relaunchToUpdate()` restarts same argv/cwd.
  */
 
 import { readFile, stat } from "node:fs/promises";
@@ -32,30 +23,19 @@ import {
 } from "./update-signature-gate.js";
 
 const POLL_MS = 10_000;
-/** Packaged feed re-check interval (I4). */
 const PACKAGED_CHECK_MS = 4 * 60 * 60 * 1000;
 
-/**
- * Broadcast channel for "a new build is on disk". Mirrored (as a string
- * literal, like every other channel) in preload.ts; the invoke channels
- * live in ipc.ts's Channel table.
- */
 export const UPDATE_AVAILABLE_CHANNEL = "centraid:update:available";
 
 export interface UpdateStatus {
   available: boolean;
-  /** Version of the candidate build. */
   version: string;
-  /**
-   * Packaged path: true only after electron-updater finished downloading.
-   * Unpackaged: always true when available (relaunch loads dist).
-   */
+  /** Packaged: true only after download. Unpackaged: true when available. */
   readyToInstall?: boolean;
 }
 
 let current: UpdateStatus | null = null;
 let started = false;
-/** Set when a packaged download completed; quitAndInstall uses this. */
 let packagedDownloadReady = false;
 let autoUpdaterRef: {
   downloadUpdate: () => Promise<unknown>;
@@ -64,7 +44,6 @@ let autoUpdaterRef: {
   channel: string | null;
 } | null = null;
 
-/** Renderer-facing snapshot, for windows that mount after the broadcast. */
 export function getUpdateStatus(): UpdateStatus {
   return (
     current ?? {
@@ -75,13 +54,9 @@ export function getUpdateStatus(): UpdateStatus {
   );
 }
 
-/**
- * Restart into the new build. Unpackaged: app.relaunch. Packaged + downloaded:
- * electron-updater quitAndInstall. Never quitAndInstall without a download.
- */
 export function relaunchToUpdate(): void {
   if (app.isPackaged && packagedDownloadReady && autoUpdaterRef) {
-    // I9: install the already-admitted download; forceRunAfter so the app returns.
+    // I9: admitted download; forceRunAfter so the app returns.
     autoUpdaterRef.quitAndInstall(false, true);
     return;
   }
@@ -104,7 +79,6 @@ async function statWatched(
   );
 }
 
-/** The on-disk version a relaunch would load (falls back to the running one). */
 async function readDiskVersion(appRoot: string): Promise<string> {
   try {
     const pkg = JSON.parse(
@@ -126,14 +100,8 @@ async function broadcastUpdate(status: UpdateStatus): Promise<void> {
   }
 }
 
-/**
- * Announce an available update only when staged rollout admits this install
- * (I4 thin wiring over pure I5/I6 math). `manualCheck` always admits.
- * Exported for unit tests that drive the real admit path.
- */
 export async function announceUpdateIfAdmitted(input: {
   version: string;
-  /** Release publish time; omit → fail-open admit. */
   releasedAtMs?: number | null;
   manualCheck?: boolean;
   readyToInstall?: boolean;
@@ -151,14 +119,10 @@ export async function announceUpdateIfAdmitted(input: {
   return true;
 }
 
-/** D5: beta tags use channel `beta`; everything else `latest`. */
 export function updaterChannelForVersion(version: string): "beta" | "latest" {
   return /beta/iu.test(version) ? "beta" : "latest";
 }
 
-/**
- * Start the dist watcher (unpackaged) or packaged updater. Idempotent.
- */
 export function startUpdateWatcher(): void {
   if (started) return;
   started = true;
@@ -193,18 +157,14 @@ export function startUpdateWatcher(): void {
 }
 
 /**
- * Packaged-app update path (I4 / #501). Loads electron-updater via createRequire
- * only here (not at main-module import time): the package is CJS and a static
- * named ESM import of `autoUpdater` crashes Electron under `"type":"module"`.
- * After admit, downloads the update; only then shows ready-to-install.
- * Accessing the autoUpdater getter needs a real Electron `app` — never call
- * outside this packaged path after ready.
+ * Packaged path (I4 / #501). createRequire here — CJS `autoUpdater` crashes
+ * under `"type":"module"` if imported statically. Download after admit;
+ * never call the autoUpdater getter outside this packaged-ready path.
  */
 export function startPackagedUpdateChecker(): void {
   void (async () => {
     try {
-      // Deferred CJS load — knip cannot see createRequire; dep is intentionally
-      // runtime + ignoreDependencies in knip.json (apps/desktop).
+      // Deferred CJS load; knip cannot see createRequire (knip.json ignoreDependencies).
       const req = createRequire(import.meta.url);
       const { autoUpdater } = req("electron-updater") as {
         autoUpdater: {
@@ -221,7 +181,7 @@ export function startPackagedUpdateChecker(): void {
           on: (event: string, cb: (info: unknown) => void) => void;
         };
       };
-      // I9: never install-on-quit a stale download; re-check before install.
+      // I9: never install-on-quit a stale download.
       autoUpdater.autoDownload = false;
       autoUpdater.autoInstallOnAppQuit = false;
       autoUpdater.channel = updaterChannelForVersion(app.getVersion());
@@ -245,7 +205,6 @@ export function startPackagedUpdateChecker(): void {
             manualCheck: false,
           });
           if (!admitted) return;
-          // Metadata available but not yet downloaded — do not claim ready.
           await broadcastUpdate({
             available: true,
             version,
@@ -254,7 +213,7 @@ export function startPackagedUpdateChecker(): void {
           try {
             await autoUpdater.downloadUpdate();
           } catch {
-            // Network failure — leave available:true readyToInstall:false; user can retry.
+            // Network failure — leave available, not ready; user can retry.
           }
         })();
       });
@@ -266,11 +225,8 @@ export function startPackagedUpdateChecker(): void {
             typeof release.version === "string"
               ? release.version
               : app.getVersion();
-          // W6.1 (#842): custody gate. A downloaded payload becomes
-          // installable only when a detached release signature vouches for its
-          // digest under a key this build pins. Refusal leaves
-          // packagedDownloadReady false, so relaunchToUpdate() falls back to a
-          // plain relaunch and never calls quitAndInstall on those bytes.
+          // W6.1 (#842): installable only with a pinned-key signature. Refusal
+          // leaves packagedDownloadReady false — relaunch, never quitAndInstall.
           const trusted = await admitDownloadedUpdate({
             packaged: app.isPackaged,
             version,
@@ -299,15 +255,11 @@ export function startPackagedUpdateChecker(): void {
       }, PACKAGED_CHECK_MS);
       timer.unref();
     } catch {
-      // Packaged without updater lib / no feed / offline — silent.
+      // Packaged without updater lib / no feed / offline.
     }
   })();
 }
 
-/**
- * Manual "check for updates" (I6 always admits when a candidate exists).
- * Exposed for Settings / IPC.
- */
 export async function checkForUpdatesManual(): Promise<UpdateStatus> {
   if (!app.isPackaged || !autoUpdaterRef) {
     return getUpdateStatus();

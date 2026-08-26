@@ -1,49 +1,20 @@
-/*
- * Repricing backfill (issue #445).
- *
- * Prices drift and the catalog gains coverage over time, so `items.cost_usd`
- * frozen under an old (or absent) rate goes wrong: a then-unknown model reads
- * NULL → $0 in Insights, and a since-repriced model reads a stale figure. This
- * is the ONLY sanctioned rewriter of the frozen cost: it recomputes each step/
- * delegate item's cost from its FROZEN token counts against the CURRENT catalog,
- * and where the result differs it rewrites `items.cost_usd` and re-derives the
- * owning turn's `total_cost_usd` with the same SUM shape `finishTurn` uses.
- *
- * Token columns are the truth and are NEVER touched. `conversation_digest`
- * rows (issue #438 archived rollups) are frozen copies and out of scope — this
- * only sees live `items`/`turns`.
- *
- * Harness-reported costs (`cost_source = 'harness'`, issue #514) are never rewritten
- * — only catalog estimates and NULL unknowns are revisited.
- *
- * Bounded and resumable: one pass scans at most `maxScan` items from a caller-
- * held rowid cursor and writes at most `maxWrites` differing rows, returning
- * the cursor to resume from. Steady state is ~free — a clean row recomputes to
- * the same value and writes nothing; a second pass over unchanged data is a
- * no-op (idempotent).
- */
+// Reprice frozen `items.cost_usd` from frozen tokens vs current catalog (#445).
+// Never rewrite token columns or harness costs (#514); digests (#438) out of scope.
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { costForUsage } from "../model-pricing.js";
 
 export interface RepriceOptions {
-  /** Resume point — process items with `rowid > cursor`. Default 0 (start). */
   cursor?: number;
-  /** Max items examined per pass (bounds CPU). Default 5000. */
   maxScan?: number;
-  /** Max differing items rewritten per pass (bounds IO / chunks convergence). Default 1000. */
   maxWrites?: number;
 }
 
 export interface RepriceResult {
-  /** Items whose cost changed and were rewritten. */
   itemsRepriced: number;
-  /** Distinct turns whose `total_cost_usd` was re-derived. */
   turnsRederived: number;
-  /** Items examined this pass. */
   scanned: number;
-  /** Cursor to pass next time; wraps to 0 once the table tail is reached. */
   nextCursor: number;
 }
 
@@ -59,8 +30,7 @@ interface ItemRow {
   cost_source: string | null;
 }
 
-// Below this the two costs are the same money — keeps float noise from forcing
-// a write (and matches the ledger's 4-dp rounding elsewhere).
+// Float noise must not force a write (matches 4-dp ledger rounding).
 const EPSILON = 1e-9;
 
 function differs(a: number | null, b: number | null): boolean {
@@ -68,10 +38,6 @@ function differs(a: number | null, b: number | null): boolean {
   return Math.abs(a - b) > EPSILON;
 }
 
-/**
- * Run one bounded repricing pass over a journal handle's live ledger. Safe to
- * call repeatedly; only rows whose recomputed cost differs are written.
- */
 export function repriceLedger(
   db: DatabaseSync,
   opts: RepriceOptions = {}
@@ -107,13 +73,11 @@ export function repriceLedger(
   let itemsRepriced = 0;
   let lastRowid = cursor;
 
-  // SAVEPOINT (not BEGIN) so this nests safely if the caller already holds a
-  // transaction — the sweep runs several duties per tick.
+  // SAVEPOINT, not BEGIN — nests if the caller already holds a transaction.
   db.prepare("SAVEPOINT reprice").run();
   try {
     for (const row of rows) {
       lastRowid = row.rowid;
-      // Never clobber harness-reported costs (also filtered in SQL).
       if (row.cost_source === "harness") continue;
       const recomputed =
         costForUsage(row.model ?? undefined, {
@@ -144,7 +108,6 @@ export function repriceLedger(
     throw error;
   }
 
-  // Fewer rows than asked for ⇒ tail reached; wrap to re-sweep from the start.
   const nextCursor =
     rows.length < maxScan && itemsRepriced < maxWrites ? 0 : lastRowid;
   return {

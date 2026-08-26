@@ -1,9 +1,8 @@
-// The learning loop's write surface (issue #310 C1, rule R08). The tables
-// and the veto have existed since v1 — agent_correction, agent_judgment,
-// and judgmentVeto() consulted on every execution — but nothing ever WROTE
-// them: the loop's promise ("corrections feed back as durable judgment
-// rows") was a dead letter. These commands close it in its honest, manual
-// form:
+// The learning loop's write surface (#310 C1, rule R08). The read side
+// is agent_correction, agent_judgment and judgmentVeto(), consulted on every
+// execution; these commands are the ONLY thing that writes those tables, and
+// they keep the loop's promise ("corrections feed back as durable judgment
+// rows") in its honest, manual form:
 //
 //   record_correction — any granted actor records that the owner fixed
 //     something (the diff, the target, the reason). Apps funnel the owner's
@@ -253,7 +252,6 @@ const REVOKE_JUDGMENT: CommandDefinition = {
   },
 };
 
-/** Register the judgment-loop commands on a gateway. */
 export function registerJudgmentCommands(gateway: Gateway): void {
   gateway.registerCommand(RECORD_CORRECTION);
   gateway.registerCommand(DISTILL_JUDGMENT);

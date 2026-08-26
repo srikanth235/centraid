@@ -1,6 +1,5 @@
-// Photos uses the same registry as the other blueprint apps.  The small
-// component adapter preserves the existing exports and lets CSS continue to
-// provide currentColor without embedding a second SVG dictionary here.
+// Same registry as the other blueprint apps; the adapter preserves the
+// existing exports and lets CSS provide currentColor — no second SVG dict.
 import type { FC, ReactElement, SVGProps } from "react";
 
 import { iconSvg } from "@centraid/design";
@@ -24,13 +23,7 @@ function RegisteredIcon({
     <i
       aria-hidden="true"
       className={className}
-      // INLINE-FLEX, NOT THE DEFAULT INLINE. An inline SVG element sits on a text
-      // baseline, so an inline wrapper's line box is the glyph PLUS the font's
-      // descent — 22px around an 18px mark. Every icon here is centred by a
-      // flex parent (`.close`, `.bottomAction`, `.nav`), and that parent then
-      // centres the 22px box, leaving the glyph 2px high: 6px above, 10px
-      // below. `inline-flex` makes the wrapper exactly the glyph's box and
-      // still sits inline beside text, which `display: block` does not.
+      // INLINE-FLEX, NOT INLINE: an inline wrapper's line box is the glyph plus the font's descent (22px around an 18px mark), so flex parents centre the wrong box and the glyph rides 2px high. `inline-flex` is exactly the glyph's box and still sits beside text, unlike `display: block`.
       style={{ display: "inline-flex", ...style, color }}
       // oxlint-disable-next-line react/no-danger -- registry output is the reviewed shared icon lowering.
       dangerouslySetInnerHTML={{ __html: markup }}
@@ -73,26 +66,17 @@ export const ShieldIcon = make("CheckCircle");
 export const PinIcon = make("Pin");
 export const RenameIcon = make("Pencil");
 
-// The selection bar's five actions (v4 handoff §6, CHANGELOG B2) — the new
-// lowercase icon keys, not the pre-existing capitalised ones above. B2 is
-// explicit that these entries "share their exact artwork rather than drawing
-// a second, competing glyph for the same action", so Favorite/Trash here are
-// deliberately a second export, not a reuse of HeartIcon/TrashIcon.
+// Selection bar's five actions (v4 handoff §6, CHANGELOG B2) — the lowercase
+// registry keys, NOT reuses of the capitalised exports above: B2 requires
+// sharing exact artwork without a second competing glyph.
 export const SelectFavoriteIcon = make("heart");
 export const SelectAlbumIcon = make("album");
 export const SelectShareIcon = make("share");
 export const SelectDownloadIcon = make("download");
 export const SelectTrashIcon = make("trash");
 export const SelectRestoreIcon = make("restore");
-// The viewer's two marks that had no honest stand-in (CHANGELOG §B2).
-//
-// `more` is bound to the registry's own key rather than re-using `Menu`: the
-// two are different actions to the member — `Menu` opens navigation, `more`
-// opens the rest of THIS bar — and "an action that changes its icon between
-// surfaces is a different action".
-//
-// `info` replaces `AlertCircle` on the stage for the same reason in reverse:
-// an alert glyph on an Info control says something went wrong, which is a
-// different message from "here is what is known about this photograph".
+// Viewer marks with no honest stand-in (CHANGELOG §B2): `more` is a different
+// action from `Menu` (bar overflow vs navigation) and `info` states what is
+// known — an alert glyph would say something went wrong.
 export const MoreIcon = make("more");
 export const InfoMarkIcon = make("info");

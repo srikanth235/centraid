@@ -1,5 +1,5 @@
 /*
- * The on-behalf-of cap (issue #599 decision 7; ownership since #726).
+ * The on-behalf-of cap (#599 decision 7; ownership since #726).
  *
  * An agent turn acts FOR an owner and is hard-capped at that owner's
  * authority in the vault — ownership: Sid's assistant must fail exactly

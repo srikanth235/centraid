@@ -1,4 +1,4 @@
-// Agenda, inline descriptor (issue #505). The `InlineAppModule` the shell's
+// Agenda, inline descriptor (#505). The `InlineAppModule` the shell's
 // client loader (packages/client inlineApps.ts) imports: it pairs the
 // query-free `Root` (app-root.tsx) with this app's `./queries/*` handler
 // modules for the shell's client-side query path, alongside changeTables +

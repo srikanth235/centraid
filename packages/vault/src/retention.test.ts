@@ -1,4 +1,4 @@
-// Bounded retention for the vault's silent growers (issue #659 L4). The
+// Bounded retention for the vault's silent growers (#659). The
 // laws under test are the two the module header states: only TERMINAL rows
 // are eligible, and one pass never writes more than its cap.
 

@@ -1,28 +1,6 @@
-// The phone's viewer controls. On the desktop the five actions sit in the top
-// bar; here they sit where a thumb is. Same five names, same marks, same order —
-// the phone rearranges the viewer, it does not water it down (CHANGELOG §D).
-//
-// ANATOMY: chip · capsule · chip, not one bar of five equal cells. The grouping
-// is `VIEWER_BOTTOM_GROUPS` and the argument for it is stated there: the two
-// ends carry the actions with consequences outside this photograph (Copy to
-// vault, which reaches outside this vault; Trash, the only destructive one),
-// and the capsule carries the three that do not. Flattening the groups still
-// reproduces the desktop order.
-//
-// THE LABELS ARE GONE FROM THE SCREEN, AND THAT IS THE ONE THING THIS COSTS.
-// Five drawn words under five marks is what the v4 handoff asked for; the iOS
-// arrangement we are copying draws none, and at chip size there is nowhere to
-// put them that does not turn a 44 target into a 70 one. What survives is the
-// contract underneath the words: every target still takes its `accessibilityLabel`
-// from `action.label`, the same field the label was drawn from, so nothing an
-// assistive technology says has changed. What must NOT be traded away with them
-// is a REASON — a refusal is a sentence a sighted member has to be able to read,
-// so `READ_ONLY_VAULT_REASON` is still rendered inline under the row, in visible
-// `--net` mono, exactly as before (§6, §18).
-//
-// The floating chrome above the stage keeps the back and the overflow only, so
-// this is still the ONLY place a write starts from in the viewer. Trash takes
-// `--net` as ink, never as a fill.
+// Same five as desktop (CHANGELOG §D), chip·capsule·chip. Labels gone (44
+// not 70); `accessibilityLabel` from `action.label`. REASON stays visible
+// as `READ_ONLY_VAULT_REASON` (§6, §18). Trash `--net` ink, never fill.
 
 import * as Haptics from "expo-haptics";
 import React from "react";
@@ -45,9 +23,6 @@ interface PhotoLightboxToolbarProps {
   onInfo: () => void;
   onPlacement: (kind: "add" | "move") => void;
   onSaveToMyVault?: () => void;
-  /** Opens the editor, which is a MODE of the viewer rather than a route
-   *  (§7.4). Optional only so a caller that has no editor to open cannot fire
-   *  this target into nothing — never because editing is a desktop feature. */
   onEdit?: () => void;
   onWrite: (
     action: string,
@@ -55,7 +30,6 @@ interface PhotoLightboxToolbarProps {
   ) => Promise<void>;
 }
 
-/** Mutation affordances stay source-atomic and degrade together when read-only. */
 export function PhotoLightboxToolbar({
   asset,
   onInfo,
@@ -68,9 +42,7 @@ export function PhotoLightboxToolbar({
   const writable = Boolean(
     asset.assetId && asset.sourceVaultId && asset.canWrite === true
   );
-  // Crop and rotate are raster operations on a still frame; there is no
-  // non-destructive answer for a video the phone can render, so the editor does
-  // not pretend to offer one.
+  // Crop/rotate are raster on a still; do not pretend a video has a non-destructive editor.
   const editable = asset.kind === "photo" || asset.kind === "scan";
   const enabled: Record<ViewerActionId, boolean> = {
     copy: Boolean(onSaveToMyVault ?? (asset.assetId && asset.scopeIds?.length)),
@@ -79,7 +51,6 @@ export function PhotoLightboxToolbar({
     info: true,
     trash: writable,
   };
-  // A read-only vault does not hide a control; it shows why it cannot fire.
   const reason: Partial<Record<ViewerActionId, string>> = {
     copy:
       onSaveToMyVault || asset.scopeIds?.length
@@ -137,21 +108,12 @@ export function PhotoLightboxToolbar({
                 <ViewerChromeTarget
                   colors={colors}
                   disabled={!on}
-                  // The hint still reaches a screen reader that lands directly
-                  // on the control; it is never the ONLY place the reason lives
-                  // — see the visible line below, which is what a sighted member
-                  // reads (§6, §18: a refusal is stated inline, never only in a
-                  // tooltip — and `accessibilityHint` IS that tooltip pattern
-                  // for a touch surface).
+                  // Hint for AT; never the only place the reason lives (§6, §18).
                   hint={why}
                   icon={action.icon}
                   key={id}
                   label={label}
-                  // Defense in depth (matches the web selection bar's
-                  // `buildSelectionActions`, §6, §18): `disabled` is what stops
-                  // a tap or an assistive-tech activation; this guard is what
-                  // stops anything that calls `onPress` directly from reaching a
-                  // write a read-only grant refused.
+                  // `disabled` stops tap/AT; this guard stops a direct `onPress` on a refused write.
                   onPress={() => {
                     if (!on) return;
                     run[id]();
@@ -165,11 +127,7 @@ export function PhotoLightboxToolbar({
           </ViewerChromePlate>
         ))}
       </View>
-      {/* The read-only reason, stated inline under the row in `--net` mono —
-          the same sentence the write-refusal panel gives elsewhere in the
-          viewer (READ_ONLY_VAULT_REASON), never carried only in a hint. This is
-          what makes dropping the drawn labels honest: a NAME can move into the
-          accessible layer, a REASON cannot. */}
+      {/* Visible refusal under the row — a NAME can move to AT, a REASON cannot. */}
       {writable ? null : (
         <Text style={[styles.viewerReadOnlyReason, { color: colors.net }]}>
           {READ_ONLY_VAULT_REASON}

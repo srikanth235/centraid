@@ -1,4 +1,4 @@
-// Cross-referencing (issue #272): the owner's pick IS the consent. A link the
+// Cross-referencing (#272): the owner's pick IS the consent. A link the
 // owner asserts lets an app resolve the far end of a domain it was never
 // granted — and only for as long as both the grant and the link live.
 import { describe, expect, test } from "vitest";

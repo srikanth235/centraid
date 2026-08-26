@@ -1,17 +1,9 @@
-// core.merge_party (issue #290 phase 2) — the entity-resolution primitive.
-// Multi-source ingestion inevitably mints duplicate people ("J. Smith" from
-// Takeout, "john.smith@…" from an MBOX); without a merge, every added source
-// DEGRADES the vault. Merging folds party B into party A: every engine FK
-// re-points (discovered via PRAGMA foreign_key_list — no hand-kept table
-// list to rot), every polymorphic (type, id) reference follows, identifiers
-// move with primary-flag demotion, and B's row is deleted. History is not
-// rewritten: provenance records the merge on both ids and receipts stay.
-//
-// A re-pointed row that collides with a uniqueness constraint (B and A both
-// members of the same tally group; both holding a people_profile) is the
-// survivor already owning that relation — the duplicate row deletes, except
-// identifiers, which demote to non-primary rather than vanish (a handle is
-// never lost in a merge), and people_profile, which folds cadence,
+// core.merge_party (#290): multi-source ingestion mints duplicate people and
+// without a merge every added source DEGRADES the vault. Folds party B into
+// A: engine FKs re-point (PRAGMA foreign_key_list — no hand-kept list),
+// polymorphic refs follow, identifiers demote rather than vanish, B's row
+// deletes; history is not rewritten. Uniqueness collisions dedupe onto the
+// survivor's copy; a handle is never lost. people_profile folds cadence,
 // last-contacted, colour, role and met onto the survivor first (#864).
 
 import type { Gateway } from "../gateway/gateway.js";
@@ -51,7 +43,6 @@ const MERGE_PARTY: CommandDefinition = {
       value: 2,
     },
     {
-      // The vault owner's identity row is structural — nothing merges INTO oblivion.
       name: "merged_is_not_the_owner",
       sql: `SELECT count(*) AS n FROM core_vault WHERE owner_party_id = :merged_party_id`,
       column: "n",
@@ -69,7 +60,7 @@ const MERGE_PARTY: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Tier 4 (issue #306): an irreversible merge stays loud on purpose.
+  // Tier 4 (#306): an irreversible merge stays loud on purpose.
   risk: "high",
   confirm: true,
   handler: mergeParty,
@@ -197,8 +188,7 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
         repointed += 1;
       } catch {
         if (ref.table === "core_party_identifier") {
-          // The survivor already has a primary handle of this scheme —
-          // demote and keep; a handle is never lost in a merge.
+          // Survivor already holds a primary handle of this scheme — demote, keep.
           ctx.db
             .prepare(
               `UPDATE core_party_identifier SET party_id = ?, is_primary = 0 WHERE identifier_id = ?`
@@ -206,7 +196,6 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
             .run(survivor, row.pk);
           repointed += 1;
         } else {
-          // Uniqueness collision: the survivor already holds this relation.
           ctx.db
             .prepare(`DELETE FROM "${ref.table}" WHERE "${ref.pk}" = ?`)
             .run(row.pk);
@@ -216,9 +205,7 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
     }
   }
 
-  // Re-point every live polymorphic mechanism from the same closed registry
-  // purge uses. Merge semantics differ from cleanup policies, but the column
-  // set must not drift independently (issue #450).
+  // Polymorphic refs: same closed registry purge uses — no drift (#450).
   for (const poly of POLY_REF_REGISTRY.flatMap((entry) =>
     entry.pairs.map((pair) => ({ table: entry.table, ...pair }))
   )) {
@@ -246,7 +233,6 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
           .run(survivor, row.pk);
         repointed += 1;
       } catch {
-        // Both parties carried the same tag / entry — the survivor's copy wins.
         ctx.db
           .prepare(`DELETE FROM "${poly.table}" WHERE "${pk}" = ?`)
           .run(row.pk);
@@ -265,15 +251,10 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
   return { survivor_party_id: survivor, repointed, deduped };
 }
 
-/** Register the merge primitive on a gateway. */
-// The convergence sweep (issue #310 C4): merge_party had no operator —
-// handle→party resolution runs at import time only, so duplicates minted
-// by different sources ("J. Smith" from Takeout, a bare email from MBOX)
-// accumulated with nothing surfacing them. This read-shaped command reports
-// candidate pairs deterministically (case-insensitive display-name
-// collisions among live persons, with each side's identifier schemes so a
-// reviewer sees WHY two rows look like one human). The assistant proposes;
-// core.merge_party stays the loud, owner-confirmed act.
+// Convergence sweep (#310): handle→party resolution runs at import time only,
+// so per-source duplicates accumulate unsurfaced; this read reports
+// deterministic candidates (case-insensitive display-name collisions plus
+// identifier schemes). The assistant proposes; merge stays owner-confirmed.
 const FIND_DUPLICATES: CommandDefinition = {
   name: "core.find_duplicate_parties",
   ownerSchema: "core",

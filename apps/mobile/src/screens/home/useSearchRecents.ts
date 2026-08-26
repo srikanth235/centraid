@@ -1,24 +1,7 @@
-// The Search overlay's empty state — RECENTS + SUGGESTION CHIPS, both
-// derived from real replica rows (issue #708, mobile close-out). No query
-// typed yet is not "nothing to show": it is a chance to surface what the
-// vault already holds, the same way Home's springboard does.
-//
-// Reads follow the useSpringboardTiles.ts idiom exactly — bounded `limit`,
-// `orderBy` only where "newest" is the actual claim being made, one memoized
-// request per read so `useReplicaQuery` doesn't re-fire every render:
-//
-//  - notes / docs: `updated_at` is edit time, read + ordered on the same way
-//    the springboard's own tiles already do.
-//  - tally: `spent_on` is the closest replica column to "when this was
-//    captured" — the same column the springboard's tally tile filters on.
-//  - photos: `captured_at` on `media.asset`, the springboard photos
-//    tile's own ordering column. The asset has no title, so its recents
-//    label is its kind ("Photo" / "Video") — never an invented caption.
-//  - people: read only to seed suggestion chips with a real name; people
-//    have no edit timestamp on this shape, so they never enter RECENTS.
-//
-// Locker is absent for the same reason it is absent from ./blueprint-search:
-// its items have no replica shape on mobile at all.
+// Search overlay empty state: RECENTS + suggestion chips from real replica
+// rows (#708), following the useSpringboardTiles idiom — bounded `limit`,
+// `orderBy` only where "newest" is the actual claim, one memoized request per
+// read. Locker is absent: no mobile replica shape at all.
 
 import { useMemo } from "react";
 
@@ -31,12 +14,10 @@ import type { NativeReadRequest } from "../../lib/replica/native-session";
 import { selectSearchRecents, selectSuggestionChips } from "./search-model";
 import type { RecentSourceRow } from "./search-model";
 
-/** Read ceiling per kind — small, because only the newest handful of each
- *  ever survives into the merged, capped RECENTS list. */
+/** Per-kind read ceiling — only the newest handful survives the capped list. */
 const READ_LIMIT = 20;
 const RECENTS_SHOWN = 8;
-// The handoff's `try` row is ONE line of three short terms (v4 .dc.html
-// :6012 — `['Pemberton','right of way','Ana']`), never a wrapping rail.
+// ONE line of three short terms (v4 :6012), never a wrapping rail.
 const SUGGESTIONS_SHOWN = 3;
 
 const appMetaById = new Map(apps.map((meta) => [meta.id, meta]));
@@ -128,11 +109,8 @@ export function useSearchRecents(): SearchRecentsResult {
       []
     )
   );
-  // Suggestion-only: a person's name earns a chip, but `core.party` carries
-  // no edit timestamp, so people never enter RECENTS. Reading `core.party`
-  // directly (not `people.profile`, which has no `display_name` column —
-  // see useSpringboardTiles' two-step profiles→parties join) keeps this a
-  // single bounded read.
+  // Chips only: `core.party` has no edit timestamp, so people never enter
+  // RECENTS. Read directly (not profiles) to keep it one bounded read.
   const parties = useReplicaQuery(
     "people",
     useMemo(

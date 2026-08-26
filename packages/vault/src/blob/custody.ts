@@ -1,26 +1,8 @@
-// Blob custody facade (#296, cache reworked in #405): two tiers, one surface.
-//
-//   local  — the spool and bounded cache (#405). It no longer mirrors the whole
-//            vault: tinies are pinned unevictable, replicated objects evict LRU
-//            under budget, and a `remote-only` blob reads through on demand
-//            and re-promotes. Eviction never removes the last local-only copy;
-//            cache pressure backpressures ingest instead.
-//   remote — an optional BlobStore (S3-compatible) that REPLICATES the local
-//            tier for durability. Replication is a sweep, never in-line with
-//            a write; remote deletes are reconciliation's job (list-diff), so
-//            a crash between a local purge and a remote delete costs an
-//            orphan object, never a dangling row.
-//
-// Optional `BlobCache` coordinates budget, replication, LRU, eviction,
-// metrics and the QoS gate. With one wired (db.ts), custody consults the
-// replication INDEX instead of a live `remote.list()` for `statusFor`/
-// `replicate` (§4 — no O(all-objects) listing per sweep) and runs the ingest
-// precheck; without one (legacy unit tests), it lists the remote as before.
-//
-// Encryption (settings `blob_store.encrypt`): remote objects seal per blob with
-// AES-256-GCM under the vault's DEK (#293 key custody), AAD `blob:<sha>`.
-// Identity/dedup key off the PLAINTEXT sha; the local tier stays plaintext (it
-// shares vault.db's disk trust; the remote tier is the third party).
+// Blob custody facade (#296, #405): a local spool+cache tier and an optional
+// remote BlobStore that REPLICATES it. Eviction never removes the last
+// local-only copy. Remote deletes are reconciliation's job, so a crash costs an
+// orphan, never a dangling row. Remote objects seal under the vault DEK (#293),
+// AAD `blob:<sha>`, keyed off the PLAINTEXT sha.
 
 import { nowIso } from "../ids.js";
 import {
@@ -41,7 +23,6 @@ import {
 } from "./custody-read.js";
 import { reconcileCustody } from "./custody-reconcile.js";
 import { createRemoteBlobStream } from "./custody-remote-stream.js";
-// Re-export the split custody types so existing facade importers stay untouched.
 import { remoteEncryptionKey, storeForClass } from "./custody-types.js";
 import type {
   CustodyState,
@@ -67,21 +48,12 @@ export type {
   ReconcileOptions,
   BlobSweepStatus,
 } from "./custody-types.js";
-// Custody-state projection helpers live in a sibling module (issue #352);
-// re-exported here so `./custody.js` importers (index.ts, gateway.ts) are
-// untouched by the split.
 export {
   refreshCustodyState,
   custodyStateCounts,
   custodyStateByteCounts,
 } from "./custody-state.js";
 
-/**
- * Blobs at or above this size stream from disk into the remote tier instead
- * of buffering the whole plaintext (issue #367 §C8) — mirrors
- * `S3BlobStore`'s own `MULTIPART_THRESHOLD_BYTES` so the two decisions line
- * up (a blob under this streams as one small buffered `put` either way).
- */
 const STREAMING_REPLICATE_THRESHOLD_BYTES = 32 * 1024 * 1024;
 
 export class BlobCustody {
@@ -90,14 +62,8 @@ export class BlobCustody {
   private lastSweepError: string | null = null;
   private sweepConsecutiveFailures = 0;
 
-  /**
-   * Single-flight coalescing (issue #405 §4): two concurrent `open()` calls
-   * for the same cold sha must produce ONE provider GET, not two full
-   * downloads + two unseals. The whole-read map shares the full read-through
-   * (fetch + unseal + verify + promote); the directory map shares the footer
-   * fetch across concurrent RANGED readers of the same sha. Both clear on
-   * settle so a later read re-fetches (never a stale cache).
-   */
+  /** Single-flight (#405): concurrent `open()`s for one cold sha must produce
+   *  ONE provider GET. Both maps clear on settle — never a cache. */
   private readonly wholeInflight = new Map<string, Promise<Buffer | null>>();
   private readonly dirInflight = new Map<
     string,
@@ -106,33 +72,18 @@ export class BlobCustody {
 
   constructor(
     readonly local: LocalBlobStore,
-    /**
-     * Resolved lazily on every use: the remote tier follows the CURRENT
-     * settings row, so switching `blob_store` needs no reopen. Returns null
-     * when the vault is local-only.
-     */
+    /** Lazy: switching `blob_store` needs no reopen; null when local-only. */
     private readonly remoteTier: () => RemoteTier | null,
-    /**
-     * The bounded-cache coordinator (issue #405 §3/§4). Present ⇒ the ingest
-     * precheck, replication index, LRU tracking, eviction, metrics and the QoS
-     * gate are all live. Absent (legacy unit tests) ⇒ pre-#405 behavior: no
-     * eviction, and `statusFor`/`replicate` list the remote directly.
-     */
+    /** Absent ⇒ no eviction; `statusFor`/`replicate` list the remote. */
     private readonly cache?: BlobCache,
-    /**
-     * The store class a sha's bytes belong in (issue #425 Wave 2). db.ts wires
-     * `(sha) => desiredStoreForSha(vault, sha)`; absent (legacy unit tests) ⇒
-     * everything routes to `cas`, byte-for-byte pre-Wave-2 behavior.
-     */
+    /** Absent ⇒ everything routes to `cas` (#425). */
     private readonly desiredStore?: (sha: string) => ReplicaStore
   ) {}
 
-  /** The remote store a sha's replica lives in for READS (issue #425 Wave 2). */
   private storeForRead(remote: RemoteTier, sha: string): BlobStore {
     return storeForClass(remote, this.cache?.replica.storeOf(sha) ?? "cas");
   }
 
-  /** The `blob-sweep` health probe's read of the last `reconcile()` run. */
   sweepStatus(): BlobSweepStatus {
     return {
       lastCompletedAt: this.lastSweepCompletedAt,
@@ -142,13 +93,10 @@ export class BlobCustody {
     };
   }
 
-  /** Hash and store raw bytes. New blobs pass the cache budget precheck before the
-   * hard ENOSPC floor; dedup hits allocate nothing and skip both. */
   ingestSync(bytes: Buffer): { sha256: string; byteSize: number } {
     const sha = sha256OfBytes(bytes);
     const existed = this.local.hasSync(sha);
-    // A NEW blob passes the budget precheck (may evict; may throw
-    // VaultBlobBackpressureError). A dedup hit adds no spool → skips both.
+    // A NEW blob passes the budget precheck (may evict, may throw).
     if (this.cache && !existed) this.cache.admit(bytes.length);
     this.local.putSync(sha, bytes);
     if (this.cache && !existed) this.cache.onPut(bytes.length);
@@ -198,10 +146,7 @@ export class BlobCustody {
     const remote = this.remoteTier();
     if (!remote) return null;
     const encryptionKey = remoteEncryptionKey(remote, sha);
-    // Resolve the store the sha's bytes actually live in (issue #425 Wave 2):
-    // a derivative reads from the derived prefix, everything else from cas.
     const store = this.storeForRead(remote, sha);
-    // Interactive reads preempt bulk replication (issue #405 §7).
     this.cache?.enterInteractive();
     try {
       if (range && encryptionKey) {
@@ -228,12 +173,6 @@ export class BlobCustody {
     }
   }
 
-  /**
-   * The single-flight full read-through (issue #405 §4): fetch the whole
-   * remote object, unseal it whole, verify the whole-blob sha, and promote it
-   * into the local tier — sharing ONE in-flight promise across concurrent
-   * callers so a cold sha triggers exactly one provider GET.
-   */
   private readWhole(
     remote: RemoteTier,
     store: BlobStore,
@@ -252,10 +191,7 @@ export class BlobCustody {
       if (sha256OfBytes(plain) !== sha) {
         throw new Error(`remote blob ${sha} failed content verification`);
       }
-      // Read-through promotes the cold blob into the local tier (issue #405
-      // §3): count the remote fetch, account new spool bytes, touch LRU. A
-      // promote is NOT a fresh ingest — it bypasses the budget precheck (the
-      // bytes already exist remotely; re-caching them can't lose anything).
+      // A promote is not an ingest; it bypasses the budget precheck (#405).
       const existed = this.local.hasSync(sha);
       this.local.putSync(sha, plain);
       if (this.cache) {
@@ -266,11 +202,9 @@ export class BlobCustody {
       return plain;
     })();
     this.wholeInflight.set(sha, started);
-    // The initiating caller owns cleanup; coalesced callers await this promise.
     return started.finally(() => this.wholeInflight.delete(sha));
   }
 
-  /** Coalesced footer-directory fetch for ranged sealed reads (issue #405 §4). */
   private readDirectory(
     store: BlobStore,
     sha: string,
@@ -283,11 +217,8 @@ export class BlobCustody {
     return started.finally(() => this.dirInflight.delete(sha));
   }
 
-  /**
-   * Delete the local copy now; the remote copy (if any) holds. Adjusts spool
-   * accounting and drops the LRU row, but does NOT unmark the replication index
-   * — a replicated sha deleted locally is now legitimately `remote-only`.
-   */
+  /** Does NOT unmark the replication index: deleted-but-replicated is
+   *  legitimately `remote-only`. */
   deleteLocalSync(sha: string): void {
     const size = this.cache ? (this.local.statSync(sha)?.size ?? 0) : 0;
     this.local.deleteSync(sha);
@@ -297,7 +228,6 @@ export class BlobCustody {
     }
   }
 
-  /** Best-effort immediate delete on both tiers (vault deletion path). */
   async deleteEverywhere(sha: string): Promise<void> {
     const size = this.cache ? (this.local.statSync(sha)?.size ?? 0) : 0;
     this.local.deleteSync(sha);
@@ -310,11 +240,8 @@ export class BlobCustody {
     if (remote) await remote.store.delete(sha);
   }
 
-  /**
-   * Post-reconciliation eviction hook (issue #405 §3). The caller must first
-   * heal replica evidence from remote truth; only this scope may shed originals.
-   * Pinned tiny/staged/un-replicated blobs remain safe. Zeros without a cache.
-   */
+  /** The caller MUST first heal replica evidence from remote truth; only this
+   *  scope sheds originals (#405). */
   evictAfterReconcile(): { evictedBlobs: number; evictedBytes: number } {
     if (!this.cache) return { evictedBlobs: 0, evictedBytes: 0 };
     const { evicted, bytes } = this.cache.runEviction(
@@ -326,19 +253,12 @@ export class BlobCustody {
     return { evictedBlobs: evicted.length, evictedBytes: bytes };
   }
 
-  /** Process-lifetime custody + cache counters (issue #405 §7). */
   metrics(): BlobMetrics {
     return this.cache?.metrics() ?? EMPTY_BLOB_METRICS;
   }
 
-  /**
-   * Push every local sha the remote tier lacks (issue #405 §4). With a cache
-   * wired, "already there" comes from the replication INDEX — durable local
-   * evidence — so this performs ZERO remote `list()` calls (the deep
-   * `reconcile()` still lists once; steady-state replication must not). Pushes
-   * are BOUNDED-PARALLEL (default 3) and yield to interactive reads (QoS)
-   * between blobs; each success records index evidence (via `pushOne`).
-   */
+  /** Performs ZERO remote `list()` calls: steady-state replication must not list
+   *  (#405). */
   async replicate(shas?: string[]): Promise<string[]> {
     const remote = this.remoteTier();
     if (!remote) return [];
@@ -352,14 +272,12 @@ export class BlobCustody {
       pushOne: (sha) => this.pushOne(remote, sha),
       concurrency:
         this.cache?.replicationConcurrency ?? DEFAULT_REPLICATION_CONCURRENCY,
-      // QoS (issue #405 §7): with a cache, park behind interactive reads.
       qosWait: this.cache
         ? () => this.cache!.qosWait()
         : () => Promise.resolve(),
     });
   }
 
-  /** Push one sha and, on success, record durable replication evidence (issue #405 §4). */
   private async pushOne(remote: RemoteTier, sha: string): Promise<boolean> {
     const landed = await this.replicateOne(remote, sha);
     if (landed && this.cache) {
@@ -368,15 +286,8 @@ export class BlobCustody {
     return landed !== null;
   }
 
-  /**
-   * Push one sha to the remote tier, streaming from disk when it's large
-   * enough to matter (issue #367 §C8) and both tiers support it; otherwise
-   * the original buffered path. Binary derivatives route to the `derived` store
-   * class when the tier grants one (issue #425 Wave 2); everything else stays on
-   * cas. Returns the store class the bytes landed in (so `pushOne` records it),
-   * or `null` when the local tier no longer has this sha (raced with a delete —
-   * not an error, just nothing to push).
-   */
+  /** Returns where the bytes landed, or `null` when the local tier raced a
+   *  delete — nothing to push, not an error. */
   private async replicateOne(
     remote: RemoteTier,
     sha: string
@@ -385,8 +296,6 @@ export class BlobCustody {
     const desired = this.desiredStore?.(sha) ?? "cas";
     const byteSize = this.local.statSync(sha)?.size ?? 0;
     const { store, storeClass } = resolveWriteStore(remote, desired, byteSize);
-    // Direct-to-cold heuristic (issue #425 Wave 3): a large media original goes
-    // to STANDARD_IA; derived writes always resolve undefined (never cold).
     const storageClass = remote.storageClassFor?.(sha, storeClass);
     const threshold =
       remote.streamThresholdBytes ?? STREAMING_REPLICATE_THRESHOLD_BYTES;
@@ -395,14 +304,8 @@ export class BlobCustody {
       const opened = openStream(sha);
       if (opened) {
         if (opened.size < threshold) {
-          // Small enough that streaming buys nothing — fall through to the
-          // buffered path below, which also exercises `getSync`'s normal
-          // caching-adjacent semantics for small blobs.
+          // Small blobs fall through to the buffered path below.
         } else {
-          // Framed streaming seal (issue #405 §1): the total plaintext size is
-          // known here (from `openReadStreamSync`), so the sealer can bind the
-          // frame count into every frame's AAD while never buffering more than
-          // one frame.
           const source = encryptionKey
             ? opened.stream.pipe(
                 sealBlobStream(
@@ -432,22 +335,14 @@ export class BlobCustody {
     return storeClass;
   }
 
-  /**
-   * The reconciliation sweep (issue #296 §6): remote list vs the live sha set.
-   * Orphans delete; missing replicas re-push; shas absent from BOTH tiers are
-   * reported, never invented. Records `sweepStatus()` around the try/catch so
-   * the `blob-sweep` health probe can read the last outcome; the original throw
-   * still propagates (`VaultPlane.runSweep` catches it to log a warning).
-   */
+  /** Shas absent from BOTH tiers are reported, never invented (#296). */
   async reconcile(
     liveShas: Set<string>,
     options: ReconcileOptions = {}
   ): Promise<ReconcileResult> {
     this.lastSweepAttemptedAt = nowIso();
     try {
-      // The deep pass DOES list every granted store (issue #405 §4, made
-      // store-aware in #425 Wave 2) — its job, and it heals the index per
-      // store; only `statusFor`/`replicate` avoid the listing.
+      // The deep pass DOES list every granted store, healing the index (#405).
       const result = await reconcileCustody(
         {
           remote: this.remoteTier(),
@@ -473,12 +368,8 @@ export class BlobCustody {
     }
   }
 
-  /**
-   * Purge EVERY remote object (vault deletion, issue #296 §6). The remote
-   * tier resolves synchronously HERE — before the first await — so callers
-   * may close the vault handles right after invoking and let the deletes
-   * run detached.
-   */
+  /** The remote tier resolves BEFORE the first await, so callers may close the
+   *  vault handles immediately. */
   purgeRemote(): Promise<string[]> {
     const remote = this.remoteTier();
     if (!remote) return Promise.resolve([]);
@@ -494,20 +385,10 @@ export class BlobCustody {
     })();
   }
 
-  /**
-   * Non-mutating custody status per sha (issue #352 phase 3/4) — the
-   * read-path snapshot `refreshCustodyState` persists into
-   * `blob_custody_state`. Unlike `reconcile`, this never pushes, deletes or
-   * re-caches; it only asks each tier what it currently holds, so it is safe
-   * to call from anywhere (including mid-sweep, right after `reconcile` has
-   * already brought the tiers into their steady state).
-   */
   async statusFor(shas: Iterable<string>): Promise<Map<string, CustodyState>> {
     const remote = this.remoteTier();
-    // Issue #405 §4: consult the durable replication INDEX (healed by the deep
-    // `reconcile()` pass), not a live `remote.list()` — a full listing is 100+
-    // round trips per sweep at 500 GB, and this runs every refreshCustodyState.
-    // Only when no cache is wired (legacy) do we list.
+    // Consult the replication INDEX, not a live `remote.list()`: a listing is
+    // 100+ round trips per sweep at 500 GB (#405).
     const remoteShas = this.cache
       ? this.cache.replica.all()
       : remote
@@ -532,11 +413,6 @@ export class BlobCustody {
     return out;
   }
 
-  /**
-   * Copy every resident local blob into `destDir/blobs` — the self-contained
-   * export/backup gesture (issue #296 §6). Delegates to custody-export.ts so
-   * the facade stays under the line-cap.
-   */
   exportTo(destDir: string): { copied: number } {
     return exportLocalTier(this.local, destDir);
   }

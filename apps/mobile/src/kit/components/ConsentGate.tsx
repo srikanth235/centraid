@@ -1,21 +1,9 @@
 import React from "react";
 import { Pressable, View } from "react-native";
 
-// THE §8 CONSENT GATE — GENERIC TWO-PANEL RENDERER (issue #712 C1, native).
-//
-// Lifted out of Photos' `apps/photos/EnrichmentConsent.tsx`, which is now a
-// thin wrapper carrying only its own header chrome (back button, title,
-// status line) and Photos' copy — the panels/facts/actions below are
-// byte-for-byte what that file used to render inline. Docs' capture-time OCR
-// consent (Scan.tsx, the second instance of this product law) renders this
-// same component with its own copy.
-//
-// A PURE VIEW: it holds no state, reads nothing and writes nothing. Every
-// answer leaves through a callback, so "can a write be issued without an
-// explicit answer" is a question about a caller's props.
-//
-// ONE FILLED ELEMENT (§18): the on-device/primary answer. The secondary
-// answer is OUTLINED in `net` — egress ink is never a fill.
+// THE §8 CONSENT GATE — GENERIC TWO-PANEL RENDERER (#712, native). A PURE
+// VIEW: every answer leaves through a callback. ONE FILLED ELEMENT (§18): the
+// on-device answer; the net answer is OUTLINED, never filled.
 import type {
   AnswerAvailability,
   ConsentFact,
@@ -28,14 +16,11 @@ import { styles } from "./ConsentGate.styles";
 import { Text } from "./NativeText";
 
 export interface ConsentGateProps {
-  /** Which `enrich_policy` domain this consent moment is about — a Locker
-   *  consent gate is a type error, not a policy (issue #712 C4): Locker has
-   *  no `"photos" | "docs"` value to supply here. Read into the panels'
-   *  accessible names; never used to branch copy. */
+  /** The `enrich_policy` domain (#712); Locker has no value here — a type
+   *  error, not a policy. */
   domain: EnrichDomain;
   onDevicePanel: ConsentPanelCopy;
-  /** A live title override (e.g. a count-based question). Falls back to
-   *  `onDevicePanel.title`. */
+  /** Live title override; falls back to `onDevicePanel.title`. */
   onDeviceTitle?: string;
   onDevice: AnswerAvailability;
   /** The bordered `net` panel — outlined, never filled, and never absent. */
@@ -44,11 +29,11 @@ export interface ConsentGateProps {
   note: string;
   /** A write is in flight; neither answer is takeable while it is. */
   busy?: boolean;
-  /** Latched once answered, so the question stops offering itself. */
+  /** Latched once answered. */
   answered?: "device" | "declined" | null;
   onRunOnDevice: () => void;
   onDecline: () => void;
-  /** Absent while the net panel's action cannot be taken from here. */
+  /** Absent while the action cannot be taken from here. */
   onChooseNet?: () => void;
 }
 
@@ -67,8 +52,7 @@ function Facts({
           style={[
             styles.fact,
             { borderBottomColor: colors.line },
-            // The egress fact carries a 2px `net` rule on its leading edge and
-            // nothing else — never a fill, never a red dot (§18).
+            // Egress fact: a 2px `net` rule, never a fill or red dot (§18).
             fact.net
               ? { borderLeftColor: colors.net, borderLeftWidth: 2 }
               : null,
@@ -103,8 +87,7 @@ function Panel({
       style={[
         styles.panel,
         { backgroundColor: colors.bgElev, borderColor: colors.line },
-        // The net panel's whole box is bordered in `net`: the panel IS the
-        // egress disclosure, so the mark belongs to the panel.
+        // Bordered in `net`: the panel IS the egress disclosure.
         copy.net ? { borderColor: colors.net } : null,
       ]}
     >
@@ -196,10 +179,8 @@ export function ConsentGate({
           </Text>
         ) : null}
         <View style={styles.actions}>
-          {/* Outlined in `net`, never filled, and NEVER ABSENT: a member who
-              cannot take this option still has to be told what it would
-              cost. `onPress` is the callback or nothing — a disabled control
-              that still carries a handler is one edit away from firing. */}
+          {/* Outlined in `net`, never filled, NEVER ABSENT: `onPress` only
+              when the callback exists — no handler on a disabled control. */}
           <Pressable
             accessibilityLabel={netPanel.action}
             accessibilityRole="button"

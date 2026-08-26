@@ -1,11 +1,4 @@
-/*
- * Process-wide performance signals for the gateway (issue #456 M2).
- *
- * `monitorEventLoopDelay` is the one measurement that sees every source of
- * synchronous work on Node's single event loop, including `node:sqlite` and
- * native addons. The monitor keeps one short rolling window for runtime load
- * shedding and a process-lifetime peak for benchmark/diagnostic evidence.
- */
+// Process-wide performance signals for the gateway (#456).
 
 import { monitorEventLoopDelay } from "node:perf_hooks";
 
@@ -30,11 +23,9 @@ interface EventLoopDelayHistogramLike {
 }
 
 export interface GatewayPerformanceMonitorOptions {
-  /** Native histogram sampling interval, subtracted from recorded delays. */
   resolutionMs?: number;
-  /** Active sampling window. Set to zero only in deterministic unit tests. */
+  /** Zero only in deterministic unit tests. */
   sampleWindowMs?: number;
-  /** Snapshot cadence. Collection remains enabled between snapshots. */
   sampleIntervalMs?: number;
   histogram?: EventLoopDelayHistogramLike;
   storageFsyncMs?: number;
@@ -52,7 +43,7 @@ function milliseconds(nanoseconds: number): number {
   return nanoseconds / NS_PER_MS;
 }
 
-/** One global monitor shared by health, benchmarks, and background load shedding. */
+/** One global monitor shared by health, benchmarks, and load shedding. */
 export class GatewayPerformanceMonitor {
   private readonly histogram: EventLoopDelayHistogramLike;
   private readonly resolutionMs: number;
@@ -85,10 +76,8 @@ export class GatewayPerformanceMonitor {
   snapshot(): GatewayPerformanceSnapshot {
     const current = this.readWindow();
     const signal = current.eventLoopLagSamples > 0 ? current : this.lastWindow;
-    // A live rolling window can have a handful of samples whose p99 is the
-    // max of that handful. Peak is a completed-window statistic; promote the
-    // in-progress window only when no timer is running (unit tests with
-    // sampleWindowMs: 0).
+    // Promote the in-progress window only when no timer runs (unit tests
+    // with sampleWindowMs: 0); peak is completed-window only.
     if (!this.timer) {
       this.peakP99Ms = Math.max(this.peakP99Ms, signal.eventLoopLagP99Ms);
     }
@@ -110,10 +99,8 @@ export class GatewayPerformanceMonitor {
     this.lastWindow = { ...EMPTY_WINDOW };
     this.peakP99Ms = 0;
     this.histogram.reset();
-    // The rolling timer was scheduled from construction. Closing it against
-    // the handful of samples collected since this reset would treat their max
-    // as p99/peak (CI: 6 samples, 503 ms). Restart the window so the first
-    // post-reset close is a full interval.
+    // Restart so the first post-reset close is a full interval, not the max
+    // of partial samples (CI: 6 samples, 503 ms).
     if (this.timer) {
       clearTimeout(this.timer);
       this.scheduleWindowEnd(this.sampleIntervalMs);
@@ -146,10 +133,8 @@ export class GatewayPerformanceMonitor {
   private readWindow(): typeof EMPTY_WINDOW {
     const count = Number(this.histogram.count);
     if (!Number.isFinite(count) || count <= 0) return { ...EMPTY_WINDOW };
-    // Node's histogram samples a recurring timer. Its raw values include the
-    // configured sampling interval itself (an idle 20 ms monitor reports
-    // roughly 20 ms), while callers need scheduling delay *beyond* that
-    // baseline for health and load shedding.
+    // Raw values include the sampling interval itself (an idle monitor
+    // reports ≈ its resolution); callers need delay beyond that baseline.
     const lagMilliseconds = (nanoseconds: number): number =>
       Math.max(0, milliseconds(nanoseconds) - this.resolutionMs);
     return {

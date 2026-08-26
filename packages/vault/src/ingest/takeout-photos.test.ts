@@ -1,4 +1,4 @@
-// The photo-library import, end to end on the staging spine (issue #721 A1):
+// The photo-library import, end to end on the staging spine (#721):
 // a Takeout zip stages as one reviewable batch, publishes into
 // media_asset through media.add_asset's own primitives, and is
 // re-importable because the queue IS the database.
@@ -209,7 +209,7 @@ describe("takeout photo import", () => {
     expect(still.kind).toBe("photo");
     expect(still.favorite).toBe(1);
     expect(still.place_id).not.toBeNull();
-    // The favorite column mirrors the canonical starred tag (issue #441 A2.1).
+    // The favorite column mirrors the canonical starred tag (#441).
     const starred = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_tag t

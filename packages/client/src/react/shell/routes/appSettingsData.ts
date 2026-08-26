@@ -27,11 +27,9 @@ import type {
 } from "../../screen-contracts.js";
 import type { AppEnrichmentCapability } from "../../screens/AppEnrichmentSurface.js";
 
-// The gateway I/O + manifest parsing behind the React app-settings popover —
-// the successor to the helpers that lived in the deleted app-appview.ts /
-// app-vault.ts. Pure/injected so AppSettingsController can stay declarative.
+// Gateway I/O + manifest parsing behind the app-settings popover. Injected
+// so AppSettingsController can stay declarative.
 
-/** One manifest-declared appearance knob (`app.json#knobs[]`). */
 export interface AppKnob {
   key: string;
   label: string;
@@ -45,13 +43,7 @@ export interface AppKnobsManifest {
   knobs: AppKnob[];
 }
 
-/**
- * Fetch the app's own `app.json` (next to its index.html), or null. Read
- * straight off the gateway with the renderer's own credential (issue #799):
- * the per-app browser session that used to front this read retired with the
- * iframe host, and the manifest is the source for the appearance knobs and
- * the vault consent block the settings popover renders.
- */
+/** Fetch `app.json` with the renderer's credential (#799) — no per-app browser session. */
 export async function fetchAppManifestRaw(
   appId: string
 ): Promise<Record<string, unknown> | null> {
@@ -71,7 +63,6 @@ export async function fetchAppManifestRaw(
   }
 }
 
-/** Parse the appearance-knobs array out of a fetched manifest. */
 export function knobsManifestFrom(
   raw: Record<string, unknown> | null
 ): AppKnobsManifest | null {
@@ -81,7 +72,6 @@ export function knobsManifestFrom(
   return { version, knobs: raw.knobs as AppKnob[] };
 }
 
-/** Parse the manifest `vault` request block, if declared + sound. */
 export function manifestVaultBlock(
   raw: Record<string, unknown> | null
 ): VaultBlockDTO | null {
@@ -97,7 +87,6 @@ export function manifestVaultBlock(
   };
 }
 
-/** Read the app's stored knob values from its settings.json (strings only). */
 export async function fetchAppKnobValues(
   appId: string
 ): Promise<Record<string, string>> {
@@ -113,7 +102,6 @@ export async function fetchAppKnobValues(
   }
 }
 
-/** Persist one knob value (the runtime kebab-cases at bake time). */
 export async function writeAppKnobValue(
   appId: string,
   key: string,
@@ -122,22 +110,16 @@ export async function writeAppKnobValue(
   await appSettingWrite({ id: appId, key, value });
 }
 
-// Settings key (camelCase, e.g. `appFont`) → the kebab name shared by the
-// data-attr and CSS-var paths. Mirrors camelTailToKebab in app-engine's
-// settings-merge so a live edit lands on the same target a reload will bake.
+// Settings key (camelCase) → kebab shared by data-attr and CSS-var paths.
+// Mirrors camelTailToKebab in app-engine settings-merge so a live edit lands
+// on the same target a reload will bake.
 function appKnobKebab(key: string): string {
   if (key === "appColor" || key === "appAccent") return "app-identity";
   const tail = key.startsWith("app") ? key.slice(3) : key;
   return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)}`;
 }
 
-/**
- * Live-push a knob to an inline app's root element (issue #505). Keys ending
- * Color/Accent are continuous colour values → CSS vars; the rest are discrete
- * states → data attributes, which keeps a live edit and a reload identical.
- * Applied straight to the element the inline app reads: the app's own CSS +
- * `data-app-*` reads react in place.
- */
+/** Live-push (#505). Color/Accent → CSS vars; the rest → data attributes. */
 export function pushKnobToInlineRoot(
   root: HTMLElement,
   key: string,
@@ -149,13 +131,10 @@ export function pushKnobToInlineRoot(
   else root.setAttribute(`data-${name}`, value);
 }
 
-/** Poll a just-started automation run to completion (6-minute ceiling). */
 export async function waitForAutomationRun(
   runId: string
 ): Promise<CentraidAutomationTurnRecord> {
   const deadline = Date.now() + 6 * 60 * 1000;
-  // This is one run's settlement timeline; start the next observation only
-  // after the previous status and retry interval have completed.
   const poll = async (): Promise<CentraidAutomationTurnRecord> => {
     if (Date.now() >= deadline)
       throw new Error("run did not finish within 6 minutes");
@@ -169,7 +148,6 @@ export async function waitForAutomationRun(
   return poll();
 }
 
-/** Build the VaultScreen props for one app's consent pane (all gateway I/O). */
 export function buildVaultProps(
   appId: string,
   block: VaultBlockDTO,
@@ -199,11 +177,9 @@ export function buildVaultProps(
         vaultParked(),
         vaultDemoStatus().catch(() => [] as VaultDemoApp[]),
       ]);
-      // `vaultApps()` rows key on `.name` (the enrollment slug, == `appId`
-      // here); `.appId` is the vault's internal row id, which is what a
-      // parked entry's `callerId` matches on (`caller`, the display name,
-      // no longer necessarily equals the slug — issue: parked-invocation
-      // trust legibility).
+      // `vaultApps()` rows key on `.name` (enrollment slug == `appId`);
+      // `.appId` is the vault's internal row id, which parked `callerId`
+      // matches on.
       const enrolledAppId = apps.find((a) => a.name === appId)?.appId;
       return {
         demo: demoApps.find((d) => d.appId === appId),
@@ -221,38 +197,22 @@ export function buildVaultProps(
   };
 }
 
-/*
- * The app popover's Enrichment surface (issue #807).
- *
- * An app is bound to a data-shape DOMAIN, not to a capability: Photos holds
- * photos, Docs holds documents, and the capability list of each domain is the
- * gateway's to say. The map below is that binding and nothing else — every
- * word the surface renders comes from the effective-policy read and the
- * profile list, so a gateway that grows a capability shows it without a client
- * release.
- */
+/** App → data-shape domain, not a capability list (#807). */
 const ENRICH_DOMAIN_BY_APP: Readonly<Record<string, EnrichDomain>> = {
   docs: "docs",
   photos: "photos",
 };
 
-/** The enrichment domain this app's data belongs to, when it has one. */
 export function enrichDomainForApp(appId: string): EnrichDomain | undefined {
   return ENRICH_DOMAIN_BY_APP[appId];
 }
 
-/** Every capability of one domain, in the vocabulary's own order. */
 function capabilitiesOf(domain: EnrichDomain): string[] {
   return Object.keys(ENRICH_CAPABILITY_DOMAIN).filter(
     (capability) => ENRICH_CAPABILITY_DOMAIN[capability] === domain
   );
 }
 
-/**
- * What the gateway's ONE resolver would answer for this app's domain, per
- * capability, joined to the profile each answer names. Nothing is folded here:
- * an unreachable gateway rejects, and the surface says so.
- */
 export async function loadAppEnrichment(
   domain: EnrichDomain
 ): Promise<AppEnrichmentCapability[]> {
@@ -270,8 +230,8 @@ export async function loadAppEnrichment(
     return {
       capability,
       effective,
-      // A built-in profile's id is the same string for every capability, so
-      // profile identity is the PAIR (engine-profiles.ts), never the id alone.
+      // Built-in profile id is the same string for every capability: identity
+      // is the pair (engine-profiles.ts), never the id alone.
       profile: effective
         ? profiles.find(
             (entry) =>

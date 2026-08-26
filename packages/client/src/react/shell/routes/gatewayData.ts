@@ -1,9 +1,6 @@
-// Pure data helpers for the Gateway runtime page — snapshot → screen DTOs,
-// duration/clock formatting, and the alert-threshold preset ladder. Kept
-// separate from the route (approvalsData.ts pattern) so it unit-tests
-// without a live shell or IPC bridge.
+// Pure data helpers for the Gateway runtime page.
 
-/** The wire snapshot the main-process monitor pushes (gateway-monitor.ts). */
+/** Wire snapshot pushed by gateway-monitor.ts. */
 export type GatewayRuntimeSnapshot = Awaited<
   ReturnType<typeof window.CentraidApi.getGatewayRuntime>
 >;
@@ -13,11 +10,10 @@ export interface OutageRowDTO {
   startedLabel: string;
   durationLabel: string;
   ongoing: boolean;
-  /** The OS down-alert fired for this outage. */
   alerted: boolean;
 }
 
-/** Compact human duration — `47s`, `3m 20s`, `2h 05m`, `1d 4h`. */
+/** `47s` · `3m 20s` · `2h 05m` · `1d 4h`. */
 export function formatDuration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}s`;
@@ -28,8 +24,7 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
-/** Ticking uptime figure — always carries seconds below a day so the counter
- *  visibly runs (`2h 14m 05s`), collapsing to `3d 02h` beyond. */
+/** Ticking uptime; keeps seconds below a day so the counter runs. */
 export function formatUptime(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   const d = Math.floor(s / 86_400);
@@ -42,7 +37,7 @@ export function formatUptime(ms: number): string {
   return `${m}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
-/** Wall-clock label for an epoch-ms instant — `Jul 11, 14:32:05`. */
+/** Wall-clock label — `Jul 11, 14:32:05`. */
 export function formatClock(at: number): string {
   const d = new Date(at);
   const mon = d.toLocaleString("en-US", { month: "short" });
@@ -50,7 +45,7 @@ export function formatClock(at: number): string {
   return `${mon} ${d.getDate()}, ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-/** `now`-relative label — `just now`, `3s ago`, `2m ago`. */
+/** `just now` · `3s ago` · `2m ago`. */
 export function formatAgo(at: number, now: number): string {
   const s = Math.max(0, Math.round((now - at) / 1000));
   if (s < 2) return "just now";
@@ -60,8 +55,7 @@ export function formatAgo(at: number, now: number): string {
   return `${Math.floor(m / 60)}h ago`;
 }
 
-/** Session availability as a percentage of heartbeats answered, or
- *  `undefined` before the first probe lands. */
+/** Heartbeats answered, as a percentage. */
 export function availabilityPct(snapshot: {
   checksTotal: number;
   checksFailed: number;
@@ -73,7 +67,6 @@ export function availabilityPct(snapshot: {
   );
 }
 
-/** Outage log rows, newest first. Ongoing outages tick against `now`. */
 export function buildOutageRows(
   snapshot: GatewayRuntimeSnapshot,
   now: number
@@ -92,8 +85,7 @@ export function buildOutageRows(
   });
 }
 
-/** One durable alert-history row (Alerts tab) — the persisted counterpart
- *  of `OutageRowDTO`, spanning restarts (issue #351 wave 4). */
+/** Durable alert-history row (Alerts tab), spanning restarts (#351). */
 export interface AlertHistoryRowDTO {
   id: string;
   kind: GatewayRuntimeSnapshot["alertHistory"][number]["kind"];
@@ -115,19 +107,13 @@ const ALERT_KIND_LABEL: Record<
   "version-skew": "Version mismatch",
 };
 
-/** Human label for an alert-history event kind — shared by the row badge
- *  and anywhere else the kind needs a display string. */
 export function alertKindLabel(
   kind: GatewayRuntimeSnapshot["alertHistory"][number]["kind"]
 ): string {
   return ALERT_KIND_LABEL[kind];
 }
 
-/** Alert-history rows, newest first. `alertHistory` arrives oldest-last from
- *  main (mirrors `outages`' ordering) — this is the display-order reversal,
- *  same shape as `buildOutageRows`. Falls back to an empty list for a
- *  snapshot fixture that predates this field (older tests, gateway-monitor
- *  before wave 4). */
+/** Newest first; main sends oldest-last (mirrors `outages`); [] if omitted. */
 export function buildAlertHistoryRows(
   snapshot: GatewayRuntimeSnapshot
 ): AlertHistoryRowDTO[] {
@@ -146,7 +132,7 @@ export function buildAlertHistoryRows(
   );
 }
 
-/** The threshold ladder the alert card renders. 120s is the shipped default. */
+/** The threshold ladder; 120s is the shipped default. */
 export const ALERT_PRESETS: readonly { seconds: number; label: string }[] = [
   { seconds: 30, label: "30s" },
   { seconds: 60, label: "1m" },
@@ -156,22 +142,17 @@ export const ALERT_PRESETS: readonly { seconds: number; label: string }[] = [
   { seconds: 1800, label: "30m" },
 ];
 
-/** Short chip label for a threshold that isn't on the preset ladder. */
+/** Chip label for an off-ladder threshold. */
 export function thresholdLabel(seconds: number): string {
   const preset = ALERT_PRESETS.find((p) => p.seconds === seconds);
   if (preset) return preset.label;
   return seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
 }
 
-/** The Overview orb's status once the heartbeat and component-health probes
- *  are merged — the reorg's fix for the two checks silently disagreeing
- *  (heartbeat says "up" while a component says "error"). */
+/** Overview orb status: heartbeat wins while down/unreachable; else non-ok
+ *  health degrades the result. */
 export type ReconciledStatus = "up" | "degraded" | "down" | "unknown";
 
-/** Heartbeat wins when the process itself is down or hasn't answered yet —
- *  component health can't be trusted if we can't reach the gateway at all.
- *  Only once the heartbeat is up does a non-`ok` component pull the overall
- *  status down to `degraded`. */
 export function reconcileStatus(
   heartbeat: GatewayRuntimeSnapshot["status"],
   health: { status: "ok" | "degraded" | "error" } | null | undefined

@@ -6,7 +6,7 @@ import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 /**
- * Secret-in-logs / token leakage smoke (#496 G3).
+ * Secret-in-logs / token leakage smoke (#496).
  * Drives a real `serve()` instance and asserts error/auth paths never echo
  * bearer tokens or seal-key material back in response bodies **or** in the
  * on-disk gateway JSONL log ring (when logsDir is configured).

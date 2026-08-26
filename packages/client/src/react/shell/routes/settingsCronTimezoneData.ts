@@ -1,6 +1,6 @@
 import { isValidIanaTimeZone } from "../../../cron.js";
 /**
- * Gateway-wide default cron timezone (issue #570).
+ * Gateway-wide default cron timezone (#570).
  * Prefs key mirrors `automation.CRON_DEFAULT_TIMEZONE_PREF` in the automation package.
  */
 import { getUserPrefs, saveUserPrefs } from "../../../gateway-client.js";

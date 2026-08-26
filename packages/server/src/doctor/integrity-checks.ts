@@ -1,38 +1,8 @@
 /*
- * The in-product integrity scrub check library (issue #839 W1.2).
- *
- * A reusable set of invariant checks over the databases and content-addressed
- * store a gateway owns, plus one orchestrator that runs them all. The
- * `centraid-gateway doctor` verb (`../cli/doctor.ts`) is the first caller; the
- * scheduled background scrub (W1.2 second half) and the crash lane (W1.1) are
- * meant to import the SAME check functions rather than reimplement the
- * invariants — so every check here is a pure function over an already-open
- * handle (or a CAS directory), returns a structured `IntegrityFinding`, and
- * touches no product state.
- *
- * What each check proves:
- *   - `database-integrity`  `PRAGMA integrity_check` on every db the gateway
- *      owns (each vault's `vault.db` + `journal.db`, and `gateway.db`). The
- *      exhaustive cousin of the `vault-integrity` health probe's `quick_check`
- *      (`../serve/vault-integrity-health.ts`) — a scrub is not a per-tick read,
- *      so it pays for the UNIQUE-constraint verification `quick_check` skips.
- *   - `cas-rehash`  re-hashes CAS blobs against their content address. The
- *      local tier is content-addressed by the sha256 of the bytes on disk
- *      (`@centraid/vault` `FsBlobStore`), so `sha256(getSync(sha)) === sha` is
- *      the exact write-once invariant. Sampled by default; `full` re-hashes
- *      every object.
- *   - `hardlink-refcount`  audits the cross-vault GC contract (issue #599
- *      decision 11): share-by-placement hardlinks a blob into a second vault's
- *      CAS, so "the filesystem's link count is the cross-vault refcount". A
- *      blob's `st_nlink` must therefore equal the number of CAS directory
- *      entries the gateway's own vaults hold for that inode — a higher count is
- *      an unaccounted external link whose bytes no vault's sweep can ever free.
- *   - `replica-journal`  checks the replica change-log (the vault's replication
- *      journal, `replica_change` in `vault.db`) against its own meta and the
- *      audit journal (`journal.db`): no row survives from a foreign epoch (the
- *      retention prune deletes `epoch <> current`), no commit group is left
- *      marked active at rest, the autoincrement watermark never rewound below
- *      the max change seq, and `journal.db` still answers.
+ * Integrity scrub checks (#839). Keep every check a pure function over an
+ * already-open handle (or a CAS directory) returning an `IntegrityFinding` and
+ * touching no product state: the doctor verb, the scheduled scrub, and the
+ * crash lane all import these rather than reimplement the invariants.
  */
 
 import { createHash } from "node:crypto";
@@ -43,9 +13,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { currentReplicaLogState } from "@centraid/vault";
 import type { LocalBlobStore } from "@centraid/vault";
 
-/** How many CAS objects a sampled `cas-rehash` re-hashes when not `full`. */
 export const DEFAULT_CAS_SAMPLE_SIZE = 128;
-/** Failure lines surfaced in a finding's detail before it truncates. */
 const MAX_DETAIL_LINES = 5;
 
 export type FindingLevel = "ok" | "warning" | "error";
@@ -56,12 +24,11 @@ export type IntegrityCheckName =
   | "hardlink-refcount"
   | "replica-journal";
 
-/** One check's verdict over one target: level + human detail. */
 export interface IntegrityFinding {
   readonly check: IntegrityCheckName;
   readonly level: FindingLevel;
   readonly detail: string;
-  /** The db label or vault id this finding is about, when scoped to one. */
+  /** Db label or vault id, when the finding is scoped to one. */
   readonly target?: string;
 }
 
@@ -80,19 +47,14 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// ── database-integrity ────────────────────────────────────────────────
+// ─── database-integrity ───
 
-/** A named open SQLite handle for the `database-integrity` check. */
 export interface DatabaseTarget {
   readonly label: string;
   readonly db: DatabaseSync;
 }
 
-/**
- * `PRAGMA integrity_check` on one handle. `ok` iff the sole result row is
- * literally `'ok'`; anything else (violation lines, or a throw from a handle
- * too corrupt to answer) is an error.
- */
+/** Full check, not the health probe's `quick_check`: pays for UNIQUE verify. */
 export function checkDatabaseIntegrity(
   target: DatabaseTarget
 ): IntegrityFinding {
@@ -128,20 +90,18 @@ export function checkDatabaseIntegrity(
   }
 }
 
-// ── cas-rehash ────────────────────────────────────────────────────────
+// ─── cas-rehash ───
 
 export interface CasRehashInput {
   readonly vaultId: string;
   readonly local: Pick<LocalBlobStore, "listSync" | "getSync">;
-  /** Re-hash every object instead of a bounded random sample. */
   readonly full?: boolean;
-  /** Sampled-mode cap. Defaults to `DEFAULT_CAS_SAMPLE_SIZE`. */
+  /** Defaults to `DEFAULT_CAS_SAMPLE_SIZE`. */
   readonly sampleSize?: number;
   /** RNG seam (tests) returning `[0, 1)`. Defaults to `Math.random`. */
   readonly random?: () => number;
 }
 
-/** A bounded random subset of `all` (Fisher–Yates prefix over a copy). */
 function sample(all: string[], size: number, random: () => number): string[] {
   const pool = [...all];
   const take = Math.min(size, pool.length);
@@ -154,11 +114,7 @@ function sample(all: string[], size: number, random: () => number): string[] {
   return pool.slice(0, take);
 }
 
-/**
- * Re-hash CAS objects against their content address. A listed object that will
- * not read back, or whose bytes hash to something other than their key, is a
- * corrupt blob — a silent bit-rot the address was chosen to catch.
- */
+/** `sha256(getSync(sha)) === sha`; a mis-hash or unreadable listing is rot. */
 export function checkCasRehash(input: CasRehashInput): IntegrityFinding {
   const all = input.local.listSync();
   if (all.length === 0) {
@@ -223,9 +179,8 @@ export function checkCasRehash(input: CasRehashInput): IntegrityFinding {
   );
 }
 
-// ── hardlink-refcount ─────────────────────────────────────────────────
+// ─── hardlink-refcount ───
 
-/** One vault's blob directory (`<vault-dir>/blobs`) for the refcount audit. */
 export interface VaultCasRoot {
   readonly vaultId: string;
   /** The vault's `blobs/` directory; the audit walks `blobs/sha256/`. */
@@ -238,15 +193,9 @@ interface InodeRecord {
 }
 
 /**
- * Audit the cross-vault GC contract: every CAS blob's on-disk link count must
- * equal the number of CAS directory entries the passed-in vaults hold for its
- * inode. A higher `st_nlink` means a directory entry OUTSIDE the gateway's own
- * vaults also points at those bytes — an unaccounted link no vault's sweep can
- * ever unlink, so the bytes leak forever (the refcount can never reach zero).
- *
- * Cross-vault by construction: it collects every owned vault's entries first,
- * keyed by `dev:ino`, so a blob legitimately shared across two vaults (two
- * entries, `st_nlink === 2`) reconciles rather than looking like a leak.
+ * Link count IS the cross-vault refcount (#599 decision 11): a blob's `st_nlink`
+ * above its CAS entries across owned vaults is an outside link, so the refcount
+ * never reaches zero. Collect all vaults first — sharing is not a leak.
  */
 export function checkHardlinkRefcounts(
   vaults: readonly VaultCasRoot[]
@@ -304,7 +253,7 @@ export function checkHardlinkRefcounts(
   );
 }
 
-// ── replica-journal ───────────────────────────────────────────────────
+// ─── replica-journal ───
 
 export interface ReplicaJournalInput {
   readonly vaultId: string;
@@ -312,11 +261,7 @@ export interface ReplicaJournalInput {
   readonly journal: DatabaseSync;
 }
 
-/**
- * Check the replica change-log (the vault's replication journal) against its
- * own meta and the audit journal. Every violation here is a state the log's
- * own writers make unrepresentable, so observing one is corruption.
- */
+/** Every violation here is a state the log's writers make unrepresentable. */
 export function checkReplicaJournalConsistency(
   input: ReplicaJournalInput
 ): IntegrityFinding {
@@ -391,15 +336,13 @@ export function checkReplicaJournalConsistency(
   );
 }
 
-// ── orchestrator ──────────────────────────────────────────────────────
+// ─── orchestrator ───
 
-/** One vault's open handles + CAS location for the full scrub. */
 export interface DoctorVaultTarget {
   readonly vaultId: string;
   readonly vault: DatabaseSync;
   readonly journal: DatabaseSync;
   readonly local: Pick<LocalBlobStore, "listSync" | "getSync">;
-  /** The vault's `blobs/` directory (for the cross-vault refcount audit). */
   readonly casRoot: string;
 }
 
@@ -407,18 +350,12 @@ export interface IntegrityScrubInput {
   readonly vaults: readonly DoctorVaultTarget[];
   /** Extra owned databases to integrity-check, e.g. `gateway.db`. */
   readonly extraDatabases?: readonly DatabaseTarget[];
-  /** Re-hash every CAS object rather than a sample. */
   readonly full?: boolean;
   readonly sampleSize?: number;
   readonly random?: () => number;
 }
 
-/**
- * Run every invariant check across the owned databases and vaults, returning
- * one flat list of findings. Deterministic order: extra databases, then per
- * vault (integrity of both files, CAS re-hash, replica/journal), then the one
- * cross-vault hardlink-refcount audit last.
- */
+/** Order is a contract: extra dbs, then per vault, then the refcount audit. */
 export function runIntegrityScrub(
   input: IntegrityScrubInput
 ): IntegrityFinding[] {
@@ -463,7 +400,6 @@ export function runIntegrityScrub(
   return findings;
 }
 
-/** True when any finding is an error — the scrub's nonzero-exit condition. */
 export function hasError(findings: readonly IntegrityFinding[]): boolean {
   return findings.some((f) => f.level === "error");
 }

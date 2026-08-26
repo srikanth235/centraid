@@ -1,11 +1,6 @@
-// Permanent reachability gate for issue #630. A handler file and a manifest
-// entry are not product: every capability must have a real UI dispatch on each
-// shipped surface, or one of the three explicitly permitted markings below.
-//
-// WebView-backed mobile covers execute the same blueprint UI, so a proven web
-// dispatch is also a mobile dispatch. Native covers are scanned independently;
-// their intentional gaps are enumerated by capability, with the assistant as
-// the documented mobile fallback until that native workflow exists.
+// Reachability gate (#630): every manifested capability needs a real UI
+// dispatch on each shipped surface, or one of the markings below. A WebView
+// cover runs the same blueprint UI, so a web dispatch counts as mobile.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -41,25 +36,9 @@ const MOBILE_APPS_ROOT = path.join(REPO_ROOT, "apps/mobile/src/apps");
 const WEBVIEW_APPS = new Set(["notes"]);
 
 /**
- * Apps whose UI on a given surface has been REMOVED pending a ground-up
- * redesign, and which therefore dispatch nothing there.
- *
- * This is the one exception in this file that is not about a capability - it is
- * about a surface. The other three say "this handler is reached another way";
- * this one says "there is no screen here at all yet". Recording it per app
- * rather than per handler is deliberate: enumerating ~35 People handlers as
- * individually-excused would read as thirty-five decisions when it is one, and
- * the day the rebuild lands the fix is to delete an app id, not to audit a
- * list.
- *
- * What was NOT removed, and so is not excused: the manifests, `./actions/*`,
- * `./queries/*` and the vault scopes. The assistant still invokes every one of
- * these handlers. The gate is suspended over the UI that is gone, not over the
- * contract that stayed.
- *
- * Removing an app id here is the last step of its rebuild. The justification
- * test below fails on an id that is not a real manifest, so an entry cannot
- * outlive the app it names.
+ * Surfaces REMOVED pending a redesign, so they dispatch nothing. The only
+ * per-SURFACE exception: recorded per app so a rebuild deletes one id. The
+ * gate is suspended over the UI, never over the contract.
  */
 const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
   {
@@ -96,14 +75,9 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
     rationale:
       "The Locker UI receives the sealed Watchtower aggregate through items; the standalone query remains available to the assistant.",
   },
-  // People, rebuilt to the Binding Layer v12 handoff (#821). The handoff draws
-  // the roster, the person, Touch, Search, Trash, Log, Edit and Merge — and
-  // EXCLUDES seven record sections outright. The queries still return that data
-  // and the writes still land, so these are not dark handlers: they are the
-  // vault contract outliving a screen the handoff chose not to draw. The
-  // register is docs/design-divergences.md § "People — v12 parity state and
-  // sanctioned withholdings"; the handoff bans placeholders, so nothing here
-  // gets a stub UI to satisfy this gate.
+  // People (#821): the v12 handoff EXCLUDES seven record sections, so these
+  // are the contract outliving screens nobody draws (docs/design-divergences).
+  // Placeholders are banned; never add a stub UI to satisfy this gate.
   "people.action.create-list": {
     kind: "agent-only",
     rationale:
@@ -186,25 +160,14 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
   },
 };
 
-// Native covers that DO render, and the queries their screens answer directly.
-// `docs` and `people` returned with their v12 phone rebuilds (#821). Neither
-// dispatches a NAMED query on the phone: both read consent-shaped replica
-// entities and re-state the web query emitters' joins in their own projection
-// modules (`docs-projection.ts`, `people-model.ts`), so the rows below name
-// the queries whose ANSWERS those screens draw — the read is native, the
-// contract is the same. Docs' `history` is the version chain the replica's
-// `core.link` revises edges carry (`docs-versions.ts`).
+// Native covers that render a query's ANSWER without dispatching it: the phone
+// re-states the emitter's joins over replica rows, same contract.
 const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
   agenda: [
     "upcoming",
     "parties",
     "search",
-    // Agenda's day-context layers on the phone are the same read done natively
-    // (#834): `day-context.ts` re-states the query emitter's joins over the
-    // `core.party` / `schedule.task` replica rows already inside Agenda's read
-    // scopes, and `AgendaDayContext.tsx` draws that answer as the ribbon and
-    // the collapsed shelf. The copy leaf is shared with the pointer surface, so
-    // the two seats cannot drift.
+    // Done natively over replica rows in Agenda's read scopes (#834).
     "day-context",
   ],
   docs: ["drive", "search", "history"],
@@ -217,10 +180,7 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
     "duplicates",
     "enrichment-status",
     "search",
-    // The phone's Backup screen is a FRAME surface since #712 B2: it reads
-    // the gateway's storage/status route (which now carries the custody
-    // rollup) rather than dispatching this app query, which remains the web
-    // Storage screen's read path.
+    // The phone's Backup screen reads the gateway's storage route (#712 B2).
     "storage",
   ],
   tally: ["dashboard", "group"],
@@ -274,13 +234,9 @@ const MOBILE_EXCEPTION_RATIONALE =
   "The native cover links to the always-available Assistant surface, which invokes this manifested handler with the same consent and receipt contract.";
 
 /**
- * A blueprint app's source, for the "is this name called anywhere" scan.
- *
- * `skipFiles` exists for the suspension check below. A file that DECLARES every
- * action by name — `pending-projection.ts` is the whole set, `app-inline.tsx`
- * the query map — would make any app look like it dispatches everything, which
- * is harmless for the normal scan (a false pass there is caught by the app
- * actually having a UI) but fatal for an assertion that the UI is GONE.
+ * Source for the "is this name called anywhere" scan. `skipFiles` serves the
+ * suspension check: a file that DECLARES every handler by name makes an app
+ * look like it dispatches everything.
  */
 function sourceTree(
   root: string,
@@ -311,7 +267,7 @@ function sourceTree(
     .join("\n");
 }
 
-/** The two files that name handlers without calling them. */
+/** Files that name handlers without calling them. */
 const DECLARATION_FILES: ReadonlySet<string> = new Set([
   "pending-projection.ts",
   "app-inline.tsx",
@@ -319,8 +275,7 @@ const DECLARATION_FILES: ReadonlySet<string> = new Set([
 
 /** Drop line/block comments so a name only in a comment cannot pass. */
 function withoutComments(source: string): string {
-  // Line comments first: otherwise `// path/*.ts` would open a block comment
-  // at the `/*` and swallow the rest of the file until a later `*/`.
+  // Line comments first, or a `/*` inside one swallows the rest of the file.
   return source
     .replace(/(?<lead>^|[^:])\/\/[^\n]*/gu, "$<lead>")
     .replace(/\/\*[\s\S]*?\*\//gu, " ");
@@ -328,8 +283,7 @@ function withoutComments(source: string): string {
 
 function hasLiteral(source: string, value: string): boolean {
   const escaped = value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  // Comments do not count as reachability — a name only mentioned in a note
-  // or disabled block is not a live call site.
+  // A name in a comment or a disabled block is not a live call site.
   return new RegExp(`["']${escaped}["']`, "u").test(withoutComments(source));
 }
 
@@ -394,10 +348,7 @@ describe("manifest handler reachability", () => {
           )
         : ""
     );
-    // The app's OWN native cover, alone. Kept separate from `mobileSource`
-    // below because a suspended surface is asserted absent over exactly what
-    // was removed — the cover — and not over the shared phone surfaces that
-    // outlived it.
+    // The cover alone: absence is asserted over exactly what was removed.
     const nativeCover = sourceTree(
       path.join(MOBILE_APPS_ROOT, manifest.id),
       false
@@ -408,11 +359,8 @@ describe("manifest handler reachability", () => {
         : ""
     );
 
-    // ONE assertion, two questions, chosen by whether this surface is
-    // suspended. A suspended app is asserted ABSENT rather than skipped: the
-    // moment a rebuild starts dispatching again this fails, and the
-    // AWAITING_HANDOFF entry has to come out. Skipping would let a half-rebuilt
-    // surface sit here unexamined.
+    // A suspended app is asserted ABSENT, never skipped: once a rebuild
+    // dispatches again this fails and its entry must come out.
     const webUnexpected = (): Array<{ kind: Kind; name: string }> => {
       if (awaitingHandoff("web", manifest.id)) {
         const rendered = sourceTree(
@@ -427,8 +375,7 @@ describe("manifest handler reachability", () => {
       return handlers(manifest).filter(({ kind, name }) => {
         if (WEB_EXCEPTIONS[`${manifest.id}.${kind}.${name}`]) return false;
         if (hasLiteral(webSource, name)) return false;
-        // The shared file-staging helper dispatches the manifest's conventional
-        // `attach` action after the input is armed for a specific entity.
+        // `wireAttachInput` dispatches the conventional `attach` action.
         return !(
           kind === "action" &&
           name === "attach" &&
@@ -442,12 +389,8 @@ describe("manifest handler reachability", () => {
     });
 
     const mobileUnexpected = (): Array<{ kind: Kind; name: string }> => {
-      // Asserted over the cover alone, not `mobileSource`. Removing a cover
-      // does not remove the shared capture/upload path beside it, and Tally's
-      // `add-receipt-expense` is still dispatched from there — a capability
-      // that outlived the screen, which is a reached handler, not a leak. What
-      // this proves is the narrower claim the entry actually makes: the app's
-      // own native cover dispatches nothing.
+      // Over the cover alone: the shared upload path outlives a removed
+      // cover, and what it still dispatches is reached, not leaked.
       if (awaitingHandoff("mobile", manifest.id))
         return handlers(manifest).filter(({ name }) =>
           hasLiteral(nativeCover, name)
@@ -497,8 +440,7 @@ describe("manifest handler reachability", () => {
         expect(MOBILE_EXCEPTION_RATIONALE.length).toBeGreaterThan(20);
       }
     }
-    // A suspended surface must name a REAL app, so the entry dies with the
-    // rebuild instead of quietly excusing an app id that no longer exists.
+    // A suspended surface must name a REAL app, so the entry dies with it.
     const appIds = new Set(manifests().map((manifest) => manifest.id));
     for (const ids of Object.values(AWAITING_HANDOFF))
       for (const id of ids) expect(appIds.has(id), id).toBe(true);

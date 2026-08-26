@@ -1,20 +1,7 @@
 /**
- * Loader-safe entry point for the handler sandbox.
- *
- * A worker runner cannot simply `import { installWorkerSandbox } from
- * "../sandbox/install.js"`. Worker threads here boot under Node's native type
- * stripping, which loads a `.ts` file handed to it directly but does NOT map a
- * `./sibling.js` specifier onto `./sibling.ts` the way the compiled build does.
- * Under `dist/` the `.js` files exist and the plain specifier resolves; running
- * from `src/` it does not, and the runner dies at import — which is exactly how
- * this file came to exist.
- *
- * So: this module has ZERO relative imports. Runners load it by absolute path,
- * it decides whether the sandbox is compiled, installs a `.js`→`.ts` sibling
- * fallback when it is not, and only then pulls the rest of the sandbox in.
- *
- * The fallback is a resolution-failure fallback, never an override: a specifier
- * Node resolves on its own is returned untouched.
+ * Loader-safe sandbox entry: ZERO relative imports — type stripping doesn't
+ * map `.js`→`.ts` outside `dist/`; installs a resolution-failure fallback
+ * (never an override).
  */
 
 import { existsSync } from "node:fs";
@@ -29,7 +16,6 @@ const SANDBOX_DIR = import.meta.dirname;
 
 let siblingFallbackInstalled = false;
 
-/** Map an unresolvable `./x.js` onto `./x.ts` when running from source. */
 function enableTsSiblingResolution(): void {
   if (siblingFallbackInstalled) return;
   siblingFallbackInstalled = true;
@@ -48,9 +34,7 @@ function enableTsSiblingResolution(): void {
         }
         const candidate = new URL(`${specifier.slice(0, -3)}.ts`, parent);
         if (!existsSync(fileURLToPath(candidate))) throw error;
-        // `module-typescript`, not `module`: this hook supplies no transformed
-        // source, so Node must still run its own type stripping. Declaring
-        // plain `module` skips the strip and the file fails to parse.
+        // `module` would skip Node's type stripping → parse failure.
         return {
           url: candidate.href,
           format: "module-typescript",
@@ -61,7 +45,7 @@ function enableTsSiblingResolution(): void {
   });
 }
 
-/** Absolute URL of a sandbox module, compiled `.js` preferred over `.ts`. */
+/** Absolute URL of a sandbox module, compiled `.js` over `.ts`. */
 function sandboxModuleUrl(base: string): string {
   const js = path.join(SANDBOX_DIR, `${base}.js`);
   if (existsSync(js)) return pathToFileURL(js).href;
@@ -70,7 +54,10 @@ function sandboxModuleUrl(base: string): string {
 }
 
 export interface SandboxBoot {
-  installWorkerSandbox: (policy: SandboxPolicy) => SandboxHandle;
+  installWorkerSandbox: (
+    policy: SandboxPolicy,
+    options?: { redactLaunchArgs?: boolean }
+  ) => SandboxHandle;
   appHandlerPolicy: () => SandboxPolicy;
   appSeedPolicy: (appDir: string) => SandboxPolicy;
   automationHandlerPolicy: () => SandboxPolicy;
@@ -78,12 +65,9 @@ export interface SandboxBoot {
   modelRuntimePolicy: (readRoots: readonly string[]) => SandboxPolicy;
 }
 
-/**
- * Load the sandbox. Deliberately NOT wrapped in a try/catch: if the sandbox
- * cannot be loaded, the handler must not run. Failing the run is the correct
- * outcome — a caught error here would silently execute untrusted code with no
- * containment, which is the one failure mode this whole slice exists to
- * prevent.
+/*
+ * No try/catch on purpose: if the sandbox can't load, the handler must not
+ * run — catching would execute untrusted code uncontained.
  */
 export async function loadSandbox(): Promise<SandboxBoot> {
   const install = (await import(sandboxModuleUrl("install"))) as {

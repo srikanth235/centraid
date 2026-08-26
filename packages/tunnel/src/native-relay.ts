@@ -111,7 +111,7 @@ function sendControlJson(
  * Production desktop endpoint. JavaScript owns only the allowlist, pairing
  * state, and dynamic loopback coordinates exposed through an authenticated
  * metadata server. Rust owns iroh, every request body, upstream I/O, and
- * every response byte (#456 N2).
+ * every response byte (#456).
  */
 export async function startNativeDesktopTunnel(
   options: DesktopTunnelOptions
@@ -157,7 +157,7 @@ export async function startNativeDesktopTunnel(
         sendControlJson(res, 200, {
           allowed,
           // The desktop relay carries a paired phone, not the host itself, so
-          // it marks the hop as forwarded (issue #568 item A). The Rust relay
+          // it marks the hop as forwarded (#568). The Rust relay
           // drops any client copy of the identity headers on the same pass.
           ...(allowed ? { headers: { [TUNNEL_FORWARDED_HEADER]: "1" } } : {}),
           ...(upstream

@@ -1,21 +1,6 @@
-// Boot wiring for the upload queue (#419 M0.4).
-//
-// Settlement reconciliation: on every foreground, re-drain. Because `begin` is
-// keyed by content sha, a drain IS the reconciliation — an item whose bytes
-// landed while the app was dead comes back `alreadyPresent` and settles
-// without transferring anything. There is no separate reconcile path to keep
-// in sync with the transfer path, which is the point.
-//
-// Two invariants this file exists to keep (F1):
-//   * A drain is NEVER concurrent with another drain. Every entry point here —
-//     the foreground hook and the Android headless task — routes through the
-//     shared `withDrainLock`, the same guard the producers use.
-//   * Reconcile never starts (or stops) the Android foreground service. Only an
-//     explicit producer owns that lifecycle; a background reconcile that spun
-//     the service up would fight the producer that already owns it.
-//
-// This imports native modules (op-sqlite, expo-file-system) and is therefore
-// boot-only; only the pure `reconcileGate` below is reached by tests.
+// Upload-queue boot (#419.4). Drain on foreground; `begin` is keyed by
+// content sha so a drain IS reconciliation. Never concurrent (`withDrainLock`);
+// reconcile never starts or stops the Android FGS.
 
 import { useEffect } from "react";
 import { AppState } from "react-native";
@@ -34,7 +19,6 @@ export interface ReconcileSummary {
   settled: number;
   deduped: number;
   replayed: number;
-  /** Follow-ups quarantined this run — a health signal, not a hard failure. */
   poisoned: number;
 }
 
@@ -50,8 +34,7 @@ async function reconcileOnce(
 ): Promise<ReconcileSummary> {
   let queue: UploadQueue | undefined;
   try {
-    // Open the queue before resolving the gateway: with nothing pending there
-    // is no reason to spin up the tunnel.
+    // Probe the queue before resolving the gateway: nothing pending ⇒ no tunnel.
     const probe = UploadQueue.open({
       gatewayBaseUrl: "http://127.0.0.1",
       headers: authHeader,
@@ -78,8 +61,7 @@ async function reconcileOnce(
       onProgress: ({ completed, total }) =>
         UploadForegroundService.update(completed, total),
     });
-    // No foreground-service start here (F1): reconcile is an accelerator, not
-    // an owner. The drain resumes across process death regardless.
+    // No FGS start here (F1): reconcile is an accelerator, not an owner.
     const drain = hasTransfers
       ? await queue.drain()
       : { settled: 0, failed: 0, deduped: 0, halted: false };
@@ -95,36 +77,26 @@ async function reconcileOnce(
       poisoned: replay.poisoned,
     };
   } catch {
-    // A drain never surfaces to the UI: every item it could not settle is
-    // still durably queued, and the next foreground tries again.
+    // Drain never surfaces to the UI; unsettled items stay queued.
     return EMPTY_RECONCILE;
   } finally {
     queue?.close();
   }
 }
 
-/**
- * Drain now, and SAY what happened (issue #712, P5). The frame's Backup screen
- * has a "Back up now" control, and a control that returns void cannot honour
- * the fallible-action contract — the member pressed it, so the member is owed
- * the count. Same lock, same reconcile, same policy gate as every other entry
- * point; the only difference is that the summary is handed back instead of
- * being dropped on the floor.
- */
 export function drainUploadQueueNow(
   session?: MobileReplicaSession
 ): Promise<ReconcileSummary> {
   return withDrainLock(() => reconcileOnce(session));
 }
 
-/** Registered as an Android Headless JS task by index.ts. Never touches the FGS. */
+/** Never touches the FGS. */
 export async function drainUploadQueueInBackground(
   session?: MobileReplicaSession
 ): Promise<void> {
   await drainUploadQueueNow(session);
 }
 
-/** Coalesces repeated foreground events into at most one queued reconcile. */
 let reconcilePending = false;
 
 function scheduleReconcile(session?: MobileReplicaSession): void {
@@ -136,7 +108,6 @@ function scheduleReconcile(session?: MobileReplicaSession): void {
   });
 }
 
-/** Drain on mount and on every return to the foreground. */
 export function useUploadReconciliation(session?: MobileReplicaSession): void {
   useEffect(() => {
     scheduleReconcile(session);

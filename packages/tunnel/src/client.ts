@@ -1,5 +1,5 @@
 /*
- * Phone side of the tunnel, in TypeScript (issue #263).
+ * Phone side of the tunnel, in TypeScript (#263).
  *
  * On a real phone this logic lives in the Expo native module
  * (apps/mobile/modules/centraid-tunnel — Swift + Kotlin); this Node
@@ -88,7 +88,7 @@ export interface TunnelClient {
   secretKeyBytes: () => Uint8Array;
   /** Pair with a desktop using the QR payload's ticket + one-time code. */
   pair: (ticket: string, request: PairRequest) => Promise<PairResponse>;
-  /** Redeem a gateway pairing ticket over `centraid/gw-pair/1` (issue #289). */
+  /** Redeem a gateway pairing ticket over `centraid/gw-pair/1` (#289). */
   pairGateway: (
     ticket: string,
     request: GatewayPairRequest
@@ -96,7 +96,7 @@ export interface TunnelClient {
   /** Dial the desktop's/gateway's tunnel ALPN. */
   connect: (ticket: string) => Promise<Connection>;
   /**
-   * Dial another GATEWAY's peer plane (`centraid/gw-link/1`, issue #726 P3).
+   * Dial another GATEWAY's peer plane (`centraid/gw-link/1`, #726 P3).
    * Requests over this connection reach `/centraid/_peer/*` and nothing else,
    * and are answered as typed states — the caller is protocol code, not a UI.
    */

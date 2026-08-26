@@ -1,14 +1,6 @@
 /*
- * The shell entity picker (duaility §12, issue #272) — the read half of the
- * cross-referencing flow, split out of vault-plane.ts to keep the plane a
- * thin surface.
- *
- * This is an OWNER-trust search/browse over the carded entities, so an app
- * can let the user reference a foreign entity without ever holding browse
- * scopes on that domain: the act of picking is the consent, and the app
- * receives only the picked card. Every underlying read is receipted by the
- * vault gateway like any owner read — the picker adds no new door, it just
- * drives the gateway's own search / read / resolve with the owner credential.
+ * Shell entity picker (duaility §12, #272): OWNER-trust search/browse;
+ * every read rides the receipted gateway — no new door.
  */
 
 import type { RuntimeLogger } from "@centraid/server/engine";
@@ -25,22 +17,17 @@ import {
   resolveAutomationAnchors,
 } from "../lifecycle/automation-anchor-scopes.js";
 
-/** What the shell's entity picker asks for. */
 export interface PickerRequest {
-  /** Owner-typed search words; empty = a recent-first browse per kind. */
   term?: string;
-  /** Restrict to these entity kinds; default = every carded entity. */
+  /** Default = every carded entity. */
   kinds?: string[];
-  /** Per-kind result cap. */
   limit?: number;
 }
 
-/** One pickable entity: its card plus the FTS snippet when a term matched. */
 export interface PickerHit extends RefCard {
   snippet?: string;
 }
 
-/** A live, text-resolvable core_link_anchor exposed to the owner editor. */
 export interface AnchorPickerHit {
   type: typeof AUTOMATION_ANCHOR_ENTITY;
   id: string;
@@ -53,26 +40,19 @@ export interface AnchorPickerHit {
   sourceField: string;
 }
 
-/**
- * Newest anchors this owner can still resolve, bounded by one gateway read.
- * A term filters on the anchor's own quote text.
- */
 const ANCHOR_SCAN_LIMIT = 500;
 
-/** The `$.exact` quote of a `core_link_anchor.selector_json` cell, or ''. */
 function anchorQuote(selectorJson: unknown): string {
   if (typeof selectorJson !== "string") return "";
   try {
     const parsed = JSON.parse(selectorJson) as { exact?: unknown };
     return typeof parsed.exact === "string" ? parsed.exact : "";
   } catch {
-    // A malformed selector cannot match a term; `resolveAutomationAnchors`
-    // reports it properly when the anchor is actually picked.
+    // Malformed selectors cannot match a term.
     return "";
   }
 }
 
-/** Search live anchors by their exact text quote, newest first. */
 export function pickAnchors(
   gateway: VaultGateway,
   cred: Credential,
@@ -81,8 +61,7 @@ export function pickAnchors(
 ): { anchors: AnchorPickerHit[] } {
   const term = request.term?.trim().toLowerCase() ?? "";
   const limit = Math.min(Math.max(request.limit ?? 8, 1), 25);
-  // Receipted owner read, like every other door this picker drives — the old
-  // raw `db.vault` JOIN was a second, unaudited read path (issue #541 review).
+  // Receipted owner read — a raw `db.vault` JOIN would be a second, unaudited read path (#541 review).
   const rows = gateway.read(cred, {
     entity: AUTOMATION_ANCHOR_ENTITY,
     orderBy: { column: "created_at", dir: "desc" },
@@ -125,12 +104,7 @@ export function pickAnchors(
   return { anchors };
 }
 
-/**
- * Search or browse the carded entities as the owner and return live cards.
- * Term search rides the FTS index where one exists; without a term each kind
- * contributes a recent-first window (UUIDv7 pk order). One unreadable kind is
- * logged and skipped, never sinking the whole picker.
- */
+/** Owner search/browse; one unreadable kind is logged and skipped, never sinking the picker. */
 export function pickEntities(
   gateway: VaultGateway,
   cred: Credential,
@@ -202,21 +176,18 @@ export function pickEntities(
   return { cards };
 }
 
-/** The endpoints of a link the owner asserts through the picker's write half. */
+/** Endpoints of a link the owner asserts through the picker's write half. */
 export interface LinkInput {
   from_type: string;
   from_id: string;
   to_type: string;
   to_id: string;
   relation?: string;
-  /** Optional inline anchor written atomically with the link (issue #282). */
+  /** Written atomically with the link (#282). */
   selector?: AnchorSelector;
 }
 
-/**
- * The standoff-anchor selector (issue #282): a W3C-style text quote plus a
- * position hint into the from-endpoint's decoded body (UTF-16 code units).
- */
+/** Standoff-anchor selector (#282): W3C-style text quote plus position hint (UTF-16 code units). */
 export interface AnchorSelector {
   exact: string;
   prefix: string;

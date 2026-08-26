@@ -1,91 +1,35 @@
-/*
- * NEAREST SETTLEMENT, from a coordinate, on this device.
- *
- * Rung 2 of the place-phrase ladder (`packages/blueprints/apps/photos/
- * place-phrase.ts`) is "near Truckee, CA". This module is the whole of how
- * Centraid knows that, and the shape of it is the point: a bundled dataset
- * (`gazetteer-data.ts`, GeoNames CC-BY — see that file's header) plus
- * arithmetic. There is no client, no key, no endpoint, and nothing to consent
- * to beyond turning the automation on. A reverse-geocoding API would answer
- * better and would also mean mailing a stranger the coordinates of a member's
- * home, their child's school, and every trailhead they have ever walked, one
- * request at a time. That trade is not available in this product, so the
- * answer is the one a 750 KB table can give.
- *
- * Pure and synchronous: same coordinate, same settlement, forever. The parse
- * of the vendored blob happens once, lazily, on first lookup.
- */
+// NEAREST SETTLEMENT on this device: a bundled table plus arithmetic. A
+// reverse-geocoding API answers better and mails a stranger the coordinates of
+// a member's home, so that trade is not available here.
 
 import { GAZETTEER_RECORDS } from "./gazetteer-data.js";
 
-/**
- * The dataset's own identity, re-exported so a caller needs one import.
- *
- * `GAZETTEER_ROW_COUNT` is the count the data file declares — pinned against
- * the table actually parsed by `gazetteer.test.ts`, so a regeneration that
- * silently drops rows fails rather than quietly answering worse.
- */
 export { GAZETTEER_ROW_COUNT, GAZETTEER_SNAPSHOT } from "./gazetteer-data.js";
 
-/** Stable id for the vendored dataset, stamped onto every record written. */
 export const GAZETTEER_SOURCE = "geonames-cities15000";
 
-/**
- * How far a settlement may be and still name where a photograph was taken.
- *
- * Fifty kilometres, which is further than it first sounds and deliberately so.
- * The dataset holds settlements over 15,000 people, so in most of the world the
- * nearest one is the nearest TOWN — and the photographs this rung exists for
- * are the ones taken away from towns. A trailhead 20 km up the road from
- * Truckee is "near Truckee" to everyone who drove there; that is how people
- * talk about where they went, and refusing to say it because the coordinate is
- * not inside the town limits would leave the phrase at "A place with no name
- * yet" for exactly the photographs that most needed a word. The hedge lives in
- * the copy: `place-phrase.ts` prints "near", never "in".
- *
- * Beyond 50 km the claim stops being about a neighbourhood and starts being
- * about a region, which this rung does not model, so the lookup returns
- * nothing and the ladder falls through to a phrase relative to a place the
- * member named — which at that range is the more informative sentence anyway.
- */
+/** Wide on purpose; the hedge is in the copy, which prints "near", never "in". */
 export const GAZETTEER_MAX_KM = 50;
 
-/**
- * Inside this much of the nearest candidate's distance, two settlements are
- * equidistant as far as a phrase is concerned, and the more populous one wins.
- *
- * A kilometre, because that is roughly the width of the towns themselves: when
- * a point falls between two of them the arithmetic's winner is decided by
- * whichever centroid GeoNames happened to place, and "near Reno" tells a reader
- * more than "near Sparks" does even when Sparks is 400 m closer. Population is
- * a proxy for recognisability, which is the only thing this phrase is for.
- */
+/** Inside this band the more populous wins: a kilometre is the width of the
+ *  towns, so the closer one is only whichever centroid GeoNames chose. */
 const TIE_BAND_KM = 1;
 
-/** Mean Earth radius (IUGG), km — the same constant `place-phrase.ts` uses. */
 const EARTH_RADIUS_KM = 6371.0088;
 
-/** Kilometres per degree of latitude. Constant enough to size a search window. */
 const KM_PER_DEGREE_LAT = 111.195;
 
-/** One settlement, as the vendored table stores it. */
 export interface Settlement {
   readonly name: string;
   readonly lat: number;
   readonly lng: number;
-  /** Two-letter state code for US rows; `""` everywhere else, on purpose. */
   readonly admin: string;
-  /** ISO 3166-1 alpha-2 country code. */
   readonly country: string;
-  /** Population in thousands, rounded. Tie-breaking only. */
   readonly populationThousands: number;
 }
 
-/** A settlement that answered for a coordinate, with how far away it was. */
 export interface GazetteerHit extends Settlement {
-  /** Great-circle kilometres from the queried coordinate, to one decimal. */
   readonly distanceKm: number;
-  /** What a surface prints — `"Truckee, CA"` or, outside the US, `"Kyoto"`. */
   readonly displayName: string;
 }
 
@@ -100,7 +44,6 @@ interface Table {
 
 let table: Table | undefined;
 
-/** Parse the vendored blob into typed columns. Called once, on first lookup. */
 function load(): Table {
   if (table !== undefined) return table;
   const records = GAZETTEER_RECORDS.split("~");
@@ -124,20 +67,11 @@ function load(): Table {
   return table;
 }
 
-/** How many settlements the loaded table holds — pinned against the data file. */
 export function gazetteerSize(): number {
   return load().name.length;
 }
 
-/**
- * Great-circle distance in kilometres, by haversine.
- *
- * Deliberately a second copy of `place-phrase.ts`'s `distanceKm` rather than an
- * import: that module has no imports at all by design (it is compiled into both
- * the web client and the Expo bundle), and this one is compiled into a handler
- * bundle that must not reach into a blueprint. Twelve lines of arithmetic in two
- * places is the cheaper of the two prices.
- */
+/** A deliberate second copy: this bundle must not reach a blueprint. */
 function distanceKm(
   aLat: number,
   aLng: number,
@@ -154,7 +88,6 @@ function distanceKm(
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** Index of the first row whose latitude is >= `value`. Rows are lat-sorted. */
 function lowerBound(lat: Float64Array, value: number): number {
   let lo = 0;
   let hi = lat.length;
@@ -166,16 +99,7 @@ function lowerBound(lat: Float64Array, value: number): number {
   return lo;
 }
 
-/**
- * What a surface prints for a settlement.
- *
- * `"Truckee, CA"` in the United States, where GeoNames' admin1 is the postal
- * state code a reader already knows. `"Kyoto"` everywhere else — see the data
- * file's header for why no other admin code is stored, and note that a country
- * name would not earn its bytes here either: these are the member's own
- * photographs, and a person looking at their own trip to Japan does not need to
- * be told which country Kyoto is in.
- */
+/** No country name, on purpose. */
 export function gazetteerDisplayName(settlement: {
   name: string;
   admin: string;
@@ -185,19 +109,8 @@ export function gazetteerDisplayName(settlement: {
     : `${settlement.name}, ${settlement.admin}`;
 }
 
-/**
- * The settlement that names a coordinate, or `null` when none is near enough.
- *
- * Scans only the rows inside a latitude window of `maxKm` — a binary search
- * plus a few dozen comparisons rather than 23,527 haversines, which matters
- * because a backfill runs this once per place row and the handler holds the
- * worker while it does. Longitude is deliberately NOT windowed: the band holds
- * every candidate whatever its longitude, so a coordinate beside the
- * antimeridian needs no wrap-around special case to be correct.
- *
- * `null` for a non-finite coordinate. A missing coordinate is not a claim that
- * a photograph was taken nowhere.
- */
+/** Latitude window only; longitude deliberately NOT windowed, so there is no
+ *  antimeridian case. */
 export function nearestSettlement(
   lat: number,
   lng: number,
@@ -221,7 +134,6 @@ export function nearestSettlement(
     }
   }
   if (best < 0) return null;
-  // Tie-break toward the settlement more readers would recognise.
   let chosen = best;
   let chosenKm = bestKm;
   for (const i of near) {
@@ -233,8 +145,6 @@ export function nearestSettlement(
       pop > chosenPop ||
       (pop === chosenPop &&
         (km < chosenKm ||
-          // Two rows with the same population at the same distance: order by
-          // name so the answer never depends on table order.
           (km === chosenKm && (t.name[i] ?? "") < (t.name[chosen] ?? ""))));
     if (better) {
       chosen = i;

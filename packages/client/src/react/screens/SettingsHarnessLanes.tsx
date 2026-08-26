@@ -16,21 +16,13 @@ import {
 import HarnessLadder from "./SettingsHarnessLadder.js";
 import PickRow from "./SettingsPickRow.js";
 
-// Settings → Agents, THE LANES (binding layer v11).
-//
-// A lane is harness · model · level, resolved independently. AN INHERITING LANE
-// HAS NO MODEL OR LEVEL OF ITS OWN, so it offers no control for one: it shows a
-// single pick, and its caption states what it currently inherits, down to the
-// level. Setting a harness is what earns the other two picks. The previous
-// shape offered all three always, with "Use default · Sonnet 4.5" inside each
-// menu — three controls where two of them wrote nothing until the first
-// changed, and the resolved answer readable only by opening a menu.
-//
-// The screen still owns every write and every rollback: this file renders picks
-// and calls back.
+// Settings → Agents, THE LANES (binding layer v11). A lane is
+// harness · model · level, resolved independently. An INHERITING lane has no
+// model or level of its own: one pick only, caption states what it inherits.
+// Setting a harness earns the other two picks. The screen owns all writes.
 
 /**
- * The routing lanes. Each resolves independently to a (harness, model, level)
+ * The routing lanes; each resolves independently to a (harness, model, level)
  * triple — a lane left unset inherits the default lane.
  */
 export const ALL_SUBSYSTEM_ROWS: ReadonlyArray<{
@@ -48,29 +40,16 @@ export const ALL_SUBSYSTEM_ROWS: ReadonlyArray<{
   },
 ];
 
-/**
- * The lanes that get a row. Builder is withheld: every builder entry point is
- * hidden by default (#434), so a routing control for a surface the member
- * cannot open is configuration for nothing.
- *
- * It stays in `ALL_SUBSYSTEM_ROWS` on purpose, because that list also feeds the
- * inventory's "used by" reading. A stored builder pin keeps resolving, and
- * hiding the row must not also hide the fact that a harness is carrying that
- * lane.
- */
+/** The lanes that get a row. Builder withheld: its entry points are hidden by
+ *  default (#434) — a control for an unopenable surface configures nothing.
+ *  It stays in ALL_SUBSYSTEM_ROWS so a stored builder pin keeps resolving and
+ *  the inventory's "used by" reading still sees it. */
 export const ROUTING_ROWS = ALL_SUBSYSTEM_ROWS.filter(
   (row) => row.key !== "builder"
 );
 
-/**
- * What a lane inherits, in one clause: agent, model, level.
- *
- * THE LEVEL IS PART OF THE SENTENCE, NOT AN EXTRA. A lane with no harness of
- * its own renders one pick, so this caption is the ONLY place the level it will
- * think at is stated — dropping it would leave the section head promising
- * "harness · model · level" over rows that name two of the three. It reads
- * lowercase because it is prose here, not the pick's own label.
- */
+/** What a lane inherits, in one clause: agent, model, level — for an
+ *  inheriting lane this caption is the ONLY place the level is stated. */
 export function inheritedClause(
   card: HarnessCardDTO | undefined,
   model: string,
@@ -82,12 +61,8 @@ export function inheritedClause(
   )} · ${effortLabel(card, effort).toLowerCase()}`;
 }
 
-/**
- * One lane. `harness === ''` means inherit the default lane, and the caption
- * names what that resolves to — "Use default model" alone told you nothing
- * about what would actually run, and with agents inheriting too that ambiguity
- * would have doubled.
- */
+/** One lane. `harness === ''` inherits the default lane; the caption names
+ *  what that resolves to — "Use default model" alone says nothing real. */
 export default function RouteRow({
   label,
   hint,
@@ -182,8 +157,8 @@ export default function RouteRow({
         : {})}
     >
       {harnessPick}
-      {/* A lane that inherits has no model or level of its own — see the head
-          of this file. The caption above already states what it resolves to. */}
+      {/* An inheriting lane has no model/level of its own (see file head);
+          the caption already states what it resolves to. */}
       {!inheriting && resolvedCard ? (
         <>
           <ModelSelect

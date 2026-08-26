@@ -1,30 +1,11 @@
-// The two states that are about the SEAT rather than about the drive
-// (Docs spec §12's `readonly` and `permission`).
-//
-// Both answer the same shape of question — "why can I not do the thing this
-// screen is offering" — and both are failures of the standard kind: silent.
-// A member in a read-only space presses Rename, nothing happens, and they
-// conclude the app is broken. A member whose grant was revoked mid-session
-// watches a drive full of titles they can no longer open. Neither state is
-// wrong; both are unspeakable unless something says them.
-//
-// They stand ABOVE the route body, on the same terms as the offline banner:
-// they change what every control below them can promise, so they are stated
-// once for the whole screen rather than on each control that would refuse.
+// Seat states (docs spec §12), stated once per screen above the route body.
 import type { ReactNode } from "react";
 
 import { Panel } from "./Blocks.tsx";
 
 import styles from "./SeatStates.module.css";
 
-/**
- * §12's `readonly` — a space the member was placed in and may not write to.
- *
- * The scope's `canWrite` is the shell's own answer to "may this member add
- * here?", so this is read and never inferred. What it changes is every writing
- * verb in the app at once, which is exactly why it is said here instead of
- * being discovered one disabled button at a time.
- */
+/** §12 `readonly`: placed in, may not write; read `canWrite`, never infer. */
 export function ReadOnlyPanel({ label }: { label: string }): ReactNode {
   return (
     <div className={styles.wrap}>
@@ -50,15 +31,7 @@ export function ReadOnlyPanel({ label }: { label: string }): ReactNode {
   );
 }
 
-/**
- * §12's `permission` — the grant that let Docs read this vault is gone.
- *
- * THE APP GOES DARK; THE DOCUMENTS DO NOT MOVE. That distinction is the whole
- * screen: a member watching an app empty itself needs to be told, in the same
- * breath, that nothing was deleted. The way back to the grant is the banner
- * this panel stands under (`Chrome.tsx`, with `VaultAccessButton`) — a denied
- * read always offers a direct way to the grant, and never a dead end.
- */
+/** §12 `permission`: grant gone; app dark, documents untouched; banner is the way back. */
 export function PermissionPanel(): ReactNode {
   return (
     <div className={styles.wrap}>

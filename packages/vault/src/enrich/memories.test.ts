@@ -1,4 +1,4 @@
-// Memories v0 (issue #724 W7) — see memories.ts's header for the three
+// Memories v0 (#724) — see memories.ts's header for the three
 // kinds and the heuristics under test here.
 
 import { beforeEach, describe, expect, test } from "vitest";
@@ -16,7 +16,7 @@ import { rebuildMemories } from "./memories.js";
 
 /**
  * A distinct data URI per call. `media.add_asset` dedupes on the decoded
- * bytes' sha256 (issue #296) — reusing one image would silently adopt the
+ * bytes' sha256 (#296) — reusing one image would silently adopt the
  * SAME asset instead of minting a new one, so every fixture asset gets its
  * own seed rather than cycling a small fixed pixel set (mint.ts's
  * `decodeDataUri` never validates image structure, so any distinct payload

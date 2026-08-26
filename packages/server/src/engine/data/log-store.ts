@@ -2,16 +2,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 /**
- * Persistent per-app handler logs.
- *
- * Each handler execution appends one JSONL line per `ScopedLog` call to
- * `<app-data-dir>/logs.jsonl`. When the file grows past `MAX_BYTES`, it's
- * rotated to `logs.jsonl.1` (overwriting any previous rotation). This is a
- * simple ring of two files — enough for an interactive log tail in the
- * Cloud panel without committing to a structured log store.
- *
- * Reads merge the current file with the rotated one (oldest first), then
- * apply newest-first / filter / limit semantics in `readLogs`.
+ * Per-app handler logs: JSONL appends to `<app-data-dir>/logs.jsonl`, rotated
+ * to `.1` past MAX_BYTES; reads merge both files oldest-first.
  */
 export interface LogEntry {
   ts: number;
@@ -41,17 +33,14 @@ export async function appendLogs(
   try {
     await fs.appendFile(file, payload, "utf8");
   } catch (error) {
-    // Log persistence is best-effort — never fail the handler request just
-    // because logs couldn't be written. Surface via console for diagnostic.
+    // Best-effort: never fail the handler request.
     console.error(
       `[centraid] log append failed for ${appDataDir}: ${error instanceof Error ? error.message : String(error)}`
     );
     return;
   }
 
-  // Rotate after write so the previous rotation is replaced atomically with
-  // the just-filled current file. Failure here is non-fatal — next append
-  // tries again.
+  // Rotate after write; failure here is non-fatal.
   try {
     const stat = await fs.stat(file);
     if (stat.size >= MAX_BYTES) {
@@ -64,19 +53,12 @@ export async function appendLogs(
 }
 
 export interface ReadLogsOptions {
-  /** Default 100, capped to 500. */
   limit?: number;
-  /** Drop entries with `ts < sinceTs` (for polling tail). */
   sinceTs?: number;
-  /** Restrict to a single level. */
   level?: LogLevel;
 }
 
-/**
- * Returns the most recent matching log entries, newest first. Entries from
- * the rotated file are concatenated underneath the current file before the
- * filter/sort pass, so the caller sees a unified stream across rotation.
- */
+/** Most recent matching entries, newest first, unified across rotation. */
 export async function readLogs(
   appDataDir: string,
   opts: ReadLogsOptions = {}

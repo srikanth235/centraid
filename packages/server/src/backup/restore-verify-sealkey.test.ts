@@ -3,8 +3,8 @@ import { afterEach, describe, expect, test } from "vitest";
 import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-provider-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 /*
- * Seal-key restore-verify (issue #439 R5) — the scheduled `runRestoreVerify`
- * now proves what FORMAT.md warns about: a restore whose sealed columns cannot
+ * Seal-key restore-verify (#439) — the scheduled `runRestoreVerify`
+ * proves what FORMAT.md warns about: a restore whose sealed columns cannot
  * be opened is "a placebo". A real backup of a vault with a sealed secret is
  * restored into a scratch dir, and the standing verification asserts the
  * recovery-kit/KeyStore DEK matches the vault's stamped fingerprint — the same

@@ -171,7 +171,7 @@ describe("attachment blob seam", () => {
   afterEach(() => {
     created.length = 0;
     URL.createObjectURL = realCreateObjectURL;
-    // Attachment URLs are cached across components on purpose (issue #659), so
+    // Attachment URLs are cached across components on purpose (#659), so
     // a case that asserts the FETCH must start from an empty cache.
     history.resetAttachmentUrlCache();
   });

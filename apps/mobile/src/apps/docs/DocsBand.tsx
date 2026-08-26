@@ -1,5 +1,5 @@
 // The band Docs has claimed, rendered (Binding Layer v12 handoff Part 2
-// §"The band"; issue #821).
+// §"The band"; #821).
 //
 // Two plates in a transparent row — the frame's Home capsule on the frame's
 // neutral page colour, then the app's five destinations as one group on

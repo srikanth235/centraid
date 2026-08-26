@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import type * as TypeImport_rdfcd1 from "node:http";
 // governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
 /*
- * Connector broker invariants (issue #290 phase 4): manifest contract
+ * Connector broker invariants (#290): manifest contract
  * (connector needs a vault block), ctx.delegate forbidden in connector handlers,
  * and the honest-liveness fire gate (paused/needs-auth connections never run
  * their connector).
@@ -1391,5 +1391,169 @@ describe("read-only ceiling on injected fetches (issue #304 phase 5)", () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe("placeholder-free fetches ride the destination pin (issue #865)", () => {
+  let appsDir: string;
+  let journalDbFile: string;
+
+  beforeEach(async () => {
+    appsDir = await tempDir("centraid-ssrf-");
+    journalDbFile = path.join(appsDir, "journal.db");
+  });
+  afterEach(async () => {
+    await fs.rm(appsDir, { recursive: true, force: true });
+  });
+
+  async function writeAutomation(handler: string): Promise<void> {
+    const dir = path.join(appsDir, "mail", "automations", "pull");
+    await fs.mkdir(dir, { recursive: true });
+    const manifest = validateManifest(
+      rawManifest({ requires: {} })
+    ) as Manifest;
+    await fs.writeFile(
+      path.join(dir, "automation.json"),
+      JSON.stringify(manifest, null, 2)
+    );
+    await fs.writeFile(path.join(dir, "handler.js"), handler);
+  }
+
+  const noDispatch = () =>
+    Promise.resolve({
+      delegateDispatcher: async () => "never",
+      close: async () => undefined,
+    } satisfies DispatchSurface);
+
+  const activeBridge: VaultBridge = async (call) => {
+    if (call.op === "read")
+      return { ok: true, result: { rows: [{ status: "active" }] } };
+    return {
+      ok: false,
+      code: "VAULT_ERROR",
+      error: `unexpected op ${call.op}`,
+    };
+  };
+
+  async function withServer(
+    respond: (
+      req: TypeImport_rdfcd1.IncomingMessage,
+      res: TypeImport_rdfcd1.ServerResponse
+    ) => void,
+    run: (port: number) => Promise<void>
+  ): Promise<void> {
+    const { createServer } = await import("node:http");
+    const server = createServer(respond);
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const port = (server.address() as { port: number }).port;
+    try {
+      await run(port);
+    } finally {
+      server.close();
+    }
+  }
+
+  it("refuses a placeholder-free fetch toward an unpinned host — nothing leaves", async () => {
+    let hits = 0;
+    await withServer(
+      (_req, res) => {
+        hits += 1;
+        res.writeHead(200);
+        res.end("exfil target reached");
+      },
+      async (port) => {
+        await writeAutomation(
+          `export default async ({ ctx }) => {
+             try {
+               // No {{connection:…}}/{{secret:…}} anywhere — this used to
+               // bypass the pin entirely (issue #865).
+               await ctx.fetch({ url: 'http://127.0.0.1:${port}/exfil' });
+               return { reached: true };
+             } catch (err) {
+               return { reached: false, reason: err.message };
+             }
+           };`
+        );
+        const { outcome } = await runFire(
+          {
+            automationRef: "mail/pull",
+            appsDir,
+            journalDbFile,
+            vaultFor: () => activeBridge,
+            resolveConnection: async () => ({
+              values: { access_token: "tok" },
+              allowedHosts: ["gmail.googleapis.com"],
+            }),
+          },
+          { openDispatch: noDispatch }
+        );
+        expect(outcome.ok).toBe(true);
+        expect(outcome.value).toMatchObject({
+          reached: false,
+          reason: expect.stringContaining("allowed_hosts"),
+        });
+        expect(hits).toBe(0);
+      }
+    );
+  });
+
+  it("refuses a placeholder-free plain-http fetch to a non-loopback host", async () => {
+    await writeAutomation(
+      `export default async ({ ctx }) => {
+         try {
+           await ctx.fetch({ url: 'http://192.168.1.1/admin' });
+           return { reached: true };
+         } catch (err) {
+           return { reached: false, reason: err.message };
+         }
+       };`
+    );
+    const { outcome } = await runFire(
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => activeBridge,
+      },
+      { openDispatch: noDispatch }
+    );
+    expect(outcome.ok).toBe(true);
+    expect(outcome.value).toMatchObject({
+      reached: false,
+      reason: expect.stringContaining("non-https"),
+    });
+  });
+
+  it("still lets a credential-free loopback read through untouched", async () => {
+    await withServer(
+      (_req, res) => {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("local bridge");
+      },
+      async (port) => {
+        await writeAutomation(
+          `export default async ({ ctx }) => {
+             const res = await ctx.fetch({ url: 'http://127.0.0.1:${port}/x' });
+             return { status: res.status, body: res.text };
+           };`
+        );
+        const { outcome } = await runFire(
+          {
+            automationRef: "mail/pull",
+            appsDir,
+            journalDbFile,
+            vaultFor: () => activeBridge,
+          },
+          { openDispatch: noDispatch }
+        );
+        expect(outcome.ok).toBe(true);
+        expect(outcome.value).toStrictEqual({
+          status: 200,
+          body: "local bridge",
+        });
+      }
+    );
   });
 });

@@ -1,43 +1,21 @@
-// The assistant rich-answer renderer (issue #420) — the ONE string→HTML
-// renderer for the assistant transcript. Framework-free so the memoizing shell
-// adapter (react/shell/routes/assistantRich.ts) can call it outside React.
+// The assistant rich-answer renderer (#420) — the ONE string→HTML renderer for
+// the transcript, framework-free so the memoizing shell adapter
+// (react/shell/routes/assistantRich.ts) can call it outside React. Turns the
+// model's `@[Title](ref:type/id)` citations and ```block:*``` JSON fences into
+// ref-chips and typed blocks; GFM from gfm.ts, highlighting code-highlight.ts.
 //
-// The shared prompt tells the model to emit `@[Title](ref:type/id)` citations
-// and ```block:table|chart|stat``` JSON fences. This renderer turns those into
-// interactive ref-chips and typed blocks; `hydrateRefs` resolves each chip to a
-// live vault card title. Full GFM (links, images, ordered/nested lists,
-// blockquotes, pipe tables, hr, strikethrough) comes from gfm.ts and
-// dependency-free syntax highlighting from code-highlight.ts.
-//
-// ── SECURITY CONTRACT (model output is UNTRUSTED input) ──────────────────────
-// The shell injects this renderer's output via `dangerouslySetInnerHTML`, so
-// the output must be provably safe. The guarantees, audited across every path:
-//   1. Escape-by-default. Every text fragment is HTML-escaped (`escapeHtml`)
-//      BEFORE any pattern-matching or tag injection. The parser only ever adds
-//      a fixed, closed set of tags — p, h3–h6, ul, ol, li, blockquote, hr,
-//      table/thead/tbody/tr/th/td, a, img, strong, em, del, code, pre, the ref
-//      <button>, and the block:* SVG/table/stat nodes it builds itself. No text
-//      the model supplies is ever placed unescaped into markup.
-//   2. URL allowlist. Link/image hrefs pass through `sanitizeUrl` (gfm.ts):
-//      only http/https(/mailto for links) schemes or scheme-less relative
-//      gateway paths survive; `javascript:`, `data:`, `vbscript:`, and
-//      protocol-relative `//host` are rejected (link → plain text, image →
-//      alt). Control/whitespace chars are stripped first so `java\tscript:`
-//      can't slip past scheme detection. Attribute-break-out is structurally
-//      impossible: the URL is drawn from the already-escaped string, so any
-//      `"` is already `&#34;`.
-//   3. External links carry `rel="noopener noreferrer"` + `target="_blank"`.
-//   4. Syntax highlighting (code-highlight.ts) is escape-by-default too: it
-//      emits only `<span class="hl…">` with static class names around escaped
-//      source, so a fenced code block can never inject markup.
-//   5. block:* JSON is parsed with a try/catch; a malformed block degrades to a
-//      visible (escaped) code block, never silent loss and never eval.
-// Adversarial coverage lives in assistant-sanitize.test.ts.
+// ── SECURITY CONTRACT (model output is UNTRUSTED input) ─────────────────────
+// Output is injected via `dangerouslySetInnerHTML`. Every path must escape text
+// (`escapeHtml`) BEFORE matching or tag injection and emit only the closed tag
+// set built here; route link/image URLs through `sanitizeUrl` (gfm.ts); give
+// external links `rel="noopener noreferrer"`; leave code-highlight.ts's static
+// `hl…` spans the only markup around fenced source; parse block:* JSON under
+// try/catch degrading to an escaped code block, never eval. Adversarial
+// coverage: assistant-sanitize.test.ts.
 
 import { highlightCode } from "./code-highlight.js";
 import { cx, el, blockNodes } from "./gfm.js";
 
-/** The renderer's class-name slots — kit.css styles the literal defaults. */
 export interface AssistantRichClasses {
   asstRich: string;
   asstP: string;
@@ -68,7 +46,6 @@ export interface AssistantRichClasses {
   asstCopyBtn: string;
 }
 
-/** A ref chip resolved to a renderable card (loose shape the resolver returns). */
 export interface ResolvedRefCard {
   status?: string;
   title?: string | null;
@@ -79,16 +56,10 @@ export type ResolveRefs = (
   refs: Array<{ type: string; id: string }>
 ) => Promise<ResolvedRefCard[]>;
 
-/**
- * A caller's class-name overrides. Values may be `undefined` (a CSS-module
- * import is often typed `string | undefined`); the renderer falls back to the
- * literal default for any missing/undefined slot.
- */
 export type AssistantRichClassOverrides = Partial<
   Record<keyof AssistantRichClasses, string | undefined>
 >;
 
-/** The literal class names kit.css styles. Callers may override any. */
 export const DEFAULT_CLASSES: AssistantRichClasses = {
   asstRich: "asstRich",
   asstP: "asstP",
@@ -119,12 +90,7 @@ export const DEFAULT_CLASSES: AssistantRichClasses = {
   asstCopyBtn: "asstCopyBtn",
 };
 
-/**
- * A fenced code block wrapped with a hover copy button. When `lang` is a known
- * language the `<pre>` gets escape-by-default syntax highlighting (hl… spans);
- * otherwise it stays a plain escaped text node. `wireCodeCopy` reads the
- * `<pre>`'s textContent (unchanged by the spans) on click, so copy still works.
- */
+/** Highlighting adds only `hl…` spans, so the copy button still yields source. */
 function codeBlock(
   code: string,
   lang: string,
@@ -310,17 +276,12 @@ function chartBlock(
   return wrap;
 }
 
-/**
- * Full answer → GFM prose + typed blocks + highlighted code fences, as an HTML
- * string. Untrusted input — see the SECURITY CONTRACT above.
- */
+/** Untrusted input — see the SECURITY CONTRACT above. */
 export function richAnswerHtml(
   text: string,
   classes?: AssistantRichClassOverrides
 ): string {
-  // Override only with truthy values so an override map with `undefined` slots
-  // (e.g. a CSS-module import typed `string | undefined`) falls back to the
-  // literal default rather than blanking the class name.
+  // Only truthy overrides win; an `undefined` slot must not blank a class name.
   let C = DEFAULT_CLASSES;
   if (classes) {
     const merged = { ...DEFAULT_CLASSES };
@@ -367,11 +328,6 @@ export function richAnswerHtml(
   return host.outerHTML;
 }
 
-/**
- * Resolve every ref chip under `host` to a live card title, batched. The shell
- * passes its auth-aware `resolveAssistantRefs` and the scoped `asstRef` class
- * name its CSS module minted.
- */
 export function hydrateRefs(
   host: HTMLElement,
   options: { resolveRefs: ResolveRefs; refClass?: string }
@@ -403,12 +359,7 @@ export function hydrateRefs(
     .catch(() => undefined);
 }
 
-/**
- * Wire one delegated click handler under `host` so every code block's hover
- * "Copy" button copies its `<pre>` text to the clipboard (issue #420).
- * Idempotent: a `data-copy-wired` flag guards against double-binding when a
- * node is re-hydrated.
- */
+/** `data-copy-wired` keeps the delegated handler idempotent across re-hydration. */
 export function wireCodeCopy(
   host: HTMLElement,
   options: { copyClass?: string } = {}

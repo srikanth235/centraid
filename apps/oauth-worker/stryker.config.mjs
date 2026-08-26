@@ -22,7 +22,7 @@ export default {
   // The range is line-addressed, so `mutation-range.test.ts` asserts that
   // those line numbers still bracket exactly that block — a shift in
   // `worker.ts` fails the suite instead of silently mutating the wrong code.
-  mutate: ["src/worker.ts:836-916"],
+  mutate: ["src/worker.ts:889-969"],
   reporters: ["clear-text", "json"],
   jsonReporter: {
     fileName: "../../artifacts/mutation/oauth-worker-report.json",

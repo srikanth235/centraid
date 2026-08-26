@@ -1,23 +1,6 @@
 // PERMISSION IS A TAKEOVER OF THE TIMELINE, NOT A SCREEN BEHIND A MENU ROW
-// (Photos v4 handoff §13, proto:4335-4342; issue #712 P13).
-//
-// This content used to be `PhotoPermission.tsx`, a PUSHED screen reached from
-// a buried `Photo access` row at the bottom of the More sheet. That arrangement
-// answered the wrong question in the wrong place: a member who refused the
-// camera-roll prompt does not go looking through a sheet for the word "access",
-// they look at an empty grid and conclude the app is broken. The timeline never
-// read the permission state at all, so the empty grid said nothing and offered
-// nothing — the exact dead end §13 exists to forbid.
-//
-// So the content moved to where the question is ASKED: `PhotosHome` renders
-// this panel in the grid's own slot the moment `photoAccessTakesOverTimeline`
-// says the grant cannot produce a timeline. The band stays up (the way out of
-// the app is never taken away), the head stays up, and the grid area carries
-// the refusal grammar — what was tried, why it was refused, what to do.
-//
-// The copy and the offered controls are `photo-access.ts`, which is
-// react-native-free and directly asserted. This file holds the live permission
-// read, the rendering, and the two handlers.
+// (Photos v4 handoff §13, #712): PhotosHome renders this panel in the grid's
+// slot whenever the grant can't produce a timeline.
 
 import * as MediaLibrary from "expo-media-library";
 import React, { useMemo } from "react";
@@ -33,21 +16,14 @@ import type {
   PhotoAccessState,
 } from "./photo-access";
 
-/**
- * The OS grant, as this app actually asks for it.
- *
- * `usePermissions` answers `null` for the first frame, before the OS has been
- * asked. That is genuinely unknown — not "denied" — so `state` stays null and
- * the takeover predicate declines to take anything over.
- */
+/** The OS grant as this app asks for it; null before the OS has been asked —
+ *  genuinely unknown, not denied. */
 export function usePhotoAccessGrant(): {
   state: PhotoAccessState | null;
   canAskAgain: boolean;
   request: () => void;
 } {
-  // The same two granular permissions the timeline engine walks the library
-  // with, so this reports on the grant the app actually uses rather than on a
-  // broader one it never asks for.
+  // Same granular permissions the timeline engine walks the library with.
   const [permission, requestPermission] = MediaLibrary.usePermissions({
     granularPermissions: ["photo", "video"],
   });
@@ -61,11 +37,8 @@ export function usePhotoAccessGrant(): {
 export interface PhotoAccessPanelProps {
   state: PhotoAccessState;
   canAskAgain: boolean;
-  /**
-   * How many photographs Photos is reading off THIS device right now. Only the
-   * limited state prints it; `null` leaves the meta column blank rather than
-   * printing a zero the app has not finished counting.
-   */
+  /** Photographs read off THIS device; only the limited state prints it.
+   *  `null` leaves the meta column blank, never a zero. */
   readableCount: number | null;
   onRequest: () => void;
 }
@@ -81,9 +54,8 @@ export default function PhotoAccessPanel({
   const copy = photoAccessCopy(state, { canAskAgain, readableCount });
 
   const run = (action: PhotoAccessAction): void => {
-    // Both handlers are real and both are fallible at the OS boundary; neither
-    // is caught here, so a failure reaches the app's error boundary instead of
-    // becoming a control that silently does nothing.
+    // Fallible at the OS boundary; failures reach the error boundary,
+    // never a silently dead control.
     if (action === "ask") onRequest();
     else void Linking.openSettings();
   };
@@ -106,9 +78,8 @@ export default function PhotoAccessPanel({
           style={[
             styles.row,
             { borderTopColor: colors.line },
-            // The row that says what Photos CANNOT reach takes a 2px `net`
-            // rule on its leading edge and nothing else — never a fill, never
-            // a red dot (§18).
+            // The cannot-reach row takes a 2px `net` leading rule — never a
+            // fill, never a red dot (§18).
             row.net
               ? { borderLeftColor: colors.net, borderLeftWidth: 2 }
               : null,

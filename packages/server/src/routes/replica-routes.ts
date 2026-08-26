@@ -65,7 +65,7 @@ export const REPLICA_INTENTS_PATH = "/centraid/_vault/replica/intents";
 const OUTCOME_RECONCILE_LIMIT = 500;
 const DEFAULT_MAX_BOOTSTRAP_ROWS = 100_000;
 const DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS = 25_000;
-/** Windowed bootstrap page size bounds (issue #419). */
+/** Windowed bootstrap page size bounds (#419). */
 const DEFAULT_BOOTSTRAP_WINDOW = 5_000;
 const MAX_BOOTSTRAP_WINDOW = 20_000;
 /** Internal read-page size while filling one window from the snapshot reader. */
@@ -92,7 +92,7 @@ type BootstrapWireRow = NonNullable<ReturnType<typeof shapeReplicaRow>>;
 // library. Windowed mode is an ADDITIVE paging protocol; the single-shot path
 // is byte-for-byte unchanged when neither `window` nor `after` is present.
 //
-// Contract (the wave-2 client builds against exactly this):
+// Contract (the client builds against exactly this):
 //   • Trigger: `?window=<1..20000>` and/or `?after=<token>`. Absent ⇒ legacy.
 //   • Page 1 (`?window=n`, no `after`): the full single-shot envelope
 //     (protocolVersion, vaultId, schemaEpoch, cursor, shapes, shapeIds,
@@ -386,7 +386,7 @@ function isNdjson(req: IncomingMessage): boolean {
   return String(req.headers.accept ?? "").includes("application/x-ndjson");
 }
 
-// Every replica SSE frame goes through the bounded writer (issue #659 G6): a
+// Every replica SSE frame goes through the bounded writer (#659): a
 // device that stops draining its change stream is dropped and re-syncs from its
 // checkpoint on reconnect, rather than accumulating in gateway memory.
 function writeSse(stream: SseStream, event: string, data: unknown): void {
@@ -655,11 +655,11 @@ async function streamChanges(
   let heartbeatAt = Date.now();
   const heartbeatMs = options.heartbeatMs ?? 15_000;
   /*
-   * A LOOP, not recursion (issue #659 G11). `streamNext()` used to tail-call
-   * itself once per page and once per wake, so a long-lived subscriber built an
-   * ever-deeper chain of pending promises — memory that grew with the
-   * connection's age rather than with its work. The control flow is otherwise
-   * unchanged: the access check runs before every projection, a `hasMore` page
+   * A LOOP, not recursion (#659). A `streamNext()` that tail-calls
+   * itself once per page and once per wake builds an ever-deeper chain of
+   * pending promises for a long-lived subscriber — memory that grows with the
+   * connection's age rather than with its work. The control flow:
+   * the access check runs before every projection, a `hasMore` page
    * loops immediately without a heartbeat or a wait, and either rebootstrap
    * path ends the stream.
    *
@@ -775,7 +775,7 @@ type WindowedBootstrapResult =
       next?: string;
     };
 
-/** One page of the windowed bootstrap (issue #419 — contract above). */
+/** One page of the windowed bootstrap (#419 — contract above). */
 function handleWindowedBootstrap(
   res: ServerResponse,
   url: URL,
@@ -989,7 +989,7 @@ export function makeReplicaRouteHandler(
 
     if (url.pathname === BOOTSTRAP_PATH) {
       if (method !== "GET") return methodAllowed(res, "GET");
-      // Windowed mode (issue #419): additive, and only when the client opts in
+      // Windowed mode (#419): additive, and only when the client opts in
       // via `?window`/`?after`. The single-shot path below is untouched.
       if (url.searchParams.has("window") || url.searchParams.has("after")) {
         return handleWindowedBootstrap(

@@ -1,4 +1,4 @@
-// Issue #630 Wave 4: durable time semantics and the organizational spine.
+// Durable time semantics and the organizational spine (#630).
 // These objects are part of the pre-release base contract consumed together by
 // Agenda, Tasks, People, and Tally.
 

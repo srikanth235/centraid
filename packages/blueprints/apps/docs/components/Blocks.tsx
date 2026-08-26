@@ -1,16 +1,5 @@
-// The block vocabulary the app's non-drive screens compose from (Docs spec
-// §4.3's `panelBlock` / `rowsBlock` / `sectionBlock` / `noteBlock`).
-//
-// THE VOCABULARY IS THE SYSTEM'S, NOT THIS APP'S. Every screen the shelf model
-// names — capabilities, storage, the ways in, the bulk queue, the picker, the
-// Locker boundary — is the same four shapes in a different order, and the
-// handoff builds all of them from one kit for that reason. Written once here,
-// they cannot drift into six dialects of "a bordered box with a heading", and
-// a screen becomes a list of what it has to SAY rather than a page of markup.
-//
-// Each block is deliberately small and prop-driven: no state, no data access,
-// no knowledge of which screen it is standing in. What a screen says is the
-// screen's business; how a fact looks is this file's.
+// The four shapes every non-drive screen composes from (Docs spec §4.3). Keep
+// each prop-driven: no state, no data access, no knowledge of its screen.
 import type { ReactNode } from "react";
 
 import type { ACTION_ICONS } from "../icons.ts";
@@ -18,48 +7,28 @@ import { ActionBtn } from "./Shared.tsx";
 
 import styles from "./Blocks.module.css";
 
-/** One `key: value` line inside a panel. */
 export interface Fact {
-  /** The property, in the micro register — "what leaves the device". */
   k: string;
-  /** The answer, in the member's own words. */
   v: string;
-  /**
-   * This fact is the one that costs something — bytes leaving the device, a
-   * limit passed, a refusal. It takes `--net`, the product's one "this reaches
-   * outside / this cannot be undone" hue, and never more than a line or two of
-   * a panel carries it.
-   */
+  /** Egress, a limit passed, a refusal. At most a line or two per panel. */
   net?: boolean;
 }
 
-/** One bounded verb under a panel or on a row. */
 export interface Act {
   label: string;
-  /** The verb's shape, from the app's one table (`icons.ts` `ACTION_ICONS`).
-   *  Optional: these panels also carry verbs that are CONSENTS rather than
-   *  actions on a document ("Turn it on"), and there is no honest shape for
-   *  those in a table keyed by what the drive does to a file. */
+  /** Optional: consent verbs have no shape in a file-action table. */
   icon?: keyof typeof ACTION_ICONS;
   onClick?: () => void;
-  /** The one commit. At most one per panel — a panel with two filled buttons
-   *  is a panel that has not decided what it is asking. */
+  /** At most one per panel. */
   filled?: boolean;
   /** Irreversible, or it reaches outside the device. */
   net?: boolean;
-  /** Present and unpressable, with the reason, rather than absent: a verb
-   *  that vanishes teaches nothing about why it is unavailable. */
+  /** Set this rather than dropping the verb, which teaches nothing. */
   disabledReason?: string;
 }
 
-/**
- * The workhorse. An eyebrow (what state this is), a title (the finding), a
- * body (the sentence), facts (the evidence), and up to two verbs.
- *
- * A panel is what a ROW cannot be: a row holds a label, a value and one verb,
- * and the moment a thing needs an actor, an artifact and a consequence stated
- * together it stops fitting on a row honestly.
- */
+/** Use this, not `Row`, once an actor, an artifact and a consequence must be
+ *  stated together. */
 export function Panel({
   eyebrow,
   title,
@@ -74,7 +43,6 @@ export function Panel({
   body?: string;
   facts?: readonly Fact[];
   actions?: readonly Act[];
-  /** The whole panel is a refusal or a cost — it takes the `--net` edge. */
   net?: boolean;
   children?: ReactNode;
 }): ReactNode {
@@ -110,17 +78,13 @@ export function Panel({
   );
 }
 
-/** A panel's or a row's verb, in the one shape both use. */
 function ActButton({ act }: { act: Act }): ReactNode {
   const off = act.disabledReason !== undefined;
-  // A filled control that cannot be pressed stops being filled — the fill is
-  // the promise that pressing it does something.
+  // The fill promises that pressing does something; never fill a dead one.
   const tone = `${act.filled === true && !off ? "primary" : ""}${
     act.net === true ? " danger" : ""
   }`.trim();
-  // Bound once here rather than passing `act.onClick` straight through: the
-  // handler naming rule wants a `handle*` identifier at the call site, and one
-  // binding serves both branches below.
+  // The handler naming rule wants a `handle*` identifier at the call site.
   const handleClick = (): void => void act.onClick?.();
   if (act.icon)
     return (
@@ -145,19 +109,16 @@ function ActButton({ act }: { act: Act }): ReactNode {
   );
 }
 
-/** One row: a label, the sentence under it, a reading, and at most one verb. */
+/** At most one verb; more belongs in a `Panel`. */
 export interface Row {
   id: string;
   label: string;
   sub?: string;
-  /** The reading at the trailing edge — "on", "1,728", "never". */
   meta?: string;
   action?: Act;
-  /** This row names a cost or a refusal. */
   net?: boolean;
 }
 
-/** A set of rows, bordered as one object. */
 export function Rows({
   rows,
   ariaLabel,
@@ -166,9 +127,7 @@ export function Rows({
   ariaLabel: string;
 }): ReactNode {
   return (
-    /* A real <ul>, not a div wearing role="list". The semantics are the same
-       to a reader, but only the element carries them without a second
-       attribute to keep in sync — and the a11y profile prefers the element. */
+    /* A real <ul>, never a div wearing role="list". */
     <ul className={styles.rows} aria-label={ariaLabel}>
       {rows.map((row) => (
         <li
@@ -188,8 +147,7 @@ export function Rows({
   );
 }
 
-/** A head ABOVE the thing it names, over its own hairline — never a caption
- *  inside the bordered box, which would make it part of the contents. */
+/** A head ABOVE the box it names, never a caption inside it. */
 export function Section({
   label,
   meta,
@@ -205,13 +163,11 @@ export function Section({
   );
 }
 
-/** The closing sentence: what was deliberately NOT built, or the rule behind
- *  what was. Prose, once, under the thing it is about. */
+/** The closing sentence: a non-goal, or the rule behind what is there. */
 export function Note({ children }: { children: ReactNode }): ReactNode {
   return <p className={styles.note}>{children}</p>;
 }
 
-/** Every non-drive screen's outer column, so they share one rhythm. */
 export function Screen({
   children,
   label,

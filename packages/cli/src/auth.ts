@@ -7,8 +7,8 @@ export interface AuthOptions {
  * Resolve a bearer for product CLI calls.
  * Precedence: --token > CENTRAID_TOKEN > CENTRAID_GATEWAY_TOKEN.
  *
- * Issue #505 phase 7 retired the daemon's persistent `token.bin`, so there is
- * no on-disk token to auto-discover from a data dir. To reach a local daemon's
+ * The daemon keeps no persistent `token.bin` (#505), so there is no
+ * on-disk token to auto-discover from a data dir. To reach a local daemon's
  * loopback listener, start it with `CENTRAID_GATEWAY_TOKEN=<hex>` and pass the
  * same value here (or `--token`); a remote `direct`-tier gateway takes the
  * per-device token minted by pairing.

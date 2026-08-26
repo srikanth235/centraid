@@ -7,7 +7,7 @@ import type { DeleteState } from "./atlasBrowseData.js";
 
 import styles from "./AtlasRecordsSection.module.css";
 
-// The delete-confirmation dialog (issue #441 B3), split out of the records
+// The delete-confirmation dialog (#441), split out of the records
 // section.
 // Lists the rows that depend on the target (engine FK + polymorphic), badges
 // each mechanism, and blocks the delete outright when an engine FK still points

@@ -1,17 +1,10 @@
-// Turning a timeline snapshot into offline thumbnail-pack candidates, and
-// deciding whether that set actually changed.
-//
-// `usePhotoTimeline` re-publishes its assets array on every replica tick, so a
-// naive effect kicked off a whole pack refresh — a stat of every pinned file
-// plus any missing downloads — many times a minute for an unchanged library.
-// The signature below is the cheap thing that lets the expensive thing be
-// skipped: one O(assets) fold with no per-row allocation, versus an O(assets)
-// filesystem pass.
+// Timeline snapshot → offline thumbnail-pack candidates + change detection.
+// `usePhotoTimeline` re-publishes assets every tick; the cheap signature fold
+// skips the expensive filesystem pass.
 
 import type { PinnedThumbnailCandidate } from "../../lib/replica/thumbnail-pack";
 import type { PhotoAsset } from "./timeline-source";
 
-/** FNV-1a, 32-bit. Chosen for being one multiply per character, not for cryptography. */
 function foldString(hash: number, value: string): number {
   let next = hash;
   for (let index = 0; index < value.length; index += 1) {
@@ -20,14 +13,7 @@ function foldString(hash: number, value: string): number {
   return next;
 }
 
-/**
- * A stable identity for the candidate set a snapshot would produce.
- *
- * Folds in everything the candidate URLs and the pack's own retention rules
- * read — content id, scopes, kind, capture time, favourite flag — plus the
- * gateway base the URLs are built from, so re-pairing to a different gateway
- * counts as a change. Equal signatures mean an equal set of downloads.
- */
+/** Stable identity for the candidate set; `gatewayBase` included. */
 export function pinnedThumbnailSignature(
   gatewayBase: string,
   assets: readonly PhotoAsset[]
@@ -37,14 +23,10 @@ export function pinnedThumbnailSignature(
   let newest = "";
   for (const asset of assets) {
     const contentId = asset.contentId;
-    // A device-only row has no gateway blob to pin, and a row without a content
-    // id has not been backed up yet — neither can produce a candidate.
+    // Device-only rows have no blob; no content id = not backed up yet.
     if (contentId === undefined || asset.source === "device") continue;
     count += 1;
-    // An undated row still belongs in the signature — it is a real row whose
-    // thumbnail can be pinned — so it folds in the empty string rather than
-    // `undefined`, which would stringify identically for every row and let two
-    // different libraries hash alike.
+    // Fold "" not `undefined`, which stringifies alike per row.
     const capturedAt = asset.capturedAt ?? "";
     if (capturedAt > newest) newest = capturedAt;
     hash = foldString(hash, contentId);
@@ -57,7 +39,6 @@ export function pinnedThumbnailSignature(
   return `${count}:${newest}:${hash.toString(16)}`;
 }
 
-/** One candidate per (asset, scope) — the pack budget is enforced per scope. */
 export function pinnedThumbnailCandidates(
   gatewayBase: string,
   assets: readonly PhotoAsset[]
@@ -72,9 +53,7 @@ export function pinnedThumbnailCandidates(
       uri: `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
         scopeId
       )}/${encodeURIComponent(contentId)}?variant=${variant}`,
-      // The pack ranks candidates by recency; an undated row sorts as the
-      // oldest thing there is rather than being dropped, since its bytes are
-      // as worth pinning as any other's.
+      // Undated rows sort oldest rather than being dropped.
       capturedAt: asset.capturedAt ?? "",
       favorite: asset.favorite,
     }));

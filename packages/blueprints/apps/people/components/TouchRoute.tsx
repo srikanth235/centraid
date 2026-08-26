@@ -1,17 +1,5 @@
-// Touch (v12 handoff § Screens 2) — what needs doing about people, in order.
-//
-// Four count tiles over three lists: who is overdue, which dated reminders
-// come round next, and what has been logged. Nothing here is a second read —
-// the `dashboard` query answers all four counts and all three lists, so this
-// screen only chooses recipes.
-//
-// THE RECONNECT SUB-LINE IS `every <n> days · <ago>` where the cadence is
-// known — `logic.ts` joins it in from the roster read — and the role where it
-// is not, so the row never re-derives a column it was not handed.
-//
-// NOTHING HERE TOGGLES A REMINDER. `UpcomingCard` carries no `reminder_on`,
-// so a trailing Mute/Remind could only guess which way it points. The toggle
-// lives on the person screen, where the flag is read.
+// Touch (v12 handoff § Screens 2): tiles + three lists off one `dashboard`
+// query. NOTHING HERE TOGGLES A REMINDER — that lives on the person screen.
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
@@ -37,9 +25,8 @@ import { CountTiles, Row, Section, SkeletonBlock, Verb } from "./Shared.tsx";
 
 export function TouchRoute(props: TouchRouteProps): ReactNode {
   const dashboard = props.dashboard;
-  // A null dashboard is a read that has not landed, not a member with nothing
-  // to do (`_shared/view-state-kit.ts`), so it takes the same gate `loading`
-  // does — the three sections below can only be honestly empty past this line.
+  // Null dashboard is a pending read, not an empty member (`view-state-kit`);
+  // same gate as `loading`.
   if (props.loading || !dashboard) {
     return (
       <SkeletonBlock>
@@ -48,11 +35,9 @@ export function TouchRoute(props: TouchRouteProps): ReactNode {
     );
   }
 
-  // TWO TILE SETS, ONE ROW. While the sharing plane answers, the tiles are the
-  // handoff's own — Vaults · To link · Reconnect · Upcoming — and `Starred`
-  // gives up its slot, because the star already has a chip on the roster.
-  // While it does not, the four the roster alone can answer stand instead: a
-  // `Vaults` tile reading 0 over a denied read would be a count nobody took.
+  // Handoff tiles while the sharing plane answers (Starred has a roster chip);
+  // roster-answerable tiles once linked/to_link land — a denied read must not
+  // render as a 0 count.
   const counts = dashboard.counts;
   const linked = counts.linked;
   const toLink = counts.to_link;

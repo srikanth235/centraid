@@ -14,14 +14,14 @@ export interface ReceiptInput {
   action: string;
   objectType: string;
   objectId: string | null;
-  /** The purpose that APPLIED — callers record the defaulted notation (issue #306). */
+  /** The purpose that APPLIED — callers record the defaulted notation (#306). */
   purpose: string | null | undefined;
   decision: "allow" | "deny";
   detail?: Record<string, unknown>;
 }
 
 /**
- * The L4 attribution fragment for one invocation's receipt detail (issue #599
+ * The L4 attribution fragment for one invocation's receipt detail (#599
  * decisions 7–8; #726): the owner the write is attributable to, spread into
  * `detail` beside the app/agent that carried it — so an agent turn journals
  * as "agent, for <owner>".

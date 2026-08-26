@@ -1,4 +1,4 @@
-// Derivation provenance (issue #724 W2) — behaviour: what a stamp says after
+// Derivation provenance (#724) — behaviour: what a stamp says after
 // a re-run, and which targets a version bump hands back to the sweep.
 
 import { describe, expect, test } from "vitest";

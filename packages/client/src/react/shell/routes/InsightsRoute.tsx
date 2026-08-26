@@ -30,16 +30,13 @@ import { PageSkeleton } from "../status.js";
 import { useAsyncData } from "../useAsyncData.js";
 
 // Analytics route (#514, revamped for v9 in #765): reads the run rollup for a
-// chosen window, resolves automation display names from the live list, and
-// deep-links a run. It publishes the frame's count line, the status-line
-// health sentence, and the one verb the bar offers (Export CSV) — Analytics
-// has no commit at all, because a page that counts what already happened has
-// nothing to write.
+// chosen window, resolves automation display names, deep-links a run. No
+// commit — counting what already happened has nothing to write.
 
 const DAY_MS = 86_400_000;
 
-/** The window survives the session on the member's own prefs record — the same
- *  gateway-side store appearance and the assistant's starters read from. */
+/** The window survives the session on the member's prefs record, shared with
+ *  the assistant's starters. */
 export const WINDOW_PREF_KEY = "insights.windowDays";
 
 const DEFAULT_WINDOW_DAYS = 30;
@@ -51,8 +48,6 @@ function isWindow(value: unknown): value is number {
   );
 }
 
-/** "up for 21 days" / "up for 4 hours" — the gateway's own uptime, said at the
- *  coarsest unit that is still true. */
 export function uptimeLine(uptimeMs: number | undefined): string {
   if (uptimeMs === undefined || !Number.isFinite(uptimeMs) || uptimeMs < 0)
     return "This vault host did not report how long it has been up.";
@@ -69,8 +64,7 @@ export function countLine(summary: InsightsSummary, days: number): string {
   return `${generations.toLocaleString()} runs in ${days} days · ${failedRuns} failed`;
 }
 
-/** The status line: how much of the work succeeded, and how long the machine
- *  doing it has been up. No median duration — no run duration is recorded. */
+/** Success share + host uptime; no median duration is recorded. */
 export function healthLine(
   summary: InsightsSummary,
   uptimeMs: number | undefined
@@ -87,8 +81,7 @@ export function healthLine(
 
 const CSV_HEADER = "date,runs,tokens,cost_usd";
 
-/** The daily rollup as CSV — the numbers the chart is drawn from, in the order
- *  the chart draws them. */
+/** The daily rollup as CSV, in the order the chart draws it. */
 export function insightsCsv(summary: InsightsSummary): string {
   const rows = summary.daily.map(
     (day) => `${day.date},${day.runs},${day.tokens},${day.costUsd.toFixed(4)}`
@@ -113,13 +106,10 @@ function downloadCsv(summary: InsightsSummary, days: number): void {
 export default function InsightsRoute(): JSX.Element {
   const { navigate } = useShellActions();
   const [windowDays, setWindowDays] = useState(DEFAULT_WINDOW_DAYS);
-  // The reader asked again after an error. A tick rather than a refetch handle:
-  // `useAsyncData` keys on its deps, so bumping one IS the retry.
   const [retry, setRetry] = useState(0);
 
-  // The persisted window arrives after the first paint, so a member whose
-  // window is not the default sees one extra read. Fetching before the pref
-  // resolves is the alternative to a blank frame, and a blank frame is worse.
+  // The persisted window arrives after the first paint; fetching before it
+  // resolves is the alternative to a blank frame.
   useEffect(() => {
     let cancelled = false;
     void getUserPrefs()
@@ -135,15 +125,13 @@ export default function InsightsRoute(): JSX.Element {
 
   const pickWindow = useCallback((days: number): void => {
     setWindowDays(days);
-    // Fire and forget: the window is a preference, not a commit, and a failed
-    // write must never block the view the reader just asked for.
+    // Fire-and-forget: a preference write must never block the view.
     void saveUserPrefs({ [WINDOW_PREF_KEY]: days }).catch(() => undefined);
   }, []);
 
   const state = useAsyncData(async () => {
-    // Health carries the optional resource receipt (#528 Phase C) and the
-    // uptime the status line quotes; its failure must never break Analytics,
-    // so it resolves to null on any error.
+    // Health (#528) carries the resource receipt + uptime; its failure must
+    // never break Analytics, so it resolves to null on any error.
     const [summary, automations, health] = await Promise.all([
       getInsightsSummary({ windowDays }),
       listAutomations().catch(() => [] as CentraidAutomationRow[]),
@@ -176,9 +164,6 @@ export default function InsightsRoute(): JSX.Element {
     };
   }, [windowDays, retry]);
 
-  // The count line and the status line come from the same resolution, so they
-  // are published together and can never disagree about what state this page
-  // is in.
   const status = state.status;
   const data = status === "ready" ? state.data : undefined;
   useEffect(() => {
@@ -201,11 +186,8 @@ export default function InsightsRoute(): JSX.Element {
     });
   }, [data, status, windowDays]);
 
-  // Export is the page's only verb, and only the route can honour it: it
-  // exports the window that is on screen, which is state nothing above it has.
+  // Export is the page's only verb: it exports the window on screen.
   useEffect(() => {
-    // Nothing read yet, nothing to export: the bar withdraws the verb rather
-    // than offering a control that would write an empty file.
     if (!data) {
       publishRouteVerbs("insights", {});
       return;
@@ -225,9 +207,7 @@ export default function InsightsRoute(): JSX.Element {
           <NoteBlock>{SKELETON_NOTE}</NoteBlock>
         </>
       ) : state.status === "error" ? (
-        // What failed, what is still safe, one way forward. There is no
-        // rebuild trigger to offer — the rollup rebuilds on its own schedule —
-        // so the verb is the honest one: ask again.
+        // No rebuild trigger; the rollup rebuilds on its own schedule.
         <PanelBlock
           action={{ label: "Retry", onClick: () => setRetry((n) => n + 1) }}
           body={INSIGHTS_ERROR_BODY}

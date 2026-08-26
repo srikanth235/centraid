@@ -1,14 +1,9 @@
-// What a DRIVE SCREEN says about itself beyond its row set (Docs spec §1.6,
-// §4.1, §4.2, §4.3): the crumb chain, the filter row's own table, trash's ask,
-// and the fetched window's one refusal.
+// What a DRIVE SCREEN says beyond its row set (§1.6, §4.1–4.3): crumb chain,
+// filter row, trash's ask, the fetched window's one refusal.
 //
-// A second copy module, not a bigger first one. `view-copy.ts` answers "what
-// is this SHELF" — its title, its count's noun, its caption, how it is empty
-// on its own terms. This one answers "what does the screen around those rows
-// say", which changes on its own schedule and is read by a different set of
-// components. Splitting them also keeps each file under the repo's size cap
-// without a waiver, which is the honest version of "this file is doing two
-// jobs".
+// A second copy module on purpose. `view-copy.ts` answers "what is this SHELF";
+// this answers "what does the screen around those rows say" — a different
+// schedule, a different set of readers.
 import type { SearchStateCopy } from "../_shared/search-scaffold.ts";
 import type { PLACE_ICONS } from "./icons.ts";
 import {
@@ -26,22 +21,13 @@ import type { ShelfId } from "./shelves.ts";
 import type { SortOption } from "./types.ts";
 import { SHELF_LABELS } from "./view-copy.ts";
 
-// ---------------------------------------------------------------------------
-// The sort menu (§4.1's `DSORTS`)
-// ---------------------------------------------------------------------------
+// ─── The sort menu (§4.1) ─────
 
 /**
- * The named orders, in the order the menu lists them.
- *
- * THE MENU IS NOT A SECOND SORT CONTROL, it is the same one said in sentences.
- * A column head can be pressed twice to reverse it, which is fast once you know
- * it and invisible until you do; this list names both directions of the order
- * that has two useful ones and one direction of each order that does not. A
- * member who wants their oldest documents reads "oldest first" here instead of
- * discovering that Changed toggles.
- *
- * Every entry resolves to a (key, direction) pair the heads also produce, so
- * the two controls can never disagree about what the drive is showing.
+ * THE MENU IS NOT A SECOND SORT CONTROL, it is the column heads said in
+ * sentences: pressing a head twice to reverse it is invisible until you know it,
+ * so this names the directions. Every entry resolves to a (key, direction) pair
+ * the heads also produce, so the two can never disagree.
  */
 export const SORT_OPTIONS: readonly SortOption[] = [
   { key: "changed", dir: -1, name: "Date changed", sub: "newest first" },
@@ -51,15 +37,10 @@ export const SORT_OPTIONS: readonly SortOption[] = [
   { key: "size", dir: -1, name: "Size", sub: "largest first" },
 ];
 
-// ---------------------------------------------------------------------------
-// The breadcrumb (§1.6)
-// ---------------------------------------------------------------------------
+// ─── The breadcrumb (§1.6) ─────
 
-/**
- * One crumb. `shelf` is the place it goes; the TRAILING crumb has none —
- * "The trailing crumb owns the place, so it carries the place's menu … Every
- * crumb before it is a link and nothing else." (§1.6, verbatim.)
- */
+/** The TRAILING crumb has no `shelf`: it owns the place and carries its menu;
+ *  every crumb before it is a link and nothing else (§1.6). */
 export interface Crumb {
   label: string;
   /** Where this crumb goes. Absent on the trailing crumb: it is where you are. */
@@ -69,12 +50,8 @@ export interface Crumb {
 /** The app's own name, first crumb of every chain. */
 const ROOT_CRUMB: Crumb = { label: "Docs", shelf: null };
 
-/**
- * §1.6's crumb chains, one per shelf. A folder's chain goes THROUGH Folders
- * because that is where the member reached it from — the same fact
- * `stripShelf`/`bandActiveId` encode for the strip and the band, so the three
- * surfaces cannot disagree about where a folder sits.
- */
+/** A folder's chain goes THROUGH Folders, the same fact `stripShelf` and
+ *  `bandActiveId` encode, so the three surfaces agree where a folder sits. */
 export function crumbsFor(
   id: ShelfId,
   {
@@ -111,32 +88,20 @@ export function crumbsFor(
 }
 
 /**
- * The place's menu (§1.6), hung off the trailing crumb.
- *
- * THIS IS THE POINTER SURFACE'S ONLY DOOR to the seven destinations that are
- * off the shelf strip. The strip holds five tabs and is not growing to
- * thirteen; the compact band reaches the rest through its More sheet; at a
- * desk there is no More sheet, so without this menu every one of these routes
- * would exist and be unreachable.
- *
- * IT LIVES HERE, NOT IN A ROUTE, because more than one route draws the
- * breadcrumb. It was defined inside `DriveRoute.tsx` while the drive was the
- * only screen that opened with a crumb row, and the moment Folders opened with
- * one too the menu had to be either copied or moved. A door that exists on
- * some screens and not others is not a door.
+ * THE POINTER SURFACE'S ONLY DOOR to the seven off-strip destinations: the strip
+ * holds five tabs, the compact band reaches the rest through More, and at a desk
+ * there is no More sheet. Lives HERE, not in a route, because more than one
+ * route draws the breadcrumb — a door on some screens and not others is not a
+ * door (§1.6).
  */
 export interface PlaceMenuItem {
   label: string;
   shelf: ShelfId;
-  /** The destination's shape (`icons.ts` `PLACE_ICONS`). Every row has one:
-   *  a menu where some rows carry a glyph and others carry a gap reads as a
-   *  menu with something missing. */
+  /** Every row has one: a menu where some rows carry a glyph and others a gap
+   *  reads as a menu with something missing. */
   icon: keyof typeof PLACE_ICONS;
-  /** Start a new group above this row. The menu is not one list of seven —
-   *  it is three answers to three different questions (how do I put something
-   *  in, what is this drive costing me, what may this app read), and a rule
-   *  between them is what lets a member stop reading once they are in the
-   *  right group. */
+  /** The menu is three answers to three questions, not one list of seven, so a
+   *  member can stop reading once they are in the right group. */
   group?: boolean;
 }
 
@@ -155,29 +120,18 @@ export const PLACE_MENU: readonly PlaceMenuItem[] = [
   { label: "Docs and Locker", shelf: LOCKER, icon: "locker" },
 ];
 
-// ---------------------------------------------------------------------------
-// The filter row (§4.2)
-// ---------------------------------------------------------------------------
+// ─── The filter row (§4.2) ─────
 
 /**
- * §4.2's four properties, with the spec's own option words.
+ * §4.2's four properties. `live` is an honesty flag: an axis renders only where
+ * THIS DRIVE can answer it from what it actually read, since a pill whose
+ * options cannot be computed either does nothing or filters by an invented fact.
  *
- * `live` is the same honesty flag `MORE_ROWS` carries: an axis is rendered
- * only where THIS DRIVE can answer it from what it has actually read. A pill
- * whose options cannot be computed is a control that would either do nothing
- * or, worse, filter by a fact the app invented.
- *
- * PEOPLE IS LIT ON ONE HALF OF ITSELF (issue #821). The drive projection now
- * carries `shared_with` — real commons grants over a document or the folders
- * above it — so "shared with <somebody>" is computable and the axis is
- * rendered. Its options are therefore DERIVED FROM THE ROWS (filters.ts
- * `liveOptions`), not listed here: the audiences are the owner's own circles
- * and change with the vault, and a fixed list would be four pills that match
- * whatever this vault happens to lack. The other two halves of §4.2's people
- * axis stay dark and stay unlisted: nothing here reads an OWNER (this drive
- * projects one vault, so "Owned by you" would select every row) and nothing
- * reads the NAMES a document mentions (the details rail's Names tab says as
- * much — Docs has not looked).
+ * PEOPLE IS LIT ON ONE HALF OF ITSELF (#821): `shared_with` makes "shared with
+ * <somebody>" computable, and its options are DERIVED FROM THE ROWS
+ * (filters.ts `liveOptions`) because the audiences change with the vault. The
+ * OWNER and NAMES halves stay dark and unlisted — this drive projects one vault
+ * and reads no mentioned names.
  */
 export interface FilterAxis {
   id: "type" | "people" | "modified" | "source";
@@ -206,8 +160,7 @@ export const DFILTERS: readonly FilterAxis[] = [
   {
     id: "people",
     label: "People",
-    // Empty on purpose — every option this axis offers is one audience the
-    // rows actually name (`sharedWithOption` below, derived in filters.ts).
+    // Empty on purpose: every option is an audience the rows actually name.
     options: [],
     live: true,
   },
@@ -237,12 +190,8 @@ export const DFILTERS: readonly FilterAxis[] = [
   },
 ];
 
-/**
- * One People option, worded from the audience it narrows to — §4.2's own
- * "Shared with Family" shape, with the vault's real circle in the slot the
- * spec filled with a fixture. The option string IS the filter value, so the
- * predicate compares generated strings rather than parsing a label back out.
- */
+/** The option string IS the filter value, so the predicate compares generated
+ *  strings rather than parsing a label back out. */
 export function sharedWithOption(label: string): string {
   return `Shared with ${label}`;
 }
@@ -250,40 +199,28 @@ export function sharedWithOption(label: string): string {
 /** §4.2's link, which appears only once at least one filter is set. */
 export const CLEAR_FILTERS = "Clear filters";
 
-// ---------------------------------------------------------------------------
-// The Search shelf's field
-// ---------------------------------------------------------------------------
+// ─── The Search shelf's field ─────
 
-/** The placeholder, verbatim from the v11 handoff's docs `search` scene
- *  (`fieldBlock('right of way', 'Search titles and contents', true)`). It
- *  names the TWO things this search reaches, which is the promise the shelf
- *  then has to keep — and it is deliberately shorter than the topbar field's
- *  old "Search documents, contents, people…", which offered a people axis
- *  this drive does not have. */
+/** Names the TWO things this search reaches — the promise the shelf must keep,
+ *  and deliberately not a people axis this drive does not have. */
 export const SEARCH_PLACEHOLDER = "Search titles and contents";
 
-/** The field's accessible name. The placeholder is not one: it disappears the
- *  moment a member types, and a control that loses its name mid-use is a
- *  control a screen reader cannot go back and re-read. */
+/** The placeholder is NOT a name: it disappears the moment a member types, and
+ *  a control that loses its name mid-use cannot be re-read. */
 export const SEARCH_LABEL = "Search documents by title or contents";
 
-/** The clear affordance is a WORD beside the field, not an icon button
- *  (handoff `clearCss` — underlined text). Same word Photos uses. */
+/** A WORD beside the field, not an icon button. Same word Photos uses. */
 export const SEARCH_CLEAR = "Clear";
 
 /**
- * What this search actually reaches, in one seat-honest phrase
- * (docs/blueprint-seats.md §Worked example: search). `queries/search.ts` runs
- * FTS5 over the vault's own index on the gateway on every keystroke — there is
- * no replica in the path on this surface — so the claim is the live library,
- * literally. Mobile searches an on-device replica and owes a different
- * sentence; it does not read this constant.
+ * Seat-honest (docs/blueprint-seats.md): `queries/search.ts` runs FTS5 over the
+ * gateway's own index with no replica in the path, so "the live library" is
+ * literal. Mobile searches a replica, owes a different sentence, and does not
+ * read this constant.
  */
 export const SEARCH_SCOPE = "the live library";
 
-/** The resting panel's example queries, verbatim from the handoff's docs
- *  `search` scene. They are literal: a member can type any of them back and
- *  this drive will answer. */
+/** Literal: a member can type any of these back and this drive will answer. */
 export const SEARCH_EXAMPLES: readonly string[] = [
   "right of way",
   "lease expiry",
@@ -293,16 +230,10 @@ export const SEARCH_EXAMPLES: readonly string[] = [
 ];
 
 /**
- * The four states the Search shelf can be in, in the product's own words
- * (`_shared/SearchScaffold.tsx` renders them; this file is the only place
- * that says them).
- *
- * ONE HANDOFF SENTENCE IS DELIBERATELY NOT COPIED. Its miss body ends "One
- * letter short of a phrase in two of your documents" — a near-miss claim that
- * would need an edit-distance pass over the index nobody has run. Printing it
- * would be the screen inventing a fact, which is the one thing these panels
- * exist to stop. The rest of the sentence, which names what WAS searched, is
- * verbatim.
+ * The four states, in the product's own words; this file is the only place that
+ * says them. ONE HANDOFF SENTENCE IS DELIBERATELY NOT COPIED — its near-miss
+ * claim would need an edit-distance pass nobody has run, and printing it would
+ * be the screen inventing a fact.
  */
 export const SEARCH_COPY = {
   resting: {
@@ -338,58 +269,37 @@ export const SEARCH_COPY = {
   },
 } as const satisfies SearchStateCopy;
 
-// ---------------------------------------------------------------------------
-// Trash's ask (§4.3 `trash`, §14)
-// ---------------------------------------------------------------------------
+// ─── Trash's ask (§4.3, §14) ─────
 
 /**
- * THE ASK, NOT THE VERB — and on screen it is a label plus one sentence.
+ * THE ASK, NOT THE VERB. There is no destroy verb in the platform today;
+ * destruction happens only on the purge schedule (§4.3). What is asked for is
+ * two typed commands, confirmed as Photos confirms them.
  *
- * THE RATIONALE, which this panel used to print at a member standing in
- * Trash: "There is no destroy verb in the platform today; destruction happens
- * only on the purge schedule." (§4.3, verbatim.) Photos shipped an emptiable
- * trash and Docs is where it matters most — a scanned passport should be gone
- * when a member says so — so what is asked for is two typed commands (destroy
- * one document, destroy everything in trash), confirmed exactly as Photos
- * confirms it: an outlined --net button, the count named, no default. If the
- * ask is refused, the shelf says once, plainly, why destruction is scheduled.
- *
- * That is a design note, and a design note is not copy (DESIGN.md → Copy). The
- * shelf shows the eyebrow — so the title is never mistaken for a control that
- * failed — the title, and `TRASH_FALLBACK`'s one sentence.
+ * The rationale is a design note, and a design note is NOT copy (DESIGN.md →
+ * Copy): the shelf shows the eyebrow, the title, and `TRASH_FALLBACK`'s one
+ * sentence — nothing more.
  */
 export const TRASH_ASK = {
   eyebrow: "Not available yet",
   title: "Delete forever and Empty trash",
 } as const;
 
-/** §14's fallback wording — the sentence the shelf says while the ask stands. */
+/** What the shelf says while the ask stands (§14). */
 export const TRASH_FALLBACK =
   "Destruction happens only on the schedule a purge date announces, so a trash cannot be emptied.";
 
-// ---------------------------------------------------------------------------
-// The fetched window (§4.1 state slot rung 1)
-// ---------------------------------------------------------------------------
+// ─── The fetched window (§4.1 state slot rung 1) ─────
 
-/** What the window says when the read for the rows beyond it came back
- *  failed. A refusal, in the `net` role, and the ONLY thing rung 1 ever says —
- *  a window still in flight says nothing at all. */
+/** The ONLY thing rung 1 ever says: a window still in flight says nothing. */
 export const WINDOW_FAILED = "could not be fetched";
 
-// ---------------------------------------------------------------------------
-// The Folders shelf (§4.3)
-// ---------------------------------------------------------------------------
+// ─── The Folders shelf (§4.3) ─────
 
 /**
- * The caption under the folder rows.
- *
- * "Never a sentence on a row: the caption under the set carries the prose,
- * once." (§4.1, verbatim.) The Unfiled row used to break that rule by itself —
- * it printed *"N never put anywhere. Not an error, and not a folder"* in the
- * cell where every other row prints a number, which is both a sentence on a
- * row and a column that means two different things depending on which row you
- * read. The number stayed; the sentence came here, where the drive's prose
- * lives.
+ * Never a sentence on a row: the caption under the set carries the prose, once
+ * (§4.1). The Unfiled row keeps the number; its sentence lives here, or the
+ * column would mean two different things depending on which row you read.
  */
 export function foldersCaption(unfiled: number): string {
   const those =

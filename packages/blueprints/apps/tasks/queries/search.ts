@@ -79,7 +79,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         : { rows: [] };
     const contentRows = (contents.rows ?? []) as unknown as RawContent[];
     const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
-    // Blob-backed bytes serve as same-origin URLs (issue #296).
+    // Blob-backed bytes serve as same-origin URLs (#296).
     const srcOf = (c: RawContent | undefined): string | undefined =>
       typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}`

@@ -8,37 +8,13 @@ import type { Page } from "@playwright/test";
 import { installHarnessControlTransport } from "./control-transport.js";
 import { enforceTiming, perfBudgets } from "./perf-budgets.js";
 
-// PWA fast-path waterfall probe (issue #404 workstream I). The former desktop
-// exploratory rig is retired; this is the only budgeted app-open probe. It
-// boots the same e2e harness gateway (tests/e2e/server.ts) and measures two
-// costs off the SHELL PAGE's own performance timeline: the shell bundle (cold,
-// then warm through the SW/HTTP caches) and an app open (cold, then warm).
-//
-// The app open is an INLINE REACT ROUTE. Issue #799 retired the served-app
-// plane, so there is no app iframe and no second window to read a timeline
-// from: opening a bundled app is a dynamic `import()` of that app's own lazy
-// chunk (packages/client/src/react/shell/routes/inlineApps.ts) rendered by
-// InlineAppRoute inside the live document. The cost of an open is therefore
-// exactly the assets the shell pulls between the palette click and the mounted
-// app, which this probe deltas out of
-// `performance.getEntriesByType('resource')` on the shell page.
-//
-// It also exercises two other levers of the fast path: the service-worker
-// TUNNEL cache (Test B) and the QUIC connection pool instrumentation (Test C).
-//
-// All budgets live in perf-budgets.ts; this file only measures and asserts.
-// The JSON report is written to test-results/ for the bundling workstream to
-// diff against as it drives these numbers down.
+// The only budgeted app-open probe (#404). An open is an inline React route
+// (#799): its cost is a DELTA over the shell's own timeline. Budgets: perf-budgets.ts.
 
 const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
 const CONTROL_SESSION = "web-e2e-control-session";
-// The app-open subject: a bundled inline app, opened from the palette like any
-// other. Tasks is a plain first-party route that mounts on the web seat (Locker
-// refuses that seat, docs/blueprint-seats.md S5; Photos is the heaviest and its
-// own byte story), so what this probe fences is the shell's per-app lazy-chunk
-// cost with the least product-specific noise on top. Changing this app
-// re-seeds the appOpen ceilings — measure before you swap it.
+// Swapping the subject app re-seeds the appOpen ceilings — measure first.
 const APP_ID = "tasks";
 const APP_NAME = "Tasks";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
@@ -69,53 +45,30 @@ interface OpenSummary {
   requestCount: number;
   totalTransferBytes: number;
   totalEncodedBytes: number;
-  // Cross-origin resources report 0 transfer/body sizes without a
-  // Timing-Allow-Origin header, so track same-origin totals separately — those
-  // are the honest byte numbers. In this harness the gateway answers on another
-  // port, so every control/replica/query call an app makes is cross-origin and
-  // byte-blind; both the shell and the app-open figures the report publishes
-  // are the same-origin ones.
+  // Budget same-origin only: cross-origin gateway calls report 0 bytes.
   sameOriginRequestCount: number;
+  // WIRE bytes — 0 once the SW serves the dist, so it fences only "an open
+  // must not go back to the network".
   sameOriginTransferBytes: number;
-  // `transferSize` is what came off the WIRE, and it is 0 for anything the
-  // service worker answered out of Cache Storage. By the time an app can be
-  // opened the SW has already precached the whole dist, so an inline app open
-  // transfers 0 bytes — true, and useless as a weight fence. `encodedBodySize`
-  // is populated whether a body was served from the wire or from the cache, so
-  // it is the number that actually grows when an app's chunk grows. Both are
-  // budgeted: transfer fences "an open must not go back to the network",
-  // encoded fences "an open must not get heavier". Read encoded as DECODED
-  // (raw) weight, never as a wire figure — Cache Storage holds decoded bodies.
+  // DECODED weight, wire or cache: the column that grows with the chunk.
   sameOriginEncodedBytes: number;
-  // The HTML document itself is a `navigation` entry, not a `resource`, so a
-  // whole-page measurement has to add it in by hand. An inline app open makes
-  // NO navigation — the route swaps inside the live document — so that
-  // measurement passes `navigation: false` and this stays 0 rather than
-  // charging the shell document to every app open.
+  // 0 for an inline open; kept so a whole-page reuse counts its document.
   navTransferBytes: number;
   grandTotalTransferBytes: number;
   resources: ResourceRow[];
 }
 
 interface CollectOptions {
-  /**
-   * Ignore entries recorded before this index in the page's resource timeline.
-   * This is how an inline app open is isolated from the shell load that
-   * preceded it: both now happen in the same window, so the open's cost is the
-   * TAIL of one timeline rather than a second window's whole timeline.
-   */
+  /** Isolates an app open from the shell load before it. */
   sinceIndex?: number;
-  /** Count the page's `navigation` entry. Only a whole-page load has one. */
+  /** Only a whole-page load has a `navigation` entry. */
   navigation?: boolean;
 }
 
-/** How many resource entries the shell page has recorded so far. */
 async function resourceMark(page: Page): Promise<number> {
   return page.evaluate(() => performance.getEntriesByType("resource").length);
 }
 
-// Pull the resource (and, for a whole-page load, navigation) timeline out of
-// the shell page.
 async function collect(
   page: Page,
   origin: string,
@@ -182,11 +135,7 @@ async function collect(
   };
 }
 
-// Poll the resource timeline until its length stops growing, so a measurement
-// taken right after a load or an app open still counts the trailing chunks
-// (CSS, token sheets, a lazily-imported dependency) that arrive after the
-// thing being waited on has painted. Shared by the shell load and the inline
-// app open — both now measure the SAME window, so both settle the same way.
+// Trailing chunks land after paint, so count-stability is the only settle.
 async function settleResourceTimeline(
   page: Page,
   timeout: number
@@ -208,9 +157,6 @@ async function settleResourceTimeline(
     .toBe(true);
 }
 
-// Wait until the dynamically-imported boot chunk has actually landed in the
-// resource timeline, so a shell measurement taken right after doesn't race the
-// bundle's arrival.
 async function waitForShellBundle(page: Page): Promise<void> {
   await page.waitForLoadState("load");
   await expect
@@ -224,17 +170,12 @@ async function waitForShellBundle(page: Page): Promise<void> {
       { timeout: 20_000 }
     )
     .toBe(true);
-  // readyState is already 'complete' once waitForLoadState('load') resolves,
-  // so the count-stable poll is what actually bounds the measurement.
+  // The count-stable poll, not readyState, bounds the measurement.
   await settleResourceTimeline(page, 5_000);
 }
 
-// Mirror the working control-session bootstrap from docs-drive.spec.ts: mint a
-// cookie control session, swap in the harness's deterministic ENROLLED device
-// session (replica routes reject an admin-only cookie that carries no durable
-// device identity, and an inline app cannot mount without a replica lease),
-// pin the connection in localStorage, reload into a booted shell. The caller
-// has already done the cold `goto('/')` so the shell bundle could be measured
+// The ENROLLED device session is required: replica routes reject an admin-only
+// cookie with no durable device identity. Callers must do the cold `goto('/')`
 // before this reload.
 async function establishSession(page: Page): Promise<void> {
   await installHarnessControlTransport(page, API_URL);
@@ -301,8 +242,6 @@ async function establishSession(page: Page): Promise<void> {
     }
   );
   await page.reload();
-  // Home is the springboard (#708); apps open via the palette, not a library
-  // card. Wait for the shell, then confirm the service worker.
   await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
   await expect
     .poll(() =>
@@ -311,15 +250,9 @@ async function establishSession(page: Page): Promise<void> {
     .toBe(true);
 }
 
-/**
- * Get the command palette open. Deliberately SEPARATE from the pick below, and
- * called before the open timer starts: right after a reload the Search button
- * can paint before its React listener attaches, and a click that lands in that
- * window is silently lost (same shape as docs-drive.spec.ts). Retrying that is
- * correct, but its 30s ceiling must not be inside a measurement budgeted at
- * 15s — one retry cycle would then hard-fail the timing gate on shell startup
- * jitter that has nothing to do with app-open cost.
- */
+// Must stay outside the open timer: the Search button can paint before its
+// listener attaches, so the click needs a retry whose 30s ceiling must never
+// sit inside a 15s-budgeted measurement.
 async function openPalette(page: Page): Promise<void> {
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await expect
@@ -336,7 +269,7 @@ async function openPalette(page: Page): Promise<void> {
     .toBe(true);
 }
 
-/** Pick the app out of an already-open palette. This is the timed action. */
+/** The timed action; the palette must already be open. */
 async function pickAppFromPalette(page: Page): Promise<void> {
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await palette.locator("input").fill(APP_NAME);
@@ -347,31 +280,17 @@ async function pickAppFromPalette(page: Page): Promise<void> {
     .click();
 }
 
-// Open the inline app route and charge it everything the shell page downloaded
-// while doing so. There is no second window any more, so the measurement is a
-// delta over the shell's own resource timeline between the palette click and
-// the mounted app.
-//
-// The app must be proved MOUNTED, not merely routed to: a chunking change that
-// ships a blank route would otherwise post the best numbers in this file. So
-// the wait is the Suspense fallback disappearing plus `window.centraid` being
-// published by the inline bridge — the same liveness proof docs-drive.spec.ts
-// uses. We still deliberately do NOT invoke `window.centraid.read`: the asset
-// waterfall is the subject, and the query runtime is a separate concern.
+// Prove the app MOUNTED, not merely routed to: a chunking change shipping a
+// blank route would otherwise post the best numbers here. Deliberately no
+// `window.centraid.read` — the query runtime is a separate concern.
 async function openAppAndMeasure(
   page: Page
 ): Promise<{ summary: OpenSummary; elapsedMs: number }> {
   const origin = new URL(page.url()).origin;
-  // Getting the palette up is shell-startup cost, not app-open cost: do it
-  // before the mark and before the clock, so neither the byte delta nor the
-  // timing ceiling is charged for it.
+  // Palette startup is shell cost: keep it before the mark and the clock.
   await openPalette(page);
-  // …and let its own chunks finish landing before marking. The palette resolves
-  // when the dialog is VISIBLE, which does not mean its lazy imports have
-  // settled; a chunk still in flight at the mark gets charged to the app open.
-  // Skipping this settle produced a reproducible-looking 112_759 B with an
-  // occasional 179_759 B outlier — a 67 KB swing that would flake any honest
-  // ceiling. Measure from a quiet timeline instead of padding the budget.
+  // Settle first: the palette resolves when VISIBLE, not when its imports land,
+  // and a chunk in flight at the mark is charged to the open (67 KB swing).
   await settleResourceTimeline(page, 5_000);
   const sinceIndex = await resourceMark(page);
   const started = Date.now();
@@ -384,8 +303,7 @@ async function openAppAndMeasure(
     .poll(() => page.evaluate(() => Boolean(window.centraid)))
     .toBe(true);
   const elapsedMs = Date.now() - started;
-  // The replica holds a long-lived `_changes` SSE, so networkidle never
-  // settles; wait for the resource count to stop moving instead.
+  // Never use networkidle here: the replica holds a long-lived `_changes` SSE.
   await settleResourceTimeline(page, 10_000);
   const summary = await collect(page, origin, {
     sinceIndex,
@@ -394,30 +312,15 @@ async function openAppAndMeasure(
   return { summary, elapsedMs };
 }
 
-/**
- * The byte total an app open is budgeted on: SAME-ORIGIN resources plus the
- * navigation entry. Inline opens contribute no navigation, so in practice this
- * is the asset download; the field is summed rather than dropped so a future
- * whole-page measurement reusing this helper still counts its document.
- *
- * Same-origin only, deliberately: in this harness the gateway answers on
- * another port with no Timing-Allow-Origin header, so every control / replica
- * / query call an app makes reports 0 bytes and would silently dilute the
- * total. Cross-origin REQUEST COUNT is still real, and is fenced separately by
- * `maxTotalRequests` — see the budgets file.
- */
+// Same-origin only: cross-origin calls report 0 bytes and would dilute this;
+// their COUNT is fenced by `maxTotalRequests`.
 function openBytes(s: OpenSummary): number {
   return s.sameOriginTransferBytes + s.navTransferBytes;
 }
 
-/**
- * Leave the app. This must prove the app actually UNMOUNTED, not merely that
- * Home painted: `nav[aria-label="Apps"]` renders inside InlineAppRoute's own
- * ShellFrame too (Stem.tsx), so waiting on it alone is satisfied while the app
- * is still up — and `window.centraid` stays installed until React unmounts
- * (centraid-inline.ts teardown). A warm re-open measured from that state would
- * "prove liveness" against the cold open's residue instead of its own mount.
- */
+// Prove the app UNMOUNTED, not merely that Home painted: the Apps nav renders
+// inside InlineAppRoute's ShellFrame too and `window.centraid` survives until
+// React unmounts, so a warm re-open would measure the cold open's residue.
 async function goHome(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Home", exact: true }).click();
   await expect(page.getByTestId("inline-app-view")).toBeHidden();
@@ -430,63 +333,38 @@ async function goHome(page: Page): Promise<void> {
 test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   page,
 }) => {
-  // ---- Shell: COLD load ----------------------------------------------------
-  // First visit against an empty cache — this is the shell bundle cost (the
-  // ~700KB boot chunk dominates), the number the bundling workstream targets.
+  // ─── Shell: COLD load ─────
   await page.goto("/");
   const origin = new URL(page.url()).origin;
   await waitForShellBundle(page);
   const shellCold = await collect(page, origin);
 
-  // ---- Shell: WARM load ----------------------------------------------------
-  // establishSession() reloads into a booted, signed-in shell; the SW shell
-  // cache + browser HTTP cache should serve the same bundle for ~0 bytes.
+  // ─── Shell: WARM load ─────
   await establishSession(page);
   const shellWarm = await collect(page, origin);
   const shellByteRatio = shellCold.sameOriginTransferBytes
     ? shellWarm.sameOriginTransferBytes / shellCold.sameOriginTransferBytes
     : 0;
 
-  // ---- Inline app route: cold then warm open -------------------------------
-  // COLD is the first open of this app in this page: the route's lazy chunk
-  // (and whatever it pulls in) is fetched over the network. WARM is a second
-  // open after returning Home: the module registry already holds the
-  // descriptor, so a healthy warm open downloads nothing at all. That is a
-  // stronger result than the retired iframe path could give — its app document
-  // was `no-store`, so its warm/cold ratio sat at ~1.0 by construction — and it
-  // is why the ratio ceiling is a regression fence here, not a cache proof:
-  // what it catches is a change that makes re-opening an app re-download it.
+  // ─── Inline app route: cold then warm open ─────
   const cold = await openAppAndMeasure(page);
   await goHome(page);
   const warm = await openAppAndMeasure(page);
-  // The warm/cold ratio rides ENCODED bytes, not wire bytes: wire bytes are 0
-  // on both sides (the SW precached the dist), so a transfer-based ratio would
-  // be 0/0 and would fence nothing. On encoded bytes the ratio keeps its
-  // original meaning — a re-open must not re-pay the app's payload.
+  // Must ride ENCODED bytes: wire bytes are 0 on both sides, so a
+  // transfer-based ratio would be 0/0 and fence nothing.
   const appByteRatio = cold.summary.sameOriginEncodedBytes
     ? warm.summary.sameOriginEncodedBytes / cold.summary.sameOriginEncodedBytes
     : 0;
 
-  // Same-origin only, for counts and for both byte columns: in this harness the
-  // gateway is a different origin, so the app's control/replica/query traffic
-  // reports zero bytes AND arrives in a count that varies with replica
-  // scheduling. The shell's own assets are the deterministic, byte-bearing
-  // subject — and they are what an app open actually costs to load.
   const openReport = (label: string, s: OpenSummary, elapsedMs: number) => ({
     label,
     requestCount: s.sameOriginRequestCount,
-    // The all-origin count is published too, and budgeted: bytes are
-    // unmeasurable cross-origin here, but requests are not, and an app open
-    // that starts firing extra gateway round-trips must not be invisible just
+    // Budgeted: extra gateway round-trips must not be invisible merely
     // because the byte fences cannot see them.
     totalRequestCount: s.requestCount,
     resourceTransferBytes: s.sameOriginTransferBytes,
-    // Structurally 0 for an inline open — no navigation happens. Kept so the
-    // report shape (and `grandTotalTransferBytes`, which every consumer reads)
-    // stays stable across the served-app → inline-route change.
     navTransferBytes: s.navTransferBytes,
     grandTotalTransferBytes: openBytes(s),
-    // The weight fence (see OpenSummary): decoded body bytes, wire or cache.
     encodedBodyBytes: s.sameOriginEncodedBytes,
     elapsedMs,
     resources: s.resources
@@ -527,7 +405,6 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
     )
   );
 
-  // Human-readable summary — the baseline the bundling workstream diffs against.
   console.log("\n================ PWA WATERFALL SUMMARY ================");
   console.log(
     `shell cold:  requests=${shellCold.sameOriginRequestCount} transfer=${shellCold.sameOriginTransferBytes}B`
@@ -549,9 +426,8 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   );
   console.log("======================================================\n");
 
-  // ---- Hard budgets (request count + bytes) --------------------------------
-  // Cold shell is the headline cost. Assert we actually measured a cold load
-  // (non-zero bytes) so a silent regression to "measured warm" can't pass.
+  // ─── Hard budgets (request count + bytes) ─────
+  // Anti-vacuity: non-zero bytes prove the load was cold.
   expect(
     shellCold.sameOriginTransferBytes,
     "cold shell measured (>0 bytes)"
@@ -564,15 +440,11 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
     shellCold.sameOriginTransferBytes,
     "cold shell transfer bytes"
   ).toBeLessThanOrEqual(perfBudgets.shell.maxTransferBytes);
-  // Warm shell must be a small fraction of cold — the SW/HTTP cache working.
   expect(shellByteRatio, "shell warm/cold byte ratio").toBeLessThanOrEqual(
     perfBudgets.shell.maxWarmToColdByteRatio
   );
 
-  // The same anti-vacuity guard the cold shell gets, and it is load-bearing
-  // here: a cold open that loaded no bytes means the app's chunks were already
-  // in the timeline (a preload, or a measurement taken after the fact), and
-  // every app-open ceiling below would then pass on an empty measurement.
+  // Without this floor every app-open ceiling below passes vacuously.
   expect(
     cold.summary.sameOriginEncodedBytes,
     "cold app open measured (>=floor encoded bytes)"
@@ -581,8 +453,6 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
     cold.summary.sameOriginRequestCount,
     "cold app request count"
   ).toBeLessThanOrEqual(perfBudgets.appOpen.cold.maxRequests);
-  // All-origin count, including the byte-blind cross-origin gateway calls the
-  // same-origin byte fences cannot see.
   expect(
     cold.summary.requestCount,
     "cold app all-origin request count"
@@ -591,9 +461,6 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
     cold.summary.sameOriginEncodedBytes,
     "cold app encoded bytes"
   ).toBeLessThanOrEqual(perfBudgets.appOpen.cold.maxEncodedBytes);
-  // Wire bytes: on a warm shell the SW answers every chunk out of Cache
-  // Storage, so this is 0 today. The ceiling is what catches an app open that
-  // starts going back to the network for its own assets.
   expect(
     openBytes(cold.summary),
     "cold app transfer bytes"
@@ -618,7 +485,7 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
     perfBudgets.appOpen.maxWarmToColdByteRatio
   );
 
-  // ---- Soft timing (log-only unless enforceTiming) -------------------------
+  // ─── Soft timing (log-only unless enforceTiming) ─────
   for (const [phase, elapsed, ceiling] of [
     ["cold", cold.elapsedMs, perfBudgets.timing.coldOpenMsSoftCeiling],
     ["warm", warm.elapsedMs, perfBudgets.timing.warmOpenMsSoftCeiling],
@@ -631,12 +498,8 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   }
 });
 
-// ---------------------------------------------------------------------------
-// Test B — service-worker TUNNEL cache. The page plays the tunnel-bridge role
-// (as web-pwa-cache.spec.ts does) so this runs without the Iroh WASM. A warm
-// re-open must be served from the SW cache: bridge round trips and
-// tunnel-fetched bytes both collapse, proving the wave-1 SW-caching win.
-// ---------------------------------------------------------------------------
+// ─── Test B — service-worker TUNNEL cache ─────
+// The page plays tunnel bridge, so this runs without the Iroh WASM.
 test("sw tunnel cache — warm re-open collapses relay round trips and bytes", async ({
   page,
 }) => {
@@ -651,8 +514,6 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
     )
     .toBe(true);
 
-  // A bridge that streams a real, sized body for a fresh request and a 304
-  // (empty body) for a validated one — and tallies bytes streamed per call.
   await page.evaluate(() => {
     interface Tally {
       calls: number;
@@ -686,7 +547,6 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
         (!isBlob && ifNoneMatch === '"perf-etag"') ||
         (isBlob && ifNoneMatch === '"perf-blob-etag"')
       ) {
-        // Validated authorization/content: 304, no body bytes on the wire.
         port.postMessage({ type: "head", status: 304, headers: {} });
         port.postMessage({ type: "end" });
         return;
@@ -719,9 +579,8 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
     });
   });
 
-  // Durable bridge ids are the only scopes allowed to persist cache entries.
-  // Ephemeral ids intentionally stay cache-blind, so use the remembered-device
-  // prefix that production mints for the cache performance probe.
+  // Must carry the remembered-device prefix: only durable bridge ids persist
+  // cache entries, ephemeral ids stay cache-blind by design.
   const assetUrl = "/__centraid_iroh__/d-perf/centraid/perf-app/app.js";
   const blobUrl = "/__centraid_iroh__/d-perf/centraid/_vault/blobs/perf-sha";
 
@@ -743,14 +602,11 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
       };
     });
 
-  // Cold: both fetches reach the bridge and stream full bodies.
   expect(await read(assetUrl)).toBe("a".repeat(4096));
   expect(await read(blobUrl)).toBe("b".repeat(8192));
   const cold = await tunnel();
 
-  // Let the background asset revalidation (SWR) settle — poll until the tunnel
-  // call counter is stable across two samples — then reset the tally so it
-  // doesn't leak into the warm measurement.
+  // SWR revalidation must settle before the reset or it leaks into the warm run.
   await expect
     .poll(
       async () => {
@@ -768,11 +624,10 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
     .toBe(true);
   await reset();
 
-  // Warm: both bodies are served from cache; conditional checks reach the
-  // bridge with zero body bytes so revocation remains observable.
+  // Conditional checks must still reach the bridge (zero body bytes), or
+  // revocation stops being observable.
   expect(await read(assetUrl)).toBe("a".repeat(4096));
   expect(await read(blobUrl)).toBe("b".repeat(8192));
-  // Poll until the warm path has recorded at least one tunnel observation.
   await expect
     .poll(async () => (await tunnel()).calls, { timeout: 5_000 })
     .toBeGreaterThan(0);
@@ -792,21 +647,15 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
   );
 });
 
-// ---------------------------------------------------------------------------
-// Test C — QUIC connection pool instrumentation. Proves the transport reuses
-// one endpoint CONNECT across many request STREAMS via globalThis
-// .__centraidIrohStats. A live proof needs a real iroh endpoint (WebTransport
-// to a relay); when the headless harness can't spawn one, we still assert the
-// instrumentation CONTRACT is present so a regression that drops the counters
-// is caught. Run against a FRESH `vite build` (the committed dist is gitignored
-// and may predate this instrumentation).
-// ---------------------------------------------------------------------------
+// ─── Test C — QUIC connection pool ─────
+// One CONNECT reused across many STREAMS, via __centraidIrohStats. Without a
+// real iroh endpoint only the instrumentation CONTRACT is asserted, so dropped
+// counters are still caught. Run against a FRESH `vite build`.
 test("iroh pool — connects stay far below streams (or contract is present)", async ({
   page,
 }) => {
   await page.goto("/");
 
-  // The bundle initializes the counter object at boot (installIrohServiceWorkerBridge).
   const hasInstrumentation = await page
     .evaluate(
       () =>
@@ -819,9 +668,8 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
     "iroh instrumentation absent from the built bundle — run `vite build` for a fresh dist"
   );
 
-  // Configure an iroh connection so window.CentraidIroh.fetch drives the real
-  // transport. There is no live gateway, so each request fails after opening a
-  // stream on the pooled endpoint — exactly the signal we count.
+  // Each request fails without a gateway, but the stream it opened on the
+  // pooled endpoint is the signal being counted.
   await page.evaluate(() => {
     localStorage.setItem(
       "centraid.web.v1.connection",
@@ -859,7 +707,6 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
 
   console.log(`\n[iroh-pool] ${JSON.stringify(stats)}\n`);
 
-  // Contract: the counter object always has the three numeric fields.
   expect(stats).toMatchObject({
     connects: expect.any(Number),
     streams: expect.any(Number),
@@ -867,7 +714,6 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
   });
 
   if (stats.streams >= perfBudgets.irohPool.minStreamsForProof) {
-    // Live proof: many streams rode a handful of connects.
     const ratio = stats.connects / stats.streams;
     expect(
       ratio,
@@ -883,24 +729,10 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
   }
 });
 
-// ---------------------------------------------------------------------------
-// Test D — WEB VITALS (issue #659 R3a). Until this landed, the only thing the
-// PWA rig measured was BYTES: request counts and transfer sizes, which are
-// machine cost. A shell can move its whole bundle behind a lazy chunk, satisfy
-// every byte ceiling, and still paint late — LCP/INP/CLS are what the owner
-// actually experiences, and nothing in the repo captured them.
-//
-// The observers are installed via addInitScript so they exist BEFORE the
-// document runs: a PerformanceObserver attached after paint sees a truncated
-// timeline (`buffered: true` helps for LCP but not for `event`), and a vital
-// measured from a late observer is a number with no relationship to the user's
-// experience.
-//
-// Ceilings live in tests/experience-budgets/web.json (Core Web Vitals "good"
-// thresholds — see that file's _provenance for why they are standard-derived
-// and not fixture-derived). The report is published for the nightly perf lane
-// at artifacts/perf-input/web-vitals-report.json.
-// ---------------------------------------------------------------------------
+// ─── Test D — WEB VITALS (#659) ─────
+// Observers must install via addInitScript, BEFORE the document runs: one
+// attached after paint sees a truncated timeline (`buffered: true` covers LCP,
+// not `event`). Ceilings: tests/experience-budgets/web.json.
 
 const VITALS_REPORT_PATH = path.resolve(
   here,
@@ -921,16 +753,8 @@ interface VitalsCapture {
   bodyText?: string;
 }
 
-/**
- * Install the three vitals observers before any document script runs.
- *
- * Every entry type is checked against `PerformanceObserver.supportedEntryTypes`
- * and the outcome recorded, because the failure that actually happens is an
- * observer that silently never fires: a probe reporting `LCP: null` is
- * indistinguishable from a fast page unless it can say WHY the number is
- * missing. A policy table keyed by entry type keeps the three cases from
- * drifting apart.
- */
+// Record support per entry type: an observer that never fires reports `LCP:
+// null`, indistinguishable from a fast page without the reason.
 async function installVitalsObservers(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const state = {
@@ -945,8 +769,7 @@ async function installVitalsObservers(page: Page): Promise<void> {
     ).__centraidVitals = state;
 
     const HANDLERS: Record<string, (entry: PerformanceEntry) => void> = {
-      // Last LCP candidate wins — the metric is the LARGEST paint, and later
-      // candidates supersede earlier ones by definition.
+      // Last candidate wins — later ones supersede earlier by definition.
       "largest-contentful-paint": (entry) => {
         state.lcpMs = entry.startTime;
       },
@@ -955,15 +778,13 @@ async function installVitalsObservers(page: Page): Promise<void> {
           value: number;
           hadRecentInput: boolean;
         };
-        // Shifts within 500 ms of an input are intentional (a menu opening),
-        // not the janky reflow CLS exists to catch. The spec excludes them and
-        // so must we, or every deliberate interaction inflates the score.
+        // Spec excludes input-adjacent shifts; counting them lets any
+        // deliberate interaction inflate the score.
         if (!shift.hadRecentInput) state.clsScore += shift.value;
       },
       event: (entry) => {
         const event = entry as PerformanceEntry & { interactionId?: number };
-        // interactionId > 0 marks an entry belonging to a real user
-        // interaction; INP is the worst such latency, so track the max.
+        // INP is the worst real interaction; interactionId 0 is not one.
         if (!event.interactionId) return;
         if (state.inpMs === null || entry.duration > state.inpMs)
           state.inpMs = entry.duration;
@@ -979,8 +800,7 @@ async function installVitalsObservers(page: Page): Promise<void> {
       const observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) handle(entry);
       });
-      // 16 ms is the lowest threshold the event-timing spec honours; 0 is
-      // silently clamped to it, so state the real value.
+      // 16 ms is the event-timing spec floor; 0 is silently clamped to it.
       observer.observe(
         type === "event"
           ? ({
@@ -1019,9 +839,7 @@ async function readVitals(page: Page): Promise<VitalsCapture> {
       loadEventMs: nav ? nav.loadEventEnd : null,
       installed: state?.installed ?? [],
       unsupported: state?.unsupported ?? [],
-      // Diagnostic, not decoration: `first-paint` without
-      // `first-contentful-paint` is exactly the state this harness lands in,
-      // and without it a null LCP is unattributable.
+      // Without the paint timeline a null LCP is unattributable.
       paintEntries: performance
         .getEntriesByType("paint")
         .map((entry) => `${entry.name}=${Math.round(entry.startTime)}`)
@@ -1052,21 +870,17 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
 
   await installVitalsObservers(page);
 
-  // ---- Cold shell, empty cache ---------------------------------------------
   await page.goto("/");
   await waitForShellBundle(page);
 
-  // ---- One deliberate interaction so INP exists at all ---------------------
-  // INP is undefined without an interaction; a test that reported "INP: null,
-  // passed" would be the vacuous green this rig exists to prevent, so drive a
-  // real click on whatever interactive control the cold shell offers and record
-  // explicitly when the browser still logged no event-timing entry.
+  // INP is undefined without an interaction, and "INP: null, passed" is the
+  // vacuous green this rig exists to prevent.
   const anyButton = page.locator("button:visible").first();
   const clicked = await anyButton.click({ timeout: 15_000 }).then(
     () => true,
     () => false
   );
-  // Event-timing entries are reported on the next frame after the interaction.
+  // Event-timing entries arrive on the frame after the interaction.
   await page.evaluate(
     () =>
       new Promise((resolve) => {
@@ -1078,9 +892,8 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
   const report = {
     capturedAt: new Date().toISOString(),
     harness: { apiUrl: API_URL, appId: APP_ID },
-    // The single most important field in this file: these numbers were taken
-    // against an EMPTY fixture vault on loopback, so they bound the shell's own
-    // boot cost and nothing else. See tests/experience-budgets/README.md.
+    // A ceiling with no stated volume is not a budget
+    // (tests/experience-budgets/README.md).
     volume: "empty (web-e2e fixture vault, loopback, headless Chromium)",
     interactionDriven: clicked,
     vitals,
@@ -1107,31 +920,22 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
   );
   console.log("======================================================\n");
 
-  // A probe that cannot install its observer must say so rather than report a
+  // A probe that cannot install its observer must fail, not report the
   // missing number as a fast page.
   expect(
     vitals.installed,
     `vitals observers failed to install (unsupported: ${vitals.unsupported.join(", ")})`
   ).toContain("largest-contentful-paint");
 
-  // CLS is the one vital this harness measures honestly, and it is a HARD gate.
+  // CLS is the one vital this harness measures honestly — a HARD gate.
   expect(vitals.clsScore, "cumulative layout shift").toBeLessThanOrEqual(
     budgets.metrics.cumulativeLayoutShift.maxScore
   );
 
-  // LCP/INP: assert when the browser produced them, annotate when it did not.
-  //
-  // MEASURED 2026-07-31 (darwin arm64, Playwright's bundled headless Chromium):
-  // this harness records `first-paint` but NEVER `first-contentful-paint`, and
-  // therefore never an LCP candidate, on the connect screen — even though the
-  // accessibility snapshot shows fully rendered text. Both observers install
-  // (`installed` proves it), so this is the renderer withholding paint timing,
-  // not a broken probe. Failing the nightly on a number the browser refuses to
-  // emit would make the lane permanently red and teach everyone to ignore it;
-  // fabricating a pass would be worse. So: report, annotate, and keep the
-  // budget entries in tests/experience-budgets/web.json marked `unmeasured`
-  // until the cause is found (first suspect: content that stays visually empty
-  // to the paint pipeline until a font or an opacity transition resolves).
+  // Assert when the browser produced them, annotate when it did not: the
+  // headless harness emits no LCP candidate while both observers install, so
+  // the renderer withholds paint timing and the probe is fine. Do not make this
+  // branch fail — the lane would go red on a number Chromium will not emit.
   if (vitals.lcpMs === null) {
     test.info().annotations.push({
       type: "perf-note",
@@ -1140,9 +944,7 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
         `LCP not asserted this run; tests/experience-budgets/web.json keeps it unmeasured.`,
     });
   } else {
-    // Binding Layer content can produce a real LCP where the old connect screen
-    // did not. Prefer a live ceiling; fall back to the parked intended ceiling
-    // until web.json is re-seeded with a measured status.
+    // Live ceiling first; the parked intended one until web.json is re-seeded.
     const lcpCeiling =
       budgets.metrics.largestContentfulPaint.ceilingMs ??
       budgets.metrics.largestContentfulPaint._intendedCeilingMs;

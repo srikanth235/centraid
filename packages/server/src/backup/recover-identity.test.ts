@@ -1,5 +1,5 @@
 /*
- * Exit evidence #3 (issue #726 P1): the vault identity keypair rides beside
+ * Exit evidence #3 (#726): the vault identity keypair rides beside
  * the sealing key on the SAME recovery-kit path. `recover()` restores a
  * vault into a fresh data dir carrying its id, its identity keypair, AND its
  * data (grants included, since the whole `vault.db` restores) — proven here

@@ -89,7 +89,7 @@ describe("vaultModals", () => {
       expect(setActiveVault).not.toHaveBeenCalled();
       // updateVault is a direct HTTP call, not IPC, so it never broadcasts
       // VAULT_CHANGED on its own — saveVault must notify explicitly or the
-      // sidebar head keeps showing the stale name (issue #382 follow-up).
+      // sidebar head keeps showing the stale name (#382 follow-up).
       expect(notifyVaultMetadataChanged).toHaveBeenCalledOnce();
     });
 

@@ -1,10 +1,7 @@
 /*
- * Durable notices behind the Notifications surface (#647).
- *
- * This store intentionally owns only notices. Owner decisions remain in
- * their canonical tables and are projected beside these rows by VaultPlane.
- * A `(kind, sourceRef)` pair is one card: repeated outcomes update that card
- * server-side, increment its count, and make it unread/active again.
+ * Durable notices behind the Notifications surface (#647). Owner decisions
+ * stay in their canonical tables, projected beside these rows by VaultPlane.
+ * A `(kind, sourceRef)` pair is one card: repeats update count/read state.
  */
 
 import { randomUUID } from "node:crypto";
@@ -71,9 +68,8 @@ function fromRow(row: NoticeRow): Notice {
 }
 
 /**
- * The artifact-level gist a headline carries (#647 D4): the first line of a
- * failure message, whitespace-collapsed and bounded. `detail_json` keeps the
- * full record — the headline only has to say WHICH failure this is.
+ * First non-empty line of a failure message, collapsed and bounded (#647);
+ * `detail_json` keeps the full record — the headline only says WHICH failure.
  */
 export function noticeGist(
   message: string | undefined,
@@ -86,7 +82,7 @@ export function noticeGist(
   if (!firstLine) return undefined;
   const collapsed = firstLine
     .replace(/\s+/gu, " ")
-    // A serialized `Error: …` prefix is noise in a headline, never the gist.
+    // A serialized `Error:` prefix is noise in a headline.
     .replace(/^[A-Za-z]*Error:\s*/u, "")
     .replace(/[.:;,]+$/u, "");
   if (collapsed === "") return undefined;
@@ -95,11 +91,7 @@ export function noticeGist(
     : collapsed;
 }
 
-/**
- * A human label for an automation whose manifest could not be read. Headlines
- * never speak in refs (#647 D4), so `myapp/nightly-digest` reads as
- * "Nightly digest" rather than leaking the on-disk handle.
- */
+/** Human label for an automation whose manifest could not be read (#647). */
 export function humanizeAutomationRef(ref: string): string {
   const segment = ref.split("/").at(-1) ?? ref;
   const words = segment.replace(/[-_]+/gu, " ").trim();
@@ -108,21 +100,11 @@ export function humanizeAutomationRef(ref: string): string {
 }
 
 /**
- * The card an ENRICHMENT-TIER REFUSAL raises (decision S9).
- *
- * The gate is enforced on the execution path over the `off | device |
- * gateway` axis (issue #712 C5). The card only appears under `off` or
- * `device` — the tier that stops a gateway-lane (model-turn) enricher —
- * since a `gateway`-tier vault only refuses the automations it hasn't
- * enabled, which is not a policy refusal. As an ordinary skip that refusal
- * was silent (#647 D6), so an owner who asked for faces got nothing and no
- * explanation. It is a skip, so it is not a failure and never wakes a
- * device (`severity` is deliberately below `high`, which is the only level
- * `NoticeStore.put` wakes on) — but it IS a standing state the owner is
- * owed an account of, with the control that changes it named.
- *
- * Keyed by DOMAIN, not by automation: seven enrichers refusing for the same
- * reason is one fact about the owner's photographs, not seven cards.
+ * The card an ENRICHMENT-TIER REFUSAL raises (decision S9, #712, #647). A
+ * refusal is a silent skip — not a failure, never wakes a device — so this
+ * standing state is the owner's only account of it, with the control named.
+ * Keyed by DOMAIN, not by automation: seven refusals for one reason are one
+ * card about the owner's photographs, not seven cards.
  */
 export function enrichRefusalNotice(input: {
   domain: string;
@@ -134,9 +116,8 @@ export function enrichRefusalNotice(input: {
       : input.domain === "docs"
         ? "Document enrichment"
         : `Enrichment for ${input.domain}`;
-  // Each headline states the tier in force AND what it costs, because "off"
-  // and "on your devices" are both legitimate settings an owner may have
-  // chosen on purpose — the card explains, it does not nag.
+  // Each headline states the tier in force AND what it costs — the card
+  // explains, it does not nag.
   const headline =
     input.tier === "off"
       ? `${subject} is switched off`
@@ -154,19 +135,15 @@ export function enrichRefusalNotice(input: {
     },
     headline,
     kind: "enrichment",
-    // An unreadable setting is a fault the owner has to act on; a tier the
-    // owner chose is information, not a warning about their own decision.
+    // Unreadable setting = fault to act on; an owner-chosen tier = information.
     severity: input.tier === undefined ? "warning" : "info",
     sourceRef: input.domain,
   };
 }
 
 /**
- * Whether a refusal card should be (re)written. A refusal recurs on every
- * enrichment tick for as long as the tier stands, and `NoticeStore.put` clears
- * `read_at` on every write — so re-putting an unchanged refusal would make a
- * card the owner has already read pop back up forever. The card is written
- * once per (domain, tier) and then left alone until the tier moves.
+ * Write once per (domain, tier): put clears read_at, so re-putting an
+ * unchanged refusal would re-surface an already-read card on every tick.
  */
 export function shouldWriteEnrichRefusalNotice(
   prior: Notice | undefined,
@@ -197,7 +174,7 @@ export class NoticeStore {
       notice: Notice;
     }) => void = () => undefined
   ) {
-    // Enforce retention on mount even when the vault receives no new notices.
+    // Enforce retention even when no new notices arrive.
     this.prune(new Date().toISOString());
   }
 

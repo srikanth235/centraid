@@ -1,9 +1,4 @@
-// Centraid — legacy card finishes.
-// Four variants remain for non-identity card surfaces and mobile compatibility.
-// Desktop app identity is no longer a tile finish: it uses the shared
-// single-tone `AppMark` primitive and the stroke/tint tokens below.
-// `tileFinish(color, variant)` returns a platform-agnostic record that CSS and
-// RN consumers can still apply to those legacy surfaces.
+// Legacy card finishes for non-identity surfaces (desktop identity uses AppMark).
 
 import { palette, paletteText } from "./palette";
 
@@ -17,23 +12,21 @@ export const TILE_VARIANTS = [
 ] as const satisfies readonly TileVariant[];
 
 export interface TileFinish {
-  /** CSS-shorthand background (may be a gradient). */
+  /** May be a gradient. */
   background: string;
-  /** Solid fallback for surfaces that can't render gradients (RN View). */
+  /** Solid fallback (RN). */
   backgroundColor: string;
-  /** Foreground glyph (icon stroke/fill) color. */
   glyphColor: string;
-  /** Optional CSS box-shadow string. RN can split into shadow* props. */
+  /** Optional; RN splits it. */
   boxShadow?: string;
-  /** Optional CSS backdrop-filter. RN: not supported, fall back to opaque fill. */
+  /** RN unsupported. */
   backdropFilter?: string;
 }
 
 export function tileFinish(color: string, variant: TileVariant): TileFinish {
   switch (variant) {
     case "gradient":
-      // Top→bottom hue darkening — premium feel without an extra gradient
-      // texture. -36 on each channel matches the design system's reference.
+      // -36/channel per the design system reference.
       return {
         background: `linear-gradient(180deg, ${color} 0%, ${shade(color, -36)} 100%)`,
         backgroundColor: color,
@@ -95,28 +88,20 @@ function shade(hex: string, amount: number): string {
 
 // ── App icon chips ─────────────────────────────────────────────────────────
 //
-// A desktop app mark is a single-tone stroke in a rounded-square container:
-// the container is the app hue at 13% (light) / 20% (dark) over the surface,
-// the solved identity text rung carries the full stroke, and nothing else — no
-// gradient, gloss, or drop shadow. The metaphor is a tinted paper label, not a
-// glass button.
-//
-// The tint is composited HERE, in TypeScript, for the same reason the hues are
-// resolved here: `color-mix(in oklab, <hue> 13%, transparent)` does not exist
-// in React Native, and a chip whose tint the shell and the phone compute
-// differently is a chip that is not the same chip.
+// Single-tone stroke in a rounded square: hue at 13%/20% over surface, solved
+// text rung as mark. Tint composited HERE — `color-mix` is absent in RN; both
+// platforms must compute the same chip.
 
-/** Share of the app hue in the icon container, per theme. */
+/** App-hue share in the chip container, per theme. */
 export const ICON_CHIP_TINT = { dark: 0.2, light: 0.13 } as const;
 
 export interface IconChipFinish {
-  /** Opaque container fill — the hue composited over `surface`. */
+  /** Hue composited over `surface`. */
   backgroundColor: string;
-  /** The mark itself: the solved text rung for known app hues. */
   markColor: string;
 }
 
-/** Desktop app-mark geometry from the Binding Layer handoff. */
+/** Binding Layer handoff geometry. */
 export const APP_MARK_VIEWBOX = 24;
 export const APP_MARK_STROKE = 1.6;
 export const APP_MARK_SMALL_STROKE = 1.75;
@@ -129,7 +114,6 @@ function solvedMarkColor(hue: string, scheme: "light" | "dark"): string {
   return key ? paletteText[scheme][key] : hue;
 }
 
-/** The icon-container finish for `hue` drawn on `surface` in `scheme`. */
 export function iconChipFinish(
   hue: string,
   surface: string,

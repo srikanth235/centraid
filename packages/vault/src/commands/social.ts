@@ -228,7 +228,7 @@ function draftMessage(ctx: HandlerCtx): Record<string, unknown> {
   // Rent the bytes, own the reference (P2): identical bodies dedupe on sha256.
   // text/plain stays inline forever (the FTS trigger reads content_uri
   // in-transaction, no CAS redirect possible) — refuse rather than let an
-  // unbounded draft body bloat vault.db (issue #367 §E4).
+  // unbounded draft body bloat vault.db (#367).
   assertTextBodyWithinBudget(input.body_text, "text/plain");
   const bodyBytes = Buffer.from(input.body_text, "utf8");
   const sha = sha256Hex(input.body_text);
@@ -314,7 +314,7 @@ const SEND_MESSAGE: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Tier 3 semantic egress (issue #306): a send is the one thing structure
+  // Tier 3 semantic egress (#306): a send is the one thing structure
   // cannot verify — loud on purpose, parks for every non-owner caller.
   risk: "high",
   confirm: true,
@@ -356,14 +356,14 @@ const UPDATE_CARD: CommandDefinition = {
       nickname: { type: "string" },
       // Display label only (vCard ORG + TITLE). The employment claim itself
       // is a core.link (works-for) asserted via core.link_entities — the
-      // card never carries the relationship (issue #274).
+      // card never carries the relationship (#274).
       org_title: { type: "string" },
       // The contract keeps its `note` input; storage is the caller's memo
-      // annotation on the canonical core.party (issue #274) — "everything
+      // annotation on the canonical core.party (#274) — "everything
       // I've written about Ravi" is one query. Empty string clears it.
       note: { type: "string" },
       // The contract keeps its `favorite` input; storage is a starred tag on
-      // the canonical core.party (issue #274) — the same star every surface
+      // the canonical core.party (#274) — the same star every surface
       // rendering this person reads.
       favorite: { type: "integer", minimum: 0, maximum: 1 },
     },
@@ -550,7 +550,6 @@ function markThreadRead(ctx: HandlerCtx): Record<string, unknown> {
   return { thread_id: input.thread_id };
 }
 
-/** Register the social domain's commands on a gateway. */
 export function registerSocialCommands(gateway: Gateway): void {
   gateway.registerCommand(RESOLVE_IDENTITY);
   gateway.registerCommand(DRAFT_MESSAGE);

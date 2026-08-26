@@ -1,27 +1,6 @@
-/*
- * Generic ACP model enumeration — the ONE way every harness kind reports its
- * model catalog (issue #484).
- *
- * There is no bespoke claude/codex enumerator any more. ACP already carries
- * the answer: an harness advertises its model selector as a `configOptions`
- * entry on the `session/new` RESULT (see `./session-config.ts`), the same
- * option `pinModel` reads to switch models mid-turn. So enumeration is just a
- * probe: launch the harness exactly as a turn would, `initialize`, open a fresh
- * session in a scratch cwd, read the offered models off the returned config
- * option, then tear the process down. No prompt is ever sent — no model turn,
- * no tokens.
- *
- * This never fabricates a catalog: it only echoes the `{ value, name }` pairs
- * the harness itself offered, so the `no-hardcoded-model-ids` rule holds without
- * this file naming a single concrete model id.
- *
- * Best-effort by contract (the `CatalogWarmer` treats an empty result as "keep
- * the prior entry"): ANY failure — no binary, adapter not installed,
- * `AUTH_REQUIRED` (-32000) from an unsigned-in harness, a probe that outruns the
- * deadline, or a harness with no model option — resolves to `[]`. It never
- * throws, and it never leaves the child process running (the `finally` ends
- * stdin, sends SIGTERM, then SIGKILLs if the child ignores it).
- */
+// Generic ACP model enumeration (#484): probe the harness as a turn would and
+// echo its own `{ value, name }` pairs — no prompt is sent, no model id is
+// named here. ANY failure resolves to `[]`; never throws, never leaks a child.
 
 import { spawn } from "node:child_process";
 import type { ChildProcessByStdio } from "node:child_process";
@@ -41,28 +20,14 @@ import { readConfigOptions, readOfferedModels } from "./session-config.js";
 import type { OfferedModel } from "./session-config.js";
 import type { AcpTurnConfig } from "./types.js";
 
-/**
- * Overall probe deadline. Generous — enumeration runs only through the
- * `CatalogWarmer` (boot + Refresh), never on a hot path — but bounded so a
- * wedged harness can't leave the warm hanging. Covers spawn → initialize →
- * session/new → teardown end to end.
- */
 const PROBE_TIMEOUT_MS = 12_000;
 
-/** How long to wait after SIGTERM before SIGKILL, so a stuck child is always reaped. */
 const KILL_GRACE_MS = 2_000;
 
-/**
- * Enumerate the models an ACP harness advertises, launched exactly as its turns
- * are (same `planLaunch` → same adapter/env/binPath). Returns `[]` on any
- * failure; never throws; never leaves a child running.
- */
 export async function enumerateAcpModels(
   config: AcpTurnConfig
 ): Promise<HarnessModel[]> {
-  // Launch is impossible with no binary (or a missing adapter) — `planLaunch`
-  // throws, and an unenumerable kind simply has no catalog. Notices are
-  // irrelevant here (no transcript), so they are collected and dropped.
+  // An unenumerable kind simply has no catalog.
   let launch: { bin: string; args: string[]; env: NodeJS.ProcessEnv };
   try {
     launch = planLaunch(config, undefined, []);
@@ -95,8 +60,7 @@ export async function enumerateAcpModels(
   try {
     return await withTimeout(probe(conn, cwd), PROBE_TIMEOUT_MS);
   } catch {
-    // Timeout, AUTH_REQUIRED (-32000), a rejected session/new, an exited
-    // child — all are "no catalog this time".
+    // Timeout, AUTH_REQUIRED, rejected session/new: no catalog this time.
     return [];
   } finally {
     try {
@@ -105,8 +69,7 @@ export async function enumerateAcpModels(
       // stream already gone
     }
     if (!child.killed) child.kill("SIGTERM");
-    // A child that ignores SIGTERM must still die, or `conn.exited` (and thus
-    // this warm) would hang forever.
+    // A child ignoring SIGTERM must still die, or `conn.exited` hangs forever.
     const killTimer = setTimeout(() => {
       if (!child.killed) child.kill("SIGKILL");
     }, KILL_GRACE_MS);
@@ -117,11 +80,6 @@ export async function enumerateAcpModels(
   }
 }
 
-/**
- * Drive the minimal enumeration exchange: handshake, then a fresh session
- * whose result carries the model config option. Rejects on any RPC failure
- * (including `AUTH_REQUIRED`), which the caller maps to `[]`.
- */
 async function probe(
   conn: ReturnType<typeof createAcpConnection>,
   cwd: string
@@ -139,8 +97,7 @@ async function probe(
     },
   });
 
-  // No vault MCP servers: enumeration reads the harness's own catalog, not the
-  // vault. The scratch cwd is a throwaway the harness never writes to.
+  // No vault MCP servers: this reads the harness's catalog, not the vault.
   const created = await conn.request(methods.agent.session.new, {
     cwd,
     mcpServers: [],
@@ -152,12 +109,6 @@ async function probe(
   return mapOfferedModels(models, currentValue);
 }
 
-/**
- * Map the harness's offered `{ value, name }` pairs to `HarnessModel[]`: `value`
- * → `id`, `name` → label (dropped when it merely echoes the id), and the
- * option's `currentValue` flagged as the default selection. Dedupes by id and
- * drops blanks. Exported for tests.
- */
 export function mapOfferedModels(
   offered: OfferedModel[],
   currentValue?: string
@@ -177,7 +128,6 @@ export function mapOfferedModels(
   return models;
 }
 
-/** Reject `work` if it outruns `ms`; the caller's `finally` reaps the child. */
 async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {

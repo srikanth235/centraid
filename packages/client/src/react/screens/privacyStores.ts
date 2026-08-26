@@ -1,23 +1,5 @@
-/*
- * Groups the vault's per-app/per-agent grants BY STORE (issue #708 section A2)
- * — the inversion the brief asks for. Today's consent surfaces (VaultScreen,
- * ApprovalsScreen's "Standing grants") answer "what does this app do?" one app
- * at a time; this module answers "who can see my photos?" by turning the same
- * `(app|agent) -> grants[] -> scopes[]` data sideways into `store -> holders[]`.
- *
- * Pure and framework-free — same shape as `backupMetrics.ts`'s derivation.
- * Inputs are `VaultAppEntry[]` / `VaultAgentEntry[]` (gateway-client-vault.ts),
- * already fetched by the route; this module only reshapes them.
- *
- * STORES is a hand-authored map from (schema[, table]) to the product-facing
- * store a person actually reasons about ("Photos", not "media"). Most schemas
- * are one store; `core` is split at the table level because it is the shared
- * ontology schema every app's scopes route through (`content_item`, `link`,
- * `tag`, …) as well as the literal per-app tables that live in it (`document`
- * for Docs). Anything not matched — future schemas, or `core` tables not yet
- * mapped — falls into the honest "Shared identifiers" catch-all rather than
- * silently vanishing from the ledger.
- */
+// Turns `(app|agent) -> grants[] -> scopes[]` sideways into `store -> holders[]`
+// (#708 A2). Anything unmatched falls into the "Shared identifiers" catch-all.
 
 import type {
   VaultAgentEntry,
@@ -27,7 +9,6 @@ import type {
 
 export type GrantMode = "read" | "write";
 
-/** One store the ledger is organized by. Order is the render order. */
 export interface StoreDefinition {
   storeId: string;
   label: string;
@@ -61,12 +42,7 @@ const DOCS_CORE_TABLES = new Set([
   "restore_document_version",
 ]);
 
-/** One `(schema[, table])` scope → the store id it belongs to. Every `core`
- *  table not in `DOCS_CORE_TABLES` or `party` (`content_item`, `link`,
- *  `tag`, `attachment`, `place`, …) is shared plumbing every app's scopes
- *  route through — it falls through to the "Shared identifiers" catch-all
- *  below rather than being misattributed to whichever app happened to ask
- *  for it first. */
+/** `core` tables outside `DOCS_CORE_TABLES`/`party` are shared plumbing. */
 function storeIdForScope(scope: VaultScope): string {
   switch (scope.schema) {
     case "media":
@@ -87,22 +63,17 @@ function storeIdForScope(scope: VaultScope): string {
       if (scope.table === "party") return "people";
       return "shared";
     default:
-      // consent, blob, enrich, and any future schema: shared plumbing rather
-      // than a store a person would recognize by name.
       return "shared";
   }
 }
 
-/** `verbs` is a free-form string (e.g. "read", "act", "read,act") — anything
- *  beyond a bare read counts as write for the ledger's coarse mode. */
 function modeForVerbs(verbs: string): GrantMode {
   return verbs.split(",").some((v) => v.trim() !== "read") ? "write" : "read";
 }
 
-/** One holder's access to one store — the row the ledger renders. */
 export interface StoreHolderDTO {
-  /** `grantId` (revocable) for an app; `${agentId}` composite for an agent —
-   *  agents have no per-scope grantId, they revoke via `agentId`. */
+  /** An app's revocable `grantId`; an agent's `agentId` — agents have no
+   *  per-scope grant. */
   grantId: string;
   holderKind: "app" | "agent";
   holderId: string;
@@ -122,10 +93,7 @@ function holdersFromEntry(
   holderLabel: string,
   grants: readonly { grantId: string; scopes: readonly VaultScope[] }[]
 ): Map<string, StoreHolderDTO> {
-  // One holder can hold several grants (and several scopes per grant) that
-  // land in the same store — collapse to the single strongest mode rather
-  // than one row per grant, so "who can see my photos" reads as one line
-  // per app, not one line per consent event.
+  // One row per holder per store, at the strongest mode.
   const byStore = new Map<string, StoreHolderDTO>();
   for (const grant of grants) {
     for (const scope of grant.scopes) {
@@ -146,12 +114,7 @@ function holdersFromEntry(
   return byStore;
 }
 
-/**
- * The store-centric ledger: every declared store, in `STORES` order, each
- * carrying the apps/agents that can reach it and in what mode. A store with
- * no holders is still present — its empty `holders` is "reachable by
- * nothing," rendered by the caller, not silently dropped from the list.
- */
+/** A store with no holders stays in the list; the caller renders that. */
 export function groupGrantsByStore(
   apps: readonly VaultAppEntry[],
   agents: readonly VaultAgentEntry[]
@@ -186,25 +149,12 @@ export function groupGrantsByStore(
   }));
 }
 
-// ── The revoked-this-session snapshot (issue #708 A2) ─────────────────────
-// A revoke DELETES the grant server-side, so the next fetch simply drops the
-// row. Keeping a copy of it as it looked at the moment of revoke is what lets
-// the row stay visible, struck through, instead of vanishing — the history of
-// who once held a store is the ledger's whole point. Pure, so the rule is
-// testable without rendering anything.
+// A revoke DELETES the grant server-side; the snapshot keeps the row visible.
 
-/** `${storeId}:${grantId}` — a grant is only unique to a store when both are
- *  present, since the same underlying grant can span several stores' scopes
- *  and each store's row needs its own independent revoked state. */
 export function revokedHolderKey(storeId: string, grantId: string): string {
   return `${storeId}:${grantId}`;
 }
 
-/**
- * Re-attach any revoked-this-session snapshot whose grant is no longer in the
- * live group (the revoke call deleted it server-side) — pure so it is
- * unit-testable independent of the screen's rendering.
- */
 export function mergeRevokedHolders(
   group: StoreGroup,
   revoked: ReadonlyMap<string, StoreHolderDTO>

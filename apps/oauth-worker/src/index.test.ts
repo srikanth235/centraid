@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit #545 cohesive security/ACID suite for one module
 import { afterEach, describe, expect, test, vi } from "vitest";
 
+import { expectedRefreshCapability } from "./refresh-capability-test-support.js";
 import { handleRequest } from "./worker.js";
 
 const NOW = Date.UTC(2026, 6, 23, 10, 0, 0);
@@ -10,12 +11,13 @@ const STATE = `w.${"A".repeat(43)}`;
 const VERIFIER = "v".repeat(43);
 const CODE = "google-authorization-code";
 const BROWSER_BINDING = "b".repeat(43);
+const RECEIPT_SECRET = "receipt-secret-with-at-least-thirty-two-bytes";
 
 function environment(): Env {
   return {
     APP_ORIGIN: "https://app.centraid.dev",
     CALLBACK_URL: "https://oauth.centraid.dev/callback",
-    CALLBACK_RECEIPT_SECRET: "receipt-secret-with-at-least-thirty-two-bytes",
+    CALLBACK_RECEIPT_SECRET: RECEIPT_SECRET,
     EXCHANGE_ENABLED: "true",
     GLOBAL_LIMITER: { limit: async () => ({ success: true }) } as RateLimit,
     GOOGLE_CLIENT_ID: "shared.apps.googleusercontent.com",
@@ -168,9 +170,14 @@ describe("index", () => {
         }
       );
       expect(response.status).toBe(200);
+      // Issue #865: a minted refresh token leaves with its capability.
       await expect(response.json()).resolves.toStrictEqual({
         access_token: "ya29.gateway-only",
         refresh_token: "1//gateway-only",
+        refresh_capability: await expectedRefreshCapability(
+          "1//gateway-only",
+          RECEIPT_SECRET
+        ),
         expires_in: 3600,
         token_type: "Bearer",
         scope: "https://www.googleapis.com/auth/calendar.events",
@@ -352,14 +359,37 @@ describe("index", () => {
       });
     });
 
+    function refreshRequest(
+      body: Record<string, unknown>,
+      upstream: typeof fetch
+    ): Promise<Response> {
+      return handleRequest(
+        new Request("https://oauth.centraid.dev/refresh", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "cf-connecting-ip": "203.0.113.7",
+          },
+          body: JSON.stringify(body),
+        }),
+        environment(),
+        context,
+        { fetch: upstream, now: () => NOW }
+      );
+    }
+
     test("refresh is stateless and returns only allowlisted OAuth fields", async () => {
-      const env = environment();
+      const capability = await expectedRefreshCapability(
+        "1//stored-on-gateway",
+        RECEIPT_SECRET
+      );
       const upstream = vi.fn<typeof fetch>(
         async (_url: string | URL | Request, init?: RequestInit) => {
           const form = new URLSearchParams(String(init?.body));
           expect(form.get("grant_type")).toBe("refresh_token");
           expect(form.get("refresh_token")).toBe("1//stored-on-gateway");
-          expect(form.get("client_secret")).toBe(env.GOOGLE_CLIENT_SECRET);
+          expect(form.get("client_secret")).toBe("worker-only-google-secret");
+          // No rotation: no refresh token, and therefore no new capability.
           return Response.json({
             access_token: "ya29.refreshed",
             expires_in: 3600,
@@ -367,21 +397,128 @@ describe("index", () => {
           });
         }
       );
-      const response = await handleRequest(
-        new Request("https://oauth.centraid.dev/refresh", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            provider: "google",
-            refresh_token: "1//stored-on-gateway",
-          }),
-        }),
-        env,
-        context,
-        { fetch: upstream as typeof fetch, now: () => NOW }
+      const response = await refreshRequest(
+        {
+          provider: "google",
+          refresh_token: "1//stored-on-gateway",
+          refresh_capability: capability,
+        },
+        upstream as typeof fetch
       );
+      expect(response.status).toBe(200);
       await expect(response.json()).resolves.toStrictEqual({
         access_token: "ya29.refreshed",
+        expires_in: 3600,
+        token_type: "Bearer",
+      });
+    });
+
+    test("refresh without a capability is refused before Google is called (issue #865)", async () => {
+      let googleCalls = 0;
+      const upstream = vi.fn<typeof fetch>(async () => {
+        googleCalls += 1;
+        return new Response("must-not-run");
+      });
+      const response = await refreshRequest(
+        { provider: "google", refresh_token: "1//stolen" },
+        upstream as typeof fetch
+      );
+      expect(response.status).toBe(401);
+      await expect(response.json()).resolves.toStrictEqual({
+        error: "missing_capability",
+      });
+      expect(googleCalls).toBe(0);
+    });
+
+    test("a wrong or foreign-token capability is refused before Google is called", async () => {
+      let googleCalls = 0;
+      const upstream = vi.fn<typeof fetch>(async () => {
+        googleCalls += 1;
+        return new Response("must-not-run");
+      });
+      const wrong = await refreshRequest(
+        {
+          provider: "google",
+          refresh_token: "1//stored-on-gateway",
+          refresh_capability: "C".repeat(43),
+        },
+        upstream as typeof fetch
+      );
+      expect(wrong.status).toBe(401);
+      await expect(wrong.json()).resolves.toStrictEqual({
+        error: "invalid_capability",
+      });
+
+      // A genuinely minted capability for a DIFFERENT token does not redeem
+      // this one — the capability is bound to its exact refresh token.
+      const foreign = await expectedRefreshCapability(
+        "1//some-other-token",
+        RECEIPT_SECRET
+      );
+      const mismatched = await refreshRequest(
+        {
+          provider: "google",
+          refresh_token: "1//stored-on-gateway",
+          refresh_capability: foreign,
+        },
+        upstream as typeof fetch
+      );
+      expect(mismatched.status).toBe(401);
+      await expect(mismatched.json()).resolves.toStrictEqual({
+        error: "invalid_capability",
+      });
+      expect(googleCalls).toBe(0);
+    });
+
+    test("the exchange-minted capability redeems its own token, and a rotated token returns re-minted", async () => {
+      const originalToken = "1//gateway-only";
+      const rotatedToken = "1//rotated-by-google";
+      const env = environment();
+      const receipt = await callbackReceipt(env);
+      const exchangeUpstream = vi.fn<typeof fetch>(async () =>
+        Response.json({
+          access_token: "ya29.first",
+          refresh_token: originalToken,
+          expires_in: 3600,
+          scope: "https://www.googleapis.com/auth/calendar.events",
+        })
+      );
+      const exchanged = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        { fetch: exchangeUpstream as typeof fetch, now: () => NOW }
+      );
+      const { refresh_capability: capability } = (await exchanged.json()) as {
+        refresh_capability: string;
+      };
+      expect(capability).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+
+      const refreshUpstream = vi.fn<typeof fetch>(async () =>
+        Response.json({
+          access_token: "ya29.rotated",
+          refresh_token: rotatedToken,
+          expires_in: 3600,
+        })
+      );
+      const response = await refreshRequest(
+        {
+          provider: "google",
+          refresh_token: originalToken,
+          refresh_capability: capability,
+        },
+        refreshUpstream as typeof fetch
+      );
+      expect(response.status).toBe(200);
+      // The rotated pair leaves with the capability for the NEW token, in the
+      // same strict allowlist shape.
+      await expect(response.json()).resolves.toStrictEqual({
+        access_token: "ya29.rotated",
+        refresh_token: rotatedToken,
+        refresh_capability: await expectedRefreshCapability(
+          rotatedToken,
+          RECEIPT_SECRET
+        ),
         expires_in: 3600,
         token_type: "Bearer",
       });

@@ -1,4 +1,4 @@
-// Devices' cross-surface copy (issue #805, slice C).
+// Devices' cross-surface copy (#805).
 //
 // The roster is `react/screens/HouseholdScreen.tsx` on desktop and
 // `screens/devices/Devices.tsx` on mobile; the forget-this-device confirm is

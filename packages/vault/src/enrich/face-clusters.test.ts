@@ -1,4 +1,4 @@
-// Face grouping (issue #724 W5) — behaviour, not mechanism. Every case here
+// Face grouping (#724) — behaviour, not mechanism. Every case here
 // is an owner-visible claim: what a confirmation buys the next pass, what an
 // answered proposal is protected from, what two different people must never
 // become, and that a rebuild says the same thing twice.

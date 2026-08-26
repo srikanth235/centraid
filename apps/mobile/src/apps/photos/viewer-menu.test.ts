@@ -1,5 +1,5 @@
 // `viewerOverflowMenuGroups` — the viewer `···` chip's anchored menu, as pure
-// data (issue #712). Asserted without a renderer, the same discipline
+// data (#712). Asserted without a renderer, the same discipline
 // `viewer-model.test.ts` uses for the rest of this module's shapes: the row
 // set, the honesty omissions the header comment argues for, and the
 // enabled/disabled logic a read-only grant drives.

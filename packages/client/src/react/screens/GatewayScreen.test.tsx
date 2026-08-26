@@ -12,12 +12,12 @@ import {
 import GatewayScreen from "./GatewayScreen.js";
 
 describe("GatewayScreen — Overview tab (default)", () => {
-  // THERE IS NO HERO WHILE THE GATEWAY IS ANSWERING (binding layer v11). The
-  // panel used to open the page in every state and restate what the rest of it
-  // already said — availability over a strip whose whole subject is
-  // availability, uptime over an Identity row naming when the gateway started.
-  // What survives is the page's status attribute, the head's cadence line, and
-  // the Identity rows, and those are what this pins.
+  // THERE IS NO HERO WHILE THE GATEWAY IS ANSWERING (binding layer v11). A
+  // panel opening the page in every state restates what the rest of it already
+  // says — availability over a strip whose whole subject is availability,
+  // uptime over an Identity row naming when the gateway started. The page
+  // carries its status attribute, the head's cadence line, and the Identity
+  // rows, and those are what this pins.
   it("states the gateway's condition without a hero while it is answering", () => {
     const html = render(base);
     expect(html).toContain("<h1>System</h1>");

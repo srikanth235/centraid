@@ -1,6 +1,6 @@
 /**
  * Delete one ALREADY-TRASHED photograph forever, through media.purge_asset
- * (issue #711). There is no undo: the asset row, its faces, its tags, its
+ * (#711). There is no undo: the asset row, its faces, its tags, its
  * album membership and its annotations go now, and the bytes are handed to
  * the gateway's next storage sweep. A photograph that is not in the trash is
  * refused by precondition, as is one an edited copy still points at — the

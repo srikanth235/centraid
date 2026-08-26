@@ -1,36 +1,20 @@
 /*
- * Token-purity lint for authored app CSS (issue #686, item D3).
- *
- * `packages/design` owns every colour, radius, spacing rung, and type face in
- * the product; app CSS is supposed to *consume* those names through
- * `var(--token)` and never restate them. Checked-in blueprint apps have a
- * vitest ratchet (`packages/blueprints/src/token-purity.test.ts`); this module
- * was the runtime equivalent for harness-authored app CSS at the publish gate.
- * Its caller retired with the served-app plane (issue #799) — it now has no
- * live consumer and comes out with the rest of the serving path.
- *
- * Pure and dependency-free on purpose: the design contract's own property
- * names are *injected* (`contractProps`) by the caller that already depends on
- * `@centraid/design`, so app-engine does not grow a dependency on the design
- * package. The detection rules deliberately mirror the blueprint ratchet's.
+ * Token-purity lint for authored app CSS (#686). App CSS consumes
+ * `var(--token)` and never restates design tokens. `contractProps` is
+ * injected so app-engine does not depend on `@centraid/design`. No live
+ * consumer in this repo (#799).
  */
 
-/** One token-purity problem found in a stylesheet. */
 export interface TokenPurityFinding {
-  /** 1-based line number in the scanned source. */
   line: number;
-  /** What rule was broken. */
   kind: "hex" | "functional-color" | "font-family" | "reserved-custom-prop";
-  /** The offending text, trimmed for display. */
   text: string;
-  /** What the author should write instead. Read by an LLM app author. */
   fix: string;
 }
 
 /**
- * Custom-property namespaces owned by `packages/design`. An app that declares
- * one of these shadows the design system's token, so its value wins locally
- * and the app silently stops tracking theme changes.
+ * Custom-property namespaces owned by `packages/design`. Declaring one
+ * shadows the token so the app silently stops tracking theme changes.
  */
 const RESERVED_PREFIXES = [
   "--c-",
@@ -42,8 +26,7 @@ const RESERVED_PREFIXES = [
 ] as const;
 
 /**
- * The two identity knobs an app is explicitly allowed to declare
- * (`DESIGN.md`, "Do's and Don'ts"). Everything else
+ * The two identity knobs an app may declare (`DESIGN.md`). Everything else
  * in the contract is read-only to an app.
  */
 const APP_OWNED_PROPS = new Set(["--app-hue", "--app-identity"]);
@@ -95,8 +78,6 @@ function lineAt(source: string, index: number): number {
 }
 
 function isTokenOnlyFontFamily(value: string): boolean {
-  // A value assembled purely out of `var()` (plus CSS-wide keywords,
-  // whitespace, and commas) is exactly the compliant form.
   return (
     value
       .replace(VAR_REFERENCE, "")
@@ -105,24 +86,12 @@ function isTokenOnlyFontFamily(value: string): boolean {
   );
 }
 
-/** Options for {@link scanCssTokenPurity}. */
 export interface TokenPurityOptions {
-  /**
-   * The design package's public custom-property names (i.e.
-   * `BLUEPRINT_TOKEN_CONTRACT`). Injected so this module stays free of a
-   * dependency on `@centraid/design`. Omitted → only the reserved namespace
-   * prefixes are enforced.
-   */
+  /** `BLUEPRINT_TOKEN_CONTRACT` names. Injected so this module stays free of `@centraid/design`. */
   contractProps?: readonly string[];
 }
 
-/**
- * Find every token-purity violation in one stylesheet. Pure; the caller owns
- * reading files and deciding what to do with the findings.
- *
- * Note that `color-mix(in oklab, #fff 20%, var(--bg))` is still a violation:
- * the hex endpoint is matched regardless of the function wrapping it.
- */
+/** Pure scan. `color-mix(..., #fff, ...)` is still a violation — the hex is matched regardless of wrapping. */
 export function scanCssTokenPurity(
   source: string,
   options: TokenPurityOptions = {}
@@ -182,11 +151,7 @@ export function scanCssTokenPurity(
   return findings.sort((a, b) => a.line - b.line);
 }
 
-/**
- * Render findings as one publish-blocking error string, or `""` when clean.
- * The wording is deliberately instructive: an LLM app author reads this text
- * as its only feedback from the publish gate.
- */
+/** Publish-blocking error string, or `""` when clean. Instructive for an LLM app author. */
 export function formatTokenPurityError(
   findings: readonly TokenPurityFinding[],
   relPath: string

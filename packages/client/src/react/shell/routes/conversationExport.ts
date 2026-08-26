@@ -1,5 +1,5 @@
 /*
- * Conversation export (issue #420, Wave 3). Serializes an already-loaded
+ * Conversation export (#420). Serializes an already-loaded
  * transcript (the shape `loadConversation` returns) to Markdown or JSON, then
  * triggers a browser download. Client-side by design: the transcript
  * reconstruction already exists on `GET .../sessions/<id>`, so export is a pure

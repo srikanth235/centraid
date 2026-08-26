@@ -1,12 +1,9 @@
 // The shell's navigation history, as a pure reducer.
 //
-// This is a faithful port of the imperative router that lived in the vanilla
-// `app.ts` (navStack / navIndex / recordRoute / goBack / goForward). Extracting
-// it as a reducer lets the React shell own routing without the `applyingNav`
-// re-entrancy guard — the vanilla code needed that flag because `applyRoute`
-// both replayed history *and* was the only render path, so a replay would
-// otherwise re-record itself. Here the action variants keep those concerns
-// apart: `navigate` records, `back`/`forward` only move the cursor.
+// The action variants keep recording and replay apart: `navigate` records,
+// `back`/`forward` only move the cursor. Do not collapse them into one
+// "apply route" action — a single render-and-record path replays history into
+// itself and needs a re-entrancy guard to stay correct.
 import type { ShellRoute } from "../../app-shell-context.js";
 
 export interface RouterState {
@@ -26,8 +23,7 @@ export type RouterAction =
 export const INITIAL_ROUTER: RouterState = { stack: [], index: -1 };
 
 /** Stable identity for a route — dedupes consecutive navigations to the same
- *  place, matching the vanilla `routeKey`. Two routes with the same key are the
- *  same history entry. */
+ *  place. Two routes with the same key are the same history entry. */
 export function routeKey(route: ShellRoute): string {
   switch (route.kind) {
     case "settings":
@@ -83,7 +79,7 @@ export function routerReducer(
   switch (action.type) {
     case "navigate": {
       const cur = currentRoute(state);
-      // No-op a repeat of the entry we're already on (vanilla recordRoute).
+      // No-op a repeat of the entry we're already on.
       if (cur && routeKey(cur) === routeKey(action.route)) return state;
       const stack = state.stack.slice(0, state.index + 1);
       stack.push(action.route);

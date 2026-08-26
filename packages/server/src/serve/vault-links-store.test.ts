@@ -1,6 +1,6 @@
 /*
- * The link store over its three tables (issue #726 P2 §3 + P3 decisions 1–4,
- * reshaped by issue #750): `vault_links` is pure permission, `vault_directory`
+ * The link store over its three tables (#726 P2 §3 + P3 decisions 1–4,
+ * reshaped by #750): `vault_links` is pure permission, `vault_directory`
  * is one identity record per known vault, and `vault_routes` is ONE row per
  * vault that lives elsewhere — a pair on this machine and a pair across the
  * world are the same link rows, differing only in whether the far vault has a
@@ -289,8 +289,8 @@ describe(VaultLinksStore, () => {
 
   test("one signed-route slot serves EVERY link to a peer vault (#750 invariants 1–2)", async () => {
     // Two LOCAL vaults link to the SAME peer vault — the household shape that
-    // used to duplicate the peer's key/label/route across two rows, where a
-    // later assertion updated only whichever row a lookup found first.
+    // must not duplicate the peer's key/label/route across two rows, where a
+    // later assertion would update only whichever row a lookup found first.
     const store = await open();
     for (const local of ["vault-local-1", "vault-local-2"]) {
       const ticket = store.tickets.mint(local, keyA);

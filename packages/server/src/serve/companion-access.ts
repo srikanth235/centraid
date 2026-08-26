@@ -10,7 +10,7 @@ export function companionRequestAllowed(
   const method = (req.method ?? "GET").toUpperCase();
   const selfRevokePath = `/centraid/_gateway/devices/${encodeURIComponent(enrollmentId)}`;
   // The pinned app RPC surface: an action or query invocation on a granted
-  // module (issue #505). The per-operation allowlist is enforced separately
+  // module (#505). The per-operation allowlist is enforced separately
   // by the runtime's `companionHandlerAllowed` gate.
   const appRpc =
     method === "POST" &&

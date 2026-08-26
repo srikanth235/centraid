@@ -1,15 +1,6 @@
-// Non-visual business logic: data/selection helpers, the plain-DOM popovers
-// (kebab / move-to), and every vault write (documents, folders, upload).
-//
-// This is NOT a component — no JSX, no props-in/props-out contract — but it
-// still must never own a second copy of mutable state. `createLogic()` is a
-// factory app.tsx calls once at boot, closing over the exact `state`/`data`
-// objects app.tsx owns (passed by reference: app.tsx mutates their
-// properties in place, never reassigns the bindings, so this module always
-// sees the live values) plus the two orchestration entry points, `render`
-// and `refresh`, that only app.tsx can define (they touch the JSX-rendering
-// roots). Everything returned here is then wired into app.tsx's render
-// functions as props/callbacks, exactly like any other value flowing down.
+// Non-visual business logic; never a second copy of mutable state.
+// `createLogic()` closes over the `state`/`data` app.tsx owns BY REFERENCE
+// (app.tsx mutates their properties, never reassigns the bindings).
 import {
   outcomeMessage,
   runBulk as runBulkBase,
@@ -27,26 +18,12 @@ import { createVersions } from "./versions.ts";
 
 const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 
-/**
- * HOW MANY ROWS **Recently changed** SHOWS.
- *
- * It is a WINDOW on the drive, not a filter over it: the shelf answers "what
- * did I touch last", and a list of everything sorted by date is the All shelf
- * with a different sort. Exported because the navigation rail's count has to
- * be the number this shelf will actually draw — a rail saying 1,908 over a
- * shelf showing 8 is the count/header disagreement v16 §3 calls a defect.
- */
+/** A WINDOW, not a filter. Exported because the nav rail's count must be the
+ *  number this shelf draws (v16 §3). */
 export const RECENT_WINDOW = 8;
-// Bytes stream to the blob staging route (issue #296) — no base64 through
-// command JSON — so big documents fit; the route itself caps at 512 MB.
 
-// The vault speaks in predicates; the drive speaks in plain language. The
-// gateway's contract checker (packages/vault/src/gateway/contract.ts) always
-// stringifies a failed precondition as `"${name}: ${column} ${op} ${value}"`
-// (e.g. "folder_is_empty: n eq 0"), never the bare name — so the lookup below
-// keys off the substring before the first ": " rather than the whole string,
-// or every entry here would be permanently dead and every failure would show
-// the raw predicate/SQL detail instead of this app's own copy.
+// The gateway stringifies a failed precondition as `"name: column op value"`,
+// so the lookup keys off the substring before ": " or every entry is dead.
 const FRIENDLY_PREDICATES: Record<string, string> = {
   not_rented_elsewhere:
     "This file is in use elsewhere in your vault (an attachment, a note, an avatar…) — remove it there first.",
@@ -67,8 +44,6 @@ interface LogicDeps {
   render: () => void;
   refresh: () => Promise<void> | void;
   openQuick: (id: string) => void;
-  /** The row menu names Details and Version history among its verbs, so the
-   *  routes behind them are passed in the same way Quick Look already is. */
   openDetails: (id: string) => void;
   openVersions: (id: string) => void;
 }
@@ -95,8 +70,7 @@ export function createLogic({
     );
   }
 
-  // Returns true when the write executed; otherwise narrates parked / failed
-  // / denied honestly and returns false.
+  // True when the write executed; otherwise narrates parked/failed/denied.
   function narrate(outcome: VaultOutcome | undefined): boolean {
     if (outcome?.status === "executed") {
       notice("");
@@ -127,14 +101,11 @@ export function createLogic({
     }
   }
 
-  // ---------- Data helpers ----------
+  // ─── data helpers ─────
 
   function folderById(id: string | null | undefined): Folder | undefined {
     return data.folders.find((f) => f.folder_id === id);
   }
-  // A "selector" closure over `data`, threaded down as a prop wherever a
-  // component needs a folder's name (List rows, Details, QuickLook) instead
-  // of each one re-deriving the folders map.
   function folderName(id: string | null | undefined): string {
     return id == null ? "Documents" : (folderById(id)?.name ?? "a folder");
   }
@@ -145,9 +116,7 @@ export function createLogic({
     return data.documents.filter((f) => f.trashed);
   }
 
-  // One comparator per sortable column head (`SortKey`). `changed` reads
-  // `updated_at`, which is the date the row PRINTS — a set ordered by one date
-  // while showing another is the sort lying about itself.
+  // `changed` reads `updated_at`, the date the row PRINTS.
   function compareDocs(a: DriveDoc, b: DriveDoc): number {
     let r = 0;
     if (state.sortKey === "size") r = (a.byte_size ?? 0) - (b.byte_size ?? 0);
@@ -160,15 +129,11 @@ export function createLogic({
           sensitivity: "base",
         }
       );
-    // Owner is a stable no-op while this drive projects ONE vault: every row
-    // belongs to the member, so nothing reorders. It is the comparator the day
-    // a shared space puts somebody else's documents in the same set, and
-    // leaving it out would make the column the one head that cannot be pressed.
+    // A no-op while this drive projects ONE vault; dropping it would leave
+    // Owner the one unpressable head.
     else if (state.sortKey === "owner") r = 0;
     else if (state.sortKey === "kind")
-      // The word in the column, not the raw media type: "PDF" and "Image" are
-      // what the member is grouping by, and two media types that print the
-      // same word must land together.
+      // The word in the column: two media types printing it land together.
       r = typeMeta(a.media_type, a.title).name.localeCompare(
         typeMeta(b.media_type, b.title).name,
         undefined,
@@ -179,8 +144,7 @@ export function createLogic({
     return r * state.sortDir;
   }
 
-  // The rows for the current view: nav (or search) → type filter → tag
-  // filter → sort.
+  // nav (or search) → type filter → tag filter → sort.
   function currentRows(): DriveDoc[] {
     const { shelf, tag, search } = state;
     const folderId = folderIdFrom(shelf);
@@ -195,13 +159,9 @@ export function createLogic({
       if (folderId)
         list = list.filter((f) => (f.folder_id ?? null) === folderId);
     }
-    // §4.2's filter row, composed after the chips and before the sort: each
-    // axis narrows what the last one left, which is exactly a chain of
-    // predicates and deliberately not a score (filters.ts).
+    // §4.2: a chain of predicates, deliberately not a score (filters.ts).
     list = applyFilters(list, state.filters);
-    // Free-form label filter (issue #352 phase 4) — same "all" escape hatch
-    // and same idiom as the type chips above, alongside them rather than
-    // replacing them (a document can be one type AND carry several labels).
+    // Free-form labels (#352) sit ALONGSIDE the type chips, never replace.
     if (tag && tag !== "all")
       list = list.filter((f) => (f.tags ?? []).some((t) => t.label === tag));
     if (search.trim()) return list; // keep the vault's rank order for search
@@ -215,7 +175,7 @@ export function createLogic({
     return [...list].sort(compareDocs);
   }
 
-  // ---------- Selection ----------
+  // ─── selection ─────
 
   function clearSelection() {
     state.selected.clear();
@@ -252,7 +212,7 @@ export function createLogic({
     render();
   }
 
-  // ---------- Document writes ----------
+  // ─── document writes ─────
 
   async function trashDoc(doc: DriveDoc) {
     const outcome = await act("trash", { document_id: doc.document_id });
@@ -276,9 +236,7 @@ export function createLogic({
     }
   }
 
-  // One star across the vault: the flags-scheme tag on the document
-  // wrapper, so favorites from Photos and stars from here are the same
-  // judgment.
+  // One star across the vault: a Photos favorite is this same judgment.
   async function toggleStar(doc: DriveDoc) {
     const outcome = await act(doc.starred ? "unstar" : "star", {
       document_id: doc.document_id,
@@ -330,9 +288,7 @@ export function createLogic({
     }
   }
 
-  // Loop an action over many rows (kit runBulk) in this app's voice: our
-  // notice banner, our friendly failure copy, and the old hard-wired tail —
-  // clear the selection, then refresh.
+  // kit runBulk in this app's voice, with the fixed tail: clear, then refresh.
   const runBulk = (
     ids: string[],
     run: (id: string) => Promise<VaultOutcome | undefined>,
@@ -371,16 +327,7 @@ export function createLogic({
   function moveSelected(anchor: HTMLElement) {
     openMovePopover(anchor, selectedDocs());
   }
-  /**
-   * Star the selection — or unstar it, when every picked document already
-   * carries a star.
-   *
-   * ONE VERB FOR THE WHOLE SET, decided before anything is written: a bar that
-   * toggled each row independently would leave a mixed selection exactly as
-   * mixed as it found it, which is not what pressing one button once means.
-   * Mixed becomes starred, which is the reading of "Star" that adds rather
-   * than removes.
-   */
+  /** ONE VERB FOR THE SET, decided before any write; mixed becomes starred. */
   function starSelected() {
     const docs = selectedDocs();
     const unstar = docs.length > 0 && docs.every((d) => d.starred);
@@ -393,8 +340,7 @@ export function createLogic({
       }
     );
   }
-  /** Is every picked document already starred? The bar reads this to name its
-   *  own verb, so the label and what the press does cannot disagree. */
+  /** The bar names its verb from this, so label and press cannot disagree. */
   function selectionAllStarred(): boolean {
     const docs = selectedDocs();
     return docs.length > 0 && docs.every((d) => d.starred);
@@ -404,7 +350,7 @@ export function createLogic({
     render();
   }
 
-  // ---------- Folder writes ----------
+  // ─── folder writes ─────
 
   async function createFolder(name: string) {
     const outcome = await act("create-folder", { name });
@@ -429,10 +375,7 @@ export function createLogic({
   async function deleteFolder(folder: Folder) {
     const outcome = await act("delete-folder", { folder_id: folder.folder_id });
     if (narrate(outcome)) {
-      // The shelf the member was on has just ceased to exist. They fall back
-      // to FOLDERS, not All: the folder was reached from there, and a silent
-      // jump to the drive's root would drop them somewhere they did not ask
-      // to be (view-state.ts, rule 2).
+      // Fall back to FOLDERS, not All (view-state.ts, rule 2).
       if (folderIdFrom(state.shelf) === folder.folder_id) state.shelf = FOLDERS;
       statusLine("Folder deleted · receipted.");
       await refresh();
@@ -451,11 +394,8 @@ export function createLogic({
     render();
   }
 
-  // ---------- Upload (picker + drag-and-drop) ----------
-  // A separate module for the same reason versions.ts and metadata.ts are:
-  // file-size hygiene on a seam that is real. It closes over this factory's
-  // own state/act/notice/render/refresh, so the queue and every refusal still
-  // speak in this app's voice.
+  // ─── upload ─────
+  // Closes over this factory's state/act/notice, so refusals keep one voice.
   const { uploadFiles } = createUploads({
     state,
     render,
@@ -465,11 +405,7 @@ export function createLogic({
     notice,
   });
 
-  // ---------- Content lifecycle (edit / replace / version history) ----------
-  // A separate module purely for file-size hygiene — see versions.ts's own
-  // header for why. It closes over this factory's own act/narrate/notice
-  // rather than re-implementing them, so every outcome still narrates in
-  // this app's voice.
+  // ─── content lifecycle ─────
   const { replaceDocument, restoreVersion, loadHistory } = createVersions({
     refresh,
     act,
@@ -477,19 +413,14 @@ export function createLogic({
     notice,
   });
 
-  // ---------- Metadata (tags + real activity) ----------
-  // Another file-size split (metadata.ts) — closes over this factory's own
-  // act/narrate/refresh rather than re-implementing them.
+  // ─── metadata ─────
   const { addTag, removeTag, loadActivity } = createMetadata({
     refresh,
     act,
     narrate,
   });
 
-  // ---------- Popovers (kebab + move) ----------
-  // Another file-size split (popovers.ts) — closes over data.folders plus
-  // the document-write functions just above, passed in rather than
-  // re-implemented.
+  // ─── popovers ─────
   const { openMovePopover, openDocMenu } = createPopovers({
     data,
     openQuick,

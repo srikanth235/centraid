@@ -1,4 +1,4 @@
-// Durable blob ingress + offsite transit state (issue #414).
+// Durable blob ingress + offsite transit state (#414).
 //
 // These are plumbing tables, deliberately separate from the ontology and
 // from `blob_staging`: an upload session is not yet a content claim, and an

@@ -1,4 +1,4 @@
-// Photos, inline descriptor (issue #505). The `InlineAppModule` the shell's
+// Photos, inline descriptor (#505). The `InlineAppModule` the shell's
 // client loader (packages/client inlineApps.ts) imports: it pairs the
 // query-free `Root` (app-root.tsx) with this app's `./queries/*` handler
 // modules for the shell's client-side query path, alongside changeTables +
@@ -20,7 +20,7 @@ const photosInlineApp: InlineAppModule = {
   appId: "photos",
   pendingProjection,
   changeTables: PHOTOS_READ_TABLES_LIST,
-  // Mount over every scope this member can see (issue #599): the timeline is
+  // Mount over every scope this member can see (#599): the timeline is
   // the merge of their own library and each audience they belong to. app-root
   // paints one grid over N pages; albums, places and trash stay own-scope.
   multiScope: true,
@@ -34,7 +34,7 @@ const photosInlineApp: InlineAppModule = {
     "enrichment-status": { default: enrichmentStatusQuery },
     faces: { default: facesQuery },
     people: { default: peopleQuery },
-    // The whole-library custody rollup the Storage screen reads (issue #711).
+    // The whole-library custody rollup the Storage screen reads (#711).
     storage: { default: storageQuery },
   } as unknown as InlineAppModule["queries"],
   kitAsk: {

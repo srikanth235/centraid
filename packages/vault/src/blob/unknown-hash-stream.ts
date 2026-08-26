@@ -245,7 +245,7 @@ export async function streamThroughUnknownHash(
       plain.pipe(sealBlobStream(finalKey, sha, received, remote.frameSize)),
       received
     );
-    // Direct-to-cold heuristic (issue #425 Wave 3): the CopyObject that mints
+    // Direct-to-cold heuristic (#425): the CopyObject that mints
     // the final CAS object carries STANDARD_IA for an eligible large original.
     // The sha is only known post-stream and the staging row is written after
     // custody, so the media type + size are handed in directly for the resolver.

@@ -39,7 +39,7 @@ describe("duties", () => {
     };
   });
 
-  // ---- file custody (needs a file-backed vault) ----
+  // ──── file custody (needs a file-backed vault) ────
 
   let custodyDir: string;
   let fileDb: VaultDb | null = null;
@@ -192,7 +192,7 @@ describe("duties", () => {
     ]);
   });
 
-  // THE SABOTAGE TARGET (#712 P11): drop the media.asset entry from
+  // THE SABOTAGE TARGET (#712): drop the media.asset entry from
   // RETENTION_REFUSALS in duties.ts and this goes red — the policy would fall
   // through to the missing-column skip and the refusal would lose its stated
   // reason, which is exactly the "runs and silently retains nothing" duty the
@@ -569,7 +569,7 @@ describe("duties", () => {
     expectPolyDependentsCleaned(deps, "media.asset", "poly-a");
   });
 
-  // ---- edit lineage vs the sweep (issue #711 decision S8) ----
+  // ──── edit lineage vs the sweep (issue #711 decision S8) ────
 
   const PAST = "2020-01-01T00:00:00Z";
 

@@ -1,23 +1,8 @@
-// Replica-export recovery for the Commons plane (issue #731).
-//
-// A commons grant has exactly ONE steward vault, and today its loss is
-// terminal: members keep a complete replica forever and can do nothing with
-// it. State shipping already gave every member the whole closure — the only
-// missing piece is a ceremony that says "this group's steward is gone; I will
-// found a new one from what I hold."
-//
-// This is deliberately a CEREMONY, never automatic:
-//   * the old grant is SUPERSEDED, not deleted — its ops, receipts and
-//     projected rows stay exactly where they are, and only its sync stops;
-//   * the successor starts a fresh genesis chain at sequence 0, seeded from
-//     the local closure, because the old chain's authority (the old steward's
-//     key) is precisely what is unavailable;
-//   * every other member is INVITED. Consent is never fabricated on another
-//     vault's behalf — the successor's roster mirrors the old one, but each
-//     seat must accept it like any other invitation;
-//   * it refuses when this seat is parked on a named divergence fault (never
-//     re-found from state you could not verify) and when this seat is already
-//     the steward (there is nothing to recover from).
+// Replica-export recovery for the Commons plane (#731). A ceremony, never
+// automatic: the old grant is SUPERSEDED not deleted; the successor starts a
+// fresh genesis at sequence 0 (the old steward's key is unavailable); every
+// other member is INVITED — consent is never fabricated; refuse when this seat
+// is parked on a named divergence fault or is already the steward.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -39,11 +24,10 @@ import type { CommonsCapability, CommonsMemberInput } from "./commons.js";
 import type { ShareVaultRef } from "./placement.js";
 
 export interface RecoverCommonsFromReplicaInput {
-  /** The local member vault holding the replica. It becomes the new steward. */
+  /** Local member vault holding the replica; becomes the new steward. */
   seat: ShareVaultRef;
   /** Gateway id of `seat` — the successor grant's steward vault. */
   localVaultId: string;
-  /** The grant whose steward is gone. */
   grantId: string;
   /** Free text stored as lineage; defaults to a steward-absence note. */
   reason?: string;
@@ -51,13 +35,9 @@ export interface RecoverCommonsFromReplicaInput {
 }
 
 export type CommonsRecoveryRefusal =
-  /** This vault already stewards the grant; absence recovery is meaningless. */
   | "already-steward"
-  /** The seat is parked on a named history/digest fault. */
   | "parked-on-fault"
-  /** The grant is revoked/superseded — there is nothing live to re-found. */
   | "grant-not-live"
-  /** No projected container for the grant in this vault: no replica to export. */
   | "no-local-replica";
 
 export interface CommonsRecoveryLineage {
@@ -78,10 +58,8 @@ export type CommonsRecoveryResult =
       circleId: string;
       containerType: ShareableItemType;
       containerId: string;
-      /** Roster seats that must still accept the successor invitation. */
       invitedPartyIds: readonly string[];
       lineage: CommonsRecoveryLineage;
-      /** True when a prior attempt had already re-founded this grant. */
       replayed: boolean;
     }
   | { state: "refused"; reason: CommonsRecoveryRefusal };
@@ -99,9 +77,7 @@ function localOwnerPartyId(db: DatabaseSync): string {
   return row.owner_party_id;
 }
 
-/** The named divergence fault this seat parked on, if any. Read straight from
- *  the contact table rather than through the sync module, so recovery has no
- *  dependency on the pull path being loaded. */
+/** Named divergence fault, if any. Read from the contact table, not the sync module. */
 function parkedFault(
   db: DatabaseSync,
   grantId: string,
@@ -117,9 +93,8 @@ function parkedFault(
 }
 
 /**
- * The replica's own row id for the grant's container. Projection assigns
- * audience-local ids, so the grant's `container_id` (the ORIGIN's id) is not
- * necessarily addressable here; `share_commons_lineage` is the mapping.
+ * Replica-local container id. Projection assigns audience-local ids, so the
+ * grant's `container_id` (the ORIGIN's id) is not necessarily addressable here.
  */
 function localContainerId(
   db: DatabaseSync,
@@ -160,16 +135,13 @@ function roster(
         status: "current" | "invited" | "refused";
       }[]
     )
-      // A seat that already refused the old grant is not carried forward: the
-      // successor mirrors the roster, not a wish list.
+      // A seat that already refused the old grant is not carried forward.
       .filter((seat) => seat.status !== "refused")
       .map((seat) => ({ partyId: seat.party_id, capability: seat.capability }))
   );
 }
 
-/** Insert the successor's own circle — owned by THIS vault's owner, so the
- *  successor grant has an authority of its own rather than borrowing the
- *  projected circle whose owner just disappeared. */
+/** Successor circle owned by THIS vault's owner — do not borrow the projected circle. */
 function foundCircle(input: {
   db: DatabaseSync;
   ownerPartyId: string;
@@ -191,8 +163,7 @@ function foundCircle(input: {
          (member_id, circle_id, party_id, added_at, capability)
        VALUES (?, ?, ?, ?, ?)`
     );
-    // The founder always writes; every other seat keeps the capability the
-    // superseded grant gave it.
+    // Founder always writes; every other seat keeps the superseded grant's capability.
     member.run(uuidv7(), circleId, input.ownerPartyId, input.now, "read+write");
     for (const seat of input.seats) {
       if (seat.partyId === input.ownerPartyId) continue;
@@ -206,9 +177,7 @@ function foundCircle(input: {
   return circleId;
 }
 
-/** A successor this ceremony already created — either recorded in the
- *  supersession table (the normal path) or discoverable as a live grant this
- *  vault stewards over the same replica (a retry after a mid-ceremony crash). */
+/** Successor already created — supersession table, or a live grant after a mid-ceremony crash. */
 function existingSuccessor(input: {
   db: DatabaseSync;
   oldGrantId: string;
@@ -284,9 +253,7 @@ function writeLineage(input: {
       input.lineage.reason,
       input.lineage.recoveredAt
     );
-  // Superseded, not deleted: the row, its ops, its receipts and every
-  // projected domain row survive. Setting `revoked_at` is what stops the
-  // sweep from pulling a steward that will never answer again.
+  // Superseded, not deleted. `revoked_at` is what stops the sweep pulling a dead steward.
   input.db
     .prepare(
       `UPDATE share_circle_grant SET revoked_at = ?
@@ -295,11 +262,7 @@ function writeLineage(input: {
     .run(input.lineage.recoveredAt, input.oldGrantId);
 }
 
-/**
- * Re-found a commons from this vault's replica. Idempotent under retry: a
- * second call returns the successor the first one created, and never mints a
- * second grant.
- */
+/** Re-found from this replica. Idempotent: a retry returns the first successor. */
 export function recoverCommonsFromReplica(
   input: RecoverCommonsFromReplicaInput
 ): CommonsRecoveryResult {
@@ -348,9 +311,8 @@ export function recoverCommonsFromReplica(
         circleId,
         containerType: grant.containerType,
         containerId,
-        // No `vaultId` on any other seat: that field is what marks a member
-        // "current" at creation, and consent is theirs to give, not ours to
-        // assume. Everyone else starts INVITED.
+        // No `vaultId` on any other seat: that field marks a member "current".
+        // Consent is theirs. Everyone else starts INVITED.
         members: seats
           .filter((seat) => seat.partyId !== ownerPartyId)
           .map<CommonsMemberInput>((seat) => ({
@@ -363,9 +325,7 @@ export function recoverCommonsFromReplica(
           : { maxSizeBytes: grant.maxSizeBytes }),
         now: input.now,
       });
-  // Seed the successor's own steward seat: cursor, roster and the lineage row
-  // that ties the replica's container to the new grant. The closure is
-  // unchanged bytes — the successor simply starts at sequence 0 over it.
+  // Seed the successor steward seat at sequence 0 over the unchanged closure.
   compileCommons({
     steward: input.seat,
     stewardVaultId: input.localVaultId,
@@ -418,7 +378,6 @@ export function recoverCommonsFromReplica(
   };
 }
 
-/** The recorded explanation of where a superseded grant's successor came from. */
 export function readCommonsRecoveryLineage(
   db: DatabaseSync,
   oldGrantId: string

@@ -1,4 +1,4 @@
-// ReadRequest.orderBy (issue #262): ordering is what turns a bounded read
+// ReadRequest.orderBy (#262): ordering is what turns a bounded read
 // into a recent window. Column and direction are validated like filter
 // columns — caller strings never become SQL text.
 

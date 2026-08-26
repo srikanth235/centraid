@@ -1,33 +1,15 @@
-// The day-context layers on the phone (#834): birthdays from People and due
-// tasks from Tasks, projected onto a day of the Agenda list.
-//
-// THE LIST IS FOR THINGS WITH A TIME COST. Every row on this surface came from
-// `core.event`; a birthday and a due date are COSTLESS, so they decorate a
-// day's header and its shelf and never become a row. That is the same ruling
-// the pointer surface obeys, expressed against the replica rows the phone
-// actually holds.
-//
-// A NATIVE REPLICA READ, NOT A SECOND STORE. The rows come from the agenda
-// scope's own replica (`core.party` and `schedule.task`, both inside Agenda's
-// declared read scopes), and nothing here writes. The member's OWN tasks are
-// the only ones the replica holds for this seat, which is what makes the shelf
-// obey #834 R-shelf-scope without a scope argument of its own.
-//
-// The COPY comes from the blueprints leaf both seats read
-// (`apps/agenda/day-context-copy`), so the phone cannot drift from the pointer
-// surface on what `3 due` says.
+// Birthdays and due tasks decorate a day's header/shelf; they never become
+// list rows (`core.event` only). Replica-scoped to this seat's own tasks
+// (#834 R-shelf-scope).
 import {
   ribbonCollapsedBirthdays,
   shelfDue,
 } from "@centraid/blueprints/apps/agenda/day-context-copy";
 
-/** A replica row, as far as these derivations read one. */
 export type ContextRow = Record<string, unknown>;
 
 const OPEN_STATUSES = new Set(["needs-action", "in-process"]);
 
-/** The owner's flags scheme, and the marker that means "inner circle". The
- *  same two constants the pointer surface's `day-context` query reads. */
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 const STARRED_NOTATION = "starred";
 
@@ -36,7 +18,6 @@ function text(row: ContextRow, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
-/** `YYYY-MM-DD` for a `Date`, in the device's own wall clock. */
 export function dayKeyOf(date: Date): string {
   return [
     date.getFullYear(),
@@ -45,26 +26,18 @@ export function dayKeyOf(date: Date): string {
   ].join("-");
 }
 
-/** One costless fact about a day. */
 export interface RibbonFact {
   id: string;
   text: string;
-  /** Only a starred person is inner; it is the one tier the vault stores. */
   inner: boolean;
 }
 
-/** One of the member's own tasks coming due. */
 export interface DueRow {
   taskId: string;
   title: string;
 }
 
-/**
- * The birthdays landing on a day. A birth date recurs annually, so it is
- * matched on `MM-DD` and the stored year is never read — both the `YYYY-MM-DD`
- * and the year-less `--MM-DD` forms the vault writes end in the same five
- * characters.
- */
+/** Match `MM-DD` only — never read the stored year (`YYYY-MM-DD` and `--MM-DD`). */
 export function birthdaysOn(
   dayKey: string,
   parties: readonly ContextRow[],
@@ -87,11 +60,6 @@ export function birthdaysOn(
     .sort((left, right) => left.text.localeCompare(right.text));
 }
 
-/**
- * What the ribbon SAYS. One fact reads as itself; several collapse to a count,
- * because a day header that spelled three names would push the day's events
- * off the top of the screen.
- */
 export function ribbonLabel(facts: readonly RibbonFact[]): string {
   const first = facts[0];
   if (!first) return "";
@@ -99,13 +67,7 @@ export function ribbonLabel(facts: readonly RibbonFact[]): string {
   return ribbonCollapsedBirthdays(facts.length);
 }
 
-/**
- * The member's own open tasks due on a day.
- *
- * AN UNDATED TASK NEVER REACHES THE CALENDAR. A task with no `due_at` has no
- * day to be keyed to, so it cannot appear here in any code path — the same
- * property the pointer surface's projection rests on.
- */
+/** A task with no `due_at` has no day and must not appear. */
 export function dueOn(dayKey: string, tasks: readonly ContextRow[]): DueRow[] {
   return tasks
     .filter((task) => {
@@ -121,18 +83,11 @@ export function dueOn(dayKey: string, tasks: readonly ContextRow[]): DueRow[] {
     .filter((row) => row.title !== "");
 }
 
-/** The collapsed shelf's caption — `3 due`, never a row on the day. */
 export function shelfLabel(count: number): string {
   return shelfDue(count);
 }
 
-/**
- * Who the owner has STARRED — the vault's only stored closeness judgment about
- * a person (`packages/vault/src/commands/flags.ts`), and therefore the only
- * honest answer to "inner circle". No scheme and no marker concept means
- * nobody is starred, which is an honest `outer` for everyone rather than a
- * missing field.
- */
+/** Missing flags scheme/marker is honest outer for everyone, not a missing field. */
 export function starredParties(
   schemes: readonly ContextRow[],
   concepts: readonly ContextRow[],

@@ -116,8 +116,8 @@ describe("preflight suite", () => {
   });
 
   test("session-ready preflight serves a warm capability cache without spawning the harness", async () => {
-    // Readiness used to force `refresh: true`, so every poll spawned the harness
-    // AND bought a live provider turn from the diagnostic prompt.
+    // Readiness must not force `refresh: true`: that spawns the harness on
+    // every poll AND buys a live provider turn from the diagnostic prompt.
     const dir = await tempDir("centraid-preflight-ready-");
     const pidMarker = path.join(dir, "pid");
     const promptMarker = path.join(dir, "prompt.json");
@@ -181,7 +181,7 @@ describe("preflight suite", () => {
     expect(warm.models?.map((m) => m.id)).toStrictEqual(["gpt-x"]);
   });
 
-  // ---- pluggable harness kinds (gemini / qwen / custom acp) ----------------
+  // ──── pluggable harness kinds (gemini / qwen / custom acp) ────────────────
 
   test("gemini/qwen preflight probe their bin and carry the registry min version", async () => {
     invalidatePreflightCache();
@@ -231,7 +231,7 @@ describe("preflight suite", () => {
     );
   });
 
-  // ---- wave 7: eight more ACP-native kinds ---------------------------------
+  // ──── wave 7: eight more ACP-native kinds ─────────────────────────────────
 
   const WAVE_7_KINDS = [
     "copilot",
@@ -331,7 +331,7 @@ describe("preflight suite", () => {
     expect(status.available).toBe(false);
   });
 
-  // ---- probeCliAvailability tests -----------------------------------------
+  // ──── probeCliAvailability tests ─────────────────────────────────────────
 
   test("probeCliAvailability reports available + version when the CLI runs", async () => {
     // `true` always exits 0 (empty output) — stands in for an installed CLI.

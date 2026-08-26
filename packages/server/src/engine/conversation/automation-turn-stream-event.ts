@@ -1,5 +1,5 @@
 /*
- * Native automation turn stream (issue #541).
+ * Native automation turn stream (#541).
  *
  * The durable source of truth is the same conversation → turn → item ledger
  * used by interactive conversations. Lifecycle events mirror those row names;

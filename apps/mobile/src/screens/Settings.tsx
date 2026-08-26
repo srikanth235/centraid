@@ -60,13 +60,14 @@ import YouSection from "./settings/YouSection";
 // tunnel, no URLs or tokens. The manual URL/token fields under Advanced remain a
 // dev fallback for simulators pointing at a token-less local gateway.
 //
-// BOTH pairing branches offer BOTH roads. The paste field used to render only in
-// the unpaired branch, so a phone that had already paired once could add a second
-// gateway by camera alone — and a camera is exactly what the two cases that need
-// a ticket do not have: a simulator, and a headless VPS whose QR lives in a
-// terminal on the same machine you are typing on. The only way back to the paste
-// field was to unpair (or reinstall), which throws away a working link to add
-// one. Adding a vault must never cost the vault you already have.
+// BOTH pairing branches offer BOTH roads. A paste field rendered only in the
+// unpaired branch leaves a phone that has already paired once able to add a
+// second gateway by camera alone — and a camera is exactly what the two cases
+// that need a ticket do not have: a simulator, and a headless VPS whose QR
+// lives in a terminal on the same machine you are typing on. The only way back
+// to the paste field would be to unpair (or reinstall), which throws away a
+// working link to add one. Adding a vault must never cost the vault you
+// already have.
 
 interface TicketPasteProps {
   value: string;
@@ -268,7 +269,7 @@ export default function SettingsScreen({
         <AppearanceSection />
         <AppLockSection />
         <VaultSection />
-        {/* Read-only view of the effective enrichment policy (#807 Wave 6) —
+        {/* Read-only view of the effective enrichment policy (#807) —
             it sits under Vault because it is a fact ABOUT the vault, and above
             the device/link sections that are facts about this phone. */}
         <EnrichmentSection />
@@ -395,11 +396,11 @@ export default function SettingsScreen({
             <Text style={styles.rowLabel}>On this phone</Text>
             <Icon name="ChevronRight" size={16} color={colors.textFaint} />
           </Pressable>
-          {/* Backup health moved here from the Photos stack (issue #712 B2).
-              The two rows are the same question from opposite ends: what this
-              phone is HOLDING, and whether what it holds has left it. The
-              policy the second one edits governs every byte-bearing app, not
-              photographs — which is exactly why it stopped living inside one. */}
+          {/* Backup health is a FRAME row, not a Photos one (#712). The two
+              rows are the same question from opposite ends: what this phone is
+              HOLDING, and whether what it holds has left it. The policy the
+              second one edits governs every byte-bearing app, not photographs
+              — which is why it may not live inside one. */}
           <View style={styles.rowGap} />
           <Pressable
             onPress={() => navigation.navigate("BackupHealth")}

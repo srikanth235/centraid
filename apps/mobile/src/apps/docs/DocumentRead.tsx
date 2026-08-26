@@ -1,4 +1,4 @@
-// The one READ route (Docs handoff Part 2 §6–§7; issue #821): reading view
+// The one READ route (Docs handoff Part 2 §6–§7; #821): reading view
 // for text kinds, the facts panel for kinds Docs cannot set, and a hand-off
 // to the stage for the kinds that render as media — the fork is a fact about
 // the document (`document-read-model.ts`), not three places.

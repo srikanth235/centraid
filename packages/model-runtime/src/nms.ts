@@ -1,7 +1,7 @@
 // Pure-math greedy non-maximum suppression, shared by the faces (YuNet) and
 // ocr detection postprocess paths. No ONNX/sharp import here on purpose —
 // this module is exercised directly by vitest with synthetic boxes, without
-// needing `bun run setup` (issue #724 W8: the vitest suite must pass with no
+// needing `bun run setup` (#724 W8: the vitest suite must pass with no
 // onnxruntime-node installed).
 
 export interface Box {

@@ -1,9 +1,6 @@
 // The kebab menu and the shared "Move to…" tree — plain DOM popovers built
-// with kit's h()/popItem(), exactly as logic.ts always built them inline.
-// Split out purely to keep logic.ts under the file-size cap (same factory
-// pattern as versions.ts): closes over data.folders (read-only) plus the
-// document-write functions logic.ts already owns, passed in rather than
-// re-implemented here.
+// with kit's h()/popItem(). Split out to keep logic.ts under the file-size
+// cap; closes over data.folders plus the write functions logic.ts owns.
 import {
   armConfirm,
   closePopover,
@@ -42,10 +39,7 @@ export function createPopovers({
   trashDoc,
   restoreDoc,
 }: PopoverDeps) {
-  // One "Move to…" target row. `popItem` (the element layer) builds the real button
-  // node; these popovers stay plain DOM (built with `h()`/`popItem()`),
-  // exactly as before — the target list mixes a fixed depth-0 root with
-  // depth-1 folders, same as the vanilla builder always did.
+  // One "Move to…" target row: fixed depth-0 root + depth-1 folders.
   function moveTargetBtn(
     folderId: string | null,
     name: string,
@@ -87,25 +81,14 @@ export function createPopovers({
   }
 
   /**
-   * The row menu (the handoff's `menu:[...]` on `docRowsBlock`). Drive's ⋮ is
-   * where rename, move, star, history and trash actually live; without it
-   * every one of those verbs is homeless on a row.
-   *
-   * EVERY ITEM WEARS ITS GLYPH (`icons.ts` `MENU_ICONS`). The handoff gives
-   * each entry an `icon` alongside its `label`, and a menu where some items
-   * carry one and others carry a gap reads as a menu with something missing.
-   *
-   * TWO OF THE HANDOFF'S ENTRIES ARE NOT DRAWN, both because they would be
-   * dead:
-   *   * `Place in a space` — placement is not how Docs shares. A document is
-   *     shared as a STANDING GRANT (issue #825) from the two surfaces that are
-   *     already about one document: the details rail and the stage. A third
-   *     entry point on the row menu would be a third door to one decision.
+   * The row menu — rename, move, star, history and trash live here. EVERY
+   * ITEM WEARS ITS GLYPH (`icons.ts` `MENU_ICONS`). Two handoff entries are
+   * not drawn, both dead:
+   *   * `Place in a space` — Docs shares as a STANDING GRANT (#825) from the
+   *     details rail and stage only.
    *   * `Delete forever` — THE PLATFORM HAS NO DESTROY VERB (frame.tsx's
    *     `NO_PRIMARY`): destruction happens only on the schedule a purge date
-   *     announces, so the trashed row offers Restore and says nothing it
-   *     cannot do.
-   * A menu that is half dead ends is worse than a shorter menu.
+   *     announces; the trashed row offers Restore and says nothing it cannot.
    */
   function openDocMenu(anchor: HTMLElement, doc: DriveDoc) {
     closePopover();
@@ -149,10 +132,8 @@ export function createPopovers({
             download: doc.title ?? "file",
             onclick: closePopover,
           },
-          // The download entry is a real `<a download>`, not a button, so the
-          // glyph is appended here rather than passed to `popItem`. `flex:
-          // none` because `.kit-popover-item` is a flex row and an SVG that
-          // may shrink is an SVG that will.
+          // A real `<a download>`, not a button, so the glyph is appended here.
+          // `flex:none`: an SVG that may shrink in this flex row is one that will.
           h("i", {
             style: "display:flex;flex:none",
             html: MENU_ICONS.download,

@@ -1,5 +1,5 @@
 /**
- * React format helpers + parity pin with app-format relativeTime (issue #545 B8).
+ * React format helpers + parity pin with app-format relativeTime (#545).
  */
 
 import { describe, expect, it } from "vitest";

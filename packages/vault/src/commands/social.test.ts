@@ -246,7 +246,7 @@ describe("social", () => {
     expect(outcome.predicate).toContain("handle_not_claimed_elsewhere");
   });
 
-  /** The starred flags-scheme tag rows on a target (issue #274). */
+  /** The starred flags-scheme tag rows on a target (#274). */
   function starredTags(targetType: string, targetId: string) {
     return db.vault
       .prepare(

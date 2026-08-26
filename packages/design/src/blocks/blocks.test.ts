@@ -1,9 +1,8 @@
 // The headless block layer, pinned once (#765).
 //
-// These are the claims both kits used to make separately, so they are asserted
-// here and nowhere else: the kit tests keep their render assertions (which node
-// takes `net`, which style takes the touch floor) and stop restating the
-// arithmetic.
+// The claims shared by both kits are asserted here and nowhere else: the kit
+// tests keep their render assertions (which node takes `net`, which style
+// takes the touch floor) and do not restate the arithmetic.
 import { describe, expect, it } from "vitest";
 
 import {

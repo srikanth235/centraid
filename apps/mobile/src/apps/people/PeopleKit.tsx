@@ -1,18 +1,10 @@
-// The recipes every People screen is built out of, as native components — the
-// phone's mirror of `packages/blueprints/apps/people/components/Shared.tsx`.
+// People's native recipes — the phone mirror of blueprints' people Shared.tsx;
+// ONE ROW AND ONE SECTION for the whole app, every string the caller's.
 //
-// ONE ROW AND ONE SECTION FOR THE WHOLE APP: the roster, Search, Touch's three
-// lists, Trash, Merge and the person screen's sections all draw the same row
-// and the same head, so two screens cannot disagree about what a 44pt line
-// looks like. Every string is the caller's; geometry and ink live here once.
-//
-// THE LINK RING (v12 handoff, "The vault link, as a visual system"): every
-// avatar carries it — solid ink where linked, dashed line-colour where not,
-// NOTHING where the sharing plane could not be read. The web draws it as an
-// `outline`, which does not exist in React Native, so it is a wrapper View's
-// own border held off the disc by the ring gap; the avatar box keeps its fixed
-// size and the wrapper reserves the same outer rectangle in all three states,
-// so a row cannot reflow when the link facts arrive.
+// THE LINK RING (v12): solid ink where linked, dashed line-colour where not,
+// NOTHING where the sharing plane could not be read. A wrapper View border
+// (`outline` does not exist in React Native) reserving the same outer rectangle
+// in all three states, so a row cannot reflow when link facts arrive.
 
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -31,13 +23,11 @@ import { avatarFill } from "./people-model";
 
 export type LinkRing = "linked" | "unlinked" | "unknown";
 
-/** The star mark: 17px on a 24 grid, stroke 1.5, filled while it is on —
- *  the handoff's own path, verbatim. */
+/** Star mark: 17px on a 24 grid, stroke 1.5 (handoff's own path). */
 const STAR_PATH =
   "M12 3.8l2.6 5.2 5.7.9-4.1 4 1 5.7-5.2-2.8-5.2 2.8 1-5.7-4.1-4 5.7-.9z";
 
-/** Avatar box sizes on touch (handoff: 34px rows, 52px hero) and the ring's
- *  two rungs (1.5/2 wide, offset 2/3). Fixed boxes; the ring wraps them. */
+/** Avatar boxes and ring rungs; fixed sizes. */
 const AVATAR_ROW = 34;
 const AVATAR_HERO = 52;
 const RING_ROW = { width: 1.5, offset: 2 } as const;
@@ -78,9 +68,8 @@ export function PersonAvatar({
         height: outer,
         borderRadius: radii.pill,
         borderWidth: ring.width,
-        // Unknown draws NOTHING: an app that cannot see the sharing plane must
-        // not paint a dashed ring on everybody and call it "not linked". The
-        // transparent border keeps the outer box, so nothing moves.
+        // Unknown draws NOTHING — never paint a dashed ring and call it
+        // "not linked" (transparent border keeps the outer box).
         borderColor:
           link === "linked"
             ? colors.text
@@ -110,7 +99,7 @@ export function PersonAvatar({
   );
 }
 
-/** The star, its own 44×44 target — pressing it never opens the person. */
+/** Its own 44×44 target — pressing never opens the person. */
 export function StarButton({
   name,
   starred,
@@ -159,7 +148,7 @@ export interface PersonRowProps {
   subNumeric?: boolean;
   meta?: string;
   metaNet?: boolean;
-  /** Wrap the name instead of ellipsising — the notes row's register. */
+  /** Wrap the name instead of ellipsising (notes row). */
   wrap?: boolean;
   onOpen?: () => void;
   trailing?: React.ReactNode;
@@ -168,7 +157,7 @@ export interface PersonRowProps {
   last?: boolean;
 }
 
-/** THE ROW. Avatar · main · meta · verbs · star, in that order, everywhere. */
+/** THE ROW: avatar · main · meta · verbs · star, everywhere. */
 export function PersonRow(props: PersonRowProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -227,8 +216,7 @@ export function PersonRow(props: PersonRowProps): React.JSX.Element {
   );
 }
 
-/** A trailing verb in the small recipe, or its quiet twin for a removal that
- *  must not compete with the row's own name. */
+/** A trailing verb, or its quiet twin for a removal. */
 export function Verb({
   label,
   quiet = false,
@@ -284,18 +272,17 @@ export function Verb({
 
 export interface PeopleSectionProps {
   title: string;
-  /** How many rows are inside. Omitted rather than shown as an invented zero. */
+  /** Rows inside; omitted rather than shown as an invented zero. */
   count?: number;
   collapsible?: boolean;
   open?: boolean;
   onToggle?: () => void;
-  /** The head's own `Add`, where the section can be added to in place. */
+  /** The head's own `Add`, for in-place adds. */
   add?: React.ReactNode;
   children: React.ReactNode;
 }
 
-/** THE SECTION. A head row with a title, a count, an optional collapse mark
- *  and an optional Add — then the rows, or the one-sentence empty state. */
+/** THE SECTION: head (title, count, collapse, Add) then rows or empty state. */
 export function PeopleSection(props: PeopleSectionProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -368,9 +355,7 @@ export function Caption({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-/** The commit row: both controls grow to fill the row on touch. Children are
- *  passed as an array so each can be seated in its own growing cell without
- *  reaching for `React.Children`. */
+/** Commit row: both controls grow to fill on touch. */
 export function Commits({
   children,
 }: {
@@ -386,8 +371,7 @@ export function Commits({
       }}
     >
       {cells.map((cell, index) => (
-        // Position is identity here: the commit row is a fixed pair the
-        // caller writes inline, never a reordered collection.
+        // Position is identity: a fixed pair, never reordered.
         <View key={index} style={{ flex: 1 }}>
           {cell}
         </View>
@@ -396,7 +380,7 @@ export function Commits({
   );
 }
 
-/** A labelled input — the handoff's `field` recipe at control height. */
+/** Labelled input — the handoff's `field` at control height. */
 export function FieldRow({
   label,
   value,
@@ -445,7 +429,7 @@ export function FieldRow({
   );
 }
 
-/** The vault tag under the hero: `<name> · <label>` on sunken paper. */
+/** Vault tag under the hero: `<name> · <label>` on sunken paper. */
 export function VaultTag({ label }: { label: string }): React.JSX.Element {
   const { colors } = useTheme();
   return (
@@ -465,8 +449,7 @@ export function VaultTag({ label }: { label: string }): React.JSX.Element {
   );
 }
 
-/** The frame's back row on a nested screen: chevron + the DESTINATION's name,
- *  never the word "Back" (v12 handoff, cross-app table). Height 40 on touch. */
+/** Back row: chevron + the DESTINATION's name, never "Back". */
 export function BackRow({
   destination,
   onPress,
@@ -495,8 +478,7 @@ export function BackRow({
   );
 }
 
-/** The count tiles: two-up on the phone. Each is a button that filters or
- *  navigates — a tile that only displayed a number would be a badge. */
+/** Count tiles: two-up; each filters or navigates — never a bare badge. */
 export function CountTiles({
   tiles,
   onSelect,

@@ -1,6 +1,6 @@
 /*
  * The matrix that proves ONE function answers "may an edge cross from vault A
- * to vault B" for both localities (issue #726 P2 §3 + P3 decision 6).
+ * to vault B" for both localities (#726 P2 §3 + P3 decision 6).
  *
  * Same-owner, cross-owner-approved, cross-owner-unapproved, remote-linked,
  * remote-unlinked and remote-revoked all go through `judgeEdgeCrossing`. The

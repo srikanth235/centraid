@@ -1,30 +1,12 @@
-// Pure-TS byte-level BPE tokenizer matching OpenAI CLIP's reference
-// `simple_tokenizer.py` (MIT-licensed, https://github.com/openai/CLIP —
-// same source as the ViT-B/32 weights this service downloads, see
-// LICENSES.md). Implemented from the published algorithm rather than a
-// vendored port: byte<->unicode remapping (identical to GPT-2's
-// `bytes_to_unicode`), regex pre-tokenization, then rank-ordered pairwise
-// merges read from the `merges.txt` BPE-rank file `bun run setup` fetches
-// alongside the model weights.
-//
-// Deliberately generic over its vocab/merges input so the unit tests below
-// can verify the ALGORITHM against a small, hand-computable synthetic
-// vocabulary rather than asserting specific token ids from the real 49408-
-// entry CLIP vocabulary from memory — this repo's honesty rule (never
-// present an unverified number as fact) applies to test fixtures too. The
-// real vocab.json/merges.txt (fetched by setup.ts from the same source as
-// the ONNX weights) plug into this same `createBpeTokenizer` at runtime.
+// CLIP BPE tokenizer matching OpenAI `simple_tokenizer.py` (MIT,
+// https://github.com/openai/CLIP — same source as the ViT-B/32 weights;
+// LICENSES.md). From the published algorithm, not a vendored port.
+// Generic over vocab/merges so tests use a hand-computable synthetic
+// vocabulary rather than asserting unverified CLIP token ids.
 
 const START_OF_TEXT = "<|startoftext|>";
 const END_OF_TEXT = "<|endoftext|>";
 
-/**
- * GPT-2/CLIP's byte<->printable-unicode remapping: every one of the 256
- * byte values gets a stable, mergeable unicode codepoint, so BPE can be
- * learned over Unicode strings instead of raw bytes (which include
- * unmergeable control characters and don't roundtrip through Python's/JS's
- * string types uniformly).
- */
 export function bytesToUnicode(): Map<number, string> {
   const bytes: number[] = [];
   for (
@@ -66,7 +48,6 @@ export function bytesToUnicode(): Map<number, string> {
   return map;
 }
 
-/** All adjacent symbol pairs in a word (a word is an array of BPE symbols). */
 export function getPairs(word: readonly string[]): Set<string> {
   const pairs = new Set<string>();
   for (let i = 0; i < word.length - 1; i++) {
@@ -75,7 +56,6 @@ export function getPairs(word: readonly string[]): Set<string> {
   return pairs;
 }
 
-/** Builds a rank lookup ("sym1 sym2" -> merge priority, lower = merges first) from ordered merge pairs. */
 export function buildBpeRanks(
   merges: ReadonlyArray<readonly [string, string]>
 ): Map<string, number> {
@@ -86,12 +66,6 @@ export function buildBpeRanks(
   return ranks;
 }
 
-/**
- * Applies BPE merges to a single word (already byte-remapped) until no
- * mergeable pair remains, following CLIP's reference algorithm: at each
- * step, merge the pair with the lowest rank (the earliest-learned merge);
- * stop when no remaining pair has a rank.
- */
 export function bpeMerge(
   token: string,
   ranks: ReadonlyMap<string, number>
@@ -141,10 +115,8 @@ export function bpeMerge(
   return word;
 }
 
-// CLIP's pre-tokenization regex: special tokens first, then contractions,
-// then runs of letters, single digits, or runs of "other" (punctuation/
-// symbol) characters. The `u` flag is required for the `\p{...}` Unicode
-// property escapes (repo oxlint convention — see docs/toolchain.md).
+// CLIP pre-tokenize: specials, contractions, letter runs, single digits, other.
+// `u` is required for `\p{...}` (docs/toolchain.md).
 const PRETOKENIZE_PATTERN =
   /<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|\p{L}+|\p{N}|[^\s\p{L}\p{N}]+/gu;
 
@@ -152,24 +124,16 @@ function cleanText(text: string): string {
   return text.trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
-/**
- * Lowercases, collapses whitespace, and splits into CLIP's pre-tokens
- * (special tokens, contractions, letter runs, single digits, punctuation
- * runs). Exported separately from `encode` so the splitting behavior itself
- * is directly unit-testable without needing a vocab/merges fixture.
- */
 export function pretokenize(text: string): string[] {
   return cleanText(text).match(PRETOKENIZE_PATTERN) ?? [];
 }
 
 export interface ClipTokenizerData {
-  /** token string -> id */
   vocab: ReadonlyMap<string, number>;
   merges: ReadonlyArray<readonly [string, string]>;
 }
 
 export interface ClipTokenizer {
-  /** Encodes text to a fixed-length id sequence: [startoftext, ...bpe ids (truncated), endoftext, ...zero padding]. */
   encode: (text: string, contextLength?: number) => number[];
 }
 
@@ -186,10 +150,7 @@ export function createClipTokenizer(data: ClipTokenizerData): ClipTokenizer {
       "createClipTokenizer: vocab is missing <|startoftext|> or <|endoftext|>"
     );
   }
-  // Re-bound to new consts: TS's control-flow narrowing above doesn't carry
-  // into the `encode` closure defined below (it's a nested function, called
-  // at some later, unknowable time), so without this rebinding `encode`
-  // would see `startId`/`endId` widened back to `number | undefined`.
+  // Re-bind: control-flow narrowing does not carry into the nested `encode` closure.
   const startId: number = maybeStartId;
   const endId: number = maybeEndId;
 

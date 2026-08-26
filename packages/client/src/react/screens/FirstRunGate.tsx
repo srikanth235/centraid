@@ -8,36 +8,19 @@ import type {
   OnboardingPath,
 } from "./OnboardingScreen.js";
 
-// The chooser is step ZERO of onboarding, so it wears onboarding's sheet. It
-// used to borrow RecoverScreen's module, which is how the product's first
-// screen and its second screen ended up looking like two different apps.
+// Chooser = step ZERO of onboarding; it wears onboarding's sheet, not
+// RecoverScreen's.
 import styles from "./OnboardingScreen.module.css";
 
 /**
- * First run branches on PLATFORM, not on gateway state (issue #603).
- *
- * There is no founding ceremony and no "uninitialized" gateway any more: a
- * fresh gateway founds one marked personal vault at construction, so the
- * only question left is which gateway this device should talk to. Shared
- * vaults are created later by an explicit owner action.
- *
- *   - Desktop (Electron) can answer two ways, so it gets a chooser: start a
- *     fresh gateway on this Mac, or join one that already exists with a pair
- *     ticket.
- *   - Web (PWA) can only ever join — there is no gateway to start inside a
- *     browser tab — so it renders the ticket path directly, with no chooser
- *     and no probe.
- *
- * Both paths hand off to the shell after one connection act. Profile details
- * are optional Settings choices, not an onboarding gate.
+ * Branches on PLATFORM, not gateway state (#603): desktop gets a chooser
+ * (fresh vs join with a ticket); web can only join and renders the ticket
+ * path directly. Profile details are optional Settings choices, not a gate.
  */
 export interface FirstRunGateProps {
-  /** Completion after the gateway connection — boot writes the stamp and
-   *  swaps in the app. */
   onOnboardingComplete: (
     input: OnboardingCompleteInput
   ) => Promise<void> | void;
-  /** Override the platform decision. Defaults to `isWebHost()`. */
   host?: "desktop" | "web";
 }
 

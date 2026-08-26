@@ -1,4 +1,4 @@
-// Direct ICS parser unit tests (issue #545 B6) — pure string→struct.
+// Direct ICS parser unit tests (#545) — pure string→struct.
 
 import { describe, expect, test } from "vitest";
 

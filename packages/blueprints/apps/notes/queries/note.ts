@@ -1,17 +1,11 @@
 /**
  * A single note's canonical body, decoded — the editor's on-open pull. The
  * library/search projections ship only a short preview + the checklist tally
- * (issue #404: shipping every note's full body on every doorbell was the
+ * (#404: shipping every note's full body on every doorbell was the
  * cost), so the full text is fetched lazily here when a note is opened.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders it
  * as the "ask the owner for access" state, receipt id included.
- *
- * TS conversion note: the vault read surface returns `Record<string, unknown>`
- * rows (see HandlerCtx.vault), so a raw row is read as such and its columns
- * stay `unknown` — every consumer here (`decodeBody`, a where `value`) accepts
- * `unknown`, so no cast is needed. Handler logic is otherwise byte-for-byte the
- * pre-conversion JS.
  */
 
 /** Decode a note body from a content item's content_uri (see library.ts). */

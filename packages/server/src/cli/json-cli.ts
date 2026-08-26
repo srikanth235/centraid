@@ -1,16 +1,4 @@
-/*
- * Shared `--json` error contract for the admin CLI (issue #382).
- *
- * Every `fail(message, code)` call in this package writes to stderr and
- * calls `process.exit` immediately — right for a human terminal, wrong for
- * a caller (the desktop's SSH-driven admin flow) that needs to parse a
- * structured failure. `--json` commands swap in `jsonFail`, which THROWS a
- * catchable `CliJsonError` instead of exiting; `runJson` wraps the command
- * body, catches that throw, and prints `{ok:false, error, message}` before
- * exiting with the same code. Human mode (`json: false`) is byte-identical
- * to before — `jsonFail` hands back the real `fail`, and `runJson` just
- * awaits the body with no try/catch in the way.
- */
+/* `--json` error contract (#382) for the SSH-driven caller. */
 
 export type Fail = (message: string, code?: number) => never;
 
@@ -24,7 +12,6 @@ export class CliJsonError extends Error {
   }
 }
 
-/** Human mode passes `fail` through unchanged; `--json` mode makes it throw. */
 export function jsonFail(json: boolean, fail: Fail): Fail {
   if (!json) return fail;
   return (message: string, code = 1): never => {
@@ -32,18 +19,7 @@ export function jsonFail(json: boolean, fail: Fail): Fail {
   };
 }
 
-/**
- * Run `body`. In human mode this is a plain `await body()` — any `fail()`
- * call inside already exited the process, so there is nothing to catch.
- * In `--json` mode, a thrown `CliJsonError` (or any other error) becomes
- * one JSON line on stdout — `error` is a coarse code derived from the exit
- * code (`2` is a usage error, everything else is a runtime error), never
- * the raw message, so scripts can switch on it without string-matching —
- * then hands off to `realFail` (the ORIGINAL `fail` the command was given,
- * not the `jsonFail`-wrapped one `body` used internally) so the actual
- * exit — `process.exit` in production, a throw in tests — happens exactly
- * the same way a human-mode failure would.
- */
+/** One JSON error line; exit-derived coarse code; exits via the ORIGINAL `fail`. */
 export async function runJson(
   json: boolean,
   realFail: Fail,

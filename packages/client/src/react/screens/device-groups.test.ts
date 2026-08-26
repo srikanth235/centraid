@@ -90,8 +90,8 @@ describe(groupDevicesByOwner, () => {
 
   it("folds a device's per-vault enrollments into one hardware row", () => {
     // The devices route returns a row per (device, vault). Two rows for one
-    // browser used to render as two devices — the card counted "4 devices"
-    // for two — each with a "Revoke device" button that dropped one vault.
+    // browser must not render as two devices — a card counting "4 devices"
+    // for two, each with a "Revoke device" button that drops one vault.
     const groups = groupDevicesByOwner(
       [
         device({ deviceId: "enr_shared", vaultId: "v1", vaultName: "Shared" }),

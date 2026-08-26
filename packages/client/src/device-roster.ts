@@ -1,5 +1,5 @@
 /*
- * Roster predicates over the device DTO (issue #599).
+ * Roster predicates over the device DTO (#599).
  *
  * A leaf on purpose: `gateway-client-devices.ts` registers gateway listeners
  * at module load through `gateway-client-core.ts`, so a React screen that

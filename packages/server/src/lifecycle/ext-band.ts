@@ -1,19 +1,6 @@
-// The ext band's lifecycle wiring (issue #286 phase 2) — the successor to
-// the silo's draft-data seeding and migrations-on-publish. App data lives
-// in the vault; what a draft session branches is the app's DECLARED
-// extension tables:
-//
-//   - first draft access seeds the vault's `extdraft_<app>_*` band from the
-//     live band (rows copied), then every access diff-applies the draft
-//     manifest's `ext.tables` so a schema edit is previewable immediately
-//     (rows preserved; reset is the explicit fresh-snapshot control);
-//   - publish reads `ext.tables` from the POST-REBASE tree and applies the
-//     DDL diff to the LIVE band transactionally (inside the store's publish
-//     mutex, before the ff-merge — a refused spec aborts the publish), then
-//     drops the draft band: the scratch copy is superseded.
-//
-// The composition root owns this: it is the one layer that sees both the
-// session worktree (which carries `app.json`) and the vault plane.
+// Draft access seeds `extdraft_<app>_*` from live, then diffs the draft
+// `ext.tables`. Publish applies the post-rebase specs to LIVE inside the
+// publish mutex before the ff-merge, then drops the draft band (#286).
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -22,7 +9,6 @@ import type { ExtApplyOutcome, ExtTableSpec } from "@centraid/vault";
 
 import type { WorktreeStore } from "../worktree-store/index.js";
 
-/** The slice of the vault plane the lifecycle needs — injected, testable. */
 export interface ExtBandOps {
   applyAppExt: (appId: string, tables: ExtTableSpec[]) => ExtApplyOutcome;
   seedAppExtDraft: (
@@ -33,12 +19,6 @@ export interface ExtBandOps {
   dropAppExtDraft: (appId: string) => { dropped: string[] };
 }
 
-/**
- * The declared extension tables of the app.json at `appDir` — empty when
- * the manifest is missing, unreadable, or declares no `ext` block. Spec
- * validation is the vault's job at apply time; manifest-shape validation
- * is the publish path's (`validateManifestAt`).
- */
 export async function readExtSpecs(appDir: string): Promise<ExtTableSpec[]> {
   try {
     const raw = await fs.readFile(path.join(appDir, "app.json"), "utf8");
@@ -49,12 +29,6 @@ export async function readExtSpecs(appDir: string): Promise<ExtTableSpec[]> {
   }
 }
 
-/**
- * The publish half: apply the post-rebase tree's declared specs to the
- * LIVE band (create/alter/drop, validated + receipted by the vault
- * gateway), then drop the superseded draft band. Wired as the store's
- * `beforeMerge` hook — a throw aborts the publish with `main` untouched.
- */
 export async function applyExtOnPublish(
   ops: ExtBandOps,
   appId: string,
@@ -66,14 +40,7 @@ export async function applyExtOnPublish(
   return outcome;
 }
 
-/**
- * Build the runtime's draft code-dir resolver: resolve an app's code dir
- * to its OPEN session worktree and keep the vault's draft band in step
- * with the draft manifest before returning. Returns `undefined` for an
- * unknown/closed session (→ the runtime serves a 503), leaving the live
- * path unaffected. A refused spec propagates (→ 500 with the vault's
- * message) rather than masquerading as a missing session.
- */
+/** Closed session → `undefined` (503). A refused spec must propagate, not look missing. */
 export function makeDraftCodeDirResolver(
   store: WorktreeStore,
   ext?: ExtBandOps
@@ -90,12 +57,6 @@ export function makeDraftCodeDirResolver(
   };
 }
 
-/**
- * Keep the draft band in step with the draft worktree's manifest. Cheap
- * when nothing changed (spec diff is a no-op); creates + seeds from live
- * on the very first access. Skipped entirely for apps that declare no ext
- * tables and have no draft band to maintain.
- */
 export async function ensureDraftBand(
   ops: ExtBandOps,
   appId: string,
@@ -103,8 +64,7 @@ export async function ensureDraftBand(
 ): Promise<void> {
   const specs = await readExtSpecs(worktreeAppDir);
   if (specs.length === 0) {
-    // Declaring zero tables in the draft still has to KILL a previously
-    // declared draft table — seed handles the diff-to-empty.
+    // Zero tables still has to drop a previously declared draft table.
     ops.dropAppExtDraft(appId);
     return;
   }

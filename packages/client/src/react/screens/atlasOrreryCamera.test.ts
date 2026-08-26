@@ -1,5 +1,5 @@
 /**
- * Names atlasOrreryCamera.ts (issue #545 B8). Pure pan/zoom math lives in
+ * Names atlasOrreryCamera.ts (#545). Pure pan/zoom math lives in
  * atlasOrreryGeometry (already tested). Calling the hook outside a React
  * dispatcher must throw — pins the export is a real hook, not a no-op stub.
  */

@@ -1,17 +1,7 @@
-// Shell CSS lowering for the product-grammar registry.
-//
-// This is the only place that turns shared design values into a browser
-// custom-property sheet.  It deliberately emits solved values and adapters;
-// clients do not need a CSS parser or a second semantic vocabulary.
-//
-// Two things this file owns that no component may re-own:
-//   • the density axis — an app sets `data-density`, and only row height and
-//     content padding move (never control size);
-//   • `prefers-reduced-motion`, honoured in ONE global rule.
-//
-// There is no surface-tone axis. The shell and every app share ONE page
-// colour (`--bg`); see docs/traps/design-tokens.md, "There is ONE page, and
-// an app does not retune it."
+// The only lowering of shared design values into custom properties. Two axes
+// no component may re-own: density (row height and padding, never control
+// size) and reduced motion. No surface-tone axis — one page colour, `--bg`
+// (docs/traps/design-tokens.md).
 
 import {
   DENSITY_TIERS,
@@ -60,22 +50,16 @@ function themeProps(theme: Theme): Record<string, string> {
     "--accent-deep": theme.accentDeep,
     "--accent-fill": theme.accentDeep,
     "--accent-deep-hover": theme.accentHover,
-    // The OUTLINE's hover, which steps the other way — see roles.ts.
+    // The OUTLINE's hover steps the other way.
     "--accent-hover": theme.accentInkHover,
     "--accent-light": theme.accentLight,
     "--accent-soft": `color-mix(in oklab, ${theme.accent} 8%, transparent)`,
     "--accent-text": theme.accentText,
     "--attention": theme.attention,
-    // App marks override these element-local defaults with the app's solved
-    // hue, ink, and size. Keeping the defaults in the shell contract means
-    // the shared CSS module is valid even before a mark receives its props.
     "--app-mark-hue": "var(--c-slate)",
     "--app-mark-ink": "var(--app-identity-text)",
     "--app-mark-size": "30px",
-    // App marks use a quiet chip and let the solved identity text rung carry
-    // the single-tone outline.
     "--app-mark-tint": theme.kind === "dark" ? "20%" : "13%",
-    // An app that declares no identity renders in ink; the shell always does.
     "--app-identity-text": "var(--text)",
     "--bg": theme.bg,
     "--bg-app": theme.bgApp,
@@ -100,14 +84,11 @@ function themeProps(theme: Theme): Record<string, string> {
     "--link": theme.link,
     "--net": theme.net,
     "--net-hover": theme.netHover,
-    // A concrete `rgba()`, not a `color-mix()`: this is the one wash whose
-    // alpha differs per theme, and it is built from `--net` in the registry.
+    // A concrete `rgba()`, never a `color-mix()`: alpha differs per theme.
     "--net-wash": theme.netWash,
     "--on-accent": theme.textInv,
     "--seam": theme.seam,
-    // The stage is the media ground for viewer/slideshow/editor — deliberately
-    // the SAME literal in both themes (Photos handoff v4 §B), unlike every
-    // other role in this block.
+    // The SAME literal in both themes.
     "--on-stage": ON_STAGE,
     "--on-stage-soft": ON_STAGE_SOFT,
     "--scrim": theme.scrim,
@@ -136,9 +117,7 @@ function themeProps(theme: Theme): Record<string, string> {
   return out;
 }
 
-/** The density axis. Tiers scale row height and content padding only — a
- *  control below 34px stops being reliably hittable, so control size is not
- *  on this axis and no tier may put it there. */
+/** No tier may scale control size: below 34px it stops being hittable. */
 function densityBlocks(): string {
   return Object.entries(DENSITY_TIERS)
     .map(([tier, value]) =>
@@ -150,8 +129,7 @@ function densityBlocks(): string {
     .join("\n\n");
 }
 
-/** Reduced motion, honoured in ONE place. Duration goes to zero and nothing
- *  else changes: the grammar says movement is removed, not that layout is. */
+/** Duration to zero and nothing else — movement, not layout. */
 const REDUCED_MOTION = [
   "@media (prefers-reduced-motion: reduce) {",
   "  :where(html) { --dur-1: 0ms; --dur-2: 0ms; }",
@@ -170,10 +148,7 @@ export function toCss(): string {
     staticProps[`--r-${key}`] = `${value}px`;
   for (const [key, value] of Object.entries(spacing))
     staticProps[`--sp-${key}`] = `${value}px`;
-  // The two named sub-base seams (v7 §E). They sit on the SAME `--sp-`
-  // namespace as the six rungs on purpose: a stylesheet reaching under the
-  // base still has to name which exception it is claiming, and the two names
-  // are the whole allowlist.
+  // These two names are the whole allowlist for reaching under the base.
   for (const [key, value] of Object.entries(subBase))
     staticProps[`--sp-${key}`] = `${value}px`;
 
@@ -183,25 +158,14 @@ export function toCss(): string {
   staticProps["--o-disabled"] = "0.45";
   staticProps["--dur-1"] = "140ms";
   staticProps["--dur-2"] = "280ms";
-  // From `metrics`, never re-typed: these same four numbers are emitted to
-  // native by `roles.ts` and quoted in DESIGN.md, and a literal here is how the
-  // CSS and the native lowering drift apart without a test noticing.
+  // From `metrics`, never re-typed; `roles.ts` emits the same to native.
   staticProps["--h-control"] = `${metrics.control}px`;
   staticProps["--h-row"] = `${metrics.row}px`;
   staticProps["--h-segmented"] = `${metrics.segmented}px`;
   staticProps["--w-stem"] = `${metrics.stem}px`;
-  // Touch-first like `--page-margin`: the touch column at :root, the pointer
-  // column under `(pointer: fine)` below.
   staticProps["--w-key-col"] = `${metrics.keyColTouch}px`;
-  // THE PAGE MARGIN, emitted so the web stops guessing it. Native already
-  // reads this scale (`toNativeTheme` lowers the mobile rung) and every phone
-  // screen insets by it; the web had no token at all, so blueprints hardcoded
-  // their own number — Photos used 20px, which is neither the desktop 32 nor
-  // the mobile 18. The compact rung is not a media query here because an app
-  // pane can be narrower than the viewport (#505 trap 1); a pane that knows it
-  // is narrow re-declares this property on itself and everything inside it
-  // follows, which is why the value is read through a variable rather than
-  // branched on at each use.
+  // THE PAGE MARGIN, so no blueprint invents one. The compact rung is NOT a
+  // media query: a narrow pane re-declares it and its subtree follows (#505).
   staticProps["--page-margin"] = `${pageMargin.mobile}px`;
   staticProps["--density-row"] = `${DENSITY_TIERS.comfortable.row}px`;
   staticProps["--density-pad"] = `${DENSITY_TIERS.comfortable.pad}px`;
@@ -226,32 +190,19 @@ export function toCss(): string {
   }
   Object.assign(pointerProps, typeSizeRungs(remSizeScale(type)));
 
-  // Library became a tile recipe.  The values stay shared between Home and
-  // Discover, but the semantic namespace no longer suggests a separate UI.
+  // `--tile-` is deliberately not per-surface.
   for (const [key, value] of Object.entries(library)) {
     const suffix = key.startsWith("tile-") ? key.slice("tile-".length) : key;
     staticProps[`--tile-${suffix}`] = value;
   }
 
-  // The `prefers-color-scheme` entry is the un-stamped first paint. `<html>`
-  // carries no `data-theme` until the renderer has read the member's prefs, and
-  // until this existed the shell's index.html hardcoded `data-theme="dark"` to
-  // stop a light flash — which made "follow the system" unreachable, because
-  // the attribute always won. The blueprint sheet has emitted exactly this pair
-  // since it shipped (`blueprint.ts`); the shell sheet was the asymmetry.
-  //
-  // No specificity contest with the `[data-theme='…']` blocks appended below:
-  // `:not([data-theme])` simply stops matching the moment the attribute is
-  // stamped, so an explicit choice — including an explicit `light` on a dark
-  // OS — always wins.
+  // The un-stamped first paint, so BOTH themes must be reachable here. Never
+  // fix a light flash by hardcoding `data-theme` in index.html: a stamped
+  // attribute always wins, and "follow the system" becomes unreachable.
   const blocks = [
     "/* Generated by @centraid/design — do not edit by hand. */",
     block(":root", { ...staticProps, ...themeProps(themes.light) }),
-    // A control is 44px on touch, without exception, and `metrics.control`
-    // under a pointer (v7 §C: `CTL = touch ? 44 : 34`). The 32px this used to
-    // drop to was off the scale in both directions — smaller than the control
-    // height every other token agrees on, and reached by a literal rather than
-    // by the metric.
+    // 44px on touch, `metrics.control` under a pointer; never a literal 32.
     [
       "@media (pointer: fine) {",
       block(":root", pointerProps)

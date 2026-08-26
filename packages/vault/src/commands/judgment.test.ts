@@ -1,4 +1,4 @@
-// The learning loop (issue #310 C1, rule R08): corrections are recorded,
+// The learning loop (#310 C1, rule R08): corrections are recorded,
 // the owner distills a standing judgment, the contract stage vetoes the
 // next matching call, and revocation lifts it — learning as rows,
 // auditable and revocable, end to end through typed commands.

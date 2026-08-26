@@ -1,6 +1,6 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /*
- * Settings → Enrichment data layer (issue #807).
+ * Settings → Enrichment data layer (#807).
  *
  * The law under test is ONE WRITER PER PATH: tiers and rules go to the vault's
  * own routes, and an engine profile goes to the prefs key `enrich.profile.<id>`

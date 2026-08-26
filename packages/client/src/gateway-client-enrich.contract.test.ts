@@ -5,7 +5,7 @@
 // and the client renders the tiers the GATEWAY reports back, never the ones it
 // asked for. Shared harness in gateway-client-seam-fixtures.ts.
 //
-// Tier vocabulary is `off | device | gateway` (issue #712 C5, renamed from
+// Tier vocabulary is `off | device | gateway` (#712 C5, renamed from
 // `off | local | model`).
 
 import { describe, expect, it } from "vitest";
@@ -62,7 +62,7 @@ describe("enrichment tier seam", () => {
   });
 });
 
-// The policy CASCADE (issue #807), layered over the tier above. Its laws are
+// The policy CASCADE (#807), layered over the tier above. Its laws are
 // the tier's laws, restated for a scoped rule: the caller renders what the
 // VAULT holds, and the effective answer is a REPORT of what the one runtime
 // gate would resolve — never permission the client may act on itself.
@@ -146,7 +146,7 @@ describe("enrichment cascade seam", () => {
   });
 });
 
-// The EGRESS-CONSENT ledger (issue #807, Wave 3). Its seam laws are the
+// The EGRESS-CONSENT ledger (#807). Its seam laws are the
 // cascade's, one turn stricter: the client only ever READS the ledger and
 // POSTS an answer to it — the rows themselves are written by the vault's one
 // journalled command — and a decline is carried back exactly like a grant,

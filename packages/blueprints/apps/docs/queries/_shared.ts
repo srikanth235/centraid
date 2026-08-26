@@ -1,38 +1,14 @@
 /**
- * Shared read/join helpers for the docs app's queries (issue #352 phase 4) —
- * pulled out once drive.ts and search.ts both needed the SAME bounded joins
- * over the same windowed document/content ids: free-form labels
- * (core.tag_item/untag_item over the shared "Tags" scheme —
- * packages/vault/src/commands/tags.ts, shared with notes/tasks) and the
- * blob custody projection
- * (blob.custody_state, blob/custody.ts) and, since issue #821, who a document
- * is shared with (the share.circle_grant × social.circle_member ×
- * share.commons_member_state join that packages/vault/src/share/
- * commons-lifecycle.ts runs steward-side, here scoped to the windowed
- * documents and their folder ancestors). Mirrors the photos app's own
- * queries/_shared.js readAssetJoins split, minus the parts specific to media
- * (favorite star and place stay inline in drive.ts/search.ts — they already
- * ride the SAME core.tag/concept/concept_scheme reads those files make for
- * folders, so factoring them out here would just add a second round trip).
- *
- * NOT a query itself — the dispatcher resolves a query name straight to
- * `queries/<name>.ts` (never a directory scan: packages/server/src/engine/
- * handlers/dispatcher.ts), so a plain helper module beside the handlers is
- * invisible to it and to build-manifest.mjs's install-copy walk; nothing
- * needs to know this file exists besides the two callers that import it.
- *
- * TS conversion note: the vault read surface returns `Record<string, unknown>`
- * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
- * shape (`as unknown as X[]`) at its read site — the only place unknown vault
- * columns become named fields. Handler logic is otherwise byte-for-byte the
- * pre-conversion JS.
+ * Bounded joins over the same windowed document/content ids (#352, #821).
+ * NOT a query: the dispatcher resolves `queries/<name>.ts` and never scans
+ * the directory, so a helper beside the handlers is invisible to it and to
+ * build-manifest.mjs's install-copy walk.
  */
 
 const TAGS_SCHEME_URI = "centraid:tags:v1";
 const DOCUMENT_TARGET_TYPE = "core.document";
 const FOLDER_CONTAINER_TYPE = "docs.folder";
 
-/** A folders/flags/tags-scheme concept row (the SKOS vocabulary). */
 export interface ConceptRow {
   concept_id: string;
   scheme_id: string;
@@ -41,13 +17,11 @@ export interface ConceptRow {
   broader_concept_id?: string | null;
 }
 
-/** A concept-scheme row (keyed by its stable URI). */
 export interface SchemeRow {
   scheme_id: string;
   uri: string;
 }
 
-/** A core.tag edge row. */
 export interface TagRow {
   tag_id: string;
   concept_id: string;
@@ -56,7 +30,6 @@ export interface TagRow {
   tagged_at?: string;
 }
 
-/** One free-form label carried by a document, keyed by document_id. */
 export interface LabelEntry {
   tag_id: string;
   label: string;
@@ -71,13 +44,9 @@ interface LabelArgs {
 }
 
 /**
- * Free-form labels for the windowed document ids, keyed by document_id —
- * `{ document_id -> {tag_id, label}[] }`. `schemes`/`concepts` are the SAME
- * core.concept_scheme/core.concept reads the caller already made for the
- * folders scheme (and, in drive.ts, the flags scheme) — passed in rather
- * than re-read, since a personal vault's whole concept table is small and
- * already unbounded-read once per query. Each entry carries its tag_id:
- * untag.ts removes by tag_id (core.untag_item), not by label.
+ * `schemes`/`concepts` are the SAME reads the caller already made, passed in
+ * rather than re-read. Each entry carries its tag_id because untag.ts removes
+ * by tag_id, never by label.
  */
 export async function readLabelsByDocument({
   ctx,
@@ -117,11 +86,9 @@ interface CustodyRow {
 }
 
 /**
- * The blob custody projection for the windowed CURRENT content ids, keyed by
- * content_id. A content id absent from the map means either its bytes never
- * left vault.db (an inline `data:` document — custody has nothing to track)
- * or the standing sweep simply hasn't run yet; callers render nothing for a
- * missing entry rather than claim a state the vault never asserted.
+ * An absent content id means inline bytes custody cannot track, or a sweep
+ * that has not run; callers render nothing rather than claim a state the
+ * vault never asserted.
  */
 export async function readCustodyByContent({
   ctx,
@@ -146,19 +113,12 @@ export async function readCustodyByContent({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Who a document is shared with (issue #821)
-// ---------------------------------------------------------------------------
-//
-// GRACEFUL DENIAL is why this read is a seam of its own. Docs' `share.*` and
-// `core.party` scopes are newer than the app, and on an EXISTING vault a newly
-// declared scope parks for the owner to approve rather than being auto-granted.
-// A denial here must never take the drive down with it: this helper catches its
-// own denial and returns `null`, which the callers ship as `shared_with: null`
-// on every row — "we cannot see", which is a different sentence from "shared
-// with nobody" (`[]`) and is worded differently on screen.
+// ─── Who a document is shared with (#821) ─────
+// GRACEFUL DENIAL: on an existing vault a newly declared scope parks for the
+// owner to approve, and a denial must never take the drive down. This catches
+// its own denial and returns `null`, which callers ship as `shared_with: null`
+// — "we cannot see", not "shared with nobody" (`[]`).
 
-/** A live commons grant over one container. */
 interface GrantRow {
   grant_id: string;
   circle_id: string;
@@ -189,47 +149,36 @@ interface PartyRow {
   display_name?: string | null;
 }
 
-/** One person a document reaches through a grant. */
 export interface SharedMember {
   party_id: string;
   label: string;
   capability: "read" | "read+write";
-  /** `invited` until the member's own vault has accepted. A member who
-   *  refused is not listed at all — naming them as shared-with would be the
-   *  rail asserting a reach that was declined. */
+  /** `invited` until their vault accepts. REFUSED is not listed: naming them
+   *  would assert a reach that was declined. */
   status: "invited" | "current";
 }
 
-/** One live share a document sits inside, as the app renders it. */
 export interface SharedWithEntry {
   grant_id: string;
   circle_id: string;
-  /** What the member reads: the circle's own name, or — for a circle the
-   *  sharing flow created implicitly for one-off recipients — the recipients'
-   *  names, because an implicit circle's stored name is a machine string. */
+  /** Circle name, or recipients for an implicit circle (stored name is machine). */
   label: string;
-  /** Whether the grant names THIS document or a folder above it. The rail
-   *  says "through <folder>" for the second, so a member is never told the
-   *  document itself was shared when its folder was. */
+  /** THIS document or a folder above it — never tell a member the document
+   *  itself was shared when it only sits in a shared folder. */
   via: "document" | "folder";
-  /** The granted container's id — the folder whose name the rail prints when
-   *  `via` is `folder`, and the document's own id otherwise. */
   container_id: string;
   members: SharedMember[];
   member_count: number;
-  /** How many of `members` have not accepted yet. */
   pending_count: number;
 }
 
-/** A bound for every `in`-shaped share read, sized off the caller's window. */
+/** Bounds every `in`-shaped share read, sized off the caller's window. */
 const shareLimit = (ids: number): number =>
   Math.min(Math.max(ids, 1) * 4, 2000);
 
 /**
- * The folders-scheme concept chain above a document, root included: the
- * document's own folder, then each broader concept, walked client-side off
- * concepts already in hand. A grant on any of them reaches the document, so
- * the chain is what the folder-side grant read is bounded by.
+ * Concept chain above a document, root included. A grant on any of them
+ * reaches the document, so this chain bounds the folder-side grant read.
  */
 function folderChain(
   conceptId: string | undefined,
@@ -237,9 +186,8 @@ function folderChain(
 ): string[] {
   const chain: string[] = [];
   let at = conceptId;
-  // The walk is GUARDED rather than trusted: a broader-concept cycle is data
-  // the vault does not forbid, and an unguarded walk would hang the drive
-  // rather than lose one share.
+  // GUARDED, not trusted: the vault does not forbid a broader-concept cycle,
+  // and an unguarded walk hangs the drive rather than losing one share.
   while (at && !chain.includes(at) && chain.length < 64) {
     chain.push(at);
     at = parentOf.get(at) ?? undefined;
@@ -248,13 +196,9 @@ function folderChain(
 }
 
 /**
- * What a share is CALLED, honestly.
- *
- * A named circle carries the owner's own word for the audience ("Family"), and
- * that is what the rail prints. A circle the sharing flow minted for a one-off
- * recipient (`implicit_circle`) has a machine-generated name nobody chose, so
- * printing it would show a member an internal string; the honest label there is
- * who is actually in it.
+ * A named circle carries the owner's word for the audience. An
+ * `implicit_circle` has a machine-generated name nobody chose — the honest
+ * label is who is in it.
  */
 function shareLabel(
   grant: GrantRow,
@@ -270,13 +214,10 @@ function shareLabel(
 }
 
 /**
- * Who each windowed document is shared with, keyed by document_id — or `null`
- * when any of the share reads is denied.
+ * `null` when any share read is denied.
  *
- * SHARES DECORATE THE WINDOW, THEY NEVER WIDEN IT. Every read below is bounded
- * by ids the caller already holds: the windowed document ids, the folder
- * concepts above them, then the circles those grants name and the parties those
- * circles hold. Nothing here can pull a whole table.
+ * SHARES DECORATE THE WINDOW, THEY NEVER WIDEN IT: every read below is bounded
+ * by ids the caller already holds.
  */
 export async function readSharesByDocument({
   ctx,
@@ -288,9 +229,7 @@ export async function readSharesByDocument({
   ctx: HandlerCtx;
   purpose: string;
   documentIds: string[];
-  /** Each windowed document's own folders-scheme concept id (root included). */
   folderByDoc: Map<string, string>;
-  /** The folders scheme's concepts — the parent chain is walked off these. */
   folderConcepts: ConceptRow[];
 }): Promise<Map<string, SharedWithEntry[]> | null> {
   if (documentIds.length === 0) return new Map();
@@ -320,9 +259,8 @@ export async function readSharesByDocument({
         ? ctx.vault.read(grantRead(FOLDER_CONTAINER_TYPE, folderIds))
         : { rows: [] as Record<string, unknown>[] },
     ]);
-    // Deduplicated by grant_id: the two reads are disjoint by container_type
-    // in the vault, but a grant that arrived through both would otherwise
-    // print the same audience twice on the same row.
+    // Dedupe by grant_id: a grant arriving through both reads would otherwise
+    // print the same audience twice on one row.
     const grants = [
       ...new Map(
         [
@@ -359,8 +297,8 @@ export async function readSharesByDocument({
     const memberRows = (members.rows ?? []) as unknown as CircleMemberRow[];
     const stateRows = (states.rows ?? []) as unknown as MemberStateRow[];
 
-    // Party labels are a read of their own, bounded by the roster the circles
-    // just named — a member with no party row is "Someone", never an id.
+    // Bounded by the roster the circles just named; a member with no party row
+    // is "Someone", never an id.
     const partyIds = [...new Set(memberRows.map((m) => m.party_id))];
     const parties =
       partyIds.length > 0
@@ -396,8 +334,7 @@ export async function readSharesByDocument({
           party_id: m.party_id,
           label: nameByParty.get(m.party_id) ?? "Someone",
           capability: m.capability ?? "read",
-          // No state row yet means the invitation has gone out and nothing
-          // has come back — invited, not current.
+          // No state row: the invitation went out and nothing came back.
           status:
             statusByGrantParty.get(`${grant.grant_id} ${m.party_id}`) ??
             "invited",
@@ -423,9 +360,8 @@ export async function readSharesByDocument({
 
     const byDocument = new Map<string, SharedWithEntry[]>();
     for (const documentId of documentIds) {
-      // Reach is matched per container TYPE, never on the id alone: a
-      // document id and a folder concept id are different namespaces, and
-      // comparing across them is how a share lands on the wrong row.
+      // Match per container TYPE, never id alone: document ids and folder
+      // concept ids are different namespaces.
       const chain = chainByDoc.get(documentId) ?? [];
       const entries = grants
         .filter((g) =>
@@ -435,7 +371,6 @@ export async function readSharesByDocument({
         )
         .map((g) => entryByGrant.get(g.grant_id))
         .filter((e): e is SharedWithEntry => e !== undefined)
-        // The document's own grant leads: it is the fact the member acted on.
         .toSorted(
           (a, b) =>
             (a.via === "document" ? 0 : 1) - (b.via === "document" ? 0 : 1) ||

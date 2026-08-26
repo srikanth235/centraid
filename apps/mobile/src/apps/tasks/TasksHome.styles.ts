@@ -1,4 +1,4 @@
-// Tasks' native styles (Tasks spec §5; issue #834). Values come from the design
+// Tasks' native styles (Tasks spec §5; #834). Values come from the design
 // boundary (`kit/theme`) and nothing else — no hex, no literal rule weight, no
 // font size of its own.
 

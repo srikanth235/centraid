@@ -34,8 +34,7 @@ function asset(overrides: Partial<PhotoAsset> = {}): PhotoAsset {
 const vaults = (...facts: VaultFacts[]): ReadonlyMap<string, VaultFacts> =>
   new Map(facts.map((f) => [f.vaultId, f]));
 
-// Stated once. The values are stand-ins for whatever hue the registry carries;
-// what the cases below are about is WHICH vaults get a mark, never the colour.
+// Hues are stand-ins; only WHICH vaults get a mark is under test, never colour.
 const FALLBACK_HUE = "#B07C2E";
 const VAULT_HUE = "#3E6B57";
 const SKEL = "#E4E3E0";
@@ -60,8 +59,6 @@ describe("the vault slot (handoff §4.4, §H)", () => {
   test("is derived from the record, never a name — a rename keeps the mark", () => {
     const renamed = vaultMarkFor(
       asset({ sourceVaultId: "v2" }),
-      // The member renamed the shared vault to something of their own. The
-      // marker is about where the photograph IS, so it survives the rename.
       vaults({ vaultId: "v2", label: "Holiday pics", personal: false }),
       3,
       FALLBACK_HUE
@@ -71,7 +68,6 @@ describe("the vault slot (handoff §4.4, §H)", () => {
   });
 
   test("the member's OWN vault named Sharing is still unmarked", () => {
-    // The mirror of the rename case: the name is display, never the trigger.
     expect(
       vaultMarkFor(
         asset({ sourceVaultId: "v3" }),
@@ -127,14 +123,12 @@ describe("the kind slot", () => {
 });
 
 describe("the state slot", () => {
-  const M = 2; // a mid rung, comfortably above the custody floor
+  const M = 2; // a mid rung
 
   test("SABOTAGE: the steady state says NOTHING — no line under every tile", () => {
-    // The defect this slot was rebuilt to remove. `remote-only` is where bytes
-    // are DESIGNED to live, so captioning it labelled the water for the fish:
-    // in a vault whose assets are all on the gateway, every single tile
-    // carried an identical line. Restoring the unconditional `on the gateway`
-    // branch fails right here.
+    // Regression pin: `remote-only` is the DESIGNED steady state, so captioning
+    // it marked every tile in an all-gateway vault. An unconditional
+    // `on the gateway` branch must not come back; it fails right here.
     expect(
       stateOverlay(asset({ backupState: "remote-only" }), M)
     ).toBeUndefined();
@@ -144,11 +138,8 @@ describe("the state slot", () => {
   });
 
   test("an unreachable gateway adds nothing to any tile", () => {
-    // THE OVER-ANNOUNCEMENT THIS PINS. `on the gateway` used to render on
-    // every `remote-only` tile the moment the gateway stopped answering: an
-    // ambient fact printed through a per-tile slot, forty times a screenful.
-    // The replica bar states it once, at the top; a tile speaks only for
-    // itself.
+    // Pins the over-announcement: with the gateway down, `on the gateway`
+    // must not render per-tile; the replica bar states reachability once.
     for (const backupState of [
       "remote-only",
       "local-only",
@@ -160,18 +151,15 @@ describe("the state slot", () => {
   });
 
   test("bytes on this device keep their MARK regardless of the gateway", () => {
-    // `local-only` needs no gateway to paint, so nothing about reachability
-    // changes it — the custody mark is about this photograph's own bytes.
+    // `local-only` paints without a gateway; the mark tracks the photo's own bytes.
     expect(stateOverlay(asset({ backupState: "local-only" }), M)).toStrictEqual(
       { form: "custody" }
     );
   });
 
   test("bytes here and nowhere else take the MARK, never a caption", () => {
-    // The one custody state a member can lose something to, and so the only
-    // one worth marking — as a glyph, the way Google Photos marks it, because
-    // in a fresh camera roll this fires on every photograph and a sentence
-    // repeated that often is chrome (§18).
+    // The one losable state: worth a glyph, not a caption fired on every
+    // photograph in a fresh camera roll (§18).
     expect(stateOverlay(asset({ backupState: "local-only" }), M)).toStrictEqual(
       {
         form: "custody",
@@ -198,8 +186,6 @@ describe("the state slot", () => {
   });
 
   test("a decode failure outranks the custody mark", () => {
-    // The member needs to know the tile will not resolve, not where its bytes
-    // are — the failure is the more urgent of the two true statements.
     expect(
       stateOverlay(asset({ backupState: "local-only" }), M, {
         decodeFailed: true,
@@ -212,10 +198,8 @@ describe("the state slot", () => {
   });
 
   test("SABOTAGE: a line and a mark can never both be drawn", () => {
-    // The exclusion is STRUCTURAL — one return value with two shapes — so a
-    // tile can never stack a glyph under a caption at its own foot. Every
-    // case that produces a line is one where custody is not the actionable
-    // fact, so the line winning is right on the merits too.
+    // STRUCTURAL exclusion — one return, two shapes; a tile can never stack
+    // a glyph under a caption.
     const resolved = stateOverlay(asset({ backupState: "local-only" }), M, {
       decodeFailed: true,
     });
@@ -223,8 +207,7 @@ describe("the state slot", () => {
   });
 
   test("the seconds in between say nothing — no flickering mark", () => {
-    // `queued`/`uploading` are the seconds between two custody states. A mark
-    // that blinks off tile by tile as a drain walks the grid is chrome.
+    // queued/uploading are transient; a blinking mark is chrome.
     expect(stateOverlay(asset({ backupState: "queued" }), M)).toBeUndefined();
     expect(
       stateOverlay(asset({ backupState: "uploading" }), M)
@@ -241,9 +224,8 @@ describe("a tile holds its geometry from record to bytes to failure (§14)", () 
   ];
 
   test("the skeleton occupies the exact box the photograph will", () => {
-    // Packing reads `width`/`height` off the RECORD, which is known before the
-    // bytes are — so the box a skeleton paints is the box the decoded
-    // photograph lands in, and nothing reflows when bytes arrive.
+    // Packing reads width/height off the RECORD, known before bytes arrive —
+    // skeleton box = decoded box, nothing reflows.
     const beforeBytes = justify(list, 390, 120);
     const afterBytes = justify(list, 390, 120);
     expect(afterBytes).toStrictEqual(beforeBytes);
@@ -255,8 +237,7 @@ describe("a tile holds its geometry from record to bytes to failure (§14)", () 
   });
 
   test("a failed tile keeps the geometry rather than vanishing", () => {
-    // The failure is a state slot on the same rectangle, not a removal: a
-    // vanishing tile is what §14 calls a grey mosaic with no explanation.
+    // Failure is a slot on the same rectangle, not a removal (§14).
     const rows = justify(list, 390, 120);
     const failed = stateOverlay(list[0]!, 2, { decodeFailed: true });
     expect(failed).toStrictEqual({

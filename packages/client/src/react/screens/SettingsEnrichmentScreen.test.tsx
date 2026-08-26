@@ -11,7 +11,7 @@ import type {
 } from "./SettingsEnrichmentScreen.js";
 
 /*
- * Settings → Enrichment (issue #807, reshaped for v11). The behaviour that
+ * Settings → Enrichment (#807, reshaped for v11). The behaviour that
  * matters is that this page is a PROJECTION: every control writes through the
  * store that owns its path and renders what came back, the resolver's answer is
  * what a row shows rather than a fold done here, and the faces capability is

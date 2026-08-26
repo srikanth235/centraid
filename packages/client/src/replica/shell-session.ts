@@ -63,10 +63,7 @@ import { runWindowedBootstrap } from "./windowed-bootstrap.js";
 import { prepareReplicaWrite } from "./write-helpers.js";
 import type { ReplicaWriteMutationInput } from "./write-helpers.js";
 
-/**
- * Replica teardown mutates shared session and durable-storage ownership, so
- * each scope finishes before the next teardown begins.
- */
+/** Teardown mutates shared ownership — finish each scope before the next. */
 function applyScopeTeardownsInOrder<T>(
   values: Iterable<T>,
   teardown: (value: T) => void | PromiseLike<void>
@@ -153,8 +150,7 @@ export interface ShellReplicaCoordinator {
   subscribeInvalidations: (
     listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ) => () => void;
-  /** Imperative catch-up to the gateway head; see `ReplicaCoordinator.syncNow`.
-   *  Optional so bootstrap-only coordinators stay valid implementations. */
+  /** Optional so bootstrap-only coordinators stay valid implementations. */
   syncNow?: () => Promise<void>;
   close: () => Promise<void>;
   purge: () => Promise<void>;
@@ -166,12 +162,9 @@ export interface ReplicaShellSessionOptions {
   isOnline?: () => boolean;
   retryDelayMs?: number;
   indexedDbFactory?: IDBFactory;
-  /** True only when the coordinator actually opened durable storage. */
   rememberStorage?: boolean;
-  /** Test seam for the authoritative global durable-scope inventory. */
   inventory?: ReplicaIdentityInventory;
   onAuthorizationRevoked?: (session: ReplicaShellSession) => void;
-  /** Visibility-safe sweep fallback for transports without an SSE feed. */
   pollIntervalMs?: number;
 }
 
@@ -181,7 +174,6 @@ export interface OpenReplicaShellSessionOptions extends ReplicaShellSessionOptio
   idFactory?: () => string;
 }
 
-/** One shell-owned replica + durable intent shipper for an authenticated scope. */
 export class ReplicaShellSession {
   readonly #fetcher: ReplicaFetcher;
   readonly #eventTarget: Pick<
@@ -203,7 +195,6 @@ export class ReplicaShellSession {
   #bootstrapAbort: AbortController | undefined;
   #bootstrapRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #bootstrapRetryAttempt = 0;
-  /** A rebootstrap demanded while one was already walking; runs once it ends. */
   #rebootstrapQueued = false;
   #drainPromise: Promise<void> | undefined;
   #drainRequested = false;
@@ -315,9 +306,7 @@ export class ReplicaShellSession {
         "The pending row is no longer available to edit"
       );
     }
-    // A first-open offline session has no catalog yet. The action intent is
-    // still durable and replayable; only its local projection must wait for
-    // bootstrap to reveal the shape contract.
+    // Offline first-open has no catalog; the intent is still durable.
     const { optimistic, dependencies } =
       this.#catalog.length === 0
         ? { optimistic: [], dependencies: [] }
@@ -465,15 +454,8 @@ export class ReplicaShellSession {
   }
 
   /**
-   * Pull whatever the gateway holds beyond the local cursor, right now.
-   *
-   * The change feed is push-driven, so a caller that has just finished a
-   * gateway-side write (Home's sample seed) otherwise races the SSE nudge:
-   * its re-read lands before the replica has the rows and paints the pre-write
-   * state. Awaiting this makes "the write resolved" imply "the replica has the
-   * rows". A session still waiting on its first fill catches up by
-   * bootstrapping instead — the walk owns the first fill and already ends at
-   * the head.
+   * Await so a post-write re-read cannot race the SSE nudge and paint
+   * pre-write rows. First fill still belongs to the bootstrap walk.
    */
   async sync(): Promise<void> {
     this.assertOpen();
@@ -569,10 +551,7 @@ export class ReplicaShellSession {
   requireBootstrap(): void {
     this.#hasCursor = false;
     if (this.#closed) return;
-    // A demand raised while a bootstrap is already walking is about the state
-    // that walk started from, so the walk does not satisfy it — and
-    // `bootstrapWhenReachable` would hand back the in-flight promise and drop
-    // it on the floor. Queue exactly one follow-up instead.
+    // An in-flight walk started from older state; queue one follow-up.
     if (this.#bootstrapPromise) {
       this.#rebootstrapQueued = true;
       return;
@@ -631,22 +610,14 @@ export class ReplicaShellSession {
       const resolved: IntentOutcome[] = [];
       await runWindowedBootstrap({
         gatewayAuth: this.gatewayAuth,
-        // Wrapped, not referenced. `runWindowedBootstrap` invokes these as
-        // `target.bootstrapBegin(...)`, so a bare method reference arrives with
-        // `this` bound to this object literal instead of the coordinator — and
-        // the first thing `bootstrapBegin` does is call a private method on
-        // itself. Detaching them threw `this.resetFeedGeneration is not a
-        // function` the moment anything drove a windowed bootstrap.
+        // Wrap methods — a bare reference binds `this` to this object literal.
         target: {
           bootstrapBegin: (header) => this.coordinator.bootstrapBegin!(header),
           bootstrapPage: (rows) => this.coordinator.bootstrapPage!(rows),
           bootstrapPreview: this.coordinator.bootstrapPreview
             ? (rows) => this.coordinator.bootstrapPreview!(rows)
             : undefined,
-          // Every argument, forwarded. `outcomes` carries the intent outcomes
-          // `reconcileOutcomes` just reconciled against the page-1 cursor;
-          // dropping it left every write that was in flight across a bootstrap
-          // unresolved, with nothing to say so.
+          // Forward `outcomes` or in-flight writes across bootstrap stay unresolved.
           bootstrapCommit: (cursor, header, outcomes) =>
             this.coordinator.bootstrapCommit!(cursor, header, outcomes),
           applyChanges: (changes) => this.coordinator.applyChanges!(changes),
@@ -946,9 +917,7 @@ export async function openReplicaShellSession(
         ? { indexedDbFactory: options.indexedDbFactory }
         : {}),
       ...(options.idFactory ? { idFactory: options.idFactory } : {}),
-      // Every feed call names THIS session's scope explicitly (issue #599). The
-      // ambient overloads would bind all N mounted sessions to whichever vault is
-      // focused, so the non-focused scopes would silently stop seeing changes.
+      // Name THIS session's scope (#599) — ambient overloads bind to the focused vault.
       changeFeed: {
         subscribe: (listener) => subscribeVaultChanges(listener, gatewayAuth),
         setShapeIds: async (shapeIds: readonly string[]) => {
@@ -1016,16 +985,7 @@ export async function openReplicaShellSession(
   return session;
 }
 
-/**
- * One MOUNTED scope: its open session and the leases keeping it warm.
- *
- * Issue #599 turned this from a singleton into a map. A member's own vault and
- * every audience vault they were added to can be mounted at once, so N sessions
- * coexist — each with its own OPFS store, its own change-feed stream, and its
- * own stamped `x-centraid-vault` (see `fetchReplicaForScope`). `refs` counts
- * live leases; a scope released by its last holder stays warm for a grace
- * window before closing, so chip-flipping between scopes does not re-bootstrap.
- */
+/** One mounted scope. Last-holder release stays warm for idle grace (#599). */
 interface SessionEntry {
   key: string;
   identity: ReplicaIdentity;
@@ -1034,17 +994,14 @@ interface SessionEntry {
   idleTimer?: ReturnType<typeof setTimeout>;
 }
 
-/** A held scope. Release exactly once; releasing twice is a no-op, not a bug. */
+/** Release twice is a no-op. */
 export interface ReplicaScopeLease {
   readonly session: ReplicaShellSession;
   release: () => void;
 }
 
 const sessions = new Map<string, SessionEntry>();
-/** How long a released scope stays warm before its session closes. */
 const SESSION_IDLE_GRACE_MS = 30_000;
-// The gateway's answer to "which vault am I addressing?", per gateway. Held
-// across calls because `getReplicaShellSession` runs on every bridged read.
 let addressedFallback:
   | { key: string; promise: Promise<string | undefined> }
   | undefined;
@@ -1071,10 +1028,7 @@ function entryFor(gatewayAuth: GatewayAuth): SessionEntry {
   return entry;
 }
 
-/**
- * Credentials for a scope on THIS gateway. A scope from another gateway has no
- * token here, so it is refused rather than opened against the wrong host.
- */
+/** Refuse a scope from another gateway rather than opening against the wrong host. */
 async function gatewayAuthForIdentity(
   identity: ReplicaIdentity
 ): Promise<GatewayAuth> {
@@ -1096,7 +1050,6 @@ function scheduleIdleClose(entry: SessionEntry): void {
     if (entry.refs > 0 || sessions.get(entry.key) !== entry) return;
     void dropEntry(entry, "close");
   }, SESSION_IDLE_GRACE_MS);
-  // Node/vitest: a warm-scope timer must never hold the process open.
   (timer as unknown as { unref?: () => void }).unref?.();
   entry.idleTimer = timer;
 }
@@ -1116,14 +1069,12 @@ async function dropEntry(
     });
 }
 
-/** The session for one explicit scope, opening it if this is its first mount. */
 export async function getReplicaShellSessionFor(
   identity: ReplicaIdentity
 ): Promise<ReplicaShellSession> {
   return entryFor(await gatewayAuthForIdentity(identity)).promise;
 }
 
-/** Hold one scope open for as long as a mount needs it (issue #599). */
 export async function acquireReplicaShellSession(
   identity: ReplicaIdentity
 ): Promise<ReplicaScopeLease> {
@@ -1144,27 +1095,21 @@ export async function acquireReplicaShellSession(
   }
 }
 
-/** The session for the shell's ambient focused scope (pre-#599 callers). */
 export async function getReplicaShellSession(): Promise<ReplicaShellSession> {
   return entryFor(await addressedGatewayAuth()).promise;
 }
 
-/** Purge EVERY mounted scope — the local half of losing this device's access. */
 export async function purgeReplicaShellSession(): Promise<void> {
   await applyScopeTeardownsInOrder([...sessions.values()], (entry) =>
     dropEntry(entry, "purge")
   );
 }
 
-/** Eager local half of revoking the device that owns this renderer. */
 export async function purgeCurrentReplicaDevice(): Promise<void> {
   purgeBrowserReplicaCaches();
-  // The pointer to the vault this device addressed goes with the access it
-  // pointed at — and the session's in-memory copy with it.
   forgetAllAddressedVaults();
   addressedFallback = undefined;
-  // Revoking THIS device revokes every scope it holds, so the sweep fans across
-  // all mounted identities — not just the focused one (issue #599).
+  // Fan across every mounted identity, not just the focused one (#599).
   const identities = new Map<string, ReplicaIdentity>(
     [...sessions.values()].map((entry) => [entry.key, entry.identity])
   );
@@ -1175,7 +1120,7 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
       identities.set(identityKey(identity), identity);
     }
   } catch {
-    // Open sessions still carry their identities and purge themselves below.
+    // Open sessions still carry identities and purge below.
   }
   await purgeReplicaShellSession();
   try {
@@ -1192,14 +1137,12 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
     ) {
       throw error;
     }
-    // The selector/terminal marker was written before deletion began. A
-    // temporarily unavailable inventory is retried by the lifecycle loop.
+    // Selector was written before deletion; a missing inventory is retried.
   } finally {
     terminalPurgeRetryLoop.wake();
   }
 }
 
-/** Ordinary scope switches preserve remembered OPFS/IDB for a warm return. */
 export async function closeReplicaShellSession(): Promise<void> {
   await applyScopeTeardownsInOrder([...sessions.values()], (entry) =>
     dropEntry(entry, "close")
@@ -1207,15 +1150,8 @@ export async function closeReplicaShellSession(): Promise<void> {
 }
 
 /**
- * Only genuinely TERMINAL events tear replicas down (issue #599).
- *
- * The focused-scope pointer moving is NOT one of them any more. It used to
- * purge every session and every remembered store outside the newly focused
- * vault — correct while exactly one scope could be mounted, data-destroying now
- * that a member legitimately holds several at once (flipping a chip would have
- * wiped the scope you just left). `onVaultChanged` is therefore no longer wired
- * here at all; a scope's storage dies when the scope is REVOKED or its gateway
- * is removed, and otherwise closes warm through the idle grace above.
+ * Terminal events only (#599). Do not re-wire `onVaultChanged` to purge —
+ * focus change must close warm, not wipe the scope just left.
  */
 export function installReplicaStorageLifecycle(): void {
   if (lifecycleInstalled) return;
@@ -1241,13 +1177,10 @@ async function handleGatewayChanged(
   if (detail.removedGatewayId) purgeGatewayIds.add(detail.removedGatewayId);
   if (detail.purgeReplicaGatewayId)
     purgeGatewayIds.add(detail.purgeReplicaGatewayId);
-  // A removed or purged gateway's remembered vault pointer is now a pointer at
-  // a scope this device does not hold — drop it before anything can re-open it.
   for (const gatewayId of purgeGatewayIds) forgetAddressedVault(gatewayId);
   if (addressedFallback && purgeGatewayIds.has(addressedFallback.key))
     addressedFallback = undefined;
-  // Every mounted scope of a removed gateway is terminal; scopes on a gateway
-  // that merely lost focus close warm and keep their remembered storage.
+  // Removed gateway is terminal; lost-focus scopes close warm and keep storage.
   await applyScopeTeardownsInOrder([...sessions.values()], async (entry) => {
     if (purgeGatewayIds.has(entry.identity.gatewayId))
       await dropEntry(entry, "purge");
@@ -1271,7 +1204,6 @@ function queueLifecyclePurge(task: () => Promise<void>): void {
     .finally(() => terminalPurgeRetryLoop.wake());
 }
 
-/** Drop one revoked session from the map, leaving every other scope mounted. */
 function forgetSession(session: ReplicaShellSession): void {
   for (const entry of sessions.values()) {
     void entry.promise.then((active) => {
@@ -1301,7 +1233,6 @@ async function purgeSessionTerminal(
   }
 }
 
-/** The PWA service worker owns lazy blob/preview bytes for this device scope. */
 function purgeBrowserReplicaCaches(): void {
   try {
     navigator.serviceWorker?.controller?.postMessage({
@@ -1333,17 +1264,8 @@ function purgeBrowserReplicaCaches(): void {
 }
 
 /**
- * `auth()`, with the addressed vault filled in when the client left it unset.
- *
- * An undefined `vaultId` means "let the gateway pick" (issue #289) — fine over
- * HTTP, where the composed handler resolves one per request, but the replica
- * keys its local store by `(gatewayId, vaultId)` and needs a concrete id up
- * front. We ask the gateway instead of guessing: `_vault/status` answers for
- * `vaults.current()`, the very plane the request resolved to, so it is right
- * for both transports. Guessing `listVaults()[0]` would be wrong on the
- * device-token path, which addresses the OLDEST ENROLLMENT rather than the
- * lowest vault id — the replica would then build a store for one vault while
- * every HTTP call served another.
+ * Replica store is keyed by `(gatewayId, vaultId)` — do not guess
+ * `listVaults()[0]`; device-token addresses the oldest enrollment (#289).
  */
 export async function addressedGatewayAuth(): Promise<GatewayAuth> {
   const gatewayAuth = await auth();
@@ -1360,41 +1282,21 @@ export async function addressedGatewayAuth(): Promise<GatewayAuth> {
       .catch(() => undefined);
     pending = { key, promise };
     addressedFallback = pending;
-    // `promise` already folds a failed read into `undefined`, so it never
-    // rejects — no catch to attach here.
     void promise.then((vaultId) => {
-      // A gateway that mounts no vault plane has nothing to cache — let the
-      // next call re-ask rather than pinning "unknown" for the session.
+      // No vault plane — do not pin "unknown"; let the next call re-ask.
       if (vaultId === undefined && addressedFallback?.promise === promise) {
         addressedFallback = undefined;
       } else if (vaultId) rememberAddressedVault(key, vaultId);
     });
   }
-  // The last id this gateway told us, answered WITHOUT waiting for the network
-  // ask above. An unpaired same-origin install leaves `vaultId` unset (only the
-  // pairing path writes it into the connection), so every replica read went
-  // through `_vault/status` — and with the gateway down that read does not fail
-  // fast, it fails after the Iroh dial gives up. Home would then throw "An
-  // addressed vault is required" and paint the day-one empty state over a fully
-  // synced replica. This is not the guess the doc comment above rejects: it is
-  // the gateway's OWN previous answer for this exact gateway key, and the ask
-  // is still in flight to correct the record for the next launch.
+  // Last-known id for this gateway, without waiting on `_vault/status` (Iroh
+  // dial). Not `listVaults()[0]` — the gateway's own previous answer.
   const remembered = rememberedAddressedVault(key);
   if (remembered) return { ...gatewayAuth, vaultId: remembered };
   const vaultId = await pending.promise;
-  // Still nothing to address (no vault plane) — `replicaIdentityForGatewayAuth`
-  // raises the protocol error, which is the honest answer here.
   return vaultId ? { ...gatewayAuth, vaultId } : gatewayAuth;
 }
 
-// ── the last-known addressed vault, per gateway ─────────────────────────────
-//
-// One localStorage key, `{ [gatewayKey]: vaultId }`. It is a POINTER, not
-// content: knowing which vault this browser opens is already implied by the
-// replica's own OPFS store, so persisting it adds no exposure — and it is
-// cleared on exactly the paths that make it wrong (the device purge and any
-// gateway removal/purge), so a browser can never keep opening a scope it no
-// longer holds.
 const ADDRESSED_VAULT_KEY = "centraid.v1.replica.addressedVault";
 
 function addressedVaultStorage(): Storage | undefined {
@@ -1441,7 +1343,6 @@ function rememberAddressedVault(gatewayKey: string, vaultId: string): void {
   writeAddressedVaults(map);
 }
 
-/** Forget one gateway's pointer — a removed or purged gateway. */
 function forgetAddressedVault(gatewayKey: string): void {
   const map = readAddressedVaults();
   if (!(gatewayKey in map)) return;
@@ -1449,7 +1350,6 @@ function forgetAddressedVault(gatewayKey: string): void {
   writeAddressedVaults(map);
 }
 
-/** Forget every pointer — this device lost its access altogether. */
 function forgetAllAddressedVaults(): void {
   writeAddressedVaults({});
 }
@@ -1492,16 +1392,8 @@ function shapeId(shape: ReplicaShape): string {
 }
 
 /**
- * The transport for ONE replica session, stamped with that session's own scope.
- *
- * `doFetch` fills in `x-centraid-vault` from the shell's AMBIENT addressed vault
- * "unless the caller set one" (gateway-client-core `withVaultHeader`). That is
- * right for ordinary shell HTTP, and catastrophic here: a session is keyed by
- * `(gatewayId, vaultId)` and owns an OPFS store for exactly that pair, so once
- * more than one scope is mounted (issue #599) an unstamped bootstrap/changes/
- * intent request would be answered from whichever vault happens to be FOCUSED
- * and the rows would land in another vault's store. Every session therefore
- * stamps its own scope, and `withVaultHeader` then leaves the request alone.
+ * Stamp this session's vault. Ambient `withVaultHeader` would write focused
+ * vault rows into another scope's OPFS store (#599).
  */
 export function fetchReplicaForScope(gatewayAuth: GatewayAuth): ReplicaFetcher {
   return (baseUrl, pathname, init) => {

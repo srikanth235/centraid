@@ -1,4 +1,4 @@
-// The staging spine (issue #290 phase 2): stage → review → publish/discard,
+// The staging spine (#290): stage → review → publish/discard,
 // the external-id map that turns append-on-dedup into true sync, and the
 // file-drop customs for MBOX, statement CSV and Takeout zips.
 

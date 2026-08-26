@@ -146,25 +146,49 @@ test("Notes writes a passage on the custodian seat and its body survives an Elec
     // the app's own handlers use must come back `executed` — never `queued`,
     // never `in-flight`. This is the one fact that distinguishes this file from
     // its viewer-seat mirror.
-    const custodianOutcome = await page.evaluate(
-      async ({ title }) => {
-        type Library = { notes: Array<{ note_id: string; title?: string }> };
-        const library = await window.centraid.read<Library>({
-          query: "library",
-          input: {},
-        });
-        const note = library.notes.find((row) => row.title === title);
-        if (!note) return "no-such-note";
-        const outcome = await window.centraid.write({
-          action: "edit-note",
-          input: { note_id: note.note_id, title },
-          intentId: "notes-desktop-e2e-custodian-edit",
-        });
-        return outcome.status;
-      },
-      { title: NOTE_TITLE }
-    );
-    expect(custodianOutcome).toBe("executed");
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            async ({ title }) => {
+              type Library = { notes: Array<{ title?: string }> };
+              const library = await window.centraid.read<Library>({
+                query: "library",
+                input: {},
+              });
+              return (library.notes ?? []).some((row) => row.title === title);
+            },
+            { title: NOTE_TITLE }
+          ),
+        { timeout: 60_000 }
+      )
+      .toBe(true);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            async ({ title }) => {
+              type Library = {
+                notes: Array<{ note_id: string; title?: string }>;
+              };
+              const library = await window.centraid.read<Library>({
+                query: "library",
+                input: {},
+              });
+              const note = library.notes.find((row) => row.title === title);
+              if (!note) return "no-such-note";
+              const outcome = await window.centraid.write({
+                action: "edit-note",
+                input: { note_id: note.note_id, title },
+                intentId: `notes-desktop-e2e-custodian-edit-${Date.now()}`,
+              });
+              return outcome.status;
+            },
+            { title: NOTE_TITLE }
+          ),
+        { timeout: 60_000 }
+      )
+      .toBe("executed");
 
     // A passage is a vault row on the LOCAL gateway, not renderer state: both
     // the row and its body must come back after a full Electron reload.

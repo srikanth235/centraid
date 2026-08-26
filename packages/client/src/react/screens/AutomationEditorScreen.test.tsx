@@ -277,8 +277,8 @@ describe("screens/AutomationEditorScreen", () => {
       expect(el.querySelector('[role="switch"]')).toBeTruthy();
       expect(el.textContent).not.toContain("Writes park for your review");
 
-      // Notifications is a plain section now — the Plan tab it used to sit
-      // beside moved into the compile rail, leaving nothing to tab between.
+      // Notifications is a plain section — the plan lives in the compile rail,
+      // so there is nothing to tab between.
       expect(el.textContent).toContain("automation-a/notify-owner");
       expect(
         el.querySelector('select[aria-label="Notification preference"]')

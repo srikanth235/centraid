@@ -1,71 +1,34 @@
 /*
- * Per-request vault context (issue #289).
- *
- * A client addresses a (gateway, vault) pair — never a gateway alone. The
- * gateway resolves WHICH vault a request rides from the request itself
- * (device identity and/or the explicit `x-centraid-vault` header), then runs
- * the whole handler chain inside this AsyncLocalStorage scope so every
- * provider callback deep in the graph (`appsDir()`, transcripts, `ctx.vault`
- * bridges, owner routes) lands on the request's vault without threading a
- * vault id through each signature.
- *
- * There is no server-global active vault: the client owns its pointer, and
- * two clients on two vaults never observe each other. Background work
- * (scheduler fires, boot activation) enters a scope explicitly via
- * `runWithVaultContext` with the vault it belongs to.
+ * Per-request vault context (#289). A client addresses a (gateway, vault) pair;
+ * the handler chain runs inside this scope so deep provider callbacks land on
+ * the right vault. There is no server-global active vault — background work
+ * enters a scope explicitly via `runWithVaultContext`.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import type * as TypeImport_rdfcd1 from "node:http";
 
 export interface VaultRequestContext {
-  /** The vault this request (or background fire) is addressed to. */
   vaultId: string;
-  /**
-   * The calling device's key when the request arrived over an enrolled
-   * transport (issue #289 phase 2): an iroh EndpointId for a proved iroh
-   * caller. A loopback embed also owns a concrete enrollment. Absence is
-   * never an admin wildcard: the composed handler fails closed.
-   */
+  /** Absence is never an admin wildcard: the composed handler fails closed (#289). */
   deviceKey?: string;
-  /**
-   * The owner the calling device is bound to — the acting human for
-   * authorization and journal attribution. Resolved once per request from
-   * the binding, so it is correct across renames: the id is the key, the
-   * label is only display.
-   */
+  /** The acting human for authorization and attribution; the id is the key, never the label. */
   ownerId?: string;
-  /**
-   * Whether that owner OWNS this vault (#726) — the one write predicate.
-   * Resolved beside `ownerId` from `vault_owners` so an agent turn can be
-   * capped at the human it acts for without re-reading gateway.db from
-   * inside the vault plane. False for a tombstoned binding.
-   */
+  /** The one write predicate (#726); false for a tombstoned binding. */
   ownsVault?: boolean;
-  /** App-id allow-list for a constrained Companion device. */
   grantProfile?: readonly string[];
 }
 
-/**
- * Device-plane resolution + ACL (issue #289 phase 2): device key ↔ vault,
- * one bit. Implemented by the daemon's enrollment store; absent for hosts
- * whose transport carries no device identity (loopback embed, tests).
- */
+/** Absent for hosts whose transport carries no device identity (loopback, tests). */
 export interface DeviceAccess {
-  /**
-   * Extract the calling device's key (iroh EndpointId) from the request's
-   * iroh-forwarder proof headers. `undefined` = not a proved iroh
-   * transport — the composed handler (`build-gateway.ts`) then refuses the
-   * request unless its host supplied another proved enrollment identity.
-   */
+  /** `undefined` = unproved transport; the composed handler then refuses the request. */
   deviceKeyFor: (req: TypeImport_rdfcd1.IncomingMessage) => string | undefined;
-  /** The vault ids this device key is enrolled in, oldest enrollment first. */
+  /** Oldest enrollment first. */
   vaultsFor: (deviceKey: string) => string[];
 }
 
 const storage = new AsyncLocalStorage<VaultRequestContext>();
 
-/** Run `fn` with `ctx` as the ambient vault context. */
 export function runWithVaultContext<T>(
   ctx: VaultRequestContext,
   fn: () => T
@@ -73,10 +36,9 @@ export function runWithVaultContext<T>(
   return storage.run(ctx, fn);
 }
 
-/** The ambient vault context — undefined outside a scoped request/fire. */
+/** Undefined outside a scoped request or fire. */
 export function vaultContext(): VaultRequestContext | undefined {
   return storage.getStore();
 }
 
-/** Canonical header a client names its vault with. */
 export const VAULT_HEADER = "x-centraid-vault";

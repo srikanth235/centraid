@@ -1,7 +1,4 @@
-// Tiny HTTP helpers shared by the gateway-runtime route modules
-// (apps-store-routes, automations-routes). app-engine's http-utils
-// isn't exported, and these are small + handler-shaped, so they live
-// here rather than reaching across packages.
+// HTTP helpers for gateway-runtime routes. app-engine http-utils is not exported.
 
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -20,10 +17,9 @@ import {
   TUNNEL_FORWARDED_HEADER,
 } from "@centraid/tunnel";
 
-/** Default request-body cap (1 MiB) for JSON + draft-file bodies. */
 export const DEFAULT_MAX_BODY_BYTES = 1 * 1024 * 1024;
 
-/** Whether the peer socket itself is loopback (Host/X-Forwarded-For do not count). */
+/** Peer socket is loopback — Host/X-Forwarded-For do not count. */
 export function isLoopbackRequest(req: IncomingMessage): boolean {
   const address = req.socket.remoteAddress;
   if (!address) return false;
@@ -36,13 +32,9 @@ export function isLoopbackRequest(req: IncomingMessage): boolean {
 }
 
 /**
- * The host itself made this request — a kernel-observed loopback peer that
- * no forwarder produced (issue #568 items A/B).
- *
- * Loopback alone is NOT an identity: the daemon's iroh forwarder, the Rust
- * byte relay, and the desktop phone tunnel all deliver REMOTE peers to
- * 127.0.0.1. Each stamps its markings on the way through, so a host-only
- * capability asks for a loopback socket AND the absence of every marking.
+ * Host-only (#568): loopback AND no forwarder marking. Loopback alone is
+ * NOT identity — iroh, the byte relay, and the phone tunnel all deliver
+ * remote peers to 127.0.0.1 with their stamps on.
  */
 export function isDirectHostRequest(req: IncomingMessage): boolean {
   return (
@@ -54,13 +46,11 @@ export function isDirectHostRequest(req: IncomingMessage): boolean {
   );
 }
 
-/** A `{path, content}` pair — the file-map shape the scaffolders emit. */
 export interface FileMapEntry {
   path: string;
   content: string;
 }
 
-/** Text extensions a draft read/write accepts — mirrors the harness runtime. */
 const EDITABLE_EXT = new Set([
   ".ts",
   ".js",
@@ -76,12 +66,7 @@ const EDITABLE_EXT = new Set([
 
 const MAX_FILE_MAP_BYTES = 1 * 1024 * 1024; // 1 MiB per file
 
-/**
- * Write a `{path, content}[]` file map into an app dir (a session
- * worktree's `apps/<id>/`). Each path is resolved + confined under
- * `appDir`; parents are created. Used by the gateway lifecycle routes
- * (issue #141) to stage a scaffolded/cloned app into a session.
- */
+/** Paths confined under `appDir` (#141). */
 export async function writeFileMap(
   appDir: string,
   files: ReadonlyArray<FileMapEntry>
@@ -97,16 +82,10 @@ export async function writeFileMap(
     await fs.writeFile(abs, f.content, "utf8");
     return writeNext(index + 1);
   }
-  // Input order defines the winner if a generated map carries a duplicate path.
+  // Input order wins on a duplicate path.
   await writeNext(0);
 }
 
-/**
- * Read an app dir into a sorted `{path, content}[]` file map (text
- * files only, dotfiles skipped). The inverse of `writeFileMap`; the
- * lifecycle routes feed it to the harness file-map editors
- * (`updateAppMetaFiles`, `setAutomationEnabledInFiles`, …).
- */
 export async function readFileMap(appDir: string): Promise<FileMapEntry[]> {
   const out: FileMapEntry[] = [];
   await walkFileMap(appDir, "", out);
@@ -158,12 +137,7 @@ export function sendJson(
   return sendJsonBytes(res, status, Buffer.from(JSON.stringify(body)));
 }
 
-/**
- * {@link sendJson} for a body that is ALREADY serialized. Used where the
- * document's bytes are the thing the producer guarantees — the diagnostics
- * bundle's tripwire sweeps the serialized text, so re-serializing a parsed
- * object here would discard the gate that made it safe (#846 P8).
- */
+/** Already-serialized body. Re-stringify would discard the diagnostics tripwire (#846). */
 export function sendJsonText(
   res: ServerResponse,
   status: number,
@@ -201,18 +175,8 @@ function sendJsonBytes(
 }
 
 /**
- * Conditional-GET flavour of {@link sendJson} — the server half of the client's
- * `If-None-Match` revalidation (issue #659 M5's gateway counterpart).
- *
- * The ETag is a strong validator over the SERIALIZED RESPONSE, mirroring
- * blob-read-route.ts, which tags a blob with its content sha256. Deriving it
- * from the payload is the point: a timestamp or a poll counter would change
- * without the content changing (defeating the 304) or, worse, stay the same
- * while the content changed (serving a stale body forever). Hashing costs a
- * few microseconds on responses of this size and saves the whole body.
- *
- * A request with no `If-None-Match` gets exactly the bytes `sendJson` would
- * have sent, plus the `ETag` header it needs to revalidate next time.
+ * Conditional GET (#659). ETag is a strong validator over the serialized
+ * body — never a timestamp or poll counter (stale 304 or a defeated 304).
  */
 export function sendJsonConditional(
   req: IncomingMessage,
@@ -234,11 +198,7 @@ export function sendJsonConditional(
   return sendJsonBytes(res, status, bytes);
 }
 
-/**
- * RFC 9110 If-None-Match: `*`, or any member of the comma-separated list. Our
- * etags are quoted hex, so a split+trim parse is exact — and a `W/` prefix is
- * accepted because the weak comparison function is the one this header uses.
- */
+/** RFC 9110 If-None-Match: `*` or a list member. `W/` accepted (weak comparison). */
 function matchesEtag(header: string, etag: string): boolean {
   const trimmed = header.trim();
   if (trimmed === "*") return true;
@@ -247,7 +207,6 @@ function matchesEtag(header: string, etag: string): boolean {
     .some((token) => token.trim().replace(/^W\//u, "") === etag);
 }
 
-/** Generic 500 for an unexpected error (route-specific senders wrap this). */
 export function sendError(res: ServerResponse, err: unknown): true {
   return sendJson(res, 500, {
     error: "internal_error",
@@ -293,12 +252,8 @@ export async function fileExists(p: string): Promise<boolean> {
 }
 
 /**
- * Parse a turn body's `providerConsent`. Clients answer an egress prompt with
- * one harness or, when a ladder attempt names several, an array of them — both
- * shapes reach every gateway turn route, so both are accepted here.
- *
- * Returns `undefined` for an absent field and `'invalid'` when any entry is not
- * a registered harness, so the caller can answer 400 rather than dropping it.
+ * One harness or an array — both shapes are accepted. Absent → `undefined`;
+ * unregistered entry → `'invalid'` so the caller can 400 rather than drop it.
  */
 export function parseProviderConsent(
   value: unknown

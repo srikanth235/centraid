@@ -1,25 +1,7 @@
 /*
- * A reusable, crude path-style S3-compatible test server: PUT/GET/HEAD/
- * DELETE object, GET bucket = ListObjectsV2 (paginated). Test-only — this
- * module is intentionally NOT re-exported from `index.ts` (see README's
- * "public API" convention); it exists purely so the package's own tests, and
- * anything that wants to point a real S3-credentialed client at *something*,
- * share one implementation instead of two copies drifting apart.
- *
- * Two consumers as of writing:
- *  - `remote-provider.test.ts`'s in-process fake gateway, which serves the
- *    control plane itself and delegates data-plane requests to an instance
- *    of this server.
- *  - `interop-clawgnition.test.ts`, which points a REAL Clawgnition
- *    `wrangler dev` gateway's S3 credential grants (the `DEV_BACKUP_S3_*`
- *    dev fallback — see Clawgnition's docs/LOCAL_DEV_BACKUP.md) at this
- *    server, playing the role R2 plays in production.
- *
- * SigV4 is NOT validated here — only its *presence* is observable via
- * `requests` (method/path/headers), which is enough for tests asserting the
- * client shapes Authorization/x-amz-* headers correctly. Real signature
- * verification is out of scope: this plays the role of "some S3-compatible
- * bucket," not a security boundary.
+ * Crude path-style S3-compatible test server: PUT/GET/HEAD/DELETE object,
+ * GET bucket = ListObjectsV2. Test-only — not re-exported from `index.ts`.
+ * SigV4 is NOT verified; presence is observable via `requests`.
  */
 
 import { createHash } from "node:crypto";
@@ -27,7 +9,6 @@ import http from "node:http";
 
 export interface S3TestServerRequest {
   method: string;
-  /** Path + query string, e.g. `/bucket/chunks/abcd?list-type=2`. */
   path: string;
   headers: http.IncomingHttpHeaders;
 }
@@ -35,13 +16,8 @@ export interface S3TestServerRequest {
 export interface S3TestServerOptions {
   /** Bind port. 0 (default) = OS-assigned ephemeral port. */
   port?: number;
-  /** Bind host. Defaults to `127.0.0.1`. */
   host?: string;
-  /**
-   * ListObjectsV2 page size. Small values exercise pagination in tests;
-   * defaults to 1000 (roughly S3's own default), which for most tests means
-   * "one page."
-   */
+  /** ListObjectsV2 page size. Small values exercise pagination; default 1000. */
   listPageSize?: number;
 }
 
@@ -53,22 +29,17 @@ interface StoredObject {
 }
 
 /**
- * Crude path-style S3: object keys are the full `{bucket}/{key...}` path
- * (matching how `S3ObjectStore` addresses objects — see `s3-store.ts`).
- * Durable for the lifetime of the process holding the instance — a plain
- * in-memory `Map`, fine for "an in-process fake" or "a local dev-loop
- * stand-in," not for anything that needs to survive a restart.
+ * Object keys are the full `{bucket}/{key...}` path (matching `S3ObjectStore`).
+ * In-memory `Map` — process lifetime only.
  */
 export class S3TestServer {
   readonly url: string;
   readonly port: number;
-  /** Every request this server has handled (data-plane traffic only), in order. */
   readonly requests: S3TestServerRequest[] = [];
 
   private readonly objects = new Map<string, StoredObject>();
   private readonly server: http.Server;
   private readonly listPageSize: number;
-  /** In-flight multipart uploads (issue #367 §C8), keyed by uploadId. */
   private readonly multipart = new Map<
     string,
     { key: string; parts: Map<number, Buffer> }
@@ -85,10 +56,8 @@ export class S3TestServer {
   static async start(options: S3TestServerOptions = {}): Promise<S3TestServer> {
     const listPageSize = options.listPageSize ?? 1000;
     const host = options.host ?? "127.0.0.1";
-    // The request handler needs `self` to call instance methods, but `self`
-    // doesn't exist until after the constructor runs (which needs the
-    // already-listening server's assigned port) — tie the knot with a
-    // pre-declared binding the closure captures by reference.
+    // The request handler needs `self` before the constructor has the bound
+    // port — pre-declare a binding the closure captures by reference.
     let getSelf = (): S3TestServer => {
       throw new Error("S3TestServer request arrived before initialization");
     };
@@ -131,10 +100,6 @@ export class S3TestServer {
     this.requests.length = 0;
   }
 
-  // --- Test-only direct object access — bypasses HTTP + SigV4 entirely, for
-  // asserting/seeding/corrupting state the way a test double for "the real
-  // bucket, poked at directly" needs to (e.g. simulating real data loss). ---
-
   private static compositeKey(bucket: string, key: string): string {
     return `${bucket}/${key}`;
   }
@@ -176,7 +141,6 @@ export class S3TestServer {
     return this.objects.delete(S3TestServer.compositeKey(bucket, key));
   }
 
-  /** Every stored key under `bucket/prefix`, with the `bucket/` stripped. */
   listDirect(bucket: string, prefix = ""): string[] {
     const bucketPrefix = `${bucket}/`;
     const fullPrefix = `${bucketPrefix}${prefix}`;
@@ -195,8 +159,6 @@ export class S3TestServer {
     });
   }
 
-  // --- HTTP handling ---
-
   private async handle(
     req: http.IncomingMessage,
     res: http.ServerResponse
@@ -208,7 +170,6 @@ export class S3TestServer {
       headers: req.headers,
     });
 
-    // "{bucket}/{key...}" or bare "{bucket}" (listing/bucket-root requests).
     const key = decodeURIComponent(url.pathname.slice(1));
 
     if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
@@ -216,11 +177,8 @@ export class S3TestServer {
       return;
     }
 
-    // Multipart upload (issue #367 §C8: `S3BlobStore.putStream`'s three
-    // control calls). `uploads` (empty value) = initiate; `uploadId` alone
-    // on a POST = complete; `uploadId` + `partNumber` on a PUT = one part;
-    // `uploadId` alone on a DELETE = abort. Real S3 disambiguates the same
-    // way — these query params never appear on a plain object PUT/DELETE.
+    // Multipart (#367 §C8). `uploads` = initiate; `uploadId` on POST = complete;
+    // `uploadId`+`partNumber` on PUT = part; `uploadId` on DELETE = abort.
     if (req.method === "POST" && url.searchParams.has("uploads")) {
       const uploadId = String(this.nextUploadId++);
       this.multipart.set(uploadId, { key, parts: new Map() });
@@ -261,7 +219,7 @@ export class S3TestServer {
         res.end();
         return;
       }
-      await readBody(req); // the complete-request XML body — parts already came in via PUT
+      await readBody(req); // complete-request XML — parts already arrived via PUT
       const ordered = [...upload.parts.entries()]
         .sort((a, b) => a[0] - b[0])
         .map(([, buf]) => buf);

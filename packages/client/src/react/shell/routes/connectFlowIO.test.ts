@@ -1,6 +1,6 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Connect flow IO error folding (issue #545 B8).
+ * Connect flow IO error folding (#545).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -112,8 +112,8 @@ describe("connectFlowIO scenarios", () => {
       });
     });
 
-    // Issue #603 W4: an unreachable gateway used to fold into an empty list,
-    // which the UI then rendered as "no vaults here" and offered to create one
+    // Issue #603 W4: an unreachable gateway must not fold into an empty list,
+    // which the UI would render as "no vaults here" and offer to create one
     // against. Failure must stay distinguishable from an empty registry.
     it("reports a transport failure instead of an empty list", async () => {
       listVaults.mockRejectedValue(new Error("down"));

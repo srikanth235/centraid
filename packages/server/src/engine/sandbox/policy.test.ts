@@ -1,13 +1,16 @@
 /**
- * Unit tests for the sandbox RULING (issue #842 W7.1). These prove the
+ * Unit tests for the sandbox RULING (#842). These prove the
  * decision function says the right thing; they prove nothing about whether the
  * decision is enforced. Enforcement is `sandbox-escape.test.ts`, which runs
  * hostile handlers in real worker threads and asserts the refusals.
  */
 
+import { realpathSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   appHandlerPolicy,
@@ -103,8 +106,8 @@ describe("app-seed lane", () => {
   const policy = appSeedPolicy(appDir);
 
   // The regression this lane exists for: photos/seed.js reads its bundled
-  // sample images with readFileSync, and the app-handler lane refused `fs`
-  // outright, so demo seeding died with "lane app-handler has no filesystem
+  // sample images with readFileSync, and the app-handler lane refuses `fs`
+  // outright, so demo seeding dies with "lane app-handler has no filesystem
   // grant". Revert the runner to appHandlerPolicy for seeds and this fails.
   test("grants fs, confined to the seed's own app directory", () => {
     expect(policy.filesystem).toStrictEqual({
@@ -175,6 +178,17 @@ describe("read-root normalization", () => {
       path.resolve("/a/one"),
       path.resolve("/b/two"),
     ]);
+  });
+
+  test("realpath aliases of the same directory collapse to one root", () => {
+    const dir = tempDirSync("sandbox-root-");
+    const canonical = realpathSync(dir);
+    const roots = normalizeRoots([dir, canonical]);
+    expect(roots).toHaveLength(1);
+    expect(roots[0]).toBe(canonical);
+    expect(isPathWithinRoots(path.join(canonical, "weights.bin"), roots)).toBe(
+      true
+    );
   });
 });
 

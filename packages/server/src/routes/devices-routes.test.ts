@@ -167,7 +167,7 @@ describe("devices-routes scenarios", () => {
   });
 
   /*
-   * Branch coverage the #566 rewrite dropped (issue #568 item L).
+   * Branch coverage the #566 rewrite dropped (#568).
    *
    * These live branches would otherwise go unexercised: DELETE idempotency,
    * the 405s, the foreign-vault 404, sibling revoke, `vault_required`, and
@@ -308,7 +308,7 @@ describe("devices-routes scenarios", () => {
 
     // Every device a caller can see is its own owner's (one owner per vault,
     // #726), so revoking a sibling is the owner acting on their own gear —
-    // the old role lattice's "not_admin" refusal has nothing left to refuse.
+    // there is no role lattice left to refuse it.
     const revoked = await fetch(
       `${f.base}/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}`,
       { method: "DELETE", headers: deviceHeaders("phone-key") }

@@ -1,13 +1,6 @@
-// One place's photographs, opened by tapping a card on `PlacesView.tsx`
-// (Photos v4 handoff §14).
-//
-// The same tap-a-card-opens-a-filtered-timeline pattern `PhotosPeopleView`
-// established for People, via `PhotoStateView`'s "person" mode. `PhotoStateView`
-// has no "place" mode and is owned by another agent mid-flight — rather than
-// grow a file that is not this issue's to edit, the filter lives here,
-// grouping by the same 0.1° key `PlacesView` mints for its cards
-// (`places-model.ts`), so a card's count and this screen's count cannot
-// disagree about which photographs were taken here.
+// One place's photographs, opened from a PlacesView card (Photos v4 handoff
+// §14): groups by the same 0.1° key PlacesView mints for its cards, so a
+// card's count and this screen's count cannot disagree.
 
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -51,27 +44,22 @@ export default function PlaceDetail({
     [timelineAssets, places.rows, placeKey]
   );
 
-  // WHICH ROW THIS SCREEN COULD NAME (issue #816). Null once the place has a
-  // name a person would recognise — and after the write it becomes null on its
-  // own, because the replica pushes the renamed row and this recomputes. The
-  // phrase is never cached anywhere: the head reads the row at render.
+  // The unnamed row this screen could name (#816); null once the place has a
+  // recognisable name — recomputes after the replica pushes the rename.
   const unnamedPlaceId = useMemo(
     () => unnamedPlaceAt(timelineAssets, places.rows, placeKey),
     [timelineAssets, places.rows, placeKey]
   );
 
-  // WHAT THIS SCREEN CALLS THE PLACE. Read from the rows, with the name the
-  // card carried as the fallback — the route parameter is a copy made when the
-  // card was tapped, and a screen that kept printing it would show "A place
-  // with no name yet" over a place the member had just named on this screen.
+  // Read from live rows first; the route param is a copy made at tap time —
+  // printing it would show the fallback phrase over a just-named place.
   const heading = useMemo(
     () => placeNameAt(timelineAssets, places.rows, placeKey) ?? placeName,
     [timelineAssets, places.rows, placeKey, placeName]
   );
 
-  /** Name this place. `kind` carries the member's one declaration: this is home,
-   *  which is what anchors a relative phrase for every place the vault cannot
-   *  name. */
+  /** Name this place; `kind: "home"` anchors relative phrases for every
+   *  place the vault cannot name. */
   const namePlace = async (name: string, kind?: "home"): Promise<void> => {
     const trimmed = name.trim();
     if (!session || !unnamedPlaceId || !trimmed) return;
@@ -94,10 +82,8 @@ export default function PlaceDetail({
   };
 
   return (
-    // The band, via the shell (issue #712 P8) — and the back chevron STAYS,
-    // because `PlacesView` is this screen's genuine parent, exactly the split
-    // `DuplicatesShelf` states: the shell owns the band, the screen owns its
-    // own head. `current="more"` for the same reason it is on Places.
+    // Shell owns the band (#712); the back chevron STAYS because PlacesView
+    // is this screen's genuine parent.
     <PhotosScreen current="more">
       <View style={styles.header}>
         <Pressable
@@ -122,13 +108,9 @@ export default function PlaceDetail({
           </Text>
         </View>
       </View>
-      {/* THE NAMING CONVERSATION (issue #816). It stands under the head that
-          shows the fallback phrase and nowhere else: a place the member named
-          has nothing to answer, and `unnamedPlaceAt` is what knows. Two
-          answers, offered together — a typed name, or the one-tap declaration
-          that this is home. They are siblings rather than one flow because
-          "This is home" is the answer that makes every OTHER unnamed place
-          legible ("3.4 km NE of Home"), and it should cost one press. */}
+      {/* The naming UI (#816), only under an unnamed place: a typed name or
+          the one-tap "This is home" — home makes every OTHER unnamed place
+          legible, so it costs one press. */}
       {unnamedPlaceId ? (
         <View style={styles.naming}>
           {naming ? (
@@ -209,17 +191,12 @@ export default function PlaceDetail({
   );
 }
 
-// A place's shelf carries no selection/restore action (it is a read of the
-// library, the same reason `PhotoStateView`'s "person" mode never renders one)
-// — kept as module-level constants so they are stable across renders instead
-// of allocating a new empty Set/no-op on every one.
+// Module-level so they are stable across renders instead of allocating a new
+// empty Set/no-op per render.
 const EMPTY_SELECTION = new Set<string>();
 const NOOP_SELECTION_CHANGE = (): void => {};
 
 const styles = StyleSheet.create({
-  // A question in the same register as the count above it, not a button: this
-  // is a thing to answer when a member feels like it, and a filled control
-  // would make an unnamed place read as a chore.
   ask: t("control"),
   copy: { flex: 1, marginLeft: spacing[2] + 2 },
   empty: { alignItems: "center", flex: 1, justifyContent: "center" },
@@ -233,8 +210,6 @@ const styles = StyleSheet.create({
     ...t("body"),
     borderBottomWidth: borders.hairline,
     flex: 1,
-    // 44 is the target floor, and a text field a thumb can miss is worse than
-    // no field at all.
     minHeight: 44,
   },
   meta: { ...t("control"), marginTop: 2 },

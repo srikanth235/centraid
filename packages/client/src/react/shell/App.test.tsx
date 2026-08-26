@@ -23,15 +23,10 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   getUserPrefs: () => Promise.resolve({}),
-  // The shell root reads the capability map once at boot (C1). These suites
-  // exercise a gateway with the experimental features ON, so the launcher and
-  // the automation routes are the ones they already assert on; the gated-off
-  // shell has its own suite in App.capabilities.test.tsx.
+  // Features ON; gated-off shell lives in App.capabilities.test.tsx.
   readGatewayCapabilities: () =>
     Promise.resolve({ automations: true, connectors: true }),
-  // The sidebar identity row + every scope picker read the owner's scope
-  // registry (#599). `undefined` is the "gateway has no scopes plane" answer,
-  // which falls through to listVaults.
+  // `undefined` = no scopes plane (#599) → falls through to listVaults.
   listAppScopes: apiMocks.listAppScopes,
   listVaults: apiMocks.listVaults,
   saveUserPrefs: () => Promise.resolve(undefined),
@@ -81,9 +76,6 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   syncWebNotifications: () => Promise.resolve(),
 }));
 
-// The renderer's client-local store is a plain module now; back it with an
-// in-memory Map so the hooks read/write deterministically (vi.hoisted lets the
-// mock factory close over `store` despite mock hoisting).
 const store = vi.hoisted(() => new Map<string, unknown>());
 vi.mock(import("./store.js") as Promise<unknown>, () => ({
   Store: {
@@ -105,7 +97,6 @@ let root: Root | null = null;
 let host: HTMLElement | null = null;
 
 function seedShellGlobals(): void {
-  // Ambient globals the real tileVisualFromListing (via useShellApps) probes.
   (globalThis as unknown as { Icon: unknown }).Icon = {
     Todo: () => "",
     Sparkle: () => "",
@@ -113,14 +104,12 @@ function seedShellGlobals(): void {
   (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = {
     violet: "#7C5BD9",
   };
-  // gateway-client-core registers onGatewayChanged at module load — CentraidApi
-  // must exist before the first App graph import.
+  // CentraidApi must exist before the first App graph import.
   (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
     onGatewayChanged: () => {},
     onVaultChanged: () => {},
     getSettings: () => Promise.resolve({}),
   };
-  // Starred's app cards ask the tokens bridge for each tile's finish.
   (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
     tileFinish: () => ({
       background: "#111",
@@ -130,10 +119,7 @@ function seedShellGlobals(): void {
   };
 }
 describe("App suite", () => {
-  // Import the App graph once. Under turbo --filter concurrency the first
-  // transform of the shell can exceed a short per-test hook budget; re-importing
-  // every beforeEach only repeats that cost without resetting module state we
-  // care about (store + CentraidApi are re-seeded below).
+  // Import once: first transform can exceed a short per-test hook budget.
   beforeAll(async () => {
     seedShellGlobals();
     ({ default: App } = await import("./App.js"));
@@ -174,17 +160,10 @@ describe("App suite", () => {
     it("renders the frame with the stem launcher, opening on Home", async () => {
       const el = await mount();
       expect(el.querySelector(".window")).not.toBeNull();
-      // Home's body is the springboard and nothing else (issue #708). The bar
-      // names the SCREEN and carries no redundant global action — the vault is
-      // at the head of the stem, true on every route, so Home does not say it a
-      // second time.
       const bar = el.querySelector(".appBar")!;
       expect(bar.textContent).toContain("Home");
       expect(bar.textContent).not.toContain("Search everything");
       expect(bar.textContent).not.toContain("All apps");
-      // The stem holds the vault head, Search, the PINNED destinations, and a
-      // foot of All apps + the account row (Settings and What's new live in
-      // its menu, as they did before #707).
       const stem = el.querySelector(".stem")!;
       expect(stem.textContent).toContain("Search");
       expect(stem.textContent).toContain("All apps");
@@ -196,11 +175,8 @@ describe("App suite", () => {
       expect(stem.textContent).not.toContain("Connectors");
       expect(stem.textContent).not.toContain("Copies");
       expect(stem.textContent).not.toContain("System");
-      // Assistant is a pinned APP, not a place the frame goes (#707), so it
-      // has no standing row here.
+      // Assistant is a pinned app, not a stem place (#707).
       expect(stem.textContent).not.toContain("Assistant");
-      // Unpinned destinations are still not on the stem — they live in All
-      // apps and in the ⌘K palette, which is what lets the stem stay short.
       expect(stem.textContent).not.toContain("Starred");
       const activeHome = stem.querySelector('[data-active="true"]');
       expect(activeHome?.textContent).toContain("Home");
@@ -215,7 +191,6 @@ describe("App suite", () => {
       });
       const sheet = document.querySelector('[aria-label="All apps"]')!;
       expect(sheet).not.toBeNull();
-      // Every destination is listed, pinned or not.
       expect(sheet.textContent).toContain("Connectors");
       expect(sheet.textContent).toContain("Starred");
       const starred = [
@@ -224,10 +199,7 @@ describe("App suite", () => {
       await act(async () => {
         starred.click();
       });
-      // Analytics route mounts its own dashboard (a main-scroll body). The
-      // stem shows no highlight, which is the honest reading: an UNPINNED
-      // destination is not on the launcher, and pretending otherwise would
-      // make the stem's contents depend on where you happen to be.
+      // Unpinned destinations must not light a stem row.
       expect(el.querySelector('.stem [data-active="true"]')).toBeNull();
       await act(async () => {
         await Promise.resolve();
@@ -258,19 +230,10 @@ describe("App suite", () => {
         autoBtn.click();
       });
       const bar = el.querySelector(".appBar")!;
-      // The title is STATIC, so it is right on the first frame rather than
-      // after the route's query resolves.
       expect(bar.textContent).toContain("Automations");
-      // Automations is migrated (#765): its screen reads on mount and publishes
-      // its own state, so by this point the bar is showing what that read said
-      // rather than the pre-publish fallback (which `opsBar.test.ts` covers).
-      // The stub gateway has no automations endpoint, so the read fails —
-      // error withdraws the commit and keeps the quiet verb, which is the whole
-      // "what failed, what is still safe" shape.
+      // Stub gateway has no automations endpoint: error withdraws the commit.
       expect(bar.textContent).not.toContain("New automation");
       expect(bar.textContent).toContain("Templates");
-      // No successful read to date, so the error state carries no count line
-      // rather than a blank row of identity waiting to be filled in.
       expect(el.querySelector(".opsCount")).toBeNull();
 
       await act(async () => {
@@ -282,14 +245,12 @@ describe("App suite", () => {
       expect(el.querySelector(".opsCount")?.textContent).toBe(
         "6 automations · 1 failing · 1 paused"
       );
-      // A read page offers both verbs: the one filled commit and its quiet peer.
       expect(el.querySelector(".appBar")?.textContent).toContain(
         "New automation"
       );
       expect(el.querySelector(".appBar")?.textContent).toContain("Templates");
 
-      // Loading withdraws BOTH verbs: a bar offering to act on a page it has
-      // not read yet is offering to act on nothing.
+      // Loading withdraws both verbs — acting on an unread page is acting on nothing.
       await act(async () => {
         publishVitals("automations", { state: "loading" });
       });
@@ -317,17 +278,12 @@ describe("App suite", () => {
         pin.click();
       });
       expect(el.querySelector(".stem")?.textContent).toContain("Starred");
-      // Pins are user data, so they survive the session.
       expect(store.get("launcher.pins")).toMatchObject({ starred: true });
     });
 
     it("hides every builder entry point by default (#434 builder off)", async () => {
       const el = await mount();
-      // No builder pencil in the app bar. Home itself has no builder entry
-      // point to hide any more — it is the springboard and nothing else
-      // (issue #708), so the pencil and the palette row are the whole surface.
       expect(el.querySelector('[aria-label="New app"]')).toBeNull();
-      // The ⌘K palette lists the app but no "Build a new app…" create row.
       await act(async () => {
         document.dispatchEvent(
           new KeyboardEvent("keydown", { key: "k", metaKey: true })
@@ -363,8 +319,6 @@ describe("App suite", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      // No toast, no floating pill: one persistent line at the foot of the
-      // frame, in the bordered offline state, saying why commits are disabled.
       const line = el.querySelector<HTMLElement>(".statusLine")!;
       expect(line.dataset.offline).toBe("true");
       expect(line.textContent).toContain("Offline");
@@ -373,8 +327,6 @@ describe("App suite", () => {
     });
 
     it("offers no app-building entry point anywhere (#799)", async () => {
-      // The served-app plane and the builder that produced apps for it are
-      // gone: neither the app bar nor the palette may still advertise one.
       const el = await mount();
       expect(el.querySelector('[aria-label="New app"]')).toBeNull();
       await act(async () => {
@@ -387,9 +339,7 @@ describe("App suite", () => {
     });
 
     it("hides the stem on request, and never on its own", async () => {
-      // The stem can be reclaimed (⌘B or the bar's leading control) but it
-      // never becomes a drawer: no scrim, and navigating does not dismiss it.
-      // Those are the affordances #707 removed, and they stay removed.
+      // Stem is never a drawer: no scrim, navigating does not dismiss it (#707).
       const el = await mount();
       expect(el.querySelector(".stem")).not.toBeNull();
       const win = el.querySelector<HTMLElement>(".window")!;
@@ -401,8 +351,6 @@ describe("App suite", () => {
       expect(win.dataset.stem).toBe("hidden");
       expect(el.querySelector('[aria-label="Show sidebar"]')).not.toBeNull();
       expect(el.querySelector(".scrim")).toBeNull();
-      // Navigating with the stem hidden leaves it hidden — the preference is
-      // the owner's, not the router's.
       await act(async () => {
         el.querySelector<HTMLButtonElement>('[aria-label="Back"]')?.click();
       });
@@ -439,8 +387,6 @@ describe("App suite", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      // The whole identity row is the switcher (#608) — its label names the
-      // vault and gateway it is switching, so match on the action.
       const switcher = el.querySelector<HTMLButtonElement>(
         'button[aria-label$="Switch vault."]'
       )!;
@@ -453,7 +399,7 @@ describe("App suite", () => {
       expect(setActiveVault).toHaveBeenCalledWith({ vaultId: "personal" });
     });
 
-    // Issue #665 — the switcher is VAULTS ONLY, flattened across gateways.
+    // #665 — switcher is vaults only, flattened across gateways.
     it("lists the vaults of every registered gateway in one list, and picking one on another gateway switches both", async () => {
       apiMocks.listVaults.mockResolvedValue([
         {
@@ -506,21 +452,18 @@ describe("App suite", () => {
         'button[aria-label$="Switch vault."]'
       )!;
       await act(async () => switcher.click());
-      // Let both probes land and patch the open popover in place.
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
         await Promise.resolve();
       });
       const pop = document.querySelector('[role="menu"]')!;
-      // No Gateways section survives — one list, both gateways' vaults in it.
       expect(pop.textContent).not.toContain("Gateways");
       expect(pop.textContent).toContain("Shared");
       expect(pop.textContent).toContain("Studio");
       const studio = document.querySelector<HTMLButtonElement>(
         '[data-vault-id="studio"]'
       )!;
-      // The gateway is named as quiet context because more than one is known.
       expect(studio.textContent).toContain("Office");
       await act(async () => studio.click());
       expect(order).toStrictEqual(["gateway:office", "vault:studio"]);

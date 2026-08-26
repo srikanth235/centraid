@@ -166,7 +166,7 @@ describe("embedded-gateway-layout scenarios", () => {
   test(
     "actual Electron embed auto-founds Personal on a fresh data dir",
     async () => {
-      // Issue #603: the desktop passes no founding options at all — a fresh data
+      // The desktop passes no founding options at all (#603) — a fresh data
       // dir is founded by the gateway itself at construction. This is the desktop
       // half of that contract: start the real embed, ask it for its vault list,
       // and expect the one auto-founded vault with no ceremony in between.

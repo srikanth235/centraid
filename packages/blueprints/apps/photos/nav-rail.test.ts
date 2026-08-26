@@ -1,11 +1,5 @@
-// Photos' rail, as a table (v16 §4). What is asserted here is what the handoff
-// says out loud and what a reader of the rows cannot otherwise check:
-//
-//  * the two GROUPS and the rule, in order, and Duplicates and Trash below it;
-//  * every row is a shelf the app can route to, so nothing exists only here;
-//  * a sub-state lights the shelf it is a sub-state OF — an album lights
-//    **Albums**, one person lights **People**;
-//  * a count comes from the ONE counts map, and an unread shelf draws none.
+// Photos' rail as a table (v16 §4): groups + rule in order; every row routes;
+// a sub-state lights its shelf; counts from the ONE map.
 import { describe, expect, it } from "vitest";
 
 import type { NavRailItem } from "../_shared/NavRail.tsx";
@@ -58,10 +52,7 @@ describe("Photos' navigation rail", () => {
   });
 
   it("lists no destination the app cannot route to", () => {
-    // Every row is a shelf with a route, which is what makes the same
-    // destinations reachable on touch through the band and the strip. A row
-    // that existed only in the rail would route to `photos` and be
-    // indistinguishable from Library.
+    // Every row routes; rail-only would read as Library.
     const rowIds: ShelfId[] = [
       null,
       FAVORITES,
@@ -84,13 +75,10 @@ describe("Photos' navigation rail", () => {
         .map((item) => (item.kind === "row" ? item.label : ""));
     expect(current(null)).toStrictEqual(["Library"]);
     expect(current(TRASH)).toStrictEqual(["Trash"]);
-    // Inside an album, **Albums** is the current row — the definition of done
-    // says so outright, and an album's id is a collection token in no table.
+    // Inside an album, **Albums** is current — definition of done.
     expect(current("collection-7")).toStrictEqual(["Albums"]);
-    // One person's timeline is a sub-state of People for the same reason.
     expect(current(personShelf("p1"))).toStrictEqual(["People"]);
-    // A shelf the rail does not list lights NOTHING rather than the row
-    // nearest to it.
+    // An unlisted shelf lights NOTHING, not nearest row.
     expect(current(STORAGE)).toStrictEqual([]);
   });
 
@@ -103,8 +91,7 @@ describe("Photos' navigation rail", () => {
       Favorites: 128,
       Albums: 14,
       Places: 42,
-      // People and Duplicates answer `null` until their own lazy reads land,
-      // so the map carries no entry and the rail draws no number.
+      // People/Duplicates answer `null` until lazy reads land.
       People: undefined,
       Duplicates: undefined,
       Trash: 24,
@@ -115,9 +102,7 @@ describe("Photos' navigation rail", () => {
     expect(railDrawnOn(null)).toBe(true);
     expect(railDrawnOn(ALBUMS)).toBe(true);
     expect(railDrawnOn("collection-7")).toBe(true);
-    // Storage keeps a rail though §4 lists it: the strip draws there today and
-    // withdrawing both would leave a desk seat with no way back into the
-    // library but the frame's own stem.
+    // Storage keeps a rail though §4 lists it: withdrawing strands the seat.
     expect(railDrawnOn(STORAGE)).toBe(true);
     expect(railDrawnOn(SEARCH)).toBe(false);
   });

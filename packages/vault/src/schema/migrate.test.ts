@@ -176,12 +176,12 @@ describe("schema/migrate", () => {
   });
 
   test("fresh vaults apply the composed baseline plus every rung above it", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(4);
+    expect(VAULT_MIGRATIONS).toHaveLength(5);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(4);
+    expect(version.user_version).toBe(5);
     for (const table of [
       "locker_auth_credential",
       "core_entity_revision",
@@ -484,7 +484,7 @@ ${touchUpdatedAt("people_profile", "profile_id")}
         )
         .run()
     ).toThrow(/CHECK/u);
-    // people_profile.cadence_days floors at 0, not 1 (issue #821): zero is the
+    // people_profile.cadence_days floors at 0, not 1 (#821): zero is the
     // storable "never reach out", negative days are still refused.
     const now = new Date().toISOString();
     db.vault

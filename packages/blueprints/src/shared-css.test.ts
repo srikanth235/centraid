@@ -57,10 +57,10 @@ describe("shared blueprint CSS", () => {
 
   it("does not reintroduce retired global chrome selectors", () => {
     // Scanned across each app's WHOLE source tree rather than one chrome file:
-    // these three were rebuilt (#834) and their new chromes are free to put
-    // styling wherever the design asks, so a rule keyed to one file could
-    // quietly assert nothing. Reading the tree keeps the ban on the retired
-    // global selectors live wherever the styling ends up living.
+    // these three chromes are free to put styling wherever the design asks, so
+    // a rule keyed to one file could quietly assert nothing. Reading the tree
+    // keeps the ban on these global selectors live wherever the styling ends
+    // up living.
     const retiredSelectors = {
       agenda: [".ag-shell", ".ag-side", ".ag-topbar"],
       notes: [".nt-side", ".nt-topbar", ".nt-hamburger"],
@@ -84,7 +84,7 @@ describe("shared blueprint CSS", () => {
         `${app}/app.tsx`
       ).toBe(false);
       // The main client compiles these apps; no bundled app carries a
-      // document the gateway could serve (issue #799).
+      // document the gateway could serve (#799).
       expect(
         existsSync(path.join(appDir, app, "index.html")),
         `${app}/index.html`

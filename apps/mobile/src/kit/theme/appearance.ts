@@ -1,12 +1,4 @@
-// Device-local Appearance preference (issue #498) — the theme override the user
-// picks in Settings → Appearance, folded over the OS colour scheme. Persisted in
-// the same AsyncStorage `Store` as the rest of the mobile prefs and exposed as an
-// external store so `useAppearance()` re-renders every themed surface the instant
-// the preference changes (no reload).
-//
-// 'system' defers to the OS scheme (the default); 'light'/'dark' pin it. Both
-// App.tsx (nav container + status bar) and `useTheme()` resolve through
-// `resolveScheme` here so the whole app agrees on one scheme.
+// Appearance pref (#498), persisted in `Store`, exposed as an external store.
 
 import { useSyncExternalStore } from "react";
 
@@ -26,8 +18,7 @@ function coerce(value: unknown): Appearance {
   return value === "light" || value === "dark" ? value : "system";
 }
 
-// Synchronous read off the Store's in-memory cache — call `hydrateAppearance()`
-// once at boot so this reflects the persisted choice from the first render.
+// Sync read; call `hydrateAppearance()` once at boot.
 export function getAppearance(): Appearance {
   return coerce(Store.get<Appearance>(KEY, "system"));
 }
@@ -58,11 +49,7 @@ export function useAppearance(): Appearance {
   );
 }
 
-// Fold the preference over the live OS scheme into the single scheme the theme
-// resolver consumes. 'system' → follow the OS; otherwise the pinned choice wins.
-// RN 0.86 changed `useColorScheme()` to return 'unspecified' where it used to
-// return null. Both mean "the OS states no preference" and fall through to the
-// light default below; null/undefined stay accepted for non-hook callers.
+// 'system' follows the OS; RN 0.86 'unspecified' (like null) means none.
 export function resolveScheme(
   pref: Appearance,
   osScheme: "light" | "dark" | "unspecified" | null | undefined

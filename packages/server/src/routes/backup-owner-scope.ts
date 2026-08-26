@@ -1,6 +1,5 @@
 /*
- * Owner-held backup (issue #726 P1) — split out of `backup-routes.ts` to
- * keep that file under the size cap. Hosting a vault confers no authority
+ * Owner-held backup (#726). Hosting a vault confers no authority
  * over ITS backup destination/policy or recovery material: configuring a
  * target, and exporting a recovery kit, are both owner acts scoped to the
  * vault(s) the REQUESTING owner actually owns.

@@ -1,17 +1,6 @@
-// The Tasks read layer (issue #834) — the board, projected from this device's
-// consent-shaped replica, exactly the entity set the `tasks` manifest's read
-// scopes grant (packages/blueprints/apps/tasks/app.json).
-//
-// Same shape as `useDocs`: one `useReplicaQuery` per entity, one combined
-// honesty state, one memoized projection. The BOARD's own arithmetic is not
-// restated here — the grouping, the overdue rule and the undated-never-Today
-// rule are imported from `@centraid/blueprints/apps/tasks/logic`, so the phone
-// and the pointer seats cannot answer "what is due today" two different ways.
-//
-// WHAT THE PHONE CANNOT DO HERE, AND SAYS SO. The replica projects rows, not
-// the `board` query's server-side recurrence collapse; a repeating row on this
-// seat therefore renders the fields it carries and no invented count. The
-// summariser is never re-implemented — one engine, or none.
+// Tasks read layer (#834): board projected from this device's consent-shaped
+// replica; board arithmetic is imported from the blueprint logic, never
+// restated here. Rows carry their fields, never an invented recurrence count.
 
 import { useCallback, useMemo } from "react";
 
@@ -67,10 +56,8 @@ export function useTasks(): UseTasksResult {
 
   const queryState = combineReplicaQueryStates([tasks, projects, sections]);
 
-  // A family travels with its parent on every seat, so the children are nested
-  // here rather than left as loose rows the list would draw twice. Completing
-  // a parent promotes its unfinished children onto the open board — the same
-  // nest the pointer seat's `board` query uses.
+  // Children nest under their parent on every seat — same nest as the pointer
+  // `board` query, so completing a parent promotes unfinished children.
   const board = useMemo(() => {
     const rows = tasks.rows as unknown as Task[];
     const families = nestTaskFamilies(rows, (row, children) => ({
@@ -83,8 +70,6 @@ export function useTasks(): UseTasksResult {
     return [...families.open, ...families.logbook];
   }, [tasks.rows]);
 
-  // A plain function — react-compiler memoizes the hook result; a manual
-  // dependency list over three query objects would only get stale.
   const refresh = async (): Promise<void> => {
     await Promise.all([
       tasks.refresh(),
@@ -113,9 +98,7 @@ export function useTasks(): UseTasksResult {
 
 /**
  * One write door for every Tasks act — `session.write` plus the kit's outcome
- * surfacing (executed / parked→Approvals / queued / refused). Returns the
- * result on a continuable outcome and `undefined` otherwise, so a caller can
- * chain an optimistic follow-up without inspecting the status itself.
+ * surfacing; returns the result on a continuable outcome, else `undefined`.
  */
 export type TasksWrite = (
   action: string,

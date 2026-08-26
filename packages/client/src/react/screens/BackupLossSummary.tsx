@@ -6,7 +6,7 @@ import type { LossSummary } from "./backupMetrics.js";
 
 import styles from "./BackupCard.module.css";
 
-// Leads the Backups screen with LOSS, not exposure (issue #708 A2): the
+// Leads the Backups screen with LOSS, not exposure (#708): the
 // first thing on the surface answers "if this device died right now, what
 // would I lose?" — everything else (the five-metric health readout, the
 // device list, the copy/encryption cards) supports that one line rather

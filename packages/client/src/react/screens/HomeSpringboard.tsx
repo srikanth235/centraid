@@ -1,14 +1,6 @@
-// The Home springboard (issue #708, section A).
-//
-// Tier-1 CONTENT tiles, not an icon launcher. The header is invariant — app
-// mark, app name at the UI role, count in the numeric register — and the body
-// is structurally different per app, because the content is. That division is
-// the whole design: the header is what makes eight apps one house, the body is
-// what makes them eight rooms.
-//
-// The vault-level conditions (out of room, two devices disagree) sit ABOVE the
-// tiles rather than in Settings, because Home is the front door and those are
-// facts about the vault, not about a preferences page.
+// The Home springboard (#708). Tier-1 CONTENT tiles, not an icon launcher: the
+// header is invariant (mark, name, count), the body per-app. Vault-level
+// conditions belong above the tiles, not in Settings.
 import type { JSX } from "react";
 
 import { identityHueKey } from "@centraid/design";
@@ -60,11 +52,8 @@ function Mark({
   iconKey: IconName;
   colorKey: ColorKey;
   size: number;
-  /* `string | undefined`, not `string`: a CSS-module lookup is an index read,
-     and the desktop's React program checks it as one. A required `string` here
-     type-errors at every call site under that program while passing under the
-     client's — which is how this went unnoticed until the desktop typecheck
-     ran (see docs/traps/worktrees.md on per-program drift). */
+  /* `string | undefined`: a CSS-module lookup is an index read under the
+     desktop's React program (docs/traps/worktrees.md). */
   className: string | undefined;
 }): JSX.Element {
   return (
@@ -106,7 +95,7 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
         <div className={styles.body}>
           <span className={styles.eventTime}>{body.at}</span>
           <p className={styles.eventTitle}>{body.title}</p>
-          {/* Pinned to the tile bottom whatever the title above it does. */}
+          {/* Pinned to the tile bottom. */}
           {body.after ? (
             <span className={styles.afterLine}>{body.after}</span>
           ) : null}
@@ -116,17 +105,9 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
       return (
         <div className={styles.body}>
           <div className={styles.faces}>
-            {/* Coloured, because a person is the subject here — a row of grey
-                pills reads as another table; the handoff's faces read as
-                people, which is the whole argument for the tile.
-
-                Derived from the PARTY ID and painted through the `--c-<hue>`
-                custom property rather than an inline hex, for two reasons the
-                previous name-hashed `identityColor` got wrong: a rename must
-                not repaint a person (and the phone's Home derives from the
-                same id, so the two clients agree), and `--c-*` is per theme,
-                so `--text-inv` clears AA on it in DARK as well — an inline
-                light-ring hex left near-black initials on it at 3.1:1. */}
+            {/* Hue derives from the PARTY ID through `--c-<hue>`, never a name
+                hash or inline hex: a rename must not repaint a person, mobile
+                must agree, and only `--c-*` keeps AA in dark. */}
             {body.faces.map((face) => (
               <span
                 className={styles.face}
@@ -148,9 +129,7 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
     case "tasks":
       return (
         <div className={styles.body}>
-          {/* THE GLANCE (#834): today's pile and what is next. A count the
-              member can look at, in the tile's own body ink — never a badge,
-              never a dot, and nothing here is red. */}
+          {/* THE GLANCE (#834): body ink — never a badge, dot, or red. */}
           {body.glance.today ? (
             <span className={styles.eventTime}>{body.glance.today}</span>
           ) : null}
@@ -166,8 +145,7 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
               </li>
             ))}
           </ul>
-          {/* Pinned under the rows, the way the agenda tile pins its
-              after-line: what is coming, said once. */}
+          {/* Pinned under the rows, as the agenda after-line is. */}
           {body.glance.next ? (
             <span className={styles.afterLine}>{body.glance.next}</span>
           ) : null}
@@ -196,9 +174,8 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
         </div>
       );
     case "empty":
-      // `empty` is partitioned out of the grid into first-moves (see
-      // `partitionHomeTiles`). Kept exhaustive so type-aware lint catches new
-      // body kinds; rendering an empty body would put both treatments on screen.
+      // `partitionHomeTiles` routes `empty` to first-moves; this arm keeps the
+      // switch exhaustive.
       return <div className={styles.body} />;
   }
 }
@@ -210,8 +187,6 @@ function Tile({
   tile: HomeTileModel;
   onOpen: (id: string) => void;
 }): JSX.Element {
-  // The accessible name is the whole header sentence — a reader tabbing the
-  // grid hears "Photos, 1,204 photos", which is what a sighted reader sees.
   const label =
     tile.count === null
       ? tile.name
@@ -243,14 +218,8 @@ function Tile({
   );
 }
 
-/**
- * One first move — a door into somewhere that can actually take content.
- *
- * Dashed, because a dashed border reads as "not filled in yet" where a solid one
- * reads as "this is the finished thing, and it is empty". The geometry, the mark
- * and the type are the tile's own, so a move becoming a tile is a FILL rather
- * than a re-layout.
- */
+/** Shares the tile's geometry, mark and type, so becoming a tile is a FILL
+ *  rather than a re-layout. */
 function FirstMove({
   move,
   onPick,
@@ -258,7 +227,6 @@ function FirstMove({
 }: {
   move: HomeFirstMove;
   onPick: (move: HomeFirstMove) => void;
-  /** The band under a populated grid: label only, one row tall. */
   compact?: boolean;
 }): JSX.Element {
   return (
@@ -288,17 +256,9 @@ function FirstMove({
   );
 }
 
-/**
- * Day one — the vault has no content ANYWHERE.
- *
- * The copy is the brief's, verbatim, out of the shared constants (mobile draws
- * the same two sentences from the same module, because one state may not have
- * two spellings). What sits under it changed: the four dashed rectangles used to
- * open the empty app they were named after, which is a dead end wearing an
- * invitation. They are now the four things that actually put something on this
- * page — and the copy finally offers what it promises, since "bring your
- * photographs and documents in" now has a control that does it.
- */
+/** Day one — no content ANYWHERE. Copy stays in the shared constants because
+ *  mobile draws the same state; beneath it go moves that put content here,
+ *  never doors into the empty apps. */
 function DayOne({
   moves,
   onPick,
@@ -320,13 +280,7 @@ function DayOne({
   );
 }
 
-/**
- * The start band — what the apps with nothing in them become once at least one
- * app HAS something.
- *
- * Three, not all of them: the band is a nudge under a page that is already
- * working, and a nudge as tall as the grid stops being one.
- */
+/** Three, not all: a nudge as tall as the grid stops being a nudge. */
 function StartBand({
   moves,
   onPick,
@@ -346,28 +300,9 @@ function StartBand({
   );
 }
 
-/**
- * The sample offer.
- *
- * Returning users can start it below the real first moves, behind a rule,
- * phrased as a question rather than a step. A first visit uses the same
- * disclosed surface while the existing seed path starts automatically, so the
- * useful preview does not become a decision before the member has seen Home.
- *
- * The hint is not a caption; it is the disclosure, and it is placed where a
- * disclosure belongs — BEFORE the control, not underneath it as an apology.
- * Three facts, in the order they matter: the content is invented, nothing
- * leaves the device, one tap undoes it.
- *
- * Pressing REPLACES the control with the working state rather than disabling
- * it in place. The fill takes about ten seconds — seven generators, of which
- * the photo one is ten uploads — and a disabled button wearing a fixed
- * sentence is the exact shape of a surface that has hung. The working state is
- * the designed answer and it already exists (`ui/states.tsx`): the act named
- * as a sentence, the exact counts beside it, a proportional rule under both,
- * and no spinner anywhere. Home keeps working behind it, which is why this is
- * a block in the offer rather than an overlay over the page.
- */
+/** The hint is the disclosure, so it goes BEFORE the control. Pressing
+ *  REPLACES the control with `WorkingState`; never disable it in place — a
+ *  stuck button reads as a hung surface. A block, not an overlay. */
 function SampleOffer({
   seed,
   filling,
@@ -408,27 +343,15 @@ function SampleOffer({
   );
 }
 
-/**
- * The fill's sentence for one moment of it.
- *
- * No app named means the generators are done and the run is on its closing
- * replica catch-up — the step that would otherwise read as the bar arriving at
- * the end and Home staying empty for another beat.
- */
+/** No app named means the generators are done and the run is on its closing
+ *  replica catch-up — otherwise a finished bar over an empty Home. */
 function fillLabel(progress: HomeSampleProgress): string {
   if (progress.appId === undefined) return HOME_SAMPLE_FILLING_CATCH_UP;
   return HOME_SAMPLE_FILLING_APP[progress.appId] ?? HOME_SAMPLE_FILLING;
 }
 
-/**
- * What Home says while the sample is loaded.
- *
- * ONE line, at vault level, in the same band as "out of room" and "two devices
- * disagree" — because "some of what you are looking at is not yours" is a fact
- * about the vault, exactly like those. Deliberately NOT a badge per tile: eight
- * badges is the eight-apologies failure again, and it would make the sample
- * feel like damage rather than a demo.
- */
+/** ONE vault-level line, banded with "out of room". Never a badge per tile:
+ *  eight badges make the sample read as damage. */
 function SampleLoaded({
   clear,
   clearing,
@@ -456,35 +379,27 @@ function SampleLoaded({
   );
 }
 
-/** Moves shown beneath a populated grid. Fewer than day one's four — a nudge as
- *  tall as the grid it sits under stops being a nudge. */
 const BAND_MOVES = 3;
 
 export interface HomeSpringboardProps {
   tiles: readonly HomeTileModel[];
-  /** The reads are still in flight: static skeletons, never a spinner. */
+  /** Reads in flight: static skeletons, never a spinner. */
   loading: boolean;
   onOpen: (id: string) => void;
-  /** The one first move that is not an app surface. */
   onConnect: () => void;
-  /** Vault-level conditions, wired to their real signals by the route. */
   outOfRoom?: OutOfRoomProps;
   conflicts?: readonly DevicesDisagreeProps[];
-  /** The sample: offerable when the vault ships scenarios, present when loaded. */
   sample?: {
     canSeed: boolean;
     loaded: boolean;
-    /** The one first-entry run is being started automatically. */
     autoSeedPending?: boolean;
-    /** Where the fill has got to, or null when no fill is running. Not a
-     *  boolean: "it is filling" is not a thing this screen can usefully say. */
+    /** Null when no fill is running; not a boolean — the step is the message. */
     filling: HomeSampleProgress | null;
     clearing: boolean;
     onSeed: () => void;
     onClear: () => void;
   };
-  /** True for the one render after a seed lands — the grid arrives staggered
-   *  ONCE, as the payoff for pressing, and never again on a routine revisit. */
+  /** True for the one render after a seed lands: the grid staggers once. */
   justFilled?: boolean;
 }
 
@@ -498,10 +413,8 @@ export default function HomeSpringboard({
   sample,
   justFilled = false,
 }: HomeSpringboardProps): JSX.Element {
-  // Graded, not binary (issue #708). A tile earns the grid by having something
-  // to show; everything else becomes an invitation. So Home is never a wall of
-  // apologies, and it FILLS IN — the same page, one tile richer — rather than
-  // switching between two unrelated layouts at the first piece of content.
+  // Graded, not binary (#708): a tile earns the grid by having something to
+  // show, everything else becomes an invitation, and Home fills in.
   const { live, idle } = partitionHomeTiles(tiles);
   const dayOne = live.length === 0;
   const moves = homeFirstMoves(idle, dayOne ? undefined : BAND_MOVES);
@@ -519,7 +432,7 @@ export default function HomeSpringboard({
     <section className={styles.section} aria-label="Your apps">
       {outOfRoom || (conflicts?.length ?? 0) > 0 || sample?.loaded ? (
         <div className={styles.conditions}>
-          {/* First, because it changes how everything under it should be read. */}
+          {/* First: it changes how the rest reads. */}
           {sample?.loaded ? (
             <SampleLoaded clear={sample.onClear} clearing={sample.clearing} />
           ) : null}
@@ -530,8 +443,6 @@ export default function HomeSpringboard({
         </div>
       ) : null}
       {loading ? (
-        // The springboard stays mounted and the app stays usable; only the
-        // tiles that have nothing yet show placeholder rows.
         <WorkingState label="Reading your vault…" skeletonRows={3} />
       ) : dayOne ? (
         <>
@@ -550,13 +461,9 @@ export default function HomeSpringboard({
             ))}
           </div>
           {moves.length > 0 ? <StartBand moves={moves} onPick={pick} /> : null}
-          {/* The offer belongs to BOTH treatments (issue #708). It used to hang
-              off day one alone, which quietly made it unreachable: a vault has
-              a People row for its own owner the moment it exists, so one live
-              tile ends day one before the member has added anything — and
-              clearing the sample then left them with no way back to it. The
-              condition that matters is "there is something to seed and it is
-              not seeded", not which layout Home happens to be drawing. */}
+          {/* Both treatments (#708): the owner's own People row ends day one
+              immediately, so the condition is "seedable and not seeded", not
+              which layout Home draws. */}
           {offer}
         </>
       )}

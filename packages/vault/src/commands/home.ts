@@ -452,7 +452,6 @@ function addWarranty(ctx: HandlerCtx): Record<string, unknown> {
   return { warranty_id: warrantyId };
 }
 
-/** Register the home domain's commands on a gateway. */
 const COMPLETE_MAINTENANCE: CommandDefinition = {
   name: "home.complete_maintenance",
   ownerSchema: "home",

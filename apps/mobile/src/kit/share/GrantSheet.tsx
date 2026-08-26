@@ -1,19 +1,8 @@
 /**
- * THE GRANT SHEET, native seat (issue #825).
- *
- * The web sheet's twin, and deliberately not its copy: every sentence, every
- * state token and the whole write door come from
- * `@centraid/blueprints/apps/_shared/grant-*`, so the only thing restated here
- * is what React Native genuinely renders differently. Two entries, one core:
- *
- *  - AUDIENCE-FIRST is primary (ruling G-audience): person → what → capability.
- *  - OBJECT-FIRST pins `subject`; the "what" step becomes a fixed line and the
- *    standing list becomes the object side. It is an entry, not a second sheet.
- *
- * `edit` is drawn only where the gateway's declared subject registry answers
- * it. Outcomes go to the host's status line, never to a toast, and the
- * revoke confirm says the removal is REQUESTED — the only honest thing to say
- * about a vault on someone else's device.
+ * Grant sheet, native seat (#825). Audience-first (G-audience): person → what
+ * → capability. Object-first is an ENTRY via `subject`, not a second sheet.
+ * `edit` only where the subject registry answers it. Feedback is `onStatus`,
+ * never a toast.
  */
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -71,17 +60,12 @@ import { GrantSheetConfirm } from "./GrantSheetConfirm";
 export interface GrantSheetProps {
   visible: boolean;
   onClose: () => void;
-  /** People and named circles this sheet may name. Ordered by the host. */
   audiences: readonly GrantAudienceOption[];
-  /** Everything the host can offer to share. Ignored when `subject` is set. */
   subjects?: readonly GrantSubject[];
-  /** OBJECT-FIRST entry: the one subject this sheet was opened over. */
+  /** Object-first entry. */
   subject?: GrantSubject;
-  /** Preselect an audience — a person screen opening the sheet on them. */
   audienceId?: string;
-  /** The host's one status line. Every outcome is reported here. */
   onStatus: (message: string) => void;
-  /** The grant plane. Defaults to this seat's authed transport. */
   door?: GrantDoor;
 }
 
@@ -95,7 +79,6 @@ function subjectTitle(subject: GrantSubject): string {
     : subjectNoun(subject.subjectType);
 }
 
-/** The audience a grant names, in the member's words — never a raw id. */
 function audienceLabelFor(
   grant: GrantRecord,
   audiences: readonly GrantAudienceOption[]
@@ -117,18 +100,14 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     [props.door, gatewayBase]
   );
 
-  // `null` is "the registry read has not answered". It is NOT an empty
-  // registry: an empty one is the refusal "this cannot be shared", and
-  // painting that before the gateway has spoken refuses on its behalf.
+  // `null` = unread. Empty registry is "cannot be shared" — do not paint that early.
   const [registry, setRegistry] = useState<SubjectRegistry | null>(null);
   const [audienceId, setAudienceId] = useState(props.audienceId ?? "");
   const [subjectId, setSubjectId] = useState("");
-  // `null` is "the member has not chosen"; the capability is then DERIVED from
-  // whatever grant already stands, during render rather than in an effect.
+  // `null` = unchosen; capability is derived at render, not in an effect.
   const [picked, setPicked] = useState<GrantCapability | null>(null);
   const [standing, setStanding] = useState<GrantRecord[] | null>(null);
-  // `undefined` until a read answers — see `GrantChannel`. Starting at `null`
-  // would paint "Not reached yet" over every person for one frame.
+  // `undefined` until a read answers. `null` would paint "Not reached yet" for one frame.
   const [channel, setChannel] = useState<GrantChannel>(undefined);
   const [audienceKnown, setAudienceKnown] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -142,17 +121,13 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
   const subject =
     offered.find((candidate) => subjectKey(candidate) === subjectId) ??
     offered[0];
-  // Effect KEYS, not objects: a host that rebuilds its roster array on every
-  // render must not make the sheet re-read the grant plane on every render, so
-  // the reads below close over these primitives and nothing else.
+  // Effect keys, not objects — a rebuilt roster array must not re-read every render.
   const audienceKey = audience?.id ?? "";
   const audienceKind = audience?.kind ?? "party";
   const pinnedType = props.subject?.subjectType ?? "";
   const pinnedId = props.subject?.subjectId ?? "";
 
-  // Opening resets the sheet and reads the declared registry. Every write to
-  // state is deferred off the effect body — a synchronous setState here would
-  // cascade a second render before the first one has painted.
+  // Reset + registry read deferred off the effect body — sync setState would cascade.
   useEffect(() => {
     if (!props.visible) return;
     let active = true;
@@ -173,12 +148,8 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     };
   }, [props.visible, props.audienceId, door]);
 
-  // The standing read follows whichever question the sheet was opened with:
-  // the object side when a subject is pinned, the person side otherwise.
-  //
-  // REACH IS A FACT ABOUT THE PERSON, not about which door was used. An
-  // object-first sheet still names someone, so it still owes an honest reach
-  // line — and its own read, since `forSubject` cannot answer one.
+  // Reach is about the person, not the door. Object-first still names
+  // someone, so it still owes a reach read (`forSubject` cannot answer one).
   useEffect(() => {
     if (!props.visible) return;
     if (!pinnedType && !audienceKey) return;
@@ -188,9 +159,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
       setStanding(null);
       setChannel(undefined);
       setAudienceKnown(true);
-      // A reach read that fails leaves the channel UNKNOWN and the standing
-      // list alone: "we could not ask" is not "never reached", and it is not
-      // a reason to blank the shares the other read answered.
+      // Failed reach leaves channel unknown; do not blank the standing list.
       const readReach = async (): Promise<void> => {
         try {
           const reach = await door.forParty(audienceKey);
@@ -235,10 +204,8 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     };
   }, [props.visible, pinnedType, pinnedId, audienceKind, audienceKey, door]);
 
-  // A grant already standing over this exact pair opens on ITS capability:
-  // proposing `view` over a live `edit` reads as a downgrade nobody asked for.
-  // Derived at render — an effect writing it back would be a second source of
-  // truth for a value the standing read already answers.
+  // Open on the standing capability — do not propose a downgrade or a widen.
+  // Derived at render; an effect writing it back would be a second source of truth.
   const alreadyStanding =
     subject && standing
       ? grantOverSubject(
@@ -251,16 +218,13 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
   const capabilities = subject
     ? capabilitiesFor(registry?.offers ?? [], subject.subjectType)
     : [];
-  // Clamped to what the picker could draw: a standing `edit` over a subject
-  // the registry has since narrowed must not be what Share posts.
+  // Clamp to drawable: a standing `edit` the registry narrowed must not be posted.
   const capability = drawableCapability(
     capabilities,
     picked ?? defaultCapability(alreadyStanding)
   );
   const noun = subject ? subjectNoun(subject.subjectType) : "shared item";
-  // Three states, not two: the registry has not answered, it answered nothing
-  // for this subject, or it could not be read. Only the middle one is the
-  // refusal, and only it may say a subject cannot be shared.
+  // Three states: unread, empty-for-subject, unreadable. Only the middle is refusal.
   const registryPending = registry === null;
   const registryUnreadable = registry !== null && !registry.readable;
   const notOfferable =
@@ -272,8 +236,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     ? groupContributionNote(subject.subjectType, capability)
     : null;
   const rows = standing ? liveGrants(standing) : [];
-  // An audience the vault has no record of gets its OWN sentence: "nothing is
-  // shared with them" is a lie about a person we do not know.
+  // Unknown audience gets its own sentence — "nothing shared" is a lie.
   const standingEmptyLine = audienceKnown
     ? nothingSharedYet(
         props.subject
@@ -318,8 +281,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     const outcome = await door.revoke(grant.grantId);
     setBusy(false);
     setConfirming(null);
-    // The route's sentence, verbatim — it is derived from what each delivered
-    // copy actually did, and nothing here may soften it.
+    // Route sentence, verbatim — nothing here may soften it.
     props.onStatus(outcome.message);
     if (outcome.ok)
       setStanding((current) =>
@@ -385,9 +347,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                 <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
                   Person
                 </Text>
-                {/* AN EMPTY PICKER IS NOT AN ANSWER (#825): a roster read as
-                    empty says so in words. A roster that could not be read at
-                    all never opens the sheet — the host speaks that one. */}
+                {/* Empty picker is not an answer (#825). Unreadable roster never opens here. */}
                 {props.audiences.length === 0 ? (
                   <Text style={{ color: colors.textSoft }}>
                     {NOBODY_TO_SHARE_WITH}
@@ -410,18 +370,14 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                     )}
                   </View>
                 </ScrollView>
-                {/* An unknown reach draws the checking line and nothing else:
-                    every other label is a claim about this person that only an
-                    answered read may make. */}
+                {/* Unknown reach: checking line only — other labels are claims. */}
                 {audience?.kind === "party" && audienceKnown ? (
                   <View>
                     <Text
                       style={[
                         styles.reachState,
                         {
-                          // "Not yet, and not wrong" is `--seam`, not an error
-                          // rung: an unaccepted invitation is neither. A read
-                          // that has not answered is quieter than both.
+                          // Unaccepted invitation is `--seam`, not error. Unread is quieter.
                           color:
                             reach === "severed"
                               ? colors.net
@@ -460,8 +416,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                           subjectKey(candidate) ===
                             (subject ? subjectKey(subject) : ""),
                           () => {
-                            // A different subject may answer different verbs,
-                            // so the member's pick does not carry across.
+                            // Different subject, different verbs — pick does not carry.
                             setPicked(null);
                             setSubjectId(subjectKey(candidate));
                           }

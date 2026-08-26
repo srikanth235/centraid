@@ -31,7 +31,7 @@ export function useGatewayHealth(): {
   useEffect(() => {
     load();
     // Suspended while the tab is hidden and caught up the moment it returns
-    // (issue #659) — a backgrounded window has no orb to keep honest.
+    // (#659) — a backgrounded window has no orb to keep honest.
     const stop = startVisibilityTicker(load, POLL_MS);
     window.addEventListener("focus", load);
     return () => {

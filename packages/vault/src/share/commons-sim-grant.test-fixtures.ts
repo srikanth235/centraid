@@ -1,36 +1,14 @@
-// The share-grant SCHEDULE and ORACLE for the Commons simulator (issue #839,
-// gaps G1/G2/G3). `commons-sim-grant-world.test-fixtures.ts` owns the physical
-// world; this half owns the verbs and what must be true after each of them.
+// The share-grant SCHEDULE and ORACLE for the Commons simulator (#839); the
+// physical world lives in `commons-sim-grant-world.test-fixtures.ts`. Every
+// verb calls the real product path. The four golden claims:
 //
-// Every verb calls the real product path — `createShareGrant`,
-// `fulfillShareGrant`, `revokeShareGrant`, `propagateShareGrantRevocation`,
-// and the gateway's own park/confirm route into `settleDurableParkedPayload`.
-// Nothing here reimplements what it is here to test.
+//   G1 REVOCATION SEVERS: once settled the audience holds no projection and
+//      no delivery is possible; `remove_sent` is the not-yet.
+//   G2 PARKED PAYLOADS SETTLE, NEVER UNPARK: a payload leaves the pool once.
+//   G3 THE STATE MACHINE TAKES ONLY LEGAL EDGES — see `LEGAL_TRANSITIONS`.
+//   G-view THE ORIGIN IS THE SOLE AUTHOR: a pass re-projects, never merges.
 //
-// The four golden claims, in the order the rulings state them:
-//
-//   G1 REVOCATION SEVERS. Once a revocation has SETTLED (`removed`), the
-//      audience vault holds no projection of the subject and no further
-//      delivery is possible — `fulfillShareGrant` refuses a revoked grant
-//      outright. `remove_sent` is the honest not-yet, and the quiescence pass
-//      drives it home with a reachable peer.
-//   G2 PARKED PAYLOADS SETTLE, THEY NEVER UNPARK. A durable parked payload
-//      leaves `replica_parked_payload` exactly once, through the owner's
-//      confirmation (approve or deny) or through revocation of the consent
-//      grant it rode. Nothing returns it to the parked pool afterwards.
-//   G3 THE FULFILLMENT STATE MACHINE TAKES ONLY LEGAL EDGES, over the
-//      vocabulary awaiting_channel | syncing | delivered | remove_sent |
-//      removed. See `LEGAL_TRANSITIONS` for the exact edge set and why each
-//      one exists.
-//   G-view PROJECTION DOCTRINE: the origin is the sole author. A delivered
-//      pass leaves the audience holding EXACTLY the origin's current album —
-//      following origin edits, erasing audience edits, and keeping one
-//      provenance row, because a pass re-projects rather than merges.
-//
-// Nothing here is pinned. `checkSeverance` carried the simulator's one
-// tolerated break — defect D1, a revocation settling `removed` while the
-// audience kept the projection — until #846 P1 fixed the engine; the pin went
-// with the fix, so every invariant below now simply fails.
+// Nothing here is pinned: every invariant simply fails on violation.
 
 import {
   fulfillShareGrant,
@@ -67,9 +45,7 @@ import {
   createWorld,
 } from "./commons-sim-world.test-fixtures.js";
 
-/** Weighted grant-plane schedule, merged into the #731 table when a program
- *  asks for the plane. Fulfillment outweighs the lifecycle verbs so most
- *  steps are delivery under churn rather than bookkeeping. */
+/** Fulfillment outweighs lifecycle verbs: mostly delivery under churn. */
 export const GRANT_ACTION_WEIGHTS = {
   grant_create: 5,
   grant_fulfill: 16,
@@ -86,18 +62,10 @@ export const GRANT_ACTION_WEIGHTS = {
 export type GrantActionName = keyof typeof GRANT_ACTION_WEIGHTS;
 
 /**
- * Every edge the engine can legally take, keyed by the state observed BEFORE
- * an action and read again after it. `none` is "no row yet".
- *
- *   - `ensureFulfillment` is INSERT … DO NOTHING, so an existing row never
- *     falls back to `awaiting_channel`.
- *   - a pass with a live channel writes `syncing` and then `delivered`, so a
- *     single action can be observed as none/awaiting_channel → delivered.
- *   - propagation is the ONLY writer of `remove_sent` and `removed`, and it
- *     refuses to run on a grant that still stands.
- *   - `removed` and (for delivery) `remove_sent` are terminal: reaching them
- *     needs a revoked grant, and `fulfillShareGrant` refuses those, so no
- *     edge leads back out.
+ * Every legal edge, keyed by the state observed BEFORE an action; `none` is
+ * "no row yet". `ensureFulfillment` never falls an existing row back to
+ * `awaiting_channel`; one action can cross `syncing` to `delivered`;
+ * propagation alone writes `remove_sent`/`removed`, which are terminal.
  */
 const LEGAL_TRANSITIONS: Record<string, readonly ShareFulfillmentState[]> = {
   none: ["awaiting_channel", "syncing", "delivered"],
@@ -117,7 +85,6 @@ function fail(world: World, message: string): void {
   world.failures.push(`#${world.step} ${message}`);
 }
 
-/** Run a call that MUST be refused, and check the refusal says why. */
 function refuses(
   world: World,
   label: string,
@@ -134,10 +101,7 @@ function refuses(
   }
 }
 
-/**
- * Read the store's fulfillment row, check the edge the action just took is
- * one the engine is allowed to take (G3), and move the model onto it.
- */
+/** Checks the edge just taken is legal (G3), then moves the model onto it. */
 function observe(world: World, slot: ShareSlot, label: string): void {
   if (slot.grantId === undefined) return;
   const next = readFulfillment(
@@ -161,11 +125,7 @@ function observe(world: World, slot: ShareSlot, label: string): void {
   slot.fulfillment = next;
 }
 
-/**
- * G-view: after a delivered pass the audience holds EXACTLY the origin's
- * album — no stale caption, no audience edit surviving, and one provenance
- * row rather than a second projection laid beside the first.
- */
+/** G-view: no stale caption, no surviving audience edit, ONE provenance row. */
 function checkProjection(world: World, slot: ShareSlot, label: string): void {
   const held = audienceTitles(slot);
   const truth = originTitles(slot);
@@ -186,9 +146,7 @@ function checkProjection(world: World, slot: ShareSlot, label: string): void {
       world,
       `${slot.key} ${label}: the origin's own album drifted to ${JSON.stringify(truth)}`
     );
-  // The audience had been edited behind the origin's back and this pass wiped
-  // that edit out. Counted so the program can prove it actually happened —
-  // "the origin is the sole author" is empty if nothing ever contested it.
+  // "Sole author" is empty unless a pass actually wiped a contesting edit.
   if (slot.tampered) {
     world.stats["grant_tamper_healed"] =
       (world.stats["grant_tamper_healed"] ?? 0) + 1;
@@ -197,19 +155,9 @@ function checkProjection(world: World, slot: ShareSlot, label: string): void {
 }
 
 /**
- * G1. A revocation that has SETTLED (`removed`) must leave the audience
- * holding nothing.
- *
- * This carried the simulator's one pinned break, defect D1 (#839), until #846
- * P1 closed it: `fulfillShareGrant` overwrote a `delivered` row with `syncing`
- * when the host merely could not reach the peer that pass, erasing the record
- * that the peer HOLDS the subject, and `propagateShareGrantRevocation` then
- * read `syncing` as never-delivered and finished `removed` — "nothing had been
- * delivered; there was nothing to remove" — without deleting the projection
- * and without even a `remove_sent`. The owner read `removed`; the peer kept the
- * copy. The engine now remembers delivery durably
- * (`share_fulfillment.delivered_at`), so there is no reach-lost carve-out left
- * here: every settled revocation is held to G1 alike.
+ * G1, with NO reach-lost carve-out (#846): `delivered_at` is durable, so an
+ * unreachable pass cannot demote a `delivered` row and let propagation settle
+ * `removed` while the peer keeps the copy.
  */
 function checkSeverance(world: World, slot: ShareSlot, label: string): void {
   if (slot.fulfillment !== "removed") return;
@@ -250,7 +198,6 @@ function createAction(world: World, rng: Rng): void {
   world.trace.push(`#${world.step} grant_create ${slot.key}`);
 }
 
-/** One fulfillment pass, at whatever reach this host happens to have. */
 function fulfillAction(
   world: World,
   slot: ShareSlot,
@@ -282,9 +229,7 @@ function fulfillAction(
     fail(world, `${slot.key} grant_fulfill: ${result.steps.length} steps`);
     return;
   }
-  // The three legs, in the order `fulfillShareGrant` decides them: no live
-  // channel parks, a live channel this host cannot carry is `syncing`, and a
-  // live channel it can carry delivers.
+  // Decision order: no channel parks, an uncarryable one is `syncing`.
   const reached = reachable ? "delivered" : "syncing";
   const wanted = slot.linked ? reached : "awaiting_channel";
   if (step.state !== wanted)
@@ -329,8 +274,7 @@ function propagateAction(
 ): void {
   if (slot.grantId === undefined) return;
   if (!slot.revoked) {
-    // The store dates a revocation; the engine refuses to carry one that was
-    // never dated, so the two halves can never drift apart.
+    // The engine refuses an undated revocation, so the halves cannot drift.
     refuses(world, `${slot.key} grant_propagate`, "still stands", () =>
       propagateShareGrantRevocation({
         origin: slot.origin.db,
@@ -381,7 +325,6 @@ function parkAction(world: World, seat: Seat): void {
   world.trace.push(`#${world.step} park_confirmable seat=${seat.index}`);
 }
 
-/** The owner decides. Either way the payload leaves the pool exactly once. */
 function settleAction(world: World, rng: Rng, approve: boolean): void {
   const fact = rng.pick(plane(world).parked.filter((entry) => !entry.settled));
   if (!fact) return;
@@ -404,8 +347,7 @@ function settleAction(world: World, rng: Rng, approve: boolean): void {
   );
 }
 
-/** Revoking the consent grant drops every payload riding it — a settlement,
- *  not an escape: those invocations are terminal and never executable again. */
+/** A settlement, not an escape: those invocations are terminal. */
 function consentRevokeAction(world: World, seat: Seat): void {
   const agent = plane(world).agents.get(seat.index);
   if (!agent) return;
@@ -420,11 +362,7 @@ function consentRevokeAction(world: World, seat: Seat): void {
   world.trace.push(`#${world.step} revoke_consent_grant seat=${seat.index}`);
 }
 
-/**
- * G2 at one seat: every payload the model calls parked is still in the pool,
- * and every payload the model calls settled is gone from it and has stayed
- * gone. A settled payload reappearing is an UNPARK, which no verb offers.
- */
+/** G2: settled payloads stay gone; a reappearance is an UNPARK, which no verb offers. */
 function checkParked(world: World, seatIndex: number): void {
   for (const fact of plane(world).parked) {
     if (fact.seat.index !== seatIndex) continue;
@@ -450,8 +388,7 @@ export function runGrantAction(
   const slots = plane(world).slots;
   const live = slots.filter((slot) => slot.grantId !== undefined);
   const seat = rng.pick(plane(world).seats);
-  // One in four passes finds the peer out of reach — the `syncing` /
-  // `remove_sent` legs exist for exactly that host, and never fire otherwise.
+  // One pass in four is out of reach, or those legs never fire.
   const reachable = rng.int(4) !== 0;
   switch (name) {
     case "grant_create":
@@ -487,8 +424,7 @@ export function runGrantAction(
     }
     case "grant_revoke": {
       const standing = live.filter((entry) => !entry.revoked);
-      // Never revoke the LAST standing grant: a plane with nothing standing
-      // could satisfy every severance check vacuously.
+      // Never the LAST standing grant: nothing standing passes vacuously.
       const slot = standing.length > 1 ? rng.pick(standing) : undefined;
       if (slot) revokeAction(world, slot);
       break;
@@ -528,11 +464,7 @@ function revokeAction(world: World, slot: ShareSlot): void {
   world.trace.push(`#${world.step} grant_revoke ${slot.key}`);
 }
 
-/**
- * Force the grant plane to rest: every channel re-lit, every standing grant
- * delivered at full reach, every revoked grant propagated at full reach.
- * Anything still divergent after this is a defect, not an unfinished race.
- */
+/** Anything still divergent after this rest is a defect, not a race. */
 export function quiesceGrantPlane(world: World): void {
   for (const slot of plane(world).slots) {
     if (!slot.linked) bindSlotChannel(slot, true);
@@ -550,7 +482,7 @@ export function checkGrantInvariants(world: World): void {
     if (slot.grantId === undefined) continue;
     if (slot.revoked) {
       checkSeverance(world, slot, "quiesced");
-      // G1's second half: no reach, no retry, and no future pass revives it.
+      // G1's second half: no future pass revives it.
       refuses(world, `${slot.key} quiesced`, "is revoked", () =>
         fulfillShareGrant({
           origin: slot.origin.db,
@@ -560,8 +492,7 @@ export function checkGrantInvariants(world: World): void {
           now: NOW,
         })
       );
-      // Only a revocation that actually SETTLED counts as proof. A grant
-      // revoked before it was ever fulfilled has nothing to sever.
+      // Only a SETTLED revocation is proof; an unfulfilled one severed nothing.
       if (slot.fulfillment === "removed") severed += 1;
       continue;
     }
@@ -570,8 +501,7 @@ export function checkGrantInvariants(world: World): void {
   }
   for (const seat of grantPlane.seats) checkParked(world, seat.index);
   const settled = grantPlane.parked.filter((fact) => fact.settled).length;
-  // A plane where nothing was ever delivered, nothing was ever severed, and
-  // no payload ever settled would satisfy every check above vacuously.
+  // A plane that delivered, severed and settled nothing passes vacuously.
   if (delivered === 0 || severed === 0 || settled === 0)
     world.failures.push(
       `the grant plane proved nothing: ${delivered} standing, ${severed} severed, ${settled} settled payloads`
@@ -583,18 +513,11 @@ export function buildPlaneFor(world: World, albumsPerPair: number): void {
 }
 
 export interface SeveranceProbe {
-  /** What the audience vault holds after the revocation settled. */
   audienceTitles: string[];
-  /** The store's final fulfillment state for that peer. */
   state: ShareFulfillmentState | undefined;
 }
 
-/**
- * The minimal deterministic walk that reaches defect D1: deliver, lose reach
- * for one pass, revoke, then propagate with the peer reachable again. No PRNG
- * and no schedule — this is the characterization `commons-sim.test.ts` pins,
- * so the day the engine remembers what it delivered, the pin turns red.
- */
+/** The minimal deterministic walk to defect D1, pinned by `commons-sim.test.ts`. */
 export function runRevocationSeveranceProbe(): SeveranceProbe {
   const world = createWorld({ seed: 839_000, actions: 0, seats: 2, grants: 2 });
   try {

@@ -139,7 +139,7 @@ export default function AlbumDetail({
   }, [route.params.albumId]);
   const pinsReady = pinsHydratedFor === route.params.albumId;
   // CAN THIS MEMBER CHANGE THIS ALBUM? Rename, Delete, Share, Make cover and
-  // Remove all used to render unconditionally and then `return` on a missing
+  // Remove all must not render unconditionally and then `return` on a missing
   // session — a silent no-op, which §1 forbids outright: a control that looks
   // available and does nothing teaches a member that the app is broken, and
   // they have no way to learn otherwise. Two different truths block the write

@@ -1,10 +1,10 @@
-// The sync domain (issue #290 phases 2–4): connections, the universal
+// The sync domain (#290 phases 2–4): connections, the universal
 // external-id map, and the staging band every import flows through —
 // source → connector → staging → review/merge → live. File drops and live
 // connectors are the same shape; a file connection simply has no principal
 // and no cursor.
 //
-// Policy stances the schema encodes (issue #290 decision 6):
+// Policy stances the schema encodes (#290 decision 6):
 //   - the vault wins conflicts: an upstream change lands as a staged
 //     `update` row for review, never an overwrite;
 //   - upstream deletions never delete: `gone_upstream` is a flag the owner
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS sync_connection_run (
 CREATE INDEX IF NOT EXISTS idx_sync_connection_run_connection ON sync_connection_run(connection_id);
 `;
 
-// Broker-owned credentials (issue #304, amending #290 decision 4): a
+// Broker-owned credentials (#304, amending #290 decision 4): a
 // connection may CARRY its credential instead of borrowing the harness's —
 // `oauth2` (BYO client: the owner registers their own OAuth app per
 // provider) or `api_key` (a static PAT). Both live in a SIDECAR keyed by
@@ -132,4 +132,15 @@ CREATE TABLE IF NOT EXISTS sync_connection_health (
   auth_note     TEXT,
   updated_at    TEXT NOT NULL
 ) STRICT;
+`;
+
+// Issue #865: Assist refresh tokens are redeemable at the OAuth Worker only
+// with the exchange-minted HMAC capability over that exact token. The gateway
+// persists the capability sealed, beside the refresh token it authenticates,
+// and re-persists it whenever Google rotates the pair. The credential table
+// above predates the column, so it ships as its own migration rung (an ALTER
+// on a fresh file would collide with a column added to the CREATE) — see the
+// ladder in schema/migrate.ts.
+export const SYNC_CREDENTIAL_REFRESH_CAPABILITY_DDL = `
+ALTER TABLE sync_connection_credential ADD COLUMN refresh_capability TEXT;
 `;

@@ -1,29 +1,6 @@
-// The editor's SEVEN write outcomes (Docs handoff Part 2 §9; issue #821) —
-// "a write has seven visible outcomes and the member must always know which
-// one is showing."
-//
-// The copy is the handoff's `DSAVE` table, and each posture maps HONESTLY
-// onto the replica's real result union (`NativeWriteResult`,
-// lib/replica/native-session.ts): `IntentOutcome` gives executed / parked /
-// denied / failed / conflict, the outbox adds queued / in-flight. Three of
-// the seven never touch the wire at all:
-//
-//   * `unsaved`  — local dirt, nothing dispatched.
-//   * `nochange` — a byte-identical save WRITES NOTHING. Compared here,
-//     before dispatch: "a no-op is not a version" and the history must not
-//     grow an entry for it.
-//   * `refused` for a non-text kind — the vault's own edit precondition
-//     (`media_type LIKE 'text/%'`), known before asking, so the screen wears
-//     the Refused posture from the start rather than round-tripping to hear
-//     the same no.
-//
-// The load-bearing distinction: QUEUED ≠ WAITING FOR APPROVAL. Nobody has to
-// consent to a queued write — it is in order on this phone and goes when the
-// gateway is back; a parked write is held until the owner consents. The two
-// notes below say exactly that, in the handoff's own words (generic where the
-// handoff used its sample's names — "Ana" is nobody on this vault).
-//
-// Pure and react-free so all seven mappings are directly assertable.
+// The editor's seven write outcomes (Docs handoff Part 2 §9; #821).
+// QUEUED ≠ WAITING FOR APPROVAL: queued is in order on this phone; parked
+// waits for owner consent. A byte-identical save writes nothing.
 
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 
@@ -38,35 +15,24 @@ export type EditorPostureId =
 
 export interface EditorPosture {
   id: EditorPostureId;
-  /** The vault's own reason, on a refusal. */
   reason?: string;
-  /** Real facts for the Saved line — never invented. */
   savedAt?: string;
   savedVersion?: number | null;
 }
 
 export interface EditorOutcomeCopy {
-  /** The status line — the handoff's sentence with real facts interpolated. */
   line: string;
-  /** The note names the rule, not the vibe. */
   note: string;
-  /** The commit control's label. */
   commit: string;
-  /** Drawn in the `net` tone. */
   net: boolean;
-  /** The one optional follow-up beside the line. */
   action?: EditorActionId;
-  /** The commit control is pressable only where pressing it means something —
-   *  "a filled control that cannot be pressed stops being filled." */
   commitEnabled: boolean;
 }
 
 export type EditorActionId = "receipt" | "approvals" | "editable";
 
-/** The vault's edit rule, said as the refusal line's second clause. */
 export const NOT_TEXT_REASON = "this document is not text";
 
-/** What "What can be edited?" answers — the rule, in the vault's own terms. */
 export const WHAT_CAN_BE_EDITED =
   "A body can only be set on a text document (a kind whose media type is text/…). Every other kind takes a new file through Replace instead — same document, new bytes, each a version in its history.";
 
@@ -78,12 +44,6 @@ const fmtClock = (iso: string): string => {
   return `${hh}:${mm}`;
 };
 
-/**
- * Map ONE real write result to the posture it must show. Total over the
- * union: executed → saved, parked → approval (held, not refused), queued →
- * queued, in-flight → saving, and denied/failed/conflict are all the Refused
- * posture carrying the vault's own reason.
- */
 export function postureFromResult(result: NativeWriteResult): EditorPosture {
   switch (result.status) {
     case "executed":
@@ -104,8 +64,6 @@ export function postureFromResult(result: NativeWriteResult): EditorPosture {
   }
 }
 
-/** The seven postures' words — `DSAVE`, with real facts where the sample had
- *  sample ones. */
 export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
   switch (posture.id) {
     case "unsaved":
@@ -188,7 +146,6 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
   }
 }
 
-/** The action's visible label, per posture. */
 export const EDITOR_ACTION_LABELS: Record<EditorActionId, string> = {
   receipt: "Open the version history",
   approvals: "Show it in Approvals",

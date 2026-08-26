@@ -1,4 +1,4 @@
-// The pure decision at the top of a reconcile (#419 M0.4), split from boot.ts
+// The pure decision at the top of a reconcile (#419.4), split from boot.ts
 // so it can be unit-tested without the native module chain boot.ts drags in.
 
 export interface ReconcileGateInput {

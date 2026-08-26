@@ -39,18 +39,17 @@ export const PEER_COMMONS_CLAIM_PATH = "/centraid/_peer/commons/claim";
 export const PEER_COMMONS_REFUSE_PATH = "/centraid/_peer/commons/refuse";
 
 /**
- * Per-transfer authorization state (#750 defect b). Authorizing a blob pull
- * used to run a FULL closure export + Ed25519 signing for EVERY 1 MiB chunk
- * (~1024 exports per member per GiB). Now the closure walk happens ONCE, when
- * a transfer session is opened; each chunk only validates against the
- * session's sha set. Sessions are in-memory and expiring — losing one on a
- * gateway restart merely costs the member one re-authorize round trip.
- * The same store carries a paginated bootstrap frame (#750 defect d), sliced
- * so no single response serializes the entire commons.
+ * Per-transfer authorization state (#750 defect b): the closure walk +
+ * Ed25519 signing happen ONCE at session open, never per 1 MiB chunk; each
+ * chunk validates against the session's sha set. Sessions are in-memory/
+ * expiring — a restart costs one re-authorize round trip. Same store carries
+ * a paginated bootstrap frame (#750 defect d).
  */
 const PEER_COMMONS_SESSION_TTL_MS = 5 * 60 * 1000;
-/** Server-side ceiling for one bootstrap page. The member may ask for less
- * (its own memory bound), never for more. */
+/** Count bound on the transfer/bootstrap session store (#865 F9). TTL sweep
+ * reclaims only expired sessions; eviction is oldest-expiry-first. */
+export const PEER_COMMONS_SESSION_CAP = 256;
+/** Server-side ceiling for one bootstrap page; members may ask less, never more. */
 export const PEER_COMMONS_PAGE_BYTES = 1024 * 1024;
 
 interface PeerCommonsSession {
@@ -59,7 +58,7 @@ interface PeerCommonsSession {
   grantId: string;
   /** Content addresses this transfer may pull, proven once at open. */
   shas?: ReadonlySet<string>;
-  /** Serialized bootstrap frame, when this session carries pages. */
+  /** Serialized bootstrap frame when the session carries pages. */
   frame?: string;
   pageBytes?: number;
   expiresAt: number;
@@ -76,6 +75,11 @@ function openPeerCommonsSession(
   const nowMs = Date.now();
   for (const [token, held] of peerCommonsSessions)
     if (held.expiresAt <= nowMs) peerCommonsSessions.delete(token);
+  while (peerCommonsSessions.size >= PEER_COMMONS_SESSION_CAP) {
+    const oldest = peerCommonsSessions.keys().next().value;
+    if (oldest === undefined) break;
+    peerCommonsSessions.delete(oldest);
+  }
   const token = randomBytes(16).toString("hex");
   const expiresAt = nowMs + PEER_COMMONS_SESSION_TTL_MS;
   peerCommonsSessions.set(token, { ...session, expiresAt });
@@ -116,6 +120,15 @@ function notFound(res: ServerResponse): true {
   return sendJson(res, 404, { state: "not_found" });
 }
 
+/**
+ * A member signature nonce is an opaque replay key the steward's command
+ * executor binds straight into SQLite (`signature_nonce`, #865 F9): a
+ * non-string or control-bearing value used to reach that binding and surface
+ * as a 500 instead of the route's normal refusal. Bounded printable strings
+ * only — every minted nonce (a uuidv7 or a member-local label) fits.
+ */
+const SIGNATURE_NONCE_GRAMMAR = /^[\x20-\x7E]{1,128}$/u;
+
 function pair(
   peer: PeerIdentity,
   query: URLSearchParams
@@ -151,8 +164,7 @@ export function handlePeerCommonsBootstrap(
   const steward = linked ? deps.vaultFor(linked.stewardVaultId) : undefined;
   if (!linked || !steward) return notFound(res);
   try {
-    // Page fetch for an already-opened bootstrap session (#750 defect d):
-    // slices the frame stored at open time, never re-exports.
+    // Page fetch for an open session (#750 defect d): slice the stored frame, never re-export.
     const sessionToken = query.get("session");
     if (sessionToken) {
       const page = uint(query.get("page"));
@@ -239,9 +251,8 @@ export function handlePeerCommonsBootstrap(
       });
     }
     const acknowledged = uint(query.get("afterSequence"));
-    // `full=1` is the member's re-baseline fallback: an increment its replica
-    // could not use (wrong anchor, unresolvable delta) must be able to force
-    // the complete frame without dropping its ack.
+    // full=1 is the member's re-baseline fallback: an increment its replica
+    // could not use must force the complete frame without dropping its ack.
     const wantsFull = query.get("full") === "1";
     const frame = exportCommonsSyncFrame({
       steward: steward.vault,
@@ -269,13 +280,10 @@ export function handlePeerCommonsBootstrap(
       });
       compactCommonsOperations(steward.vault, grantId);
     }
-    // A fully caught-up member (its ack equals the grant's head) needs no data:
-    // shipping a full bootstrap frame here would make the client scrub and
-    // re-project the whole commons — deleting its seat-local OCR/embeddings/FTS
-    // and re-enqueuing enrichment — and count as sweep progress, pinning the
-    // active cadence. Answer an explicit no-op instead (the ack + compaction
-    // above already ran). Tombstones are never short-circuited: a removed
-    // member still needs the scrub they carry.
+    // A caught-up member needs no data: a full frame would make the client
+    // scrub and re-project the whole commons (deleting seat-local
+    // OCR/embeddings/FTS) and count as sweep progress. Tombstones are never
+    // short-circuited: a removed member still needs its scrub.
     if (
       frame.state !== "tombstone" &&
       acknowledged !== undefined &&
@@ -285,14 +293,12 @@ export function handlePeerCommonsBootstrap(
         state: "current",
         grantId,
         currentSequence,
-        // The no-op still carries the chain head (#731): a steward that forked
-        // at a sequence the member already verified would otherwise hide
-        // behind "you are caught up".
+        // The no-op still carries the chain head (#731): a forked steward must
+        // not hide behind "you are caught up".
         headHash: readCommonsChainHead(steward.vault, grantId).hash,
       });
     if (frame.state !== "bootstrap") return sendJson(res, 200, frame);
-    // Bound every response (#750 defect d): a full-closure frame larger than
-    // the member's page budget is stored once and served in slices.
+    // Bound every response (#750 defect d): oversize frames stored once, served in slices.
     const requested = uint(query.get("pageBytes"));
     const pageBytes = Math.min(
       requested && requested >= 4096 ? requested : PEER_COMMONS_PAGE_BYTES,
@@ -321,8 +327,8 @@ export function handlePeerCommonsBootstrap(
 
 /**
  * Open one blob-pull transfer session (#750 defect b): membership + the
- * grant's current blob set are proven ONCE here; every chunk after validates
- * against the stored session instead of re-exporting the closure.
+ * grant's current blob set are proven ONCE here; chunks validate against the
+ * session instead of re-exporting the closure.
  */
 export function handlePeerCommonsBlobAuthorize(
   res: ServerResponse,
@@ -383,9 +389,8 @@ export function handlePeerCommonsBlob(
   )
     return notFound(res);
   try {
-    // Chunk authorization is the transfer session opened by
-    // `handlePeerCommonsBlobAuthorize` — proven once, validated per chunk
-    // (#750 defect b). No closure export, no signing, on this path.
+    // Chunk authorization rides the authorize-session (#750 defect b):
+    // proven once, validated per chunk; no export, no signing.
     const session = peerCommonsSession({
       token,
       stewardVaultId: linked.stewardVaultId,
@@ -441,14 +446,11 @@ export async function handlePeerCommonsCommand(
   const gateway = deps.gatewayFor(stewardVaultId);
   const credential = deps.credentialFor(stewardVaultId);
   const link = peer.linkForPair(stewardVaultId, memberVaultId);
-  // The grant sequence the member had projected locally when it composed this
-  // command (issue #731 goal 1). It is member-supplied, untrusted input like
-  // every other field on this wire body — it never rode inside the signed
-  // intent bytes `memberSignature` covers — so it is an honesty/classification
-  // signal for the stale-context check only, and must never widen what
-  // `executeCommonsCommand` authorizes. v0 requires it explicitly on the
-  // wire: a payload missing (or malforming) it is refused outright, with no
-  // defaulting and no compat branch for pre-#731 senders.
+  // The grant sequence the member had projected when it composed this command
+  // (#731 goal 1). Member-supplied, untrusted input — it never rode inside the
+  // signed intent bytes — so it feeds the stale-context check ONLY and must
+  // never widen what `executeCommonsCommand` authorizes. v0 requires it
+  // explicitly: no defaulting, no compat branch.
   const basedOnSequence = body.basedOnSequence;
   if (
     !link ||
@@ -461,18 +463,21 @@ export async function handlePeerCommonsCommand(
     !body.input ||
     typeof body.input !== "object" ||
     !memberSignature ||
+    typeof memberSignature.nonce !== "string" ||
+    !SIGNATURE_NONCE_GRAMMAR.test(memberSignature.nonce) ||
+    typeof memberSignature.signature !== "string" ||
+    memberSignature.signature.length === 0 ||
     memberSignature.memberVaultId !== memberVaultId ||
     typeof basedOnSequence !== "number" ||
     !Number.isInteger(basedOnSequence) ||
     basedOnSequence < 0
   )
     return notFound(res);
-  // Bind the acted-as party to the PROVEN peer vault, exactly as the refuse
-  // route does. `body.actorPartyId` is caller-supplied; a linked member — even
-  // a read-only one — must never be able to claim to be the steward and forge
-  // steward-attributed writes past capability/signature/replay (those all skip
-  // when actorPartyId === stewardPartyId). Resolve the caller's real party from
-  // the link's pinned key + circle membership and require the request to match.
+  // Bind the acted-as party to the PROVEN peer vault, as the refuse route
+  // does: caller-supplied `body.actorPartyId` must never forge
+  // steward-attributed writes past capability/signature/replay (all skipped
+  // when actorPartyId === stewardPartyId). Resolve from the link's pinned key
+  // + circle membership and require a match.
   try {
     const grant = readCommonsGrant(steward.vault, grantId);
     const boundParty = steward.vault
@@ -487,10 +492,9 @@ export async function handlePeerCommonsCommand(
       | { party_id: string }
       | undefined;
     if (!boundParty || boundParty.party_id !== actorPartyId) {
-      // A member whose vault identity was RE-MINTED still links and still
-      // signs — it simply is not the key this commons pinned. That is a named
-      // condition with a cure (re-invitation), not an unknown caller, so it
-      // answers with the fault instead of a silent 404 (issue #750).
+      // A member whose vault identity was RE-MINTED still links and signs —
+      // it is simply not the pinned key. Named fault with a cure
+      // (re-invitation), not a silent 404 (#750).
       const pinned = steward.vault
         .prepare(
           `SELECT b.party_id FROM share_party_vault_binding b
@@ -533,10 +537,9 @@ export async function handlePeerCommonsCommand(
       grantId,
       stewardVaultId,
       vaultFor: deps.vaultFor,
-      // Co-hosted member seats catch up by replaying this command through
-      // their OWN gateway (#750 invariant 7), seeded so they mint the ids the
-      // steward just minted. A seat whose vault is not mounted here has no
-      // executor and re-projects from the closure instead.
+      // Co-hosted member seats replay this command through their OWN gateway
+      // (#750 invariant 7); a seat whose vault is not mounted here re-projects
+      // from the closure.
       invokeFor: (vaultId, replicaCommand, replicaInput, invocationId) => {
         const seatGateway = deps.gatewayFor(vaultId);
         const seatCredential = deps.credentialFor(vaultId);
@@ -565,9 +568,8 @@ export async function handlePeerCommonsCommand(
   });
 }
 
-/** Steward-pushed invitation. The exact linked vault pair authenticates the
- * inviter, but the receiver gets only durable consent metadata until its
- * owner explicitly accepts through the local Commons route. */
+/** Steward-pushed invitation: the linked vault pair authenticates the inviter;
+ * the receiver gets only consent metadata until its owner accepts. */
 export async function handlePeerCommonsInvite(
   req: IncomingMessage,
   res: ServerResponse,
@@ -677,8 +679,8 @@ export async function handlePeerCommonsClaim(
   }
 }
 
-/** Receiver consent refusal travels over the same authenticated vault pair as
- * claim/accept so the steward's control truth and ordered log stay honest. */
+/** Refusal travels the same authenticated pair as claim/accept so control
+ * truth and the ordered log stay honest. */
 export async function handlePeerCommonsRefuse(
   req: IncomingMessage,
   res: ServerResponse,

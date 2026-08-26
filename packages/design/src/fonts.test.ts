@@ -74,7 +74,7 @@ describe("bundled font seam", () => {
   // not resolve. When `toFontFaceCss` shared a module with `FONTS_DIR`, the
   // desktop preload pulled `require("node:path")` into its bundle, failed to
   // load, and took the entire app down — no tokens, no icons, no IPC bridge
-  // (issue #707). Nothing in the type layer prevents that regression; the file
+  // (#707). Nothing in the type layer prevents that regression; the file
   // boundary is the only thing that does, so it is asserted here.
   it("the browser-safe font module reaches for no node builtin", () => {
     const source = readFileSync(

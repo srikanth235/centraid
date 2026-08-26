@@ -1,7 +1,3 @@
-/**
- * Token precedence depth for resolveToken (issue #545 B10).
- */
-
 import { describe, expect, test } from "vitest";
 
 import { resolveToken } from "./auth.ts";

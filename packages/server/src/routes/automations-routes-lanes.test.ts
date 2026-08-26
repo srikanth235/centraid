@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 /*
- * `GET /_automations/turns?systemLane=` lane split (issue #731 M2). Same
- * mock req/res harness as automations-routes.test.ts, split out so the
- * flood-isolation scenario has room of its own.
+ * `GET /_automations/turns?systemLane=` lane split (#731). Same
+ * mock req/res harness as automations-routes.test.ts.
  */
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -69,13 +68,12 @@ describe("automations-routes systemLane suite", () => {
     };
   }
 
-  // Issue #731 M2: the combined `turns` feed used to hand back whichever
-  // `limit` turns ran most recently — no lane split — so a flood of
-  // recognition runs (a large photo import fires them once per photo) could
-  // fill the whole window and leave the member's own "Recent activity"
-  // empty. `systemLane=member`/`systemLane=recognition` are now separate,
-  // independently-bounded SQL queries; a flood on one must never starve the
-  // other.
+  // Issue #731 M2: an unsplit `turns` feed hands back whichever `limit` turns
+  // ran most recently, so a flood of recognition runs (a large photo import
+  // fires them once per photo) fills the whole window and leaves the member's
+  // own "Recent activity" empty. `systemLane=member`/`systemLane=recognition`
+  // are separate, independently-bounded SQL queries; a flood on one must never
+  // starve the other.
   test("systemLane splits the turns feed so a recognition flood can't starve the member lane", async () => {
     const store = new ConversationStore(
       makeJournalDbProvider(path.join(dir, "journal.db"))

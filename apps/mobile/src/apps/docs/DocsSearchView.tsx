@@ -1,4 +1,4 @@
-// The Search shelf (handoff Part 2 §5; issue #821) — field first, then the
+// The Search shelf (handoff Part 2 §5; #821) — field first, then the
 // same rows as the drive.
 //
 // WHAT THIS SEARCH REACHES, honestly: the phone's replica indexes document

@@ -1,9 +1,9 @@
 /**
  * The springboard grid's packing rule.
  *
- * The case that drove this module is `packs the seeded vault with no interior
- * hole` below: it is the exact size sequence a freshly seeded vault produced on
- * device, which rendered three blank half-rows. `holes()` is the assertion that
+ * The case this module exists for is `packs the seeded vault with no interior
+ * hole` below: the exact size sequence a freshly seeded vault produces on
+ * device, which renders three blank half-rows unpacked. `holes()` is the assertion that
  * matters — it walks the packed order the way the flex-wrap grid does and
  * counts the gaps a member would actually see.
  */

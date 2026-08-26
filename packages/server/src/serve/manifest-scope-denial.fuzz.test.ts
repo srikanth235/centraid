@@ -1,5 +1,5 @@
 /*
- * The bundled-manifest scope-denial sweep (issue #839, G4) — part 3 of 3.
+ * The bundled-manifest scope-denial sweep (#839) — part 3 of 3.
  *
  * Property fuzz: arbitrary clamps and requests fail closed, never throw, never
  * widen. Loader, oracles, and vault fixture live in

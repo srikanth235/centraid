@@ -1,6 +1,6 @@
 /**
  * Add a document through core.add_document. Bytes arrive either STAGED
- * (issue #296: the app streamed them to /_vault/blobs and claims the sha
+ * (#296: the app streamed them to /_vault/blobs and claims the sha
  * here — big files, text extracted server-side for search) or as a small
  * inline data: URI. Omit folder_id for the drive's top level; re-uploading
  * identical bytes restores them from trash and renames them. Risk low.

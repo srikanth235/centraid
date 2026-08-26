@@ -1,5 +1,5 @@
 /**
- * Content-script pure helpers (issue #545 C10) — password generation and
+ * Content-script pure helpers (#545) — password generation and
  * message-envelope unwrapping without DOM / chrome APIs.
  */
 

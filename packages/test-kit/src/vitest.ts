@@ -5,46 +5,23 @@ import type { UserWorkspaceConfig } from "vitest/config";
 
 type ProjectConfig = UserWorkspaceConfig;
 
-// Resolved from this file rather than named as a bare specifier: consuming
-// projects run with their own cwd, and setupFiles paths are resolved against
-// the project root, not against test-kit.
+// setupFiles paths resolve against the consuming project root, not test-kit.
 const JSDOM_SETUP = fileURLToPath(new URL("jsdom-setup.ts", import.meta.url));
 
-// #496 E5 — fail any test that runs zero assertions. Cheap partial defense
-// against assertion-gutting (matrix minimumTests counts `test(`/`it(` call
-// sites, not expect calls). Legitimately assertion-free tests must call
-// `expect.assertions(0)` or be rewritten to assert an outcome.
+// Zero-assertion tests fail (#496). A legitimately assertion-free test must
+// call `expect.assertions(0)`.
 const requireAssertions = {
   expect: {
     requireAssertions: true,
   },
 } as const;
 
-// Vitest 4 transforms jsdom-environment files through Vite's `client`
-// environment, whose `noExternal: true` makes it try to *bundle* every import.
-// Vite knows `node:sqlite` is a Node builtin and refuses ("Cannot bundle
-// Node.js built-in"); older builtins like `node:crypto` and `node:fs` slip
-// through because Vitest's own externalization list predates it.
-//
-// jsdom projects here deliberately reach for it: the client replica-store
-// conformance suites run one corpus against both drivers (sqlite-wasm, the real
-// web engine, which needs jsdom; and node:sqlite, the CI stand-in for op-sqlite,
-// which cannot load under vitest on macOS), and desktop's main-process tests
-// pull it in transitively through `@centraid/vault`. Handing the builtin back to
-// Node keeps those on jsdom instead of forcing a split into node projects.
-//
-// A `pre` plugin rather than `resolve.builtins` or `test.server.deps.external`:
-// neither of those reaches the client environment's resolver — both were tried
-// and had no effect.
-//
-// Installed on BOTH presets, not just the jsdom one (#842): the environment a
-// file is transformed in is chosen per FILE — a `// @vitest-environment jsdom`
-// docblock inside a *node* project puts that one file through the same client
-// environment — while plugins are chosen per PROJECT. A node project without
-// this plugin therefore cannot host a single jsdom-docblock file that reaches
-// node:sqlite: the file dies at transform with zero tests collected, which is a
-// silently absent suite rather than a red one. `scripts/ci/collection-tripwire.mjs`
-// is the backstop that makes that class of failure loud.
+// Vite's `client` environment refuses to bundle `node:sqlite`, which jsdom
+// projects legitimately reach for. Must be a `pre` plugin: neither
+// `resolve.builtins` nor `test.server.deps.external` reaches that resolver.
+// Installed on BOTH presets (#842) because environments are per FILE and
+// plugins per PROJECT: a node project lacking it silently collects zero tests
+// from a `@vitest-environment jsdom` file.
 const externalizeNodeSqlite = {
   name: "centraid:external-node-sqlite",
   enforce: "pre" as const,
@@ -59,38 +36,13 @@ const nodePreset = {
     environment: "node",
     pool: "forks",
     ...requireAssertions,
-    // Node projects are the node:sqlite ones: they bootstrap real vault/daemon
-    // layouts on disk, so their wall clock is fsync-bound, not CPU-bound.
-    // Hosted-runner storage latency varies enough between runner instances to
-    // blow the 5s default even though nothing about the code changed. Measured
-    // on one day, same `bun run coverage` command, same ubuntu-24.04 image,
-    // same node 22.23.1 — ci run 29733633559 (passed) vs nightly 29733737906
-    // (failed), per test FILE:
-    //   serve/vault-plane      10.7s -> 71.5s  (6.7x)
-    //   serve/vault-registry   11.2s -> 65.0s  (5.8x)
-    //   stores/gateway-db       2.1s -> 18.7s  (8.8x)
-    //   routes/import-routes    1.1s -> 10.9s  (9.8x)
-    // The median file across the whole run was 0.83x — CPU-bound tests were
-    // unaffected, so this is disk latency on the slow host, NOT v8 coverage
-    // instrumentation (coverage is on in BOTH lanes) and NOT a regression: all
-    // 16 nightly failures were timeouts, zero assertion failures.
-    // Budget: the slowest test still on this default measured ~2.9s on a fast
-    // host; at the ~10x worst observed host penalty that is ~29s, so 30s. Kept
-    // well below a real-hang signal — a deadlock never completes at any budget,
-    // it just takes 30s instead of 5s to report. jsdom projects deliberately
-    // keep Vitest's tight 5s default: they do no disk I/O.
-    //
-    // Do NOT add a per-test `}, N)` override below this number. Eight tests
-    // carried 10s/15s/20s overrides written against the old 5s default, where
-    // they were RAISES; raising the default silently turned them into CAPS on
-    // exactly the slow I/O-bound tests that needed the headroom most, and
-    // stream-ingress.test.ts then timed out at its own 15s in ci run
-    // 29755774783 while everything around it had 30s. They are gone. A test
-    // genuinely slower than 30s should say so with an override ABOVE it.
+    // Node projects are fsync-bound, and hosted-runner disk latency swings ~10x
+    // between instances; 30s covers the slowest such test at that penalty. A
+    // deadlock still reports, just later. jsdom does no disk I/O and keeps the
+    // 5s default. Do NOT add a per-test `}, N)` override BELOW this number: it
+    // becomes a cap on exactly the slow I/O tests that need the headroom.
     testTimeout: 30_000,
-    // The same SQLite bootstrap work commonly lives in beforeEach/afterEach;
-    // leaving Vitest's 10s hook default in place gives setup less headroom
-    // than the test it prepares and flakes under instrumented parallel runs.
+    // Hooks carry the same bootstrap work as the test they prepare.
     hookTimeout: 30_000,
   },
 } satisfies ProjectConfig;
@@ -102,19 +54,17 @@ const jsdomPreset = {
     environment: "jsdom",
     css: { modules: { classNameStrategy: "non-scoped" as const } },
     ...requireAssertions,
-    // Puts React into act mode for every jsdom project — see jsdom-setup.ts.
+    // React act mode for every jsdom project — see jsdom-setup.ts.
     setupFiles: [JSDOM_SETUP],
   },
 } satisfies ProjectConfig;
 
-/** Shared node:sqlite-safe Vitest project preset. */
 export function nodeProject(
   config: ProjectConfig
 ): ReturnType<typeof defineProject> {
   return defineProject(mergeConfig(nodePreset, config));
 }
 
-/** Shared browser-logic preset: jsdom + automatic JSX + readable CSS modules. */
 export function jsdomProject(
   config: ProjectConfig
 ): ReturnType<typeof defineProject> {

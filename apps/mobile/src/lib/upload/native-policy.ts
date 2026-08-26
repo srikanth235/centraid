@@ -2,7 +2,7 @@ import * as Battery from "expo-battery";
 import * as Network from "expo-network";
 
 import { getCellularRoamingStatus } from "../../../modules/centraid-network-status";
-// The RECORD is frame-owned (#711, S4): one policy for every byte-bearing app,
+// The RECORD is frame-owned (#711): one policy for every byte-bearing app,
 // not one per app. This file keeps the EVALUATION — what the radios and the
 // battery say about it right now — because that is the drain loop's business.
 // See `kit/transfer/transfer-policy.ts` for why the storage key never changes.
@@ -16,7 +16,7 @@ export function nativeUploadPolicy(): UploadPolicy {
   return {
     async canTransfer() {
       const rules = await hydrateTransferPolicy();
-      // `never` is the floor of the table (#712 P5) and is asked FIRST — before
+      // `never` is the floor of the table (#712) and is asked FIRST — before
       // a radio, a battery or a roaming probe. A switch that reported "never"
       // while the drain kept running on Wi-Fi would be the exact class of lying
       // control the policy table exists to prevent.

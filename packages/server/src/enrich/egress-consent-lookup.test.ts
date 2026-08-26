@@ -1,5 +1,5 @@
 /*
- * The gateway's read of the vault's egress-consent ledger (issue #807, Wave 3).
+ * The gateway's read of the vault's egress-consent ledger (#807).
  *
  * Two laws are under test, and both are about the DIRECTION consent travels: a
  * specific scope's answer beats the vault-wide one, and a "no" nearby is never

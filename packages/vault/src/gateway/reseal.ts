@@ -1,18 +1,7 @@
-// The reseal maintenance verb (issue #298 item 8): decrypt-with-old,
-// encrypt-with-new, one transaction, receipted. `sealed:v1:` gave the
-// version seam; this is the machinery that walks it — a DEK compromise or
-// an algorithm bump finally has a migration path instead of a shrug.
-//
-// Scope honesty: rotation covers every sealed CELL — live sealed columns
-// (SEALED_COLUMNS) and staged draft payloads (SEALED_PAYLOAD_FIELDS). It
-// REFUSES while a remote CAS is attached: its per-blob keys are wrapped by
-// the current vault key, and rotating that registry belongs in the same
-// atomic gesture. Drain/detach the remote tier first.
-//
-// Crash safety: the new key lands in a `<file>.next` sidecar BEFORE the
-// sweep commits, and the commit itself flips the stamped fingerprint. An
-// interruption between commit and the final rename is healed at next open —
-// `resolveSealKey` promotes a matching sidecar automatically.
+// Reseal verb (#298): decrypt-with-old, encrypt-with-new, one transaction,
+// receipted. REFUSES while a remote CAS is attached — drain/detach the remote
+// tier first. Crash safety: `<file>.next` sidecar BEFORE the sweep commits;
+// pre-rename crash heals at next open (`resolveSealKey` promotes a sidecar).
 
 import { randomBytes } from "node:crypto";
 import { renameSync, rmSync } from "node:fs";
@@ -39,11 +28,8 @@ import { resolveEntity } from "../schema/tables.js";
 import { writeReceipt } from "./evidence.js";
 import { pkColumn } from "./execution.js";
 
-/**
- * Every logical entity that may hold sealed cells: the canonical static
- * registry plus each live ext table that declared a `sealed` column. Draft
- * ext bands are the builder's scratch copy — reseal covers durable data.
- */
+/** Sealed-cell entities: static registry plus live ext tables declaring a
+ *  `sealed` column. Draft bands are scratch — reseal covers durable data. */
 function sealedEntities(db: VaultDb): string[] {
   const entities = Object.keys(SEALED_COLUMNS);
   try {
@@ -65,20 +51,14 @@ function sealedEntities(db: VaultDb): string[] {
 }
 
 export interface ResealResult {
-  /** Sealed cells re-encrypted, live band. */
   resealedCells: number;
-  /** Sealed staged payload fields re-encrypted, draft band. */
   resealedStaged: number;
   oldFingerprint: string;
   newFingerprint: string;
   receiptId: string;
 }
 
-/**
- * Rotate the vault's DEK: every sealed cell decrypts with the current key
- * and re-encrypts with a fresh one, atomically. Owner/admin gesture only —
- * this is not a registered command, so no app or agent can ever reach it.
- */
+/** Rotate the DEK atomically. Owner/admin gesture only — not a registered command. */
 export function resealVaultKey(
   db: VaultDb,
   now: string = new Date().toISOString()
@@ -96,9 +76,7 @@ export function resealVaultKey(
   const onDisk = db.dir !== ":memory:";
   const keyFile = onDisk ? sealKeyFileFor(db.dir) : null;
 
-  // Sidecar first: if we crash mid-sweep, the old key is still the stamped
-  // one and the stale sidecar is ignored; after commit, the sidecar IS the
-  // stamped key and `resolveSealKey` promotes it.
+  // Sidecar first: crash mid-sweep leaves the old key stamped; after commit it gets promoted.
   if (keyFile) writeSealKeyFile(`${keyFile}.next`, newKey, db.keyStore);
 
   let resealedCells = 0;
@@ -107,8 +85,7 @@ export function resealVaultKey(
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   try {
     replicaCommit = beginReplicaCommit(db.vault);
-    // Live band: every sealed column of every entity — canonical (static
-    // registry) AND ext-band (declared in consent_app_ext, issue #298 item 9).
+    // Live band: canonical AND ext-band sealed columns.
     for (const entity of sealedEntities(db)) {
       const cols = sealedColumnsOf(entity, db.vault);
       if (cols.length === 0) continue;
@@ -134,7 +111,7 @@ export function resealVaultKey(
         }
       }
     }
-    // Draft band: sealed payload fields of staged import rows.
+    // Draft band: staged import rows.
     for (const entityType of Object.keys(SEALED_PAYLOAD_FIELDS)) {
       const fields = sealedPayloadFieldsOf(entityType);
       const rows = db.vault
@@ -162,7 +139,7 @@ export function resealVaultKey(
         }
       }
     }
-    // The stamped fingerprint flips with the data, in the same transaction.
+    // Fingerprint flips with the data, same transaction.
     stampSealKeyFingerprint(db.vault, newKey);
     endReplicaCommit(db.vault, replicaCommit);
     db.vault.exec("COMMIT");
@@ -171,8 +148,7 @@ export function resealVaultKey(
     if (keyFile) rmSync(`${keyFile}.next`, { force: true });
     throw error;
   }
-  // Publish the new key: promote the sidecar and swap the live buffer in
-  // place, so every holder of db.sealKey (gateway, staging) sees it.
+  // Promote the sidecar; every db.sealKey holder now sees the new key.
   if (keyFile) renameSync(`${keyFile}.next`, keyFile);
   db.sealKey.set(newKey);
 

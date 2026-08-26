@@ -1,37 +1,7 @@
 /*
- * `LocalBackupProvider` — a `BackupProvider` backed entirely by the local
- * filesystem: `objects/<targetId>/` (an `FsObjectStore` per target) plus a
- * `registry.json` tracking targets, snapshots and generations. Exists for
- * two reasons: (1) "backup to an external drive / NAS" is a real product
- * mode, not just a test fixture, and (2) `conformance.ts` needs a reference
- * implementation to run against in this package's own test suite.
- *
- * Auth tiers here (PROTOCOL.md): the local disk *is* the user's own
- * api-key-equivalent custody, so `purgeAuthTier: 'api-key'` and
- * `purgeTarget` succeeds directly — there's no separate "interactive"
- * surface to defer to when the surface already IS the user's machine.
- *
- * Cross-process correctness (the whole point of generation fencing —
- * PROTOCOL.md: "two gateways, one vault"): `registry.json` is re-read from
- * disk on EVERY operation. There is deliberately no in-memory cache — a
- * cache keyed by mtime was considered and rejected, because these files are
- * small (a handful of KB per target) and a stale read here is exactly the
- * bug generation fencing exists to catch. Each public method loads the
- * registry once, mutates that single in-memory copy, and persists that
- * SAME object — never a second independent read — so a method never loses
- * its own mutations to an interleaved re-read.
- *
- * Honest TOCTOU window: nothing below serializes read-modify-write ACROSS
- * operations or processes. Two `registerSnapshot` calls — same or
- * different processes — that both read the registry before either writes
- * can both compute (e.g.) the same `nextSeq`; the second `persist()` wins
- * and the first's row is silently gone from the registry. This is
- * explicitly out of scope for a JSON-file provider: `persist()`'s
- * temp-file-then-rename keeps `registry.json` itself always well-formed
- * (a crash mid-write never corrupts it), but does not arbitrate concurrent
- * writers. Single-writer-per-operation is the deployment assumption — a
- * real multi-writer NAS-sharing story needs a lock file or a real backend,
- * neither of which this reference implementation attempts.
+ * Filesystem `BackupProvider`: `objects/<targetId>/` + `registry.json`. Local disk is api-key-equivalent custody — `purgeAuthTier: 'api-key'` succeeds directly (PROTOCOL.md).
+ * Re-read `registry.json` on EVERY operation — no in-memory cache (a stale read is the generation-fencing bug). Each public method loads once, mutates that copy, `persist()`s that SAME object.
+ * TOCTOU across operations/processes is out of scope: `persist()` atomic-renames keep the file well-formed, not concurrent-writer-safe. Single-writer-per-operation is the deployment assumption.
  */
 
 import { randomUUID } from "node:crypto";
@@ -72,9 +42,7 @@ const SOFT_DELETE_WINDOW_DAYS = 14;
 const CAPABILITIES: ProviderCapabilities = {
   protocol: ["centraid-storage-provider/1"],
   dataPlane: "s3",
-  // Local disk has no separate wire-grant concept (openDataPlane IS the
-  // grant), but it still supports every store class and can report cheap,
-  // real usage — all are legitimately advertised offline.
+  // No separate wire-grant (`openDataPlane` IS the grant); every store class and real usage are still advertised offline.
   capabilities: [
     "backup",
     "cas",
@@ -95,9 +63,9 @@ const CAPABILITIES: ProviderCapabilities = {
   },
 };
 
-/* eslint-disable max-classes-per-file -- (#354) the read-only wrapper is a small
+/* oxlint-disable max-classes-per-file -- (#354) the read-only wrapper is a small
    adapter colocated with the provider it serves (#247 convention). */
-/** Read-only wrapper: `put`/`delete` refused, everything else passes through. */
+/** `put`/`delete` refused; everything else passes through. */
 class ReadOnlyObjectStore implements ObjectStore {
   constructor(private readonly inner: ObjectStore) {}
   async put(): Promise<void> {
@@ -121,7 +89,6 @@ class ReadOnlyObjectStore implements ObjectStore {
 }
 
 export interface LocalBackupProviderOptions {
-  /** Root directory: holds `objects/` and `registry.json`. */
   rootDir: string;
 }
 
@@ -129,7 +96,7 @@ export class LocalBackupProvider implements BackupProvider {
   private readonly rootDir: string;
   private readonly registryFile: string;
   private readonly objectsRoot: string;
-  /** Serializes the temp-file-then-rename write itself (not read-modify-write; see module header). */
+  /** Serializes this instance's temp-file-then-rename (not cross-process RMW; see header). */
   private writeChain: Promise<void> = Promise.resolve();
 
   constructor(options: LocalBackupProviderOptions) {
@@ -138,12 +105,7 @@ export class LocalBackupProvider implements BackupProvider {
     this.objectsRoot = path.join(this.rootDir, "objects");
   }
 
-  /**
-   * Always re-reads `registry.json` from disk — no in-memory cache (module
-   * header). Every public method calls this exactly once and threads the
-   * returned object through to its own `persist()` call, so a method's own
-   * mutations are never lost to a second, independent load.
-   */
+  /** Re-read from disk — no cache. Call once per public method and thread through to `persist()`. */
   private async load(): Promise<Registry> {
     try {
       const raw = await fs.readFile(this.registryFile, "utf8");
@@ -162,11 +124,8 @@ export class LocalBackupProvider implements BackupProvider {
     }
   }
 
-  /** Persist the given (already-mutated) registry atomically. */
   private async persist(registry: Registry): Promise<void> {
-    // Serialize the writes THIS instance issues so two of its own in-flight
-    // persist() calls don't race on the temp-file rename. Does not — and
-    // cannot — serialize against another process; see the module header.
+    // Serialize this instance's persist() calls on the temp-file rename — not another process (header).
     this.writeChain = this.writeChain.then(async () => {
       await fs.mkdir(this.rootDir, { recursive: true });
       const tmp = `${this.registryFile}.${process.pid}.${Date.now()}.tmp`;
@@ -252,7 +211,7 @@ export class LocalBackupProvider implements BackupProvider {
     if (!target.deletedAt) {
       target.status = "active";
       await this.persist(registry);
-      return; // already active — undelete is a no-op
+      return;
     }
     const deletedAt = new Date(target.deletedAt).getTime();
     const windowMs = SOFT_DELETE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -269,8 +228,7 @@ export class LocalBackupProvider implements BackupProvider {
   }
 
   async purgeTarget(targetId: string): Promise<void> {
-    // Local disk IS the user's own custody — api-key tier suffices (see
-    // module header). A remote provider MUST reject this with 403.
+    // Local disk is the user's own custody — api-key tier suffices. A remote provider MUST reject this with 403.
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);
     await fs.rm(path.join(this.objectsRoot, targetId), {
@@ -286,9 +244,7 @@ export class LocalBackupProvider implements BackupProvider {
     await this.persist(registry);
   }
 
-  /** Per-store isolated root (PROTOCOL.md § Layer 1 — per-store isolated
-   *  prefixes): `objects/<targetId>/<store>/`, giving `backup` and `cas`
-   *  disjoint namespaces without a literal wire grant. */
+  /** Per-store isolated prefixes (PROTOCOL.md Layer 1): `objects/<targetId>/<store>/`. */
   private storeRoot(targetId: string, store: StoreClass): string {
     return path.join(this.objectsRoot, targetId, store);
   }
@@ -338,7 +294,7 @@ export class LocalBackupProvider implements BackupProvider {
     }
 
     const rows = (registry.snapshots[targetId] ??= []);
-    const prevManifestHash = rows[0]?.manifestHash ?? null; // newest-first
+    const prevManifestHash = rows[0]?.manifestHash ?? null;
     const seq = registry.nextSeq[targetId] ?? 1;
     registry.nextSeq[targetId] = seq + 1;
     const row: SnapshotRow = {
@@ -351,10 +307,10 @@ export class LocalBackupProvider implements BackupProvider {
       generation: reg.generation,
       format: reg.format,
       appMeta: reg.appMeta,
-      createdAt: Math.floor(Date.now() / 1000), // wire timestamps are epoch seconds
+      createdAt: Math.floor(Date.now() / 1000),
       prunedAt: null,
     };
-    rows.unshift(row); // newest-first
+    rows.unshift(row);
     target.currentGeneration = Math.max(
       target.currentGeneration,
       reg.generation
@@ -401,9 +357,7 @@ export class LocalBackupProvider implements BackupProvider {
     };
   }
 
-  /** Backup store's own usage figure (Layer 2, embedded in the target list) —
-   *  scoped to the `backup` subtree only; `cas` usage is reported separately
-   *  via `usageReport`. */
+  /** Layer 2 usage for the `backup` subtree only — `cas` is `usageReport`. */
   async usage(
     targetId: string
   ): Promise<{ usage: Usage; accountStatus: AccountStatus }> {
@@ -417,9 +371,8 @@ export class LocalBackupProvider implements BackupProvider {
       usage: {
         storedBytes: bytesStored,
         objectCount,
-        // quotaBytes deliberately omitted — local disk has no product-declared
-        // quota, and the field is optional on the wire (a provider may not cap).
-        meteredAt: Math.floor(Date.now() / 1000), // epoch seconds
+        // quotaBytes omitted — local disk has no product-declared quota (field optional on the wire).
+        meteredAt: Math.floor(Date.now() / 1000),
       },
       accountStatus: "ok",
     };
@@ -439,9 +392,7 @@ export class LocalBackupProvider implements BackupProvider {
     return { bytesStored, objectCount };
   }
 
-  /** Layer-1 `usage` capability — real byte counts, cheap to compute locally
-   *  (PROTOCOL.md § Usage). `quotaBytes: null` (unmetered); `period` spans
-   *  target creation to now (local disk has no billing-period concept). */
+  /** `quotaBytes: null` (unmetered); `period` is target creation → now (no billing period). */
   async usageReport(targetId: string): Promise<UsageByStore> {
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);

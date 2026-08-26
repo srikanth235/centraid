@@ -1,6 +1,6 @@
 /*
  * InsightsStore — transparency + control aggregates over the vault ledger
- * (issue #514 rewrite; prior #98 / #438).
+ * (#514 rewrite; prior #98 / #438).
  *
  * Product promise: everything Centraid saw agents use — priced when we can,
  * marked when we can't — so the owner can control apps and automations.

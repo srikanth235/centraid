@@ -1,9 +1,5 @@
-/*
- * Renderer-side client for the vault's enrichment policy surface
- * (`/centraid/_vault/enrich*`). Split from gateway-client-vault.ts (#807),
- * whose header rules apply unchanged: owner acts only, apps reach the mirror
- * through `ctx.vault`.
- */
+// Renderer-side enrichment policy client (#807): owner acts only; apps read
+// the mirror through `ctx.vault`.
 
 import type {
   EnrichConsentRecord,
@@ -19,18 +15,6 @@ import type {
 } from "./enrich-policy.js";
 import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
 
-/**
- * The owner's standing enrichment tier, per domain (`GET/PUT
- * /centraid/_vault/enrich`, vault-routes.ts).
- *
- * This is the OWNER's copy of the setting — the authoritative writer is
- * `updateEnrichSettings` (packages/vault/src/host.ts), which also refreshes
- * the app-readable `enrich_policy` mirror the enforcement gate reads
- * (packages/server/src/automation/fire/enrich-gate.ts). Apps never reach this route;
- * they read the mirror through `ctx.vault` and cannot write it at all, which
- * is why raising the tier can only happen from an owner surface.
- */
-/** Read the owner's per-domain enrichment tiers. */
 export async function getEnrichPolicy(): Promise<EnrichPolicy> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/enrich", {
@@ -44,11 +28,8 @@ export async function getEnrichPolicy(): Promise<EnrichPolicy> {
   return body.enrich;
 }
 
-/**
- * Write one or both domains' tier. Returns the tiers that actually took
- * effect, read back from the vault — the caller renders THAT, never the value
- * it hoped for, so a rejected or coerced write can never show as applied.
- */
+/** Render what took effect, read back — never the value hoped for. The same
+ *  law governs every write below. */
 export async function setEnrichPolicy(
   patch: Partial<EnrichPolicy>
 ): Promise<EnrichPolicy> {
@@ -65,16 +46,8 @@ export async function setEnrichPolicy(
   return body.enrich;
 }
 
-/**
- * The policy CASCADE (issue #807): the scoped rules layered over the tiers
- * above. A rule states only what its scope decides — `null` is inherit — and
- * the gateway's ONE resolver folds a chain into the effective answer.
- *
- * A rule can never widen egress past the tier's ceiling; that is enforced at
- * the runtime gate, so nothing here needs (or is allowed) to reason about it.
- */
+// `null` in a rule means inherit; no rule widens egress past the tier ceiling.
 
-/** Every scoped rule this vault holds, alongside the per-domain tiers. */
 export async function getEnrichRules(): Promise<EnrichPolicyRule[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/enrich", {
@@ -88,11 +61,6 @@ export async function getEnrichRules(): Promise<EnrichPolicyRule[]> {
   return body.rules ?? [];
 }
 
-/**
- * Write one scope's rule for one capability, replacing whatever that scope
- * decided before. Returns the rule the VAULT holds afterwards, never the patch
- * — same law as the tier write above.
- */
 export async function setEnrichRule(rule: {
   scope: EnrichScopeType;
   ref?: string;
@@ -114,7 +82,6 @@ export async function setEnrichRule(rule: {
   return body.rule;
 }
 
-/** Drop one scope's rule — that scope stops deciding, and inherits again. */
 export async function deleteEnrichRule(
   scope: EnrichScopeType,
   ref: string,
@@ -130,15 +97,11 @@ export async function deleteEnrichRule(
   await readJson(res, "delete enrichment rule");
 }
 
-/**
- * What the gateway's resolver folds for one capability at one scope chain.
- * `effective: null` is the fail-closed answer — the vault stated no policy the
- * runtime can honour, and the gate refuses. A REPORT, never permission.
- */
+/** `effective: null` is fail-closed. A REPORT, never permission. */
 export async function getEffectiveEnrichPolicy(input: {
   domain: EnrichDomain;
   capability: string;
-  /** Deeper scopes than `[vault, domain]`, least-specific first. */
+  /** Least-specific first. */
   scopes?: ReadonlyArray<{ type: EnrichScopeType; ref: string }>;
 }): Promise<{
   tier: EnrichTier | null;
@@ -164,14 +127,8 @@ export async function getEffectiveEnrichPolicy(input: {
   }>(res, "read effective enrichment policy");
 }
 
-/*
- * The EGRESS-CONSENT ledger (issue #807, Wave 3) — capability × egress class,
- * asked once, answered once, recorded. A READ surface here: the ledger's one
- * writer is the vault's journalled `enrich.record_consent` command, reached
- * through the owner-plane POST below, and no client ever writes the rows.
- */
+// The egress-consent ledger is READ-only here; `enrich.record_consent` writes it.
 
-/** Every egress answer this vault holds — the Privacy audit's source. */
 export async function listEnrichEgressConsent(): Promise<
   EnrichConsentRecord[]
 > {
@@ -187,16 +144,11 @@ export async function listEnrichEgressConsent(): Promise<
   return body.consent;
 }
 
-/**
- * Record one answer. Returns the row the VAULT holds afterwards — read back,
- * never echoed, so a refused or parked write can never render as an answer.
- * A decline is recorded exactly like a grant; this is not a toggle.
- */
+/** A decline is recorded like a grant; not a toggle. */
 export async function recordEnrichEgressConsent(input: {
   capability: string;
   egress: EnrichEgressClass;
   decision: "granted" | "declined";
-  /** Omit for the vault-wide answer. */
   scopeRef?: string;
 }): Promise<EnrichConsentRecord | null> {
   const { baseUrl, token } = await auth();
@@ -212,16 +164,7 @@ export async function recordEnrichEgressConsent(input: {
   return body.consent;
 }
 
-/**
- * The engine profiles this gateway offers (`GET /centraid/_enrich/profiles`).
- *
- * Not a vault route, and it lives here anyway: a profile is the other half of
- * every policy answer above, so the surface that renders one renders both. The
- * list is the gateway's — built-ins are derived from the shipped engines, and
- * `egress` is computed there — so nothing on this side keys off a local table
- * of capabilities or harnesses. Writes go through the prefs API
- * (`enrich.profile.<id>`), which is where the one validation gate lives.
- */
+/** The gateway owns the list; never key off a local capability table. */
 export async function listEnrichProfiles(): Promise<EnrichEngineProfile[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_enrich/profiles", {

@@ -1,77 +1,27 @@
 /**
- * Common interface every "thing that fires automations on a schedule"
- * implements. Centraid's backend today:
- *
- *   - local gateway (desktop embed + standalone daemon): the in-process
- *     `InProcessScheduler` (issue #149) keeps an in-memory registry and a
- *     single minute-boundary timer — no OS scheduler, no launchd/systemd.
- *     It fires enabled cron automations only while the gateway runs (n8n
- *     semantics, no backfill). See `./in-process-scheduler.ts`.
- *
- * Callers that mutate automation state drive this interface (via
- * `reconcile`) rather than poking the host's primitives directly.
- *
- * An automation is keyed by its globally-unique `<ownerApp>/<id>` ref.
- * Automations are user-owned and globally scheduled — `reconcile` always
- * receives the full desired set, so there is no per-app scoping to get wrong.
- *
- * Lifecycle contract:
- *   - `register` is idempotent. Calling it with the same row twice is a
- *     no-op. Calling with a changed schedule/prompt/etc. updates the
- *     existing entry.
- *   - `register` is also the toggle path. When `row.enabled` is false,
- *     the host's implementation decides whether to register a
- *     suppressed entry or to
- *     unregister entirely (the in-process scheduler simply drops a
- *     disabled row from its registry). Either is fine — callers just
- *     call `register(row)` and don't care.
- *   - `unregister` is also idempotent. Tolerates "not found" — happens
- *     when the user removed the host entry by hand between centraid
- *     registration and teardown.
- *   - `reconcile(desired)` brings the host into agreement with the
- *     supplied desired set. Used at gateway/runtime startup to absorb
- *     changes that landed while the host was offline, and after a sync
- *     to settle every entry.
+ * Every host that fires automations on a schedule (today: `InProcessScheduler`,
+ * #149 — no OS scheduler, no backfill). Callers drive this interface through
+ * `reconcile`, never the host's primitives; `desired` is always the FULL set of
+ * user-owned automations, keyed by `<ownerApp>/<id>`.
  */
 
 import type { Row } from "../scaffold/app.js";
 
 export interface Host {
-  /**
-   * Register or update one automation in the host. Idempotent.
-   * Hosts decide how to represent `row.enabled === false` (suppressed
-   * entry vs. no entry); callers just call this whenever the row
-   * changes.
-   */
+  /** Idempotent, and the toggle path — hosts choose how to represent
+   *  `enabled: false`. */
   register: (row: Row) => Promise<void>;
 
-  /**
-   * Remove one automation from the host by its UUID. Tolerates
-   * "not present".
-   */
+  /** Idempotent; tolerates "not present". */
   unregister: (automationId: string) => Promise<void>;
 
-  /**
-   * List the centraid-owned host entries currently registered. The
-   * format is host-specific (automation refs for the in-process
-   * scheduler) — useful only for diagnostics and reconciliation.
-   */
   list: () => Promise<readonly string[]>;
 
-  /**
-   * Bring the host into agreement with `desired`. Implementations
-   * compare against `list()`, then issue the smallest set of
-   * register/unregister calls needed. `desired` is always the full
-   * set of centraid-owned automations.
-   */
   reconcile: (desired: ReadonlyArray<Row>) => Promise<ReconcileResult>;
 }
 
 export interface ReconcileResult {
-  /** Host-entry names newly registered. */
   added: readonly string[];
-  /** Host-entry names whose definition changed. */
   updated: readonly string[];
-  /** Host-entry names removed because they had no corresponding desired row. */
   removed: readonly string[];
 }
