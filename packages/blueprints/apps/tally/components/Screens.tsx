@@ -9,14 +9,21 @@
 // where its window ends. A settlement where neither party is the owner changes
 // a balance and nothing else, which its own row says out loud.
 //
-// GROUPS DRAWS TWO ACTS AGAINST AN ASK. Leave and Archive are engineering
-// asks; the rows carry them so the consequence is readable, and the confirms
-// they open state the gap on the commit rather than firing into nothing.
+// GROUPS DRAWS TWO REAL ACTS. Leave and Archive both write; the confirms they
+// open state the consequence in the handoff's own words and then commit.
+// ARCHIVED GROUPS ARE THEIR OWN SECTION — they leave the lists and keep
+// everything, so filtering them into silence would be the one thing archiving
+// is not — and each carries the verb that brings it back.
+//
+// REMIND IS ON A BALANCE ROW THAT HAS GONE QUIET. It always parks: this app
+// has no delivery path, so the row offers to PREPARE a reminder and the
+// confirm says so before the press.
 import type { ReactNode } from "react";
 
 import { identityInitials } from "@centraid/design";
 
 import { dayBuckets, windowOf } from "../activity-model.ts";
+import { feedFacts } from "../entry-facts.ts";
 import {
   allSettled,
   figureTone,
@@ -28,6 +35,7 @@ import {
 } from "../format.ts";
 import type { ActivityData, DashboardData } from "../types.ts";
 import {
+  ARCHIVED_META,
   EMPTY,
   SECTIONS,
   SECTION_META,
@@ -42,7 +50,7 @@ import {
   HERO_SETTLED_SUB,
 } from "../view-copy.ts";
 import { Hero, Rows, Section, WindowEnd } from "./Blocks.tsx";
-import { EntryRow, feedFacts } from "./EntryRow.tsx";
+import { EntryRow } from "./EntryRow.tsx";
 import { LedgerRow } from "./LedgerRow.tsx";
 import { AllSettled } from "./States.tsx";
 
@@ -57,6 +65,12 @@ export interface BalancesProps {
   onNewGroup: () => void;
   onSettle: () => void;
   onSpending: () => void;
+  /** Prepare a reminder about one friend's balance. Always parks. */
+  onRemind: (friend: {
+    party_id: string;
+    name: string;
+    net_minor: number;
+  }) => void;
 }
 
 export function Balances(props: BalancesProps): ReactNode {
@@ -88,7 +102,9 @@ export function Balances(props: BalancesProps): ReactNode {
             ? HERO_SETTLED_SUB
             : balancesHeroSub(
                 money(data.owed_total_minor, data.currency),
-                money(data.owe_total_minor, data.currency)
+                money(data.owe_total_minor, data.currency),
+                data.expense_count ?? 0,
+                data.settlement_count ?? 0
               )
         }
         acts={[
@@ -121,6 +137,19 @@ export function Balances(props: BalancesProps): ReactNode {
                 tone: figureTone(friend.net_minor),
                 sub: personSubLabel(friend.net_minor),
               }}
+              acts={
+                // ONLY WHERE THERE IS SOMETHING TO REMIND ABOUT. A level
+                // balance has nothing owed, and a row that owes YOU money is
+                // the one a reminder is for.
+                friend.net_minor > 0
+                  ? [
+                      {
+                        label: VERBS.remind,
+                        run: () => props.onRemind(friend),
+                      },
+                    ]
+                  : []
+              }
               narrow={props.narrow}
               onOpen={() => props.onOpenFriend(friend.party_id)}
             />
@@ -241,7 +270,9 @@ export interface GroupsProps {
   onOpenGroup: (groupId: string) => void;
   onNewGroup: () => void;
   onLeave: (groupId: string) => void;
-  onArchive: (groupId: string) => void;
+  /** `archived` is what the group IS now, so the confirm can ask the right
+   *  question and the write can send the other boolean. */
+  onArchive: (groupId: string, archived: boolean) => void;
 }
 
 export function Groups(props: GroupsProps): ReactNode {
@@ -270,7 +301,7 @@ export function Groups(props: GroupsProps): ReactNode {
               acts={[
                 {
                   label: VERBS.archive,
-                  run: () => props.onArchive(group.group_id),
+                  run: () => props.onArchive(group.group_id, false),
                 },
                 {
                   label: VERBS.leave,
@@ -283,6 +314,42 @@ export function Groups(props: GroupsProps): ReactNode {
           ))}
         </Rows>
       </Section>
+
+      {/* ARCHIVING IS NOT DELETING. The section exists whenever the dashboard
+          answered with one, so a member can always see what left the lists —
+          and every row carries the verb that brings it back. */}
+      {props.data.archived_groups ? (
+        <Section
+          label={SECTIONS.archived}
+          meta={SECTION_META.archived}
+          count={props.data.archived_groups.length}
+          empty={EMPTY.archived}
+          narrow={props.narrow}
+        >
+          <Rows>
+            {props.data.archived_groups.map((group) => (
+              <LedgerRow
+                key={group.group_id}
+                title={group.name}
+                meta={ARCHIVED_META}
+                figure={{
+                  text: netFigure(group.owner_net_minor, data.currency),
+                  tone: figureTone(group.owner_net_minor),
+                  sub: groupSubLabel(group.owner_net_minor),
+                }}
+                acts={[
+                  {
+                    label: VERBS.unarchive,
+                    run: () => props.onArchive(group.group_id, true),
+                  },
+                ]}
+                narrow={props.narrow}
+                onOpen={() => props.onOpenGroup(group.group_id)}
+              />
+            ))}
+          </Rows>
+        </Section>
+      ) : null}
     </div>
   );
 }

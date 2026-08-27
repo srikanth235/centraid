@@ -15,9 +15,23 @@ export interface RawItem {
   network?: string | null;
   expiry?: string | null;
   compromised?: number | boolean | null;
+  password_set_at?: string | null;
   updated_at?: string;
   purge_at?: string | null;
+  archived_at?: string | null;
   deleted_at?: string | null;
+}
+
+interface AliasRow {
+  alias: string;
+  item_id: string;
+}
+
+interface CountsPayload {
+  live?: number;
+  archived?: number;
+  trashed?: number;
+  by_type?: { type: string; n: number }[];
 }
 
 interface WatchEntry {
@@ -70,6 +84,18 @@ interface DecoratedItem {
   expiry: string | null;
   updated_at?: string;
   purge_at: string | null;
+  /**
+   * The connector alias (#298 item 4), read back at last: `locker_item_alias`
+   * became a REGISTERED table in #872, so the mapping the write path has
+   * always maintained is finally something a read can return. Until then the
+   * form had nothing to pre-fill and no way to show what a typed value would
+   * overwrite — the first paper cut README-Locker §8 names.
+   */
+  alias: string | null;
+  /** Archived items are kept forever and hidden from the default window. */
+  archived: boolean;
+  /** When the CURRENT password was set — Review's password-age source. */
+  password_set_at: string | null;
 }
 
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
@@ -123,7 +149,8 @@ export function decorate(
   rows: RawItem[],
   tagsByItem: Map<string, string[]>,
   starredIds: Set<string>,
-  watchByItem?: Map<string, WatchEntry>
+  watchByItem?: Map<string, WatchEntry>,
+  aliasByItem?: Map<string, string>
 ): DecoratedItem[] {
   return rows.map((it) => {
     const watch = watchByItem?.get(it.item_id);
@@ -146,8 +173,60 @@ export function decorate(
       expiry: it.expiry ?? null,
       updated_at: it.updated_at,
       purge_at: it.purge_at ?? null,
+      alias: aliasByItem?.get(it.item_id) ?? null,
+      archived: it.archived_at != null,
+      password_set_at: it.password_set_at ?? null,
     };
   });
+}
+
+/**
+ * item_id → connector alias. Fail-soft: an app installed before the alias
+ * scope existed keeps rendering its list with no alias rather than going dark.
+ */
+export async function readAliases(
+  ctx: HandlerCtx,
+  ids: string[],
+  purpose: string
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (ids.length === 0) return map;
+  try {
+    const result = await ctx.vault.read({
+      entity: "locker.item_alias",
+      where: [{ column: "item_id", op: "in", value: ids }],
+      purpose,
+    });
+    for (const row of (result.rows ?? []) as unknown as AliasRow[])
+      map.set(row.item_id, row.alias);
+  } catch {
+    /* fail soft — an alias is a decoration, never the list itself */
+  }
+  return map;
+}
+
+/**
+ * The vault's own COUNT, for "300 of 312 · the window is 300 by default and
+ * 2,000 at most". Counted inside the vault rather than by reading the ceiling
+ * back and calling `.length` on it — the foot line's whole job is to say how
+ * much is beyond the window, so deriving it from the window would be circular.
+ * Fail-soft: no counts means the foot line says nothing, never a wrong number.
+ */
+export async function readCounts(
+  ctx: HandlerCtx,
+  purpose: string
+): Promise<CountsPayload | null> {
+  try {
+    const out = await ctx.vault.invoke({
+      command: "locker.counts",
+      input: {},
+      purpose,
+    });
+    if (out.status !== "executed") return null;
+    return (out.output ?? null) as CountsPayload | null;
+  } catch {
+    return null;
+  }
 }
 
 /** Read the two SKOS vocabulary tables once, shared by readTags + readStarred (#404). */
@@ -252,9 +331,18 @@ export default async function itemsHandler({
         configured: authentication.configured ?? false,
       };
     }
+    // Archived is "keep forever, hide from lists" (GAPS §3.3 #9): it leaves
+    // the default window without being deleted and without a purge date, so
+    // the shelf is asked for explicitly rather than filtered client-side.
+    const archived = input?.archived === true;
     const res = await ctx.vault.read({
       entity: "locker.item",
-      where: [{ column: "deleted_at", op: "is-null" }],
+      where: [
+        { column: "deleted_at", op: "is-null" },
+        archived
+          ? { column: "archived_at", op: "not-null" }
+          : { column: "archived_at", op: "is-null" },
+      ],
       orderBy: { column: "updated_at", dir: "desc" },
       limit: window,
       purpose,
@@ -264,12 +352,21 @@ export default async function itemsHandler({
     // One shared vocabulary read + ONE watchtower unseal (#404) — not a
     // second full read and second receipted unseal.
     const vocab = await readConceptTables(ctx, purpose);
-    const [tagsByItem, starredIds, watchByItem] = await Promise.all([
-      readTags(ctx, ids, purpose, vocab),
-      readStarred(ctx, ids, purpose, vocab),
-      readWatchtower(ctx, purpose),
-    ]);
-    const items = decorate(rows, tagsByItem, starredIds, watchByItem);
+    const [tagsByItem, starredIds, watchByItem, aliasByItem, counts] =
+      await Promise.all([
+        readTags(ctx, ids, purpose, vocab),
+        readStarred(ctx, ids, purpose, vocab),
+        readWatchtower(ctx, purpose),
+        readAliases(ctx, ids, purpose),
+        readCounts(ctx, purpose),
+      ]);
+    const items = decorate(
+      rows,
+      tagsByItem,
+      starredIds,
+      watchByItem,
+      aliasByItem
+    );
     const affected = items.filter(
       (it) => it.compromised || it.weak || it.reused
     );
@@ -279,7 +376,18 @@ export default async function itemsHandler({
       reused: items.filter((it) => it.reused).length,
       items: affected,
     };
-    return { items, watchtower, truncated: rows.length >= window, window };
+    const total = archived ? counts?.archived : counts?.live;
+    return {
+      items,
+      watchtower,
+      truncated: rows.length >= window,
+      window,
+      archived,
+      ...(total == null ? {} : { total }),
+      ...(counts?.by_type ? { byType: counts.by_type } : {}),
+      ...(counts?.archived == null ? {} : { archivedCount: counts.archived }),
+      ...(counts?.trashed == null ? {} : { trashedCount: counts.trashed }),
+    };
   } catch (error) {
     const e = error as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };

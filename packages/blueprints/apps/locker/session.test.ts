@@ -188,6 +188,46 @@ describe("a lock takes every secret-bearing field with it", () => {
       searchTerm: "git",
       searchResults: [{ item_id: "l1", type: "login", title: "GitHub" }],
       trashRows: [{ item_id: "z1", type: "login", title: "Old agent" }],
+      // The sidecar editors' typed values — a half-typed sealed field and a
+      // half-pasted passkey key are both plaintext a lock has to reach.
+      sidecarDraft: {
+        field: {
+          section: "Recovery",
+          label: "Recovery code",
+          kind: "sealed",
+          value: "8fj2-half-typed",
+        },
+        addresses: [
+          { url: "https://example.test", matchPolicy: "registrable-domain" },
+        ],
+        passkey: {
+          rpId: "example.test",
+          userHandle: "ana",
+          displayName: "Ana",
+          credentialId: "cred-1",
+          algorithm: "ES256",
+          privateKey: "half-pasted-key",
+        },
+      },
+      accessEntries: [
+        {
+          receipt_id: "r1",
+          kind: "reveal",
+          action: "reveal",
+          decision: "allow",
+          item_id: "l1",
+          occurred_at: "2026-01-15T09:12:00Z",
+        },
+      ],
+      importRows: [
+        {
+          seq: 1,
+          entityType: "locker.item",
+          externalId: "row-1",
+          disposition: "create",
+          mapping: "title → title",
+        },
+      ],
     };
   }
 

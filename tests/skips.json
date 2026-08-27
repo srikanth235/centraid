@@ -5,28 +5,28 @@
   "sites": {
     "apps/mobile/src/lib/replica/multi-vault-reader.test.ts#1": {
       "kind": "env-gate",
-      "line": 858,
+      "line": 867,
       "snippet": "const strict = process.env.CENTRAID_PERF_EVIDENCE === \"1\";",
       "issue": 864,
       "reason": "Product latency budgets only bind on the dedicated evidence lane; the shared vitest fan-out keeps a 15x smoke ceiling so CPU contention cannot fake a regression (rig lane split to #790 by #781; originally #659)."
     },
     "apps/web/tests/e2e/perf-waterfall.spec.ts#1": {
       "kind": "static-skip",
-      "line": 817,
+      "line": 666,
       "snippet": "test.skip(",
       "issue": 864,
       "reason": "The iroh request counter only exists in a freshly built bundle; the assertion self-skips against a stale dist instead of failing, which is why this owner cannot back a solid cell (re-homed from #781; originally #656)."
     },
     "packages/backup/src/interop-clawgnition.test.ts#1": {
       "kind": "env-gate",
-      "line": 107,
+      "line": 77,
       "snippet": "if (process.env.CLAWGNITION_INTEROP !== \"1\") {",
       "issue": 864,
       "reason": "Cross-repo interop against a Clawgnition checkout; opt-in via CLAWGNITION_INTEROP=1 because the peer repo is not available on CI (rig lane split to #790 by #781; originally #656)."
     },
     "packages/backup/src/interop-clawgnition.test.ts#2": {
       "kind": "conditional-skip",
-      "line": 367,
+      "line": 317,
       "snippet": "describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {",
       "issue": 864,
       "reason": "The collection-time gate for the same cross-repo interop suite; skips the whole describe (including beforeAll) with a named reason instead of failing (rig lane split to #790 by #781; originally #656)."
@@ -110,28 +110,28 @@
     },
     "packages/vault/src/blob/disk-full.integration.test.ts#1": {
       "kind": "runtime-skip",
-      "line": 44,
+      "line": 31,
       "snippet": "t.skip(\"disk-full e2e only runs on darwin (hdiutil)\");",
       "issue": 864,
       "reason": "The real full-filesystem rig is built with hdiutil, which exists only on darwin (rig lane split to #790 by #781; originally #656)."
     },
     "packages/vault/src/blob/disk-full.integration.test.ts#2": {
       "kind": "env-gate",
-      "line": 47,
+      "line": 34,
       "snippet": "if (process.env.CENTRAID_DISKFULL_E2E !== \"1\") {",
       "issue": 864,
       "reason": "Attaching and filling a real disk image is destructive and slow, so it is opt-in via CENTRAID_DISKFULL_E2E=1 (rig lane split to #790 by #781; originally #656)."
     },
     "packages/vault/src/blob/disk-full.integration.test.ts#3": {
       "kind": "runtime-skip",
-      "line": 48,
+      "line": 35,
       "snippet": "t.skip(",
       "issue": 864,
       "reason": "The runtime half of the CENTRAID_DISKFULL_E2E opt-in: it reports the skip so a green run never implies the ENOSPC law ran (rig lane split to #790 by #781; originally #656)."
     },
     "packages/vault/src/wal-shipper-clone.test.ts#1": {
       "kind": "conditional-skip",
-      "line": 61,
+      "line": 41,
       "snippet": "test.skipIf(process.platform !== \"darwin\")(",
       "issue": 864,
       "reason": "Reflink cloning can only be asserted unconditionally on APFS; ext4 cannot clone at all, so the law is darwin-only (rig lane split to #790 by #781; originally #656)."

@@ -16,26 +16,33 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 
+import { AccessScreen } from "./components/Access.tsx";
 import { EditScreen } from "./components/Edit.tsx";
+import { ExportScreen } from "./components/Export.tsx";
+import { ImportScreen } from "./components/Import.tsx";
 import { ReviewScreen } from "./components/Review.tsx";
 import { SearchScreen } from "./components/Search.tsx";
-import {
-  AccessScreen,
-  ExportScreen,
-  FillScreen,
-  ImportScreen,
-} from "./components/Surfaces.tsx";
+import { FillScreen } from "./components/Surfaces.tsx";
 import { TrashScreen } from "./components/Trash.tsx";
 import { SEALED, emptySeed } from "./draft.ts";
 import { reviewRegister } from "./review-model.ts";
 import {
-  ACCESS_NOT_SERVED,
+  ACCESS_EMPTY,
+  ACCESS_NO_VALUES,
+  ACCESS_OFFLINE,
+  ALIAS_ROW,
   ALL_CLEAR,
   CUSTOM_ROW,
   EDIT_FOOT_OFFLINE,
   EDIT_SAVE,
-  EXPORT_COMMIT_NOTE,
+  EXPORT_COMMIT,
+  EXPORT_HISTORY,
+  EXPORT_OFFLINE,
+  EXPORT_TRASHED,
   FILL_WHERE,
+  IMPORT_CHOOSE,
+  IMPORT_NO_DOOR,
+  IMPORT_OFFLINE,
   REVIEW_ATTENTION,
   REVIEW_CHANGE_IT,
   REVIEW_UNRUNNABLE,
@@ -44,7 +51,8 @@ import {
   TRASH_PURGE,
   TRASH_RESTORE,
 } from "./route-copy.ts";
-import type { LockerRow } from "./types.ts";
+import { emptySidecarDraft } from "./session.ts";
+import type { LockerAccessEntry, LockerDetail, LockerRow } from "./types.ts";
 import {
   COMPROMISED_WHY,
   EDIT_LEDE,
@@ -73,6 +81,8 @@ describe("ADD / EDIT states the online-only rule in the lede", () => {
     renderToStaticMarkup(
       createElement(EditScreen, {
         seed: emptySeed(),
+        detail: null,
+        sidecarDraft: emptySidecarDraft(),
         offline: false,
         busy: false,
         error: "",
@@ -81,6 +91,14 @@ describe("ADD / EDIT states the online-only rule in the lede", () => {
         onGenerate: NOOP,
         onSave: NOOP,
         onCancel: NOOP,
+        onFieldDraft: NOOP,
+        onFieldSave: NOOP,
+        onFieldRemove: NOOP,
+        onAddressDraft: NOOP,
+        onAddressSave: NOOP,
+        onPasskeyDraft: NOOP,
+        onPasskeySave: NOOP,
+        onPasskeyClear: NOOP,
         ...props,
       })
     );
@@ -125,10 +143,84 @@ describe("ADD / EDIT states the online-only rule in the lede", () => {
     expect(markup).toContain("otpauth");
   });
 
-  test("the two structural gaps are drawn where they belong, tagged", () => {
+  test("the type chip offers ALL FIFTEEN, not only the rail's six", () => {
+    const markup = form({});
+    for (const label of [
+      "Login",
+      "Card",
+      "Secure note",
+      "Identity",
+      "Wi-Fi",
+      "Password",
+      "SSH key",
+      "API credential",
+      "Passport",
+      "Bank account",
+      "Driving licence",
+      "Software licence",
+      "Crypto wallet",
+      "Membership",
+      "Document",
+    ]) {
+      expect(markup, label).toContain(`>${label}<`);
+    }
+  });
+
+  test("NO GAP TAG SURVIVES on the form — every row it named has a door", () => {
     const markup = form({});
     expect(markup).toContain(CUSTOM_ROW);
-    expect(markup).toContain("[backend-needed]");
+    expect(markup).not.toContain("[backend-needed]");
+    expect(markup).not.toContain("[open-question]");
+  });
+
+  test("THE ALIAS IS A CONTROL, pre-filled, clearable and reassignable", () => {
+    const markup = form({
+      seed: { ...emptySeed(), mode: "edit", itemId: "l1", alias: "deploy-key" },
+    });
+    expect(markup).toContain(ALIAS_ROW);
+    expect(markup).toContain('value="deploy-key"');
+    // Not the old read-only row: there is a field to empty.
+    expect(markup).toContain(`aria-label="${ALIAS_ROW}"`);
+  });
+
+  test("the sidecar editors are WITHHELD on a create, with the reason", () => {
+    const markup = form({});
+    expect(markup).toContain("once it is saved");
+    expect(markup).not.toContain("Add a field");
+  });
+
+  test("an EDIT opens the item's own sections, addresses and passkey slot", () => {
+    const detail: LockerDetail = {
+      item_id: "l1",
+      type: "login",
+      title: "GitHub",
+      fields: [
+        {
+          field_id: "f1",
+          section: "Recovery",
+          label: "Recovery code",
+          kind: "sealed",
+          value: null,
+          sealed: true,
+        },
+      ],
+      addresses: [
+        {
+          address_id: "a1",
+          url: "https://alt.example.test",
+          match_policy: "exact-host",
+        },
+      ],
+    };
+    const markup = form({
+      seed: { ...emptySeed(), mode: "edit", itemId: "l1" },
+      detail,
+    });
+    expect(markup).toContain("Recovery code");
+    expect(markup).toContain("Add a field");
+    expect(markup).toContain("https://alt.example.test");
+    // The replace-all semantics are stated where the save is, not after it.
+    expect(markup).toContain("replaces the whole list");
   });
 });
 
@@ -263,35 +355,228 @@ describe("TRASH counts down, restores whole, and purges once", () => {
 
 // ----------------------------------- the four surfaces drawn against the ask
 
-describe("a surface with no door states the gap and offers no control", () => {
-  test("IMPORT names the three verdicts and the missing door", () => {
-    const markup = renderToStaticMarkup(createElement(ImportScreen));
+describe("IMPORT is live where the door is, and states the fact where it is not", () => {
+  const DRAFT = {
+    batchId: "b1",
+    status: "draft",
+    createdAt: "2026-01-15T09:00:00Z",
+    summary: { "locker.item": 3 },
+    kind: "1password",
+    label: "1Password export",
+  };
+  const ROWS = [
+    {
+      seq: 1,
+      entityType: "locker.item",
+      externalId: "Netflix",
+      disposition: "create",
+      mapping: "title → title",
+    },
+    {
+      seq: 2,
+      entityType: "locker.item",
+      externalId: "GitHub",
+      disposition: "update",
+      mapping: "username → username",
+    },
+    {
+      seq: 3,
+      entityType: "locker.item",
+      externalId: "Bank",
+      disposition: "skip",
+      mapping: "password → password",
+    },
+  ];
+  const importer = (props: Partial<Parameters<typeof ImportScreen>[0]>) =>
+    renderToStaticMarkup(
+      createElement(ImportScreen, {
+        hasDoor: true,
+        offline: false,
+        batches: null,
+        rows: null,
+        openBatchId: null,
+        note: "",
+        onStage: NOOP,
+        onOpen: NOOP,
+        onPublish: NOOP,
+        onDiscard: NOOP,
+        ...props,
+      })
+    );
+
+  test("the three verdicts are §6's, verbatim, whatever the draft holds", () => {
+    const markup = importer({});
     expect(markup).toContain(IMPORT_VERDICT.new);
     expect(markup).toContain(IMPORT_VERDICT.gapfill);
     expect(markup).toContain(IMPORT_VERDICT.held);
-    expect(markup).toContain("[backend-needed]");
-    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("[backend-needed]");
   });
 
-  test("ACCESS HISTORY describes the register and says it is not served here", () => {
-    const markup = renderToStaticMarkup(createElement(AccessScreen));
-    expect(markup).toContain("Filled");
-    expect(markup).toContain("page origin");
-    expect(markup).toContain(ACCESS_NOT_SERVED);
-    expect(markup).not.toContain("<button");
+  test("DOOR PRESENT: a file can be staged, and the drafts are listed", () => {
+    const markup = importer({ batches: [DRAFT] });
+    expect(markup).toContain(IMPORT_CHOOSE);
+    expect(markup).toContain("1Password export");
+    expect(markup).toContain("Review");
   });
 
-  test("EXPORT carries the §6 lede and NO control that would write plaintext", () => {
-    const markup = renderToStaticMarkup(
-      createElement(ExportScreen, { items: 312 })
+  test("DOOR ABSENT (C1): no control at all, and the seat that has it is named", () => {
+    const markup = importer({ hasDoor: false, batches: [DRAFT] });
+    expect(markup).toContain(IMPORT_NO_DOOR);
+    expect(markup).not.toContain(IMPORT_CHOOSE);
+    expect(markup).not.toContain("<input");
+  });
+
+  test("OFFLINE: the refusal is stated BEFORE a file is picked, not after", () => {
+    const markup = importer({ offline: true, batches: [DRAFT] });
+    expect(markup).toContain(IMPORT_OFFLINE);
+    expect(markup).not.toContain(IMPORT_CHOOSE);
+  });
+
+  test("a reviewed draft wears one verdict per row, and the vault wins on held", () => {
+    const markup = importer({
+      batches: [DRAFT],
+      openBatchId: "b1",
+      rows: ROWS,
+    });
+    expect(markup).toContain("Netflix");
+    expect(markup).toContain(IMPORT_VERDICT.held);
+    expect(markup).toContain("Publish the draft");
+    expect(markup).toContain("Discard the draft");
+  });
+});
+
+// ------------------------------------------------- ACCESS HISTORY, now served
+
+describe("ACCESS HISTORY draws the receipts and never a value", () => {
+  const ENTRIES: LockerAccessEntry[] = [
+    {
+      receipt_id: "r1",
+      kind: "auth",
+      action: "unlock",
+      decision: "allow",
+      item_id: null,
+      occurred_at: "2026-01-15T09:12:00Z",
+    },
+    {
+      receipt_id: "r2",
+      kind: "reveal",
+      action: "reveal",
+      decision: "allow",
+      item_id: "l1",
+      occurred_at: "2026-01-15T09:13:00Z",
+      columns: ["password"],
+    },
+    {
+      receipt_id: "r3",
+      kind: "fill",
+      action: "reveal",
+      decision: "allow",
+      item_id: "l1",
+      occurred_at: "2026-01-15T09:14:00Z",
+      origin: "https://github.test",
+    },
+    {
+      receipt_id: "r4",
+      kind: "auth",
+      action: "unlock",
+      decision: "deny",
+      item_id: null,
+      occurred_at: "2026-01-15T09:15:00Z",
+      reason: "wrong passphrase",
+    },
+  ];
+  const access = (props: Partial<Parameters<typeof AccessScreen>[0]>) =>
+    renderToStaticMarkup(
+      createElement(AccessScreen, {
+        entries: ENTRIES,
+        window: { window: 200, truncated: false },
+        itemId: null,
+        titles: new Map([["l1", "GitHub"]]),
+        offline: false,
+        onNarrow: NOOP,
+        ...props,
+      })
     );
+
+  test("every kind is drawn, and a FILL carries its page origin", () => {
+    const markup = access({});
+    expect(markup).toContain("Unlocked");
+    expect(markup).toContain("Revealed");
+    expect(markup).toContain("Filled");
+    expect(markup).toContain("https://github.test");
+    expect(markup).toContain("GitHub");
+    expect(markup).not.toContain("[backend-needed]");
+  });
+
+  test("A REFUSAL IS A ROW — listed like an allowance, with its reason", () => {
+    const markup = access({});
+    expect(markup).toContain("Refused");
+    expect(markup).toContain("wrong passphrase");
+  });
+
+  test("a reveal names its COLUMNS and never a value", () => {
+    const markup = access({});
+    expect(markup).toContain("password");
+    expect(markup).toContain(ACCESS_NO_VALUES);
+  });
+
+  test("NOTHING IS EMPTY UNTIL A READ HAS LANDED", () => {
+    expect(access({ entries: null })).not.toContain(ACCESS_EMPTY);
+    expect(access({ entries: [] })).toContain(ACCESS_EMPTY);
+  });
+
+  test("OFFLINE: no list, and the reason it cannot be answered here", () => {
+    const markup = access({ offline: true });
+    expect(markup).toContain(ACCESS_OFFLINE);
+    expect(markup).not.toContain("https://github.test");
+  });
+});
+
+// -------------------------------------------------------- EXPORT, now committed
+
+describe("EXPORT carries §6's lede and a commit that names the consequence", () => {
+  const exporter = (props: Partial<Parameters<typeof ExportScreen>[0]>) =>
+    renderToStaticMarkup(
+      createElement(ExportScreen, {
+        items: 312,
+        offline: false,
+        busy: false,
+        includeTrashed: false,
+        includeHistory: false,
+        onOption: NOOP,
+        onAsk: NOOP,
+        ...props,
+      })
+    );
+
+  test("the lede is verbatim, and the count is the vault's", () => {
+    const markup = exporter({});
     expect(markup).toContain(EXPORT_LEDE);
     expect(markup).toContain("312 items");
-    expect(markup).toContain(EXPORT_COMMIT_NOTE);
-    expect(markup).not.toContain("<button");
+    expect(markup).not.toContain("[backend-needed]");
   });
 
-  test("COMPANION gives the three not-offered reasons verbatim, and dispatches nothing", () => {
+  test("the commit exists, and both options are OFF unless asked for", () => {
+    const markup = exporter({});
+    expect(markup).toContain(EXPORT_COMMIT);
+    expect(markup).toContain(`aria-pressed="false"`);
+    expect(markup).toContain(EXPORT_TRASHED);
+    expect(markup).toContain(EXPORT_HISTORY);
+  });
+
+  test("OFFLINE: the commit is WITHHELD, with the reason in its place", () => {
+    const markup = exporter({ offline: true });
+    expect(markup).toContain(EXPORT_OFFLINE);
+    // Withheld, never disabled: the row stays, the BUTTON does not.
+    expect(markup).not.toContain(`<button type="button" class="kit-btn">`);
+    expect(markup).not.toContain("disabled");
+  });
+});
+
+// ------------------------------------------- COMPANION: still where it happens
+
+describe("COMPANION explains where the act happens and dispatches nothing", () => {
+  test("the three not-offered reasons are §6's, and there is no control", () => {
     const markup = renderToStaticMarkup(createElement(FillScreen));
     expect(markup).toContain(NOT_OFFERED.policy);
     expect(markup).toContain(NOT_OFFERED.http);

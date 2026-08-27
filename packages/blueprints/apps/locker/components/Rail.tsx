@@ -23,6 +23,7 @@ import type { ShelfId } from "../shelves.ts";
 import type { ItemFilter, LockerItemType, LockerRow } from "../types.ts";
 import {
   RAIL_ALL,
+  RAIL_ARCHIVED,
   RAIL_HEADS,
   RAIL_REVIEW,
   RAIL_STARRED,
@@ -39,6 +40,9 @@ export interface RailProps {
   rows: readonly LockerRow[];
   typeCounts: Readonly<Record<LockerItemType, number>>;
   trashCount: number;
+  /** How many items are archived, counted inside the vault. Archived items are
+   *  out of the default window, so this is never `rows.filter(...)`. */
+  archivedCount: number;
   onFilter: (filter: ItemFilter) => void;
   onGo: (shelf: ShelfId) => void;
 }
@@ -98,6 +102,12 @@ export function Rail(props: RailProps): ReactNode {
       current: props.shelf === WATCH,
       onSelect: () => props.onGo(WATCH),
     },
+    // ARCHIVED IS A SHELF OF THE VAULT, NOT AN ACT and NOT THE TRASH: it is
+    // "keep forever, hide from the lists", and nothing in it has a purge date.
+    // Its count is the vault's, because its rows are out of the window.
+    filterRow("archived", RAIL_ARCHIVED, props.archivedCount, {
+      kind: "archived",
+    }),
     { kind: "rule" },
     { kind: "head", label: RAIL_HEADS.types },
     ...TYPE_ORDER.map((type) =>

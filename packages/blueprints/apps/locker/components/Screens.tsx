@@ -7,6 +7,7 @@
 // bag, where the lock's enumerated wipe can reach them.
 import type { ReactNode } from "react";
 
+import { titlesOf } from "../access-model.ts";
 import type { Bag } from "../bag.ts";
 import { emptySeed } from "../draft.ts";
 import { clockAt } from "../format.ts";
@@ -24,16 +25,15 @@ import {
   WATCH,
 } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";
+import type { SurfaceActs } from "../surface-acts.ts";
+import { AccessScreen } from "./Access.tsx";
 import { EditScreen } from "./Edit.tsx";
+import { ExportScreen } from "./Export.tsx";
 import { GenScreen } from "./Gen.tsx";
+import { ImportScreen } from "./Import.tsx";
 import { ReviewScreen } from "./Review.tsx";
 import { SearchScreen } from "./Search.tsx";
-import {
-  AccessScreen,
-  ExportScreen,
-  FillScreen,
-  ImportScreen,
-} from "./Surfaces.tsx";
+import { FillScreen } from "./Surfaces.tsx";
 import { TrashScreen } from "./Trash.tsx";
 
 /** The routes this switch draws. Everything else — the list, one item, the
@@ -67,6 +67,11 @@ export interface ScreensProps {
    *  read next door cannot disagree by a second. */
   now: number;
   acts: RouteActs;
+  /** The three surfaces that talk to a door rather than the write path. */
+  surfaces: SurfaceActs;
+  /** Does THIS seat carry the staged-import plane? Feature-detected once by
+   *  the orchestrator, so every consumer reads the same answer. */
+  hasImportDoor: boolean;
   /** Opening an item is a per-item gesture: it opens the permit gate. */
   onOpenItem: (itemId: string) => void;
   /** Leave the form without writing. The typed values go with it. */
@@ -83,6 +88,8 @@ export function Screens(props: ScreensProps): ReactNode {
     return (
       <EditScreen
         seed={bag.editSeed ?? emptySeed()}
+        detail={bag.editSeed?.mode === "edit" ? bag.detail : null}
+        sidecarDraft={bag.sidecarDraft}
         offline={props.offline}
         busy={props.busy}
         error={bag.editError}
@@ -91,6 +98,14 @@ export function Screens(props: ScreensProps): ReactNode {
         onGenerate={() => acts.handleGenerateInto("password")}
         onSave={acts.handleSave}
         onCancel={props.onCancelEdit}
+        onFieldDraft={acts.handleFieldDraft}
+        onFieldSave={acts.handleFieldSave}
+        onFieldRemove={acts.handleFieldRemove}
+        onAddressDraft={acts.handleAddressDraft}
+        onAddressSave={acts.handleAddressSave}
+        onPasskeyDraft={acts.handlePasskeyDraft}
+        onPasskeySave={acts.handlePasskeySave}
+        onPasskeyClear={acts.handlePasskeyClear}
       />
     );
   }
@@ -146,9 +161,50 @@ export function Screens(props: ScreensProps): ReactNode {
     );
   }
 
-  if (shelf === IMPORT) return <ImportScreen />;
-  if (shelf === ACCESS) return <AccessScreen />;
-  if (shelf === EXPORT) return <ExportScreen items={bag.items.length} />;
+  if (shelf === IMPORT) {
+    return (
+      <ImportScreen
+        hasDoor={props.hasImportDoor}
+        offline={props.offline}
+        batches={bag.importBatches}
+        rows={bag.importRows}
+        openBatchId={bag.openBatchId}
+        note={bag.importNote}
+        onStage={props.surfaces.handleStageFile}
+        onOpen={props.surfaces.handleOpenBatch}
+        onPublish={props.surfaces.handlePublishBatch}
+        onDiscard={props.surfaces.handleDiscardBatch}
+      />
+    );
+  }
+
+  if (shelf === ACCESS) {
+    return (
+      <AccessScreen
+        entries={bag.accessEntries}
+        window={bag.accessWindow}
+        itemId={bag.accessItemId}
+        titles={titlesOf(bag.items)}
+        offline={props.offline}
+        onNarrow={props.surfaces.handleNarrowAccess}
+      />
+    );
+  }
+
+  if (shelf === EXPORT) {
+    return (
+      <ExportScreen
+        items={bag.total ?? bag.items.length}
+        offline={props.offline}
+        busy={props.busy}
+        includeTrashed={bag.exportTrashed}
+        includeHistory={bag.exportHistory}
+        onOption={props.surfaces.handleExportOption}
+        onAsk={props.surfaces.handleAskExport}
+      />
+    );
+  }
+
   if (shelf === FILL) return <FillScreen />;
   return null;
 }

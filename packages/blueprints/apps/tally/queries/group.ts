@@ -5,7 +5,14 @@
  * read). All balances come from the shared engine in dashboard.ts.
  */
 
-import { groupNet, ledgerRow, loadTally, personOf } from "./dashboard.ts";
+import { tallySimplification } from "../../../src/tally-simplify.ts";
+import {
+  deniedPayload,
+  groupNet,
+  ledgerRow,
+  loadTally,
+  personOf,
+} from "./dashboard.ts";
 
 export default async function groupHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
@@ -20,6 +27,12 @@ export default async function groupHandler({ input, ctx }: HandlerArgs) {
         group: null,
         members: [],
         ledger: [],
+        simplification: {
+          opted_in: false,
+          transfers: [],
+          debts_before: 0,
+          payments_after: 0,
+        },
       };
     const net = groupNet(data, groupId);
     const currentMemberIds = data.membersByGroup.get(groupId) ?? [];
@@ -51,19 +64,34 @@ export default async function groupHandler({ input, ctx }: HandlerArgs) {
         name: g.name,
         icon: g.icon,
         color: g.color,
+        simplify_opt_in: g.simplify_opt_in === 1,
+        archived_at: g.archived_at ?? null,
       },
       members,
       ledger,
+      // Derived, never stored: the minimal payment set this group's ledger
+      // implies, plus the counts that say what it rewired. Empty rows until
+      // the group opts in, because simplification changes who owes whom.
+      simplification: tallySimplification(
+        data,
+        groupId,
+        g.simplify_opt_in === 1
+      ),
     };
   } catch (error) {
-    const e = error as { code?: string; message?: string };
     return {
       me: null,
       currency: "USD",
       group: null,
       members: [],
       ledger: [],
-      vaultDenied: { code: e.code, message: e.message },
+      simplification: {
+        opted_in: false,
+        transfers: [],
+        debts_before: 0,
+        payments_after: 0,
+      },
+      vaultDenied: deniedPayload(error),
     };
   }
 }

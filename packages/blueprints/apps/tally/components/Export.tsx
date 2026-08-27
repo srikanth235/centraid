@@ -1,17 +1,19 @@
-// EXPORT — the custodian's surface, drawn against the ask (GAPS.md Tally §8).
+// EXPORT — the custodian's surface (GAPS.md Tally §8).
 //
 // LOCAL-FIRST MAKES LEAVING POSSIBLE, and that is the point of it: a sovereign
-// vault must not be a roach motel. So the surface exists, states exactly what
-// a file would carry, and refuses at the commit with the gap named — rather
-// than being absent, which would teach a member that leaving is not on offer.
+// vault must not be a roach motel. The `export` query answers with one group's
+// rows; the FILE is assembled here and saved from here, which is why the foot
+// reads in `--net` — the bytes leave the vault the moment the member saves it,
+// and nothing before that moment has left anything.
 //
 // SPLITS AND REVISIONS TRAVEL; BALANCES DO NOT. A balance is arithmetic over
 // the rows, and the rows are what the file holds — so the export cannot ship a
-// figure this app refuses to store.
+// figure this app refuses to store. The payload says `balances_excluded` out
+// loud rather than leaving a reader to notice the absence.
 //
-// THE FOOT READS IN `--net`. It is the one sentence in Tally that is not about
-// owing: bytes leave the device the moment the file is saved, and `--net` is
-// the product's register for exactly that.
+// THE WINDOW IS STATED. `truncated` and `window` come back with the rows, so a
+// partial export is never mistaken for a whole one: the foot names the counts
+// before the press, and a file that carries the window says so.
 import type { ReactNode } from "react";
 
 import {
@@ -21,12 +23,14 @@ import {
   EXPORT_FORMATS,
   EXPORT_HEAD,
   EXPORT_LEDE,
+  EXPORT_NO_GROUP,
   EXPORT_NOTE,
   EXPORT_RANGES,
-  EXPORT_UNBUILT,
   FIELD_KEYS,
+  exportWindow,
 } from "../compose-copy.ts";
-import type { GroupSummary } from "../types.ts";
+import { metaSentence } from "../format.ts";
+import type { ExportData, GroupSummary } from "../types.ts";
 import {
   ChipSet,
   Editor,
@@ -44,11 +48,17 @@ export interface ExportDraft {
 export interface ExportScreenProps {
   draft: ExportDraft;
   groups: readonly GroupSummary[];
+  /** The rows the chosen group's `export` query answered with, or `null` while
+   *  that read is in flight — and then the counts are absent rather than zero,
+   *  because "nothing to export" is a claim nobody has checked. */
+  data: ExportData | null;
   onPatch: (patch: Partial<ExportDraft>) => void;
   onCancel: () => void;
+  onCommit: () => void;
 }
 
 export function ExportScreen(props: ExportScreenProps): ReactNode {
+  const ready = props.draft.groupId !== null && props.data !== null;
   return (
     <Editor>
       <EditorHead head={EXPORT_HEAD} lede={EXPORT_LEDE} />
@@ -84,14 +94,23 @@ export function ExportScreen(props: ExportScreenProps): ReactNode {
       </FieldRow>
 
       <EditorFoot
-        copy={EXPORT_FOOT}
+        copy={metaSentence([
+          EXPORT_FOOT,
+          props.data
+            ? exportWindow(
+                props.data.window.expenses,
+                props.data.window.settlements,
+                props.data.truncated
+              )
+            : "",
+        ])}
         net
         cancelLabel={CANCEL}
         onCancel={props.onCancel}
         commit={{
           label: EXPORT_COMMIT,
-          refusal: EXPORT_UNBUILT,
-          run: props.onCancel,
+          ...(ready ? {} : { refusal: EXPORT_NO_GROUP }),
+          run: props.onCommit,
         }}
       />
     </Editor>

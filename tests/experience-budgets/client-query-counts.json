@@ -1,9 +1,9 @@
 {
-  "approvedDeviation": "#807 Wave 0 registers two new enrichment tables (enrich.policy_rule, enrich.consent) in schema/tables.ts, and the Atlas census counts one row-count query per REGISTERED table: the measured SQL baseline rises 138 -> 140, with no additional HTTP request and no new query per table beyond that count. Registration is what carries both tables through portable export and the replica change log, so the two statements are the price of them being real vault rows rather than a side store. Prior: #731 Atlas now counts the registered Commons control tables during its bounded first-paint census; the measured SQL baseline rises from 128 to 138 with no additional HTTP request.",
+  "approvedDeviation": "None outstanding. The Atlas budget no longer needs one: #873 batches the census row counts into one compound SELECT per file (atlas-graph.ts countRowsBatched), so registering a table costs a COUNT(*) scan but never a first-paint statement, and the measured baseline drops 147 -> 13. That retires the deviation chain (#731 128 -> 138, #807 138 -> 140) that raised this budget once per registered table; the knob is tighten-only (tests/matrix.json P2) and 13 is the measured number.",
   "screens": {
     "photos-grid": { "sqlStatements": 68, "httpRequests": 1 },
     "notifications": { "sqlStatements": 8, "httpRequests": 3 },
-    "atlas": { "sqlStatements": 140, "httpRequests": 2 },
+    "atlas": { "sqlStatements": 13, "httpRequests": 2 },
     "assistant": { "sqlStatements": 22, "httpRequests": 1 }
   }
 }

@@ -120,6 +120,21 @@ export function isExpiringSoon(row: LockerRow, now: number): boolean {
   return days !== null && days <= EXPIRY_HORIZON_DAYS;
 }
 
+/** A password older than this is a verdict (GAPS §3.3 #6d). A year, because
+ *  that is the horizon the copy states — the number and the sentence are one
+ *  fact, and neither may move without the other. */
+export const PASSWORD_AGE_HORIZON_DAYS = 365;
+
+/** Has this item's CURRENT password stood longer than the horizon? A row with
+ *  no `password_set_at` is NOT old — it is a row the vault never dated, and
+ *  calling it stale would be a verdict nobody earned. */
+export function isPasswordStale(row: LockerRow, now: number): boolean {
+  if (!row.password_set_at) return false;
+  const set = new Date(row.password_set_at).getTime();
+  if (Number.isNaN(set)) return false;
+  return (now - set) / 86_400_000 > PASSWORD_AGE_HORIZON_DAYS;
+}
+
 /** Does this row hold THIS verdict? The one derivation Review's registers and
  *  the list's verdict lens both read, so pressing *Show them* can never open
  *  a lens over a different set from the count that was pressed. */
@@ -132,6 +147,7 @@ export function matchesCheck(
   if (check === "weak") return Boolean(row.weak);
   if (check === "reused") return Boolean(row.reused);
   if (check === "http") return isUnsecuredAddress(row);
+  if (check === "age") return isPasswordStale(row, now);
   return isExpiringSoon(row, now);
 }
 
@@ -148,6 +164,9 @@ export function rowsFor(
     if (filter.kind === "verdict") return matchesCheck(row, filter.check, now);
     if (filter.kind === "type") return row.type === filter.type;
     if (filter.kind === "tag") return (row.tags ?? []).includes(filter.tag);
+    // The archived shelf is a different READ, not a different slice: the rows
+    // in hand are already the archived ones, so filtering them again here
+    // would be asking the same question twice and risking two answers.
     return true;
   });
   return pool.toSorted(byTitle);
@@ -185,15 +204,23 @@ export function tagCounts(
 /**
  * THE BOUNDED WINDOW'S OWN FOOT (README-Locker §6, "Window end").
  *
- * The handoff's sentence is `300 of 312 · the window is 300 by default and
- * 2,000 at most.` — and the second half is verbatim here. The first half is
- * NOT: the `items` query returns `truncated` and `window`, and no total, so
- * "of 312" is a number this seat does not have. It says what it does know —
- * how many it is showing, and that older items exist beyond them — rather than
- * inventing a denominator. Restoring the handoff's exact wording is a backend
- * change (a `total` on the items payload), noted in the receipt.
+ * `300 of 312 · the window is 300 by default and 2,000 at most.` — the §6
+ * sentence, whole, whenever the `items` payload carries the live `total` the
+ * vault counted for it.
+ *
+ * AND THE FALLBACK IS NOT DECORATION. `total` is ABSENT when the count could
+ * not be read, and a denominator this seat does not have is one it will not
+ * invent: it then says how many it is showing, and that older items exist
+ * beyond them, which is the whole of what it knows.
  */
-export function windowEndCopy(shown: number, truncated: boolean): string {
+export function windowEndCopy(
+  shown: number,
+  truncated: boolean,
+  total?: number | null
+): string {
+  if (typeof total === "number" && Number.isFinite(total)) {
+    return `${shown} of ${total} · ${WINDOW_RULE}`;
+  }
   return truncated
     ? `${shown} shown, and older items beyond them · ${WINDOW_RULE}`
     : `${shown} in the vault · ${WINDOW_RULE}`;

@@ -14,14 +14,14 @@
 // percentage of a balance and no "settle everything" button: the member types
 // what they paid.
 //
-// THE SIMPLIFICATION PROPOSAL IS DRAWN AGAINST THE ASK, and drawn WITHOUT
-// invented rows. The ruling is opt-in per group, off by default, because it
-// rewires who owes whom and a member who agreed to pay Ana should not silently
-// owe Tom. No minimal-transfer engine exists, so this app cannot know what the
-// three payments would be — printing a plausible three would be inventing
-// figures on the one screen whose whole subject is that figures are derived.
-// The head, the §6 sentence, the current state and a refused commit are the
-// honest whole of it.
+// THE SIMPLIFICATION PROPOSAL IS A PROPOSAL. The ruling is opt-in per group,
+// off by default, because it rewires who owes whom and a member who agreed to
+// pay Ana should not silently owe Tom. Turning it on writes ONE FLAG; the
+// transfers themselves are derived at read time by `queries/group.ts` and
+// stored nowhere, and the panel states what it changed — five debts, three
+// payments — because a rewiring that did not say what it rewired is exactly
+// what the ruling forbids. A group whose read has not landed shows no
+// proposal at all rather than an invented one.
 import type { ReactNode } from "react";
 
 import {
@@ -38,13 +38,23 @@ import {
   SIMPLIFICATION,
   SIMPLIFY_COMMIT,
   SIMPLIFY_HEAD,
+  SIMPLIFY_NONE,
   SIMPLIFY_OFF,
-  SIMPLIFY_UNBUILT,
+  SIMPLIFY_ON,
+  SIMPLIFY_STOP,
+  simplifyChanged,
+  transferLine,
   NO_GROUP_LABEL,
   WHEN_CHIPS,
 } from "../compose-copy.ts";
 import type { SettleDraft, SettleVerdict } from "../draft-model.ts";
-import type { FriendSummary, GroupSummary, Person } from "../types.ts";
+import { money } from "../format.ts";
+import type {
+  FriendSummary,
+  GroupSummary,
+  Person,
+  Simplification,
+} from "../types.ts";
 import {
   ChipSet,
   Editor,
@@ -68,9 +78,75 @@ export interface SettleScreenProps {
   currency: string;
   today: string;
   verdict: SettleVerdict;
+  /** The open group's proposal, or `null` while its read has not landed — and
+   *  then nothing is drawn, because absent is not "no transfers". */
+  simplification: Simplification | null;
+  /** Who each transfer runs between, by party id. */
+  names: ReadonlyMap<string, string>;
   onPatch: (patch: Partial<SettleDraft>) => void;
+  onSimplify: (simplify: boolean) => void;
   onCancel: () => void;
   onCommit: () => void;
+}
+
+/** The proposal panel: the §6 sentence, what it changed, and the transfers. */
+function Proposal({
+  simplification,
+  names,
+  currency,
+  onSimplify,
+}: {
+  simplification: Simplification;
+  names: ReadonlyMap<string, string>;
+  currency: string;
+  onSimplify: (simplify: boolean) => void;
+}): ReactNode {
+  const on = simplification.opted_in;
+  const level =
+    simplification.debts_before === 0 && simplification.payments_after === 0;
+  return (
+    <>
+      <div className={styles.tableHead}>{SIMPLIFY_HEAD}</div>
+      <p className={styles.lede}>{SIMPLIFICATION}</p>
+      <p className={styles.note}>{on ? SIMPLIFY_ON : SIMPLIFY_OFF}</p>
+      {on ? (
+        <>
+          <p className={styles.note}>
+            {level
+              ? SIMPLIFY_NONE
+              : simplifyChanged(
+                  simplification.debts_before,
+                  simplification.payments_after
+                )}
+          </p>
+          {simplification.transfers.map((transfer) => (
+            <p
+              key={`${transfer.from}-${transfer.to}-${transfer.amount_minor}`}
+              className={styles.value}
+            >
+              {transferLine(
+                names.get(transfer.from) ?? transfer.from,
+                names.get(transfer.to) ?? transfer.to,
+                money(transfer.amount_minor, currency)
+              )}
+            </p>
+          ))}
+        </>
+      ) : null}
+      <div className={styles.foot}>
+        <span className={styles.footCopy} />
+        <span className={styles.footActs}>
+          <button
+            type="button"
+            className="kit-btn"
+            onClick={() => onSimplify(!on)}
+          >
+            {on ? SIMPLIFY_STOP : SIMPLIFY_COMMIT}
+          </button>
+        </span>
+      </div>
+    </>
+  );
 }
 
 function parties(props: SettleScreenProps): ChipOption[] {
@@ -155,18 +231,14 @@ export function SettleScreen(props: SettleScreenProps): ReactNode {
         <span className={styles.value}>{BANK_LINE_VALUE}</span>
       </FieldRow>
 
-      <div className={styles.tableHead}>{SIMPLIFY_HEAD}</div>
-      <p className={styles.lede}>{SIMPLIFICATION}</p>
-      <p className={styles.note}>{SIMPLIFY_OFF}</p>
-      <p className={styles.note}>{SIMPLIFY_UNBUILT}</p>
-      <div className={styles.foot}>
-        <span className={styles.footCopy} />
-        <span className={styles.footActs}>
-          <button type="button" className="kit-btn" disabled>
-            {SIMPLIFY_COMMIT}
-          </button>
-        </span>
-      </div>
+      {props.draft.groupId && props.simplification ? (
+        <Proposal
+          simplification={props.simplification}
+          names={props.names}
+          currency={props.currency}
+          onSimplify={props.onSimplify}
+        />
+      ) : null}
 
       <EditorFoot
         copy={verdict.yours ? SETTLE_FOOT_YOURS : SETTLE_FOOT_THEIRS}

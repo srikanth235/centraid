@@ -60,23 +60,29 @@ export function ChipSet({
   );
 }
 
-/** One field row (§5): a key column, a value or a chip set, and a note that
- *  carries the rule and, where relevant, the gap tag. */
+/** One field row (§5): a key column, a value or a chip set, and the note that
+ *  carries the rule. A note may be SEVERAL lines, because some rules are
+ *  genuinely two claims and each of them is its own sentence. */
 export function FieldRow({
   label,
   note,
   children,
 }: {
   label: string;
-  note?: string;
+  note?: string | readonly string[];
   children: ReactNode;
 }): ReactNode {
+  const notes = note === undefined ? [] : [note].flat();
   return (
     <div className={styles.field}>
       <span className={styles.key}>{label}</span>
       <div className={styles.body}>
         {children}
-        {note ? <span className={styles.note}>{note}</span> : null}
+        {notes.map((line) => (
+          <span key={line} className={styles.note}>
+            {line}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -91,7 +97,7 @@ export function ValueRow({
 }: {
   label: string;
   value: string;
-  note?: string;
+  note?: string | readonly string[];
   /** Is the value a number? Then it is tabular and bidi-isolated. */
   num?: boolean;
 }): ReactNode {

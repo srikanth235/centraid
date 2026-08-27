@@ -18,31 +18,63 @@ function row(over: Partial<LockerRow> & { item_id: string }): LockerRow {
   return { type: "login", title: over.item_id, ...over };
 }
 
-/** A window whose rows carry the two metadata fields the checks read — what
- *  the items query hands back once it decorates them. */
+/** A window whose rows carry the three metadata fields the checks read — what
+ *  the items query hands back since #872 decorated them. */
 const SERVED: LockerRow[] = [
-  row({ item_id: "a", compromised: true, url: "https://one.example" }),
-  row({ item_id: "b", weak: true, url: "http://two.example" }),
-  row({ item_id: "c", weak: true, reused: true, url: "https://three.example" }),
-  row({ item_id: "d", reused: true, url: "https://four.example" }),
-  row({ item_id: "e", type: "card", expiry: "02 / 26", url: "" }),
+  row({
+    item_id: "a",
+    compromised: true,
+    url: "https://one.example",
+    password_set_at: "2025-06-01T00:00:00Z",
+  }),
+  row({
+    item_id: "b",
+    weak: true,
+    url: "http://two.example",
+    password_set_at: "2020-01-01T00:00:00Z",
+  }),
+  row({
+    item_id: "c",
+    weak: true,
+    reused: true,
+    url: "https://three.example",
+    password_set_at: "2025-12-01T00:00:00Z",
+  }),
+  row({
+    item_id: "d",
+    reused: true,
+    url: "https://four.example",
+    password_set_at: "2025-12-01T00:00:00Z",
+  }),
+  row({
+    item_id: "e",
+    type: "card",
+    expiry: "02 / 26",
+    url: "",
+    password_set_at: "2025-12-01T00:00:00Z",
+  }),
 ];
 
-/** The same window as the items query actually returns it today: decorated
- *  with the watchtower verdicts, and with no address and no expiry. */
+/** A read that stopped carrying them. The register must then say "not asked"
+ *  rather than reporting a zero — which is the state this file exists for. */
 const UNSERVED: LockerRow[] = SERVED.map(
-  ({ url: _url, expiry: _expiry, ...rest }) => rest
+  ({ url: _url, expiry: _expiry, password_set_at: _setAt, ...rest }) => rest
 );
 
 describe("what the payload carries decides what can be checked", () => {
-  it("sees both fields when the rows carry them", () => {
-    expect(servedFields(SERVED)).toStrictEqual({ address: true, expiry: true });
+  it("sees all three when the rows carry them", () => {
+    expect(servedFields(SERVED)).toStrictEqual({
+      address: true,
+      expiry: true,
+      age: true,
+    });
   });
 
-  it("sees neither on today's decorated rows", () => {
+  it("sees none of them on a read that dropped them", () => {
     expect(servedFields(UNSERVED)).toStrictEqual({
       address: false,
       expiry: false,
+      age: false,
     });
   });
 });
@@ -57,9 +89,10 @@ describe("Needs attention is one row per verdict, with its count", () => {
       "reused",
       "http",
       "expiring",
+      "age",
     ]);
     expect(register.attention.map((verdict) => verdict.count)).toStrictEqual([
-      1, 2, 2, 1, 1,
+      1, 2, 2, 1, 1, 1,
     ]);
   });
 
@@ -73,7 +106,7 @@ describe("Needs attention is one row per verdict, with its count", () => {
   });
 
   it("counts the verdicts, not the rows — one row can hold two", () => {
-    expect(register.verdicts).toBe(7);
+    expect(register.verdicts).toBe(8);
     expect(register.items).toHaveLength(5);
     expect(register.items.map((held) => held.item_id)).toStrictEqual([
       "a",
@@ -84,18 +117,30 @@ describe("Needs attention is one row per verdict, with its count", () => {
     ]);
   });
 
-  it("carries each check's reason, tags included", () => {
+  it("carries each check's reason, and no gap tag survives on any of them", () => {
     const http = register.attention.find((verdict) => verdict.key === "http");
-    expect(http?.why).toContain("[exists]");
+    expect(http?.why).toContain("the list read carries it");
+    for (const verdict of register.attention) {
+      expect(verdict.why).not.toContain("[backend-needed]");
+      expect(verdict.why).not.toContain("[exists]");
+    }
+  });
+
+  it("PASSWORD AGE RUNS NOW — the check that wanted item history (GAPS #6d)", () => {
+    const age = register.attention.find((verdict) => verdict.key === "age");
+    expect(age?.count).toBe(1);
+    expect(age?.items.map((held) => held.item_id)).toStrictEqual(["b"]);
   });
 });
 
 describe("Checked, and cannot be checked", () => {
-  it("always lists the three with no source at all", () => {
+  it("lists the two that have no source at all, and only those", () => {
     const register = reviewRegister(SERVED, NOW);
     const keys = register.unrunnable.map((check) => check.key);
     expect(keys).toStrictEqual(UNRUNNABLE_CHECKS.map((check) => check.key));
-    expect(keys).toStrictEqual(["2fa", "age", "breach"]);
+    // Password age LEFT this register when the read started carrying its
+    // source; the two that remain are rulings, not deferrals.
+    expect(keys).toStrictEqual(["2fa", "breach"]);
   });
 
   it("NAMES AN UNSERVED READ RATHER THAN REPORTING A ZERO", () => {
@@ -103,6 +148,7 @@ describe("Checked, and cannot be checked", () => {
     const keys = register.unrunnable.map((check) => check.key);
     expect(keys).toContain("http");
     expect(keys).toContain("expiring");
+    expect(keys).toContain("age");
     // …and neither appears as a verdict with a count of nothing.
     expect(register.attention.map((verdict) => verdict.key)).toStrictEqual([
       "compromised",

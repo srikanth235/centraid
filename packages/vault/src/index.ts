@@ -156,6 +156,14 @@ export {
   type ExecuteCommonsCommandInput,
   type ExecuteCommonsCommandResult,
 } from "./share/commons.js";
+// The steward's per-intent answer (#872): approve re-enters the signed rail,
+// decline settles `denied` with the steward's own words. Neither is a second
+// write path — see the module header.
+export {
+  decideCommonsIntent,
+  type CommonsIntentDecisionResult,
+  type DecideCommonsIntentInput,
+} from "./share/commons-decide.js";
 export {
   listCommonsGrants,
   findCommonsGrantForContainer,

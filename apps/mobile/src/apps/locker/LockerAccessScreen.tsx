@@ -1,14 +1,15 @@
 // ACCESS HISTORY — `locker/access` (SURFACES.md: custodian AND origin).
 //
-// DRAWN AGAINST THE ASK. The receipts are written and kept — every auth, every
-// reveal, every fill, and every refusal — and NO QUERY SERVES THEM TO THIS
-// SCREEN. The surface exists because the ask is real and a member has to be
-// able to see what a receipt records; the missing read is stated in one line
-// rather than papered over with an empty list, which would say "nothing has
-// happened" about a ledger nobody read.
+// WHAT A RECEIPT RECORDS, AND WHERE TO READ THEM. The `access` query exists
+// now and the custodian seat renders the list; this seat does not, because the
+// query is online-only by construction (receipts live in journal.db, which the
+// replica does not carry) and pointing the phone at it is its own slice. So
+// the screen states the register and names where the same receipts are read,
+// rather than drawing an empty list that would say "nothing has happened"
+// about a ledger nobody read here.
 //
-// The register and both sentences are the shared table's, so the day the query
-// lands the desktop and the phone gain the same screen from the same words.
+// Every sentence is the shared table's, so the day this seat gains the read it
+// gains the desktop's screen from the same words.
 
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -16,7 +17,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import {
   ACCESS_HEAD,
   ACCESS_LEDE,
-  ACCESS_NOT_SERVED,
+  ACCESS_NO_VALUES,
   ACCESS_REGISTER,
   ACCESS_WHERE,
 } from "@centraid/blueprints/apps/locker/route-copy";
@@ -56,8 +57,9 @@ export default function LockerAccessScreen({
           </View>
         ))}
 
-        {/* The one honest line: the receipts exist, this screen has no read. */}
-        <Text style={styles.note}>{ACCESS_NOT_SERVED}</Text>
+        {/* The rule that governs the register itself, stated where the rows
+            are named rather than where a list would be. */}
+        <Text style={styles.note}>{ACCESS_NO_VALUES}</Text>
         <Text style={styles.note}>{ACCESS_WHERE}</Text>
       </ScrollView>
     </LockerScreen>

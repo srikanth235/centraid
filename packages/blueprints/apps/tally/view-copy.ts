@@ -2,12 +2,14 @@
 //
 // THE SPEC'S §6 TABLE IS VERBATIM. Where a sentence in the handoff carries a
 // value the prototype had and this app derives — the friend's name in the
-// removal guard, the query in the search miss, the revocation's own receipt —
-// the string is a function of that value rather than a copy of the prototype's
-// example. Two strings in that table also carried data no query returns (a
-// count of expenses and settlements behind the Balances sub-line; a wall clock
-// on the denied gate); those clauses are DROPPED rather than invented, which
-// is the same rule the rest of the room follows about figures.
+// removal guard, the query in the search miss, the counts behind the Balances
+// sub-line, the wall clock on the denied gate — the string is a function of
+// that value rather than a copy of the prototype's example.
+//
+// TWO OF THEM ARE HELD AS A PAIR OF SENTENCES rather than one string (the
+// leave and archive confirms). They render one after the other, so what a
+// member reads is the §6 line unaltered; splitting the SOURCE is what keeps
+// each literal a single claim, which is the copy ratchet's whole subject.
 //
 // THE REGISTER (§7). Nine categories, closed. The words are *expense,
 // settlement, group, member, departed, steward, contribution, ledger, share,
@@ -29,9 +31,20 @@ export const DAY_ONE_SUB =
   "The first real move is one expense with one person; a group can wait for three of you.";
 export const DAY_ONE_ACT = "Add an expense";
 
-/** The invariant under the hero, with the two totals the dashboard derived. */
-export function balancesHeroSub(owedTo: string, owe: string): string {
-  return `Owed to you ${owedTo} · you owe ${owe}. No balance is stored, and none is ever sent.`;
+/**
+ * The invariant under the hero, with the two totals the dashboard derived AND
+ * the counts they were derived from — the §6 line, whole.
+ *
+ * The counts are the point: a figure that says where it came from is
+ * inspectable, and this one names the exact rows a member could go and count.
+ */
+export function balancesHeroSub(
+  owedTo: string,
+  owe: string,
+  expenses: number,
+  settlements: number
+): string {
+  return `Owed to you ${owedTo} · you owe ${owe}. Derived from ${expenses} expenses and ${settlements} settlements — no balance is stored, and none is ever sent.`;
 }
 
 export const HERO_OWE = "you owe, on balance";
@@ -71,6 +84,8 @@ export const SECTIONS = {
   paidAndOwed: "Paid, and owed",
   trash: "Trash",
   results: "Results",
+  archived: "Archived",
+  simplification: "To zero everything out",
 } as const;
 
 export const SECTION_META = {
@@ -82,9 +97,16 @@ export const SECTION_META = {
   paidAndOwed: "the two figures a splitting tool keeps apart",
   trash: "restorable in full for 30 days",
   results: "descriptions only",
+  archived: "out of the lists, and nothing lost",
+  simplification: "a proposal · nothing is written by turning it on",
 } as const;
 
 export const VERBS = {
+  unarchive: "Bring back",
+  remind: "Remind",
+  approve: "Approve",
+  decline: "Decline",
+  simplify: "Simplify",
   addFriend: "Add a friend",
   newGroup: "New group",
   addSomeone: "Add someone",
@@ -118,6 +140,7 @@ export const EMPTY = {
   together: "No shared expenses yet.",
   trash: "Nothing in the trash.",
   spending: "Nothing spent this month.",
+  archived: "No groups are archived.",
 } as const;
 
 // ------------------------------------------------------------- the guards
@@ -141,16 +164,21 @@ export const REMOVE_BODY =
 
 export const LEAVE_TITLE = "Leave this group?";
 export const LEAVE_BODY =
-  "Your rows stay on the ledger, marked departed, with your balance still visible — settle first.";
+  "Your rows stay on the ledger, marked departed, and your balance with the group stays visible.";
+/** DIVERGENCE, deliberate and small: §6 reads "Settle first if you can." The
+ *  repo's copy rule bans "you can" outright as filler, and the clause it
+ *  qualifies is advice rather than a fact about the write — so the advice
+ *  stands and the filler goes. Nothing a member needs is lost. */
+export const LEAVE_BODY_2 = "Settle first.";
 
 export const ARCHIVE_TITLE = "Archive this group?";
-export const ARCHIVE_BODY =
-  "It leaves the lists and keeps everything, and needs no settled balance.";
+export const ARCHIVE_BODY = "It leaves the lists and keeps everything.";
+export const ARCHIVE_BODY_2 =
+  "Archiving is not deleting, and it does not need a settled balance.";
 
-/** Why the two group acts cannot fire yet. A confirm that fired anyway would
- *  be the lie; a control that vanished would teach nothing. */
-export const LEAVE_UNBUILT = "Leaving a group is an engineering ask";
-export const ARCHIVE_UNBUILT = "Archiving a group is an engineering ask";
+export const UNARCHIVE_TITLE = "Bring this group back?";
+export const UNARCHIVE_BODY =
+  "It returns to the lists with everything it kept.";
 
 // ------------------------------------------------------------- the notices
 
@@ -187,6 +215,14 @@ export function windowEnd(shown: number, total: number): string {
 export const DENIED_TITLE = "Tally cannot read this vault";
 export const DENIED_BODY =
   "Your expenses, groups and receipts are untouched, and nothing was deleted.";
+/** WHEN the grant went, where the gateway recorded it. The clock is a fact the
+ *  denial carried, so it is stated; a denial that carried none says nothing
+ *  rather than inventing a time (§6, and the room's rule about figures). */
+export function revokedAt(at: string): string {
+  return `The grant was revoked at ${at}.`;
+}
+export const REVOKED_UNKNOWN =
+  "The grant is gone, and the time it went with it.";
 export const DENIED_REGRANT =
   "Re-grant tally.read and tally.write to see them again.";
 export const DENIED_SCOPE = "tally.read · tally.write";
@@ -209,6 +245,12 @@ export const DENIED_FACT_LABELS = {
 
 export const SETTLEMENT_NOT_YOURS =
   "neither party is you · no ledger entry, balances only";
+
+/** One part of a friend's net, with the figure the query derived for it. */
+export function partSubLabel(netMinor: number): string {
+  if (Math.abs(netMinor) < 1) return "";
+  return netMinor < 0 ? "you owe" : "owes you";
+}
 
 export const IOU_TITLE = "An IOU recorded in People";
 export const IOU_META =
@@ -289,7 +331,7 @@ export const ROUTE_STATUS = {
   friend:
     "Groups, group-less expenses and People's obligations, added up here and nowhere else",
   expense: "Every edit is a revision · undo is one shot, in the window here",
-  add: "Three split methods are backed today · three are engineering asks",
+  add: "Six ways to divide it · the method is recorded with the shares",
   receipt:
     "Photograph and OCR happen on the phone · the allocation is what Tally owns",
   settle:
@@ -334,10 +376,21 @@ export const SPEND_ROWS = {
   difference: "The difference",
 } as const;
 
+export const ARCHIVED_META = "archived · out of the lists, everything kept";
 export const DEPARTED_META =
   "departed · kept on the ledger with the balance they left";
 export const ON_THE_LEDGER = "on the ledger · cannot be removed";
 export const CO_CONTRIBUTES = "co-contributes from their own vault";
+
+/** A row that has gone quiet, in days — the stale balance a nudge is for. */
+export function owedFor(days: number): string {
+  return `owed ${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/** A reminder ALWAYS parks: this app has no delivery path, and the record is
+ *  the intention. The sentence never says "sent", in any tense. */
+export const NUDGE_PARKED =
+  "Prepared, awaiting your confirmation · nothing is sent from here";
 
 export function memberCount(count: number): string {
   return `${count} ${count === 1 ? "member" : "members"}`;
@@ -349,10 +402,11 @@ export function sharedExpenseCount(count: number): string {
   return `${count} shared ${count === 1 ? "expense" : "expenses"}`;
 }
 
-/** The one part of a friend's net Tally cannot yet open: the query returns the
- *  net whole, so a per-part figure would have to be re-derived here. */
+/** Every part carries its own figure now, derived by the same fold that
+ *  produced the net — so the claim the section makes is checkable by adding
+ *  the rows up. */
 export const FRIEND_PARTS_NOTE =
-  "The net above is the sum of these parts · a figure per part is an engineering ask";
+  "The net above is these parts added up · each one is derived from the same facts";
 
 export function paidBy(name: string, isMe: boolean): string {
   return isMe ? "you paid" : `${name} paid`;

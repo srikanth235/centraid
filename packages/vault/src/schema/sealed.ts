@@ -60,6 +60,22 @@ import { KeyStore } from "./key-store.js";
  */
 export const SEALED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   "locker.item": ["password", "otp_seed", "card_number", "cvv", "content"],
+  // Locker's sealed sidecars (#872). The list stays TIGHT on purpose — one
+  // column per table, and only where the value IS the secret:
+  //  - `item_field.value_sealed` is the owner-defined custom field whose kind
+  //    is `sealed`; its sibling `value_text` carries every non-secret kind and
+  //    stays readable and browsable (the schema CHECK keeps them apart).
+  //  - `item_history.password` is a PREVIOUS password. A rotated secret is
+  //    still a secret, and history that stored it in the clear would make the
+  //    reveal boundary a thing the current row has and the old ones do not.
+  //  - `item_passkey.private_key` is the key material; the passkey's rp id,
+  //    user handle and creation date are metadata and stay plain, which is
+  //    what lets the item pane show the slot without unsealing anything.
+  // Nothing else on these tables is sealed: labels, sections, addresses and
+  // match policies are the browsable half Locker's whole premise rests on.
+  "locker.item_field": ["value_sealed"],
+  "locker.item_history": ["password"],
+  "locker.item_passkey": ["private_key"],
   // Broker-owned credentials (#304): tokens live on the connection's
   // credential sidecar so the gateway broker can inject them; every read
   // surface shows a placeholder and reseal covers them like any secret cell.
@@ -163,6 +179,15 @@ export const SEALED_PAYLOAD_FIELDS: Readonly<
     "cvv",
     "content",
   ],
+  // Locker's sealed sidecars (#872) stage like the item does. A sidecar has
+  // no publisher registered today, which is exactly why it is listed: the
+  // draft band is a generic persistence boundary, so an importer that learns
+  // to carry custom fields, password history or passkey material must find
+  // the seal already in front of it rather than leave the secret in a draft
+  // row until a publisher shows up.
+  "locker.item_field": ["value_sealed", "valueSealed"],
+  "locker.item_history": ["password"],
+  "locker.item_passkey": ["private_key", "privateKey"],
   "sync.connection_credential": [
     "client_secret",
     "access_token",

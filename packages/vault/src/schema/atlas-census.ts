@@ -16,7 +16,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { countRows } from "./atlas-graph.js";
+import { countRowsBatched } from "./atlas-graph.js";
 import { atlasTables } from "./atlas.js";
 import type { AtlasPackKind } from "./atlas.js";
 import { dbSizeBreakdown } from "./table-stats.js";
@@ -111,20 +111,29 @@ export function atlasCensus(
   let kinds = 0;
   let populatedKinds = 0;
 
-  for (const entry of atlasTables()) {
-    // Grant-plane tables ride the canonical registry (export/replica) but
-    // are not COUNTed on Atlas first paint. Their row counts belong with
-    // the graph, which is already loaded after first paint; the grant
-    // surfaces already answer "how many grants". Two extra COUNT(*) would
-    // push the first-paint SQL budget past 140 (#825).
-    if (
-      entry.logical === "share.grant" ||
-      entry.logical === "share.fulfillment"
-    ) {
-      continue;
-    }
-    const db = entry.file === "vault" ? vault : journal;
-    const rows = countRows(db, entry.physical);
+  // Grant-plane tables ride the canonical registry (export/replica) but are not
+  // COUNTed on Atlas first paint. Their row counts belong with the graph, which
+  // is already loaded after first paint; the grant surfaces already answer "how
+  // many grants" (#825).
+  const entries = atlasTables().filter(
+    (entry) =>
+      entry.logical !== "share.grant" && entry.logical !== "share.fulfillment"
+  );
+  // Counted per FILE, in one compound statement per file, so registering a
+  // table costs the census a COUNT(*) scan but never a new statement (#873).
+  const countsByFile = {
+    vault: countRowsBatched(
+      vault,
+      entries.filter((e) => e.file === "vault").map((e) => e.physical)
+    ),
+    journal: countRowsBatched(
+      journal,
+      entries.filter((e) => e.file === "journal").map((e) => e.physical)
+    ),
+  };
+
+  for (const entry of entries) {
+    const rows = countsByFile[entry.file].get(entry.physical) ?? 0;
     const size = method === "dbstat" ? bytesOf.get(entry.physical) : undefined;
     const bytes = size?.bytes ?? null;
     const pages = size?.pages ?? null;

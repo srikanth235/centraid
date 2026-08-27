@@ -24,6 +24,12 @@ describe("locker-online-only", () => {
     expect(addItemWrite(draft).onlineOnly).toBe(true);
     expect(editItemWrite({ ...draft, itemId: "item-1" }).onlineOnly).toBe(true);
     expect(starWrite("item-1", false).onlineOnly).toBeUndefined();
-    expect(ONLINE_ONLY_ACTIONS).toStrictEqual(["add-item", "edit-item"]);
+    expect(ONLINE_ONLY_ACTIONS).toStrictEqual([
+      "add-item",
+      "edit-item",
+      "set-field",
+      "set-passkey",
+      "export",
+    ]);
   });
 });

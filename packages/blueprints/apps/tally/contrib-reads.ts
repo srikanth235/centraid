@@ -21,6 +21,8 @@ export interface ContribReads {
   sections: ContribSections;
   /** Does this host hold an approval inbox at all? */
   hasApprovals: boolean;
+  /** Does it hold the per-intent Approve/Decline door? */
+  canDecide: boolean;
 }
 
 export function useContribReads(args: {
@@ -62,6 +64,7 @@ export function useContribReads(args: {
 
   const client = window.centraid;
   const hasApprovals = typeof client.openApprovals === "function";
+  const canDecide = typeof client.decideCommonsIntent === "function";
 
   const sections = useMemo(
     () =>
@@ -74,10 +77,11 @@ export function useContribReads(args: {
           retry: typeof client.retryPendingWrite === "function",
           discard: typeof client.discardPendingWrite === "function",
           approvals: typeof client.openApprovals === "function",
+          decide: typeof client.decideCommonsIntent === "function",
         },
       }),
     [client, intents, me, names]
   );
 
-  return { sections, hasApprovals };
+  return { sections, hasApprovals, canDecide };
 }

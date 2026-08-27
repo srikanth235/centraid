@@ -6,23 +6,36 @@
 // who appears anywhere on this ledger cannot be removed, because removing them
 // would make the arithmetic unreadable — they are marked departed instead.
 //
-// FRIEND. Every part of one net, openable. The parts Tally can show today are
-// the GROUPS the two of you share and the expenses with no group, each opening
-// the ledger where its own figure is derived, plus the standing obligation
-// People holds — which Tally reads and never writes.
+// FRIEND. Every part of one net, openable, each with the figure that part
+// contributes: the GROUPS the two of you share, what is outside every group,
+// and the standing obligation People holds — which Tally reads and never
+// writes.
 //
-// WHY THE PARTS CARRY NO FIGURE OF THEIR OWN. `queries/friend.ts` returns the
-// net whole. Splitting it per group here would mean a second balance engine in
-// the interface, computing from the shared expenses it happens to have loaded
-// — which is exactly the thing this app does not do. The parts are therefore
-// named, counted and openable, and the note under them says the per-part
-// figure is an engineering ask rather than quietly showing a wrong one.
+// THE PART FIGURES ARE THE QUERY'S. `queries/friend.ts` folds them with the
+// same `pairwise` engine that produced the net, scoped per group, and returns
+// `parts[]` — so the parts sum to the net by construction rather than by a
+// second balance engine in the interface computing from whichever expenses
+// this route happened to load.
+//
+// THE GROUP'S OWN ACTS ARE ON ITS LEDGER: leave, archive, export, and the
+// simplification opt-in. Each is a real write; the two that change what a
+// member owes ask first, in the confirm's own words.
 import type { ReactNode } from "react";
 
 import { appearsOnLedger } from "../activity-model.ts";
 import {
+  SIMPLIFICATION,
+  SIMPLIFY_NONE,
+  SIMPLIFY_OFF,
+  SIMPLIFY_STOP,
+  simplifyChanged,
+  transferLine,
+} from "../compose-copy.ts";
+import { entryFacts } from "../entry-facts.ts";
+import {
   figureTone,
   metaSentence,
+  money,
   netFigure,
   personSubLabel,
 } from "../format.ts";
@@ -46,7 +59,6 @@ import {
   IOU_META,
   IOU_TITLE,
   ON_THE_LEDGER,
-  OUTSIDE_ANY_GROUP,
   SECTIONS,
   SECTION_META,
   VERBS,
@@ -54,13 +66,21 @@ import {
   friendHeroOwe,
   friendHeroOwed,
   memberCount,
+  partSubLabel,
   sharedExpenseCount,
 } from "../view-copy.ts";
 import { Hero, Note, Rows, Section } from "./Blocks.tsx";
-import { EntryRow, entryFacts } from "./EntryRow.tsx";
+import { EntryRow } from "./EntryRow.tsx";
 import { LedgerRow } from "./LedgerRow.tsx";
 
 import styles from "./Ledger.module.css";
+
+/** Whoever a transfer runs between, named off the members the query derived. */
+function nameOfMember(data: GroupData, partyId: string): string {
+  return (
+    data.members.find((member) => member.party_id === partyId)?.name ?? partyId
+  );
+}
 
 export interface GroupLedgerProps {
   data: GroupData;
@@ -75,6 +95,10 @@ export interface GroupLedgerProps {
   /** The vault refuses a group that still holds expenses; the confirm puts the
    *  refusal in front of the question where this ledger already knows it. */
   onDelete: () => void;
+  onLeave: () => void;
+  onArchive: () => void;
+  /** Turn simplification on or off. Off by default, always. */
+  onSimplify: (simplify: boolean) => void;
 }
 
 export function GroupLedger(props: GroupLedgerProps): ReactNode {
@@ -100,6 +124,15 @@ export function GroupLedger(props: GroupLedgerProps): ReactNode {
         sub={GROUP_HERO_SUB}
         acts={[
           { label: VERBS.settleUp, run: props.onSettle },
+          {
+            label: data.group.simplify_opt_in ? SIMPLIFY_STOP : VERBS.simplify,
+            run: () => props.onSimplify(!data.group?.simplify_opt_in),
+          },
+          { label: VERBS.leave, run: props.onLeave },
+          {
+            label: data.group.archived_at ? VERBS.unarchive : VERBS.archive,
+            run: props.onArchive,
+          },
           // DESTRUCTIVE IS OUTLINED, never filled, and it sits beside the
           // group's own figure because that is where the group IS.
           {
@@ -109,6 +142,44 @@ export function GroupLedger(props: GroupLedgerProps): ReactNode {
           },
         ]}
       />
+
+      {/* THE PROPOSAL LIVES BESIDE THE LEDGER IT REWIRES. Off is the default
+          and stays a stated fact; on shows what it changed, in this group's
+          own figures, and nothing about it is written. */}
+      {data.simplification ? (
+        <Section
+          label={SECTIONS.simplification}
+          meta={SECTION_META.simplification}
+          count={data.simplification.transfers.length}
+          empty={data.simplification.opted_in ? SIMPLIFY_NONE : SIMPLIFY_OFF}
+          narrow={props.narrow}
+        >
+          <Rows>
+            {data.simplification.transfers.map((transfer) => (
+              <LedgerRow
+                key={`${transfer.from}-${transfer.to}-${transfer.amount_minor}`}
+                title={transferLine(
+                  nameOfMember(data, transfer.from),
+                  nameOfMember(data, transfer.to),
+                  money(transfer.amount_minor, data.currency)
+                )}
+                narrow={props.narrow}
+              />
+            ))}
+          </Rows>
+          <Note>
+            {data.simplification.opted_in
+              ? metaSentence([
+                  SIMPLIFICATION,
+                  simplifyChanged(
+                    data.simplification.debts_before,
+                    data.simplification.payments_after
+                  ),
+                ])
+              : SIMPLIFICATION}
+          </Note>
+        </Section>
+      ) : null}
 
       <Section
         label={SECTIONS.members}
@@ -209,21 +280,10 @@ export function FriendScreen(props: FriendScreenProps): ReactNode {
     props.groups.map((group) => [group.group_id, group.name])
   );
 
-  // The parts, counted off the shared ledger the query returned. A COUNT is
-  // not a balance: it says how much of the net is behind each part without
-  // claiming to know how much of it, which the query does not report.
-  const perGroup = new Map<string, number>();
-  for (const entry of data.ledger) {
-    const key = entry.group_id || "";
-    perGroup.set(key, (perGroup.get(key) ?? 0) + 1);
-  }
-  const parts = [...perGroup.entries()].map(([groupId, count]) => ({
-    groupId,
-    count,
-    name: groupId
-      ? (nameOf.get(groupId) ?? SECTIONS.groups)
-      : OUTSIDE_ANY_GROUP,
-  }));
+  // EVERY PART IS THE QUERY'S OWN FOLD. `friend.parts` names each group, the
+  // group-less rows, and the figure each contributes — derived by the same
+  // engine that produced the net above, so the rows add up to it.
+  const parts = data.friend.parts ?? [];
 
   return (
     <div className={styles.list}>
@@ -250,12 +310,16 @@ export function FriendScreen(props: FriendScreenProps): ReactNode {
         <Rows>
           {parts.map((part) => (
             <LedgerRow
-              key={part.groupId || "no-group"}
-              title={part.name}
-              meta={sharedExpenseCount(part.count)}
+              key={part.group_id ?? "no-group"}
+              title={part.group_name}
+              figure={{
+                text: netFigure(part.net_minor, data.currency),
+                tone: figureTone(part.net_minor),
+                sub: partSubLabel(part.net_minor),
+              }}
               narrow={props.narrow}
-              {...(part.groupId
-                ? { onOpen: () => props.onOpenGroup(part.groupId) }
+              {...(part.group_id
+                ? { onOpen: () => props.onOpenGroup(part.group_id as string) }
                 : {})}
             />
           ))}
@@ -280,7 +344,7 @@ export function FriendScreen(props: FriendScreenProps): ReactNode {
               facts={entryFacts(entry)}
               currency={data.currency}
               me={data.me}
-              {...(nameOf.get(entry.group_id)
+              {...(entry.group_id && nameOf.get(entry.group_id)
                 ? { groupName: nameOf.get(entry.group_id) }
                 : {})}
               narrow={props.narrow}

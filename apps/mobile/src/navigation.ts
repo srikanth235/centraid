@@ -13,6 +13,8 @@ import type {
   NativeStackScreenProps,
 } from "@react-navigation/native-stack";
 
+import type { LockerItemType } from "@centraid/blueprints/apps/locker/types";
+
 export type PhotosStackParamList = {
   // Band shelf on this screen (do not push a second copy). `more` is a sheet, never a destination.
   // Longhand, not `Exclude<BandDestinationKey, "more">`: the frame may not import an app
@@ -80,11 +82,12 @@ export type LockerStackParamList = {
     | undefined;
   // Title and type ride along so the app bar and the permit gate need no
   // replica round-trip — and so the gate can name the field this TYPE seals
-  // before any read has happened.
+  // before any read has happened. Never restate the union here: an unfamiliar
+  // type must still reach the item screen, which degrades it.
   LockerItem: {
     itemId: string;
     title: string;
-    type: "login" | "card" | "note" | "identity" | "wifi" | "password";
+    type: LockerItemType;
   };
   // No `itemId` means a new item. `generated` seeds the password field from
   // the generator's "Put it on an item".

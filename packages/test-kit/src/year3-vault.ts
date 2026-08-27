@@ -127,6 +127,69 @@ export function seedYear3Vault(
        VALUES (?, 'login', 'Year 3 sealed canary', ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(lockerId, ...lockerValues, at(1), at(1));
+  // Locker's sealed sidecars (#872). Each hangs off the canary item above and
+  // seals under its OWN row id — the AAD is `table.column:rowid`, so a field's
+  // ciphertext is bound to its `field_id`, a history row's to its
+  // `revision_id`, and the passkey's to the `item_id` that is its primary key.
+  // Seeding them here is what lets the T3 canary prove the three new columns
+  // reach all six enforcement points rather than merely being declared.
+  const fieldId = "year3-sealed-field";
+  target.vault
+    .prepare(
+      `INSERT INTO locker_item_field
+       (field_id, item_id, section, label, kind, value_text, value_sealed,
+        position, created_at, updated_at)
+       VALUES (?, ?, '', 'Year 3 sealed field', 'sealed', NULL, ?, 0, ?, ?)`
+    )
+    .run(
+      fieldId,
+      lockerId,
+      target.sealCell(
+        "locker.item_field",
+        "value_sealed",
+        fieldId,
+        profile.sealedSentinels["locker.item_field.value_sealed"]!
+      ),
+      at(1),
+      at(1)
+    );
+  const revisionId = "year3-sealed-revision";
+  target.vault
+    .prepare(
+      `INSERT INTO locker_item_history
+       (revision_id, item_id, operation, title, password, changed_json, recorded_at)
+       VALUES (?, ?, 'update', 'Year 3 sealed canary', ?, '{"password":true}', ?)`
+    )
+    .run(
+      revisionId,
+      lockerId,
+      target.sealCell(
+        "locker.item_history",
+        "password",
+        revisionId,
+        profile.sealedSentinels["locker.item_history.password"]!
+      ),
+      at(1)
+    );
+  target.vault
+    .prepare(
+      `INSERT INTO locker_item_passkey
+       (item_id, rp_id, user_handle, display_name, credential_id, algorithm,
+        private_key, created_at, updated_at)
+       VALUES (?, 'year3.example', 'year3-handle', 'Year 3 passkey',
+               'year3-credential', 'ES256', ?, ?, ?)`
+    )
+    .run(
+      lockerId,
+      target.sealCell(
+        "locker.item_passkey",
+        "private_key",
+        lockerId,
+        profile.sealedSentinels["locker.item_passkey.private_key"]!
+      ),
+      at(1),
+      at(1)
+    );
   const connectionId = "year3-sealed-connection";
   target.vault
     .prepare(
@@ -243,6 +306,13 @@ export function year3VaultProfile(
       "locker.item.card_number": sentinel("locker.item.card_number"),
       "locker.item.cvv": sentinel("locker.item.cvv"),
       "locker.item.content": sentinel("locker.item.content"),
+      "locker.item_field.value_sealed": sentinel(
+        "locker.item_field.value_sealed"
+      ),
+      "locker.item_history.password": sentinel("locker.item_history.password"),
+      "locker.item_passkey.private_key": sentinel(
+        "locker.item_passkey.private_key"
+      ),
       "sync.connection_credential.client_secret": sentinel(
         "sync.connection_credential.client_secret"
       ),

@@ -11,15 +11,20 @@ import {
   addExpenseWrite,
   addFriendWrite,
   addMemberWrite,
+  archiveGroupWrite,
   createGroupWrite,
   deleteGroupWrite,
   editExpenseWrite,
   editOccurrenceWrite,
+  leaveGroupWrite,
   materializeWrite,
+  nudgeWrite,
+  reallocateReceiptWrite,
   removeMemberWrite,
   renameGroupWrite,
   restoreExpenseWrite,
   saveRecurringWrite,
+  setSimplificationWrite,
   settleUpWrite,
   trashExpenseWrite,
   undoExpenseWrite,
@@ -151,6 +156,90 @@ describe("the acts this wave can take", () => {
         template_id: "r1",
         original_start: "2026-09-01T09:00:00.000Z",
       },
+    });
+  });
+
+  it("re-cuts a receipt's lines and its shares in ONE write", () => {
+    // The lines and the shares are one fact; two writes would let the vault
+    // hold a cut whose lines and shares disagree.
+    expect(
+      reallocateReceiptWrite({
+        expenseId: "x1",
+        lineItems: [
+          {
+            kind: "item",
+            description: "Wine",
+            amount_minor: 6000,
+            allocations: [{ party_id: "me", share_minor: 6000 }],
+          },
+        ],
+        splits: [{ party_id: "me", share_minor: 6000 }],
+      })
+    ).toStrictEqual({
+      action: "reallocate-receipt",
+      input: {
+        expense_id: "x1",
+        line_items: [
+          {
+            kind: "item",
+            description: "Wine",
+            amount_minor: 6000,
+            allocations: [{ party_id: "me", share_minor: 6000 }],
+          },
+        ],
+        splits: [{ party_id: "me", share_minor: 6000 }],
+      },
+    });
+  });
+
+  it("stores the simplification opt-in flag, and nothing else", () => {
+    expect(setSimplificationWrite("flat", true)).toStrictEqual({
+      action: "set-group-simplification",
+      input: { group_id: "flat", simplify: true },
+    });
+  });
+
+  it("leaves a group, defaulting to the owner when no party is named", () => {
+    expect(leaveGroupWrite("flat")).toStrictEqual({
+      action: "leave-group",
+      input: { group_id: "flat" },
+    });
+    expect(leaveGroupWrite("flat", "ana").input).toStrictEqual({
+      group_id: "flat",
+      party_id: "ana",
+    });
+  });
+
+  it("archives and un-archives with the same write and the other boolean", () => {
+    expect(archiveGroupWrite("flat", true)).toStrictEqual({
+      action: "archive-group",
+      input: { group_id: "flat", archived: true },
+    });
+    expect(archiveGroupWrite("flat", false).input).toStrictEqual({
+      group_id: "flat",
+      archived: false,
+    });
+  });
+
+  it("prepares a reminder, carrying only what the member gave it", () => {
+    expect(
+      nudgeWrite({ partyId: "tom", groupId: null, asOfMinor: 8100 })
+    ).toStrictEqual({
+      action: "nudge",
+      input: { party_id: "tom", as_of_minor: 8100 },
+    });
+    expect(
+      nudgeWrite({
+        partyId: "tom",
+        groupId: "flat",
+        asOfMinor: 8100,
+        note: "  before the trip  ",
+      }).input
+    ).toStrictEqual({
+      party_id: "tom",
+      as_of_minor: 8100,
+      group_id: "flat",
+      note: "before the trip",
     });
   });
 });

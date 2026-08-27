@@ -12,6 +12,7 @@
 // keeps "one at a time" true by construction rather than by care.
 import type { ReactNode } from "react";
 
+import { NUDGE_BODY, NUDGE_COMMIT, nudgeTitle } from "../compose-copy.ts";
 import type { Overlay } from "../compose-state.ts";
 import { moreMeta } from "../route-copy.ts";
 import { MORE_SHELVES, shelfLabel } from "../shelves.ts";
@@ -19,12 +20,15 @@ import type { ShelfId } from "../shelves.ts";
 import type { Person } from "../types.ts";
 import {
   ARCHIVE_BODY,
+  ARCHIVE_BODY_2,
   ARCHIVE_TITLE,
-  ARCHIVE_UNBUILT,
   LEAVE_BODY,
+  LEAVE_BODY_2,
   LEAVE_TITLE,
-  LEAVE_UNBUILT,
+  NUDGE_PARKED,
   REMOVE_BODY,
+  UNARCHIVE_BODY,
+  UNARCHIVE_TITLE,
   VERBS,
   removeAsk,
   removeRefused,
@@ -69,20 +73,50 @@ export function Overlays(props: OverlaysProps): ReactNode {
     );
   }
 
-  if (open.kind === "leave" || open.kind === "archive") {
-    // DRAWN AGAINST THE ASK. Both acts are engineering asks, so the confirm
-    // states the consequence the backend will have to honour and its commit
-    // carries the reason it cannot fire — rather than firing into nothing.
-    const leaving = open.kind === "leave";
+  if (open.kind === "leave") {
+    // THE §6 SENTENCE, IN TWO PARTS. It renders as one paragraph and one
+    // trailing line, so a member reads the handoff's copy unaltered; holding
+    // it as two literals is what keeps each of them a single claim.
     return (
       <Confirm
-        title={leaving ? LEAVE_TITLE : ARCHIVE_TITLE}
-        body={leaving ? LEAVE_BODY : ARCHIVE_BODY}
-        commitLabel={leaving ? VERBS.leave : VERBS.archive}
-        disabledReason={leaving ? LEAVE_UNBUILT : ARCHIVE_UNBUILT}
+        title={LEAVE_TITLE}
+        body={LEAVE_BODY}
+        note={LEAVE_BODY_2}
+        commitLabel={VERBS.leave}
         cancelLabel={VERBS.close}
         onCancel={props.onClose}
-        onConfirm={props.onClose}
+        onConfirm={props.onCommit}
+      />
+    );
+  }
+
+  if (open.kind === "archive") {
+    const back = open.archived;
+    return (
+      <Confirm
+        title={back ? UNARCHIVE_TITLE : ARCHIVE_TITLE}
+        body={back ? UNARCHIVE_BODY : ARCHIVE_BODY}
+        {...(back ? {} : { note: ARCHIVE_BODY_2 })}
+        commitLabel={back ? VERBS.unarchive : VERBS.archive}
+        cancelLabel={VERBS.close}
+        onCancel={props.onClose}
+        onConfirm={props.onCommit}
+      />
+    );
+  }
+
+  if (open.kind === "nudge") {
+    // IT ALWAYS PARKS, and the confirm says so BEFORE the press. A reminder
+    // this app could send would be a delivery path this product does not have.
+    return (
+      <Confirm
+        title={nudgeTitle(open.name)}
+        body={NUDGE_BODY}
+        note={NUDGE_PARKED}
+        commitLabel={NUDGE_COMMIT}
+        cancelLabel={VERBS.close}
+        onCancel={props.onClose}
+        onConfirm={props.onCommit}
       />
     );
   }

@@ -11,10 +11,14 @@
 // already decides that a denied write may be retried and an expired one may
 // only be discarded; the door those verbs go through is `window.centraid`'s
 // (`retryPendingWrite`, `discardPendingWrite`, `cancelCommonsIntent`,
-// `openApprovals`). This module maps one to the other and NOTHING else — in
-// particular it never invents an Accept or a Decline, because no per-intent
-// approval door exists on the app client: a steward answers in the shell's own
-// Approvals inbox, and the row says so and hands over.
+// `decideCommonsIntent`, `openApprovals`). This module maps one to the other
+// and NOTHING else.
+//
+// APPROVE AND DECLINE ARE THE STEWARD'S ANSWER, and they are drawn only where
+// `decideCommonsIntent` exists. A host without that door draws neither — no
+// fallback, no "open the inbox instead" standing in for a verb that cannot
+// fire (protocol C1). Where the host holds an approval inbox as well, Review
+// stays beside them, because an inbox answers questions this row cannot.
 //
 // EMPTY IS THE HEALTHY STATE. Three empty sections are the ordinary Tuesday,
 // so each says so in its own words rather than the screen collapsing to one
@@ -36,7 +40,13 @@ export interface Intent {
 
 /** What a row offers. Each maps to exactly one door on `window.centraid`; a
  *  verb whose door the host does not provide is not drawn at all. */
-export type ContribVerb = "cancel" | "retry" | "discard" | "approvals";
+export type ContribVerb =
+  | "cancel"
+  | "retry"
+  | "discard"
+  | "approvals"
+  | "approve"
+  | "decline";
 
 export type ContribSection = "waiting" | "inFlight" | "ended";
 
@@ -109,6 +119,9 @@ function verbsFor(
   doors: ContribDoors
 ): ContribVerb[] {
   const out: ContribVerb[] = [];
+  // THE STEWARD'S OWN ANSWER, first, because it is the act the row is for.
+  if (intent.status === "parked" && !mine && doors.decide)
+    out.push("approve", "decline");
   if (intent.status === "parked" && !mine && doors.approvals)
     out.push("approvals");
   if (
@@ -135,6 +148,8 @@ export interface ContribDoors {
   retry: boolean;
   discard: boolean;
   approvals: boolean;
+  /** `decideCommonsIntent` — the per-intent Approve/Decline door. */
+  decide: boolean;
 }
 
 function sectionOf(intent: Intent, mine: boolean): ContribSection | null {

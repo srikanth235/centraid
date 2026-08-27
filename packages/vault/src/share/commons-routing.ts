@@ -197,9 +197,24 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   tallyGroup("tally.add_receipt_expense"),
   tallyGroup("tally.delete_group"),
   tallyGroup("tally.save_recurring_expense"),
+  // Archiving hides the group from every member's lists and turning
+  // simplification on rewires who owes whom — both are the steward's call
+  // about the container itself, not a member's write inside it.
+  tallyGroup("tally.archive_group"),
+  tallyGroup("tally.set_group_simplification"),
+  // Leaving is remove_group_member WITHOUT the on-ledger guard, so declaring
+  // it would hand every member an eject verb the guarded one refuses. It stays
+  // refused by name; a shared departure is the steward's act.
+  tallyGroup("tally.leave_group"),
+  // A prepared reminder is the owner's own intention about a person, and it
+  // carries `confirm: true` regardless — it is never a shared write.
+  tallyGroup("tally.nudge"),
   tallyExpense("tally.bind_txn"),
   tallyExpense("tally.set_expense_memo"),
   tallyExpense("tally.undo_expense"),
+  // Re-allocation rewrites every member's share of an expense already agreed.
+  // Same stance as add_receipt_expense: routed so the refusal names it.
+  tallyExpense("tally.reallocate_receipt"),
 
   // Documents/folders: enclosing shared folder first, then the document's own grant.
   onFolder("core.add_document", "folder_id", true),
@@ -249,6 +264,18 @@ export const COMMONS_COMMAND_ROUTES: readonly CommonsCommandRoute[] = [
   onAsset("media.update_asset"),
   onAsset("enrich.upsert_faces", "enrich"),
 
+  // Locker items are single-vault — none of these is declared actable, so the
+  // rail refuses them by NAME rather than letting a write land privately.
+  // Every command carrying `item_id` must be here (#750 conformance), which
+  // is why the #872 surface joins the list rather than quietly bypassing it.
+  onLockerItem("locker.archive_item"),
+  onLockerItem("locker.clear_passkey"),
+  onLockerItem("locker.duplicate_item"),
+  onLockerItem("locker.remove_field"),
+  onLockerItem("locker.set_addresses"),
+  onLockerItem("locker.set_field"),
+  onLockerItem("locker.set_passkey"),
+  onLockerItem("locker.unarchive_item"),
   onLockerItem("locker.edit_item"),
   onLockerItem("locker.purge_item"),
   onLockerItem("locker.restore_item"),

@@ -14,16 +14,38 @@
 // because their surfaces did not exist yet; they are back, unaltered, beside
 // the surfaces that carry them.
 //
-// A GAP TAG IS ON THE SURFACE, not only in the register. A reviewer reading
-// this app should be able to see the scope without opening `GAPS.md`, which is
-// why `[backend-needed]` and `[open-question]` are written into the field notes
-// rather than kept as a comment.
+// NO GAP TAG SURVIVES HERE. Every capability these surfaces name is now
+// backed by a command or a query the app actually calls, so the field notes
+// carry the RULE rather than the register: what the vault checks, what a
+// method means, where a write lands. A tag left standing over a wired control
+// would be the same lie in the other direction.
 
 // ------------------------------------------------------- the §6 verbatim six
 
-/** Add expense → Currency. There is no rate provider anywhere in this path. */
+/**
+ * Add expense → Currency. There is no rate provider anywhere in this path.
+ *
+ * HELD AS TWO LITERALS, rendered one after the other: the §6 note is two
+ * claims — where the rate came from, and that nothing supplies one — and the
+ * copy rule this repo enforces is that a string carries a single thought. What
+ * a member reads is the handoff's sentence pair, unaltered.
+ */
 export const CURRENCY_NOTE =
-  "The rate is supplied at entry, with its source and date; there is no rate provider.";
+  "The rate is supplied at entry, with its source and date.";
+export const CURRENCY_NOTE_2 =
+  "There is no rate provider, and the vault works with none.";
+
+/** Add expense → Currency, beside a pair this vault has already been told a
+ *  rate for. ADDITIVE: the manual flow is the primary path and stands alone. */
+export const RATE_SUGGESTION_NOTE =
+  "A rate this vault was already given for the same pair · press to fill it in";
+export function rateSuggestionChip(
+  rate: string,
+  source: string,
+  date: string
+): string {
+  return `${rate} · ${source} · ${date}`;
+}
 
 /** Recurring → a rule the summariser cannot phrase. No preview at all, and it
  *  says why — raw rule syntax on a member-facing surface is banned outright. */
@@ -62,6 +84,8 @@ export const FIELD_KEYS = {
   when: "When",
   currency: "Currency",
   divided: "Divided",
+  payers: "Who put money down",
+  lines: "The lines",
   yourShare: "Your share",
   memo: "Memo",
   receipt: "Receipt",
@@ -91,18 +115,22 @@ export const PLACEHOLDERS = {
   rateSource: "read off the receipt",
   friend: "Their name",
   group: "14 Sitwell Road",
+  line: "Two flat whites",
 } as const;
 
 export const FIELD_NOTES = {
   paidBy: "A payer must be a member of the group, re-validated by the vault.",
   group:
-    "No group is a friend-to-friend expense. Settlements already work without one; expenses are [open-question] — the command requires a group.",
+    "No group is a friend-to-friend expense · participants are checked against the friend roster instead of a circle.",
   category: "Nine, closed — Spending reads this and nothing else.",
   when: "Today, unless it was not today.",
   settlementCurrency: "The settlement currency of the group.",
   divided:
-    "Three of these six exist in the vault today — the other three are engineering asks.",
+    "The method is recorded beside the shares, so an edit re-opens the way it was entered.",
   alloc: "Who it is divided between",
+  payers:
+    "Several payers each put down their part, and the parts sum to the total.",
+  lines: "Type the lines, then press whoever was on each of them.",
 } as const;
 
 export const CURRENCY_CHIPS = {
@@ -118,6 +146,14 @@ export const WHEN_CHIPS = {
 
 export const NO_GROUP_LABEL = "No group";
 
+/** The typed-lines table's own verbs and marks. */
+export const LINE_VERBS = {
+  add: "Add a line",
+  remove: "Remove",
+  paidItAll: "paid all of it",
+  whoWasOn: "Who was on",
+} as const;
+
 /** Where the write lands, said BEFORE the commit rather than after it. */
 export function addFoot(groupName: string | null): string {
   const where = groupName ?? NO_GROUP_LABEL;
@@ -132,9 +168,8 @@ export const CANCEL = "Cancel";
 
 export const EXPENSE_NOTES = {
   paidBy:
-    "One payer per expense today. Two people splitting the bill at the till is [backend-needed].",
-  divided:
-    "Equally, exact amounts and percentages are the three the vault validates. Shares, adjustments and typed line items are [backend-needed].",
+    "Several people can front one expense · each is owed back the part they put down.",
+  divided: "The recorded method, with the numbers that produced these shares.",
   yourShare: "Derived here from this expense alone; no share is stored.",
   group:
     "A group is a shared circle of the superapp — the same circle Photos and Docs share to.",
@@ -193,6 +228,9 @@ export const LIFE_ACTS = {
   trash: "Trash",
 } as const;
 
+/** The mark on a split row belonging to somebody who fronted part of it. */
+export const PAID_IT = "paid it";
+
 export const TRASH_TITLE = "Trash this expense?";
 
 // -------------------------------------------------------------- the receipt
@@ -205,8 +243,6 @@ export const RECEIPT_LEDE_OTHER =
 export const RECEIPT_SHOT_ALT = "The receipt";
 export const RECEIPT_SHOT_ABSENT = "the photograph · a document in the vault";
 export const RECEIPT_COMMIT = "Save allocation";
-export const RECEIPT_UNBUILT =
-  "Re-allocating a receipt already in the vault is an engineering ask [backend-needed]";
 export const RECEIPT_NONE =
   "This expense has no receipt — capture belongs to the phone.";
 export function unallocatedLines(count: number): string {
@@ -234,10 +270,22 @@ export const SETTLE_FOOT_THEIRS =
   "neither party is you · no ledger entry, balances only";
 export const SIMPLIFY_HEAD = "To zero everything out";
 export const SIMPLIFY_COMMIT = "Turn it on";
-export const SIMPLIFY_UNBUILT =
-  "A minimal-transfer engine is an engineering ask [backend-needed]";
 export const SIMPLIFY_OFF =
   "Off for this group · debts read as they were incurred";
+export const SIMPLIFY_ON = "On for this group · the proposal is below";
+export const SIMPLIFY_STOP = "Turn it off";
+/** What it CHANGED, in the group's own figures. The §6 sentence states the
+ *  shape; this states the instance, because a proposal that did not say what
+ *  it rewired would be exactly the silent re-wiring the ruling forbids. */
+export function simplifyChanged(before: number, after: number): string {
+  const debts = `${before} ${before === 1 ? "debt becomes" : "debts become"}`;
+  const payments = `${after} ${after === 1 ? "payment" : "payments"}`;
+  return `${debts} ${payments}`;
+}
+export const SIMPLIFY_NONE = "Nothing to rewire · this group is already level";
+export function transferLine(from: string, to: string, amount: string): string {
+  return `${from} pays ${to} ${amount}`;
+}
 
 // --------------------------------------------------------------- recurring
 
@@ -294,14 +342,25 @@ export const CONTRIB_VERBS = {
   retry: "Retry",
   discard: "Discard",
   approvals: "Review",
+  approve: "Approve",
+  decline: "Decline",
 } as const;
-/** Accept and Decline are the steward's answer, and the app client has no
- *  per-intent door for either — the shell's Approvals inbox does. The row says
- *  where the answer is given rather than drawing two buttons that cannot. */
-export const CONTRIB_APPROVALS_NOTE =
-  "Accept and Decline are given in Approvals · no per-intent door reaches this app [backend-needed]";
 export const CONTRIB_NO_DOOR =
   "This host holds no approval inbox, so the act waits where it is";
+/** Reminders the owner PREPARED. Nothing here was ever sent — Tally has no
+ *  delivery path, and the record is the intention. */
+export function nudgeTitle(name: string): string {
+  return `Remind ${name}?`;
+}
+export const NUDGE_BODY =
+  "The reminder is recorded as your intention, and it waits for you to confirm it.";
+export const NUDGE_COMMIT = "Prepare it";
+export const NUDGE_SECTION = "Reminders prepared";
+export const NUDGE_META = "prepared, and never sent";
+export const NUDGE_EMPTY = "No reminders prepared.";
+export function nudgePrepared(name: string, at: string): string {
+  return `${name} · prepared ${at}`;
+}
 
 // ------------------------------------------------------------------ export
 
@@ -311,7 +370,17 @@ export const EXPORT_LEDE =
 export const EXPORT_NOTE =
   "The file carries splits and revisions, not balances — balances are arithmetic, and arithmetic travels in the rows.";
 export const EXPORT_COMMIT = "Export";
-export const EXPORT_UNBUILT = "Export is an engineering ask [backend-needed]";
+export const EXPORT_NO_GROUP = "A group · a ledger is a group's";
+export function exportWindow(
+  expenses: number,
+  settlements: number,
+  truncated: boolean
+): string {
+  const rows = `${expenses} expenses and ${settlements} settlements`;
+  return truncated
+    ? `${rows} · more than the window holds, so the file carries the window`
+    : `${rows} · the whole of them`;
+}
 export const EXPORT_RANGES: readonly (readonly [string, string])[] = [
   ["all", "Everything"],
   ["year", "This year"],
@@ -381,6 +450,16 @@ export const COMPOSE_OUTCOMES = {
   cancelled: "Cancelled · it was never applied",
   discarded: "Discarded · the row is gone",
   retried: "Retried · a fresh attempt at the same write",
+  reallocated: "Re-allocated · a revision, and the amount is unchanged",
+  simplifyOn: "On · the proposal says what it rewired",
+  simplifyOff: "Off · debts read as they were incurred again",
+  left: "Left · your rows stay, marked departed",
+  archived: "Archived · out of the lists, everything kept",
+  unarchived: "Back · in the lists again, with everything it kept",
+  approved: "Approved · it runs on the signed rail",
+  declined: "Declined · settled with your reason, and never applied",
+  decidedAlready: "Already settled · your answer arrived after it did",
+  exported: "Exported · the file is on this device now",
 } as const;
 
 export const OFFLINE_MATERIALISE =

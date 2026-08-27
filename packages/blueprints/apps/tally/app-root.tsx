@@ -48,6 +48,8 @@ import { useComposeActs } from "./compose-acts.ts";
 import { useComposeState, useReceiptShot } from "./compose-state.ts";
 import { useContribReads } from "./contrib-reads.ts";
 import { expenseVerdict, settleVerdict } from "./draft-model.ts";
+import { useExportRead } from "./export-read.ts";
+import { money } from "./format.ts";
 import { appBar, bandClaim } from "./frame.tsx";
 import { CHANGE_TABLES, useLedgerReads } from "./ledger-reads.ts";
 import { useLedgerSearch } from "./ledger-search.ts";
@@ -251,6 +253,17 @@ export function Root({
 
   const sheets = useRoomSheets({ compose, group, openGroupId });
 
+  // The Export route's own read, beside the spine. It answers for ONE group,
+  // so it is asked when a group is chosen and not before — and until it lands
+  // the surface states no counts rather than zero ones.
+  const exports = useExportRead({
+    shelf,
+    groupId: bag.exportDraft.groupId,
+    range: bag.exportDraft.range,
+    format: bag.exportDraft.format,
+    say: ledger.say,
+  });
+
   // ---- what the room knows about itself ------------------------------------
 
   const reach = libraryReachability({
@@ -296,11 +309,15 @@ export function Root({
         verdict: expenseVerdict(
           bag.draft,
           members.map((member) => member.party_id),
-          dashboard.currency
+          dashboard.currency,
+          dashboard.me,
+          money
         ),
         settleVerdict: settleVerdict(bag.settle, dashboard.me),
         contrib: contrib.sections,
         hasApprovals: contrib.hasApprovals,
+        canDecide: contrib.canDecide,
+        exportData: exports.data,
         shotUrl,
         members,
       }}
@@ -316,7 +333,12 @@ export function Root({
       onOpenExpense={openExpense}
       onShowMore={() => setActivityWindow((size) => size + ACTIVITY_STEP)}
       onAskLeave={(groupId) => compose.show({ kind: "leave", groupId })}
-      onAskArchive={(groupId) => compose.show({ kind: "archive", groupId })}
+      onAskArchive={(groupId, archived) =>
+        compose.show({ kind: "archive", groupId, archived })
+      }
+      onSimplify={(groupId, simplify) => acts.setSimplify(groupId, simplify)}
+      onRemind={(input) => acts.nudge(input)}
+      onSaveExport={() => exports.save()}
       onAskRemove={(partyId) => sheets.askRemove(partyId)}
       onAddFriend={() => sheets.askFriend()}
       onNewGroup={() => sheets.askGroup()}

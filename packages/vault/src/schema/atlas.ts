@@ -340,6 +340,26 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
     name: "Secrets",
     blurb: "Passwords and codes kept under lock.",
   },
+  "locker.item_alias": {
+    name: "Aliases",
+    blurb: "Short names a connector binds to instead of an id.",
+  },
+  "locker.item_address": {
+    name: "Addresses",
+    blurb: "Extra web addresses a login answers to.",
+  },
+  "locker.item_field": {
+    name: "Custom fields",
+    blurb: "Sections and fields you added to an item yourself.",
+  },
+  "locker.item_history": {
+    name: "Item history",
+    blurb: "What changed on an item, and the passwords it had before.",
+  },
+  "locker.item_passkey": {
+    name: "Passkeys",
+    blurb: "Passkey details kept beside the login they belong to.",
+  },
   // tally
   "tally.friend": { name: "Friends", blurb: "People you split expenses with." },
   "tally.group": { name: "Groups", blurb: "Groups you share expenses in." },
@@ -351,6 +371,14 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
   "tally.expense_split": {
     name: "Expense splits",
     blurb: "Who owes what on each expense.",
+  },
+  "tally.expense_payer": {
+    name: "Expense payers",
+    blurb: "Who put money down on each expense, and how much.",
+  },
+  "tally.nudge": {
+    name: "Prepared reminders",
+    blurb: "Reminders you prepared about a balance. Nothing is ever sent.",
   },
   "tally.settlement": {
     name: "Settlements",

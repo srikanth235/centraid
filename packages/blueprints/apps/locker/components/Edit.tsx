@@ -29,15 +29,9 @@ import type { DraftField } from "../draft.ts";
 import { typeLabel } from "../format.ts";
 import { SEALED_RUN } from "../item-fields.ts";
 import {
-  ALIAS_NONE,
   ALIAS_NOTE,
+  ALIAS_PLACEHOLDER,
   ALIAS_ROW,
-  CONNECTION_NONE,
-  CONNECTION_NOTE,
-  CONNECTION_ROW,
-  CUSTOM_NOTE,
-  CUSTOM_ROW,
-  CUSTOM_VALUE,
   EDIT_CANCEL,
   EDIT_FOOT,
   EDIT_FOOT_OFFLINE,
@@ -61,18 +55,27 @@ import {
   TYPE_NOTE,
   TYPE_ROW,
 } from "../route-copy.ts";
+import type { SidecarDraft } from "../session.ts";
 import type {
   ItemDraftSeed,
+  LockerDetail,
   LockerItemType,
   UrlMatchPolicy,
 } from "../types.ts";
-import { EDIT_LEDE, GENERATE, TYPE_LABEL, TYPE_ORDER } from "../view-copy.ts";
+import { ALL_TYPES, EDIT_LEDE, GENERATE, TYPE_LABEL } from "../view-copy.ts";
+import { EditSidecars } from "./EditSidecars.tsx";
+import type { SidecarActs } from "./EditSidecars.tsx";
 import { FieldRow } from "./Fields.tsx";
 
 import styles from "./Rows.module.css";
 
-export interface EditScreenProps {
+export interface EditScreenProps extends SidecarActs {
   seed: ItemDraftSeed;
+  /** The item as the vault last answered with it, on an EDIT. The sidecar
+   *  editors hang off it; a create has none and they say so. */
+  detail: LockerDetail | null;
+  /** What the sidecar editors are holding between keystrokes. */
+  sidecarDraft: SidecarDraft;
   /** The gateway is out of reach, so a secret write has nowhere to land. */
   offline: boolean;
   /** A save is in flight — the commit says so by being absent, not by a
@@ -170,7 +173,7 @@ export function EditScreen(props: EditScreenProps): ReactNode {
       <FieldRow label={TYPE_ROW} note={TYPE_NOTE}>
         {creating ? (
           <span className={styles.chipRow}>
-            {TYPE_ORDER.map((type) => (
+            {ALL_TYPES.map((type) => (
               <button
                 key={type}
                 type="button"
@@ -249,16 +252,39 @@ export function EditScreen(props: EditScreenProps): ReactNode {
         />
       </FieldRow>
 
-      {/* Three rows drawn where they belong and inert where the backend is
-          not there yet. Each carries its own tag, so a reviewer reading the
-          screen sees the scope without reading the gap register. */}
-      <FieldRow label={CUSTOM_ROW} value={CUSTOM_VALUE} note={CUSTOM_NOTE} />
-      <FieldRow
-        label={CONNECTION_ROW}
-        value={CONNECTION_NONE}
-        note={CONNECTION_NOTE}
+      {/* THE ALIAS, READ BACK AND WRITABLE (README-Locker §8's first paper
+          cut). The field pre-fills with the binding that exists, emptying it
+          clears the binding, and typing another reassigns it — which is the
+          whole of what the cut asked for. */}
+      <FieldRow label={ALIAS_ROW} note={ALIAS_NOTE}>
+        <input
+          className="kit-input"
+          type="text"
+          autoComplete="off"
+          placeholder={ALIAS_PLACEHOLDER}
+          aria-label={ALIAS_ROW}
+          value={seed.alias}
+          onChange={(event) =>
+            props.onChange({ ...seed, alias: event.target.value })
+          }
+        />
+      </FieldRow>
+
+      {/* The item's own sections and fields, its further addresses and its
+          passkey slot. Each is its own act, so each is written where it is
+          edited rather than folded into this form's payload. */}
+      <EditSidecars
+        detail={props.detail}
+        draft={props.sidecarDraft}
+        onFieldDraft={props.onFieldDraft}
+        onFieldSave={props.onFieldSave}
+        onFieldRemove={props.onFieldRemove}
+        onAddressDraft={props.onAddressDraft}
+        onAddressSave={props.onAddressSave}
+        onPasskeyDraft={props.onPasskeyDraft}
+        onPasskeySave={props.onPasskeySave}
+        onPasskeyClear={props.onPasskeyClear}
       />
-      <FieldRow label={ALIAS_ROW} value={ALIAS_NONE} note={ALIAS_NOTE} />
 
       {props.error ? (
         <p className={styles.gateError}>{displayText(props.error)}</p>

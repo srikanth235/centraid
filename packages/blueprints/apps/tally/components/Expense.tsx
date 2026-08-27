@@ -1,16 +1,16 @@
 // ONE EXPENSE — what it cost, who paid, how it divided, what that makes yours,
 // and the revision list that is the reason an edit is safe (Tally spec §1, §4).
 //
-// THE FIELD ROWS CARRY THE GAPS WHERE THEY BITE. Multiple payers is stated on
-// *Paid by*, the three unbacked divisions on *Divided*, the assistant-only
-// memo and bank line on their own rows — each on the field it would change,
-// so a reviewer reads the scope off the surface (GAPS.md Tally §3).
+// EVERY PAYER IS NAMED. Several people can front one expense, and each of them
+// is owed back the part they actually put down — so *Paid by* lists them with
+// their amounts rather than naming one person and rounding the rest away.
 //
-// THE METHOD IS NOT CLAIMED. The vault stores an expense's SHARES, not the
-// rule that produced them, so *Divided* says how many shares there are and
-// points at the table. "Equally" inferred from three equal numbers would be a
-// guess presented as a fact, and the one case it is wrong is the case a member
-// opened this screen to check.
+// THE METHOD IS NOT INFERRED — IT IS READ. `tally.add_expense` records
+// `split_method` beside the shares, so *Divided* states the method that was
+// actually used. An expense written before the method was recorded has none,
+// and then the row says how many shares there are and points at the table:
+// "Equally" guessed from three equal numbers would be exactly the claim a
+// member opened this screen to check.
 //
 // UNDO IS THE VAULT'S OWN REVERSE WRITE. `queries/history.ts` reports each
 // revision's `undo_until`, and `undo-expense` applies that durable pre-edit
@@ -23,10 +23,12 @@ import { displayText } from "../../_shared/untrusted.ts";
 import {
   CONFLICT_BOTH,
   CURRENCY_NOTE,
+  CURRENCY_NOTE_2,
   EXPENSE_NOTES,
   EXPENSE_ROWS,
   FIELD_KEYS,
   LIFE_ACTS,
+  PAID_IT,
   PENDING_STRIP,
   PENDING_VIEW,
   UNDO_SPENT,
@@ -36,6 +38,7 @@ import {
   splitFoot,
 } from "../compose-copy.ts";
 import { metaSentence, money, roleSubLabel } from "../format.ts";
+import { DIVISIONS } from "../split-model.ts";
 import type { LedgerEntry, Revision } from "../types.ts";
 import { paidBy } from "../view-copy.ts";
 import { Note, Rows, Section } from "./Blocks.tsx";
@@ -69,6 +72,24 @@ export interface ExpenseScreenProps {
   onUndo: (revisionId: string) => void;
 }
 
+/** The payers, as one value: who put down what. One payer reads as one name
+ *  and one amount, which is what a one-payer expense is. */
+function paidValue(entry: LedgerEntry, currency: string): string {
+  const payers = entry.payers ?? [];
+  if (payers.length === 0)
+    return `${entry.paid_by_name} · ${money(entry.amount_minor, currency)}`;
+  return payers
+    .map((payer) => `${payer.name} · ${money(payer.paid_minor, currency)}`)
+    .join("  ·  ");
+}
+
+/** The recorded method, in the interface's own word for it — or the share
+ *  count where the vault holds no method for this expense. */
+function dividedText(entry: LedgerEntry): string {
+  const spec = DIVISIONS.find((row) => row.method === entry.split_method);
+  return spec ? spec.label : dividedValue(entry.splits.length);
+}
+
 function currencyValue(entry: LedgerEntry): string {
   const rate = entry.rate_scaled / 10 ** entry.rate_scale;
   return metaSentence([
@@ -80,7 +101,12 @@ function currencyValue(entry: LedgerEntry): string {
 
 export function ExpenseScreen(props: ExpenseScreenProps): ReactNode {
   const { entry } = props;
-  const isMine = entry.paid_by === props.me && props.me !== null;
+  // "You paid" is true where the owner put ANY of it down, which is the point
+  // of several payers: `paid_by` names one of them, never all.
+  const isMine =
+    props.me !== null &&
+    (entry.paid_by === props.me ||
+      (entry.payers ?? []).some((payer) => payer.party_id === props.me));
   const pending = entry.pending === true;
   const conflict = entry.intentStatus === "conflict";
   const foreign = entry.original_currency !== entry.settlement_currency;
@@ -125,13 +151,16 @@ export function ExpenseScreen(props: ExpenseScreenProps): ReactNode {
 
       <ValueRow
         label={FIELD_KEYS.paidBy}
-        value={`${entry.paid_by_name} · ${money(entry.amount_minor, props.currency)}`}
+        value={paidValue(entry, props.currency)}
         note={EXPENSE_NOTES.paidBy}
         num
       />
       <ValueRow
         label={FIELD_KEYS.divided}
-        value={dividedValue(entry.splits.length)}
+        value={metaSentence([
+          dividedText(entry),
+          dividedValue(entry.splits.length),
+        ])}
         note={EXPENSE_NOTES.divided}
       />
       <ValueRow
@@ -150,7 +179,7 @@ export function ExpenseScreen(props: ExpenseScreenProps): ReactNode {
         <ValueRow
           label={FIELD_KEYS.currency}
           value={currencyValue(entry)}
-          note={CURRENCY_NOTE}
+          note={[CURRENCY_NOTE, CURRENCY_NOTE_2]}
           num
         />
       ) : null}
@@ -184,7 +213,11 @@ export function ExpenseScreen(props: ExpenseScreenProps): ReactNode {
                 {money(split.share_minor, props.currency)}
               </span>
               <span className={styles.allocNote}>
-                {split.party_id === entry.paid_by ? "paid it" : ""}
+                {(entry.payers ?? []).some(
+                  (payer) => payer.party_id === split.party_id
+                ) || split.party_id === entry.paid_by
+                  ? PAID_IT
+                  : ""}
               </span>
             </div>
           ))}

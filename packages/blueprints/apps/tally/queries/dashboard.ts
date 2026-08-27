@@ -15,7 +15,11 @@
 
 import { BRAND, identityColor, identityInitials } from "@centraid/design";
 
-import { tallyGroupNet } from "../../../src/tally-balance.ts";
+import {
+  attributeExpense,
+  expensePayers,
+  tallyGroupNet,
+} from "../../../src/tally-balance.ts";
 import {
   PENDING_OVERLAY_FIELDS,
   pendingOverlayCopy,
@@ -40,14 +44,19 @@ interface GroupRow {
   circle_id: string;
   icon?: string;
   color?: string;
+  simplify_opt_in?: number;
+  archived_at?: string | null;
   [k: string]: unknown;
 }
 type DecoratedGroup = GroupRow & { name: string };
 interface ExpenseRowRaw {
   expense_id: string;
-  group_id: string;
+  /** Null on a group-less 1:1 expense (GAPS #4). */
+  group_id: string | null;
   paid_by: string;
   amount_minor: number;
+  split_method?: string;
+  split_params_json?: string | null;
   description?: string;
   category?: string;
   spent_on?: string;
@@ -76,7 +85,13 @@ interface RecurringRow {
   time_zone: string;
   status: "active" | "paused" | "ended";
 }
-type ExpenseFact = ExpenseRowRaw & { splits: Record<string, number> };
+type ExpenseFact = ExpenseRowRaw & {
+  splits: Record<string, number>;
+  /** Who put money down. Empty reads as the single `paid_by` payer. */
+  payers: Record<string, number>;
+  /** Typed lines, receipt-backed or not; empty when the expense has none. */
+  lines: ReceiptLineFact[];
+};
 interface ReceiptLineFact {
   line_item_id: string;
   kind: "item" | "tax" | "tip";
@@ -100,6 +115,14 @@ interface SettlementRow {
   group_id?: string;
   [k: string]: unknown;
 }
+interface NudgeRow {
+  nudge_id: string;
+  party_id: string;
+  group_id?: string | null;
+  as_of_minor: number;
+  note?: string | null;
+  prepared_at: string;
+}
 interface ObligationRow {
   obligation_id: string;
   from_party: string;
@@ -121,6 +144,8 @@ export interface TallyData {
   expenses: ExpenseWithReceipt[];
   settlements: SettlementRow[];
   obligations: ObligationRow[];
+  /** Reminders the owner PREPARED. Nothing here was ever sent. */
+  nudges: NudgeRow[];
 }
 
 /** Pull every ground fact Tally needs and shape it for the compute helpers. */
@@ -138,11 +163,13 @@ export async function loadTally(
     membersRes,
     expensesRes,
     splitsRes,
+    payersRes,
     settlesRes,
     obligationsRes,
     receiptsRes,
     receiptLinesRes,
     receiptAllocationsRes,
+    nudgesRes,
   ] = await Promise.all([
     ctx.vault.read({ entity: "core.vault", purpose }),
     ctx.vault.read({ entity: "tally.friend", purpose }),
@@ -159,6 +186,7 @@ export async function loadTally(
       purpose,
     }),
     ctx.vault.read({ entity: "tally.expense_split", limit: 8000, purpose }),
+    ctx.vault.read({ entity: "tally.expense_payer", limit: 8000, purpose }),
     ctx.vault.read({
       entity: "tally.settlement",
       where: [{ column: "deleted_at", op: "is-null" }],
@@ -189,6 +217,12 @@ export async function loadTally(
       limit: 32_000,
       purpose,
     }),
+    ctx.vault.read({
+      entity: "tally.nudge",
+      orderBy: { column: "prepared_at", dir: "desc" },
+      limit: 500,
+      purpose,
+    }),
   ]);
 
   const vaultRow = (vaultRes.rows ?? [])[0] ?? {};
@@ -214,6 +248,15 @@ export async function loadTally(
     ...((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
       (expense) => expense.paid_by
     ),
+    // A co-payer who is no longer a member still has to be nameable.
+    ...(
+      (payersRes.rows ?? []) as unknown as Array<{
+        expense_id: string;
+        party_id: string;
+      }>
+    )
+      .filter((payer) => activeExpenseIds.has(payer.expense_id))
+      .map((payer) => payer.party_id),
     ...(
       (splitsRes.rows ?? []) as unknown as Array<{
         expense_id: string;
@@ -348,18 +391,21 @@ export async function loadTally(
     allocationsByLine.get(allocation.line_item_id)![allocation.party_id] =
       allocation.share_minor;
   }
-  const linesByReceipt = new Map<string, ReceiptLineFact[]>();
+  // Lines now hang off the EXPENSE, with the receipt as an optional
+  // decoration, so the "By line" division has typed lines and no photo.
+  const linesByExpense = new Map<string, ReceiptLineFact[]>();
   for (const line of (receiptLinesRes.rows ?? []) as unknown as Array<{
     line_item_id: string;
-    receipt_id: string;
+    expense_id: string;
+    receipt_id: string | null;
     kind: "item" | "tax" | "tip";
     description: string;
     amount_minor: number;
     sort_order: number;
   }>) {
-    if (!linesByReceipt.has(line.receipt_id))
-      linesByReceipt.set(line.receipt_id, []);
-    linesByReceipt.get(line.receipt_id)!.push({
+    if (!linesByExpense.has(line.expense_id))
+      linesByExpense.set(line.expense_id, []);
+    linesByExpense.get(line.expense_id)!.push({
       line_item_id: line.line_item_id,
       kind: line.kind,
       description: line.description,
@@ -368,7 +414,7 @@ export async function loadTally(
       allocations: allocationsByLine.get(line.line_item_id) ?? {},
     });
   }
-  for (const lines of linesByReceipt.values())
+  for (const lines of linesByExpense.values())
     lines.sort((a, b) => a.sort_order - b.sort_order);
   const receiptByExpense = new Map<string, ReceiptFact>();
   for (const receipt of receiptRows) {
@@ -384,14 +430,26 @@ export async function loadTally(
           }
         : {}),
       ...(content?.media_type ? { media_type: content.media_type } : {}),
-      lines: linesByReceipt.get(receipt.receipt_id) ?? [],
+      lines: linesByExpense.get(receipt.expense_id) ?? [],
     });
+  }
+  const payersByExpense = new Map<string, Record<string, number>>();
+  for (const payer of (payersRes.rows ?? []) as unknown as Array<{
+    expense_id: string;
+    party_id: string;
+    paid_minor: number;
+  }>) {
+    if (!payersByExpense.has(payer.expense_id))
+      payersByExpense.set(payer.expense_id, {});
+    payersByExpense.get(payer.expense_id)![payer.party_id] = payer.paid_minor;
   }
   const expenses: ExpenseWithReceipt[] = (
     (expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]
   ).map((e) => ({
     ...e,
     splits: splitsByExpense.get(e.expense_id) ?? {},
+    payers: payersByExpense.get(e.expense_id) ?? {},
+    lines: linesByExpense.get(e.expense_id) ?? [],
     ...(receiptByExpense.has(e.expense_id)
       ? { receipt: receiptByExpense.get(e.expense_id)! }
       : {}),
@@ -407,6 +465,27 @@ export async function loadTally(
     expenses,
     settlements: (settlesRes.rows ?? []) as unknown as SettlementRow[],
     obligations: (obligationsRes.rows ?? []) as unknown as ObligationRow[],
+    nudges: (nudgesRes.rows ?? []) as unknown as NudgeRow[],
+  };
+}
+
+/**
+ * The denial the UI renders as its access state. `revoked_at` is present only
+ * when the refusal really was a revocation — the gateway attaches the time it
+ * recorded, because a revoked app cannot read the consent tables to find out
+ * for itself. Null the rest of the time: the app says what it knows and never
+ * invents a timestamp.
+ */
+export function deniedPayload(error: unknown): {
+  code?: string;
+  message?: string;
+  revoked_at: string | null;
+} {
+  const e = error as { code?: string; message?: string; revokedAt?: string };
+  return {
+    code: e.code,
+    message: e.message,
+    revoked_at: e.revokedAt ?? null,
   };
 }
 
@@ -428,12 +507,15 @@ export function pairwise(data: TallyData): Map<string, number> {
   const b = new Map<string, number>();
   for (const f of data.friends) b.set(f.party_id, 0);
   for (const e of data.expenses) {
-    const payer = e.paid_by;
-    for (const [pid, share] of Object.entries(e.splits)) {
-      if (pid === payer) continue;
-      if (payer === me && pid !== me) b.set(pid, (b.get(pid) || 0) + share);
-      else if (pid === me && payer !== me)
-        b.set(payer, (b.get(payer) || 0) - share);
+    // With several payers a share is owed to each of them for the part they
+    // actually put down, so the owner's position is their own slice of it —
+    // never the whole share to whoever happened to be named `paid_by`.
+    for (const { from, to, amount_minor } of attributeExpense(e)) {
+      if (from === to) continue;
+      if (to === me && from !== me)
+        b.set(from, (b.get(from) || 0) + amount_minor);
+      else if (from === me && to !== me)
+        b.set(to, (b.get(to) || 0) - amount_minor);
     }
   }
   for (const s of data.settlements) {
@@ -468,11 +550,13 @@ export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
   const myShare = me == null ? undefined : e.splits[me];
   const yourShare = myShare ?? 0;
   const involved = myShare != null;
+  const payers = expensePayers(e);
+  const youPaid = me == null ? 0 : (Object.fromEntries(payers)[me] ?? 0);
   let your_role: "lent" | "borrowed" | "none";
   let your_amount_minor: number;
-  if (e.paid_by === me) {
+  if (youPaid > 0) {
     your_role = "lent";
-    your_amount_minor = e.amount_minor - yourShare;
+    your_amount_minor = youPaid - yourShare;
   } else if (involved) {
     your_role = "borrowed";
     your_amount_minor = yourShare;
@@ -497,6 +581,31 @@ export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
     spent_on: e.spent_on,
     paid_by: e.paid_by,
     paid_by_name: personOf(data, e.paid_by).name,
+    // How the shares were arrived at, so an edit re-opens the way it was
+    // entered rather than collapsing every division to exact amounts.
+    split_method: e.split_method ?? "exact",
+    split_params:
+      typeof e.split_params_json === "string"
+        ? (JSON.parse(e.split_params_json) as Record<string, unknown>)
+        : null,
+    payers: payers.map(([pid, paid]) => {
+      const person = personOf(data, pid);
+      return {
+        party_id: pid,
+        name: person.name,
+        color: person.color,
+        initials: person.initials,
+        paid_minor: paid,
+      };
+    }),
+    line_items: e.lines.map((line) => ({
+      ...line,
+      allocations: Object.entries(line.allocations).map(([pid, share]) => ({
+        party_id: pid,
+        name: personOf(data, pid).name,
+        share_minor: share,
+      })),
+    })),
     your_role,
     your_amount_minor,
     splits: Object.entries(e.splits).map(([pid, share]) => {
@@ -544,6 +653,72 @@ export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
           },
         }
       : {}),
+  };
+}
+
+/** One remembered rate for a currency pair, with where it came from. */
+export interface RateSuggestion {
+  from_currency: string;
+  to_currency: string;
+  rate_scaled: number;
+  rate_scale: number;
+  rate_source: string;
+  rate_date: string;
+  observed_on: string;
+  expense_id: string;
+}
+
+/**
+ * The most recent rate this vault has already been told, per currency pair.
+ * ADDITIVE ONLY: the manual-rate flow stands alone and stays the primary path.
+ * There is no rate provider here and no network call — the suggestion is the
+ * vault quoting itself, which is why it always carries its source and date.
+ */
+export function rateSuggestions(data: TallyData): RateSuggestion[] {
+  const latest = new Map<string, RateSuggestion>();
+  for (const expense of data.expenses) {
+    const from = expense.original_currency;
+    const to = expense.settlement_currency;
+    if (!from || !to || from === to) continue;
+    if (
+      typeof expense.rate_scaled !== "number" ||
+      typeof expense.rate_scale !== "number"
+    )
+      continue;
+    const observedOn = String(expense.rate_date ?? expense.spent_on ?? "");
+    const key = `${from}>${to}`;
+    const held = latest.get(key);
+    if (held && held.observed_on >= observedOn) continue;
+    latest.set(key, {
+      from_currency: from,
+      to_currency: to,
+      rate_scaled: expense.rate_scaled,
+      rate_scale: expense.rate_scale,
+      rate_source: String(expense.rate_source ?? "supplied at entry"),
+      rate_date: observedOn,
+      observed_on: observedOn,
+      expense_id: expense.expense_id,
+    });
+  }
+  return [...latest.values()].sort((a, b) =>
+    `${a.from_currency}${a.to_currency}`.localeCompare(
+      `${b.from_currency}${b.to_currency}`
+    )
+  );
+}
+
+/** A group row for the lists, archived or not. */
+function groupCard(data: TallyData, g: TallyData["groups"][number]) {
+  const net = groupNet(data, g.group_id);
+  return {
+    group_id: g.group_id,
+    name: g.name,
+    icon: g.icon,
+    color: g.color,
+    member_count: (data.membersByGroup.get(g.group_id) ?? []).length,
+    owner_net_minor: net.get(data.me as string) || 0,
+    simplify_opt_in: g.simplify_opt_in === 1,
+    archived_at: g.archived_at ?? null,
   };
 }
 
@@ -595,17 +770,14 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       if (v > 0) owed += v;
       else if (v < 0) owe += -v;
     }
-    const groups = data.groups.map((g) => {
-      const net = groupNet(data, g.group_id);
-      return {
-        group_id: g.group_id,
-        name: g.name,
-        icon: g.icon,
-        color: g.color,
-        member_count: (data.membersByGroup.get(g.group_id) ?? []).length,
-        owner_net_minor: net.get(data.me as string) || 0,
-      };
-    });
+    // Archived groups leave the default lists and keep everything, so they
+    // travel in their own array rather than being filtered into silence.
+    const groups = data.groups
+      .filter((g) => !g.archived_at)
+      .map((g) => groupCard(data, g));
+    const archivedGroups = data.groups
+      .filter((g) => Boolean(g.archived_at))
+      .map((g) => groupCard(data, g));
     const groupName = new Map(
       data.groups.map((group) => [group.group_id, group.name])
     );
@@ -665,23 +837,43 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       currency: data.currency,
       friends,
       groups,
+      archived_groups: archivedGroups,
       trash,
       recurring,
       owe_total_minor: owe,
       owed_total_minor: owed,
+      // The two counts the Balances hero states its arithmetic from
+      // ("derived from 194 expenses and 22 settlements"), over the same
+      // bounded window every figure on this screen came from.
+      expense_count: data.expenses.length,
+      settlement_count: data.settlements.length,
+      rate_suggestions: rateSuggestions(data),
+      nudges: data.nudges.map((nudge) => ({
+        nudge_id: nudge.nudge_id,
+        party_id: nudge.party_id,
+        group_id: nudge.group_id ?? null,
+        prepared_at: nudge.prepared_at,
+        note: nudge.note ?? null,
+        // Stated, and always false: Tally has no delivery path.
+        sent: false,
+      })),
     };
   } catch (error) {
-    const e = error as { code?: string; message?: string };
     return {
       me: null,
       currency: "USD",
       friends: [],
       groups: [],
+      archived_groups: [],
       trash: [],
       recurring: [],
       owe_total_minor: 0,
       owed_total_minor: 0,
-      vaultDenied: { code: e.code, message: e.message },
+      expense_count: 0,
+      settlement_count: 0,
+      rate_suggestions: [],
+      nudges: [],
+      vaultDenied: deniedPayload(error),
     };
   }
 }

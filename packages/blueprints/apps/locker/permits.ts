@@ -28,10 +28,32 @@ export interface Permit {
   expiresAt: number;
 }
 
+/**
+ * A SEALED ROW THAT HANGS OFF AN ITEM (#873) — a custom field's value, a
+ * retained previous password, a passkey's key material. The vault reveals each
+ * through its OWNING ITEM's permit (`gateway.lockerOwningItemId`), which is why
+ * this rides a `PermitRequest` rather than being a request of its own: one
+ * gate, for one item, and the row it names is what the permit is then spent on.
+ */
+export interface SidecarTarget {
+  /** `locker.item_field` · `locker.item_history` · `locker.item_passkey`. */
+  entity: string;
+  /** The SIDECAR row's own id — a field id, a revision id, the item id. */
+  entityId: string;
+  /** The one sealed column being asked for. */
+  column: string;
+}
+
 /** What the gate is standing open for, before a permit exists. */
 export interface PermitRequest {
   itemId: string;
   field: string;
+  /** Present when the permit will be spent on a sealed SIDECAR row rather than
+   *  on the item's own columns. The permit is the item's either way. */
+  sidecar?: SidecarTarget;
+  /** The row's own word, for the gate's question — a custom field is named by
+   *  its label, which no static table could hold. */
+  label?: string;
 }
 
 /**

@@ -2,9 +2,9 @@
 //
 // The grammar is the outbox's (`_shared/pending-overlay.ts`), and what is
 // pinned here is that this app does not widen it: a queued write cannot be
-// retried, an expired one cannot be re-sent, and nothing anywhere produces an
-// Accept or a Decline, because no per-intent approval door exists on the app
-// client. A verb whose door the host does not provide is not drawn at all.
+// retried and an expired one cannot be re-sent. Approve and Decline exist now
+// — the steward's own answer, through `decideCommonsIntent` — and they are
+// drawn ONLY where that door is, with no substitute offered where it is not.
 import { describe, expect, it } from "vitest";
 
 import { commandLabel, contribSections, intentTitle } from "./contrib-model.ts";
@@ -15,6 +15,7 @@ const ALL_DOORS: ContribDoors = {
   retry: true,
   discard: true,
   approvals: true,
+  decide: true,
 };
 
 const NAMES = new Map([
@@ -113,9 +114,42 @@ describe("the verbs each state permits", () => {
     expect(row?.verbs).toStrictEqual(verbs);
   });
 
-  it("hands somebody else's parked act to Approvals and nothing else", () => {
+  it("gives somebody else's parked act the steward's own answer", () => {
     const out = sections([intent({ status: "parked" })]);
+    expect(out.waiting[0]?.verbs).toStrictEqual([
+      "approve",
+      "decline",
+      "approvals",
+    ]);
+  });
+
+  it("draws NEITHER Approve nor Decline where the decide door is absent", () => {
+    // Protocol C1: no fallback behaviour stands in for a door that is not
+    // there. The inbox is a different verb, not a substitute for these two.
+    const out = sections([intent({ status: "parked" })], {
+      cancel: true,
+      retry: true,
+      discard: true,
+      approvals: true,
+      decide: false,
+    });
     expect(out.waiting[0]?.verbs).toStrictEqual(["approvals"]);
+  });
+
+  it("gives the steward the answer even where the host holds no inbox", () => {
+    const out = sections([intent({ status: "parked" })], {
+      cancel: true,
+      retry: true,
+      discard: true,
+      approvals: false,
+      decide: true,
+    });
+    expect(out.waiting[0]?.verbs).toStrictEqual(["approve", "decline"]);
+  });
+
+  it("never offers the steward's answer on the member's OWN parked write", () => {
+    const out = sections([intent({ status: "parked", actorPartyId: "me" })]);
+    expect(out.inFlight[0]?.verbs).not.toContain("approve");
   });
 
   it("draws NO control where the host provides no door", () => {
@@ -124,7 +158,13 @@ describe("the verbs each state permits", () => {
         intent({ status: "parked" }),
         intent({ status: "denied", actorPartyId: "me" }),
       ],
-      { cancel: false, retry: false, discard: false, approvals: false }
+      {
+        cancel: false,
+        retry: false,
+        discard: false,
+        approvals: false,
+        decide: false,
+      }
     );
     expect(out.waiting[0]?.verbs).toStrictEqual([]);
     expect(out.ended[0]?.verbs).toStrictEqual([]);

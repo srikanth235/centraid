@@ -72,10 +72,15 @@ const DASHBOARD: DashboardData = {
       owner_net_minor: 6240,
     },
   ],
+  archived_groups: [],
   trash: [],
   recurring: [],
   owe_total_minor: 10_960,
   owed_total_minor: 8100,
+  expense_count: 194,
+  settlement_count: 22,
+  rate_suggestions: [],
+  nudges: [],
 };
 
 const LEVEL: DashboardData = {
@@ -202,7 +207,10 @@ describe("Tally’s honest states", () => {
       const container = await mount(DASHBOARD);
       const sub = container.textContent ?? "";
       expect(sub).toContain("Owed to you");
-      expect(sub).toContain("No balance is stored, and none is ever sent.");
+      // THE COUNTS ARE THE POINT: a figure that names the rows it was derived
+      // from is one a member can go and check.
+      expect(sub).toContain("Derived from 194 expenses and 22 settlements");
+      expect(sub).toContain("no balance is stored, and none is ever sent.");
     });
   });
 
@@ -247,6 +255,35 @@ describe("Tally’s honest states", () => {
       // A denied read renders NOTHING, never an empty set — and never day one.
       expect(container.textContent).not.toContain(DAY_ONE);
       expect(container.querySelector("nav")).toBeNull();
+    });
+
+    test("denied states WHEN the grant went, where the denial carried a time", async () => {
+      const container = await mount({
+        ...BARE,
+        vaultDenied: {
+          code: "consent_denied",
+          message: "rcp_9114",
+          revoked_at: "09:02",
+        },
+      });
+      expect(container.textContent).toContain(
+        "The grant was revoked at 09:02."
+      );
+    });
+
+    test("denied invents no time where the denial carried none", async () => {
+      const container = await mount({
+        ...BARE,
+        vaultDenied: {
+          code: "consent_denied",
+          message: "rcp_9114",
+          revoked_at: null,
+        },
+      });
+      expect(container.textContent).not.toContain("revoked at");
+      expect(container.textContent).toContain(
+        "The grant is gone, and the time it went with it."
+      );
     });
   });
 

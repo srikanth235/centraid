@@ -72,10 +72,15 @@ describe("a secret write refuses the offline queue", () => {
     ).toBe("locker:@github:password");
   });
 
-  it("names both secret actions, and only those", () => {
+  it("names every secret-bearing action, and only those", () => {
+    // #872 adds a custom field and a passkey slot (sealed values in the
+    // payload) and the plaintext export (every secret in the RESULT).
     expect([...ONLINE_ONLY_ACTIONS].toSorted()).toStrictEqual([
       "add-item",
       "edit-item",
+      "export",
+      "set-field",
+      "set-passkey",
     ]);
   });
 });

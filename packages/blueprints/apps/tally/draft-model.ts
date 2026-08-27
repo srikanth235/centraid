@@ -14,7 +14,15 @@
 // `CATEGORY_ENUM`, restated here because the interface must not offer a tenth
 // — the ruling is that nine suffice, they exist to make Spending legible, and
 // a second level is a taxonomy to maintain forever (GAPS.md Tally §11).
-import { allocate, divisionSpec, prefill } from "./split-model.ts";
+import { allocateByLine, lineItems } from "./line-model.ts";
+import type { LineDraft, LineItemInput } from "./line-model.ts";
+import { parseMoneyText, parseSignedMoneyText } from "./money-text.ts";
+import {
+  allocate,
+  divisionOfMethod,
+  divisionSpec,
+  prefill,
+} from "./split-model.ts";
 import type { Allocation, Division, Share } from "./split-model.ts";
 
 export const CATEGORIES: readonly (readonly [string, string])[] = [
@@ -34,8 +42,11 @@ export const CATEGORIES: readonly (readonly [string, string])[] = [
  *  off a receipt, and the schema caps it at twelve. */
 export const RATE_SCALE = 6;
 
-/** `No group` is not a group id — it is the ABSENCE of one, and the write door
- *  refuses it. Held as its own value so the chip can be drawn honestly. */
+/** `No group` is not a group id — it is the ABSENCE of one, and `add-expense`
+ *  takes it: the expense is a group-less 1:1 and its participants are checked
+ *  against the friend roster instead of a circle (GAPS.md Tally §4, ruled in).
+ *  Held as its own value so the chip is one thing rather than an empty string
+ *  standing in for a decision. */
 export const NO_GROUP = null;
 
 export interface ExpenseDraft {
@@ -62,6 +73,12 @@ export interface ExpenseDraft {
    *  a half-typed "1." is a legitimate state of an input and rounding it to a
    *  number on every keystroke would fight the member's hands. */
   entries: Record<string, string>;
+  /** Who fronted it, and how much each of them put down — AS TYPED, for the
+   *  same reason. Empty means the one payer named by `payerId` paid all of it,
+   *  which is the ordinary case and the one the chip set starts in. */
+  payers: Record<string, string>;
+  /** The typed lines, when the division is *By line*. */
+  lines: LineDraft[];
 }
 
 export interface SettleDraft {
@@ -74,13 +91,7 @@ export interface SettleDraft {
 
 /** Minor units from typed text, or `null` when it is not a number at all. A
  *  blank field is `null` rather than zero: nobody typed a zero. */
-export function parseMoney(text: string): number | null {
-  const trimmed = text.trim().replaceAll(",", "");
-  if (trimmed === "") return null;
-  const value = Number(trimmed);
-  if (!Number.isFinite(value) || value < 0) return null;
-  return Math.round(value * 100);
-}
+export const parseMoney = parseMoneyText;
 
 /** A supplied rate, as the fixed point the vault stores. */
 export function parseRate(
@@ -126,17 +137,44 @@ export function entryValues(
   const unit = divisionSpec(division).unit;
   const out: Record<string, number> = {};
   for (const [partyId, text] of Object.entries(entries)) {
-    if (unit === "money" || division === "adjust") {
-      const trimmed = text.trim();
-      const negative = trimmed.startsWith("-");
-      const minor = parseMoney(negative ? trimmed.slice(1) : trimmed);
-      out[partyId] = minor === null ? 0 : negative ? -minor : minor;
+    if (unit === "money") {
+      out[partyId] = parseSignedMoneyText(text);
       continue;
     }
     const value = Number(text.trim());
     out[partyId] = Number.isFinite(value) ? value : 0;
   }
   return out;
+}
+
+/**
+ * Who fronted the expense, in the shape `add-expense`'s `payers` requires.
+ *
+ * ONE PAYER IS THE ORDINARY CASE and it is not a special case: an empty payer
+ * map resolves to the single named payer holding the whole amount, which is
+ * exactly what the vault stores for a one-payer expense. Two people splitting
+ * the bill at the till type their halves instead, and the sum is checked.
+ */
+export function payerRows(
+  draft: ExpenseDraft,
+  amountMinor: number
+): { party_id: string; paid_minor: number }[] {
+  const typed = Object.entries(draft.payers).filter(
+    ([, text]) => text.trim() !== ""
+  );
+  if (typed.length === 0)
+    return draft.payerId === ""
+      ? []
+      : [{ party_id: draft.payerId, paid_minor: amountMinor }];
+  return typed.map(([party_id, text]) => ({
+    party_id,
+    paid_minor: parseMoney(text) ?? 0,
+  }));
+}
+
+/** What the payers put down between them. */
+export function paidTotal(rows: readonly { paid_minor: number }[]): number {
+  return rows.reduce((sum, row) => sum + row.paid_minor, 0);
 }
 
 /** The typed cells a table starts from, as text a member can edit. */
@@ -150,10 +188,7 @@ export function prefillEntries(
   const numbers = prefill(division, amountMinor, participants, payerId);
   const out: Record<string, string> = {};
   for (const [partyId, value] of Object.entries(numbers))
-    out[partyId] =
-      unit === "money" || division === "adjust"
-        ? (value / 100).toFixed(2)
-        : String(value);
+    out[partyId] = unit === "money" ? (value / 100).toFixed(2) : String(value);
   return out;
 }
 
@@ -165,6 +200,10 @@ export interface DraftVerdict {
   allocation?: Allocation;
   /** The resolved shares the write would carry. */
   splits: Share[];
+  /** Who fronted it, resolved. */
+  payers: { party_id: string; paid_minor: number }[];
+  /** The typed lines the write would carry, when the division is *By line*. */
+  lineItems: LineItemInput[];
   /** The expense in settlement minor units, where it can be worked out. */
   amountMinor: number | null;
 }
@@ -172,12 +211,11 @@ export interface DraftVerdict {
 export const REFUSALS = {
   description: "A description · it is what the expense will be called",
   amount: "An amount above zero",
-  group: "An expense needs a group · the vault requires one",
   payer: "Who paid it",
+  payersSum: "The payers put down more or less than the expense comes to",
   participants: "Someone to divide it between",
   rate: "The rate you read off the bill, as a number",
   currency: "A three-letter code for the currency it was entered in",
-  unbacked: "This division is an engineering ask · three of the six commit",
   parties: "A settlement runs between two different people",
   same: "From and To are the same person",
 } as const;
@@ -192,7 +230,10 @@ export const REFUSALS = {
 export function expenseVerdict(
   draft: ExpenseDraft,
   participants: readonly string[],
-  currency: string
+  currency: string,
+  me: string | null = null,
+  money: (minor: number, code: string) => string = (minor) =>
+    (minor / 100).toFixed(2)
 ): DraftVerdict {
   const amountMinor = settlementMinor(draft);
   // THE TABLE APPEARS AS SOON AS THERE IS SOMEBODY TO DIVIDE BETWEEN, before
@@ -203,20 +244,33 @@ export function expenseVerdict(
   const allocation =
     participants.length === 0
       ? undefined
-      : allocate({
-          division: draft.division,
-          amountMinor: amountMinor ?? 0,
-          participants,
-          payerId: draft.payerId,
-          entries: entryValues(draft.division, draft.entries),
-          currency,
-        });
+      : draft.division === "lines"
+        ? allocateByLine({
+            lines: draft.lines,
+            amountMinor: amountMinor ?? 0,
+            participants,
+            me,
+            currency,
+            money,
+          })
+        : allocate({
+            division: draft.division,
+            amountMinor: amountMinor ?? 0,
+            participants,
+            payerId: draft.payerId,
+            entries: entryValues(draft.division, draft.entries),
+            currency,
+          });
   const splits = allocation?.shares ?? [];
+  const payers = payerRows(draft, amountMinor ?? 0);
+  const items = draft.division === "lines" ? lineItems(draft.lines) : [];
   const refuse = (refusal: string): DraftVerdict => ({
     ok: false,
     refusal,
     ...(allocation ? { allocation } : {}),
     splits,
+    payers,
+    lineItems: items,
     amountMinor,
   });
   if (draft.description.trim() === "") return refuse(REFUSALS.description);
@@ -226,12 +280,21 @@ export function expenseVerdict(
     return refuse(REFUSALS.currency);
   if (draft.foreign && parseRate(draft.rate) === null)
     return refuse(REFUSALS.rate);
-  if (draft.groupId === NO_GROUP) return refuse(REFUSALS.group);
-  if (draft.payerId === "") return refuse(REFUSALS.payer);
+  if (payers.length === 0) return refuse(REFUSALS.payer);
+  // WHAT WAS PUT DOWN IS THE EXPENSE. With one payer this can never fail; with
+  // several it is the whole of the extra rule, and the vault re-validates it.
+  if (paidTotal(payers) !== (amountMinor ?? 0))
+    return refuse(REFUSALS.payersSum);
   if (participants.length === 0) return refuse(REFUSALS.participants);
-  if (!divisionSpec(draft.division).backed) return refuse(REFUSALS.unbacked);
   if (!allocation || !allocation.ok) return refuse(allocation?.line ?? "");
-  return { ok: true, allocation, splits, amountMinor };
+  return {
+    ok: true,
+    allocation,
+    splits,
+    payers,
+    lineItems: items,
+    amountMinor,
+  };
 }
 
 /** The currency provenance an expense carries, or nothing at all when it was
@@ -256,22 +319,61 @@ function provenance(
   };
 }
 
-/** Exactly what `add-expense` declares, and nothing else. */
+/** The numbers a member typed, kept beside the shares they resolved to, so an
+ *  edit re-opens the division rather than re-deriving it from the result.
+ *  Empty for *Equally*, which has nothing typed, and for *By line*, whose
+ *  typed values are the `line_items` themselves. */
+function splitParams(draft: ExpenseDraft): Record<string, unknown> {
+  const unit = divisionSpec(draft.division).unit;
+  if (unit === "derived" || unit === "lines") return {};
+  const entries = entryValues(draft.division, draft.entries);
+  return { split_params: { unit, entries } };
+}
+
+/**
+ * Exactly what `add-expense` declares, and nothing else.
+ *
+ * `group_id` IS OMITTED RATHER THAN NULLED on a group-less 1:1 — the schema
+ * has it optional, and a `null` in an `additionalProperties:false` object is a
+ * value the command would have to interpret rather than a field that is not
+ * there.
+ */
 export function addExpenseInput(
   draft: ExpenseDraft,
   verdict: DraftVerdict,
   settlementCurrency: string
 ): Record<string, unknown> {
   return {
-    group_id: String(draft.groupId),
+    ...(draft.groupId === NO_GROUP ? {} : { group_id: draft.groupId }),
     description: draft.description.trim(),
     amount_minor: Number(verdict.amountMinor),
-    paid_by: draft.payerId,
+    // The vault still records ONE `paid_by` for the row; with several payers
+    // it is the one who put the most down, and `payers` carries the rest.
+    paid_by: principalPayer(verdict.payers, draft.payerId),
     category: draft.category,
     splits: verdict.splits,
+    payers: verdict.payers,
+    split_method: divisionSpec(draft.division).method,
+    ...splitParams(draft),
+    ...(verdict.lineItems.length > 0 ? { line_items: verdict.lineItems } : {}),
     ...(draft.spentOn === "" ? {} : { spent_on: draft.spentOn }),
     ...provenance(draft, settlementCurrency),
   };
+}
+
+/** Whoever fronted the most of it. Ties keep the chip the member chose. */
+export function principalPayer(
+  payers: readonly { party_id: string; paid_minor: number }[],
+  fallback: string
+): string {
+  let best = fallback;
+  let most = -1;
+  for (const payer of payers)
+    if (payer.paid_minor > most) {
+      most = payer.paid_minor;
+      best = payer.party_id;
+    }
+  return best;
 }
 
 /** `edit-expense` is `add-expense` re-validated the same way, keyed by the
@@ -356,23 +458,35 @@ export function newExpenseDraft(seed: {
     rateDate: seed.today,
     division: "equal",
     entries: {},
+    payers: {},
+    lines: [],
   };
 }
 
 /**
  * An expense that already exists, as a draft the editor can open pre-filled.
  *
- * THE DIVISION IS `exact`, ALWAYS, and that is the honest choice: the vault
- * stores an expense's shares, not the rule that produced them, so re-opening
- * one as "equally" would be a guess that quietly rewrites the shares the
- * moment the member changes the amount. Exact amounts is what is actually
- * known — the stored numbers, editable — and its own reconcile line then says
- * whether they still sum.
+ * THE DIVISION IS THE ONE THAT WAS RECORDED. `tally.add_expense` stores
+ * `split_method` and `split_params` beside the shares, so re-opening an
+ * expense re-opens the way it was entered — a percentage stays a percentage
+ * and changing the amount re-divides it. An expense from before the method was
+ * recorded, or one written by a method this build does not know, re-opens as
+ * exact amounts: the stored numbers, editable, which is what is actually known.
  */
 export function draftFromEntry(entry: {
   expense_id: string;
-  group_id: string;
+  group_id: string | null;
   description?: string;
+  split_method?: string;
+  split_params?: Record<string, unknown> | null;
+  payers?: readonly { party_id: string; paid_minor: number }[];
+  line_items?: readonly {
+    line_item_id?: string;
+    kind: "item" | "tax" | "tip";
+    description: string;
+    amount_minor: number;
+    allocations: readonly { party_id: string }[];
+  }[];
   amount_minor: number;
   original_amount_minor: number;
   original_currency: string;
@@ -387,9 +501,15 @@ export function draftFromEntry(entry: {
   splits: readonly { party_id: string; share_minor: number }[];
 }): ExpenseDraft {
   const foreign = entry.original_currency !== entry.settlement_currency;
-  const entries: Record<string, string> = {};
-  for (const split of entry.splits)
-    entries[split.party_id] = (split.share_minor / 100).toFixed(2);
+  const division = divisionOfMethod(entry.split_method);
+  const entries = reopenEntries(division, entry);
+  const payers: Record<string, string> = {};
+  // ONE PAYER STAYS ONE PAYER. Re-opening a single-payer expense with its
+  // payer row typed in would turn the ordinary case into the multi-payer form
+  // on every edit, so the map is filled only where there really are several.
+  if ((entry.payers?.length ?? 0) > 1)
+    for (const payer of entry.payers ?? [])
+      payers[payer.party_id] = (payer.paid_minor / 100).toFixed(2);
   return {
     expenseId: entry.expense_id,
     description: entry.description ?? "",
@@ -405,9 +525,56 @@ export function draftFromEntry(entry: {
     rate: foreign ? String(entry.rate_scaled / 10 ** entry.rate_scale) : "",
     rateSource: foreign ? entry.rate_source : "",
     rateDate: entry.rate_date ?? "",
-    division: "exact",
+    division,
     entries,
+    payers,
+    lines: (entry.line_items ?? []).map((line, index) => ({
+      lineId: line.line_item_id ?? `line-${index}`,
+      kind: line.kind,
+      description: line.description,
+      amount: (line.amount_minor / 100).toFixed(2),
+      who: line.allocations.map((allocation) => allocation.party_id),
+    })),
   };
+}
+
+/**
+ * The typed cells an edit re-opens with.
+ *
+ * The stored `split_params` carries what the member actually typed — the
+ * percentages, the weights, the adjustments — so those come back as themselves.
+ * Where there are none (an older expense, or *Equally*, which has nothing to
+ * type) the stored SHARES are what is known, and they come back as amounts.
+ */
+function reopenEntries(
+  division: Division,
+  entry: {
+    split_params?: Record<string, unknown> | null;
+    splits: readonly { party_id: string; share_minor: number }[];
+  }
+): Record<string, string> {
+  const unit = divisionSpec(division).unit;
+  const stored = entry.split_params?.["entries"];
+  if (
+    unit !== "derived" &&
+    unit !== "lines" &&
+    stored &&
+    typeof stored === "object"
+  ) {
+    const out: Record<string, string> = {};
+    for (const [partyId, value] of Object.entries(
+      stored as Record<string, unknown>
+    ))
+      out[partyId] =
+        unit === "money"
+          ? (Number(value) / 100).toFixed(2)
+          : String(Number(value));
+    return out;
+  }
+  const out: Record<string, string> = {};
+  for (const split of entry.splits)
+    out[split.party_id] = (split.share_minor / 100).toFixed(2);
+  return out;
 }
 
 export function newSettleDraft(seed: {

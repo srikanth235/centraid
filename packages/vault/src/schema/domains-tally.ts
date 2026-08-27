@@ -48,8 +48,16 @@
 //
 // Money is fixed-scale INTEGER minor units (cents) in the vault's base
 // currency; an expense's `tally_expense_split` rows resolve one method
-// (equally / exact / percentages) at entry time and MUST sum to the amount —
-// the add/edit commands re-validate that server-side. Timestamps TEXT ISO-8601
+// (equally / exact / percentages / shares / equally-adjusted / by-line) at
+// entry time and MUST sum to the amount — the add/edit commands re-validate
+// that server-side. The METHOD and its parameters ride on the expense
+// (`split_method`, `split_params_json`) purely so an edit re-opens the way the
+// expense was entered; the resolved shares stay the only arithmetic the vault
+// keeps, and nothing re-derives a share from the parameters.
+// `tally_expense_payer` carries who actually paid and how much (the
+// single-payer case is one degenerate row), and `tally_expense_line_item`
+// hangs off the EXPENSE with a nullable receipt linkage so typed lines need no
+// photo. Timestamps TEXT ISO-8601
 // UTC; dates are TEXT YYYY-MM-DD; PKs TEXT UUIDv7; all tables STRICT.
 //
 // The finance bridge (#310): Tally is a lens over shared money, not
@@ -73,9 +81,14 @@ CREATE TABLE IF NOT EXISTS tally_expense_receipt (
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 
+-- A typed line belongs to the EXPENSE, not to the photo. The receipt_id is a
+-- nullable decoration: a receipt-backed expense fills it, the "By line"
+-- division (no photo, typed lines) leaves it NULL. Lines used to hang off
+-- tally_expense_receipt alone, which made a photo the price of itemising.
 CREATE TABLE IF NOT EXISTS tally_expense_line_item (
   line_item_id TEXT PRIMARY KEY,
-  receipt_id   TEXT NOT NULL REFERENCES tally_expense_receipt(receipt_id) ON DELETE CASCADE,
+  expense_id   TEXT NOT NULL REFERENCES tally_expense(expense_id) ON DELETE CASCADE,
+  receipt_id   TEXT REFERENCES tally_expense_receipt(receipt_id) ON DELETE CASCADE,
   kind         TEXT NOT NULL CHECK (kind IN ('item','tax','tip')),
   description  TEXT NOT NULL,
   amount_minor INTEGER NOT NULL CHECK (amount_minor >= 0),
@@ -95,6 +108,8 @@ CREATE TABLE IF NOT EXISTS tally_expense_line_allocation (
 
 CREATE INDEX IF NOT EXISTS tally_expense_line_receipt_idx
   ON tally_expense_line_item(receipt_id, sort_order);
+CREATE INDEX IF NOT EXISTS tally_expense_line_expense_idx
+  ON tally_expense_line_item(expense_id, sort_order);
 CREATE INDEX IF NOT EXISTS tally_expense_line_allocation_party_idx
   ON tally_expense_line_allocation(party_id);
 ${touchUpdatedAt("tally_expense_receipt", "receipt_id").replace(
@@ -128,16 +143,39 @@ CREATE TABLE tally_group (
   circle_id  TEXT NOT NULL UNIQUE REFERENCES social_circle(circle_id),
   icon       TEXT NOT NULL,
   color      TEXT NOT NULL,
+  -- Debt simplification rewires who owes whom, so it is OFF unless this group
+  -- turns it on. The flag is the ONLY thing stored: the proposal itself is
+  -- derived at read time and never written, and an accepted proposal is
+  -- recorded as ordinary settlements.
+  simplify_opt_in INTEGER NOT NULL DEFAULT 0
+    CHECK (simplify_opt_in IN (0,1)),
+  -- Archive is not delete: an archived group drops out of the default lists
+  -- and keeps every row. It needs no settled balance.
+  archived_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 
 CREATE TABLE tally_expense (
   expense_id   TEXT PRIMARY KEY,
-  group_id     TEXT NOT NULL REFERENCES tally_group(group_id),
+  -- NULL for a group-less 1:1 expense (GAPS #4), mirroring how a settlement
+  -- has always been free-standing. Participants on a group-less expense are
+  -- validated against the friend roster instead of a circle.
+  group_id     TEXT REFERENCES tally_group(group_id),
   description  TEXT NOT NULL,
   amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
+  -- The PRINCIPAL payer, always populated and always one of the payer rows.
+  -- Every expense also writes its full payer set to tally_expense_payer (one
+  -- degenerate row in the single-payer case), so a reader that only knows this
+  -- column stays right for the single-payer case and the folds read one shape.
   paid_by      TEXT NOT NULL REFERENCES core_party(party_id),
+  -- How the shares were arrived at, so an edit re-opens the way it was
+  -- entered. The vault still stores RESOLVED shares — the method and its
+  -- parameters are provenance, never a second arithmetic path.
+  split_method TEXT NOT NULL DEFAULT 'exact' CHECK (split_method IN
+    ('equally','exact','percentages','shares','adjusted','by_line')),
+  split_params_json TEXT
+    CHECK (split_params_json IS NULL OR json_valid(split_params_json)),
   spent_on     TEXT NOT NULL,
   category     TEXT NOT NULL CHECK (category IN
     ('food','groceries','rent','utilities','transport','fun','travel','shopping','general')),
@@ -155,6 +193,35 @@ CREATE TABLE tally_expense_split (
   share_minor INTEGER NOT NULL CHECK (share_minor >= 0),
   updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
   PRIMARY KEY (expense_id, party_id)
+) STRICT;
+
+-- Who actually put money down, and how much. Written for EVERY expense: the
+-- single-payer case is the degenerate one row (paid_by, amount_minor). The
+-- paid amounts sum to the expense amount, re-validated server-side, and both
+-- balance folds credit payers from here rather than from paid_by alone.
+CREATE TABLE tally_expense_payer (
+  expense_id  TEXT NOT NULL REFERENCES tally_expense(expense_id) ON DELETE CASCADE,
+  party_id    TEXT NOT NULL REFERENCES core_party(party_id),
+  paid_minor  INTEGER NOT NULL CHECK (paid_minor >= 0),
+  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  PRIMARY KEY (expense_id, party_id)
+) STRICT;
+
+-- A PREPARED reminder, never a sent one. Tally has no delivery path and wants
+-- none: the row records that the owner meant to nudge someone about a stale
+-- balance, and tally.nudge carries confirm:true so an app-issued nudge
+-- parks for the owner's confirmation instead of firing.
+CREATE TABLE tally_nudge (
+  nudge_id     TEXT PRIMARY KEY,
+  party_id     TEXT NOT NULL REFERENCES core_party(party_id),
+  group_id     TEXT REFERENCES tally_group(group_id),
+  -- The net the owner saw when they prepared it, in minor units. Provenance
+  -- for the reminder's wording — never read back as a balance.
+  as_of_minor  INTEGER NOT NULL,
+  note         TEXT,
+  prepared_at  TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 
 CREATE TABLE tally_settlement (
@@ -198,6 +265,10 @@ CREATE INDEX tally_settlement_group_idx ON tally_settlement(group_id);
 CREATE INDEX tally_expense_paid_by_idx ON tally_expense(paid_by);
 CREATE INDEX tally_expense_txn_idx ON tally_expense(txn_id);
 CREATE INDEX tally_expense_split_party_idx ON tally_expense_split(party_id);
+CREATE INDEX tally_expense_payer_party_idx ON tally_expense_payer(party_id);
+CREATE INDEX tally_group_archived_idx ON tally_group(archived_at);
+CREATE INDEX tally_nudge_party_idx ON tally_nudge(party_id, prepared_at DESC);
+CREATE INDEX tally_nudge_group_idx ON tally_nudge(group_id);
 CREATE INDEX tally_settlement_from_party_idx ON tally_settlement(from_party);
 CREATE INDEX tally_settlement_to_party_idx ON tally_settlement(to_party);
 CREATE INDEX tally_settlement_txn_idx ON tally_settlement(txn_id);
@@ -208,6 +279,15 @@ ${touchUpdatedAt("tally_group", "group_id")}
 ${touchUpdatedAt("tally_expense", "expense_id")}
 ${touchUpdatedAt("tally_settlement", "settlement_id")}
 ${touchUpdatedAt("tally_obligation", "obligation_id")}
+${touchUpdatedAt("tally_nudge", "nudge_id")}
+CREATE TRIGGER tally_expense_payer_touch_updated_at
+AFTER UPDATE ON tally_expense_payer
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+  UPDATE tally_expense_payer
+     SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+   WHERE expense_id = NEW.expense_id AND party_id = NEW.party_id;
+END;
 CREATE TRIGGER tally_expense_split_touch_updated_at
 AFTER UPDATE ON tally_expense_split
 WHEN NEW.updated_at = OLD.updated_at

@@ -18,6 +18,7 @@ import type { ReactNode } from "react";
 
 import type { SearchStatus } from "../../_shared/search-scaffold.ts";
 import { SearchScaffold } from "../../_shared/SearchScaffold.tsx";
+import { entryFacts } from "../entry-facts.ts";
 import { money, proportion } from "../format.ts";
 import {
   categoryTotals,
@@ -47,7 +48,7 @@ import {
   trashedOn,
 } from "../view-copy.ts";
 import { Rows, Section } from "./Blocks.tsx";
-import { EntryRow, entryFacts } from "./EntryRow.tsx";
+import { EntryRow } from "./EntryRow.tsx";
 import { LedgerRow } from "./LedgerRow.tsx";
 
 import styles from "./Ledger.module.css";

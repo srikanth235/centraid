@@ -35,8 +35,10 @@ import {
   DENIED_TITLE,
   OFFLINE_NOTICE,
   PARKED_NOTICE,
+  REVOKED_UNKNOWN,
   VERBS,
   pendingNotice,
+  revokedAt,
   staleNotice,
 } from "../view-copy.ts";
 
@@ -158,9 +160,16 @@ export function AllSettled(): ReactNode {
 export interface DeniedGateProps {
   /** The receipt the denial came back with, as the query reported it. */
   receipt: string;
+  /** WHEN the grant went, where the gateway recorded it. `null` when the
+   *  denial carried no time — and then the gate says the time is gone with
+   *  the grant rather than inventing one. */
+  revokedAt?: string | null;
 }
 
-export function DeniedGate({ receipt }: DeniedGateProps): ReactNode {
+export function DeniedGate({
+  receipt,
+  revokedAt: at,
+}: DeniedGateProps): ReactNode {
   const facts: readonly (readonly [string, string])[] = [
     [DENIED_FACT_LABELS.receipt, receipt],
     [DENIED_FACT_LABELS.scope, DENIED_SCOPE],
@@ -169,6 +178,7 @@ export function DeniedGate({ receipt }: DeniedGateProps): ReactNode {
   return (
     <div className={styles.gate}>
       <h2 className={styles.gateTitle}>{DENIED_TITLE}</h2>
+      <p className={styles.gateBody}>{at ? revokedAt(at) : REVOKED_UNKNOWN}</p>
       <p className={styles.gateBody}>{DENIED_BODY}</p>
       <p className={styles.gateBody}>{DENIED_REGRANT}</p>
       <dl className={styles.gateFacts}>

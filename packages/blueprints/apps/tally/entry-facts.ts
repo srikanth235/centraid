@@ -37,6 +37,10 @@ export interface EntryFacts {
   /** Has this write settled in the vault? Read off the pending overlay the
    *  query decorated the row with, never guessed from an id. */
   pending?: boolean;
+  /** The decorated row as the query handed it over, for the shared overlay
+   *  engine. A seat that renders retry/discard needs the whole row, not the
+   *  boolean above. */
+  pendingRow?: Readonly<Record<string, unknown>> | null;
 }
 
 /** A decorated ledger row, narrowed to the facts the row draws. */
@@ -56,6 +60,7 @@ export function entryFacts(entry: LedgerEntry): EntryFacts {
     hasReceipt: entry.receipt !== undefined,
     ...(entry.parked === true ? { parked: true } : {}),
     ...(entry.pending === true ? { pending: true } : {}),
+    pendingRow: entry as unknown as Record<string, unknown>,
   };
 }
 

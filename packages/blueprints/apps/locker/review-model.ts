@@ -7,15 +7,17 @@
 // overstates itself.
 //
 // AND A THIRD FACT THIS FILE MAKES STRUCTURAL: a check whose PRODUCER exists
-// but whose data does not reach this screen is neither of those things. The
-// items read folds the vault's watchtower aggregate in (weak, reused,
-// compromised), but it decorates no address and no expiry — so *Unsecured
-// address* and *Expiring* have a producer, a source, and nothing to read.
-// `servedFields` names that as its own state instead of reporting a zero:
-// "checked, and found none" and "not asked" are different sentences, and only
-// one of them is true here today. The day the items query decorates those two
-// fields, the same code moves both checks into the first register with no
-// edit — which is what makes this a state rather than a hard-coded apology.
+// but whose data does not reach this screen is neither of those things.
+// `servedFields` names that as its own state instead of reporting a zero —
+// "checked, and found none" and "not asked" are different sentences, and a
+// register that ran both together would be overstating one of them.
+//
+// THAT STATE IS WHAT MOVED (#872). The items read now decorates each row with
+// its address, its card expiry and the clock on its current password, so
+// *Unsecured address*, *Expiring* and *Password age* run in the first register
+// — with NO edit here, because the mechanism was always the derivation and
+// never a hard-coded apology. A read that stops carrying one of the three
+// moves that check back on its own.
 //
 // Pure: no JSX, no IO, and no clock but the one passed in.
 
@@ -56,19 +58,22 @@ export interface UnrunnableRow {
 export interface ServedFields {
   address: boolean;
   expiry: boolean;
+  age: boolean;
 }
 
 export function servedFields(rows: readonly LockerRow[]): ServedFields {
   return {
     address: rows.some((row) => "url" in row),
     expiry: rows.some((row) => "expiry" in row),
+    age: rows.some((row) => "password_set_at" in row),
   };
 }
 
-/** Which of the five checks this payload can answer at all. */
+/** Which of the six checks this payload can answer at all. */
 function answerable(key: CheckKey, served: ServedFields): boolean {
   if (key === "http") return served.address;
   if (key === "expiring") return served.expiry;
+  if (key === "age") return served.age;
   return true;
 }
 
@@ -78,6 +83,7 @@ const CHECK_ORDER: readonly CheckKey[] = [
   "reused",
   "http",
   "expiring",
+  "age",
 ];
 
 /** The whole of Review, as one value. */

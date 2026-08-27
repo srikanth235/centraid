@@ -50,6 +50,12 @@ export const SEALED_KEYS: ReadonlySet<string> = new Set([
   "content",
 ]);
 
+/** A type whose own fields are vault-minted custom fields; the form owns only
+ *  the memo. See the note beside its uses below. */
+const TEMPLATE_ONLY: readonly DraftField[] = [
+  { key: "notes", label: "Memo", kind: "long" },
+];
+
 /**
  * The rows each type owns, in the order the form draws them. The notes are
  * `route-copy.ts`'s, attached at render rather than here, so this table stays
@@ -93,6 +99,21 @@ export const TYPE_FIELDS: Readonly<
     { key: "password", label: "Password", kind: "secret" },
     { key: "notes", label: "Memo", kind: "long" },
   ],
+  // The nine expansion types (#872, GAPS §3.3 #1) own NO columns: their rows
+  // are custom fields the vault mints from a template when the item is
+  // created, and they are edited through `locker.set_field`, not through this
+  // form's column payload. What the form still owns for them is the memo —
+  // which is why each is the same one row rather than a copy of a template
+  // this file would then have to keep in lockstep with the vault's.
+  ssh_key: TEMPLATE_ONLY,
+  api_credential: TEMPLATE_ONLY,
+  passport: TEMPLATE_ONLY,
+  bank_account: TEMPLATE_ONLY,
+  driving_licence: TEMPLATE_ONLY,
+  software_licence: TEMPLATE_ONLY,
+  crypto_wallet: TEMPLATE_ONLY,
+  membership: TEMPLATE_ONLY,
+  document: TEMPLATE_ONLY,
 };
 
 /** A note's body is sealed even though it is entered as prose — which is
@@ -154,7 +175,10 @@ export function seedFromDetail(detail: LockerDetail): ItemDraftSeed {
     type: detail.type,
     title: detail.title,
     tags: (detail.tags ?? []).join(", "),
-    alias: "",
+    // READ BACK AT LAST (#872, README-Locker §8's first paper cut). The form
+    // pre-fills the binding that exists, so a member can see it, clear it by
+    // emptying the field, and reassign it by typing another.
+    alias: detail.alias ?? "",
     urlMatchPolicy: detail.url_match_policy ?? "registrable-domain",
     fields,
   };
@@ -188,12 +212,11 @@ export function draftFrom(seed: ItemDraftSeed): ItemDraft {
     type: seed.type,
     title: seed.title,
     tags: seed.tags,
-    // The alias stays READ-ONLY on this form: the actions now forward it
-    // (GAPS §3.3 #15), but no vault read serves it back, so the form has
-    // nothing to pre-fill and no way to show what a typed value would
-    // overwrite. An empty string is dropped by the write door, so an edit
-    // never clears an existing binding.
-    alias: "",
+    // The alias travels as it was typed, EMPTY INCLUDED — on an edit an empty
+    // field is the member clearing the binding, which is what `locker.edit_item`
+    // reads a blank alias as. On a create there is nothing to clear, and the
+    // write door drops it.
+    alias: seed.alias,
     ...(carriesMatchPolicy(seed.type)
       ? { urlMatchPolicy: seed.urlMatchPolicy }
       : {}),

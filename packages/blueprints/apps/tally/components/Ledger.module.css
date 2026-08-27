@@ -421,6 +421,14 @@
   margin: 0;
   text-wrap: pretty;
 }
+/* The rest of one sentence, or the rule the confirm stands on: annotation
+   rung, recessive ink, so the body keeps carrying the consequence. */
+.confirmNote {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  margin: 0;
+  text-wrap: pretty;
+}
 /* ---------- The More sheet ---------- */
 
 .sheet {

@@ -46,7 +46,7 @@ export interface RouteProps {
   shelf: ShelfId;
   /** A denied read, as the query reported it. Denial is DATA, and it replaces
    *  every route's body with the gate rather than emptying it. */
-  consent: { message: string } | null;
+  consent: { message: string; revokedAt: string | null } | null;
   dashboard: DashboardData;
   group: GroupData | null;
   friend: FriendData | null;
@@ -65,7 +65,16 @@ export interface RouteProps {
   onOpenExpense: (entry: LedgerEntry) => void;
   onShowMore: () => void;
   onAskLeave: (groupId: string) => void;
-  onAskArchive: (groupId: string) => void;
+  onAskArchive: (groupId: string, archived: boolean) => void;
+  /** Turn simplification on or off for the open group. */
+  onSimplify: (groupId: string, simplify: boolean) => void;
+  /** Prepare a reminder about one balance. Always parks. */
+  onRemind: (input: {
+    partyId: string;
+    name: string;
+    groupId: string | null;
+    asOfMinor: number;
+  }) => void;
   onAskRemove: (partyId: string) => void;
   onAddFriend: () => void;
   onNewGroup: () => void;
@@ -77,13 +86,21 @@ export interface RouteProps {
   onRestore: (expenseId: string) => void;
   onBack: () => void;
   onWaiting: () => void;
+  /** Assemble the export file and hand it to the member. */
+  onSaveExport: () => void;
   onQuery: (value: string) => void;
   onRetry: () => void;
 }
 
 export function Route(props: RouteProps): ReactNode {
   const { shelf, dashboard } = props;
-  if (props.consent) return <DeniedGate receipt={props.consent.message} />;
+  if (props.consent)
+    return (
+      <DeniedGate
+        receipt={props.consent.message}
+        revokedAt={props.consent.revokedAt}
+      />
+    );
 
   if (shelf === null) {
     // DAY ONE IS A FACT ABOUT A READ THAT LANDED, and it looks nothing like a
@@ -102,6 +119,14 @@ export function Route(props: RouteProps): ReactNode {
         onNewGroup={props.onNewGroup}
         onSettle={props.onSettle}
         onSpending={() => props.go(SPENDING)}
+        onRemind={(friend) =>
+          props.onRemind({
+            partyId: friend.party_id,
+            name: friend.name,
+            groupId: null,
+            asOfMinor: friend.net_minor,
+          })
+        }
       />
     );
   }
@@ -144,6 +169,16 @@ export function Route(props: RouteProps): ReactNode {
         onSettle={props.onSettle}
         onRename={props.onRename}
         onDelete={props.onDeleteGroup}
+        onLeave={() => props.onAskLeave(props.group?.group?.group_id ?? "")}
+        onArchive={() =>
+          props.onAskArchive(
+            props.group?.group?.group_id ?? "",
+            Boolean(props.group?.group?.archived_at)
+          )
+        }
+        onSimplify={(simplify) =>
+          props.onSimplify(props.group?.group?.group_id ?? "", simplify)
+        }
       />
     ) : null;
   }
@@ -207,6 +242,7 @@ export function Route(props: RouteProps): ReactNode {
       go={props.go}
       onBack={props.onBack}
       onWaiting={props.onWaiting}
+      onSaveExport={props.onSaveExport}
     />
   );
 }

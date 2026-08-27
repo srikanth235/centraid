@@ -33,6 +33,8 @@ import {
   prefillEntries,
 } from "./draft-model.ts";
 import type { ExpenseDraft, SettleDraft } from "./draft-model.ts";
+import { newLineDraft } from "./line-model.ts";
+import type { LineDraft } from "./line-model.ts";
 import { selectionOf } from "./receipt-model.ts";
 import type { LineSelection } from "./receipt-model.ts";
 import type { ShelfId } from "./shelves.ts";
@@ -43,7 +45,17 @@ import type { HistoryData, LedgerEntry, Revision } from "./types.ts";
 export type Overlay =
   | { kind: "more" }
   | { kind: "leave"; groupId: string }
-  | { kind: "archive"; groupId: string }
+  | { kind: "archive"; groupId: string; archived: boolean }
+  /** A reminder about one stale balance, before it is prepared. It ALWAYS
+   *  parks, so the sheet says so before the press rather than after. */
+  | {
+      kind: "nudge";
+      partyId: string;
+      name: string;
+      groupId: string | null;
+      asOfMinor: number;
+      note: string;
+    }
   /** `refused` is the removal guard's verdict, decided BEFORE the question is
    *  put: a member who appears on the ledger is never offered a commit. */
   | { kind: "remove"; partyId: string; name: string; refused: boolean }
@@ -95,6 +107,12 @@ export interface ComposeState {
     participants: readonly string[]
   ) => void;
   setEntry: (partyId: string, text: string) => void;
+  /** What one payer put down. An empty string takes them off the payer set,
+   *  which is how a member goes back to one payer without a mode switch. */
+  setPayer: (partyId: string, text: string) => void;
+  /** Rewrite the typed lines wholesale — add, edit or take one out. */
+  setLines: (lines: readonly LineDraft[]) => void;
+  addLine: () => void;
   patchSettle: (patch: Partial<SettleDraft>) => void;
   patchExport: (patch: Partial<ExportDraft>) => void;
   toggleLine: (lineId: string, partyId: string) => void;
@@ -172,6 +190,12 @@ export function useComposeState(seed: { today: string }): ComposeState {
           participants,
           bag.draft.payerId
         ),
+        // A By-line table opens with one empty line: a table with no rows is a
+        // control with nothing to press.
+        lines:
+          division === "lines" && bag.draft.lines.length === 0
+            ? [newLineDraft()]
+            : bag.draft.lines,
       };
       bump();
     },
@@ -189,6 +213,35 @@ export function useComposeState(seed: { today: string }): ComposeState {
     },
     [bump]
   );
+
+  const setPayer = useCallback(
+    (partyId: string, text: string) => {
+      const bag = bagRef.current;
+      const payers = { ...bag.draft.payers };
+      // A PAYER WHO PUT DOWN NOTHING IS NOT A PAYER. Leaving an empty cell in
+      // the map would make the sum check fail on a row nobody meant to add.
+      if (text.trim() === "") delete payers[partyId];
+      else payers[partyId] = text;
+      bag.draft = { ...bag.draft, payers };
+      bump();
+    },
+    [bump]
+  );
+
+  const setLines = useCallback(
+    (lines: readonly LineDraft[]) => {
+      const bag = bagRef.current;
+      bag.draft = { ...bag.draft, lines: [...lines] };
+      bump();
+    },
+    [bump]
+  );
+
+  const addLine = useCallback(() => {
+    const bag = bagRef.current;
+    bag.draft = { ...bag.draft, lines: [...bag.draft.lines, newLineDraft()] };
+    bump();
+  }, [bump]);
 
   const patchSettle = useCallback(
     (patch: Partial<SettleDraft>) => {
@@ -344,6 +397,9 @@ export function useComposeState(seed: { today: string }): ComposeState {
     patchDraft,
     setDivision,
     setEntry,
+    setPayer,
+    setLines,
+    addLine,
     patchSettle,
     patchExport,
     toggleLine,

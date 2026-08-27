@@ -6,16 +6,16 @@
 // foot — six lines total £132.50, the expense is £132.50, yours is £41.17 — so
 // a mis-allocation is visible before saving rather than after.
 //
-// THE CHIPS MOVE AND THE COMMIT DOES NOT, and that is the honest shape of
-// today's backend. `add-receipt-expense` publishes a NEW receipt-backed
-// expense from staged bytes and an OCR text, both of which come from the
-// origin seat's capture flow — this surface has neither. Re-allocating a
-// receipt the vault already holds has no command at all: `edit-expense`
-// rewrites an expense's splits but leaves `tally.expense_line_allocation`
-// untouched, so committing through it would leave the lines and the shares
-// disagreeing inside the vault. So the allocation is live (the foot recomputes
-// as chips move, which is the whole point of stating it as arithmetic) and the
-// commit is refused with the gap named.
+// THE COMMIT IS ONE WRITE, and it has to be: `tally.reallocate_receipt`
+// rewrites every line allocation AND the splits they imply in one transaction,
+// re-validating that the lines still sum to the expense. An `edit-expense`
+// that rewrote only the splits would leave `tally.expense_line_allocation`
+// disagreeing with them inside the vault — the lines and the shares are one
+// fact, and one fact takes one write. The amount never changes.
+//
+// THE FOOT RECOMPUTES AS THE CHIPS MOVE, which is the whole point of stating
+// the reconciliation as arithmetic: a mis-allocation is visible before saving
+// rather than after, and the commit is refused while the lines do not sum.
 //
 // THE PHOTOGRAPH GOES THROUGH THE SHELL'S BLOB DOOR. The document origin is
 // not the gateway — the PWA rides a tunnel and desktop runs from `file://` —
@@ -34,7 +34,6 @@ import {
   RECEIPT_NONE,
   RECEIPT_SHOT_ABSENT,
   RECEIPT_SHOT_ALT,
-  RECEIPT_UNBUILT,
   unallocatedLines,
 } from "../compose-copy.ts";
 import { metaSentence, money } from "../format.ts";
@@ -58,6 +57,7 @@ export interface ReceiptScreenProps {
   shotUrl: string | null;
   onToggle: (lineId: string, partyId: string) => void;
   onCancel: () => void;
+  onCommit: () => void;
 }
 
 export function ReceiptScreen(props: ReceiptScreenProps): ReactNode {
@@ -146,8 +146,11 @@ export function ReceiptScreen(props: ReceiptScreenProps): ReactNode {
         onCancel={props.onCancel}
         commit={{
           label: RECEIPT_COMMIT,
-          refusal: RECEIPT_UNBUILT,
-          run: props.onCancel,
+          // THE ARITHMETIC IS THE ONLY GATE. Lines that do not sum to the
+          // expense would be refused by the command anyway; saying so here is
+          // the same refusal, in front of the press rather than behind it.
+          ...(folded.reconciles ? {} : { refusal: folded.sentence }),
+          run: props.onCommit,
         }}
       />
     </Editor>

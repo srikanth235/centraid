@@ -40,9 +40,13 @@ import {
 } from "./domains-health-finance-schedule.js";
 import { HOME_DDL, BUSINESS_DDL } from "./domains-home-business.js";
 import {
+  LOCKER_ADDRESS_DDL,
   LOCKER_ALIAS_DDL,
   LOCKER_AUTH_DDL,
   LOCKER_DDL,
+  LOCKER_FIELD_DDL,
+  LOCKER_HISTORY_DDL,
+  LOCKER_PASSKEY_DDL,
 } from "./domains-locker.js";
 import {
   PEOPLE_DDL,
@@ -139,6 +143,13 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     LOCKER_DDL,
     LOCKER_AUTH_DDL,
     LOCKER_ALIAS_DDL,
+    // Locker's remaining sidecars (#872), all FK'd to `locker_item` so they
+    // follow it in the baseline: custom fields and sections, extra addresses,
+    // the passkey slot, and the durable item/password history.
+    LOCKER_FIELD_DDL,
+    LOCKER_ADDRESS_DDL,
+    LOCKER_PASSKEY_DDL,
+    LOCKER_HISTORY_DDL,
     TALLY_DDL,
     TALLY_RECEIPT_DDL,
     ENTITY_REVISIONS_DDL,

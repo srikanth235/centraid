@@ -32,9 +32,25 @@ export type Role = "lent" | "borrowed" | "none";
 /** One expense, as `ledgerRow()` hands it to the group, friend and search
  *  ledgers — decorated with the owner's stance, its splits, its currency
  *  provenance and, where a write has not settled, the pending overlay. */
+/** One person who fronted part of an expense. Several is the ordinary shape
+ *  now; one payer is the same shape with one row in it. */
+export interface Payer extends Person {
+  paid_minor: number;
+}
+
+/** How the shares were arrived at — the word `add-expense` recorded. */
+export type SplitMethodName =
+  | "equally"
+  | "exact"
+  | "percentages"
+  | "shares"
+  | "adjusted"
+  | "by_line";
+
 export interface LedgerEntry {
   expense_id: string;
-  group_id: string;
+  /** `null` on a group-less 1:1 expense. */
+  group_id: string | null;
   description?: string;
   amount_minor: number;
   original_amount_minor: number;
@@ -52,6 +68,15 @@ export interface LedgerEntry {
   spent_on?: string;
   paid_by: string;
   paid_by_name: string;
+  /** The recorded division, and the numbers the member typed to get it. */
+  split_method?: SplitMethodName;
+  split_params?: Record<string, unknown> | null;
+  /** Everyone who put money down, with the part each of them put. */
+  payers?: Payer[];
+  /** The typed lines behind the shares, receipt-backed or not. */
+  line_items?: ReceiptLine[];
+  /** The owner's stance, keyed off WHAT THEY PAID rather than off `paid_by`:
+   *  with several payers the row is theirs if they fronted any of it. */
   your_role: Role;
   your_amount_minor: number;
   splits: Split[];
@@ -123,6 +148,15 @@ export interface HistoryData {
 /** One friend on the dashboard: positive is owed TO you. */
 export interface FriendSummary extends Person {
   net_minor: number;
+  /** Where the net came from — one part per group, plus what is outside every
+   *  group. The parts sum to the net, which is the only claim made about them. */
+  parts?: NetPart[];
+}
+
+export interface NetPart {
+  group_id: string | null;
+  group_name: string;
+  net_minor: number;
 }
 
 /** One group on the dashboard. `owner_net_minor` is the owner's own position
@@ -134,6 +168,10 @@ export interface GroupSummary {
   color?: string;
   member_count: number;
   owner_net_minor: number;
+  /** Has this group turned simplification on? Off by default, always. */
+  simplify_opt_in?: boolean;
+  /** When it left the lists, or `null` while it is still in them. */
+  archived_at?: string | null;
 }
 
 /** One trashed expense, with the date it stops being restorable. */
@@ -176,10 +214,35 @@ export interface RecurringTemplate {
   rate_date?: string | null;
 }
 
-/** A denied read, as every query reports it. Denial is DATA. */
+/** A denied read, as every query reports it. Denial is DATA — including the
+ *  moment the grant went, where the gateway recorded one. */
 export interface VaultDenied {
   code?: string;
   message?: string;
+  revoked_at?: string | null;
+}
+
+/** One rate this vault has already been told, offered as a prefill. */
+export interface RateSuggestion {
+  from_currency: string;
+  to_currency: string;
+  rate_scaled: number;
+  rate_scale: number;
+  rate_source: string;
+  rate_date: string;
+  observed_on: string;
+  expense_id: string;
+}
+
+/** One reminder the owner PREPARED. `sent` is stated and always false: Tally
+ *  has no delivery path, and the record is the intention. */
+export interface Nudge {
+  nudge_id: string;
+  party_id: string;
+  group_id: string | null;
+  prepared_at: string;
+  note: string | null;
+  sent: boolean;
 }
 
 export interface DashboardData {
@@ -187,10 +250,18 @@ export interface DashboardData {
   currency: string;
   friends: FriendSummary[];
   groups: GroupSummary[];
+  /** Archived groups leave the main lists and keep everything, so they travel
+   *  in their own array rather than being filtered into silence. */
+  archived_groups?: GroupSummary[];
   trash: TrashEntry[];
   recurring: RecurringTemplate[];
   owe_total_minor: number;
   owed_total_minor: number;
+  /** What the Balances hero states its arithmetic FROM. */
+  expense_count?: number;
+  settlement_count?: number;
+  rate_suggestions?: RateSuggestion[];
+  nudges?: Nudge[];
   vaultDenied?: VaultDenied | null;
 }
 
@@ -201,6 +272,22 @@ export interface GroupMember extends Person {
   departed?: boolean;
 }
 
+/** One payment the minimal-transfer fold proposes. DERIVED AT READ TIME and
+ *  written nowhere: turning simplification on stores a flag, never a transfer. */
+export interface Transfer {
+  from: string;
+  to: string;
+  amount_minor: number;
+}
+
+export interface Simplification {
+  opted_in: boolean;
+  /** Empty until the group opts in, because it rewires who owes whom. */
+  transfers: Transfer[];
+  debts_before: number;
+  payments_after: number;
+}
+
 export interface GroupData {
   me: string | null;
   currency: string;
@@ -209,9 +296,12 @@ export interface GroupData {
     name: string;
     icon?: string;
     color?: string;
+    simplify_opt_in?: boolean;
+    archived_at?: string | null;
   } | null;
   members: GroupMember[];
   ledger: LedgerEntry[];
+  simplification?: Simplification;
   vaultDenied?: VaultDenied | null;
 }
 
@@ -247,6 +337,35 @@ export interface ActivityData {
   me: string | null;
   currency: string;
   activity: ActivityRow[];
+  vaultDenied?: VaultDenied | null;
+}
+
+/** One group's ledger as a file's worth of rows. Balances are excluded by
+ *  design — they are arithmetic over these, and arithmetic travels in the rows. */
+export interface ExportData {
+  group: {
+    group_id: string;
+    name: string;
+    icon?: string;
+    color?: string;
+    archived_at: string | null;
+    members: { party_id: string; name: string }[];
+  } | null;
+  currency?: string;
+  expenses: Record<string, unknown>[];
+  settlements: Record<string, unknown>[];
+  revisions: Record<string, unknown>[];
+  balances_excluded: boolean;
+  truncated: boolean;
+  /** What the file holds and what bounded it: `since` is the inclusive ISO
+   *  date floor the Range chip asked for, `null` when the chip said
+   *  Everything. The counts are counts WITHIN that range. */
+  window: {
+    limit: number;
+    since: string | null;
+    expenses: number;
+    settlements: number;
+  };
   vaultDenied?: VaultDenied | null;
 }
 

@@ -22,6 +22,7 @@
 import type { SearchStatus } from "../_shared/search-scaffold.ts";
 import { defaultGenOptions } from "./gen-model.ts";
 import type { GenOptions } from "./gen-model.ts";
+import type { StagedBatch } from "./import-model.ts";
 import { emptySecretBag } from "./session.ts";
 import type { SecretBag } from "./session.ts";
 import type { ItemFilter, LockerRow } from "./types.ts";
@@ -66,6 +67,25 @@ export interface ViewBag {
   searchSeq: number;
   /** What the add / edit form refused, in its own words. */
   editError: string;
+  /** How many live items EXIST, as the vault counted them — the other half of
+   *  "300 of 312". `null` when the count could not be read, and the foot then
+   *  says what it knows rather than inventing a denominator. */
+  total: number | null;
+  /** How many items are archived, for the rail's own row. */
+  archivedCount: number;
+  /** The draft batches the import plane is holding, and which of them is open
+   *  for review. Metadata only — the ROWS live in the secret bag. */
+  importBatches: StagedBatch[] | null;
+  openBatchId: string | null;
+  /** What the import surface itself refused or settled, in its own words. */
+  importNote: string;
+  /** The access history's own window, and whether it is narrowed to one item. */
+  accessWindow: { window: number; truncated: boolean } | null;
+  accessItemId: string | null;
+  /** The export screen's two switches, and whether its confirm stands. */
+  exportTrashed: boolean;
+  exportHistory: boolean;
+  exportConfirm: boolean;
 }
 
 export type Bag = SecretBag & ViewBag;
@@ -87,5 +107,15 @@ export function makeBag(): Bag {
     searchStatus: "resting",
     searchSeq: 0,
     editError: "",
+    total: null,
+    archivedCount: 0,
+    importBatches: null,
+    openBatchId: null,
+    importNote: "",
+    accessWindow: null,
+    accessItemId: null,
+    exportTrashed: false,
+    exportHistory: false,
+    exportConfirm: false,
   };
 }

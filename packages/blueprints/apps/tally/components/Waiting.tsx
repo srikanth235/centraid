@@ -10,22 +10,28 @@
 // so each one says so in its own words rather than the screen collapsing into
 // a single generic nothing.
 //
-// ACCEPT AND DECLINE ARE NOT DRAWN AS BUTTONS, because the app client has no
-// per-intent approval door: a steward answers in the shell's own Approvals
-// inbox (`window.centraid.openApprovals`). So a steward-only act says why it
-// stopped here and hands over — and where the host provides no inbox at all,
-// it says that instead of drawing a control that cannot fire. The verbs that
-// ARE real are the outbox's own (`contrib-model.ts`), and each one is drawn
-// only where its door exists.
+// APPROVE AND DECLINE ARE THE STEWARD'S ANSWER, given here, through
+// `decideCommonsIntent`. Every verb on every row is drawn only where its own
+// door exists: a host without the decide door draws neither button and offers
+// no substitute for them, because a control that cannot fire teaches a member
+// something false and a fallback that faked it would be worse (protocol C1).
+//
+// REMINDERS PREPARED IS A FOURTH SECTION, and it is not an intent list. A
+// nudge always parks — Tally has no delivery path — so what the dashboard
+// returns is a record of intentions, and the section says "prepared" in every
+// row and "sent" in none of them.
 import type { ReactNode } from "react";
 
 import {
-  CONTRIB_APPROVALS_NOTE,
   CONTRIB_EMPTY,
   CONTRIB_META,
   CONTRIB_NO_DOOR,
   CONTRIB_SECTIONS,
   CONTRIB_VERBS,
+  NUDGE_EMPTY,
+  NUDGE_META,
+  NUDGE_SECTION,
+  nudgePrepared,
 } from "../compose-copy.ts";
 import type {
   ContribRow,
@@ -33,6 +39,8 @@ import type {
   ContribVerb,
 } from "../contrib-model.ts";
 import { metaSentence } from "../format.ts";
+import type { Nudge, Person } from "../types.ts";
+import { NUDGE_PARKED } from "../view-copy.ts";
 import { Note, Rows, Section } from "./Blocks.tsx";
 import { LedgerRow } from "./LedgerRow.tsx";
 import type { RowAct } from "./LedgerRow.tsx";
@@ -41,6 +49,12 @@ export interface WaitingScreenProps {
   sections: ContribSections;
   /** Does this host hold an approval inbox at all? */
   hasApprovals: boolean;
+  /** Does it hold the per-intent Approve/Decline door? */
+  canDecide: boolean;
+  /** Reminders the owner prepared. Nothing here was ever sent. */
+  nudges: readonly Nudge[];
+  /** Who each reminder is about, by party id. */
+  people: readonly Person[];
   narrow: boolean;
   onVerb: (verb: ContribVerb, row: ContribRow) => void;
 }
@@ -80,10 +94,13 @@ export function WaitingScreen(props: WaitingScreenProps): ReactNode {
         narrow={props.narrow}
       >
         <Rows>{rowsOf(props, sections.waiting)}</Rows>
-        {sections.waiting.length > 0 ? (
-          <Note>
-            {props.hasApprovals ? CONTRIB_APPROVALS_NOTE : CONTRIB_NO_DOOR}
-          </Note>
+        {/* Only where there is genuinely nowhere to answer. With the decide
+            door present the row's own buttons ARE the answer, and a note
+            pointing elsewhere would be a second one. */}
+        {sections.waiting.length > 0 &&
+        !props.canDecide &&
+        !props.hasApprovals ? (
+          <Note>{CONTRIB_NO_DOOR}</Note>
         ) : null}
       </Section>
 
@@ -105,6 +122,30 @@ export function WaitingScreen(props: WaitingScreenProps): ReactNode {
         narrow={props.narrow}
       >
         <Rows>{rowsOf(props, sections.ended)}</Rows>
+      </Section>
+
+      <Section
+        label={NUDGE_SECTION}
+        meta={NUDGE_META}
+        count={props.nudges.length}
+        empty={NUDGE_EMPTY}
+        narrow={props.narrow}
+      >
+        <Rows>
+          {props.nudges.map((nudge) => (
+            <LedgerRow
+              key={nudge.nudge_id}
+              title={nudgePrepared(
+                props.people.find(
+                  (person) => person.party_id === nudge.party_id
+                )?.name ?? nudge.party_id,
+                nudge.prepared_at.slice(0, 10)
+              )}
+              meta={metaSentence([nudge.note ?? "", NUDGE_PARKED])}
+              narrow={props.narrow}
+            />
+          ))}
+        </Rows>
       </Section>
     </div>
   );

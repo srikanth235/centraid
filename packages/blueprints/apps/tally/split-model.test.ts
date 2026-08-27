@@ -12,6 +12,7 @@ import {
   allocate,
   allocateEqually,
   allocateWeighted,
+  divisionOfMethod,
   divisionSpec,
   prefill,
 } from "./split-model.ts";
@@ -155,21 +156,44 @@ describe("what each division commits, and what it says", () => {
     expect(out.shares.reduce((sum, s) => sum + s.share_minor, 0)).toBe(10_001);
   });
 
-  it.each([
-    ["shares" as const, "weights, the way a recurring template already splits"],
-    ["adjust" as const, "An equal base, then the adjustments"],
-    ["lines" as const, "typed lines totalling"],
-  ])("%s is drawn in full and refuses the commit", (division, fragment) => {
+  it("commits weights, and says what the weights are", () => {
     const out = allocate({
       ...base,
-      division,
+      division: "shares",
       entries: { me: 2, ana: 1, tom: 1 },
     });
-    // The shares exist — the table is the review surface — and the commit
-    // does not, because the vault does not back the method.
     expect(out.shares).toHaveLength(3);
+    expect(out.ok).toBe(true);
+    expect(out.line).toContain(
+      "weights, the way a recurring template already splits"
+    );
+  });
+
+  it("refuses weights that weigh nothing, and says so", () => {
+    const out = allocate({
+      ...base,
+      division: "shares",
+      entries: { me: 0, ana: 0, tom: 0 },
+    });
     expect(out.ok).toBe(false);
-    expect(out.line).toContain(fragment);
+    expect(out.line).toContain("nothing weighs anything yet");
+  });
+
+  it("commits an adjusted split only when it comes back to the total", () => {
+    const off = allocate({
+      ...base,
+      division: "adjust",
+      entries: { me: 500, ana: 0, tom: 0 },
+    });
+    expect(off.ok).toBe(false);
+    expect(off.line).toContain("against");
+    const level = allocate({
+      ...base,
+      division: "adjust",
+      entries: { me: 500, ana: -500, tom: 0 },
+    });
+    expect(level.ok).toBe(true);
+    expect(level.line).toContain("come back to");
   });
 
   it("adjusts an equal base by the typed deltas", () => {
@@ -189,18 +213,30 @@ describe("what each division commits, and what it says", () => {
 });
 
 describe("the register the table is typed in", () => {
-  it("names exactly six divisions, three of them backed", () => {
+  it("names exactly six divisions, each with the method it records", () => {
     expect(DIVISIONS).toHaveLength(6);
-    expect(
-      DIVISIONS.filter((spec) => spec.backed).map((spec) => spec.id)
-    ).toStrictEqual(["equal", "exact", "percent"]);
+    expect(DIVISIONS.map((spec) => spec.method)).toStrictEqual([
+      "equally",
+      "exact",
+      "percentages",
+      "shares",
+      "adjusted",
+      "by_line",
+    ]);
+  });
+
+  it("re-opens a stored method as its own division, and an unknown one as exact", () => {
+    expect(divisionOfMethod("percentages")).toBe("percent");
+    expect(divisionOfMethod("by_line")).toBe("lines");
+    expect(divisionOfMethod(undefined)).toBe("exact");
+    expect(divisionOfMethod("moon-phase")).toBe("exact");
   });
 
   it("says what unit each division's cell is typed in", () => {
     expect(divisionSpec("equal").unit).toBe("derived");
     expect(divisionSpec("percent").unit).toBe("percent");
     expect(divisionSpec("shares").unit).toBe("shares");
-    expect(divisionSpec("lines").unit).toBe("money");
+    expect(divisionSpec("lines").unit).toBe("lines");
   });
 
   it("pre-fills percentages that already total 100", () => {

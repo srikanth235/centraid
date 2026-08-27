@@ -395,6 +395,26 @@
   min-inline-size: 0;
 }
 
+/* The two tables Add expense grew with the last three divisions. Each is a
+   stack of the row shapes already above it, so a payer row and an allocation
+   row line their columns up rather than each finding their own edge. */
+.payerTable,
+.lineTable {
+  flex: 1;
+  min-inline-size: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  align-items: flex-start;
+}
+/* Taking a line out is a quiet verb on the row it belongs to, never a filled
+   control: the row is the subject, and removing it is an aside. */
+.lineDrop {
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
 /* ---------- The simplification proposal ---------- */
 
 .proposal {

@@ -56,8 +56,10 @@ function candidateContainers(
   if (route.resolution === "tally-expense") {
     const row = db
       .prepare("SELECT group_id FROM tally_expense WHERE expense_id = ?")
-      .get(value) as { group_id: string } | undefined;
-    return row ? [row.group_id] : [];
+      .get(value) as { group_id: string | null } | undefined;
+    // A group-less 1:1 expense names no container, so there is nothing to
+    // route it to and nothing to refuse it against.
+    return row?.group_id ? [row.group_id] : [];
   }
   if (route.resolution === "folder-descendant")
     return ancestorFolders(db, value);

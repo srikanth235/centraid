@@ -32,6 +32,9 @@ export interface LockerListProps {
   /** How many rows the whole window holds, whatever this filter shows. Day one
    *  is a fact about the WINDOW; "nothing matches" is a fact about the lens. */
   windowCount: number;
+  /** How many live items EXIST, as the vault counted them — the other half of
+   *  "300 of 312". `null` when the count could not be read. */
+  total: number | null;
   /** Has a read landed? Nothing is empty until one has. */
   loaded: boolean;
   /** Older items exist beyond the window. */
@@ -118,7 +121,7 @@ export function LockerList(props: LockerListProps): ReactNode {
       {showsWindowEnd(props.loaded, props.rows.length) ? (
         <div className={styles.windowEnd}>
           <span className={styles.num}>
-            {windowEndCopy(props.windowCount, props.truncated)}
+            {windowEndCopy(props.windowCount, props.truncated, props.total)}
           </span>
           {props.truncated ? (
             <button

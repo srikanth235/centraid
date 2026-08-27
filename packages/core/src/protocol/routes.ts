@@ -17,6 +17,8 @@ export const ROUTES = {
   gatewayReplicaChanges: `${GATEWAY_PLANE_PREFIX}/replica/changes`,
   gatewayEdges: `${GATEWAY_PLANE_PREFIX}/edges`,
   gatewayCommons: `${GATEWAY_PLANE_PREFIX}/commons`,
+  /** Durable member intents on the Commons rail: the member's own overlay. */
+  gatewayCommonsIntents: `${GATEWAY_PLANE_PREFIX}/commons/intents`,
   gatewayScopedBlobs: `${GATEWAY_PLANE_PREFIX}/blobs`,
   vaultStatus: `${VAULT_PLANE_PREFIX}/status`,
   vaultErase: `${VAULT_PLANE_PREFIX}/vaults:erase`,
@@ -54,6 +56,16 @@ export function vaultGrantPath(encodedGrantId: string): string {
 
 export function vaultGrantRevokePath(encodedGrantId: string): string {
   return `${vaultGrantPath(encodedGrantId)}/revoke`;
+}
+
+/** The member's own withdrawal of a request that has not executed yet. */
+export function commonsIntentCancelPath(encodedIntentId: string): string {
+  return `${ROUTES.gatewayCommonsIntents}/${encodedIntentId}/cancel`;
+}
+
+/** The steward's per-intent answer (#872) — approve or decline, one request. */
+export function commonsIntentDecidePath(encodedIntentId: string): string {
+  return `${ROUTES.gatewayCommonsIntents}/${encodedIntentId}/decide`;
 }
 
 export function vaultConnectionAuthorizePath(

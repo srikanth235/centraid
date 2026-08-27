@@ -29,16 +29,26 @@ import {
 } from "./draft.ts";
 import { generate } from "./gen-model.ts";
 import type { GenOptions } from "./gen-model.ts";
+import { ARCHIVED, DUPLICATED, UNARCHIVED } from "./item-copy.ts";
 import {
+  ADDRESSES_SAVED,
+  CUSTOM_LABEL_MISSING,
   EDIT_CREATED,
   EDIT_SAVED,
   EDIT_TITLE_MISSING,
+  FIELD_REMOVED,
+  FIELD_SAVED,
   GEN_REGENERATED,
   GEN_SEEDED,
+  PASSKEY_CLEARED,
+  PASSKEY_RP_MISSING,
+  PASSKEY_SAVED,
   PURGED,
   PURGE_PARKED,
   RESTORED_WHOLE,
 } from "./route-copy.ts";
+import { emptySidecarDraft } from "./session.ts";
+import type { SidecarDraft } from "./session.ts";
 import { EDIT } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
 import type {
@@ -50,9 +60,16 @@ import type {
 } from "./types.ts";
 import {
   addItemWrite,
+  archiveWrite,
+  clearPasskeyWrite,
+  duplicateWrite,
   editItemWrite,
   purgeWrite,
+  removeFieldWrite,
   restoreWrite,
+  setAddressesWrite,
+  setFieldWrite,
+  setPasskeyWrite,
 } from "./writes.ts";
 import type { LockerWrite } from "./writes.ts";
 
@@ -104,6 +121,21 @@ export interface RouteActs {
   handleAskPurge: (itemId: string) => void;
   handlePurge: (itemId: string) => void;
   handleShowVerdict: (key: CheckKey) => void;
+  /** Archive / unarchive one item — the opposite end of the trash's countdown,
+   *  and idempotent in the vault, so a double press is not a second act. */
+  handleArchive: (itemId: string, archived: boolean) => void;
+  handleDuplicate: (itemId: string) => void;
+  /** The sidecar editors. ONE FIELD PER ACT: `locker.set_field` takes one
+   *  field per call so a sealed value is always a top-level input, and the
+   *  editor queues sequential calls rather than batching them. */
+  handleFieldDraft: (draft: SidecarDraft["field"]) => void;
+  handleFieldSave: () => void;
+  handleFieldRemove: (fieldId: string) => void;
+  handleAddressDraft: (draft: SidecarDraft["addresses"]) => void;
+  handleAddressSave: () => void;
+  handlePasskeyDraft: (draft: SidecarDraft["passkey"]) => void;
+  handlePasskeySave: () => void;
+  handlePasskeyClear: () => void;
 }
 
 export function useRouteActs(input: RouteActsInput): RouteActs {
@@ -319,6 +351,142 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
     [bagRef, go]
   );
 
+  const handleArchive = useCallback(
+    (itemId: string, archived: boolean): void => {
+      void act(archiveWrite(itemId, archived), {
+        text: archived ? UNARCHIVED : ARCHIVED,
+      });
+    },
+    [act]
+  );
+
+  const handleDuplicate = useCallback(
+    (itemId: string): void => {
+      void act(duplicateWrite(itemId), { text: DUPLICATED });
+    },
+    [act]
+  );
+
+  const handleFieldDraft = useCallback(
+    (draft: SidecarDraft["field"]): void => {
+      bagRef.current.sidecarDraft = {
+        ...bagRef.current.sidecarDraft,
+        field: draft,
+      };
+      bump();
+    },
+    [bagRef, bump]
+  );
+
+  /** The open field, saved. The typed value leaves the bag the moment the
+   *  payload is built — it is in flight, and an editor nobody is looking at
+   *  should not still be holding a secret. */
+  const handleFieldSave = useCallback((): void => {
+    const draft = bagRef.current.sidecarDraft.field;
+    const itemId = bagRef.current.detail?.item_id;
+    if (!draft || !itemId) return;
+    if (!draft.label.trim()) {
+      bagRef.current.editError = CUSTOM_LABEL_MISSING;
+      bump();
+      return;
+    }
+    const write = setFieldWrite(itemId, {
+      ...(draft.fieldId ? { fieldId: draft.fieldId } : {}),
+      ...(draft.section.trim() ? { section: draft.section.trim() } : {}),
+      label: draft.label.trim(),
+      kind: draft.kind,
+      ...(draft.value === "" ? {} : { value: draft.value }),
+    });
+    bagRef.current.sidecarDraft = {
+      ...bagRef.current.sidecarDraft,
+      field: null,
+    };
+    bagRef.current.editError = "";
+    void act(write, { text: FIELD_SAVED });
+  }, [act, bagRef, bump]);
+
+  const handleFieldRemove = useCallback(
+    (fieldId: string): void => {
+      const itemId = bagRef.current.detail?.item_id;
+      if (!itemId) return;
+      void act(removeFieldWrite(itemId, fieldId), { text: FIELD_REMOVED });
+    },
+    [act, bagRef]
+  );
+
+  const handleAddressDraft = useCallback(
+    (draft: SidecarDraft["addresses"]): void => {
+      bagRef.current.sidecarDraft = {
+        ...bagRef.current.sidecarDraft,
+        addresses: draft,
+      };
+      bump();
+    },
+    [bagRef, bump]
+  );
+
+  /** REPLACE-ALL, which the row above it says. A blank row is dropped rather
+   *  than sent: an address with no url is a row a member started and left. */
+  const handleAddressSave = useCallback((): void => {
+    const itemId = bagRef.current.detail?.item_id;
+    const draft = bagRef.current.sidecarDraft.addresses;
+    if (!itemId || !draft) return;
+    const addresses = draft
+      .filter((address) => address.url.trim())
+      .map((address) => ({
+        url: address.url.trim(),
+        matchPolicy: address.matchPolicy,
+      }));
+    bagRef.current.sidecarDraft = {
+      ...bagRef.current.sidecarDraft,
+      addresses: null,
+    };
+    void act(setAddressesWrite(itemId, addresses), { text: ADDRESSES_SAVED });
+  }, [act, bagRef]);
+
+  const handlePasskeyDraft = useCallback(
+    (draft: SidecarDraft["passkey"]): void => {
+      bagRef.current.sidecarDraft = {
+        ...bagRef.current.sidecarDraft,
+        passkey: draft,
+      };
+      bump();
+    },
+    [bagRef, bump]
+  );
+
+  const handlePasskeySave = useCallback((): void => {
+    const itemId = bagRef.current.detail?.item_id;
+    const draft = bagRef.current.sidecarDraft.passkey;
+    if (!itemId || !draft) return;
+    if (!draft.rpId.trim()) {
+      bagRef.current.editError = PASSKEY_RP_MISSING;
+      bump();
+      return;
+    }
+    const write = setPasskeyWrite(itemId, {
+      rpId: draft.rpId.trim(),
+      ...(draft.userHandle ? { userHandle: draft.userHandle } : {}),
+      ...(draft.displayName ? { displayName: draft.displayName } : {}),
+      ...(draft.credentialId ? { credentialId: draft.credentialId } : {}),
+      ...(draft.algorithm ? { algorithm: draft.algorithm } : {}),
+      ...(draft.privateKey ? { privateKey: draft.privateKey } : {}),
+    });
+    bagRef.current.sidecarDraft = {
+      ...bagRef.current.sidecarDraft,
+      passkey: null,
+    };
+    bagRef.current.editError = "";
+    void act(write, { text: PASSKEY_SAVED });
+  }, [act, bagRef, bump]);
+
+  const handlePasskeyClear = useCallback((): void => {
+    const itemId = bagRef.current.detail?.item_id;
+    if (!itemId) return;
+    bagRef.current.sidecarDraft = emptySidecarDraft();
+    void act(clearPasskeyWrite(itemId), { text: PASSKEY_CLEARED });
+  }, [act, bagRef]);
+
   // ONE STABLE OBJECT. The orchestrator hands these to the frame from an
   // effect, so a bag rebuilt on every render would re-contribute the app bar
   // on every render — the shape of a loop, in the one place this app can least
@@ -342,6 +510,16 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
       handleAskPurge,
       handlePurge,
       handleShowVerdict,
+      handleArchive,
+      handleDuplicate,
+      handleFieldDraft,
+      handleFieldSave,
+      handleFieldRemove,
+      handleAddressDraft,
+      handleAddressSave,
+      handlePasskeyDraft,
+      handlePasskeySave,
+      handlePasskeyClear,
     }),
     [
       handleEditChange,
@@ -361,6 +539,16 @@ export function useRouteActs(input: RouteActsInput): RouteActs {
       handleAskPurge,
       handlePurge,
       handleShowVerdict,
+      handleArchive,
+      handleDuplicate,
+      handleFieldDraft,
+      handleFieldSave,
+      handleFieldRemove,
+      handleAddressDraft,
+      handleAddressSave,
+      handlePasskeyDraft,
+      handlePasskeySave,
+      handlePasskeyClear,
     ]
   );
 }

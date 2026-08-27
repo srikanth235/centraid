@@ -6,15 +6,19 @@
 // exact amounts, "it will not commit at 99" for percentages, weights for
 // shares, an equal base with an adjustment, typed lines.
 //
-// THREE OF THE SIX COMMIT, and the other three are drawn in FULL rather than
-// hidden: the table renders the shares they would write, the reconcile line
-// reads them back, and the commit is refused with the gap named. A member
-// deciding whether "By line" is worth asking for has to be able to see it.
+// ALL SIX COMMIT, and each has its own table: five put a cell beside every
+// person, *By line* puts a row per line with a chip per member. The reconcile
+// line under whichever table is showing reads the shares back, and the commit
+// is refused only when the ARITHMETIC refuses — percentages at 99, exact
+// amounts a pound out, lines that do not sum.
 //
-// *NO GROUP* IS DRAWN AND REFUSED. `tally.add_expense` requires `group_id`
-// with a `group_exists` precondition, and `app.json` mirrors it — so the chip
-// exists, the note carries the open question, and the commit says why rather
-// than sending a write the vault would reject (GAPS.md Tally §4).
+// *NO GROUP* IS A REAL CHOICE. `tally.add_expense` has `group_id` optional and
+// checks a group-less expense's participants against the friend roster
+// instead of a circle, so the chip writes rather than explains (GAPS.md §4).
+//
+// SEVERAL PAYERS IS NOT A MODE. The payer chip set still names one person; the
+// table beside it takes an amount from anyone who put money down, and clearing
+// an amount takes them back out.
 //
 // THIS SCREEN COMPUTES, AND THAT IS NOT A CONTRADICTION. Every figure Tally
 // READS arrives folded by the one balance engine; the shares below are an
@@ -30,21 +34,26 @@ import {
   CANCEL,
   CURRENCY_CHIPS,
   CURRENCY_NOTE,
+  CURRENCY_NOTE_2,
   EDIT_COMMIT,
   EDIT_HEAD,
   FIELD_KEYS,
   FIELD_NOTES,
   NO_GROUP_LABEL,
   PLACEHOLDERS,
+  RATE_SUGGESTION_NOTE,
   WHEN_CHIPS,
   addFoot,
+  rateSuggestionChip,
 } from "../compose-copy.ts";
 import { CATEGORIES, entryValues, settlementMinor } from "../draft-model.ts";
 import type { DraftVerdict, ExpenseDraft } from "../draft-model.ts";
 import { money } from "../format.ts";
+import type { LineDraft } from "../line-model.ts";
 import { DIVISIONS, divisionSpec } from "../split-model.ts";
 import type { Division } from "../split-model.ts";
-import type { GroupMember, GroupSummary } from "../types.ts";
+import type { GroupMember, GroupSummary, RateSuggestion } from "../types.ts";
+import { LineTable, PayerTable } from "./AddExpenseTables.tsx";
 import {
   AllocTable,
   ChipSet,
@@ -57,6 +66,8 @@ import {
   ValueRow,
 } from "./Fields.tsx";
 import type { AllocRow, ChipOption } from "./Fields.tsx";
+
+import styles from "./Compose.module.css";
 
 /** The day before a day key, in UTC on the key itself — the same arithmetic
  *  `activity-model.ts` does, for the same reason. */
@@ -79,8 +90,14 @@ export interface AddExpenseProps {
   currency: string;
   today: string;
   verdict: DraftVerdict;
+  /** Rates this vault has already been told, per currency pair — offered as a
+   *  prefill and never as a lookup: there is no rate provider in this path. */
+  rateSuggestions: readonly RateSuggestion[];
   onPatch: (patch: Partial<ExpenseDraft>) => void;
   onEntry: (partyId: string, text: string) => void;
+  onPayer: (partyId: string, text: string) => void;
+  onLines: (lines: readonly LineDraft[]) => void;
+  onAddLine: () => void;
   onCancel: () => void;
   onCommit: () => void;
 }
@@ -108,6 +125,18 @@ function cellLabel(division: Division, name: string): string {
     : `Amount for ${name}`;
 }
 
+/** The suggestion for the pair this draft names, or nothing. The most recent
+ *  one the vault holds, which is what `rate_suggestions` already returns. */
+function suggestionFor(props: AddExpenseProps): RateSuggestion | undefined {
+  const from = props.draft.currency.trim().toUpperCase();
+  if (from === "" || from === props.currency.toUpperCase()) return undefined;
+  return props.rateSuggestions.find(
+    (row) =>
+      row.from_currency.toUpperCase() === from &&
+      row.to_currency.toUpperCase() === props.currency.toUpperCase()
+  );
+}
+
 function allocRows(props: AddExpenseProps): AllocRow[] {
   const { draft, verdict } = props;
   const unit = divisionSpec(draft.division).unit;
@@ -124,7 +153,9 @@ function allocRows(props: AddExpenseProps): AllocRow[] {
     partyId: member.party_id,
     name: member.name,
     figure: money(byParty.get(member.party_id) ?? 0, props.currency),
-    ...(unit === "derived"
+    // `derived` and `lines` are the two divisions with nothing to type beside
+    // a person: equal shares are computed, and typed lines are typed above.
+    ...(unit === "derived" || unit === "lines"
       ? {}
       : {
           typed: {
@@ -153,6 +184,7 @@ export function AddExpense(props: AddExpenseProps): ReactNode {
     label: member.name,
   }));
   const when = whenChip(draft, props.today);
+  const suggestion = suggestionFor(props);
 
   return (
     <Editor>
@@ -182,6 +214,17 @@ export function AddExpense(props: AddExpenseProps): ReactNode {
           onPick={(payerId) => props.onPatch({ payerId })}
         />
       </FieldRow>
+
+      {/* ABSENT UNTIL THERE IS SOMEBODY TO PAY. The payer table needs the
+          group's members, exactly as the allocation table does. */}
+      {props.members.length > 0 ? (
+        <PayerTable
+          members={props.members}
+          payers={draft.payers}
+          payerId={draft.payerId}
+          onPayer={props.onPayer}
+        />
+      ) : null}
 
       <FieldRow label={FIELD_KEYS.group} note={FIELD_NOTES.group}>
         <ChipSet
@@ -234,7 +277,11 @@ export function AddExpense(props: AddExpenseProps): ReactNode {
 
       <FieldRow
         label={FIELD_KEYS.currency}
-        note={draft.foreign ? CURRENCY_NOTE : FIELD_NOTES.settlementCurrency}
+        note={
+          draft.foreign
+            ? [CURRENCY_NOTE, CURRENCY_NOTE_2]
+            : FIELD_NOTES.settlementCurrency
+        }
       >
         <ChipSet
           options={[
@@ -275,6 +322,39 @@ export function AddExpense(props: AddExpenseProps): ReactNode {
               value={draft.rateDate}
               onChange={(rateDate) => props.onPatch({ rateDate })}
             />
+            {/* THE VAULT QUOTING ITSELF, not a provider. One chip, carrying
+                the rate WITH its source and date, which is the only form in
+                which a rate is allowed to appear on this surface. */}
+            {suggestion ? (
+              <>
+                <ChipSet
+                  options={[
+                    {
+                      id: "suggested",
+                      label: rateSuggestionChip(
+                        String(
+                          suggestion.rate_scaled / 10 ** suggestion.rate_scale
+                        ),
+                        suggestion.rate_source,
+                        suggestion.rate_date
+                      ),
+                    },
+                  ]}
+                  value={null}
+                  label={FIELD_KEYS.rate}
+                  onPick={() =>
+                    props.onPatch({
+                      rate: String(
+                        suggestion.rate_scaled / 10 ** suggestion.rate_scale
+                      ),
+                      rateSource: suggestion.rate_source,
+                      rateDate: suggestion.rate_date,
+                    })
+                  }
+                />
+                <span className={styles.note}>{RATE_SUGGESTION_NOTE}</span>
+              </>
+            ) : null}
           </>
         ) : null}
       </FieldRow>
@@ -291,15 +371,24 @@ export function AddExpense(props: AddExpenseProps): ReactNode {
         <ChipSet
           options={DIVISIONS.map((spec) => ({
             id: spec.id,
-            label: spec.backed
-              ? spec.label
-              : `${spec.label} · [backend-needed]`,
+            label: spec.label,
           }))}
           value={draft.division}
           label={FIELD_KEYS.divided}
           onPick={(id) => props.onPatch({ division: id as Division })}
         />
       </FieldRow>
+
+      {/* BY LINE TYPES LINES, not a cell per person, so it swaps the table
+          rather than re-labelling it. */}
+      {props.members.length > 0 && draft.division === "lines" ? (
+        <LineTable
+          lines={draft.lines}
+          members={props.members}
+          onLines={props.onLines}
+          onAdd={props.onAddLine}
+        />
+      ) : null}
 
       {/* ABSENT IS NOT EMPTY: before the group's members land there is no
           table, because an empty one would claim the group has nobody in it. */}

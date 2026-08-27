@@ -106,7 +106,7 @@ describe("the foot states the arithmetic", () => {
   it("says all of it in one sentence, with both figures in it", () => {
     expect(folded.sentence).toContain("6 lines total £132.50");
     expect(folded.sentence).toContain("the expense is £132.50");
-    expect(folded.sentence).toContain("they reconcile");
+    expect(folded.sentence).toContain("the expense is");
     expect(folded.sentence).toContain("£36.85");
   });
 

@@ -14,7 +14,9 @@
 //      takes commons intents; this phone holds an intent OUTBOX, which is a
 //      different shape carrying different facts, and the adapter that maps one
 //      onto the other is this seat's and only this seat's.
-//   3. WHAT EXPORT SAYS, given that its door is on the desktop.
+//   3. WHICH EXPENSE THE MEMBER TAPPED. A row can arrive from the activity,
+//      group or friend payload, so the lookup walks all three rather than
+//      making every caller remember which list it came from.
 //
 // Pure: no `react-native` import, so `tally-view-model.test.ts` asserts it
 // directly.
@@ -287,29 +289,4 @@ export function findEntry<T extends { expense_id: string }>(
     if (hit) return hit;
   }
   return null;
-}
-
-// ─── 4 · The surface whose door is on another seat ──────────────────────────
-
-export interface TallySurfaceFact {
-  key: string;
-  value?: string;
-  note?: string;
-}
-
-export interface TallySurfaceCopy {
-  title: string;
-  lede: string;
-  facts: readonly TallySurfaceFact[];
-  /** Where the act actually happens, from this seat. */
-  where: string;
-  foot: string;
-}
-
-export function exportRowCount(
-  expenses: number,
-  settlements: number,
-  revisions: number
-): string {
-  return `${expenses} expenses · ${settlements} settlements · ${revisions} revisions`;
 }

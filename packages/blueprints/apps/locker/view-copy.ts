@@ -228,7 +228,16 @@ export const EDIT_LEDE =
 // Type vocabulary
 // ---------------------------------------------------------------------------
 
-/** The six types, in the order the rail lists them. */
+/**
+ * THE RAIL'S SIX ROWS — the column-backed types, in the order it lists them.
+ *
+ * THE RULING (#872 U2): the rail STAYS SIX. README-Locker §1 says "six rows
+ * with counts", and nine more would turn a glanceable list into a taxonomy on
+ * the one screen whose whole job is being scannable. The other nine types are
+ * first-class everywhere else — the add form's chip row offers all fifteen,
+ * search reaches them, and a `type:` filter names any of them — so nothing is
+ * unreachable; it is only not a permanent row in a column of six.
+ */
 export const TYPE_ORDER: readonly LockerItemType[] = [
   "login",
   "card",
@@ -238,6 +247,30 @@ export const TYPE_ORDER: readonly LockerItemType[] = [
   "password",
 ];
 
+/**
+ * ALL FIFTEEN, in the order the add form offers them: the six that own columns
+ * on `locker_item`, then the nine (#872, GAPS §3.3 #1) whose fields the vault
+ * mints from a template — listed in the order the gap register prioritised,
+ * which is the order they unblock the most.
+ */
+export const ALL_TYPES: readonly LockerItemType[] = [
+  "login",
+  "card",
+  "note",
+  "identity",
+  "wifi",
+  "password",
+  "ssh_key",
+  "api_credential",
+  "passport",
+  "bank_account",
+  "driving_licence",
+  "software_licence",
+  "crypto_wallet",
+  "membership",
+  "document",
+];
+
 export const TYPE_LABEL: Readonly<Record<LockerItemType, string>> = {
   login: "Login",
   card: "Card",
@@ -245,6 +278,15 @@ export const TYPE_LABEL: Readonly<Record<LockerItemType, string>> = {
   identity: "Identity",
   wifi: "Wi-Fi",
   password: "Password",
+  ssh_key: "SSH key",
+  api_credential: "API credential",
+  passport: "Passport",
+  bank_account: "Bank account",
+  driving_licence: "Driving licence",
+  software_licence: "Software licence",
+  crypto_wallet: "Crypto wallet",
+  membership: "Membership",
+  document: "Document",
 };
 
 /** The rail's plural, for a row that carries a count. */
@@ -255,6 +297,15 @@ export const TYPE_PLURAL: Readonly<Record<LockerItemType, string>> = {
   identity: "Identities",
   wifi: "Wi-Fi",
   password: "Passwords",
+  ssh_key: "SSH keys",
+  api_credential: "API credentials",
+  passport: "Passports",
+  bank_account: "Bank accounts",
+  driving_licence: "Driving licences",
+  software_licence: "Software licences",
+  crypto_wallet: "Crypto wallets",
+  membership: "Memberships",
+  document: "Documents",
 };
 
 /** The rail's three group heads (README-Locker §1). */
@@ -268,6 +319,9 @@ export const RAIL_HEADS = {
 export const RAIL_ALL = "All items";
 export const RAIL_STARRED = "Starred";
 export const RAIL_REVIEW = "Review";
+/** Kept forever, out of the default window — and NEVER the trash row: one has
+ *  a purge date and the other exists so nothing ever gets one. */
+export const RAIL_ARCHIVED = "Archived";
 
 /** The one word each route's app bar carries. */
 export const ROUTE_TITLE = {

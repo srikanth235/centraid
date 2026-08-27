@@ -70,7 +70,8 @@ export interface LockerItemsViewProps {
   onImport: () => void;
 }
 
-/** The filter chips: the rail's three rows, then the six types with counts.
+/** The filter chips: the rail's three rows, then every `TYPE_ORDER` type with
+ *  its count — never a list of types kept here.
  *  A zero is drawn as a zero — a type with nothing in it is a fact. */
 function filterChips(
   rows: readonly LockerRowData[],

@@ -8,11 +8,18 @@
 // else: the two files are ONE table, and a sentence lives in whichever of them
 // its route reads.
 //
-// A GAP TAG IS PART OF THE COPY. GAPS.md's own rule is that every tag appears
-// on the surface, in the field note, so a reviewer reading the screen sees the
-// scope without reading the register. `[backend-needed]`, `[open-question]`
-// and `[exists]` are therefore literal strings here, and they are not
-// decoration to be tidied away later.
+// THE GAP TAGS ARE GONE, AND THAT IS THE NEWS (#872 U2). GAPS.md's rule was
+// that every engineering-ask tag appears on the surface itself, in the field
+// note, so a reviewer reading the screen sees the scope without reading the
+// register. The engineering those tags named has landed: custom fields, item and
+// password history, item-type breadth, several addresses, passkeys,
+// attachments, export, archive, duplicate, the alias read-back, the honest
+// window total and the access history all have doors now. So the notes below
+// state what each row DOES rather than what it is waiting for.
+//
+// What is still stated as a limit is stated as a LIMIT, never as a promise
+// deferred: breach checking and recently-used are rulings (GAPS §3.3 #6e,
+// #11), and the QR scan is the phone's control rather than this seat's.
 //
 // THE REGISTER IS §7's, the same as next door: item, reveal, conceal, permit,
 // receipt, passphrase, alias, review, verdict, window. Never "master
@@ -44,20 +51,17 @@ export const TYPE_ROW = "Type";
 export const TITLE_ROW = "Title";
 export const TITLE_PLACEHOLDER = "What this is";
 
-/** The prioritised expansion (GAPS §3.3 #1), in the order it unblocks most. */
-export const NEXT_TYPES: readonly string[] = [
-  "SSH key",
-  "API credential",
-  "Passport",
-  "Bank account",
-  "Driving licence",
-  "Software licence",
-  "Crypto wallet",
-  "Membership",
-  "Document",
-];
-
-export const TYPE_NOTE = `Six exist. A type is a set of sections and fields, so one the vault does not have yet degrades to a note with custom fields rather than to nothing. Next, in order: ${NEXT_TYPES.join(", ")}. [backend-needed]`;
+/**
+ * THE TYPE NOTE. Fifteen types exist; SIX of them own columns on `locker_item`
+ * and the other nine are sets of fields the vault mints from a template — which
+ * is the same mechanism that lets a type this build does not know still open.
+ *
+ * The rail stays SIX ROWS with counts (README-Locker §1). The other nine are
+ * reachable from this chip row and from the filters, because a rail listing
+ * fifteen would be a taxonomy where a glanceable list belongs.
+ */
+export const TYPE_NOTE =
+  "Fifteen exist · one the vault does not have yet degrades to a note with custom fields rather than to nothing.";
 
 export const TITLE_NOTE = "Metadata · searchable.";
 
@@ -65,9 +69,9 @@ export const TITLE_NOTE = "Metadata · searchable.";
 export const FIELD_NOTE: Readonly<Record<string, string>> = {
   username: "Metadata · searchable, and it never needed a permit.",
   password: "Type it, paste it, or generate it here without leaving the form.",
-  url: "The match policy Companion obeys. Several addresses per login is [backend-needed].",
+  url: "The primary address, and the match policy Companion obeys. Further addresses are managed in their own row below.",
   otp_seed:
-    "Paste an otpauth URI or the seed itself · a QR code is scanned on the phone, and that is [backend-needed]",
+    "Paste an otpauth URI or the seed itself · a QR code is scanned on the phone, where the camera is",
   content:
     "Sealed at rest, and deliberately not searched — a note routinely holds recovery codes.",
   notes: "Plaintext, yours, never a secret and never searched.",
@@ -95,17 +99,57 @@ export const TAGS_NOTE =
 export const ALIAS_ROW = "Alias";
 export const ALIAS_NONE = "None";
 export const ALIAS_NOTE =
-  "A stable name an automation holds, so rotating the secret does not break it. The vault command takes one; this app's action does not forward it yet. [backend-needed · small]";
-
-export const CONNECTION_ROW = "Guards";
-export const CONNECTION_NONE = "No connection";
-export const CONNECTION_NOTE =
-  "The sync connection this credential belongs to, and the connector alias that follows it. [backend-needed]";
+  "A stable name an automation holds, so rotating the secret does not break it. Empty the field to clear it; type another to reassign it.";
+export const ALIAS_PLACEHOLDER = "deploy-key";
 
 export const CUSTOM_ROW = "Custom fields";
-export const CUSTOM_VALUE = "Not available yet";
 export const CUSTOM_NOTE =
-  "Text, concealed, address, date or a one-time code, grouped into sections. The largest structural gap: without it every unusual credential ends up in a note, and notes are deliberately unsearchable here. [backend-needed]";
+  "Text, sealed, address, date or a one-time code, grouped into sections · one field per act.";
+export const CUSTOM_NONE = "No custom fields.";
+export const CUSTOM_ADD = "Add a field";
+export const CUSTOM_REMOVE = "Remove";
+export const CUSTOM_SAVE = "Save the field";
+export const CUSTOM_SECTION_ROW = "Section";
+export const CUSTOM_SECTION_PLACEHOLDER = "Recovery";
+export const CUSTOM_LABEL_ROW = "Label";
+export const CUSTOM_LABEL_PLACEHOLDER = "Recovery code";
+export const CUSTOM_KIND_ROW = "Kind";
+export const CUSTOM_VALUE_ROW = "Value";
+export const FIELD_SAVED = "Field saved · straight to the vault";
+export const FIELD_REMOVED = "Field removed · receipted";
+export const CUSTOM_LABEL_MISSING =
+  "A label first — a field with none is a value nobody can find again.";
+
+export const ADDRESSES_ROW = "Addresses";
+export const ADDRESSES_NOTE =
+  "Every address this login answers to, each with its own match policy · the primary stays first.";
+export const ADDRESSES_NONE = "No further addresses.";
+export const ADDRESSES_ADD = "Add an address";
+export const ADDRESSES_SAVE = "Save the addresses";
+export const ADDRESSES_REMOVE = "Remove";
+export const ADDRESSES_PLACEHOLDER = "https://example.test";
+export const ADDRESSES_SAVED = "Addresses saved · receipted";
+export const ADDRESSES_REPLACE_NOTE =
+  "Saving replaces the whole list, so a row removed here is removed in the vault.";
+
+export const PASSKEY_ROW = "Passkey";
+export const PASSKEY_NONE = "No passkey.";
+export const PASSKEY_NOTE =
+  "Storage only · nothing here performs a WebAuthn ceremony. The key material is sealed like any other secret.";
+export const PASSKEY_RP = "Relying party";
+export const PASSKEY_HANDLE = "User handle";
+export const PASSKEY_DISPLAY = "Display name";
+export const PASSKEY_CREDENTIAL = "Credential id";
+export const PASSKEY_ALGORITHM = "Algorithm";
+export const PASSKEY_KEY = "Key material";
+export const PASSKEY_KEY_PRESENT = "Present";
+export const PASSKEY_KEY_ABSENT = "None stored";
+export const PASSKEY_SAVE = "Save the passkey";
+export const PASSKEY_CLEAR = "Clear the passkey";
+export const PASSKEY_SAVED = "Passkey saved · straight to the vault";
+export const PASSKEY_CLEARED = "Passkey cleared · metadata and key together";
+export const PASSKEY_RP_MISSING =
+  "A relying party first — a passkey belongs to a site.";
 
 export const EDIT_SAVED = "Saved · straight to the vault, nothing queued";
 export const EDIT_CREATED = "Item created · straight to the vault";
@@ -169,6 +213,7 @@ export const CHECK_LABEL: Readonly<Record<string, string>> = {
   reused: "Reused",
   http: "Unsecured address",
   expiring: "Expiring",
+  age: "Password age",
 };
 
 export const CHECK_WHY: Readonly<Record<string, string>> = {
@@ -176,17 +221,24 @@ export const CHECK_WHY: Readonly<Record<string, string>> = {
   weak: "Scored against the same rule the item view shows, so the two can never disagree.",
   reused:
     "The same password on two or more live logins · trashed items are exempt.",
-  http: "The saved address is http. Pure read — the data is already there. [exists]",
-  expiring:
-    "A card expiry inside 90 days. Document expiry follows once those types exist. [exists for cards]",
+  http: "The saved address is http, and the list read carries it.",
+  expiring: "A card expiry inside 90 days, read off the row itself.",
+  age: "The current password has stood over a year, counted from the day it was set.",
 };
 
-/** A check with a producer, a source, and no read that carries it to this
- *  screen. Named as its own fact — a zero here would be a claim nobody made. */
+/**
+ * A check with a producer, a source, and no read that carries it to this
+ * screen. Named as its own fact — a zero here would be a claim nobody made.
+ *
+ * All three are SERVED today (`servedFields` reads the rows, not a flag), so
+ * these sentences stand only if a read stops carrying a field. They are kept
+ * for exactly that: a check that quietly went silent must still say so.
+ */
 export const UNSERVED_WHY: Readonly<Record<string, string>> = {
-  http: "The address is in the vault; the list read does not carry it, so nothing was checked. [backend-needed · small]",
+  http: "The address is in the vault; this read did not carry it, so nothing was checked.",
   expiring:
-    "The expiry is in the vault; the list read does not carry it, so nothing was checked. [backend-needed · small]",
+    "The expiry is in the vault; this read did not carry it, so nothing was checked.",
+  age: "The date the password was set is in the vault; this read did not carry it, so nothing was checked.",
 };
 
 /** The three checks with no source at all (GAPS §3.3 #6c, #6d, #6e). */
@@ -194,12 +246,7 @@ export const UNRUNNABLE_CHECKS: readonly UnrunnableRow[] = [
   {
     key: "2fa",
     label: "Two-factor available",
-    why: "Would need a source for which sites support it. Nothing in the vault knows. [open-question]",
-  },
-  {
-    key: "age",
-    label: "Password age",
-    why: "Needs item history, which Locker does not have yet. [backend-needed]",
+    why: "Would need a source for which sites support it, and nothing in the vault knows.",
   },
   {
     key: "breach",
@@ -263,14 +310,34 @@ export const IMPORT_HEAD = "Import";
 export const IMPORT_LEDE =
   "Draft, review, publish · nothing reaches the vault until the draft is published, and the vault wins every collision";
 export const IMPORT_FILE_ROW = "A file";
-export const IMPORT_FILE_VALUE = "Not available yet";
 export const IMPORT_FILE_NOTE =
-  "The staging plane parses a password-manager CSV and holds it as a draft, but this app has no door to it: the shell's client offers reads, writes and blob staging, and no import. [backend-needed]";
+  "A password-manager CSV, parsed into a draft · nothing reaches the vault until the draft is published.";
+export const IMPORT_CHOOSE = "Choose a file";
+export const IMPORT_STAGED = "Staged as a draft · nothing is in the vault yet";
 export const IMPORT_REVIEW_ROW = "The review";
 export const IMPORT_PUBLISH_ROW = "The publish";
 export const IMPORT_PUBLISH_NOTE =
   "One act, over the whole draft, and it needs the gateway · a draft discarded writes nothing at all";
 export const IMPORT_VERDICTS_ROW = "Verdicts";
+export const IMPORT_PUBLISH = "Publish the draft";
+export const IMPORT_DISCARD = "Discard the draft";
+export const IMPORT_DISCARDED = "Draft discarded · nothing was written";
+export const IMPORT_DRAFTS = "Drafts";
+export const IMPORT_DRAFTS_META = "staged, and not in the vault";
+export const IMPORT_NO_DRAFTS = "No draft is waiting.";
+export const IMPORT_ROWS = "The rows";
+export const IMPORT_ROWS_META = "each with the verdict the vault gave it";
+export const IMPORT_REVIEW_OPEN = "Review";
+export const IMPORT_OTHER_ENTITY =
+  "not a Locker item · it lands in the app that owns it";
+/** Custodian-only, and it says which seat rather than which device (SURFACES.md
+ *  — Import is a custodian surface). */
+export const IMPORT_NO_DOOR =
+  "Import runs on the custodian — the desktop beside the gateway — and the draft is reviewed and published there.";
+/** The doors refuse offline BY CONSTRUCTION: an import payload is the raw file,
+ *  secrets included, and a durable offline queue is where it must not sit. */
+export const IMPORT_OFFLINE =
+  "The gateway is out of reach · an import carries the file itself, secrets and all, so it waits for a connection rather than queueing";
 
 // ---------------------------------------------------------------------------
 // Access history
@@ -286,10 +353,20 @@ export const ACCESS_REGISTER: readonly (readonly [string, string])[] = [
   ["Filled", "Companion, carrying the page origin it filled into"],
   ["Refused", "a wrong passphrase or a backed-off attempt · receipted too"],
 ];
-export const ACCESS_NOT_SERVED =
-  "The receipts are written and kept, and no query serves them to this screen yet. [backend-needed]";
+export const ACCESS_ENTRIES = "The receipts";
+export const ACCESS_ENTRIES_META =
+  "newest first, and a refusal is listed like an allowance";
+export const ACCESS_EMPTY = "No receipt has been written yet.";
+export const ACCESS_EMPTY_BODY =
+  "An unlock, a reveal or a fill writes one · nothing here is a record of what you looked at until you look at something.";
+export const ACCESS_ALL_ITEMS = "Every item";
+export const ACCESS_NARROW = "Only this item";
+export const ACCESS_OFFLINE =
+  "The gateway is out of reach · receipts live in the journal, which this device does not carry, and a cached history would be a list of what this device happened to hold";
+export const ACCESS_NO_VALUES =
+  "A receipt has never carried a value · these rows name the act, the item and the columns, and nothing else.";
 export const ACCESS_WHERE =
-  "Approvals shows the same receipts today, across every app.";
+  "Approvals shows the same receipts, across every app.";
 
 // ---------------------------------------------------------------------------
 // Trash
@@ -324,7 +401,21 @@ export const EXPORT_WHERE_NOTE =
   "Written locally — what happens to it afterwards is outside the vault.";
 export const EXPORT_COMMIT_ROW = "Write the file";
 export const EXPORT_COMMIT_NOTE =
-  "A sovereign vault must let you leave, and no command writes this file yet · nothing on this screen produces plaintext. [backend-needed]";
+  "A sovereign vault must let you leave · the confirm names the consequence, and the file is written on this device.";
+export const EXPORT_COMMIT = "Write the file";
+export const EXPORT_CONFIRM_TITLE = "Write every secret to a file?";
+export const EXPORT_CONFIRM_LABEL = "Write it";
+export const EXPORT_OPTIONS_ROW = "Also include";
+export const EXPORT_TRASHED = "Trashed items";
+export const EXPORT_HISTORY = "Previous passwords";
+export const EXPORT_OPTIONS_NOTE =
+  "Both are off unless you ask · every previous password is another secret in the file.";
+export const EXPORT_WRITTEN = "Written · every secret is in that file now";
+export const EXPORT_PARKED =
+  "Parked · a mass reveal asked for on a device that is not the owner\u2019s waits for them";
+export const EXPORT_OFFLINE =
+  "The gateway is out of reach · an export is a mass reveal, and it is never answered from a device\u2019s durable store";
+export const EXPORT_NOTHING = "Nothing came back · no file was written.";
 export function exportWhat(items: number): string {
   return `${items} items · every field, in the clear`;
 }

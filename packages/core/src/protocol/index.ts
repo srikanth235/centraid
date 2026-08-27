@@ -24,6 +24,8 @@ export {
   BRIEF_PLANE_PREFIX,
   ROUTES,
   ROUTE_PATHS,
+  commonsIntentCancelPath,
+  commonsIntentDecidePath,
   vaultConnectionAuthorizePath,
   vaultConnectionPath,
   vaultGrantPath,

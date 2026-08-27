@@ -99,8 +99,9 @@ export interface LedgerReads {
   /** A read has LANDED. False covers both "still in flight" and "every read so
    *  far failed": in neither case may a view claim a set is empty. */
   loaded: boolean;
-  /** A denied read, as the query reported it. Denial is DATA. */
-  consent: { message: string } | null;
+  /** A denied read, as the query reported it. Denial is DATA — including the
+   *  moment the grant went, where the gateway recorded one. */
+  consent: { message: string; revokedAt: string | null } | null;
   /** A read that actually came back failed — evidence, not a guess. */
   readFailed: boolean;
   /** The clock the whole room reads, so a day heading and the rows under it
@@ -145,7 +146,7 @@ interface Snapshot {
   friend: FriendData | null;
   activity: ActivityData | null;
   loaded: boolean;
-  consent: { message: string } | null;
+  consent: { message: string; revokedAt: string | null } | null;
   readFailed: boolean;
   now: string;
   matchedAt: string | null;
@@ -249,7 +250,10 @@ export function useLedgerReads(args: {
       setSnapshot({
         ...EMPTY_SNAPSHOT,
         loaded: true,
-        consent: { message: denied.message ?? "" },
+        consent: {
+          message: denied.message ?? "",
+          revokedAt: denied.revoked_at ?? null,
+        },
         now: stamp,
         matchedAt: stamp,
       });

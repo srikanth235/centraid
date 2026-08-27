@@ -19,13 +19,17 @@ import type { InlineFrame } from "../inline-types.ts";
 import { Root } from "./app-root.tsx";
 import { SealedField } from "./components/Fields.tsx";
 import { LockerList } from "./components/List.tsx";
+import { Rail } from "./components/Rail.tsx";
 import { Notices } from "./components/States.tsx";
-import { OPEN_ITEM, windowEndCopy } from "./format.ts";
+import { OPEN_ITEM, rowsFor, typeCounts, windowEndCopy } from "./format.ts";
 import { PERMIT_LIFE_MS } from "./permits.ts";
 import type { LockerRow } from "./types.ts";
 import {
+  ALL_TYPES,
   DAY_ONE_ADD,
   FIELD_LABEL,
+  RAIL_ARCHIVED,
+  TYPE_ORDER,
   DAY_ONE_IMPORT,
   DAY_ONE_TITLE,
   LOCK_BODY,
@@ -159,6 +163,7 @@ describe("day one and an empty lens are different facts", () => {
       createElement(LockerList, {
         rows: [],
         windowCount: 0,
+        total: null,
         loaded: true,
         truncated: false,
         onOpen: NOOP,
@@ -198,6 +203,7 @@ describe("WINDOW END: a bounded window says so", () => {
       createElement(LockerList, {
         rows: [ROW],
         windowCount: 300,
+        total: 312,
         loaded: true,
         truncated: true,
         onOpen: NOOP,
@@ -209,7 +215,14 @@ describe("WINDOW END: a bounded window says so", () => {
     );
     expect(markup).toContain(WINDOW_RULE);
     expect(markup).toContain(SHOW_MORE);
+    // §6, VERBATIM, whenever the vault counted: "300 of 312 · the window is
+    // 300 by default and 2,000 at most."
+    expect(markup).toContain("300 of 312");
+    expect(windowEndCopy(300, true, 312)).toBe(`300 of 312 · ${WINDOW_RULE}`);
+    // AND THE HONEST FALLBACK. A total the read did not carry is a
+    // denominator this seat does not have, and it says what it knows instead.
     expect(windowEndCopy(300, true)).toContain("older items beyond them");
+    expect(windowEndCopy(300, true)).not.toContain("of 312");
   });
 
   test("an untruncated window states the count and offers no more", () => {
@@ -217,6 +230,7 @@ describe("WINDOW END: a bounded window says so", () => {
       createElement(LockerList, {
         rows: [ROW],
         windowCount: 1,
+        total: null,
         loaded: true,
         truncated: false,
         onOpen: NOOP,
@@ -364,5 +378,52 @@ describe("VIEWER REFUSED is a ruling, and it is stated", () => {
   test("Locker owns the sentence, whoever draws the wall", () => {
     expect(VIEWER_REFUSED).toContain("user-presence boundary");
     expect(VIEWER_REFUSED).toContain("refuses the seat outright");
+  });
+});
+
+// ---------------------------------------------------- the archive shelf
+
+describe("ARCHIVE IS NOT TRASH, and the rail keeps its six type rows", () => {
+  const rail = (props: Partial<Parameters<typeof Rail>[0]>) =>
+    renderToStaticMarkup(
+      createElement(Rail, {
+        shelf: null,
+        filter: { kind: "all" as const },
+        rows: [ROW],
+        typeCounts: typeCounts([ROW]),
+        trashCount: 2,
+        archivedCount: 7,
+        onFilter: NOOP,
+        onGo: NOOP,
+        ...props,
+      })
+    );
+
+  test("the archived shelf is a row of the vault, with the VAULT's count", () => {
+    const markup = rail({});
+    expect(markup).toContain(RAIL_ARCHIVED);
+    // 7 archived items, none of them in the window that was read — which is
+    // exactly why the count cannot come from `rows`.
+    expect(markup).toContain("7");
+  });
+
+  test("THE RULING: the rail stays SIX type rows (README-Locker §1)", () => {
+    expect(TYPE_ORDER).toHaveLength(6);
+    // …while the vocabulary itself is fifteen, reachable from the add form
+    // and the filters rather than from a column of fifteen rows.
+    expect(ALL_TYPES).toHaveLength(15);
+    for (const type of TYPE_ORDER) expect(ALL_TYPES).toContain(type);
+    const markup = rail({});
+    expect(markup).not.toContain("SSH keys");
+    expect(markup).not.toContain("Passports");
+  });
+
+  test("an archived shelf is a different READ, never a slice of the window", () => {
+    // `rowsFor` hands back what it was given: the archived rows were fetched
+    // by a second read, so filtering them again would be asking twice.
+    const archived: LockerRow = { ...ROW, item_id: "a1", archived: true };
+    expect(rowsFor([archived], { kind: "archived" })).toHaveLength(1);
+    // And nothing archived carries a purge date — that is the trash's clock.
+    expect(archived.purge_at).toBeUndefined();
   });
 });

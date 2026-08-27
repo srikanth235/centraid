@@ -59,6 +59,10 @@ function useModal(onClose: () => void): (el: HTMLDialogElement | null) => void {
 export interface ConfirmProps {
   title: string;
   body: string;
+  /** A second line under the body — the rest of one §6 sentence, or the rule
+   *  the confirm stands on. Rendered in the annotation rung, so the body keeps
+   *  carrying the consequence and this carries the qualification. */
+  note?: string;
   /** The commit's own word — `Leave`, `Archive`, `Remove`. */
   commitLabel: string;
   /** Does the commit take the destructive outline? */
@@ -79,6 +83,9 @@ export function Confirm(props: ConfirmProps): ReactNode {
     <dialog ref={setDialog} className={`kit-modal ${styles.confirm}`}>
       <h2 className={styles.confirmTitle}>{displayText(props.title)}</h2>
       <p className={styles.confirmBody}>{displayText(props.body)}</p>
+      {props.note ? (
+        <p className={styles.confirmNote}>{displayText(props.note)}</p>
+      ) : null}
       {blocked ? (
         <p className={styles.refusal}>{props.disabledReason}</p>
       ) : null}

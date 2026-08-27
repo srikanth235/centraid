@@ -79,15 +79,15 @@ describe("Review", () => {
     unmount();
   });
 
-  it("always lists the checks that cannot honestly run, with their tags", () => {
+  it("always lists the checks that cannot honestly run, each with its reason", () => {
     for (const rows of [[CLEAN], [CLEAN, WEAK]]) {
       const { container, unmount } = mountBlock(view(rows));
       expect(textOf(container)).toContain(REVIEW_UNRUNNABLE);
+      // The surface owes the REASON, in words — never a bracketed gap tag.
       for (const check of UNRUNNABLE_CHECKS) {
         expect(textOf(container)).toContain(check.label);
+        expect(textOf(container)).toContain(check.why);
       }
-      expect(textOf(container)).toContain("[open-question]");
-      expect(textOf(container)).toContain("[backend-needed]");
       unmount();
     }
   });

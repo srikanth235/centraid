@@ -27,6 +27,7 @@ import {
 import type { ShelfId } from "../shelves.ts";
 import type {
   DashboardData,
+  ExportData,
   GroupData,
   GroupMember,
   LedgerEntry,
@@ -58,6 +59,11 @@ export interface ComposeView {
   shotUrl: string | null;
   /** The chosen group's members, empty until that group's read lands. */
   members: readonly GroupMember[];
+  /** Does this host hold the per-intent Approve/Decline door? */
+  canDecide: boolean;
+  /** The chosen group's export payload, or `null` while that read is in
+   *  flight — and then the counts are absent rather than zero. */
+  exportData: ExportData | null;
 }
 
 export interface ComposeRoutesProps {
@@ -73,6 +79,9 @@ export interface ComposeRoutesProps {
   go: (shelf: ShelfId) => void;
   onBack: () => void;
   onWaiting: () => void;
+  /** Assemble the file and hand it to the member. Nothing has left the vault
+   *  until this runs, which is what the foot says. */
+  onSaveExport: () => void;
 }
 
 export function ComposeRoutes(props: ComposeRoutesProps): ReactNode {
@@ -91,6 +100,10 @@ export function ComposeRoutes(props: ComposeRoutesProps): ReactNode {
         currency={currency}
         today={today}
         verdict={compose.verdict}
+        rateSuggestions={dashboard.rate_suggestions ?? []}
+        onPayer={(partyId, text) => compose.state.setPayer(partyId, text)}
+        onLines={(lines) => compose.state.setLines(lines)}
+        onAddLine={() => compose.state.addLine()}
         onPatch={(patch) => {
           // Choosing a DIVISION rewrites the typed cells, because their unit
           // changed; every other field is an ordinary patch.
@@ -155,6 +168,7 @@ export function ComposeRoutes(props: ComposeRoutesProps): ReactNode {
           compose.state.toggleLine(lineId, partyId)
         }
         onCancel={props.onBack}
+        onCommit={() => compose.acts.reallocate(entry, bag.selection)}
       />
     );
   }
@@ -170,7 +184,20 @@ export function ComposeRoutes(props: ComposeRoutesProps): ReactNode {
         currency={currency}
         today={today}
         verdict={compose.settleVerdict}
+        simplification={props.group?.simplification ?? null}
+        names={
+          new Map(
+            (props.group?.members ?? []).map((member) => [
+              member.party_id,
+              member.name,
+            ])
+          )
+        }
         onPatch={(patch) => compose.state.patchSettle(patch)}
+        onSimplify={(simplify) => {
+          const groupId = bag.settle.groupId;
+          if (groupId) compose.acts.setSimplify(groupId, simplify);
+        }}
         onCancel={props.onBack}
         onCommit={() => compose.acts.commitSettle()}
       />
@@ -197,6 +224,9 @@ export function ComposeRoutes(props: ComposeRoutesProps): ReactNode {
       <WaitingScreen
         sections={compose.contrib}
         hasApprovals={compose.hasApprovals}
+        canDecide={compose.canDecide}
+        nudges={dashboard.nudges ?? []}
+        people={dashboard.friends}
         narrow={props.narrow}
         onVerb={(verb, row) => compose.acts.contribVerb(verb, row)}
       />
@@ -208,8 +238,10 @@ export function ComposeRoutes(props: ComposeRoutesProps): ReactNode {
       <ExportScreen
         draft={bag.exportDraft}
         groups={dashboard.groups}
+        data={compose.exportData}
         onPatch={(patch) => compose.state.patchExport(patch)}
         onCancel={props.onBack}
+        onCommit={props.onSaveExport}
       />
     );
   }

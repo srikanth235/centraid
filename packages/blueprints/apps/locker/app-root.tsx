@@ -40,6 +40,7 @@ import { Confirm, PermitGate } from "./components/PermitGate.tsx";
 import { Rail } from "./components/Rail.tsx";
 import { Screens, isRoutedScreen } from "./components/Screens.tsx";
 import { DeniedGate, Notices } from "./components/States.tsx";
+import { PASSKEY_KEY_FIELD, sidecarAskOf } from "./field-model.ts";
 import {
   OPEN_ITEM,
   clockAt,
@@ -53,12 +54,18 @@ import {
 import { appBar, bandClaim } from "./frame.tsx";
 import { generate } from "./gen-model.ts";
 import { isRevealExpired, permitFromAuth, spend } from "./permits.ts";
-import type { PermitRequest } from "./permits.ts";
+import type { PermitRequest, SidecarTarget } from "./permits.ts";
 import { useRouteActs } from "./route-acts.ts";
-import { PURGE_CONFIRM_LABEL, PURGE_CONFIRM_TITLE } from "./route-copy.ts";
+import {
+  EXPORT_CONFIRM_LABEL,
+  EXPORT_CONFIRM_TITLE,
+  PURGE_CONFIRM_LABEL,
+  PURGE_CONFIRM_TITLE,
+} from "./route-copy.ts";
 import {
   SESSION_IDLE_MS,
   afterStatus,
+  emptySidecarDraft,
   afterUnlock,
   bootSession,
   isOpen,
@@ -68,6 +75,7 @@ import {
 } from "./session.ts";
 import type { SessionState } from "./session.ts";
 import {
+  ACCESS,
   EDIT,
   EXPORT,
   GEN,
@@ -84,6 +92,7 @@ import {
   suppressesNavigation,
 } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
+import { importDoorPresent, useSurfaceActs } from "./surface-acts.ts";
 import type {
   AuthPayload,
   ItemsPayload,
@@ -92,6 +101,7 @@ import type {
 } from "./types.ts";
 import {
   CONFLICT_COMPARE_BODY,
+  EXPORT_LEDE,
   FIELD_LABEL,
   ITEMS_STATUS,
   OFFLINE_WHY_BODY,
@@ -209,10 +219,19 @@ export function Root({
     const token = bagRef.current.sessionToken;
     if (!isOpen(sessionRef.current) || !token) return;
     let next: ItemsPayload;
+    // THE ARCHIVED SHELF IS A DIFFERENT READ, not a client-side slice:
+    // archived items are out of the default window by construction, so a
+    // filter over rows that were never fetched would draw an empty shelf over
+    // a full one.
+    const archived = bagRef.current.filter.kind === "archived";
     try {
       next = await window.centraid.read<ItemsPayload>({
         query: "items",
-        input: { limit: bagRef.current.windowSize, auth_session: token },
+        input: {
+          limit: bagRef.current.windowSize,
+          auth_session: token,
+          ...(archived ? { archived: true } : {}),
+        },
       });
     } catch {
       setReadFailedState(true);
@@ -238,6 +257,11 @@ export function Root({
     }
     bagRef.current.items = next?.items ?? [];
     bagRef.current.truncated = Boolean(next?.truncated);
+    // THE HONEST DENOMINATOR. `total` is the count the vault made; it is
+    // ABSENT when the count could not be read, and the foot then says what it
+    // knows rather than inventing one (`format.windowEndCopy`).
+    bagRef.current.total = typeof next?.total === "number" ? next.total : null;
+    bagRef.current.archivedCount = next?.archivedCount ?? 0;
     bagRef.current.lastMatchedAt = new Date().toISOString();
     try {
       const trash = await window.centraid.read<{
@@ -342,14 +366,27 @@ export function Root({
     [setSessionError]
   );
 
-  /** Read the one item the permit authorises. The ONLY secret-bearing read in
-   *  this app, and it spends the permit on its way in. */
+  /**
+   * Read the one item the permit authorises. The ONLY secret-bearing read in
+   * this app, and it spends the permit on its way in.
+   *
+   * ONE PERMIT, ONE REVEAL (#873). A `sidecar` target moves what the permit
+   * buys — the sealed row hanging off the item rather than the item's own
+   * columns — because the vault deletes the item token before plaintext leaves
+   * it, so the two cannot both be bought with one confirmation. The plaintext
+   * comes back as the return value and is never put on the detail.
+   */
   const openWithPermit = useCallback(
-    async (itemId: string, itemToken: string): Promise<void> => {
+    async (
+      itemId: string,
+      itemToken: string,
+      sidecar?: SidecarTarget
+    ): Promise<string | null> => {
       const token = bagRef.current.sessionToken;
-      if (!token) return;
+      if (!token) return null;
       let payload: {
         item?: LockerDetail | null;
+        sidecar?: { value?: string | null } | null;
         vaultDenied?: { message?: string } | null;
       };
       try {
@@ -359,22 +396,24 @@ export function Root({
             item_id: itemId,
             auth_session: token,
             item_token: itemToken,
+            ...(sidecar ? { sidecar } : {}),
           },
         });
       } catch {
         publishOutcome(frame, { text: "The reveal did not go through." });
-        return;
+        return null;
       }
       // A denial on the ONE secret-bearing read is the app's denied state, in
       // the vault's own words — never a blank pane that reads as an item with
       // nothing in it.
       if (payload?.vaultDenied) {
         setConsent({ message: payload.vaultDenied.message ?? "" });
-        return;
+        return null;
       }
       bagRef.current.detail = payload?.item ?? null;
       bagRef.current.openItemId = itemId;
       bump();
+      return payload?.sidecar?.value ?? null;
     },
     [frame]
   );
@@ -417,12 +456,18 @@ export function Root({
       bagRef.current.reauthExpired = false;
       setSessionError("");
       setShelf(ITEM);
-      await openWithPermit(request.itemId, outcome.permit.token);
+      const fromSidecar = await openWithPermit(
+        request.itemId,
+        outcome.permit.token,
+        request.sidecar
+      );
       // ONE SHOT. The token bought exactly the read above; nothing keeps it.
       bagRef.current.permit = spend();
       // The field the member asked for is the field that opens — and only it.
+      // A sidecar's plaintext came back BESIDE the item; an item column's came
+      // back on it. Either way exactly one key lands in the bag.
       const detail = bagRef.current.detail as Record<string, unknown> | null;
-      const value = detail?.[request.field];
+      const value = request.sidecar ? fromSidecar : detail?.[request.field];
       if (typeof value === "string" && value.length > 0) {
         bagRef.current.revealed = { [request.field]: value };
         bagRef.current.revealedAt = { [request.field]: Date.now() };
@@ -443,11 +488,49 @@ export function Root({
     bump();
   }, []);
 
+  /**
+   * ASK FOR ONE SEALED ROW, wherever on the screen it sits. An item's own
+   * column needs nothing but its name; a sealed SIDECAR row (#873) carries the
+   * vault row the permit will be spent on, resolved out of the detail this pane
+   * is already holding — an address, never a value. A key that names no
+   * revealable row mints nothing rather than opening a gate over a permit
+   * nobody could spend.
+   */
+  const askReveal = useCallback(
+    (field: string): void => {
+      const detail = bagRef.current.detail;
+      if (!detail) return;
+      const sidecar = sidecarAskOf(field, detail);
+      if (sidecar) {
+        askPermit({
+          itemId: detail.item_id,
+          field,
+          sidecar: sidecar.target,
+          label: sidecar.label,
+        });
+        return;
+      }
+      // A namespaced key that resolved to nothing names a sidecar row this
+      // detail does not have. It opens no gate: a permit minted for it could
+      // buy nothing, and asking for a passphrase to buy nothing is worse than
+      // the control never having been pressed.
+      if (field.includes(":") || field === PASSKEY_KEY_FIELD) return;
+      askPermit({ itemId: detail.item_id, field });
+    },
+    [askPermit]
+  );
+
   const copyRevealed = useCallback(
     (field: string): void => {
       const value = bagRef.current.revealed[field];
       if (!value) return;
-      void copySecret(value, FIELD_LABEL[field] ?? "Value").then((outcome) =>
+      // A sidecar is named by its own row, because no static table can hold a
+      // label a member typed.
+      const label =
+        FIELD_LABEL[field] ??
+        sidecarAskOf(field, bagRef.current.detail)?.label ??
+        "Value";
+      void copySecret(value, label).then((outcome) =>
         publishOutcome(frame, { text: outcome.text })
       );
     },
@@ -613,6 +696,16 @@ export function Root({
     bagRef.current.confirm = null;
     bagRef.current.revealed = {};
     bagRef.current.revealedAt = {};
+    // ARRIVING AT THE ACCESS HISTORY FROM AN OPEN ITEM NARROWS IT TO THAT
+    // ITEM, and arriving from anywhere else widens it back. The narrowing is
+    // captured HERE because the next two lines drop the open item, which is
+    // exactly what dropping it is for — and "which item was I looking at" is
+    // the question the history is being opened to answer.
+    if (next === ACCESS) {
+      bagRef.current.accessItemId = bagRef.current.openItemId;
+      bagRef.current.accessEntries = null;
+      bagRef.current.accessWindow = null;
+    }
     if (next !== ITEM) {
       bagRef.current.detail = null;
       bagRef.current.openItemId = null;
@@ -625,6 +718,10 @@ export function Root({
     if (next !== EDIT) {
       bagRef.current.editSeed = null;
       bagRef.current.editError = "";
+      // The sidecar editors hold a half-typed sealed value and a half-pasted
+      // passkey key. Both are secrets nobody has saved, and neither survives
+      // leaving the form any more than the column form's own values do.
+      bagRef.current.sidecarDraft = emptySidecarDraft();
     }
     if (next !== GEN) bagRef.current.generated = "";
     // The generator draws on arrival: an empty bordered container with three
@@ -661,6 +758,22 @@ export function Root({
     publish,
   });
 
+  const surfaces = useSurfaceActs({ bagRef, bump, publish, refresh });
+
+  // FEATURE-DETECTED ONCE, so every consumer reads the same answer and a
+  // re-render cannot make the surface change its mind about what it has.
+  const hasImportDoor = importDoorPresent();
+
+  // The two surfaces with a read of their own pull it on ARRIVAL. Neither
+  // rides the items doorbell: an access history is not a projection of the
+  // item list, and a draft batch is not in the vault at all.
+  useEffect(() => {
+    if (shut) return;
+    if (current === ACCESS)
+      void surfaces.handleLoadAccess(bagRef.current.accessItemId);
+    if (current === IMPORT) void surfaces.handleLoadBatches();
+  }, [current, shut, surfaces]);
+
   // ---- the body -------------------------------------------------------------
 
   const scroll = ((): ReactNode => {
@@ -683,9 +796,7 @@ export function Root({
           revealed={bag.revealed}
           revealedAt={bag.revealedAt}
           now={now}
-          onReveal={(field) =>
-            askPermit({ itemId: bag.detail?.item_id ?? "", field })
-          }
+          onReveal={askReveal}
           onCopySecret={copyRevealed}
           onCopyCode={(code) => copyPlain(code, "Code")}
           onConceal={conceal}
@@ -699,6 +810,15 @@ export function Root({
             });
           }}
           onGenerate={() => go(GEN)}
+          onArchive={() => {
+            const detail = bag.detail;
+            if (!detail) return;
+            acts.handleArchive(detail.item_id, Boolean(detail.archived));
+          }}
+          onDuplicate={() => {
+            const detail = bag.detail;
+            if (detail) acts.handleDuplicate(detail.item_id);
+          }}
           onTrash={() => {
             bagRef.current.confirm = {
               kind: "trash",
@@ -719,6 +839,8 @@ export function Root({
           busy={busy}
           now={now}
           acts={acts}
+          surfaces={surfaces}
+          hasImportDoor={hasImportDoor}
           onOpenItem={openGate}
           onCancelEdit={() => go(null)}
         />
@@ -728,6 +850,7 @@ export function Root({
       <LockerList
         rows={rows}
         windowCount={bag.items.length}
+        total={bag.total}
         loaded={loaded}
         truncated={bag.truncated}
         onOpen={openGate}
@@ -753,7 +876,7 @@ export function Root({
           itemTitle={
             bag.items.find((row) => row.item_id === request.itemId)?.title ?? ""
           }
-          fieldLabel={FIELD_LABEL[request.field] ?? "Value"}
+          fieldLabel={request.label ?? FIELD_LABEL[request.field] ?? "Value"}
           busy={busy}
           error={session.error}
           onConfirm={(secret) => void confirmPermit(secret)}
@@ -762,6 +885,21 @@ export function Root({
             setSessionError("");
             bump();
           }}
+        />
+      );
+    }
+    // THE EXPORT'S CONFIRM. It names the consequence — §6's lede, whole — and
+    // it is destructive in the `--net` tone, because what it writes leaves the
+    // vault's protection entirely.
+    if (bag.exportConfirm) {
+      return (
+        <Confirm
+          title={EXPORT_CONFIRM_TITLE}
+          body={EXPORT_LEDE}
+          label={EXPORT_CONFIRM_LABEL}
+          destructive
+          onCancel={surfaces.handleCancelExport}
+          onConfirm={surfaces.handleRunExport}
         />
       );
     }
@@ -950,10 +1088,18 @@ export function Root({
                 rows={bag.items}
                 typeCounts={typeCounts(bag.items)}
                 trashCount={bag.trashRows.length}
+                archivedCount={bag.archivedCount}
                 onFilter={(filter) => {
+                  // Crossing into or out of the archived shelf is a different
+                  // READ, so it re-runs one; every other lens is a slice of
+                  // the window already in hand.
+                  const wasArchived = bagRef.current.filter.kind === "archived";
                   bagRef.current.filter = filter;
                   setShelf(null);
                   bump();
+                  if (wasArchived !== (filter.kind === "archived")) {
+                    void refresh();
+                  }
                 }}
                 onGo={go}
               />

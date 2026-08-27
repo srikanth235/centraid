@@ -16,13 +16,49 @@
 // about it.
 
 import { clearSecretClipboard } from "./clipboard.ts";
+import type { StagedRow } from "./import-model.ts";
 import type { Permit, PermitRequest } from "./permits.ts";
 import type {
   AuthPayload,
   ItemDraftSeed,
+  LockerAccessEntry,
   LockerDetail,
   LockerRow,
+  UrlMatchPolicy,
 } from "./types.ts";
+
+/**
+ * What the edit form's SIDECAR editors hold between keystrokes (#872).
+ *
+ * It is in the secret bag rather than the view bag because two of its three
+ * halves can hold a plaintext a member is halfway through typing: a `sealed`
+ * custom field's value, and a passkey's private key. The third — the address
+ * list — is metadata, and it rides along rather than being declared apart,
+ * because "one editor, one draft" is easier to keep true than "two drafts, one
+ * of which a lock erases".
+ */
+export interface SidecarDraft {
+  field: {
+    fieldId?: string;
+    section: string;
+    label: string;
+    kind: string;
+    value: string;
+  } | null;
+  addresses: { url: string; matchPolicy: UrlMatchPolicy }[] | null;
+  passkey: {
+    rpId: string;
+    userHandle: string;
+    displayName: string;
+    credentialId: string;
+    algorithm: string;
+    privateKey: string;
+  } | null;
+}
+
+export function emptySidecarDraft(): SidecarDraft {
+  return { field: null, addresses: null, passkey: null };
+}
 
 /** Five minutes of inactivity ends a session. */
 export const SESSION_IDLE_MS = 5 * 60 * 1000;
@@ -212,7 +248,10 @@ export interface SecretBag {
   sessionToken: string | null;
   /** The one secret-bearing payload in this app — the open item's fields. */
   detail: LockerDetail | null;
-  /** Plaintext values a live permit revealed, by field. */
+  /** Plaintext values a live permit revealed, by field. Since #873 a sealed
+   *  SIDECAR row's plaintext lands here too, under the namespaced key
+   *  `field-model` mints for it — one map, so one wipe still empties every
+   *  revealed value on the screen whatever kind of row it came off. */
   revealed: Record<string, string>;
   /** When each of those landed, for the countdown. */
   revealedAt: Record<string, number>;
@@ -228,6 +267,16 @@ export interface SecretBag {
   searchTerm: string;
   searchResults: LockerRow[] | null;
   trashRows: LockerRow[];
+  /** The sidecar editors' typed values — a sealed custom field and a passkey's
+   *  key material among them. */
+  sidecarDraft: SidecarDraft;
+  /** The access history a live session bought. No receipt has ever carried a
+   *  VALUE, but the list of what a member looked at is exactly the browsable
+   *  projection a lock takes with it. */
+  accessEntries: LockerAccessEntry[] | null;
+  /** The staged import rows under review. Metadata — dispositions and column
+   *  mappings — and still a member's file, held only while the session is. */
+  importRows: StagedRow[] | null;
 }
 
 export type SecretBearingKey = keyof SecretBag;
@@ -249,6 +298,9 @@ export const SECRET_BEARING_KEYS: readonly SecretBearingKey[] = [
   "searchTerm",
   "searchResults",
   "trashRows",
+  "sidecarDraft",
+  "accessEntries",
+  "importRows",
 ];
 
 /** What each secret-bearing field is when it holds nothing. */
@@ -265,6 +317,9 @@ export function emptySecretBag(): SecretBag {
     searchTerm: "",
     searchResults: null,
     trashRows: [],
+    sidecarDraft: emptySidecarDraft(),
+    accessEntries: null,
+    importRows: null,
   };
 }
 

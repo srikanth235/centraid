@@ -29,10 +29,6 @@ receipt, no child issues.
 `packages/design/src/format.test.ts`, `packages/design/src/format.ts`, and
 `scripts/home-site/public/index.html` arrive from main with no #861 edit.
 
-**Comment-only one-liner the #861 sweep left unnamed:**
-`scripts/test-report/render-briefing.mjs` — a blank line inside a JSDoc
-block. Named here so a later merge's receipt coverage check can see it.
-
 **Wave 0 — policy before sweep (root agent):**
 
 - `docs/coding-standards.md` — new section **"Comments describe now"**: the

@@ -3,7 +3,7 @@
   "entries": [],
   "copyRatchet": {
     "_comment": "U4 copy-density ratchet (#805). Every entry is a user-facing string literal the walk in tests/quality/user-facing-qualities.test.ts flags as over 120 chars, two or more sentences, or carrying banned filler. Seeded green on day one so the gate lands without rewriting copy; TIGHTEN-ONLY from here. Audit slices D1..D5 rewrite the copy, DELETE the entry, and lower maxEntries by the same count; the gate fails on any entry that no longer matches a real string, so seeds cannot outlive the copy they excuse. maxEntries is capped in turn by COPY_SEED_CEILING in the owning test, which may only ever fall.",
-    "maxEntries": 30,
+    "maxEntries": 29,
     "entries": [
       {
         "file": "packages/blueprints/apps/locker/view-copy.ts",
@@ -79,11 +79,6 @@
         "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
         "literal": "Your gateway's content store. They leave this device over the network to get there.",
         "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
-      },
-      {
-        "file": "apps/mobile/src/screens/Scan.tsx",
-        "literal": "Captured with on-device OCR. The source image was not stored in Locker.",
-        "reason": "security — Locker scan note discloses the source image was not stored"
       },
       {
         "file": "apps/mobile/src/screens/Settings.tsx",

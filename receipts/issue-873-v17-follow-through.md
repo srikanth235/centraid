@@ -9,7 +9,7 @@
 - [x] Own the Receipt surface on the origin seat, where capture lives
 - [x] Give the phone's offline expense its missing `tally.expense_payer` shape
 - [ ] Autofill native extensions (a later slice)
-- [ ] Backend doors — access-history query, alias read-back, items-window total, import bridge (other slices)
+- [x] Backend doors — access-history query, alias read-back, items-window total, import bridge
 
 ## What changed
 
@@ -213,13 +213,454 @@ ordinary queued writes, gateway-derived reads, one withheld verb;
 `packages/blueprints/src/handler-reachability.test.ts` empties
 `AWAITING_HANDOFF.mobile` and rewrites `NATIVE_FALLBACK.tally`.
 
+
+**Slice: the Tally vault backend.**
+
+The v17 surfaces were drawn against eight commands that did not exist. They
+exist now, and the app's founding rule survives all of them: no balance is
+stored and none is transmitted.
+
+*The schema.* `packages/vault/src/schema/domains-tally.ts` adds
+`tally_expense_payer` (who actually put money down, written for EVERY expense —
+the single-payer case as one degenerate row, so both balance folds read one
+shape) and `tally_nudge` (a reminder that was PREPARED, never one that was
+sent), plus `tally_expense.split_method` / `split_params_json`,
+`tally_group.simplify_opt_in` / `archived_at`, a nullable
+`tally_expense.group_id` for the group-less 1:1 case, and a
+`tally_expense_line_item` that now hangs off the expense with a nullable
+`receipt_id` — lines used to hang off the receipt, which made a photograph the
+price of itemising. `packages/vault/src/schema/tables.ts` registers both new
+tables so they enter the canonical walk, the replica change log and the
+portable export; `packages/vault/src/schema/migrate.ts` carries the rung;
+`packages/vault/src/schema/atlas.ts` gives each new kind its member-facing name
+and blurb, because a table that reaches Atlas unnamed reads as a leak.
+`packages/vault/src/gateway/portable-export.ts` was re-audited rather than
+assumed, and `tests/schema-export-fingerprint.json` records the re-pin with the
+audit written out — the same entry covers the Locker tables below.
+
+*The commands.* `packages/vault/src/commands/tally.ts` keeps the expense write
+path; `packages/vault/src/commands/tally-splits.ts` is new and is the reason
+that path stayed readable — the server-side re-validation four commands share,
+so `add_expense`, `add_receipt_expense`, `edit_expense` and
+`reallocate_receipt` cannot disagree about whether splits sum to the amount,
+lines sum to the amount, each line's allocations sum to that line, every
+participant is in scope, and the payers add up to what was paid. It does NOT
+resolve a split: the client resolves shares from its chosen division and sends
+them resolved, and `split_method` / `split_params_json` ride along as
+provenance so an edit re-opens the way the expense was entered instead of
+collapsing every division to exact amounts.
+`packages/vault/src/commands/tally-ledger.ts` is the second half of the write
+surface — `reallocate_receipt`, `leave_group`, `archive_group`,
+`set_group_simplification` and `nudge` — split out under a named file-size
+waiver and registered as one unit with `tally.ts`.
+`packages/vault/src/commands/tally-ledger.test.ts` is what the vault REFUSES
+about the way an expense is ENTERED: an unbalanced split, an out-of-scope
+participant, a payer set that does not add up, a re-allocation that leaves the
+stated arithmetic unreconciled.
+`packages/vault/src/commands/tally-ledger-groups.test.ts` carries the same
+proof for the commands that act on the container rather than on one expense —
+leaving keeps every ledger row and only drops the membership, archiving is not
+settlement, simplification is off until it is opted into, and a nudge records
+an intention while stating that nothing was sent.
+`packages/vault/src/commands/tally-ledger-test-kit.ts` is the one fixture both
+ride: the vault, the owner credential, and the refusal reader that accepts
+either half of the contract — `denied` when a precondition caught it before the
+handler ran, `failed` when the handler's own arithmetic guard threw and rolled
+the invocation back — which a second copy would quietly narrow to one.
+
+*The rail.* `packages/vault/src/share/commons-routing.ts` declares the five new
+group/expense commands rather than letting them bypass the #750 conformance
+scan — `archive_group` and `set_group_simplification` because both are the
+steward's call about the container itself, `leave_group` because it is
+`remove_group_member` without the on-ledger guard and an undeclared one would
+hand every member an eject verb, `nudge` because it is the owner's own
+intention about a person, and `reallocate_receipt` because it rewrites every
+member's share of an expense already agreed. `packages/vault/src/share/commons.ts`
+and `packages/vault/src/grant/fulfillment-edit.ts` both learned that
+`tally_expense.group_id` can be null: a group-less 1:1 expense resolves to NO
+container, which makes it a private local write rather than an unrouted shared
+one.
+
+*The folds.* `packages/blueprints/src/tally-balance.ts` reads the payer rows, so
+a participant's share is owed to each payer for the part they actually put
+down, matched off largest-first — pro-rating rounds per share and the rounded
+portions then stop adding back to what each payer paid.
+`packages/blueprints/src/tally-simplify.ts` is new: the minimal-transfer engine
+as a pure function beside that one fold, deriving the proposal at read time and
+writing nothing, because a simplification that stored debts would be the app's
+first stored balance. `packages/blueprints/src/tally-balance.test.ts` pins the
+invariants the whole app rests on — a group's nets sum to zero and the pairwise
+view agrees with the per-member view, multi-payer expenses throughout — and
+`packages/blueprints/src/tally-simplify.test.ts` pins both halves of a
+proposal: that it clears every position, and that its before/after counts (the
+whole consent argument) are true.
+
+
+**Slice: the Locker vault backend.**
+
+Same shape, opposite pressure: every table here can hold a secret, so the
+slice is mostly about where a value is allowed to be.
+
+*The schema.* `packages/vault/src/schema/domains-locker.ts` adds five sidecar
+tables — `locker_item_field` (owner-defined and template-minted custom fields,
+with `value_text` and `value_sealed` kept apart by a CHECK because sealing is
+per COLUMN while a field's kind is per ROW), `locker_item_address`,
+`locker_item_passkey`, `locker_item_history` — and registers
+`locker_item_alias`, which existed in DDL, was resolvable at reveal time, and
+was outside the canonical walk, so it never exported and no read could serve it
+back. It also adds `locker_item.password_set_at` (stamped only when the value
+actually changes, so a retag never makes an old password look fresh),
+`locker_item.archived_at` under a CHECK that makes live / archived / trashed
+exclusive, and widens the type CHECK from six to fifteen.
+`packages/vault/src/schema/tables.ts`, `migrate.ts` and `atlas.ts` carry the
+registration, the rung and the five new Atlas kinds.
+`packages/vault/src/schema/sealed.ts` declares the three sealed sidecar columns
+(`item_field.value_sealed`, `item_history.password`,
+`item_passkey.private_key`) and keeps the list tight on purpose: labels,
+sections, addresses, match policies and passkey metadata are the browsable half
+Locker's whole premise rests on.
+
+*The commands.* `packages/vault/src/commands/locker.ts` keeps the item write
+path and hands the shared vocabulary to
+`packages/vault/src/commands/locker-shared.ts`.
+`packages/vault/src/commands/locker-types.ts` is the nine expansion types as
+TEMPLATES rather than columns — the rule for the next type is "add a template".
+`packages/vault/src/commands/locker-sidecars.ts` holds the row helpers with the
+seal-boundary reasoning for each table in one place.
+`packages/vault/src/commands/locker-extras.ts` is the second command pack:
+archive, unarchive, duplicate, custom fields and sections, extra addresses, the
+passkey slot, and the counts the type rail and the window-end line read. A
+custom field is written ONE AT A TIME because `sealedInput` redacts only
+TOP-LEVEL command inputs and a list would have carried secrets into the
+append-only journal in the clear; addresses go as a whole list because none of
+them is a secret. `packages/vault/src/commands/locker-export.ts` is the
+plaintext export — a COMMAND and not a query, because a query handler is
+read-only by directive and so cannot write the receipt a mass reveal owes, and
+because a replica read returns sealed columns as placeholders and so could not
+see the plaintext anyway. `packages/vault/src/commands/attachments.ts` gains
+`locker.item` as one allow-list entry on the existing content spine, with the
+honest boundary written at the line: the bytes are NOT sealed, because the
+sealed class is a column class and there is no sealed blob today.
+
+*The evidence.* `packages/vault/src/commands/locker-test-kit.ts` is the shared
+fixture, and it is a module rather than a copy for one reason — both suites
+decrypt each cell with the AAD that cell must have been sealed under, which is
+what proves a duplicate or a history append RESEALED rather than moved a
+ciphertext to a cell it no longer belongs to. A drifting second copy of that
+helper would quietly stop proving it.
+`packages/vault/src/commands/locker-extras.test.ts` covers the alias read-back,
+archive, fields and sections, the fifteen types and the addresses;
+`packages/vault/src/commands/locker-export.test.ts` covers duplicate, history,
+counts, export and what purge takes with it.
+
+*Shared with Tally.* `packages/vault/src/share/commons-routing.ts` also
+declares the eight new Locker acts, because every command carrying `item_id`
+must be on that list for the #750 conformance scan and a Locker item is
+single-vault — the rail refuses them by NAME rather than letting a write land
+privately. `packages/vault/src/index.ts` exports the new decide entry point (below).
+
+
+**Slice: the gateway's sidecar reveal, and the grants that name it.**
+
+A sealed sidecar is a secret that hangs off an item, so the reveal gate had to
+stop being keyed on `locker.item` alone without becoming a second permit
+economy. `packages/vault/src/gateway/gateway.ts` widens the Locker gate to the
+whole `locker` SCHEMA and adds `lockerOwningItemId`: a sidecar reveal resolves
+the row's OWNING item from the requested row itself — never from the caller —
+and spends that item's permit, so a field, revision or passkey reveal costs
+exactly what revealing the item costs and writes the same receipt with the
+owning item in its detail. An unresolvable owner (row gone, or its item
+trashed) is gated on the requested id, which no permit names, so "row missing"
+and "no permit" refuse identically and the sidecars add no existence oracle.
+`packages/vault/src/gateway/locker-sidecar-reveal.test.ts` pins every clause of
+that, including the trashed-item case.
+
+`packages/blueprints/apps/locker/app.json` carries the grant that makes it
+usable: `reveal` on all three sidecar entities, the five sidecar reads, two
+content-spine reads for attachments, the ten new acts, attach/detach, and — the
+one that mattered most — a `consent.receipt` read whose **rowFilter pins
+`object_type` to Locker's own objects**. That filter is the boundary and not a
+convenience, because the gateway's structural per-entity guard covers
+`consent.provenance` only.
+`packages/blueprints/apps/tally/app.json` declares the five new Tally acts and
+the export read. `packages/blueprints/manifest.json` and
+`packages/blueprints/index.json` regenerate with them, both apps moving
+`0.2.0` → `0.3.0`.
+`packages/server/src/serve/manifest-scope-denial.sweep.test.ts` re-pins the
+bundled scope census 248 → 278 with the twenty named at the number, and adds
+`apps/locker` to the list of manifests whose declared rowFilter must reach the
+allow decision intact — with the note saying why that one carries more weight
+than the other two.
+
+
+**Slice: the client and server doors — the steward's decide, and the import bridge.**
+
+Two doors the drawn surfaces called and nothing answered.
+
+*Decide.* `packages/vault/src/share/commons-decide.ts` is the steward's answer
+to ONE durable member request, beside the member's own `cancelCommonsIntent`.
+Approving is not a second write path: it re-enters `executeCommonsCommand`
+exactly as the peer sweep does, so the signature, the stale-context judgement,
+the ordered op and the fan-out are the same machinery a live member command
+goes through — there is no "approved, therefore skip authorization" door.
+Declining settles `denied` with the steward's words and appends NO operation,
+because a refusal never reached the rail and advancing the grant's sequence for
+it would log a command nothing executed.
+`packages/vault/src/share/commons-decide.test.ts` drives it over the real
+three-vault fixture, so an approval's effect is a genuine `tally_expense` row
+on the steward's seat. `packages/vault/src/index.ts` exports it;
+`packages/core/src/protocol/routes.ts` and `packages/core/src/protocol/index.ts` name
+`gatewayCommonsIntents` plus `commonsIntentCancelPath` /
+`commonsIntentDecidePath` so no caller spells the path;
+`packages/core/src/protocol/routes.test.ts` pins both.
+`packages/server/src/routes/commons-routes.ts` serves the decide route and
+`packages/server/src/routes/commons-routes-decide.test.ts` drives it over two
+co-hosted vaults and a real shared group. `docs/protocol.md` states the whole
+two-answers rule as current state: the member withdraws with `cancel`, the
+steward answers with `decide`, a member deciding their own request is refused
+by name, a late answer reports `decided: false` with the status that stands,
+and the steward's settle is deliberately unconditional over a member's
+`cancelled` — the person who owns the commons gets the last word on what was in
+their queue.
+
+*Import.* `packages/client/src/react/blueprints/centraid-inline.ts` grows six
+optional doors — `decideCommonsIntent`, and the staged-import five
+(`stageImport`, `importBatches`, `importRows`, `publishImport`,
+`discardImport`). They are optional by contract, so an older host parses this
+client shape unchanged and a surface feature-detects; the import transport is
+lazy so it never joins the eager shell graph, and it is online-only by
+construction — never a replica session, never the pending-write outbox,
+because the payload is the file itself and a durable offline queue is exactly
+where it must not sit. It takes no `scope` argument because the import plane
+answers for whichever vault the gateway has mounted, which is a different axis
+from an app's mounted scopes; the missing argument says so instead of accepting
+one and ignoring it.
+`packages/client/src/react/blueprints/centraid-inline-doors.test.ts` asserts
+the transport contract of each — path, body, and that an import body never once
+reaches the replica session.
+`packages/blueprints/types/centraid.d.ts` restates both contracts on the
+ambient client shape (structurally, not by import: the first `import` would
+turn the ambient script into a module and every global in it would stop being
+global — recorded at the top as a named file-size waiver rather than a silent one).
+
+*The revocation time.* `packages/server/src/serve/vault-plane.ts` attaches
+`revokedAt` to a consent refusal that is a revocation, and
+`packages/server/src/engine/handlers/vault-bridge.ts` and
+`packages/server/src/engine/worker/runner.ts` carry it across the worker
+boundary. An app whose grant was revoked cannot read the consent tables to find
+out when — losing the grant is exactly what put it there — so the host tells
+it, and no caller may invent one.
+
+
+**Slice: Tally on the web.**
+
+The five new acts get their handlers — `packages/blueprints/apps/tally/actions/reallocate-receipt.ts`, `packages/blueprints/apps/tally/actions/leave-group.ts`, `packages/blueprints/apps/tally/actions/archive-group.ts`, `packages/blueprints/apps/tally/actions/set-group-simplification.ts` and `packages/blueprints/apps/tally/actions/nudge.ts` — beside the two that grew payer and line payloads, `packages/blueprints/apps/tally/actions/add-expense.ts` and `packages/blueprints/apps/tally/actions/edit-expense.ts`.
+
+*The models.* `packages/blueprints/apps/tally/split-model.ts` closes the six divisions and `packages/blueprints/apps/tally/split-model.test.ts` pins each. `packages/blueprints/apps/tally/line-model.ts` is new: the sixth division, and the payload two commands take — ONE module for two surfaces, because *By line* on Add expense and the allocation editor on Receipt are the same object seen twice, and two seats must never disagree about one receipt. Its tie-break on a LINE is position rather than the payer, because a line has nobody out of pocket; `packages/blueprints/apps/tally/line-model.test.ts` pins that difference from `split-model.ts` deliberately. `packages/blueprints/apps/tally/money-text.ts` was lifted out of `packages/blueprints/apps/tally/draft-model.ts` so the line model can read a typed amount without importing the draft — the draft imports the lines, and a module that only knows how to read a number should never be why two files point at each other; `packages/blueprints/apps/tally/draft-model.test.ts`, `packages/blueprints/apps/tally/receipt-model.ts` and `packages/blueprints/apps/tally/receipt-model.test.ts` follow it. `packages/blueprints/apps/tally/contrib-model.ts`, `packages/blueprints/apps/tally/contrib-model.test.ts` and `packages/blueprints/apps/tally/contrib-reads.ts` carry Waiting's sections and whether this host has a decide door at all; `packages/blueprints/apps/tally/entry-facts.ts` and `packages/blueprints/apps/tally/pending-projection.ts` carry the row sentence and the optimistic payer rows a queued expense now projects.
+
+*The reads.* `packages/blueprints/apps/tally/queries/dashboard.ts`, `packages/blueprints/apps/tally/queries/activity.ts`, `packages/blueprints/apps/tally/queries/group.ts`, `packages/blueprints/apps/tally/queries/friend.ts`, `packages/blueprints/apps/tally/queries/history.ts` and `packages/blueprints/apps/tally/queries/search.ts` fold payers, methods and typed lines into what they already answered with. `packages/blueprints/apps/tally/queries/export.ts` is new — one group's ledger as a structured payload, balances excluded by design. `packages/blueprints/apps/tally/ledger-reads.ts` keeps the room's spine and `packages/blueprints/apps/tally/export-read.ts` is deliberately NOT in it: nothing outside the export route wants a group's whole ledger with its revisions, so it is asked when a group is CHOSEN and not before, and until it lands the surface states no counts rather than zero ones. `packages/blueprints/apps/tally/export-file.ts` turns those rows into bytes ON THE DEVICE — a query that returned a CSV would be a query that had decided how a member wants to read them — and `packages/blueprints/apps/tally/export-file.test.ts` pins the negative that matters: nothing in it folds a figure, and `balances_excluded` travels in the JSON so a reader knows the absence was a decision rather than an omission.
+
+*The export range follow-up.* The Range chip used to be decoration: the surface named a month and the file carried the whole ledger anyway. `export-read.ts`'s `rangeSince`, the `since` argument through `packages/blueprints/apps/tally/queries/export.ts`, and the counts the foot reads now describe the RANGE rather than the group — and `packages/blueprints/apps/tally/queries/export.test.ts` pins what `since` excludes, what it keeps, and that the foot follows it.
+
+*The surfaces.* `packages/blueprints/apps/tally/components/AddExpense.tsx` and the new `packages/blueprints/apps/tally/components/AddExpenseTables.tsx` draw the payer set and the typed lines as two small editors rather than burying the six decisions the surface is about under two grids; neither is a MODE — several payers is the ordinary payer chip set with amounts typed beside it, and clearing an amount takes that person back out. `packages/blueprints/apps/tally/components/Receipt.tsx` commits the re-allocation, `packages/blueprints/apps/tally/components/Settle.tsx` carries the simplification proposal and its opt-in, `packages/blueprints/apps/tally/components/Export.tsx` the export window, and `packages/blueprints/apps/tally/components/Waiting.tsx` the steward's decide door where the host has one. `packages/blueprints/apps/tally/components/Expense.tsx`, `packages/blueprints/apps/tally/components/Ledgers.tsx`, `packages/blueprints/apps/tally/components/Lenses.tsx`, `packages/blueprints/apps/tally/components/Panels.tsx`, `packages/blueprints/apps/tally/components/Overlays.tsx`, `packages/blueprints/apps/tally/components/States.tsx`, `packages/blueprints/apps/tally/components/Screens.tsx`, `packages/blueprints/apps/tally/components/Route.tsx`, `packages/blueprints/apps/tally/components/Fields.tsx` and `packages/blueprints/apps/tally/components/ComposeRoutes.tsx` follow, with `packages/blueprints/apps/tally/components/Compose.module.css` and `packages/blueprints/apps/tally/components/Ledger.module.css` for the two new tables' geometry. `packages/blueprints/apps/tally/compose-acts.ts`, `packages/blueprints/apps/tally/compose-state.ts`, `packages/blueprints/apps/tally/compose-copy.ts`, `packages/blueprints/apps/tally/view-copy.ts`, `packages/blueprints/apps/tally/types.ts`, `packages/blueprints/apps/tally/app-root.tsx`, `packages/blueprints/apps/tally/writes.ts` and `packages/blueprints/apps/tally/writes.test.ts` carry the acts, the state, the words and the write builders; `packages/blueprints/apps/tally/states.test.tsx` covers the designed states the new surfaces added.
+
+
+**Slice: Locker on the web.**
+
+The three surfaces that used to be drawn AGAINST THE ASK now perform.
+
+*Access history.* `packages/blueprints/apps/locker/queries/access.ts` reads the vault's own `consent.receipt` stream under the row-filtered grant, online-only by construction because journal.db is not in the browser replica and a cached answer would be a list of what one device happened to hold. `packages/blueprints/apps/locker/access-model.ts` is the pure projection, and its one rule is that it NAMES acts and never their contents — a reveal row says which COLUMNS were opened, because a receipt has never carried a value. `packages/blueprints/apps/locker/components/Access.tsx` renders it and keeps the rule that governed the placeholder: an audit surface may never invent a row.
+
+*Import.* `packages/blueprints/apps/locker/import-model.ts` is the one place a staging disposition becomes one of §6's three verdicts, so the words on the review screen and the behaviour in the vault are one thing said once — `held` is not "we could not decide", it is the promise that an import never overwrites a secret the vault already holds. `packages/blueprints/apps/locker/components/Import.tsx` draws draft → review → publish over the five optional doors, and a discarded draft writes nothing at all.
+
+*Export.* `packages/blueprints/apps/locker/actions/export.ts` is the data door; `packages/blueprints/apps/locker/export-file.ts` assembles the bytes on the device, because nothing about a file — a dialect, a column order, a name — belongs inside the vault boundary. `packages/blueprints/apps/locker/components/Export.tsx` puts §6's consequence sentence above every control, and the confirm NAMES the consequence rather than asking whether the member is sure.
+
+*The item.* `packages/blueprints/apps/locker/queries/item.ts`, `packages/blueprints/apps/locker/queries/items.ts` and the new `packages/blueprints/apps/locker/queries/item-sidecars.ts` and `packages/blueprints/apps/locker/queries/type-degradation.ts` answer with the fifteen types, the window total, the alias read-back and the five sidecars — with one rule running through all of it: a sealed cell never rides these payloads, so what comes back is the SHAPE of the secret and not the secret. `packages/blueprints/apps/locker/field-model.ts` groups fields into the sections the screen draws and the editor edits; `packages/blueprints/apps/locker/item-copy.ts` is the third part of the §6 verbatim table, the sections the item screen gained. `packages/blueprints/apps/locker/components/ItemSidecars.tsx` and `packages/blueprints/apps/locker/components/EditSidecars.tsx` draw and edit them, split out of `packages/blueprints/apps/locker/components/Item.tsx` and `packages/blueprints/apps/locker/components/Edit.tsx` under the 500-line rule and for a reason that outlives it — six sections of the same shape keep drawing alike when they are held together. A create has no id for a field to hang off, so the sidecar editors appear only on an item that already exists.
+
+The rest of the room follows: `packages/blueprints/apps/locker/components/List.tsx`, `packages/blueprints/apps/locker/components/Rail.tsx` (six rows with counts, ruled — the other nine types are reached from the add form's chip and the `type:` filters), `packages/blueprints/apps/locker/components/Surfaces.tsx`, `packages/blueprints/apps/locker/components/Screens.tsx`, `packages/blueprints/apps/locker/app-root.tsx`, `packages/blueprints/apps/locker/route-acts.ts`, `packages/blueprints/apps/locker/route-copy.ts`, `packages/blueprints/apps/locker/view-copy.ts`, `packages/blueprints/apps/locker/types.ts`, `packages/blueprints/apps/locker/draft.ts`, `packages/blueprints/apps/locker/bag.ts`, `packages/blueprints/apps/locker/format.ts`, `packages/blueprints/apps/locker/permits.ts`, `packages/blueprints/apps/locker/session.ts`, `packages/blueprints/apps/locker/session.test.ts`, `packages/blueprints/apps/locker/pending-projection.ts`, `packages/blueprints/apps/locker/writes.ts` and `packages/blueprints/apps/locker/writes.test.ts`. `packages/blueprints/apps/locker/surface-acts.ts` is new and holds the three surfaces that talk to something other than a query or an action, so each of their three rules is stated once. `packages/blueprints/apps/locker/review-model.ts` and `packages/blueprints/apps/locker/review-model.test.ts` move password age out of the unrunnable checks, now that `password_set_at` exists to answer it.
+
+*The thin acts.* `packages/blueprints/apps/locker/actions/set-field.ts`, `packages/blueprints/apps/locker/actions/remove-field.ts`, `packages/blueprints/apps/locker/actions/set-addresses.ts`, `packages/blueprints/apps/locker/actions/set-passkey.ts`, `packages/blueprints/apps/locker/actions/clear-passkey.ts`, `packages/blueprints/apps/locker/actions/archive-item.ts`, `packages/blueprints/apps/locker/actions/unarchive-item.ts` and `packages/blueprints/apps/locker/actions/duplicate-item.ts`. Three of them state their online-only reason at the line rather than leaving it to be discovered at commit: `set-field` and `set-passkey` because their payload can carry a secret and a secret never enters the durable offline queue, and `export` because a mass reveal must never be queued or replayed. `set-addresses` takes a whole list where `set-field` takes one field, and says why: no address is a secret.
+
+*Evidence.* `packages/blueprints/apps/locker/item-sections.test.tsx` proves the six new sections draw AND that the boundary did not move. `packages/blueprints/apps/locker/queries.test.ts` covers the four reads, asserting every narrowing claim against the RECORDED read requests, so a handler that forgets a `where` cannot pass by having its mock ignore one. `packages/blueprints/apps/locker/route-states.test.tsx` and `packages/blueprints/apps/locker/states.test.tsx` cover the live surfaces, the archive shelf, the six-row rail ruling and the window total. `packages/blueprints/apps/locker/locker-item-type.test.ts` keeps the page-side union in lockstep with the DDL CHECK.
+
+
+**Slice: the cross-slice integration fixes.**
+
+None of these showed up inside a slice; every one of them appeared where two met.
+
+*The compose-states split.*
+`packages/blueprints/apps/tally/compose-states.test.tsx` was one file over the
+size limit once the new routes landed. The fixtures and the mount moved to
+`packages/blueprints/apps/tally/compose-states-kit.ts` and the new routes to
+`packages/blueprints/apps/tally/compose-states-v17.test.tsx`, so both files
+compose their routes the same way — `press` finds a control by the label the
+previous screen drew, which is what keeps a route reachable only from a test
+from counting as a route.
+
+*The pending-overlay pin.*
+`packages/blueprints/apps/_shared/pending-overlay.test.ts` expected an expense
+projection with no payer rows and went red the moment Tally's
+`pending-projection.ts` started emitting them. The projection is right — a
+queued expense that projected no payer read as unpaid after a restart — so the
+pin moved to the correct shape and now names the payer row's entity and values
+rather than only its id.
+
+*Mobile type-widening.* `apps/mobile/src/navigation.ts` restated the six-type
+union longhand on `LockerItem`, which would have refused to route an item of
+any of the nine new types; it now takes `LockerItemType` from the shared
+blueprint, with the comment saying why the union may never be restated there.
+`apps/mobile/src/apps/locker/LockerItemsView.tsx`'s filter chips read
+`TYPE_ORDER` instead of a list of six kept beside them.
+
+*EntryRow convergence.* The Tally mobile slice hoisted `entryFacts` /
+`feedFacts` / `entryMeta` into `entry-facts.ts` and left the web component
+holding its own copy, recorded there as a follow-up.
+`packages/blueprints/apps/tally/components/EntryRow.tsx` now imports them and
+restates nothing, so the two seats cannot say slightly different things about
+the same expense.
+
+*The U4 copy rewrite.* `apps/mobile/src/screens/scan-locker.ts`'s
+`SCANNED_CARD_NOTE` was a two-sentence string carried by a copy-allowlist seed.
+It is one sentence now — "Captured on device by OCR — the source image was
+never stored in Locker." — the seed is deleted from
+`tests/quality/copy-allowlist.json` and `copyRatchet.maxEntries` falls 30 → 29
+with it. The ledger shrank with its subject; no rule was relaxed.
+The one place the handoff's own copy could not be rendered verbatim is recorded
+instead of absorbed: `docs/design-divergences.md` gains a §-of-its-own for the
+v17 verbatim table, holding Tally's leave-a-group confirm at "Settle first."
+where §6 says "Settle first if you can." — the repo's copy rule bans "you can"
+as filler outright, and the allowlist is tighten-only with no slot for a phrase
+the rule refuses.
+
+*Three mobile leftovers the doors made real.*
+`apps/mobile/src/apps/locker/LockerReviewView.test.tsx` asserted that the
+unrunnable checks carried bracketed gap tags; the surface owes the REASON in
+words, so it now asserts each check's `why`.
+`apps/mobile/src/apps/locker/LockerAccessScreen.tsx` imported `ACCESS_NOT_SERVED`
+— a sentence saying no query serves the access history, which the web slice
+deleted along with the gap it named. The phone still does not read that history
+(the query is online-only by construction and pointing this seat at it is its
+own slice), so the screen keeps its register and now states the shared
+`ACCESS_NO_VALUES` rule beside `ACCESS_WHERE` instead: what a receipt records,
+that it never carries a value, and where the same receipts are read. No new
+string, and no sentence left claiming a gap that closed.
+`packages/blueprints/src/locker-online-only.test.ts` extends the online-only
+roster to the new secret-bearing acts (`set_field`, `set_passkey`, `export`).
+
+*Three dead exports the branch introduced, deleted rather than ignored.* `knip`
+is a `check:push` gate and it was red on branch files: `exportRowCount` and
+`TallySurfaceCopy` in `apps/mobile/src/apps/tally/tally-view-model.ts` are a
+draft the screen did not take — `TallySurfaceScreen.tsx` composes its foot from
+the shared `compose-copy.exportWindow` — so the block is gone and the module
+header's third bullet now describes the section that is actually there;
+`LOCKER_COLUMN_TYPES`, `isKnownLockerType`, `degradeType` and the now-unused
+`LockerItemType` alias in `packages/vault/src/commands/locker-types.ts` were a
+second copy of a rule that belongs on the read side, so they are gone and the
+module header points at
+`packages/blueprints/apps/locker/queries/type-degradation.ts` where it lives;
+and `packages/vault/src/commands/locker.ts`'s compat re-export dropped
+`LOCKER_TAGS_SCHEME_URI`, which nothing imported through that door.
+
+*Docs.* `docs/apps/locker-scenarios.md` records the custodian seat's four new
+scenarios and states, as current state, that the item model is fifteen types
+while the rail stays six rows with counts, which paper cuts closed, and how the
+sealed sidecars reveal. `docs/decisions.md` carries the two #873 ruling tables
+(Tally T-*, Locker L-*) and the two paragraphs beneath them.
+
+
+**Slice: the quality gates.**
+
+*The T3 canary, extended — and the leak it caught.*
+`packages/test-kit/src/year3-vault.ts` seeds a sealed row on each of the three
+new sidecar tables, each sealed under its OWN row id, and declares their
+sentinels; `tests/quality/user-facing-qualities.test.ts` runs all three through
+every enforcement point the canary owns — the masked SQL read, reveal, raw
+storage, the FTS tables, the replica snapshot, the backup and the portable
+export. Two assertions were rewritten rather than added to: the masked-read
+check now fails if any artifact came back with zero rows, because a masked read
+that returned nothing satisfied `every` vacuously; and the reveal check now
+requires EVERY declared sentinel to come back out of reveal rather than only
+`locker.item.password`, because reveal is the one surface a sentinel is allowed
+through and a sealed cell nothing can unseal is a data-loss bug wearing a
+passing canary.
+
+That extension immediately found a real leak, and the fix is in
+`packages/vault/src/schema/sealed.ts`. The canary's draft-band case stages one
+row per `SEALED_COLUMNS` entry through the import staging plane and requires
+every staged value to be sealed. The three new sidecar columns were in
+`SEALED_COLUMNS` and NOT in `SEALED_PAYLOAD_FIELDS`, so a custom field's sealed
+value, a previous password and a passkey's private key would have sat in
+`sync_import_row.payload_json` in the CLEAR. `SEALED_PAYLOAD_FIELDS` now lists
+all three (both the snake_case and camelCase spellings the band accepts). The
+reason it was worth fixing rather than waiving is written at the entry: a
+sidecar has no importer today, which is exactly why it is listed — the draft
+band is a generic persistence boundary, so an importer that learns to carry
+these must find the seal already in front of it rather than leave the secret in
+a draft row until a publisher shows up. Caught pre-merge, by a gate this change
+extended.
+
+*The Atlas census.* `packages/vault/src/schema/atlas-census.ts` counted one
+prepared statement per registered table, which is why the first-paint SQL
+budget had been raised once per registration (#731 128 → 138, #807 138 → 140)
+and why the grant-plane tables were excluded from the census to avoid two more.
+`packages/vault/src/schema/atlas-graph.ts` gains `countRowsBatched`: identical
+arithmetic — every registered table is still COUNT(*)-scanned and none is
+dropped — issued as one compound SELECT per file, batched at 200 to stay well
+under SQLite's compound-select ceiling, with a `sqlite_master` pre-check so an
+absent table answers 0 exactly as the per-table catch did, and a per-table
+fallback so one uncountable table cannot take its batch down.
+`packages/vault/src/schema/atlas-census.test.ts` pins the equivalence and the
+absent-table case. `tests/experience-budgets/client-query-counts.json` then
+falls 140 → **13** — a tighten, not a widen; the measured figure with the new
+Tally and Locker registrations on it was 147, and batching takes it to 13 — and
+its `approvedDeviation` is now "None outstanding", retiring the chain (#731
+128 → 138, #807 138 → 140) that had raised the knob once per registered table.
+
+*The ratchets.* `tests/quality/classification-ratchet.json` re-pins the
+fingerprints for `packages/vault/src/schema/sealed.ts` and `tests/matrix.json`
+with the deviation note quoted under Decisions below.
+`tests/comment-density-ratchet.json` is regenerated: 171 new files pinned, 15
+deleted files pruned, 19 pins lowered, and 53 hand-raised — every one of the 53
+on a file this branch changed against `origin/main`, listed by cause in the
+file's own `approvedDeviation`. `tests/skips.json` re-pins eight skip sites
+whose line numbers drifted; the budget stays 25 and no skip was added or
+removed.
+
+Together, the vault, gateway, door and wiring slices above close the
+checklist's backend doors — access-history query, alias read-back,
+items-window total, import bridge — on both apps, ending the
+drawn-against-the-ask era those surfaces shipped under.
+
+**Inherited from the base merge, named here for coverage:**
+`scripts/test-report/render-briefing.mjs` arrives with a comment-only
+one-liner (a blank line inside a JSDoc block) from the merge that based this
+branch. `receipts/issue-861-comment-current-state.md` briefly carried this
+note in-branch; that receipt is frozen once on the default branch, so it is
+restored byte-for-byte and the note lives here instead.
+
 ## Out of scope
 
-Autofill native extensions. The backend doors this interface is drawn against
-but cannot yet call: the access-history query, the connector-alias read-back,
-the items-window total count (which is why the window's foot says what it is
-showing rather than the design's `300 of 312`), and the import client bridge.
-Desktop and web Locker, every other app, and the frame's band geometry.
+**Autofill native extensions.** A Safari/iOS credential-provider extension and
+its Android autofill service are Xcode/Gradle targets; there is no Xcode in
+this environment, so building them here would produce an artifact nobody could
+compile or sign. The blueprint's fill path and the Companion candidate list are
+in place and unchanged by their absence — the extension is the host that calls
+them, not a rewrite of them. A later slice, on a machine that can build it.
+
+**Ruled out rather than deferred** (see [docs/decisions.md](../docs/decisions.md)):
+breach checking (network egress from an app excluded from enrichment, and
+`compromised` stays a flag with no automatic producer) and "recently used" (a
+shelf that publishes reading habits on the one screen where reading is the
+sensitive act); on the Tally side, cross-member comments on an expense, payment
+rails, and any currency-rate provider — `T-rate` derives from the vault's own
+recorded rates and there is no network call.
+
+**Still elsewhere.** The three phone-side surfaces whose door is on another
+seat stay drawn as facts plus the sentence naming where the act happens: the
+custodian seat performs Import, Export and Access history now, and pointing the
+Expo seat at those doors is its own slice. The phone's item screen reveals the
+item's own sealed columns only; the sidecar reveal is drawn on the web.
+Every other app, and the frame's band geometry.
 
 ## Decisions
 
@@ -294,6 +735,57 @@ Desktop and web Locker, every other app, and the frame's band geometry.
   with its subject, not a rule being relaxed. `copyRatchet.maxEntries` falls
   31 → 30 with it; no other entry changes.
 
+**Integration slice — which of the decisions above the later slices closed.**
+The mobile slices' entries stay as written; three of them recorded a state that
+has since moved, and the move is the news rather than an edit:
+
+- *"`entry-facts.ts` was hoisted rather than duplicated, and web has not
+  converged on it yet"* — the follow-up it named is done.
+  `packages/blueprints/apps/tally/components/EntryRow.tsx` reads the hoisted
+  module and restates nothing.
+- *"Access history is drawn against the ask"* — the query exists.
+  The custodian seat renders the list; the origin seat still does not read it
+  (the query is online-only by construction), so its screen dropped the
+  now-false "no query serves this" line and states the register's own rule
+  instead.
+- *"The window's foot keeps the honest variant"* — the items read carries a
+  `total` now, so the §6 sentence renders where a real total exists and the
+  honest variant remains for where one does not. The variant was not deleted;
+  it stopped being the only branch.
+
+The two mobile decisions the integration slice CONFIRMED rather than moved are
+now rulings in [docs/decisions.md](../docs/decisions.md): Waiting draws no
+Approve and no Decline on the phone, and the Home tile stays "spent this month"
+rather than becoming a second balance engine.
+
+**Integration slice — the approved deviations, quoted at the knob.**
+
+`tests/quality/classification-ratchet.json`:
+
+> Two #873 fingerprint moves land together. packages/vault/src/schema/sealed.ts declares Locker's three sealed sidecar columns (locker.item_field.value_sealed, locker.item_history.password, locker.item_passkey.private_key) in SEALED_COLUMNS and — the half a reviewer must see — the matching SEALED_PAYLOAD_FIELDS entries, so a draft-band row cannot carry those values in the clear before a publisher exists; the T3 canary now fails when the two lists disagree. tests/matrix.json re-pins for the fifteen owned Expo Locker and Tally origin-seat scenarios the #873 mobile slices registered, plus the tracking-issue state refresh. The governed payload (qualities, demonstratedRed) is unmoved, no quality lost a gate, no gate lost its evidence, and no classification was weakened.
+
+`tests/comment-density-ratchet.json` carries its own note at the file: 53 pins
+hand-raised, each on a file this branch changed against `origin/main`, in three
+named causes — modules the #872/#873 rebuild replaced whole, the vault and
+server modules that grew the sidecar and split surfaces, and the Expo covers'
+seat-boundary prose. No cap widened, and every downward move `--write` found
+was taken. One allowlist entry is added — `packages/vault/src/share/commons-decide.ts`,
+where the surviving prose is the steward-decision security argument itself
+(approval re-enters full authorization with no skip door, a decline appends no
+ordered op, the member's own seat signs), which no type or test carries and
+which leaves the file at 24.4% once the restating half is gone; every other new
+file on this branch is under the 15% cap on its own. The remaining ratchets are pure
+tightens and need no deviation: `copyRatchet.maxEntries` 30 → 29 (the seed's
+string was rewritten), the Atlas first-paint budget 147 → 13 (counts batched),
+and `tests/skips.json` re-pinned at the same 25 sites.
+
+- **`add_receipt_expense`'s allocation write-marker is a composite id.** It
+  stamps `ctx.wrote("tally.expense_line_allocation", "<lineId>:<partyId>")`,
+  which the demo-purge `pkColumn` walk can never address. Harmless today —
+  nothing purges by that marker — and recorded in [QUALITY.md](../QUALITY.md)
+  rather than fixed here, because the fix is the same shape the payer work
+  already took and wants doing once, deliberately, across both.
+
 ## Verification
 
 ```sh
@@ -362,7 +854,104 @@ gate. NOT fixed here and reported instead:
 `packages/blueprints/apps/_shared/pending-overlay.test.ts` expects an expense
 projection without payer rows and is red against the concurrent backend slice's
 `pending-projection.ts` — the same defect family as the shape above, on the
-other side of the boundary.
+other side of the boundary. (Fixed in the integration slice below.)
+
+**Integration slice — the whole gate loop, once.** The repo's local mirror of
+the CI PR gate, run over the assembled tree:
+
+```sh
+bun run check:pr        # = bun install --frozen-lockfile && check:push (48 gates)
+                        #   && typecheck && lint:types && lint:workflow-pins
+                        #   && check:diff-coverage
+```
+
+`check:push` finishes **46 of 48 gates green** in 98.1s. Everything this change
+touches passes: `format:check`, `lint`, `typecheck:affected`, `knip`,
+`test:qualities`, `test:matrix`, `test:ratchet`, `test:comment-density`,
+`lint:quality-knobs`, `lint:schema-export`, `check:reachability`,
+`check:mobile-native-state`, every design and copy gate. The full `bun run
+typecheck` is green over all 25 packages, `bun run lint:types` is green over all
+twelve type-aware projects, and `bun run lint:workflow-pins` reports 21 clean
+workflows.
+
+`check:diff-coverage` runs the whole instrumented suite: **1,249 files /
+15,200 tests, 4 failures**, all four listed below.
+
+Verbatim tail of the gate run:
+
+```
+  ✓ lint:quality-knobs            0.2s  (36/48)
+  ✓ lint:schema-export            0.2s  (37/48)
+  ✓ check:ui-receipt              0.1s  (38/48)
+  ✓ test:quarantine               0.1s  (39/48)
+  ✓ test:env-red                  0.5s  (40/48)
+  ✓ test:accessibility            0.3s  (41/48)
+  ✓ test:report:smoke             1.0s  (42/48)
+  ✓ check:mobile-native-state    30.1s  (43/48)
+  ✓ lockfile:lint                 0.1s  (44/48)
+  ✓ security:lifecycle            0.2s  (45/48)
+  ✓ security:unsafe-edges         0.1s  (46/48)
+  ✓ lint:ci-egress                0.1s  (47/48)
+  ✓ test:qualities               66.1s  (48/48)
+✗ test:affected
+Failed:    @centraid/model-runtime#test
+✗ design:gallery
+✗ 46/48 gates passed in 98.1s — slowest: test:qualities 66.1s, check:mobile-native-state 30.1s, typecheck:affected 14.5s, check:reachability 9.6s, test:comment-density 9.3s
+Failed: test:affected, design:gallery
+```
+
+`test:affected` stops at the first failing package, so the affected suites were
+also run with `--continue` to see past it: **25 of 29 packages green**, with
+`@centraid/vault`, `@centraid/client`, `@centraid/core`, `@centraid/mobile` and
+every other branch-touched package fully passing.
+
+**The reds, each verified pre-existing rather than accepted.**
+
+- `@centraid/model-runtime` `automation-handlers/bundle-drift.test.ts` — all six
+  published bundles report "committed bundle is stale". The rebuild differs from
+  the committed bundle only in MINIFIED VARIABLE NAMES (`v`→`j`, `f`→`I`,
+  `N`→`z`), with no semantic difference anywhere in the diff. Verified against
+  `origin/main`: none of the six `.js` bundles changed on this branch, none of
+  their handler sources changed, and the one bundled module this branch does
+  touch (`packages/model-runtime/src/gazetteer.ts`) has **no non-comment line
+  changed** — checked by filtering the diff to non-comment lines, which comes
+  back empty. A local minifier version that mangles differently from the one
+  that built the committed bundles; not a stale bundle, and nothing to re-emit.
+- `design:gallery` — `Executable doesn't exist at
+  /opt/pw-browsers/chromium_headless_shell-.../chrome-headless-shell`. The
+  Playwright browser is not installed in this container. Environment, not tree.
+- `apps/desktop` `src/main/ipc-core.test.ts` — `Error: Electron failed to
+  install correctly.` The Electron binary is absent here; the file fails to
+  COLLECT and the other 313 desktop tests pass.
+- `packages/blueprints` `apps/agenda/states.test.tsx` — "offline is the
+  reachability verdict, never navigator.onLine". A source-scan tripwire
+  (`expect(SOURCE).not.toContain("navigator.onLine")`) reading
+  `apps/agenda/app-root.tsx`, where line 582 is a COMMENT that names the
+  forbidden signal in order to explain why it is forbidden. Both files are
+  untouched by this change set (`git status` lists neither), so the assertion
+  reads identical bytes at `HEAD`; the test arrived with
+  [#864](https://github.com/srikanth235/centraid/issues/864) and the comment
+  with the #868 sweep. Agenda's, not this issue's.
+- `packages/server` `src/serve/gateway-db-lock.integration.test.ts` — "SIGKILL
+  releases gateway.db immediately and sqlite3 reads during restart recovery".
+  Untouched by this change set; a process/filesystem rig red in this container.
+- `packages/server` `src/acp/backends/acp/launch.test.ts` (two cases) —
+  `expected 'yes' to be '1'` on `plan.env.IS_SANDBOX`. This container exports
+  `IS_SANDBOX=yes`, which the test's environment reaches. Neither
+  `launch.test.ts` nor `launch.ts` is changed against `origin/main` at all.
+
+**What was NOT accepted as pre-existing, and was fixed instead.** Four reds
+landed in branch-touched code and are repaired above rather than reported:
+`@centraid/mobile` typecheck (`LockerAccessScreen.tsx` importing the deleted
+`ACCESS_NOT_SERVED`), `knip`'s six dead exports in
+`apps/mobile/src/apps/tally/tally-view-model.ts` and
+`packages/vault/src/commands/locker-types.ts` / `locker.ts`,
+`lint:schema-export`'s stale fingerprint after the `SEALED_PAYLOAD_FIELDS` fix,
+and `lint:types`' `require-array-sort-compare` in
+`packages/blueprints/src/tally-balance.test.ts`. Two of the listed known-reds
+from earlier in this issue are gone rather than tolerated: the `app-boot/*` and
+`docs-media` suites pass (188 blueprint files, 187 green), and the demo-seed
+purged-vs-registered case passes with the whole of `@centraid/vault`.
 
 ## Audit
 
@@ -382,4 +971,4 @@ of a finding either way.
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-08-26 | claude-code | 349e9d30-a980-52b7-98ca-bde72fc76090 |
+| 2026-08-27 | claude-code | 349e9d30-a980-52b7-98ca-bde72fc76090 |

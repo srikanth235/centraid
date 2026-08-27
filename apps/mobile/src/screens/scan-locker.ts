@@ -30,7 +30,7 @@ export interface ScannedCard {
 /** The memo the item carries. Stated, because a member finding this row later
  *  should know where it came from and that the photograph did not follow. */
 export const SCANNED_CARD_NOTE =
-  "Captured with on-device OCR. The source image was not stored in Locker.";
+  "Captured on device by OCR — the source image was never stored in Locker.";
 
 /** The title a scan gives a card when the receipt named a merchant. */
 export const SCANNED_CARD_TITLE = "Scanned card";

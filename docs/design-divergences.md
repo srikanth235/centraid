@@ -389,6 +389,14 @@ Sanctioned departures from the [DESIGN.md § Copy](../DESIGN.md) budgets, kept b
 | The desktop crash-loop notification (`apps/desktop/src/main/gateway-monitor.ts`, "…Use Settings → Gateway to restart it manually.") runs three sentences. | Keep until the notification path is verified live. | [receipts/issue-660-desktop-onboarding-scenarios.md](../receipts/issue-660-desktop-onboarding-scenarios.md) records the hold: the advice can fire while the startup error screen is showing, where Settings is unreachable. Rewording without live verification risks pointing at a dead control. |
 | Docs `DRIVE_EMPTY` and `folderEmpty` render two actions against the empty-state budget's "at most one action". | Keep. | Removing the second action is an affordance change, not a copy change; the copy itself is in budget. Revisit with a design decision, not a copy sweep. |
 
+## The v17 handoff's verbatim copy (#873)
+
+The v17 Tally/Locker handoff carries a verbatim copy table (README §6 of each app); the product renders it verbatim except where a repo copy rule outranks the handoff. One departure, ruled rather than absorbed:
+
+| Divergence | Decision | Enforcement / reason |
+| --- | --- | --- |
+| Tally's leave-a-group confirm says **"Settle first."** where the handoff's §6 says "Settle first if you can." | Keep the shortened line. | The repo's copy rule bans "you can" as filler outright, and the copy allowlist is tighten-only with no slot to spare for a phrase the rule refuses. The sentence loses its hedge, not its meaning — leaving with an unsettled balance still works, and the preceding line still says the balance stays visible. Recorded at the literal (`view-copy.ts`, `LEAVE_BODY_2`). |
+
 ## The public web surfaces
 
 `centraid.dev` and `centraid.dev/docs/` render in the product's design ([decisions.md](decisions.md#product-grammar-and-block-composition), 2026-08-21): `scripts/site-tokens.mjs` lowers `packages/design`'s `toCss()`, its vendored Instrument Sans and the PWA's own mark into a committed `centraid-tokens.css` per surface, and `bun run lint:site-tokens` fails on drift. The rows below are what a long-form public page does that a product screen does not. Each is a current decision, not a to-do.

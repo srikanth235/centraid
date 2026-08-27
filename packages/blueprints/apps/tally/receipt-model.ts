@@ -15,24 +15,15 @@
 // `allocateMinorUnits`). Two seats allocating the same receipt differently
 // would be two answers to one question.
 import { money } from "./format.ts";
-import { allocateWeighted } from "./split-model.ts";
+import { allocateLine } from "./line-model.ts";
+import type { LineItemInput } from "./line-model.ts";
 import type { Share } from "./split-model.ts";
 import type { ReceiptLine } from "./types.ts";
 
 /** Which people a line is allocated to, keyed by the line's own id. */
 export type LineSelection = Readonly<Record<string, readonly string[]>>;
 
-/** Split one line equally between the people it was allocated to. */
-export function allocateLine(
-  amountMinor: number,
-  partyIds: readonly string[]
-): Share[] {
-  return allocateWeighted(
-    amountMinor,
-    partyIds.map((party_id) => ({ party_id, value: 1 })),
-    ""
-  );
-}
+export { allocateLine } from "./line-model.ts";
 
 /** The allocation the vault already holds, as the selection the chips show. */
 export function selectionOf(lines: readonly ReceiptLine[]): LineSelection {
@@ -121,9 +112,12 @@ export function reconcile(input: {
   }));
   const reconciles = lineTotalMinor === input.expenseMinor;
   const yoursMinor = input.me === null ? 0 : (totals.get(input.me) ?? 0);
-  const agreement = reconciles ? "they reconcile" : "they do not reconcile";
+  // THE RECONCILIATION IS ARITHMETIC, in the spec's own words: six lines total
+  // £132.50, the expense is £132.50, yours is £41.17. The same sentence the
+  // typed-line division states, so one receipt reads the same on both paths.
   const count = input.lines.length;
-  const sentence = `${count} ${count === 1 ? "line totals" : "lines total"} ${money(lineTotalMinor, input.currency)} · the expense is ${money(input.expenseMinor, input.currency)} · ${agreement}. Yours comes to ${money(yoursMinor, input.currency)}.`;
+  const noun = count === 1 ? "line totals" : "lines total";
+  const sentence = `${count} ${noun} ${money(lineTotalMinor, input.currency)}, the expense is ${money(input.expenseMinor, input.currency)}, yours is ${money(yoursMinor, input.currency)}${reconciles ? "" : " · they do not reconcile"}`;
   return {
     lineTotalMinor,
     expenseMinor: input.expenseMinor,
@@ -133,6 +127,29 @@ export function reconcile(input: {
     unallocated,
     sentence,
   };
+}
+
+/**
+ * The lines and their allocations, in the shape `reallocate-receipt` requires.
+ *
+ * EVERY LINE TRAVELS, including one nobody is on: the line is a fact about the
+ * bill, and dropping it would make the file reconcile while the expense stayed
+ * mis-allocated. The command re-validates that the lines still sum to the
+ * expense, so a bad cut is refused rather than written.
+ */
+export function receiptLineItems(
+  lines: readonly ReceiptLine[],
+  selection: LineSelection
+): LineItemInput[] {
+  return lines.map((line) => ({
+    kind: line.kind,
+    description: line.description,
+    amount_minor: line.amount_minor,
+    allocations: allocateLine(
+      line.amount_minor,
+      selection[line.line_item_id] ?? []
+    ),
+  }));
 }
 
 /** What a line's kind is CALLED on the row. Tax and tip are lines like any

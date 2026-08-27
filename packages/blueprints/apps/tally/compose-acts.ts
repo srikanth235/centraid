@@ -33,9 +33,11 @@ import {
   settleVerdict,
 } from "./draft-model.ts";
 import type { LedgerReads } from "./ledger-reads.ts";
+import { receiptLineItems } from "./receipt-model.ts";
+import type { LineSelection } from "./receipt-model.ts";
 import type { DueOccurrence } from "./schedule-model.ts";
 import { templateSaveBase } from "./schedule-model.ts";
-import { ACTIVITY } from "./shelves.ts";
+import { ACTIVITY, WAITING } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
 import type { GroupMember, LedgerEntry, RecurringTemplate } from "./types.ts";
 import { OUTCOMES } from "./view-copy.ts";
@@ -43,15 +45,20 @@ import {
   addExpenseWrite,
   addFriendWrite,
   addMemberWrite,
+  archiveGroupWrite,
   createGroupWrite,
   deleteGroupWrite,
   editExpenseWrite,
   editOccurrenceWrite,
+  leaveGroupWrite,
   materializeWrite,
+  nudgeWrite,
+  reallocateReceiptWrite,
   removeMemberWrite,
   renameGroupWrite,
   restoreExpenseWrite,
   saveRecurringWrite,
+  setSimplificationWrite,
   settleUpWrite,
   trashExpenseWrite,
   undoExpenseWrite,
@@ -72,6 +79,17 @@ export interface ComposeActs {
   materialise: (due: DueOccurrence) => void;
   contribVerb: (verb: ContribVerb, row: ContribRow) => void;
   removeMember: (partyId: string) => void;
+  /** Commit the receipt's allocation as it currently stands. */
+  reallocate: (entry: LedgerEntry, selection: LineSelection) => void;
+  /** Turn simplification on or off for the open group. */
+  setSimplify: (groupId: string, simplify: boolean) => void;
+  /** Prepare a reminder. It ALWAYS parks, and the deep link is to Waiting. */
+  nudge: (input: {
+    partyId: string;
+    name: string;
+    groupId: string | null;
+    asOfMinor: number;
+  }) => void;
 }
 
 export function useComposeActs(args: {
@@ -126,6 +144,49 @@ export function useComposeActs(args: {
     const open = bagRef.current.overlay;
     if (!open) return;
     const done = (): void => compose.close();
+    if (open.kind === "leave") {
+      const groupId = open.groupId;
+      void (async () => {
+        // NO UNDO: the reverse of leaving is being re-added with a role this
+        // write never carried, so the outcome states what happened instead.
+        const landed = await act(leaveGroupWrite(groupId), {
+          outcome: COMPOSE_OUTCOMES.left,
+        });
+        compose.close();
+        if (landed) go(null);
+      })();
+      return;
+    }
+    if (open.kind === "archive") {
+      const { groupId, archived } = open;
+      void act(archiveGroupWrite(groupId, !archived), {
+        outcome: archived
+          ? COMPOSE_OUTCOMES.unarchived
+          : COMPOSE_OUTCOMES.archived,
+        // The same write with the other boolean IS the reverse write.
+        undo: () => void act(archiveGroupWrite(groupId, archived)),
+      });
+      done();
+      return;
+    }
+    if (open.kind === "nudge") {
+      const ask = open;
+      void (async () => {
+        // ALWAYS PARKS. `ledger.write` narrates a parked outcome itself, and
+        // this act adds the deep link rather than a second sentence.
+        await act(
+          nudgeWrite({
+            partyId: ask.partyId,
+            groupId: ask.groupId,
+            asOfMinor: ask.asOfMinor,
+            note: ask.note,
+          })
+        );
+        compose.close();
+        go(WAITING);
+      })();
+      return;
+    }
     if (open.kind === "friend") {
       void act(addFriendWrite(open.name.trim()), {
         outcome: COMPOSE_OUTCOMES.friendAdded,
@@ -266,6 +327,32 @@ export function useComposeActs(args: {
         client.openApprovals?.();
         return;
       }
+      // THE STEWARD'S ANSWER goes through its own door and reports its own
+      // outcome — including the one where the request had already settled
+      // before the answer arrived, which is a fact and not an error.
+      if (verb === "approve" || verb === "decline") {
+        void (async () => {
+          let decided: { decided: boolean } | undefined;
+          try {
+            decided = await client.decideCommonsIntent?.({
+              intentId: row.intentId,
+              decision: verb,
+            });
+          } catch {
+            // The door's own failure is not this app's to paraphrase; the
+            // next read shows the intent exactly as it still stands.
+          }
+          ledger.say(
+            decided && !decided.decided
+              ? COMPOSE_OUTCOMES.decidedAlready
+              : verb === "approve"
+                ? COMPOSE_OUTCOMES.approved
+                : COMPOSE_OUTCOMES.declined
+          );
+          await ledger.refresh();
+        })();
+        return;
+      }
       const door =
         verb === "cancel"
           ? () => client.cancelCommonsIntent?.({ intentId: row.intentId })
@@ -290,6 +377,77 @@ export function useComposeActs(args: {
       })();
     },
     [ledger]
+  );
+
+  /**
+   * The receipt's allocation, committed.
+   *
+   * The lines and the shares go in ONE write because they are one fact: an
+   * `edit-expense` that rewrote the splits would leave the stored line
+   * allocations disagreeing with them inside the vault. The command
+   * re-validates that the lines still sum to the expense, and the amount never
+   * changes.
+   */
+  const reallocate = useCallback(
+    (entry: LedgerEntry, selection: LineSelection) => {
+      const lines = entry.receipt?.lines ?? entry.line_items ?? [];
+      const items = receiptLineItems(lines, selection);
+      const totals = new Map<string, number>(
+        participants.map((partyId) => [partyId, 0])
+      );
+      for (const item of items)
+        for (const allocation of item.allocations)
+          totals.set(
+            allocation.party_id,
+            (totals.get(allocation.party_id) ?? 0) + allocation.share_minor
+          );
+      const splits = [...totals.entries()].map(([party_id, share_minor]) => ({
+        party_id,
+        share_minor,
+      }));
+      void act(
+        reallocateReceiptWrite({
+          expenseId: entry.expense_id,
+          lineItems: items,
+          splits,
+        }),
+        { outcome: COMPOSE_OUTCOMES.reallocated }
+      );
+    },
+    [act, participants]
+  );
+
+  /** The opt-in flag, and nothing else: the proposal is derived at read time
+   *  and written nowhere. Each direction is the other's true reverse. */
+  const setSimplify = useCallback(
+    (groupId: string, simplify: boolean) => {
+      void act(setSimplificationWrite(groupId, simplify), {
+        outcome: simplify
+          ? COMPOSE_OUTCOMES.simplifyOn
+          : COMPOSE_OUTCOMES.simplifyOff,
+        undo: () => void act(setSimplificationWrite(groupId, !simplify)),
+      });
+    },
+    [act]
+  );
+
+  const nudge = useCallback(
+    (input: {
+      partyId: string;
+      name: string;
+      groupId: string | null;
+      asOfMinor: number;
+    }) => {
+      compose.show({
+        kind: "nudge",
+        partyId: input.partyId,
+        name: input.name,
+        groupId: input.groupId,
+        asOfMinor: input.asOfMinor,
+        note: "",
+      });
+    },
+    [compose]
   );
 
   /** The removal itself, once the guard has let the question be put. No Undo:
@@ -318,5 +476,8 @@ export function useComposeActs(args: {
     materialise,
     contribVerb,
     removeMember,
+    reallocate,
+    setSimplify,
+    nudge,
   };
 }
