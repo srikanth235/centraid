@@ -35,6 +35,9 @@
 // #483's non-vacuous rules; this file is discovered by
 // scripts/lint-e2e-flows.mjs).
 
+import { copyFile, mkdir, readdir } from "node:fs/promises";
+import path from "node:path";
+
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
@@ -171,6 +174,33 @@ ${retryableTapCommands(".*Settings", "GO TO")}
   );
   ctx.note(
     "Settings → Sharing drew the invite-redemption section, its ordering sentence and its field"
+  );
+
+  // UI-impact evidence for #880 (check:ui-receipt): the two member-visible
+  // surfaces this wave added on the sharing path — the Tally group's Share
+  // group sheet, and the rebuilt Settings → Sharing screen — published where
+  // the desktop and native journeys publish theirs. Copied out of the run dir
+  // rather than re-captured, so what ships is the frame the assertions above
+  // already passed against.
+  const uiImpactDir = "artifacts/e2e/ui-impact";
+  const screenshot = async (suffix, published) => {
+    const frames = await readdir(ctx.state.screenshotsDir);
+    const frame = frames.find((name) => name.endsWith(`-${suffix}.png`));
+    if (frame === undefined)
+      throw new Error(`${suffix} frame was not captured`);
+    await mkdir(uiImpactDir, { recursive: true });
+    await copyFile(
+      path.join(ctx.state.screenshotsDir, frame),
+      path.join(uiImpactDir, published)
+    );
+  };
+  await screenshot(
+    "sharing-tally-group-sheet",
+    "issue-880-mobile-share-group-sheet.png"
+  );
+  await screenshot(
+    "sharing-redeem-surface",
+    "issue-880-mobile-sharing-screen.png"
   );
 
   if (ctx.state.platform === "android") {

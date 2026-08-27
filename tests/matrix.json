@@ -2182,6 +2182,16 @@
       "statement": "The star names its person and its direction.",
       "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
       "flow": "people-crm"
+    },
+    "people-readonly-star": {
+      "statement": "A person in a read-only source withholds the star: the press is refused instead of letting the write throw, the control reports itself disabled and carries the reason, and it still names Star or Unstar.",
+      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
+      "flow": "people-crm"
+    },
+    "people-row-pending": {
+      "statement": "A queued People change says so on its own row: the overlay sentence is a third line under the sub, and a row with no pending change draws no pending line at all.",
+      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
+      "flow": "people-crm"
     }
   },
   "appEngines": {
