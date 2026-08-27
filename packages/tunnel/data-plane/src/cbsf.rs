@@ -102,8 +102,11 @@ fn decode_directory(bytes: &[u8], frame_count: usize) -> Result<Directory> {
         bail!("CBSF directory frame count mismatch");
     }
     let sealed_lens = bytes[16..]
-        .chunks_exact(4)
-        .map(|part| u32::from_be_bytes(part.try_into().expect("four-byte chunk")))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .copied()
+        .map(u32::from_be_bytes)
         .collect();
     Ok(Directory {
         frame_size,

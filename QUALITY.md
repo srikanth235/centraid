@@ -27,6 +27,17 @@
     mount failed" needs wire vocabulary the protocol does not have yet, and inventing it
     inside the route was refused.
 
+- **CI's Rust toolchain floats, so a clippy release can turn any branch red.**
+  `.github/workflows/ci.yml` installs `dtolnay/rust-toolchain` with `toolchain: stable`,
+  unpinned, while `packages/tunnel/data-plane/Cargo.toml` declares only `rust-version =
+  "1.91"` as an MSRV floor. On 2026-08-27 `stable` reached 1.98 and the new
+  `clippy::chunks_exact_to_as_chunks` lint took `static` red on #880's branch against a
+  crate that branch never touched — the same file having been green on `main` five hours
+  earlier. #880 fixed the one call site; the class is still open. Pinning the toolchain to
+  a known version (and moving it deliberately) is the durable fix, but it is a
+  governance-gated toolchain config change and deserves its own argument rather than a
+  drive-by pin.
+
 - **`packages/blueprints/index.json` colorKeys disagree with the apps' own hues.** The
   catalog lists Locker as `indigo` and Tally as `forest`, while the v17 handoff and both
   `app.json` files say rose and indigo respectively. Pre-existing before #872 (that change
