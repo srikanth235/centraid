@@ -4,7 +4,7 @@
  * server-side over the bounded expense window.
  */
 
-import { ledgerRow, loadTally } from "./dashboard.ts";
+import { deniedPayload, ledgerRow, loadTally } from "./dashboard.ts";
 
 export default async function search({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
@@ -23,16 +23,15 @@ export default async function search({ input, ctx }: HandlerArgs) {
       )
       .map((e) => ({
         ...ledgerRow(data, e),
-        group_name: groupName.get(e.group_id) || "",
+        group_name: e.group_id ? (groupName.get(e.group_id) ?? "") : "",
       }));
     return { me: data.me, currency: data.currency, results };
   } catch (error) {
-    const e = error as { code?: string; message?: string };
     return {
       me: null,
       currency: "USD",
       results: [],
-      vaultDenied: { code: e.code, message: e.message },
+      vaultDenied: deniedPayload(error),
     };
   }
 }

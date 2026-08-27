@@ -7,21 +7,38 @@
 import { createHmac } from "node:crypto";
 
 import type { Gateway } from "../gateway/gateway.js";
-import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import type { CommandDefinition } from "../gateway/types.js";
 import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { SEALED_PLACEHOLDER } from "../schema/sealed.js";
 import { replaceMemo } from "./annotations.js";
 import { setStarred } from "./flags.js";
+import { registerLockerExportCommand } from "./locker-export.js";
+import { registerLockerExtraCommands } from "./locker-extras.js";
+import {
+  LOCKER_ITEM_TYPE,
+  setAlias,
+  setConnection,
+  setTags,
+} from "./locker-shared.js";
+import { mintTemplateFields, recordHistory } from "./locker-sidecars.js";
+import { LOCKER_ITEM_TYPES } from "./locker-types.js";
 
-export const LOCKER_ITEM_TYPE = "locker.item";
-
-/** SKOS locker-tags scheme (#310), not a second tag table. https, not urn:. */
-export const LOCKER_TAGS_SCHEME_URI =
-  "https://centraid.dev/schemes/locker-tags";
+// The domain vocabulary moved to `locker-shared.js` when the write surface
+// outgrew one file (#872); re-exported here so every existing importer of
+// `commands/locker.js` keeps working.
+export { LOCKER_ITEM_TYPE } from "./locker-shared.js";
 
 const PURGE_WINDOW_DAYS = 30;
 
-/** Columns each type owns; everything else is nulled on write. */
+/**
+ * Columns each type owns; everything else is nulled on write. The nine types
+ * #872 added own exactly ONE column — the plaintext memo every item can carry
+ * — because their real fields are template rows in `locker_item_field`
+ * (`locker-types.ts`). That is the "a type is a set of sections and fields"
+ * rule made structural: adding a type never adds a column.
+ */
+const TEMPLATE_TYPE_FIELDS: readonly string[] = ["notes"];
+
 const TYPE_FIELDS: Record<string, readonly string[]> = {
   login: ["username", "password", "url", "otp_seed", "notes"],
   card: ["cardholder", "card_number", "expiry", "cvv", "brand"],
@@ -29,6 +46,15 @@ const TYPE_FIELDS: Record<string, readonly string[]> = {
   identity: ["fullname", "email", "phone", "address"],
   wifi: ["network", "password"],
   password: ["password"],
+  ssh_key: TEMPLATE_TYPE_FIELDS,
+  api_credential: TEMPLATE_TYPE_FIELDS,
+  passport: TEMPLATE_TYPE_FIELDS,
+  bank_account: TEMPLATE_TYPE_FIELDS,
+  driving_licence: TEMPLATE_TYPE_FIELDS,
+  software_licence: TEMPLATE_TYPE_FIELDS,
+  crypto_wallet: TEMPLATE_TYPE_FIELDS,
+  membership: TEMPLATE_TYPE_FIELDS,
+  document: TEMPLATE_TYPE_FIELDS,
 };
 
 const ALL_FIELDS = [
@@ -72,123 +98,6 @@ function plusDays(iso: string, days: number): string {
   return d.toISOString();
 }
 
-function lockerTagsSchemeId(ctx: HandlerCtx): string {
-  const existing = ctx.db
-    .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
-    .get(LOCKER_TAGS_SCHEME_URI) as { scheme_id: string } | undefined;
-  if (existing) return existing.scheme_id;
-  const schemeId = ctx.newId();
-  ctx.db
-    .prepare(
-      `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
-       VALUES (?, ?, 'Locker tags', 'centraid', '1')`
-    )
-    .run(schemeId, LOCKER_TAGS_SCHEME_URI);
-  return schemeId;
-}
-
-/** Replace tags: SKOS concepts + core_tag rows, same graph as photos/docs. */
-function setTags(
-  ctx: HandlerCtx,
-  itemId: string,
-  tags: readonly string[]
-): void {
-  const schemeId = lockerTagsSchemeId(ctx);
-  ctx.db
-    .prepare(
-      `DELETE FROM core_tag
-        WHERE target_type = ? AND target_id = ?
-          AND concept_id IN (SELECT concept_id FROM core_concept WHERE scheme_id = ?)`
-    )
-    .run(LOCKER_ITEM_TYPE, itemId, schemeId);
-  const owner = ctx.db
-    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
-    .get() as { owner_party_id: string | null } | undefined;
-  const seen = new Set<string>();
-  for (const raw of tags) {
-    const tag = String(raw).trim();
-    if (!tag || seen.has(tag)) continue;
-    seen.add(tag);
-    let conceptId = (
-      ctx.db
-        .prepare(
-          "SELECT concept_id FROM core_concept WHERE scheme_id = ? AND notation = ?"
-        )
-        .get(schemeId, tag) as { concept_id: string } | undefined
-    )?.concept_id;
-    if (!conceptId) {
-      conceptId = ctx.newId();
-      ctx.db
-        .prepare(
-          `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
-           VALUES (?, ?, ?, ?, NULL, NULL, NULL)`
-        )
-        .run(conceptId, schemeId, tag, tag);
-    }
-    const tagId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
-         VALUES (?, ?, ?, ?, ?, NULL, ?)`
-      )
-      .run(
-        tagId,
-        LOCKER_ITEM_TYPE,
-        itemId,
-        conceptId,
-        owner?.owner_party_id ?? null,
-        ctx.now
-      );
-    ctx.wrote("core.tag", tagId);
-  }
-}
-
-/** Set or clear (`''`) the service anchor (#310). Validated live — no opaque pointer. */
-function setConnection(
-  ctx: HandlerCtx,
-  itemId: string,
-  connectionId: string
-): void {
-  const trimmed = connectionId.trim();
-  if (trimmed.length === 0) {
-    ctx.db
-      .prepare("UPDATE locker_item SET connection_id = NULL WHERE item_id = ?")
-      .run(itemId);
-    return;
-  }
-  const live = ctx.db
-    .prepare("SELECT 1 AS x FROM sync_connection WHERE connection_id = ?")
-    .get(trimmed);
-  if (!live) throw new Error(`no sync.connection with id ${trimmed}`);
-  ctx.db
-    .prepare("UPDATE locker_item SET connection_id = ? WHERE item_id = ?")
-    .run(trimmed, itemId);
-}
-
-/**
- * Set or clear (`''`) the connector alias (#298). Unique among LIVE items;
- * a trashed holder yields it.
- */
-function setAlias(ctx: HandlerCtx, itemId: string, alias: string): void {
-  ctx.db.prepare("DELETE FROM locker_item_alias WHERE item_id = ?").run(itemId);
-  const trimmed = alias.trim();
-  if (trimmed.length === 0) return;
-  const clash = ctx.db
-    .prepare(
-      `SELECT a.item_id FROM locker_item_alias a
-         JOIN locker_item i ON i.item_id = a.item_id
-        WHERE a.alias = ? AND i.deleted_at IS NULL AND a.item_id <> ?`
-    )
-    .get(trimmed, itemId) as { item_id: string } | undefined;
-  if (clash)
-    throw new Error(`alias "${trimmed}" is already used by another live item`);
-  ctx.db
-    .prepare(
-      "INSERT OR REPLACE INTO locker_item_alias (alias, item_id) VALUES (?, ?)"
-    )
-    .run(trimmed, itemId);
-}
-
 function fieldValues(
   type: string,
   input: Record<string, unknown>
@@ -219,10 +128,10 @@ const ADD_ITEM: CommandDefinition = {
     required: ["type", "title"],
     additionalProperties: false,
     properties: {
-      type: {
-        type: "string",
-        enum: ["login", "card", "note", "identity", "wifi", "password"],
-      },
+      // The fifteen types this build knows. The nine added by #872 own no
+      // columns of their own — see `locker-types.ts`: a type is a template of
+      // sections and fields, minted into `locker_item_field` below.
+      type: { type: "string", enum: [...LOCKER_ITEM_TYPES] },
       title: { type: "string", minLength: 1 },
       tags: { type: "array", items: { type: "string" } },
       compromised: { type: "boolean" },
@@ -265,9 +174,10 @@ const ADD_ITEM: CommandDefinition = {
         `INSERT INTO locker_item
            (item_id, type, title, username, password, url, url_match_policy, otp_seed, notes,
             cardholder, card_number, expiry, cvv, brand, content,
-            fullname, email, phone, address, network, compromised, created_at, updated_at)
+            fullname, email, phone, address, network, compromised,
+            password_set_at, created_at, updated_at)
          VALUES
-           (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         itemId,
@@ -293,6 +203,9 @@ const ADD_ITEM: CommandDefinition = {
         f.address ?? null,
         f.network ?? null,
         input.compromised ? 1 : 0,
+        // Password age is set-time, never updated_at: a retag must not make a
+        // three-year-old password look fresh (GAPS §3.3 #6d).
+        f.password == null ? null : ctx.now,
         ctx.now,
         ctx.now
       );
@@ -307,6 +220,15 @@ const ADD_ITEM: CommandDefinition = {
     }
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     if (Array.isArray(input.tags)) setTags(ctx, itemId, input.tags as string[]);
+    // A type is a set of sections and fields: the nine expansion types arrive
+    // as empty template rows the member fills in, which is also what lets an
+    // unknown type degrade to a note that still carries them.
+    mintTemplateFields(ctx, itemId, type);
+    recordHistory(ctx, itemId, {
+      operation: "create",
+      title: String(input.title),
+      changed: { type },
+    });
     ctx.cite({
       claim: `"${String(input.title)}" saved to your locker`,
       entityType: LOCKER_ITEM_TYPE,
@@ -347,12 +269,18 @@ const EDIT_ITEM: CommandDefinition = {
   idempotency: "idempotent",
   risk: "low",
   sealedInput: SEALED_INPUT,
+  // History (#872, GAPS §3.3 #5) needs the OUTGOING password in the clear, so
+  // it can be resealed against the history row's own cell — the ciphertext
+  // cannot be copied across, its AAD binds it to the item. Declaring the
+  // unseal is what puts the rotation on the invocation's receipt: an edit that
+  // changes a password says so, by column name, never by value.
+  unseals: [`${LOCKER_ITEM_TYPE}.password`],
   handler: (ctx) => {
     const input = ctx.input as Record<string, unknown>;
     const itemId = String(input.item_id);
     const row = ctx.db
-      .prepare("SELECT type FROM locker_item WHERE item_id = ?")
-      .get(itemId) as { type: string } | undefined;
+      .prepare("SELECT type, title FROM locker_item WHERE item_id = ?")
+      .get(itemId) as { type: string; title: string } | undefined;
     if (!row) throw new Error("item not found");
     const f = fieldValues(row.type, input);
     // Only the type's own columns + title/compromised.
@@ -382,10 +310,23 @@ const EDIT_ITEM: CommandDefinition = {
       sets.push("url_match_policy = :url_match_policy");
       params.url_match_policy = String(input.url_match_policy);
     }
+    const changed: string[] = [];
     for (const [col, val] of Object.entries(f)) {
       if (isPlaceholder(val)) continue;
       sets.push(`${col} = :${col}`);
       params[col] = val;
+      changed.push(col);
+    }
+    // A password ROTATION, distinguished from any other edit: the previous
+    // value goes to history sealed, and only a real change re-stamps the age.
+    const previousPassword = changed.includes("password")
+      ? ctx.unseal(LOCKER_ITEM_TYPE, itemId, "password")
+      : null;
+    const rotated =
+      changed.includes("password") && (f.password ?? null) !== previousPassword;
+    if (rotated) {
+      sets.push("password_set_at = :password_set_at");
+      params.password_set_at = f.password == null ? null : ctx.now;
     }
     ctx.db
       .prepare(
@@ -394,6 +335,18 @@ const EDIT_ITEM: CommandDefinition = {
       .run(params);
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     if (Array.isArray(input.tags)) setTags(ctx, itemId, input.tags as string[]);
+    recordHistory(ctx, itemId, {
+      operation: "edit",
+      title: row.title,
+      ...(rotated && previousPassword != null ? { previousPassword } : {}),
+      changed: {
+        fields: changed,
+        ...(rotated ? { password_rotated: true } : {}),
+        ...(input.title == null ? {} : { title: true }),
+        ...(Array.isArray(input.tags) ? { tags: true } : {}),
+        ...(input.alias == null ? {} : { alias: true }),
+      },
+    });
     return { item_id: itemId };
   },
 };
@@ -511,6 +464,19 @@ const PURGE_ITEM: CommandDefinition = {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     setStarred(ctx, LOCKER_ITEM_TYPE, itemId, false);
     setTags(ctx, itemId, []); // core_tag is polymorphic — no CASCADE
+    // The sidecars declare ON DELETE CASCADE, but a cascade fires no AFTER
+    // DELETE trigger unless recursive_triggers is on — so an offline phone
+    // would keep rows whose item is gone. Deleted explicitly, in the same
+    // transaction, so the replica change log carries every one of them.
+    for (const table of [
+      "locker_item_field",
+      "locker_item_address",
+      "locker_item_passkey",
+      "locker_item_history",
+      "locker_item_alias",
+    ]) {
+      ctx.db.prepare(`DELETE FROM ${table} WHERE item_id = ?`).run(itemId);
+    }
     ctx.db.prepare("DELETE FROM locker_item WHERE item_id = ?").run(itemId);
     cleanupPolyRefs(ctx.db, ctx.now, LOCKER_ITEM_TYPE, itemId);
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
@@ -768,4 +734,9 @@ export function registerLockerCommands(gateway: Gateway): void {
   gateway.registerCommand(TOTP_CODE);
   gateway.registerCommand(WATCHTOWER);
   gateway.registerCommand(SET_MEMO);
+  // The #872 surface: archive, duplicate, custom fields, addresses, passkey,
+  // counts — and the plaintext export, which is its own module because the
+  // reasoning for a mass reveal being a COMMAND is worth reading in one place.
+  registerLockerExtraCommands(gateway);
+  registerLockerExportCommand(gateway);
 }

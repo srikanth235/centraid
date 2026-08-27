@@ -14,6 +14,8 @@ import {
   appTurnPath,
   assistantResolvePath,
   assistantTurnPath,
+  commonsIntentCancelPath,
+  commonsIntentDecidePath,
   vaultConnectionAuthorizePath,
   vaultConnectionPath,
   vaultGrantPath,
@@ -67,6 +69,18 @@ describe("parametric path helpers", () => {
     expect(vaultGrantPath("g%2F1")).toBe("/centraid/_vault/grants/g%2F1");
     expect(vaultGrantRevokePath("g1")).toBe(
       "/centraid/_vault/grants/g1/revoke"
+    );
+  });
+
+  it("commons intent paths hang off the one intents constant", () => {
+    expect(ROUTES.gatewayCommonsIntents).toBe(
+      "/centraid/_gateway/commons/intents"
+    );
+    expect(commonsIntentCancelPath("i%2F1")).toBe(
+      "/centraid/_gateway/commons/intents/i%2F1/cancel"
+    );
+    expect(commonsIntentDecidePath("i1")).toBe(
+      "/centraid/_gateway/commons/intents/i1/decide"
     );
   });
 

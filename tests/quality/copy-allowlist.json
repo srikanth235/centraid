@@ -6,9 +6,14 @@
     "maxEntries": 29,
     "entries": [
       {
-        "file": "apps/mobile/src/apps/locker/LockerUnlockScreen.tsx",
-        "literal": "Create a primary passphrase of at least 12 characters. It never leaves this online authentication request.",
-        "reason": "security — Locker passphrase creation discloses where the passphrase goes"
+        "file": "packages/blueprints/apps/locker/view-copy.ts",
+        "literal": "This writes every title, username, address, note and password to a plaintext file on this device. Anything that reads the file reads your secrets.",
+        "reason": "security disclosure — the plaintext-export lede is where the export decision is made; the first sentence names every field that leaves sealed storage and the second names the consequence, and neither survives being cut without the member deciding on half the fact"
+      },
+      {
+        "file": "packages/blueprints/apps/tally/compose-copy.ts",
+        "literal": "Five debts become three payments. Simplification rewires who owes whom, so it is off unless a group turns it on, and it says what it changed.",
+        "reason": "consent — the simplification opt-in panel; the sentence carries what the setting does to the ledger, that it is off until a group consents, and that it reports its own rewrite, and a group cannot answer the opt-in without all three"
       },
       {
         "file": "apps/mobile/src/apps/photos/DuplicatesShelf.tsx",
@@ -74,11 +79,6 @@
         "file": "apps/mobile/src/kit/transfer/transfer-consent.ts",
         "literal": "Your gateway's content store. They leave this device over the network to get there.",
         "reason": "consent — transfer-consent discloses what leaves the device, and how to stop"
-      },
-      {
-        "file": "apps/mobile/src/screens/Scan.tsx",
-        "literal": "Captured with on-device OCR. The source image was not stored in Locker.",
-        "reason": "security — Locker scan note discloses the source image was not stored"
       },
       {
         "file": "apps/mobile/src/screens/Settings.tsx",

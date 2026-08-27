@@ -210,6 +210,17 @@ function commonsStewardDeviceLabel(
   return `${possessive} device`;
 }
 
+/**
+ * Locker's sealed SIDECAR entities (#873): rows that hang off an item and
+ * carry secret material of their own. Their reveal spends the OWNING item's
+ * one-time permit — a permit is minted per item, never per field/revision.
+ */
+const LOCKER_SIDECAR_ENTITIES = new Set([
+  "locker.item_field",
+  "locker.item_history",
+  "locker.item_passkey",
+]);
+
 export interface GatewayDeps {
   /** Best-effort hint emitted only after journal.db provenance is durable. */
   onProvenanceCommitted?: (entityTypes?: readonly string[]) => void;
@@ -291,6 +302,30 @@ export class Gateway {
       entityId,
       isFill ? "fill" : "ui"
     );
+  }
+
+  /**
+   * The item whose permit a Locker reveal spends (#873). `locker.item` spends
+   * its own; a sealed sidecar row spends the item it hangs off, resolved from
+   * the requested row. Null when that row is gone or its item is trashed —
+   * the caller then refuses with the SAME shape a missing item gets, after
+   * the permit gate has already run, so the sidecars are no existence oracle.
+   */
+  private lockerOwningItemId(
+    entity: string,
+    physical: string,
+    entityId: string
+  ): string | null {
+    if (!LOCKER_SIDECAR_ENTITIES.has(entity)) return entityId;
+    const pk = pkColumn(this.db.vault, physical);
+    const row = this.db.vault
+      .prepare(
+        `SELECT i.item_id FROM "${physical}" s
+           JOIN locker_item i ON i.item_id = s.item_id
+          WHERE s."${pk}" = ? AND i.deleted_at IS NULL`
+      )
+      .get(entityId) as { item_id: string } | undefined;
+    return row?.item_id ?? null;
   }
 
   /**
@@ -759,10 +794,23 @@ export class Gateway {
     }
     if (!entityId) return deny("reveal needs an entityId or alias");
     // Locker lock is data-keyed: fill needs an unlocked session; UI/agent
-    // reveals consume a one-time item permit.
-    if (request.entity === "locker.item") {
+    // reveals consume a one-time item permit. EVERY locker.* sealed entity is
+    // gated (#873) — a sidecar reveal spends its owning item's permit, and an
+    // unresolvable owner is gated on the requested id (which no permit names)
+    // so "row missing" and "no permit" refuse identically.
+    let owningItemId: string | null = null;
+    if (ref.schema === "locker") {
+      owningItemId = this.lockerOwningItemId(
+        request.entity,
+        ref.physical,
+        entityId
+      );
       try {
-        this.enforceLockerReveal(request, entityId, context !== undefined);
+        this.enforceLockerReveal(
+          request,
+          owningItemId ?? entityId,
+          context !== undefined
+        );
       } catch (error) {
         return deny(
           error instanceof Error
@@ -770,6 +818,8 @@ export class Gateway {
             : "Locker authentication required"
         );
       }
+      if (owningItemId === null)
+        return deny(`no revealable ${request.entity} row ${entityId}`);
     }
     const consent = evaluateConsent(
       this.db.vault,
@@ -829,6 +879,11 @@ export class Gateway {
       decision: "allow",
       detail: {
         columns,
+        // A sidecar reveal names the row it opened AND the item whose permit
+        // it spent, so "what looked at my secrets" stays answerable per item.
+        ...(owningItemId !== null && owningItemId !== entityId
+          ? { itemId: owningItemId }
+          : {}),
         ...(request.alias === undefined ? {} : { alias: request.alias }),
         ...(context ? { context } : {}),
       },

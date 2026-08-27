@@ -42,6 +42,43 @@
 // export and restore" fails if that walk ever becomes a column list. The
 // column arrives on existing files as migration rung five (plain ADD COLUMN).
 
+// Schema/export audit #872: Tally gains two tables and four columns, and all
+// of them MUST be carried. `tally_expense_payer` is who actually put money
+// down — it is a GROUND FACT the balance fold reads, so a restore that dropped
+// it would hand back a vault whose expenses nobody paid for; `tally_nudge` is
+// the record that the owner prepared a reminder, an intention nothing else
+// holds. Both are registered in schema/tables.ts, which is what puts them in
+// the walk. The columns ride the same `SELECT *`: `tally_expense.split_method`
+// and `split_params_json` (the division an expense was entered with, without
+// which every restored edit re-opens as exact amounts), and
+// `tally_group.simplify_opt_in` and `archived_at` (two owner decisions — a
+// dropped opt-in silently re-wires who owes whom on the next read, and a
+// dropped archive puts a group the owner filed away back in the lists).
+// `tally_expense.group_id` becomes nullable and `tally_expense_line_item`
+// gains `expense_id` with a nullable `receipt_id`: shape changes on
+// already-walked tables, carried with no adapter. No content bytes are
+// involved — a receipt's photo was already carried as core content.
+
+// Schema/export audit #872 (Locker): five tables enter the canonical walk and
+// three columns join `locker_item`, and all of them MUST be carried.
+// `locker_item_alias` existed in DDL but was never registered — the connector
+// binding was written, resolvable at reveal time, and absent from every
+// export, so a restore silently broke every `locker:@<alias>:<column>`
+// connector. `locker_item_field` is the member's own sections and fields and
+// the storage every expansion item type is built from; `locker_item_address`
+// the extra addresses a login answers to, each with its own match policy;
+// `locker_item_passkey` the passkey slot; `locker_item_history` the durable
+// item and password history, which is the ONLY record that a password was
+// ever rotated. Each is a fact the owner entered or a record only this vault
+// holds. Registration in schema/tables.ts is the whole fix — `exportVault`
+// walks `SELECT *`, so the three new `locker_item` columns
+// (`password_set_at`, `archived_at`, and the widened `type` CHECK's fifteen
+// values) ride along with no code change here, and so do the sidecars' sealed
+// cells, which stay CIPHERTEXT in the artifact exactly like
+// `locker_item.password` — the bundle carries the DEK, never plaintext.
+// No adapter and no content bytes: a file pinned to a locker item was already
+// carried as core content through `core_attachment`.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";

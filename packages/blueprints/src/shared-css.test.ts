@@ -6,10 +6,8 @@ import { describe, expect, it } from "vitest";
 const packageDir = path.resolve(import.meta.dirname, "..");
 const appDir = path.join(packageDir, "apps");
 // The system apps that currently DRAW something. Agenda, Notes and Tasks
-// returned here with their rebuilt chromes (#834); Tally is still off the list
-// because its interface is still removed whole pending a ground-up redesign —
-// there is no chrome of its to hold to the shared shell. It returns here the
-// same way, with a chrome that composes the shell.
+// returned here with their rebuilt chromes (#834); Tally returned with its
+// v17 rebuild (#872), a chrome that composes the shell like the rest.
 const systemApps = [
   "agenda",
   "docs",
@@ -17,6 +15,7 @@ const systemApps = [
   "notes",
   "people",
   "photos",
+  "tally",
   "tasks",
 ];
 

@@ -35,7 +35,10 @@ import { useAsyncData } from "../useAsyncData.js";
 import { useGatewayStatus } from "../useGatewayRuntime.js";
 import { fetchAppKnobValues, pushKnobToInlineRoot } from "./appSettingsData.js";
 import { useInlineAppFrame } from "./inlineAppFrame.js";
-import { isDisabledOnSeat } from "./inlineAppSeats.js";
+import {
+  INLINE_APP_SEAT_REFUSALS,
+  isDisabledOnSeat,
+} from "./inlineAppSeats.js";
 import { loadAppTemplates } from "./templatesData.js";
 import { scopeSetKey, useAppScopes } from "./useAppScopes.js";
 import type { ResolvedAppScope } from "./useAppScopes.js";
@@ -364,16 +367,28 @@ export default function InlineAppRoute({
       <div className={styles.view} data-testid="inline-app-view">
         <div className={styles.body}>
           {refused ? (
+            // The seat wall (docs/blueprint-seats.md S5). Stated plainly,
+            // per the repo's refusal grammar (docs/decisions.md S5, §14's
+            // offline banner is the sibling case): a title, the reason in
+            // the app's own words where it has them, the way in — and no
+            // control, because the seat itself is what refuses.
             <output
               className={styles.refusal}
               data-testid="inline-app-seat-refusal"
             >
               <p className={styles.refusalTitle}>
-                {app.name} isn’t available here
+                {INLINE_APP_SEAT_REFUSALS[appId]?.title ??
+                  `${app.name} isn’t available here`}
               </p>
               <p className={styles.refusalBody}>
-                {app.name} opens on a paired device, not in a browser — for now.
+                {INLINE_APP_SEAT_REFUSALS[appId]?.body ??
+                  `${app.name} opens on a paired device, not in a browser — for now.`}
               </p>
+              {INLINE_APP_SEAT_REFUSALS[appId]?.wayIn ? (
+                <p className={styles.refusalBody}>
+                  {INLINE_APP_SEAT_REFUSALS[appId].wayIn}
+                </p>
+              ) : null}
             </output>
           ) : (
             <ErrorBoundary

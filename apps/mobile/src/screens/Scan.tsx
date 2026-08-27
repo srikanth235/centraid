@@ -16,10 +16,7 @@ import {
   OCR_GATEWAY_PANEL,
   OCR_ON_DEVICE_PANEL,
 } from "@centraid/blueprints/apps/_shared/capture-consent";
-import {
-  allocateMinorUnits,
-  parseReceiptText,
-} from "@centraid/client/receipt-capture";
+import { parseReceiptText } from "@centraid/client/receipt-capture";
 import type {
   ReceiptDraft,
   ReceiptLineDraft,
@@ -50,6 +47,8 @@ import {
   scanOcrExtractionAllowed,
 } from "./scan-consent";
 import type { ScanOcrConsentRecord } from "./scan-consent";
+import { saveScannedCard } from "./scan-locker";
+import { scannedReceiptExpense } from "./scan-tally";
 import {
   ChoiceRows,
   CloseHeader,
@@ -309,20 +308,11 @@ export default function ScanScreen({
             route.params?.deleteSourceAfterSettle ?? false,
         });
       } else if (destination === "locker") {
-        const card = parseCard(extraction.text);
-        const outcome = await session.write("locker", {
-          action: "add-item",
-          input: {
-            type: "card",
-            title: receipt?.merchant || "Scanned card",
-            tags: ["scan"],
-            cardholder: card.cardholder,
-            card_number: card.cardNumber,
-            expiry: card.expiry,
-            notes:
-              "Captured with on-device OCR. The source image was not stored in Locker.",
-          },
-        });
+        const outcome = await saveScannedCard(
+          session,
+          parseCard(extraction.text),
+          receipt?.merchant ?? ""
+        );
         if (
           !surfaceWriteOutcome(outcome, {
             onParked: () =>
@@ -335,24 +325,6 @@ export default function ScanScreen({
         const ownerId = String(vault.rows[0]?.owner_party_id ?? "");
         if (!activeGroupId || !ownerId)
           throw new Error("Create or choose a Tally group first.");
-        const lineItems = receipt.lines.map((line) => {
-          const selected = allocations[line.id] ?? participantIds;
-          if (selected.length === 0)
-            throw new Error(`Choose who shares "${line.description}".`);
-          return {
-            kind: line.kind,
-            description: line.description,
-            amount_minor: line.amountMinor,
-            allocations: allocateMinorUnits(line.amountMinor, selected),
-          };
-        });
-        const splitMap = new Map<string, number>();
-        for (const line of lineItems)
-          for (const allocation of line.allocations)
-            splitMap.set(
-              allocation.party_id,
-              (splitMap.get(allocation.party_id) ?? 0) + allocation.share_minor
-            );
         await backupReceiptExpense(session, gatewayBase, {
           localUri: fileUri,
           targetVaultId: vaultId,
@@ -361,18 +333,15 @@ export default function ScanScreen({
           plaintextSize: size,
           deleteSourceAfterSettle:
             route.params?.deleteSourceAfterSettle ?? false,
-          group_id: activeGroupId,
-          description: receipt.merchant,
-          amount_minor: receipt.amountMinor,
-          paid_by: ownerId,
-          spent_on: new Date().toISOString().slice(0, 10),
-          category: "food",
-          ocr_text: extraction.text,
-          splits: [...splitMap].map(([party_id, share_minor]) => ({
-            party_id,
-            share_minor,
-          })),
-          line_items: lineItems,
+          ...scannedReceiptExpense({
+            allocations,
+            groupId: activeGroupId,
+            ocrText: extraction.text,
+            ownerId,
+            participantIds,
+            receipt,
+            today: new Date().toISOString().slice(0, 10),
+          }),
         });
       }
       postStatus(

@@ -42,8 +42,8 @@ const WEBVIEW_APPS = new Set(["notes"]);
  */
 const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
   {
-    web: ["tally"],
-    mobile: ["tally"],
+    web: [],
+    mobile: [],
   };
 
 const AWAITING_HANDOFF_RATIONALE =
@@ -59,6 +59,11 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
     kind: "extension-only",
     rationale:
       "The browser extension calls this per-origin reveal endpoint after user selection.",
+  },
+  "tally.action.add-receipt-expense": {
+    kind: "agent-only",
+    rationale:
+      "The action requires staged_sha and ocr_text from the origin seat's receipt capture; no web route holds a camera or the OCR pass, so the Receipt surface reconciles and simulates while the assistant carries the write (#872).",
   },
   "docs.action.edit": {
     kind: "agent-only",
@@ -185,6 +190,13 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
 const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   agenda: ["action.attach", "action.detach"],
   docs: ["action.tag", "action.untag", "action.replace", "query.activity"],
+  // Locker's seven item writes ARE dispatched by the phone (#872 follow-up:
+  // `apps/mobile/src/apps/locker/locker-writes.ts` issues each one). They stay
+  // listed because the SCAN cannot see them: the action names are literals in
+  // the SHARED write builders (`apps/locker/writes.ts`), which is exactly
+  // where the one-computation rule wants them, so the native tree names none
+  // of the seven. `query.search` and `query.trash` left this list in the same
+  // change — the phone's gateway door names those two itself.
   locker: [
     "action.add-item",
     "action.edit-item",
@@ -193,26 +205,57 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.purge-item",
     "action.star-item",
     "action.unstar-item",
-    "query.search",
-    "query.trash",
+    // The #872 surface, same reason as the seven above and one more: the
+    // phone's Locker cover draws the list, the item and the unlock, and does
+    // not yet draw an archive shelf, a duplicate act, a custom-field editor, a
+    // passkey slot or an export. Each is reachable through the Assistant with
+    // the same consent and receipt contract, and each entry dies when the
+    // phone draws its control.
+    "action.archive-item",
+    "action.unarchive-item",
+    "action.duplicate-item",
+    "action.set-field",
+    "action.remove-field",
+    "action.set-addresses",
+    "action.set-passkey",
+    "action.clear-passkey",
+    "action.export",
+    "query.access",
   ],
   photos: ["action.restore-album", "action.tag-asset", "action.untag-asset"],
+  // Tally's writes ARE dispatched by the phone (#873 U3:
+  // `apps/mobile/src/apps/tally/tally-writes.ts` issues every one of them).
+  // They stay listed for exactly the reason Locker's seven do: the SCAN cannot
+  // see them, because the action names are literals in the SHARED write
+  // builders (`apps/tally/writes.ts`), which is where the one-computation rule
+  // wants them, so the native tree names none of them itself.
+  //
+  // `add-receipt-expense` is the exception in the other direction and is NOT
+  // listed: the origin seat's capture flow dispatches it by name through
+  // `apps/mobile/src/lib/upload/media-producer.ts`, which the mobile scan
+  // reads. Every QUERY left this list in the same change — the phone's gateway
+  // door (`apps/mobile/src/apps/tally/tally-gateway.ts`) names all seven.
   tally: [
-    "action.add-receipt-expense",
+    "action.add-expense",
     "action.edit-expense",
     "action.delete-expense",
     "action.undo-expense",
     "action.restore-expense",
     "action.settle-up",
     "action.add-friend",
+    "action.create-group",
     "action.rename-group",
     "action.add-group-member",
     "action.remove-group-member",
     "action.delete-group",
-    "query.friend",
-    "query.activity",
-    "query.search",
-    "query.history",
+    "action.leave-group",
+    "action.archive-group",
+    "action.set-group-simplification",
+    "action.reallocate-receipt",
+    "action.nudge",
+    "action.save-recurring-expense",
+    "action.materialize-recurring-expense",
+    "action.edit-recurring-expense-occurrence",
   ],
   tasks: [
     "action.edit",

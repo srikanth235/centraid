@@ -808,7 +808,27 @@ describe("issue #679 user-facing quality gates", () => {
           sql: "SELECT client_secret, access_token, refresh_token, api_key FROM sync_connection_credential",
         }
       ),
+      // Locker's sealed sidecars (#872): one read per table, scoped to the
+      // seeded canary item so every selected cell is a populated sealed one.
+      ...[
+        "SELECT value_sealed FROM locker_item_field WHERE item_id = 'year3-sealed-locker'",
+        "SELECT password FROM locker_item_history WHERE item_id = 'year3-sealed-locker'",
+        "SELECT private_key FROM locker_item_passkey WHERE item_id = 'year3-sealed-locker'",
+      ].map((sql) =>
+        gateway.sql(
+          {
+            kind: "device",
+            deviceId: device.device_id,
+            deviceKey: device.public_key,
+          },
+          { sql }
+        )
+      ),
     ];
+    // A masked read that returned no rows would satisfy `every` vacuously.
+    expect(sqlArtifacts.map((artifact) => artifact.rows.length)).not.toContain(
+      0
+    );
     expect(
       sqlArtifacts.flatMap((artifact) => artifact.rows.flatMap(Object.values))
     ).toSatisfy((values: unknown[]) =>
@@ -848,13 +868,36 @@ describe("issue #679 user-facing quality gates", () => {
         entityId: "year3-sealed-connection",
         purpose: "dpv:ServiceProvision",
       }),
+      gateway.reveal(credential, {
+        entity: "locker.item_field",
+        entityId: "year3-sealed-field",
+        purpose: "dpv:ServiceProvision",
+      }),
+      gateway.reveal(credential, {
+        entity: "locker.item_history",
+        entityId: "year3-sealed-revision",
+        purpose: "dpv:ServiceProvision",
+      }),
+      gateway.reveal(credential, {
+        entity: "locker.item_passkey",
+        entityId: "year3-sealed-locker",
+        purpose: "dpv:ServiceProvision",
+      }),
     ];
-    expect(JSON.stringify(revealed)).toContain(
-      profile.sealedSentinels["locker.item.password"]
-    );
+    // Reveal is the ONE surface a sentinel is allowed through, so every
+    // declared column has to come back out of it — a sealed cell nothing can
+    // unseal is a data-loss bug wearing a passing canary.
+    const revealedText = JSON.stringify(revealed);
+    for (const sentinel of Object.values(profile.sealedSentinels))
+      expect(revealedText, `reveal never returned ${sentinel}`).toContain(
+        sentinel
+      );
     const rawStorage = [
       db.vault.prepare("SELECT * FROM locker_item").all(),
       db.vault.prepare("SELECT * FROM sync_connection_credential").all(),
+      db.vault.prepare("SELECT * FROM locker_item_field").all(),
+      db.vault.prepare("SELECT * FROM locker_item_history").all(),
+      db.vault.prepare("SELECT * FROM locker_item_passkey").all(),
     ];
     expect(JSON.stringify(rawStorage)).not.toContain("CENTRAID-SEALED-");
     const ftsTables = db.vault
@@ -874,6 +917,9 @@ describe("issue #679 user-facing quality gates", () => {
     const replicaArtifact = withReplicaSnapshot(db.vault, (reader) => [
       reader.readRows("locker.item"),
       reader.readRows("sync.connection_credential"),
+      reader.readRows("locker.item_field"),
+      reader.readRows("locker.item_history"),
+      reader.readRows("locker.item_passkey"),
     ]);
     const backupArtifact = checkpointVault(db);
     const receipts = db.journal.prepare("SELECT * FROM consent_receipt").all();

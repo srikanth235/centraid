@@ -1,3 +1,5 @@
+import { deniedPayload } from "./dashboard.ts";
+
 interface RevisionRow {
   revision_id: string;
   operation: string;
@@ -35,10 +37,9 @@ export default async function expenseHistory({ input, ctx }: HandlerArgs) {
       ),
     };
   } catch (error) {
-    const e = error as { code?: string; message?: string };
     return {
       revisions: [],
-      vaultDenied: { code: e.code, message: e.message },
+      vaultDenied: deniedPayload(error),
     };
   }
 }

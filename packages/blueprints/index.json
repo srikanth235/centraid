@@ -55,7 +55,7 @@
       "desc": "Everything, locked up — a password manager for logins, cards, notes and secrets, with Watchtower and a generator.",
       "colorKey": "indigo",
       "iconKey": "Lock",
-      "version": "0.1.0"
+      "version": "0.3.0"
     },
     {
       "id": "tally",
@@ -63,7 +63,7 @@
       "desc": "Split, settled — track shared expenses across groups and friends, see who owes whom, and settle up.",
       "colorKey": "forest",
       "iconKey": "Receipt",
-      "version": "0.1.1"
+      "version": "0.3.0"
     },
     {
       "id": "doc-text-extractor",

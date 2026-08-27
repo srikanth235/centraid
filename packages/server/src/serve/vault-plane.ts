@@ -21,6 +21,7 @@ import {
 import type {
   RuntimeLogger,
   VaultBridge,
+  VaultCall,
   VaultCallResult,
   VaultWorkspace,
 } from "@centraid/server/engine";
@@ -1733,6 +1734,32 @@ export class VaultPlane {
     return this.gateway.demoStatus(this.ownerCredential);
   }
 
+  /**
+   * A consent refusal an app renders as its access state should be able to say
+   * WHEN the grant went. The vault already records it — the revoke duty stamps
+   * `consent_access_grant.revoked_at` — but the app cannot read that table,
+   * because losing the grant is exactly what put it here. So the host attaches
+   * the time to the refusal. Absent when the refusal was never a revocation
+   * (a scope never granted, a purpose the policy forbids): the field's absence
+   * is honest, and no caller may invent one.
+   */
+  private withRevocationTime(
+    appId: string,
+    result: VaultCallResult
+  ): VaultCallResult {
+    if (result.ok || result.code !== "VAULT_CONSENT") return result;
+    const app = lookupAppByName(this.db, appId);
+    if (!app) return result;
+    const row = this.db.vault
+      .prepare(
+        `SELECT revoked_at FROM consent_access_grant
+          WHERE app_id = ? AND revoked_at IS NOT NULL
+          ORDER BY revoked_at DESC LIMIT 1`
+      )
+      .get(app.appId) as { revoked_at: string } | undefined;
+    return row ? { ...result, revokedAt: row.revoked_at } : result;
+  }
+
   /** Resolution happens PER CALL, so a revocation lands immediately. */
   bridgeFor(appId: string): VaultBridge {
     // Captured HERE, in the replica-intent async scope, so worker-message
@@ -1742,7 +1769,7 @@ export class VaultPlane {
     // An offline intent carries its own acting owner — the person who made the
     // write on the phone, not whoever's request replayed it (#599).
     const actingOwnerId = replicaIntent?.ownerId ?? vaultContext()?.ownerId;
-    return async (call): Promise<VaultCallResult> => {
+    const serve = async (call: VaultCall): Promise<VaultCallResult> => {
       const app = lookupAppByName(this.db, appId);
       if (!app) {
         return {
@@ -1852,6 +1879,7 @@ export class VaultPlane {
         }
       });
     };
+    return async (call) => this.withRevocationTime(appId, await serve(call));
   }
 
   /** The agent-plane mirror of `bridgeFor`, resolving the credential per call

@@ -100,6 +100,21 @@ export const InsightsScreen = lazyScreen(
 export const LockerHome = lazyScreen(
   () => import("./src/apps/locker/LockerHome")
 );
+export const LockerItem = lazyScreen(
+  () => import("./src/apps/locker/LockerItemScreen")
+);
+export const LockerEdit = lazyScreen(
+  () => import("./src/apps/locker/LockerEditScreen")
+);
+export const LockerAccess = lazyScreen(
+  () => import("./src/apps/locker/LockerAccessScreen")
+);
+export const LockerTrash = lazyScreen(
+  () => import("./src/apps/locker/LockerTrashScreen")
+);
+export const LockerSurface = lazyScreen(
+  () => import("./src/apps/locker/LockerSurfaceScreen")
+);
 export const NotesHome = lazyScreen(() => import("./src/apps/notes/NotesHome"));
 export const PeopleHome = lazyScreen(
   () => import("./src/apps/people/PeopleHome")
@@ -163,6 +178,39 @@ export const PlaceDetail = lazyScreen(
   () => import("./src/apps/photos/PlaceDetail")
 );
 export const TallyHome = lazyScreen(() => import("./src/apps/tally/TallyHome"));
+export const TallyGroup = lazyScreen(
+  () => import("./src/apps/tally/TallyGroupScreen")
+);
+export const TallyFriend = lazyScreen(
+  () => import("./src/apps/tally/TallyFriendScreen")
+);
+export const TallyExpense = lazyScreen(
+  () => import("./src/apps/tally/TallyExpenseScreen")
+);
+export const TallyAdd = lazyScreen(
+  () => import("./src/apps/tally/TallyAddScreen")
+);
+export const TallyReceipt = lazyScreen(
+  () => import("./src/apps/tally/TallyReceiptScreen")
+);
+export const TallySettle = lazyScreen(
+  () => import("./src/apps/tally/TallySettleScreen")
+);
+export const TallyRecurring = lazyScreen(
+  () => import("./src/apps/tally/TallyRecurringScreen")
+);
+export const TallySpending = lazyScreen(
+  () => import("./src/apps/tally/TallySpendingScreen")
+);
+export const TallyTrash = lazyScreen(
+  () => import("./src/apps/tally/TallyTrashScreen")
+);
+export const TallySearch = lazyScreen(
+  () => import("./src/apps/tally/TallySearchScreen")
+);
+export const TallySurface = lazyScreen(
+  () => import("./src/apps/tally/TallySurfaceScreen")
+);
 export const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
 export const ApprovalsScreen = lazyScreen(
   () => import("./src/screens/Approvals")

@@ -1,0 +1,129 @@
+/* The Tally chrome (spec §1). Geometry for the regions this app owns — the
+   232px rail, the back row, the tool row and the scroll host — composed onto
+   the canonical shell vocabulary. The shared design-token layer (--text, --bg,
+   --line, the type ladder, --sp-*, --r-*, --ease …) is supplied by the shell's
+   scoped token block, so this file references those directly and never loads a
+   token sheet of its own.
+
+   NO APP-LOCAL TOKENS. Tally's identity is INDIGO and it is declared exactly
+   once — in `app.json`'s `colorKey`, which the shell reads to paint the icon
+   chip and the launcher tile. Restating it here would fork that one fact into
+   app CSS for no reader: a person's chip takes `--c-<hue>-text` straight from
+   the shared identity wheel, `--net` carries "you owe", and no control in
+   Tally spends the identity. The three declarations below are GEOMETRY the
+   rail, the rows and the margins all answer to — not colour, not type. */
+
+.shell {
+  composes: kit-app-shell from global;
+  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED. Every row that spans the
+     pane reads it — the notices, the back row, the tool row, the section heads
+     and the ledger rows all begin on the same edge, and a figure column that
+     drifted by four pixels between two lists is the defect this closes. */
+  --content-margin: 22px;
+}
+
+/* ---------- The rail (§1) ---------- */
+
+/* THE RAIL HAS NO RULES HERE. It is `_shared/NavRail.tsx`, which owns its own
+   232px column, its divider and its row rung, and reads `--content-margin`
+   from the shell element above. One axis decides whether it stands at all:
+   below its own measure the orchestrator passes `null` and the phone's band
+   carries the same destinations, so the rail is WITHDRAWN rather than
+   squeezed. */
+
+/* ---------- The main column ---------- */
+
+.main {
+  composes: kit-app-main from global;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+  /* The Ask mount is positioned against this column, not against the pane. */
+  position: relative;
+}
+
+.banner {
+  margin-block: var(--sp-2);
+  margin-inline: var(--content-margin);
+}
+
+/* The back row names its DESTINATION, so it is a text control on its own line
+   rather than an arrow tucked into the bar: "Groups" is where pressing it
+   goes, and a bare chevron would make the member remember. */
+.backRow {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--h-control);
+  padding-inline: var(--content-margin);
+  padding-block-start: var(--sp-2);
+}
+
+/* The tool row: a count, the lenses and the sort verb. ONE horizontal scroller
+   at the narrow rung — a row that wrapped into three stacked lines would push
+   the first expense off the screen, which is the one thing this screen is for.
+   The chip scroller inside it is `flex: none`, never `flex: 1`. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--h-control);
+  padding-inline: var(--content-margin);
+  padding-block: var(--sp-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.scroll {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding-inline: var(--content-margin);
+  padding-block-end: var(--sp-5);
+}
+
+/* Skeletons stand at ROW GEOMETRY before the first read — never a spinner,
+   and never an empty list pretending to be an answer. */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-3);
+}
+
+/* A denied read keeps the room standing and dims nothing: the banner above
+   states the fact and the gate below it shows absence with its receipt,
+   rather than a greyed copy of rows nobody can see. */
+.denied .scroll {
+  padding-block-start: var(--sp-2);
+}
+
+/* ---------- The focus ring, on every interactive element ---------- */
+
+/* The ring is the system's (`--focus-ring`), never restyled here; this rule
+   only makes sure the app's own controls take it and that it is never clipped
+   by the scroll hosts above. */
+.shell :focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-xs);
+}
+
+/* The shell's Ask panel mounts here. Positioned against the main column so the
+   button sits out of the ledger's reading path; on a phone it moves to the
+   top, where the band owns the bottom edge. */
+.askMount {
+  composes: kit-app-ask-mount from global;
+  position: absolute;
+  inset-inline-end: 16px;
+  bottom: 16px;
+  z-index: 30;
+}
+
+.isNarrow .askMount {
+  top: 12px;
+  inset-inline-end: 14px;
+  bottom: auto;
+  z-index: 45;
+}

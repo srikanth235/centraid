@@ -1,94 +1,35 @@
-/* oxlint-disable typescript-eslint/ban-ts-comment -- this test drives an untyped
-   browser blueprint under jsdom while the package's TypeScript config is
-   intentionally Node-only. */
-// @ts-nocheck
-import { cpSync, mkdirSync, rmSync } from "node:fs";
-// @vitest-environment jsdom
-import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { describe, expect, it } from "vitest";
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  addItemWrite,
+  editItemWrite,
+  ONLINE_ONLY_ACTIONS,
+  starWrite,
+} from "../apps/locker/writes.ts";
 
-const PKG = path.resolve(import.meta.dirname, "..");
-const SCRATCH = path.resolve(PKG, ".locker-online-only");
-
-type LockerWriteTestSeam = (input: {
-  action: string;
-  input?: Record<string, unknown>;
-  onlineOnly?: boolean;
-}) => Promise<{ status: "failed"; error: string }>;
-type LockerRenderTestSeam = () => void;
-type LockerRefreshTestSeam = () => void;
-
+/* A secret-bearing payload must never enter the durable offline queue: the
+ * queue outlives the session, and the session boundary is what keeps a secret
+ * memory-only. The write builders carry that rule; pending-projection.ts's
+ * excluded set is pinned to the same list in apps/locker/writes.test.ts. */
 describe("locker-online-only", () => {
-  beforeAll(() => {
-    rmSync(SCRATCH, { recursive: true, force: true });
-    mkdirSync(SCRATCH, { recursive: true });
-    for (const file of ["logic.ts", "format.ts", "totp.ts", "types.ts"]) {
-      cpSync(
-        path.resolve(PKG, "apps/locker", file),
-        path.resolve(SCRATCH, file)
-      );
-    }
-  });
-
-  afterAll(() => rmSync(SCRATCH, { recursive: true, force: true }));
-
-  describe("Locker sealed writes", () => {
-    it("marks add and edit payloads online-only while leaving non-secret actions queueable", async () => {
-      const { createLogic } = await import(
-        pathToFileURL(path.resolve(SCRATCH, "logic.ts")).href
-      );
-      const write = vi.fn<LockerWriteTestSeam>(async () => ({
-        status: "failed",
-        error: "expected test stop",
-      }));
-      window.centraid = { write };
-      const logic = createLogic({
-        state: {},
-        data: {},
-        render: vi.fn<LockerRenderTestSeam>(),
-        refresh: vi.fn<LockerRefreshTestSeam>(),
-      });
-      const common = {
-        type: "login",
-        title: "Email",
-        tags: "personal",
-        alias: "",
-        fields: { username: "me@example.test", password: "do-not-persist" },
-        allowedKeys: ["username", "password"],
-      };
-
-      await logic.saveItem({ mode: "new", ...common });
-      await logic.saveItem({ mode: "edit", id: "item-1", ...common });
-      await logic.act("star-item", { item_id: "item-1" });
-
-      expect(write).toHaveBeenNthCalledWith(1, {
-        action: "add-item",
-        input: {
-          type: "login",
-          title: "Email",
-          tags: ["personal"],
-          username: "me@example.test",
-          password: "do-not-persist",
-        },
-        onlineOnly: true,
-      });
-      expect(write).toHaveBeenNthCalledWith(2, {
-        action: "edit-item",
-        input: {
-          item_id: "item-1",
-          title: "Email",
-          tags: ["personal"],
-          username: "me@example.test",
-          password: "do-not-persist",
-        },
-        onlineOnly: true,
-      });
-      expect(write).toHaveBeenNthCalledWith(3, {
-        action: "star-item",
-        input: { item_id: "item-1" },
-      });
-    });
+  it("marks add and edit online-only while leaving metadata actions queueable", () => {
+    const draft = {
+      type: "login" as const,
+      title: "Email",
+      tags: "personal",
+      alias: "",
+      fields: { username: "me@example.test", password: "do-not-persist" },
+      allowedKeys: ["username", "password"],
+    };
+    expect(addItemWrite(draft).onlineOnly).toBe(true);
+    expect(editItemWrite({ ...draft, itemId: "item-1" }).onlineOnly).toBe(true);
+    expect(starWrite("item-1", false).onlineOnly).toBeUndefined();
+    expect(ONLINE_ONLY_ACTIONS).toStrictEqual([
+      "add-item",
+      "edit-item",
+      "set-field",
+      "set-passkey",
+      "export",
+    ]);
   });
 });

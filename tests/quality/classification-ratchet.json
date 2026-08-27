@@ -1,13 +1,13 @@
 {
-  "approvedDeviation": "#861 merge onto main re-pins governed fingerprints: comment-only #861 bytes in packages/server/src/acp/backends/acp/vault-mcp-server.ts, packages/server/src/automation/manifest/manifest.ts, and packages/server/src/serve/health-registry.ts, plus packages/vault/src/schema/sealed.ts carrying both the #861 comment rewrite and #865's refresh_capability sealed-column expansion. No quality lost a gate, no gate lost its evidence, and every other governed fingerprint is unmoved.",
+  "approvedDeviation": "Two #873 fingerprint moves land together. packages/vault/src/schema/sealed.ts declares Locker's three sealed sidecar columns (locker.item_field.value_sealed, locker.item_history.password, locker.item_passkey.private_key) in SEALED_COLUMNS and — the half a reviewer must see — the matching SEALED_PAYLOAD_FIELDS entries, so a draft-band row cannot carry those values in the clear before a publisher exists; the T3 canary now fails when the two lists disagree. tests/matrix.json re-pins for the fifteen owned Expo Locker and Tally origin-seat scenarios the #873 mobile slices registered, plus the tracking-issue state refresh. The governed payload (qualities, demonstratedRed) is unmoved, no quality lost a gate, no gate lost its evidence, and no classification was weakened.",
   "matrixGovernanceFingerprint": "2f4acea8300a63b0fb407307840938bd29af4035239340a3addba62fc81e7b75",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "e7c3fcc3cbbafa3c0e5e36dd10a0e82aa088629fd9d790f00c276d8d630ce3ed",
     "packages/server/src/automation/manifest/manifest.ts": "0d6659e9e823fcea0a0852dc653320a8b73dea559cc3a08a40277dbb7cb2a677",
     "packages/server/src/routes/route-security.ts": "c2fd8dcb6a9687552e4550e3496085b28c1498034472eb6f1173027b4300d82c",
     "packages/server/src/serve/health-registry.ts": "14ad4979e4b0adda60f16478522b8edda3606e87caa26a71d389aeaa94b7d4e0",
-    "packages/vault/src/schema/sealed.ts": "08856b8e4b57a3868e0eaf3321a4f17a9378a4d176d698d64681cc469df0e3a5",
+    "packages/vault/src/schema/sealed.ts": "9ed864ff8c61cbca86614684de538d2c894f7805ce36a0bc3203aec0ae9b5c68",
     "tests/quality/fault-points.ts": "2b667efd1354071ab91043ab33f5ebd29cd79a11fcc4716edbe00aeada60f4bd",
-    "tests/matrix.json": "c5ee07f0652af2156ea0a36ddeb20f0097fff0c1999d7f96fcc09889adcd4bee"
+    "tests/matrix.json": "8190713ae048e807c8d80151f2f0bd4bb11347cfd1eeb5410c9428dec7d070ca"
   }
 }

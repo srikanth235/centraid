@@ -2,6 +2,7 @@ import { projectPendingWrite } from "@centraid/blueprints/apps/_shared/pending-o
 import { pendingProjectionFor } from "@centraid/blueprints/apps/_shared/pending-projections";
 // governance: allow-repo-hygiene file-size-limit (#419) the native session is one cohesive coordinator wiring store, intent outbox, windowed bootstrap, SSE feed, and AppState drain across a single lifecycle
 import {
+  authHeaders,
   DEFAULT_REPLICA_PURPOSE,
   fetchReplicaChanges,
   fetchReplicaIntentOutcomes,
@@ -15,6 +16,7 @@ import {
   ReplicaProtocolError,
   ReplicaTransportError,
   prepareReplicaWrite,
+  VAULT_HEADER,
 } from "@centraid/client/replica/native";
 import type {
   EnqueueIntentInput,
@@ -38,6 +40,7 @@ import type {
   ReplicaValue,
   ReplicaWriteMutationInput,
 } from "@centraid/client/replica/native";
+import { appActionPath } from "@centraid/core/protocol";
 
 import { backoffSchedule } from "../backoff";
 import type { BackoffSchedule } from "../backoff";
@@ -61,6 +64,19 @@ export interface NativeWriteInput {
   optimistic?: NativeOptimisticMutation[];
   intentId?: string;
   baseVersions?: ReplicaBaseVersion[];
+  /**
+   * THE ONLINE-ONLY DOOR (blueprint-seats contract H; docs/mobile-offline.md).
+   *
+   * A sealed input must never cross the durable session boundary: the outbox
+   * outlives the process, and a secret that reaches it has left the memory-only
+   * world the app promised. `true` sends the action straight to the gateway and
+   * NEVER enqueues — a transport failure surfaces as a failure, because falling
+   * back to the queue is precisely the thing this flag forbids.
+   *
+   * The browser seat's counterpart is `centraid-inline.ts`'s `opts.onlineOnly`;
+   * the action list is `apps/locker/writes.ts` `ONLINE_ONLY_ACTIONS`.
+   */
+  onlineOnly?: boolean;
 }
 
 export type NativeWriteResult =
@@ -317,6 +333,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
+    // Before ANY projection, id minting or queue touch: an online-only write
+    // has no representation in the outbox at all.
+    if (input.onlineOnly === true) return this.postAction(appId, input);
     const retainedIntent = pendingIntentIdFromInput(
       appId,
       input.action,
@@ -400,6 +419,46 @@ export class NativeReplicaSession implements MobileReplicaSession {
     });
     void this.flushIntents();
     return admitted;
+  }
+
+  /**
+   * The online-only transport. One POST to the app's own action handler,
+   * carrying the addressed vault, and no durable trace of the payload on this
+   * device: no intent id, no optimistic projection, no outbox row. The result
+   * is `executed` or it throws — there is deliberately no `queued` branch.
+   */
+  private async postAction(
+    appId: string,
+    input: NativeWriteInput
+  ): Promise<NativeWriteResult> {
+    const scope = this.#gatewayAuth.vaultId;
+    const response = await this.#fetcher(
+      this.#gatewayAuth.baseUrl,
+      appActionPath(appId, input.action),
+      {
+        method: "POST",
+        headers: {
+          ...authHeaders(this.#gatewayAuth.token, "application/json"),
+          ...(scope ? { [VAULT_HEADER]: scope } : {}),
+        },
+        body: JSON.stringify({ input: input.input }),
+        cache: "no-store",
+      }
+    );
+    if (!response.ok) {
+      throw new ReplicaProtocolError(
+        `${appId}.${input.action} was refused by the gateway (HTTP ${response.status})`
+      );
+    }
+    const output = (await response.json()) as ReplicaValue;
+    // The id is local and disposable: nothing persisted it, and no later
+    // outcome will arrive quoting it. It exists so the one write-outcome
+    // surface (`kit/replica/write-outcome.ts`) takes the same shape here.
+    return {
+      intentId: `online-only:${appId}:${input.action}`,
+      status: "executed",
+      output,
+    };
   }
 
   subscribe(

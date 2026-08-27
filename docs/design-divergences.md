@@ -348,6 +348,22 @@ The packed tile geometry, overlay slots, skeleton, viewer stack, scrub rails, fi
 | Notes' **Send to Tasks** hands one checklist line to Tasks and keeps no copy of the resulting task. | Keep. | `apps/notes/actions/send-to-tasks.ts` mints the canonical `schedule.task` through `schedule.add_task` and links it back with `core.link_entities`. Because Notes holds no row for it, the action is `excluded` from the pending-write overlay with that reason recorded in `apps/notes/pending-projection.ts` — the honest answer, not a missing projection. |
 | The due-task shelf counts the member's own tasks only, on a Tasks app that mounts every visible scope. | Keep. | #834 R-shelf-scope: the shelf is personal attention, and a cross-vault count reintroduces the "someone should, so no one does" failure the Tasks brief bans. |
 
+## Tally and Locker — rebuild divergences (#872)
+
+[#831](https://github.com/srikanth235/centraid/issues/831) cleared Tally whole; [#872](https://github.com/srikanth235/centraid/issues/872) drew it again and replaced Locker's shipping interface, both from the v17 Binding Layer handoff. The handoff's own three sanctioned divergences and the repo's rulings taken while building are one register.
+
+| Divergence | Decision | Enforcement / reason |
+| --- | --- | --- |
+| Locker's permit gate is a full-stop overlay, not a row-level inline confirm. | Keep (handoff divergence 1). | The gate must name the field, the permit's ~30-second life and the receipt — three sentences a row cannot hold — and a reveal is the one act whose cost the member must understand every time. Restated at the top of `apps/locker/components/PermitGate.tsx`. |
+| Tally's `Waiting` holds a phone band slot although a queue normally reads as status, and it carries no count. | Keep (handoff divergence 2). | Tally is the only multi-writer app: a write can be somebody else's and stuck, and there is nowhere else to look for it. It is a shelf of intents; a count would be a badge. |
+| Locker refuses the viewer seat at mount and the shell draws the refusal with its reason and the way in. | Keep (handoff divergence 3). | An app that is simply missing reads as broken. The sentence is the app's (`VIEWER_REFUSED` in `apps/locker/view-copy.ts`), restated in the shell's synchronous seat table (`packages/client/src/react/shell/routes/inlineAppSeats.ts`) so the wall renders before any app chunk is fetched. |
+| Tally's rail draws no hue dot, and its count column carries bare integers, never a net. | Keep. | The rail register rule: counts are bare integers (`_shared/NavRail.tsx`), and a hue dot would put an accent on navigation. The one sign convention lives in the ledger rows, where the figure is. |
+| Tally's removal-guard sentence uses they/them where the handoff §6 writes "He". | Keep. | A hard-coded pronoun is wrong for an arbitrary member; the guard names whoever is being removed. |
+| The Expense "Divided" row states the shares, never a method. | Keep. | The vault stores shares, not the rule that produced them; "equally" inferred from three equal numbers is a guess, and the row's job is what is actually known. |
+| Locker's generator length runs 12–40, not the "8 to 40" SURFACES §3.2's note states. | Keep. | The handoff contradicts itself: the recipe and the drawn chips (`12/16/20/28/40`) both start at 12. The chips win over the note's clause, which was dropped rather than shipping a sentence the control disproves. |
+| Both apps draw offline and stale as two notices, not Tasks' folded one. | Keep. | Locker's offline sentence names what still works and its stale one names when the replica last matched; Tally's are the same split. A lag nobody measured is not a lag, so the stale notice waits for a landed read. |
+| Leave/archive/simplification/export/import/access commits are drawn against the ask, with the commit inert and the gap named in its field note. | Keep until each backend lands. | GAPS.md tags `[backend-needed]`/`[open-question]` and the #872 rulings: a drawn-but-honest surface beats a hidden one, and no control is allowed to pretend. The register of what each needs lives on the issue. |
+
 ## The app navigation rail (#835)
 
 Where the shipped rails depart from the v16 design reference, and why. The reference is a prototype of intended structure, not production code; where it and `packages/design` disagree the package wins, and where it and this repo's shelf tables disagree the tables win — a rail row is an arrangement of destinations the app already has, never a source of new ones. The ruling behind the rail is in [decisions](decisions.md#the-app-navigation-rail-835).
@@ -372,6 +388,14 @@ Sanctioned departures from the [DESIGN.md § Copy](../DESIGN.md) budgets, kept b
 | --- | --- | --- |
 | The desktop crash-loop notification (`apps/desktop/src/main/gateway-monitor.ts`, "…Use Settings → Gateway to restart it manually.") runs three sentences. | Keep until the notification path is verified live. | [receipts/issue-660-desktop-onboarding-scenarios.md](../receipts/issue-660-desktop-onboarding-scenarios.md) records the hold: the advice can fire while the startup error screen is showing, where Settings is unreachable. Rewording without live verification risks pointing at a dead control. |
 | Docs `DRIVE_EMPTY` and `folderEmpty` render two actions against the empty-state budget's "at most one action". | Keep. | Removing the second action is an affordance change, not a copy change; the copy itself is in budget. Revisit with a design decision, not a copy sweep. |
+
+## The v17 handoff's verbatim copy (#873)
+
+The v17 Tally/Locker handoff carries a verbatim copy table (README §6 of each app); the product renders it verbatim except where a repo copy rule outranks the handoff. One departure, ruled rather than absorbed:
+
+| Divergence | Decision | Enforcement / reason |
+| --- | --- | --- |
+| Tally's leave-a-group confirm says **"Settle first."** where the handoff's §6 says "Settle first if you can." | Keep the shortened line. | The repo's copy rule bans "you can" as filler outright, and the copy allowlist is tighten-only with no slot to spare for a phrase the rule refuses. The sentence loses its hedge, not its meaning — leaving with an unsettled balance still works, and the preceding line still says the balance stays visible. Recorded at the literal (`view-copy.ts`, `LEAVE_BODY_2`). |
 
 ## The public web surfaces
 

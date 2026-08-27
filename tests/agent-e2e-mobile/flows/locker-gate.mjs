@@ -16,7 +16,10 @@
 // Four claims, in order:
 //   1. HOME WITHHOLDS THE COUNT: the tile speaks "Open Locker, locked" — the
 //      withheld-count label, never "0 locked".
-//   2. THE COVER STATES ITS CUSTODY: "Secrets stay online-only".
+//   2. THE COVER STATES ITS OWN BOUNDARY: the setup route's ambient sentence,
+//      "Nothing is browsable until there is a passphrase" — the v17 app bar
+//      carries each route's own status line (`view-copy.ts` ROUTE_STATUS),
+//      which is where the pre-v17 "Secrets stay online-only" subtitle went.
 //   3. THE GATE REFUSES AT REST: the first-run gate is drawn and its own
 //      control is disabled, because an empty field is under the 12-character
 //      floor.
@@ -36,9 +39,9 @@ import {
 /** The gate as Maestro sees it: the first-run heading, the floor it states, and
  *  the control that refuses while the field is empty. Asserted twice — once on
  *  arrival and once after the process restart — so the two chunks cannot drift. */
-const GATE_ASSERTIONS = `- assertVisible: "Create a primary passphrase of at least 12 characters.*"
+const GATE_ASSERTIONS = `- assertVisible: "Twelve characters at least, the only way in that cannot be revoked.*"
 - assertVisible:
-    text: "Create passphrase"
+    text: "Create it"
     enabled: false`;
 
 await runFlow("locker-gate", async (ctx) => {
@@ -53,9 +56,9 @@ await runFlow("locker-gate", async (ctx) => {
 - assertVisible: "Open Locker, locked"
 ${retryableTapCommands("Open Locker.*")}
 - extendedWaitUntil:
-    visible: "Protect Locker"
+    visible: "Choose a passphrase"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-- assertVisible: "Secrets stay online-only"
+- assertVisible: "Nothing is browsable until there is a passphrase"
 ${GATE_ASSERTIONS}
 - takeScreenshot: locker-gate
 `,
@@ -72,7 +75,7 @@ ${GATE_ASSERTIONS}
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Open Locker.*")}
 - extendedWaitUntil:
-    visible: "Protect Locker"
+    visible: "Choose a passphrase"
     timeout: 30000
 ${GATE_ASSERTIONS}
 - takeScreenshot: locker-gate-after-restart

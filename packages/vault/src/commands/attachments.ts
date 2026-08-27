@@ -30,6 +30,15 @@ const SUBJECT_PK: Record<string, string> = {
   "business.invoice": "invoice_id",
   "home.asset_item": "item_id",
   "media.asset": "asset_id",
+  // Locker is byte-bearing (#872, GAPS §3.3 #8): a passport scan or a recovery
+  // sheet belongs beside the item it documents, and the attachment spine
+  // already exists — so this is one allow-list entry, not a second attach
+  // command. HONEST BOUNDARY: the bytes ride the content spine like any other
+  // file and are NOT sealed. The sealed class is a COLUMN class; there is no
+  // sealed blob today, so a locker attachment is protected by the vault file,
+  // not by the reveal gate, and Locker's copy has to say so rather than imply
+  // an attachment is as guarded as a password.
+  "locker.item": "item_id",
 };
 
 const ROLES = [

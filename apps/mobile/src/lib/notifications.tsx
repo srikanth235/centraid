@@ -98,8 +98,11 @@ async function handleNotificationResponse(
       return;
     }
     if (plan.kind === "open-app") {
-      if (rootNavigationRef.isReady())
-        rootNavigationRef.navigate(plan.appId === "tasks" ? "Tasks" : "Tally");
+      if (!rootNavigationRef.isReady()) return;
+      // Tally is a STACK now, so its cover is addressed by screen. Literal
+      // names per branch: navigate's tuple overloads need one.
+      if (plan.appId === "tasks") rootNavigationRef.navigate("Tasks");
+      else rootNavigationRef.navigate("Tally", { screen: "TallyHome" });
     }
   } catch (error) {
     surfaceWriteFailure(error, "Notification action failed");

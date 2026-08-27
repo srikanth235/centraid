@@ -74,6 +74,8 @@ interface VaultReplyMessage {
   result?: unknown;
   error?: string;
   code?: string;
+  /** Set when the refusal is a revocation; see VaultCallResult.revokedAt. */
+  revokedAt?: string;
 }
 
 interface LogMessage {
@@ -105,8 +107,10 @@ port.on("message", (msg: VaultReplyMessage | RunMessage) => {
     else {
       const err = new Error(msg.error ?? "vault call failed") as Error & {
         code?: string;
+        revokedAt?: string;
       };
       if (msg.code) err.code = msg.code;
+      if (msg.revokedAt) err.revokedAt = msg.revokedAt;
       pending.reject(err);
     }
   } else if (msg.type === "run") {

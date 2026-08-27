@@ -119,7 +119,25 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   ],
   business: ["client", "project", "time_entry", "invoice", "invoice_line"],
   people: ["profile", "important_date"],
-  locker: ["item"],
+  // `item_alias` was DDL-only until #872: the connector alias existed, was
+  // written and was resolvable at reveal time, but an unregistered table is
+  // outside the canonical walk — so it never exported, never got a replica
+  // change-log trigger, and no app could read it back (README-Locker §8's
+  // first paper cut). The sidecars that follow are registered for the same
+  // reasons: `item_field` is the member's own sections and fields (and the
+  // storage every new item type is built from), `item_address` the extra
+  // addresses a login answers to, `item_passkey` the passkey slot, and
+  // `item_history` the durable item/password history. Each is either a fact
+  // the owner entered or a record only this vault holds; a restore that
+  // dropped one would hand back a locker that had forgotten it.
+  locker: [
+    "item",
+    "item_address",
+    "item_alias",
+    "item_field",
+    "item_history",
+    "item_passkey",
+  ],
   sync: [
     "connection",
     "external_entity",
@@ -135,12 +153,14 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "group",
     "expense",
     "expense_split",
+    "expense_payer",
     "expense_receipt",
     "expense_line_item",
     "expense_line_allocation",
     "recurring_expense",
     "settlement",
     "obligation",
+    "nudge",
   ],
   // `derivation` (#724 W2's provenance stamp) is registered here for the
   // reason `portable-export.ts`'s own audit note already assumes it is: the

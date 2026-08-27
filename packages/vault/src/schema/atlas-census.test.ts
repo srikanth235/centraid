@@ -15,7 +15,7 @@ import {
   atlasPulse,
   ATLAS_GRAPH_CENTER,
 } from "./atlas-census.js";
-import { VAULT_TABLES } from "./tables.js";
+import { JOURNAL_TABLES, VAULT_TABLES } from "./tables.js";
 
 const cleanups: (() => void)[] = [];
 describe("atlas-census", () => {
@@ -248,6 +248,48 @@ describe("atlas-census", () => {
     // One party inserted ⇒ core.party is a populated kind.
     expect(census.totals.populatedKinds).toBeGreaterThanOrEqual(1);
     expect(census.totals.kinds).toBeGreaterThan(census.totals.populatedKinds);
+  });
+
+  test("batched census rows equal an independent per-table COUNT(*) walk", () => {
+    const db = freshVault();
+    const now = new Date().toISOString();
+    db.vault
+      .prepare(
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
+       VALUES ('p1', 'person', 'Ravi', ?, ?, '1.3')`
+      )
+      .run(now, now);
+    db.journal
+      .prepare(
+        `INSERT INTO consent_provenance
+         (prov_id, entity_type, entity_id, prov_activity, agent_kind, agent_id, occurred_at)
+       VALUES ('pv1', 'core.party', 'p1', 'create', 'owner', 'owner', ?)`
+      )
+      .run(now);
+
+    const census = atlasCensus(db.vault, db.journal);
+    let counted = 0;
+    for (const pack of census.packs) {
+      const file = pack.file === "vault" ? db.vault : db.journal;
+      for (const table of pack.tables) {
+        const walked = (
+          file
+            .prepare(`SELECT COUNT(*) AS n FROM "${table.physical}"`)
+            .get() as { n: number }
+        ).n;
+        expect(walked, table.physical).toBe(table.rows);
+        counted += 1;
+      }
+    }
+    // Every registered table (minus the deferred grant plane) is still counted:
+    // the batch is an arithmetic identity, not a narrower census.
+    expect(counted).toBe(
+      Object.values(VAULT_TABLES).flat().length +
+        Object.values(JOURNAL_TABLES).flat().length -
+        2
+    );
+    const walkedTotal = census.packs.reduce((sum, p) => sum + p.rows, 0);
+    expect(census.totals.rows).toBe(walkedTotal);
   });
 
   test("census first paint defers grant-plane row counts (#825)", () => {

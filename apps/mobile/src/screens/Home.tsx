@@ -182,7 +182,7 @@ export default function HomeScreen({
           navigation.navigate("Agenda", { screen: "AgendaHome" });
           break;
         case "locker":
-          navigation.navigate("Locker");
+          navigation.navigate("Locker", { screen: "LockerHome" });
           break;
         case "tasks":
           navigation.navigate("Tasks");
@@ -194,7 +194,7 @@ export default function HomeScreen({
           navigation.navigate("Notes");
           break;
         case "tally":
-          navigation.navigate("Tally");
+          navigation.navigate("Tally", { screen: "TallyHome" });
           break;
       }
     },

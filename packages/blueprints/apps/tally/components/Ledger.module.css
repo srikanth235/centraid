@@ -1,0 +1,481 @@
+/* Tally's content vocabulary (spec §5): the ledger row, the section, the hero,
+   the notices, the window end, the denied gate, the confirms and the More
+   sheet. Geometry only — every colour, face and rhythm is read from the shared
+   token layer the shell injects, and this file declares none of its own.
+
+   ONE STYLESHEET FOR THE CONTENT because the row is ONE component used by
+   every list in the app — Balances, Activity, Groups, a group ledger, a
+   friend, Spending, Trash and Search. Splitting its rules per screen is
+   exactly how a figure ends up right-aligned in one list and not in another.
+
+   THE FIGURE IS THE ONE THING THIS APP ADDED (handoff coherence note): a
+   right-aligned amount with a sub-label under it. It is the existing row and
+   the existing display rung, positioned — no new size, no new weight, and the
+   only colour on it is `--net`, which means YOU OWE and nothing else. */
+
+/* ---------- Numerics ---------- */
+
+/* EVERY NUMBER IN THIS PRODUCT IS TABULAR AND BIDI-ISOLATED. Without the
+   isolate, `today · £84.20` reorders under RTL and a member reads a figure
+   that was never written — which is why the four properties travel together as
+   one class rather than as a `font:` a caller might take half of.
+
+   `--t-mono` is Instrument Sans' tabular cut, NOT `--font-code`: a monospaced
+   face is this product's register for a path, a literal or a secret, and a
+   member's money is none of those. */
+.num {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+/* ---------- The ledger row ---------- */
+
+.rowWrap {
+  border-block-end: 1px solid var(--line);
+}
+/* A pending row takes a 2px leading rule and says the words in its meta line.
+   The rule is INK, never a colour: an unsettled write is not a warning, and
+   `--net` on it would say "you owe" about a row that may not even be yours. */
+.rowWrap[data-pending="true"] {
+  border-inline-start: 2px solid var(--text-faint);
+  padding-inline-start: var(--sp-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--density-row);
+}
+@media (pointer: coarse) {
+  .row {
+    min-block-size: var(--target-min);
+  }
+}
+
+/* The person chip, in the person's own hue off the shared identity wheel. The
+   hue arrives as `--chip-hue` from the row, so this file names no colour and
+   the same person is the same hue in People, Photos and here. */
+.chip {
+  --chip-hue: var(--text-faint);
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  font: var(--t-annot-label);
+  color: var(--chip-hue);
+  background: color-mix(in oklab, var(--chip-hue) 14%, transparent);
+}
+@media (pointer: coarse) {
+  .chip {
+    inline-size: 28px;
+    block-size: 28px;
+  }
+}
+
+/* The row's own opening target — the title and the meta, as one control. A row
+   with nowhere to go renders the same two lines as a plain span (`.bodyStatic`)
+   rather than a button that would do nothing. */
+.body,
+.bodyStatic {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-hair);
+  text-align: start;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.title {
+  font: var(--t-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The meta line is ONE SENTENCE, clamped to one line. A second line of
+   annotation is a second row of noise for a fact nobody asked to read. */
+.meta {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The proportion bar — the only chart in this app, and it is a comparison
+   inside one list rather than a trend over time. */
+.bar {
+  flex: none;
+  inline-size: 120px;
+  block-size: 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+@media (pointer: coarse) {
+  .bar {
+    inline-size: 64px;
+  }
+}
+.barFill {
+  display: block;
+  block-size: 6px;
+  background: var(--text-soft);
+}
+
+/* A READ-ONLY status chip, never a control colour and never a count. */
+.status {
+  flex: none;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  padding-inline: var(--sp-1);
+}
+/* "Not yet, and not wrong" — a parked or invited state. */
+.status[data-tone="seam"] {
+  color: var(--seam);
+  border-color: var(--seam);
+}
+/* Ended: expired or refused. An outline in `--net`, never a fill. */
+.status[data-tone="net"] {
+  color: var(--net);
+  border-color: var(--net);
+}
+
+/* The figure block: right-aligned, with its sub-label under it. */
+.figWrap {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-hair);
+  min-inline-size: 96px;
+}
+@media (pointer: coarse) {
+  .figWrap {
+    min-inline-size: 76px;
+  }
+}
+.fig {
+  font: var(--t-label-on);
+  color: var(--text);
+}
+/* PROMINENCE IS EARNED BY CONSEQUENCE. `--net` on a figure that means *you
+   owe*; plain ink on one that means *you are owed*; the recessive rung on a
+   level balance. Never a green — a settled balance is a fact, not a reward. */
+.fig[data-tone="net"] {
+  color: var(--net);
+}
+.fig[data-tone="settled"] {
+  color: var(--text-soft);
+}
+.subFig {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+/* Up to two quiet trailing verbs, one where a finger lands. */
+.acts {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.pendingActions {
+  padding-block-end: var(--sp-1);
+}
+
+/* The search field, in the tool row. `flex: 1` here is the FIELD, not a chip
+   scroller: a text input is the row's subject and takes its slack, while a
+   horizontal chip run beside one never does. */
+.searchField {
+  flex: 1;
+  min-inline-size: 0;
+  max-inline-size: 420px;
+}
+
+/* ---------- Sections ---------- */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-block-start: var(--sp-3);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-block: var(--sp-3) var(--sp-1);
+}
+.sectionLabel {
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.sectionMeta {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sectionVerbs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+/* A QUIET TRAILING VERB. No border, no fill, no hue: the row's own acts sit at
+   the annotation rung in soft ink, so the figure beside them stays the loudest
+   thing on the row. */
+.quietVerb {
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+/* The back row's control: the destination's name, with the registry's own
+   back glyph beside it. Soft ink at the small rung — it is the way OUT of the
+   route, not the thing to do on it. */
+.backVerb {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.backGlyph {
+  display: inline-flex;
+  color: var(--text-faint);
+}
+
+/* The section's own text verb: underlined, because it is a verb in a line of
+   annotation rather than a control in a row of them. */
+.textVerb {
+  composes: quietVerb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* A shelf is empty ON ITS OWN TERMS, in its own words. */
+.empty {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  padding-block: var(--sp-2);
+}
+
+.note {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  padding-block: var(--sp-2);
+  text-wrap: pretty;
+}
+
+/* ---------- The hero ---------- */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-block: var(--sp-5) var(--sp-3);
+}
+.heroFig {
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  color: var(--text);
+}
+.heroFig[data-tone="net"] {
+  color: var(--net);
+}
+.heroFig[data-tone="settled"] {
+  color: var(--text-soft);
+}
+.heroLabel {
+  font: var(--t-small-strong);
+  color: var(--text-soft);
+}
+.heroSub {
+  font: var(--t-body);
+  color: var(--text-faint);
+  max-inline-size: 60ch;
+  text-wrap: pretty;
+  padding-block-start: var(--sp-1);
+}
+.heroActs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-3);
+}
+
+/* ---------- Notices, the window end, the empty screen ---------- */
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-block: var(--sp-2);
+}
+
+/* A BOUNDED WINDOW SAYS SO. This row is never styled as a footer to be
+   overlooked: a cut ledger that reads as everything is the defect. */
+.windowEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-block: var(--sp-3);
+  border-block-start: 1px solid var(--line);
+}
+
+.emptyActs {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-3);
+}
+
+/* ---------- The denied gate ---------- */
+
+.gate {
+  max-inline-size: 52ch;
+  padding-block: var(--sp-4);
+}
+.gateTitle {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  margin: 0 0 var(--sp-2);
+}
+.gateBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  margin: 0 0 var(--sp-1);
+  text-wrap: pretty;
+}
+.gateFacts {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  margin-block: var(--sp-3);
+  margin-inline: 0;
+}
+/* The pairs sit directly in the grid, so the browser's own `dd` indent has to
+   go — otherwise the value column starts somewhere the label column does not
+   know about. */
+.gateFacts dt,
+.gateFacts dd {
+  margin: 0;
+}
+.gateFactLabel {
+  color: var(--text-faint);
+}
+.gateActs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-2);
+}
+
+/* ---------- The confirms ---------- */
+
+/* A REAL `<dialog>` opened with `showModal()`, so the backdrop, the focus trap
+   and Escape are the platform's. `.kit-modal` is the card; these two rules are
+   only the rhythm inside it. */
+.confirm {
+  color: var(--text);
+}
+.confirmTitle {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  margin: 0;
+  text-wrap: pretty;
+}
+.confirmBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  margin: 0;
+  text-wrap: pretty;
+}
+/* The rest of one sentence, or the rule the confirm stands on: annotation
+   rung, recessive ink, so the body keeps carrying the consequence. */
+.confirmNote {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  margin: 0;
+  text-wrap: pretty;
+}
+/* ---------- The More sheet ---------- */
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.sheetHead {
+  font: var(--t-small-strong);
+  color: var(--text);
+  padding-block-end: var(--sp-1);
+}
+.sheetRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--target-min);
+  border: 0;
+  border-block-end: 1px solid var(--line);
+  background: none;
+  text-align: start;
+  inline-size: 100%;
+}
+.sheetName {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--t-body);
+  color: var(--text);
+}
+.sheetMeta {
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+.sheetFoot {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  padding-block-start: var(--sp-2);
+}
+
+/* ---------- A refused commit ---------- */
+
+/* The reason a commit cannot fire, standing beside it on the page rather than
+   waiting to be discovered by pressing. Annotation rung, recessive ink: it is
+   a fact about the control, not an alarm. */
+.refusal {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  margin: 0;
+}

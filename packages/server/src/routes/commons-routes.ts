@@ -13,6 +13,7 @@ import {
   compileCommons,
   createCommonsClaimInvitation,
   claimCommonsInvitation,
+  decideCommonsIntent,
   ensureCommonsGrant,
   executeCommonsCommand,
   isShareableItemType,
@@ -340,6 +341,51 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
           cancelCommonsIntent({
             seat: actor.vault,
             intentId,
+            now: new Date().toISOString(),
+          })
+        );
+      }
+      /**
+       * The STEWARD's per-intent answer (#872), beside the member's cancel
+       * above. `actorVaultId` names the deciding seat — the vault the caller
+       * owns and is acting from — while the intent row itself lives in whoever
+       * composed it; `decideCommonsIntent` locates that seat through the same
+       * mounted-vault resolver the rest of this route uses. Authorization is
+       * the vault's, not the route's: only the grant's steward party may
+       * answer, and a member deciding their own request is refused there.
+       */
+      if (
+        parts[0] === "intents" &&
+        parts[1] &&
+        parts[2] === "decide" &&
+        req.method === "POST"
+      ) {
+        const actorVaultId =
+          typeof body.actorVaultId === "string" ? body.actorVaultId : "";
+        if (deps.enrollments.owners.ownerOf(actorVaultId) !== owner.ownerId)
+          throw new Error("actor vault is not owned by this caller");
+        if (body.decision !== "approve" && body.decision !== "decline")
+          throw new Error("decision must be approve or decline");
+        const actor = deps.vaultFor(actorVaultId);
+        const gateway = deps.gatewayFor(actorVaultId);
+        const credential = deps.credentialFor(actorVaultId);
+        // Approving RUNS the command here, so a seat without its own rail
+        // cannot answer at all — it would settle the intent on a promise it
+        // has no way to keep.
+        if (!actor || !gateway || !credential)
+          throw new Error("deciding vault is not mounted");
+        return sendJson(
+          res,
+          200,
+          decideCommonsIntent({
+            steward: actor,
+            stewardVaultId: actorVaultId,
+            gateway,
+            credential,
+            intentId: decodeURIComponent(parts[1]),
+            decision: body.decision,
+            ...(typeof body.reason === "string" ? { reason: body.reason } : {}),
+            vaultFor: deps.vaultFor,
             now: new Date().toISOString(),
           })
         );

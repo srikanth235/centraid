@@ -15,6 +15,70 @@ export function countRows(db: DatabaseSync, physical: string): number {
   }
 }
 
+// SQLite's SQLITE_MAX_COMPOUND_SELECT is 500 by default. Batch well under it so
+// a registry that keeps growing never trips the parser instead of counting.
+const COUNT_BATCH = 200;
+
+function sqlString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function sqlIdent(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+/**
+ * Row counts for many tables in ONE compound statement per batch.
+ *
+ * Identical arithmetic to calling `countRows` per table — every registered
+ * table is still COUNT(*)-scanned and no table is dropped from the answer — but
+ * the census stops issuing one prepared statement per registered table, so
+ * registering a table no longer costs a first-paint statement (#873). Missing
+ * tables answer 0, exactly as the per-table path's catch did.
+ */
+export function countRowsBatched(
+  db: DatabaseSync,
+  physicals: readonly string[]
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  const wanted = [...new Set(physicals)];
+  for (const name of wanted) counts.set(name, 0);
+  if (wanted.length === 0) return counts;
+  // One absent name would fail the whole compound SELECT, where the per-table
+  // path answered 0 — so ask the schema which of them exist, once.
+  const present = new Set(
+    (
+      db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type IN ('table','view')`
+        )
+        .all() as unknown as { name: string }[]
+    ).map((row) => row.name)
+  );
+  const existing = wanted.filter((name) => present.has(name));
+  for (let start = 0; start < existing.length; start += COUNT_BATCH) {
+    const batch = existing.slice(start, start + COUNT_BATCH);
+    const sql = batch
+      .map(
+        (name) =>
+          `SELECT ${sqlString(name)} AS t, COUNT(*) AS n FROM ${sqlIdent(name)}`
+      )
+      .join(" UNION ALL ");
+    try {
+      const rows = db.prepare(sql).all() as unknown as {
+        t: string;
+        n: number;
+      }[];
+      for (const row of rows) counts.set(row.t, row.n);
+    } catch {
+      // A table that exists but refuses a bare COUNT(*) would take its whole
+      // batch down with it; fall back per table so the rest still report.
+      for (const name of batch) counts.set(name, countRows(db, name));
+    }
+  }
+  return counts;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Graph (GET /_vault/atlas/graph)
 // ───────────────────────────────────────────────────────────────────────────

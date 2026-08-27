@@ -12,7 +12,13 @@ import type {
 // MULTI-SCOPE (#599): an app may be mounted over N scopes, each with its own
 // replica session. Bindings are ordered, FIRST is the primary: `read` hits the
 // primary, `readAll` fans out, `write` names one scope, `onChange` tags each.
-import { appActionPath, appQueryPath, ROUTES } from "@centraid/core/protocol";
+import {
+  appActionPath,
+  appQueryPath,
+  commonsIntentCancelPath,
+  commonsIntentDecidePath,
+  ROUTES,
+} from "@centraid/core/protocol";
 
 import {
   auth,
@@ -22,6 +28,12 @@ import {
   VAULT_HEADER,
 } from "../../gateway-client-core.js";
 import type { GatewayAuth } from "../../gateway-client-core.js";
+// Types only — erased at build, so declaring the import doors below never pulls
+// the staged-import transport onto the eager shell graph (see `lazyVaultImports`).
+import type {
+  VaultImportBatch,
+  VaultImportRow,
+} from "../../gateway-client-vault-imports.js";
 import type { ReplicaShellSession } from "../../replica/shell-session.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { authorizeBlobText, authorizeBlobUrl } from "./blob-auth.js";
@@ -97,6 +109,37 @@ export interface InlineCommonsIntent {
   settledAt?: string;
 }
 
+/** The steward's answer to one intent (#872), as the decide door returns it. */
+export interface InlineCommonsIntentDecision {
+  intentId: string;
+  grantId: string;
+  decision: "approve" | "decline";
+  /** The intent's status AFTER the answer — read off the seat, never assumed. */
+  status: InlineCommonsIntent["status"];
+  /** `false` when the request had already settled before this answer arrived. */
+  decided: boolean;
+  reason?: string;
+  sequence?: number;
+  receiptId: string;
+}
+
+/** What staging one dropped file into a draft batch answers with (#290). */
+export interface InlineImportStaged {
+  batchId: string;
+  kind: string;
+  staged: Record<string, number>;
+  total: number;
+  unrouted: string[];
+}
+
+/** What publishing a reviewed draft batch answers with. */
+export interface InlineImportPublished {
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: unknown[];
+}
+
 export interface InlineShareTarget {
   partyId: string;
   label: string;
@@ -162,6 +205,45 @@ export interface InlineCentraidClient {
     intentId: string;
     scope?: string;
   }) => Promise<{ status: string; cancelled: boolean }>;
+  /**
+   * The STEWARD's answer to one member request (#872). Optional so an older
+   * host parses this shape unchanged and a surface that cannot find the door
+   * draws no Approve/Decline at all — feature detection, never a fallback path.
+   *
+   * `scope` names the seat the answer is given FROM and must be a vault this
+   * caller owns; the gateway resolves the intent's own seat and refuses anyone
+   * who is not that grant's steward. Approving re-enters the signed rail, so a
+   * refusal there comes back as `decided: true` with the rail's reason rather
+   * than as a transport error.
+   */
+  decideCommonsIntent?: (opts: {
+    intentId: string;
+    decision: "approve" | "decline";
+    /** The steward's own words on a decline; the member reads them verbatim. */
+    reason?: string;
+    scope?: string;
+  }) => Promise<InlineCommonsIntentDecision>;
+  /**
+   * THE STAGED-IMPORT WORKFLOW (#290), as five doors on the app client.
+   * First contact with a dropped file is always a DRAFT: stage, review the
+   * rows, then publish or discard.
+   *
+   * ONLINE-ONLY BY CONSTRUCTION. These never enter a replica session or the
+   * pending-write outbox — an import payload is the raw file, secrets and all,
+   * and a durable offline queue is exactly where it must not sit.
+   *
+   * ACTIVE-VAULT SCOPED, so they take NO `scope` argument: the import plane is
+   * owner-tier and answers for whichever vault the gateway currently has
+   * mounted (`ROUTE_SECURITY_REGISTRY`, `/centraid/_vault/imports`), which is
+   * not the same axis as an app's mounted scopes. A multi-scope app cannot
+   * stage into a secondary audience, and the absence of the argument says so
+   * rather than accepting one and quietly ignoring it.
+   */
+  stageImport?: (file: File) => Promise<InlineImportStaged>;
+  importBatches?: () => Promise<VaultImportBatch[]>;
+  importRows?: (batchId: string) => Promise<VaultImportRow[]>;
+  publishImport?: (batchId: string) => Promise<InlineImportPublished>;
+  discardImport?: (batchId: string) => Promise<{ receiptId: string }>;
   place: (opts: {
     linkToken: string;
     kind: "add" | "move";
@@ -494,6 +576,58 @@ function lazyGrantBridge(getAuth: () => Promise<GatewayAuth>): GrantBridge {
   };
 }
 
+/** Staged-import transport stays off the eager shell graph for the same reason
+ *  `lazyGrantBridge` does: Tasks and Home must not pay for a door they never
+ *  open. One module-level promise, so five doors share one load. */
+let pendingVaultImports:
+  | Promise<typeof import("../../gateway-client-vault-imports.js")>
+  | undefined;
+function lazyVaultImports(): Promise<
+  typeof import("../../gateway-client-vault-imports.js")
+> {
+  return (pendingVaultImports ??=
+    import("../../gateway-client-vault-imports.js"));
+}
+
+/** The gateway's own ceiling (`MAX_IMPORT_BYTES`, import-routes.ts). Refused
+ *  HERE so a 128 MiB body is never read into memory only to be rejected. */
+const MAX_IMPORT_BYTES = 128 * 1024 * 1024;
+
+/**
+ * Extensions the staging spine reads as TEXT. Everything else travels base64:
+ * a zip or a photo is bytes, and the route's UTF-8 decode would refuse it.
+ * Declared, not sniffed — the same posture as the commons routing table.
+ */
+const TEXT_IMPORT_EXTENSIONS =
+  /\.(?:csv|tsv|txt|json|ndjson|md|mdown|vcf|ics|eml|mbox)$/iu;
+
+/** Chunked so a large buffer never blows the argument list on `String.fromCharCode`. */
+function base64Of(bytes: Uint8Array): string {
+  const chunk = 0x8000;
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += chunk)
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
+  return btoa(binary);
+}
+
+/** One dropped file as the stage route's body: exactly one of `text`/`base64`. */
+async function importBodyFor(
+  file: File
+): Promise<{ filename: string; text?: string; base64?: string }> {
+  if (file.size > MAX_IMPORT_BYTES)
+    throw new InlineScopeError(
+      "INVALID_INPUT",
+      `${file.name} is ${file.size} bytes; imports stop at ${MAX_IMPORT_BYTES}.`
+    );
+  const filename = file.name;
+  if (TEXT_IMPORT_EXTENSIONS.test(filename))
+    return { filename, text: await file.text() };
+  return {
+    filename,
+    base64: base64Of(new Uint8Array(await file.arrayBuffer())),
+  };
+}
+
 /** Extends existing `onChange` listeners to the new scope and then announces it, so an app refetches exactly the scope that appeared. */
 export function addInlineScope(
   client: unknown,
@@ -521,6 +655,15 @@ export function createInlineCentraidClient(
     options.isOnline ??
     (() =>
       typeof navigator === "undefined" ? true : navigator.onLine !== false);
+
+  /** The import doors never queue: an offline refusal is honest, and falling
+   *  back to the outbox would durably store a file's plaintext. */
+  const requireOnline = (what: string): void => {
+    if (!isOnline())
+      throw new Error(
+        `${what} needs a gateway connection; it is never queued offline.`
+      );
+  };
 
   const bindingFor = (scope: string | undefined): InlineScopeBinding => {
     if (scope === undefined) return primary;
@@ -749,7 +892,7 @@ export function createInlineCentraidClient(
       const { baseUrl, token } = await auth();
       const response = await doFetch(
         baseUrl,
-        `${ROUTES.gatewayCommons}/intents/${encodeURIComponent(opts.intentId)}/cancel`,
+        commonsIntentCancelPath(encodeURIComponent(opts.intentId)),
         {
           method: "POST",
           headers: authHeaders(token, "application/json"),
@@ -757,6 +900,57 @@ export function createInlineCentraidClient(
         }
       );
       return readJson(response, "cancel commons intent");
+    },
+
+    async decideCommonsIntent(opts) {
+      const binding = bindingFor(opts.scope);
+      // A scope with no vault id is the ambient single-scope host: it cannot
+      // name the seat the answer is given from, so it refuses rather than
+      // posting a decision nobody can attribute.
+      if (!binding.scope.id)
+        throw new InlineScopeError(
+          "INVALID_INPUT",
+          "Answering a Commons request needs a named vault scope."
+        );
+      const { baseUrl, token } = await auth();
+      const response = await doFetch(
+        baseUrl,
+        commonsIntentDecidePath(encodeURIComponent(opts.intentId)),
+        {
+          method: "POST",
+          headers: authHeaders(token, "application/json"),
+          body: JSON.stringify({
+            actorVaultId: binding.scope.id,
+            decision: opts.decision,
+            ...(opts.reason ? { reason: opts.reason } : {}),
+          }),
+        }
+      );
+      return readJson(response, "decide commons intent");
+    },
+
+    async stageImport(file) {
+      requireOnline("Importing a file");
+      const body = await importBodyFor(file);
+      return (await lazyVaultImports()).vaultImportStage(body);
+    },
+
+    async importBatches() {
+      return (await lazyVaultImports()).vaultImportsList();
+    },
+
+    async importRows(batchId) {
+      return (await lazyVaultImports()).vaultImportRows(batchId);
+    },
+
+    async publishImport(batchId) {
+      requireOnline("Publishing an import");
+      return (await lazyVaultImports()).vaultImportPublish(batchId);
+    },
+
+    async discardImport(batchId) {
+      requireOnline("Discarding an import");
+      return (await lazyVaultImports()).vaultImportDiscard(batchId);
     },
 
     async place(opts) {

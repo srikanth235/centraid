@@ -1,121 +1,429 @@
 // @vitest-environment jsdom
-
-// Locker's `locker.dayone` cell: what a member sees the first time they open
-// the vault, before anything has been put in it.
+// LOCKER'S HONEST STATES (STATES.md's Locker matrix, umbrella #872).
 //
-// `src/state-honesty.test.ts` already reads this file's SOURCE and requires the
-// kit vocabulary (`kit-empty` + `kit-btn`), and it owns the loading gate — a
-// skeleton until the first read settles — so neither is repeated here. What a
-// source scan cannot see is which of the two empties the list actually draws:
-// `pool.length === 0` is true for a brand-new vault AND for a search that
-// matched nothing, and those are opposite situations. Telling a member with 300
-// logins that there is "Nothing here" — or offering "Add item" to someone who
-// only mistyped a search — is the failure this cell exists to catch, so both
-// branches are rendered and contrasted.
-
-import { act } from "react";
+// Locker owes the seven canonical states plus five of its own — Locked,
+// Re-auth, Revealed, Window end and the viewer refusal. This file proves them
+// where a member meets them, and it drives the PRODUCTION `Root` for the ones
+// that are a claim about the whole room (locked, denied, day one), because
+// those are exactly the ones an app can get right in a component and wrong in
+// the tree above it.
+//
+// THE STATE THIS FILE EXISTS FOR is the first block: a Locker that boots
+// browsable is not a Locker. Everything else here is downstream of that.
+import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, test } from "vitest";
 
+import type { InlineFrame } from "../inline-types.ts";
+import { Root } from "./app-root.tsx";
+import { SealedField } from "./components/Fields.tsx";
 import { LockerList } from "./components/List.tsx";
+import { Rail } from "./components/Rail.tsx";
+import { Notices } from "./components/States.tsx";
+import { OPEN_ITEM, rowsFor, typeCounts, windowEndCopy } from "./format.ts";
+import { PERMIT_LIFE_MS } from "./permits.ts";
 import type { LockerRow } from "./types.ts";
+import {
+  ALL_TYPES,
+  DAY_ONE_ADD,
+  FIELD_LABEL,
+  RAIL_ARCHIVED,
+  TYPE_ORDER,
+  DAY_ONE_IMPORT,
+  DAY_ONE_TITLE,
+  LOCK_BODY,
+  NO_MATCH,
+  OFFLINE_NOTICE,
+  REAUTH_NOTICE,
+  SEALED_NOTE,
+  SETUP_BODY,
+  SHOW_MORE,
+  VIEWER_REFUSED,
+  WINDOW_RULE,
+  pendingNotice,
+  permitGateTitle,
+  revealedNote,
+  staleNotice,
+} from "./view-copy.ts";
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-const ITEM: LockerRow = {
-  item_id: "item-1",
-  type: "login",
-  title: "Bank",
-  subtitle: "you@example.com",
+const NO_FRAME: InlineFrame = {
+  setAppBar: () => undefined,
+  setStatus: () => undefined,
+  clearStatus: () => undefined,
+  claimBand: () => undefined,
 };
 
-describe("the Locker list with nothing in it", () => {
-  let root: ReturnType<typeof createRoot> | undefined;
+const ROW: LockerRow = {
+  item_id: "l1",
+  type: "login",
+  title: "GitHub",
+  subtitle: "ana@example.test",
+  tags: ["work"],
+};
+
+const NOOP = (): void => undefined;
+
+// ------------------------------------------------- locked, first run, denied
+
+describe("the room is shut until it is opened", () => {
+  let reactRoot: ReturnType<typeof createRoot> | undefined;
 
   afterEach(() => {
-    if (root) act(() => root?.unmount());
-    root = undefined;
+    if (reactRoot) act(() => reactRoot?.unmount());
+    reactRoot = undefined;
     document.body.replaceChildren();
+    (window as unknown as { centraid?: unknown }).centraid = undefined;
   });
 
-  /**
-   * Render the list and hand back the container plus the acts its one button
-   * actually invoked — a recorded outcome rather than a spy, because the claim
-   * is "day one offers the act that FILLS the vault", not "a mock ran".
-   */
-  async function paint({
-    pool = [] as LockerRow[],
-    search = "",
-  }: { pool?: LockerRow[]; search?: string } = {}): Promise<{
-    container: HTMLElement;
-    acts: string[];
-  }> {
-    const acts: string[] = [];
+  async function mount(auth: Record<string, unknown>): Promise<HTMLElement> {
+    (window as unknown as { centraid: unknown }).centraid = {
+      read: ({ query }: { query: string }) =>
+        query === "auth"
+          ? Promise.resolve(auth)
+          : Promise.resolve({ items: [ROW] }),
+      write: () => Promise.resolve({}),
+    };
     const container = document.createElement("div");
     document.body.append(container);
-    root = createRoot(container);
-    await act(async () =>
-      root?.render(
-        <LockerList
-          pool={pool}
-          listTitle="All items"
-          allCount={pool.length}
-          search={search}
-          selectedId={null}
-          onOpenSide={() => {}}
-          onSelect={() => {}}
-          onSearchInput={() => {}}
-          onClearSearch={() => void acts.push("clear-search")}
-          onNewItem={() => void acts.push("new-item")}
-        />
-      )
-    );
-    return { container, acts };
+    reactRoot = createRoot(container);
+    await act(async () => {
+      reactRoot?.render(
+        createElement(Root, { rootRef: NOOP, frame: NO_FRAME })
+      );
+    });
+    return container;
   }
 
-  const text = (container: HTMLElement, selector: string): string | undefined =>
-    container.querySelector(selector)?.textContent ?? undefined;
-
-  test("day one names the empty vault and offers the one act that fills it", async () => {
-    const { container, acts } = await paint();
-
-    expect(container.querySelector(".kit-empty")).not.toBeNull();
-    expect(text(container, ".kit-empty-title")).toBe("Nothing here");
-    // The sub-line has to say what CAN go in a locker, because "nothing here"
-    // on an app a member has never used reads as a failure to load.
-    expect(text(container, ".kit-empty-sub")).toBe(
-      "Add a login, card, or note to get started."
-    );
-
-    const action = container.querySelector<HTMLButtonElement>(".kit-btn");
-    expect(action?.textContent).toBe("Add item");
-    await act(async () => action?.click());
-    // Exactly the new-item act, so it is not the search-empty act wearing
-    // another word.
-    expect(acts).toStrictEqual(["new-item"]);
+  test("LOCKED: a configured vault opens on the lock screen, with no list", async () => {
+    const container = await mount({
+      ok: true,
+      configured: true,
+      authenticated: false,
+    });
+    expect(container.textContent).toContain(LOCK_BODY);
+    // The band, the rail and every list are WITHDRAWN, not dimmed.
+    expect(container.querySelector("nav")).toBeNull();
+    expect(container.querySelector("[data-item-id]")).toBeNull();
+    expect(container.textContent).not.toContain(ROW.title);
   });
 
-  test("a search that matched nothing is the OTHER empty, with the other act", async () => {
-    const { container, acts } = await paint({ search: "x" });
-
-    expect(text(container, ".kit-empty-title")).toBe("No matches");
-    expect(text(container, ".kit-empty-sub")).toBe(
-      "Try a different search term."
-    );
-    expect(container.textContent).not.toContain("Nothing here");
-
-    const action = container.querySelector<HTMLButtonElement>(".kit-btn");
-    expect(action?.textContent).toBe("Clear search");
-    await act(async () => action?.click());
-    expect(acts).toStrictEqual(["clear-search"]);
+  test("FIRST RUN: an unconfigured vault states the rule before the field", async () => {
+    const container = await mount({ ok: true, configured: false });
+    expect(container.textContent).toContain(SETUP_BODY);
+    expect(container.querySelector("[data-item-id]")).toBeNull();
+    // Twelve characters is enforced in front of the member, not by a refusal.
+    const commit = container.querySelector("button[type='submit']");
+    expect((commit as HTMLButtonElement | null)?.disabled).toBe(true);
   });
 
-  test("one item is enough to retire the empty state entirely", async () => {
-    const { container } = await paint({ pool: [ITEM] });
+  test("a host that never answers stays shut rather than guessing", async () => {
+    const container = await mount({});
+    expect(container.querySelector("[data-item-id]")).toBeNull();
+  });
 
-    expect(container.querySelector(".kit-empty")).toBeNull();
-    expect(container.textContent).toContain("Bank");
+  test("DENIED: a revoked grant shows the receipt and that nothing was deleted", async () => {
+    (window as unknown as { centraid: unknown }).centraid = {
+      read: ({ query }: { query: string }) =>
+        query === "auth"
+          ? Promise.resolve({
+              ok: true,
+              configured: true,
+              authenticated: true,
+              sessionToken: "s1",
+            })
+          : Promise.resolve({
+              items: [],
+              vaultDenied: { message: "The grant was revoked." },
+            }),
+      write: () => Promise.resolve({}),
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    reactRoot = createRoot(container);
+    await act(async () => {
+      reactRoot?.render(
+        createElement(Root, { rootRef: NOOP, frame: NO_FRAME })
+      );
+    });
+    expect(container.querySelector("#consentBanner")).not.toBeNull();
+    expect(container.textContent).toContain("nothing was deleted");
+    expect(container.textContent).toContain("The grant was revoked.");
+    // Denied is not day one: it offers the grant back, not a first move.
+    expect(container.textContent).not.toContain(DAY_ONE_TITLE);
+    expect(container.textContent).toContain("Review vault access");
+  });
+});
+
+// --------------------------------------------------------- day one and lens
+
+describe("day one and an empty lens are different facts", () => {
+  const list = (props: Partial<Parameters<typeof LockerList>[0]>) =>
+    renderToStaticMarkup(
+      createElement(LockerList, {
+        rows: [],
+        windowCount: 0,
+        total: null,
+        loaded: true,
+        truncated: false,
+        onOpen: NOOP,
+        onCopyUsername: NOOP,
+        onShowMore: NOOP,
+        onImport: NOOP,
+        onAdd: NOOP,
+        ...props,
+      })
+    );
+
+  test("DAY ONE: an empty vault offers the two ways in", () => {
+    const markup = list({});
+    expect(markup).toContain(DAY_ONE_TITLE);
+    expect(markup).toContain(DAY_ONE_IMPORT);
+    expect(markup).toContain(DAY_ONE_ADD);
+  });
+
+  test("an empty LENS says only that, and offers no first move", () => {
+    const markup = list({ windowCount: 12 });
+    expect(markup).toContain(NO_MATCH);
+    expect(markup).not.toContain(DAY_ONE_TITLE);
+  });
+
+  test("NOTHING IS EMPTY UNTIL A READ HAS LANDED", () => {
+    const markup = list({ loaded: false });
+    expect(markup).not.toContain(DAY_ONE_TITLE);
+    expect(markup).not.toContain(NO_MATCH);
+  });
+});
+
+// ------------------------------------------------------------- window's end
+
+describe("WINDOW END: a bounded window says so", () => {
+  test("names what is shown, that more exist, and offers the way on", () => {
+    const markup = renderToStaticMarkup(
+      createElement(LockerList, {
+        rows: [ROW],
+        windowCount: 300,
+        total: 312,
+        loaded: true,
+        truncated: true,
+        onOpen: NOOP,
+        onCopyUsername: NOOP,
+        onShowMore: NOOP,
+        onImport: NOOP,
+        onAdd: NOOP,
+      })
+    );
+    expect(markup).toContain(WINDOW_RULE);
+    expect(markup).toContain(SHOW_MORE);
+    // §6, VERBATIM, whenever the vault counted: "300 of 312 · the window is
+    // 300 by default and 2,000 at most."
+    expect(markup).toContain("300 of 312");
+    expect(windowEndCopy(300, true, 312)).toBe(`300 of 312 · ${WINDOW_RULE}`);
+    // AND THE HONEST FALLBACK. A total the read did not carry is a
+    // denominator this seat does not have, and it says what it knows instead.
+    expect(windowEndCopy(300, true)).toContain("older items beyond them");
+    expect(windowEndCopy(300, true)).not.toContain("of 312");
+  });
+
+  test("an untruncated window states the count and offers no more", () => {
+    const markup = renderToStaticMarkup(
+      createElement(LockerList, {
+        rows: [ROW],
+        windowCount: 1,
+        total: null,
+        loaded: true,
+        truncated: false,
+        onOpen: NOOP,
+        onCopyUsername: NOOP,
+        onShowMore: NOOP,
+        onImport: NOOP,
+        onAdd: NOOP,
+      })
+    );
+    expect(markup).toContain(WINDOW_RULE);
+    expect(markup).not.toContain(SHOW_MORE);
+  });
+});
+
+// ------------------------------------------ pending, offline, stale, parked
+
+describe("the notices name the boundary rather than apologise for it", () => {
+  const notices = (props: Partial<Parameters<typeof Notices>[0]>) =>
+    renderToStaticMarkup(
+      createElement(Notices, {
+        onDeviceWrites: 0,
+        offline: false,
+        onWhyOffline: NOOP,
+        staleAt: null,
+        onRefresh: NOOP,
+        conflict: false,
+        onCompare: NOOP,
+        parked: false,
+        onReviewParked: NOOP,
+        reauth: false,
+        ...props,
+      })
+    );
+
+  test("PENDING says the writes are metadata, and that no secret is queued", () => {
+    const markup = notices({ onDeviceWrites: 2 });
+    expect(markup).toContain(pendingNotice(2));
+    expect(markup).toContain("no secret is ever queued");
+  });
+
+  test("OFFLINE names what still works before what does not", () => {
+    expect(notices({ offline: true })).toContain(OFFLINE_NOTICE);
+  });
+
+  test("STALE states the time it last matched, with the way to close it", () => {
+    const markup = notices({ staleAt: "08:02" });
+    expect(markup).toContain(staleNotice("08:02"));
+    expect(markup).toContain("Refresh");
+  });
+
+  test("PARKED says a purge waits for the owner rather than having happened", () => {
+    expect(notices({ parked: true })).toContain("waits for you");
+  });
+
+  test("CONFLICT offers the comparison rather than picking a winner", () => {
+    expect(notices({ conflict: true })).toContain("Compare");
+  });
+
+  test("RE-AUTH says the permit expired and that nothing is revealed", () => {
+    expect(notices({ reauth: true })).toContain(REAUTH_NOTICE);
+  });
+
+  test("nothing wrong, nothing said — an empty banner is chrome", () => {
+    expect(notices({})).toBe("");
+  });
+});
+
+// -------------------------------------------------------- sealed / revealed
+
+describe("SEALED and REVEALED are two states of one row", () => {
+  const field = (props: Partial<Parameters<typeof SealedField>[0]>) =>
+    renderToStaticMarkup(
+      createElement(SealedField, {
+        label: "Password",
+        field: "password",
+        revealed: null,
+        revealedAt: null,
+        now: 1_000_000,
+        onReveal: NOOP,
+        onCopy: NOOP,
+        onConceal: NOOP,
+        ...props,
+      })
+    );
+
+  test("SEALED shows a dot run, states the cost, and offers Reveal and Copy", () => {
+    const markup = field({});
+    expect(markup).toContain(SEALED_NOTE);
+    expect(markup).toContain("Reveal");
+    expect(markup).toContain("Copy");
+    expect(markup).not.toContain("Conceal");
+    // The run's length never tracks the secret's.
+    expect(markup).toContain("••••••••••••••");
+  });
+
+  test("REVEALED states the remaining time and that the receipt is written", () => {
+    const at = 1_000_000;
+    const markup = field({
+      revealed: "k7Q-vn2-Rme",
+      revealedAt: at,
+      now: at + 4_000,
+    });
+    expect(markup).toContain(revealedNote(4, 26));
+    expect(markup).toContain("the receipt is already written");
+    expect(markup).toContain("k7Q-vn2-Rme");
+    expect(markup).toContain("Conceal");
+    // …and the Reveal VERB is gone — matched as a control, because the note
+    // above it legitimately contains the word "Revealed".
+    expect(markup).not.toContain(">Reveal<");
+  });
+
+  test("the countdown floors at the permit's life, never runs negative", () => {
+    const at = 1_000_000;
+    const markup = field({
+      revealed: "x",
+      revealedAt: at,
+      now: at + PERMIT_LIFE_MS + 9_000,
+    });
+    expect(markup).toContain(revealedNote(39, 0));
+  });
+});
+
+// ------------------------------------------------------ the gate's question
+
+describe("the permit gate names what it is buying", () => {
+  test("a sealed field, by its own word", () => {
+    expect(permitGateTitle(FIELD_LABEL.password ?? "")).toBe(
+      "Reveal the password?"
+    );
+    expect(permitGateTitle(FIELD_LABEL.card_number ?? "")).toBe(
+      "Reveal the card number?"
+    );
+  });
+
+  test("and the READ, where the type seals nothing to reveal", () => {
+    expect(permitGateTitle(FIELD_LABEL[OPEN_ITEM] ?? "")).toBe(
+      "Open this item?"
+    );
+  });
+});
+
+// -------------------------------------------------------------- the refusal
+
+describe("VIEWER REFUSED is a ruling, and it is stated", () => {
+  test("Locker owns the sentence, whoever draws the wall", () => {
+    expect(VIEWER_REFUSED).toContain("user-presence boundary");
+    expect(VIEWER_REFUSED).toContain("refuses the seat outright");
+  });
+});
+
+// ---------------------------------------------------- the archive shelf
+
+describe("ARCHIVE IS NOT TRASH, and the rail keeps its six type rows", () => {
+  const rail = (props: Partial<Parameters<typeof Rail>[0]>) =>
+    renderToStaticMarkup(
+      createElement(Rail, {
+        shelf: null,
+        filter: { kind: "all" as const },
+        rows: [ROW],
+        typeCounts: typeCounts([ROW]),
+        trashCount: 2,
+        archivedCount: 7,
+        onFilter: NOOP,
+        onGo: NOOP,
+        ...props,
+      })
+    );
+
+  test("the archived shelf is a row of the vault, with the VAULT's count", () => {
+    const markup = rail({});
+    expect(markup).toContain(RAIL_ARCHIVED);
+    // 7 archived items, none of them in the window that was read — which is
+    // exactly why the count cannot come from `rows`.
+    expect(markup).toContain("7");
+  });
+
+  test("THE RULING: the rail stays SIX type rows (README-Locker §1)", () => {
+    expect(TYPE_ORDER).toHaveLength(6);
+    // …while the vocabulary itself is fifteen, reachable from the add form
+    // and the filters rather than from a column of fifteen rows.
+    expect(ALL_TYPES).toHaveLength(15);
+    for (const type of TYPE_ORDER) expect(ALL_TYPES).toContain(type);
+    const markup = rail({});
+    expect(markup).not.toContain("SSH keys");
+    expect(markup).not.toContain("Passports");
+  });
+
+  test("an archived shelf is a different READ, never a slice of the window", () => {
+    // `rowsFor` hands back what it was given: the archived rows were fetched
+    // by a second read, so filtering them again would be asking twice.
+    const archived: LockerRow = { ...ROW, item_id: "a1", archived: true };
+    expect(rowsFor([archived], { kind: "archived" })).toHaveLength(1);
+    // And nothing archived carries a purge date — that is the trash's clock.
+    expect(archived.purge_at).toBeUndefined();
   });
 });

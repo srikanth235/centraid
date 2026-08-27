@@ -21,6 +21,7 @@ import { LockerList } from "../apps/locker/components/List.tsx";
 import { NoteCard } from "../apps/notes/components/Library.tsx";
 import { Row as PeopleRow } from "../apps/people/components/Shared.tsx";
 import { MemoriesStrip } from "../apps/photos/components/Memories.tsx";
+import { LedgerRow } from "../apps/tally/components/LedgerRow.tsx";
 import { TaskRow } from "../apps/tasks/components/TaskRow.tsx";
 
 const VECTORS = [
@@ -44,11 +45,16 @@ type Renderer = (value: string) => string;
 const noop = () => undefined;
 
 // One row per app that draws member-supplied text. Agenda, Notes and Tasks
-// paid their debt in #834; Tally is absent because its interface does not
-// render vault strings yet — it owes a row the moment it does.
+// paid that debt back with their rebuilds (#834); Tally and Locker paid it
+// with theirs (#872) — the one ledger-row recipe and the items list are the
+// components every list in each app reuses.
 const RENDERERS: Record<string, Renderer> = {
-  // Every Agenda member-reachable string slot gets the vector at once,
-  // including invitation-borne fields.
+  // ONE row draws every list in Agenda: Schedule and Waiting on share it, and
+  // the grid's rows are the same component fed a different window. Every
+  // member string the row can reach is the vector at once — the title, the
+  // search snippet and the one recurrence sentence — with a guest's own name
+  // and the event's description and join link riding along, because those
+  // arrive from an invitation nobody on this seat typed.
   agenda: (value) =>
     renderToStaticMarkup(
       createElement(AgendaListView, {
@@ -105,7 +111,10 @@ const RENDERERS: Record<string, Renderer> = {
         },
         index: 0,
         selectedIds: new Set(),
-        // Selection mode and the member-supplied owner disc get the vector.
+        // Selection is a mode, and the owner disc is member-supplied text on
+        // the row - both are fed the vector rather than stubbed away, since a
+        // display name is exactly the kind of string that reaches the DOM
+        // without ever having been typed by the member reading it.
         selecting: true,
         owner: { name: value, initial: value },
         narrow: false,
@@ -123,25 +132,29 @@ const RENDERERS: Record<string, Renderer> = {
   locker: (value) =>
     renderToStaticMarkup(
       createElement(LockerList, {
-        pool: [
+        rows: [
           {
             item_id: "item-1",
-            type: "login",
+            type: "login" as const,
             title: value,
             subtitle: value,
+            tags: [value],
           },
         ],
-        listTitle: "All items",
-        allCount: 1,
-        search: "",
-        selectedId: null,
-        onOpenSide: noop,
-        onSelect: noop,
-        onSearchInput: noop,
-        onClearSearch: noop,
+        windowCount: 1,
+        loaded: true,
+        truncated: false,
+        onOpen: noop,
+        onCopyUsername: noop,
+        onShowMore: noop,
+        onImport: noop,
+        onAdd: noop,
       })
     ),
-  // Rendered TWICE and concatenated: stored preview OR snippet, never both.
+  // The library card, which is also the search result and the notebook's row.
+  // It is rendered TWICE and the two markups concatenated, because a card
+  // shows the preview it stored or the snippet a search matched — never both —
+  // and each of those is member text arriving from an import or a share.
   notes: (value) =>
     [
       renderToStaticMarkup(
@@ -174,8 +187,12 @@ const RENDERERS: Record<string, Renderer> = {
         })
       ),
     ].join(""),
-  // All People lists in one row; three text slots + avatar name path fed
-  // the vector at once.
+  // ONE row draws the whole of People — the roster, Search, Touch's three
+  // lists, Trash and Merge all render this component (apps/people/components/
+  // Shared.tsx), so covering it covers every list the app has. Each of its
+  // three text slots is fed the vector, plus the avatar's own name path: a
+  // display name reaches both the monogram and the row's accessible label
+  // without ever having been typed by the member reading it.
   people: (value) =>
     renderToStaticMarkup(
       createElement(PeopleRow, {
@@ -201,8 +218,27 @@ const RENDERERS: Record<string, Renderer> = {
         ],
       })
     ),
-  // One component, eight places; title, tag label and project name fed the
-  // vector at once (importable, shareable strings).
+  // ONE recipe draws every ledger in Tally — Balances, Activity, a group's
+  // ledger, a friend's, Spending, Trash and Search all feed this row. The
+  // title, the one-sentence meta, the chip initials and the figure's sub-label
+  // are each member text: a description, a member's name and a group's name
+  // all arrive from rows other members wrote.
+  tally: (value) =>
+    renderToStaticMarkup(
+      createElement(LedgerRow, {
+        chip: { partyId: "party-1", initials: value },
+        title: value,
+        meta: value,
+        status: { label: value, tone: "seam" as const },
+        figure: { text: value, tone: "net" as const, sub: value },
+        acts: [{ label: value, run: noop }],
+        onOpen: noop,
+      })
+    ),
+  // The task row appears in eight places and is one component, so covering it
+  // covers every list Tasks has. Its three member-text slots are fed at once:
+  // the title, a tag's label and the project name the row was handed — a tag
+  // and a project can both arrive from an import or a shared vault.
   tasks: (value) =>
     renderToStaticMarkup(
       createElement(TaskRow, {

@@ -865,6 +865,10 @@
     "864": {
       "url": "https://github.com/srikanth235/centraid/issues/864",
       "state": "open"
+    },
+    "872": {
+      "url": "https://github.com/srikanth235/centraid/issues/872",
+      "state": "open"
     }
   },
   "gaps": {
@@ -2656,19 +2660,19 @@
         "id": "tally",
         "seats": {
           "origin": {
-            "status": "skip",
-            "reason": "Tally's rendered surface is held on every seat pending a ground-up redesign; the app.json doors stay live, the interface does not.",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs",
+            "tier": "e2e"
           },
           "custodian": {
-            "status": "skip",
-            "reason": "Tally's rendered surface is held on every seat pending a ground-up redesign; the app.json doors stay live, the interface does not.",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/tally.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
             "status": "skip",
-            "reason": "Tally's rendered surface is held on every seat pending a ground-up redesign; the app.json doors stay live, the interface does not.",
-            "citation": "#831"
+            "reason": "The v17 web interface shipped (#872); the seat's end-to-end journey is not yet written. The app.json doors and the drawn surface are covered by unit and component owners; a seat journey lands with the e2e follow-up on the umbrella issue.",
+            "citation": "#872"
           }
         }
       },
@@ -2804,16 +2808,20 @@
             "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/states.test.tsx"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/states.test.tsx"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/states.test.tsx"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -2920,32 +2928,32 @@
         "id": "tally",
         "states": {
           "dayone": {
-            "status": "held",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/states.test.tsx"
           },
           "pending": {
-            "status": "held",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts"
           },
           "offline": {
-            "status": "held",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/states.test.tsx"
           },
           "stale": {
-            "status": "held",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/states.test.tsx"
           },
           "conflict": {
-            "status": "held",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/states.test.tsx"
           },
           "parked": {
-            "status": "held",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/states.test.tsx"
           },
           "denied": {
-            "status": "held",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/states.test.tsx"
           }
         }
       },
@@ -3222,10 +3230,73 @@
           },
           {
             "id": "logic",
-            "label": "list/detail derivation",
+            "label": "row-recipe derivations",
             "layer": "unit",
             "status": "owned",
-            "owner": "packages/blueprints/apps/locker/logic.test.ts"
+            "owner": "packages/blueprints/apps/locker/format.test.ts"
+          },
+          {
+            "id": "origin-boundary",
+            "label": "origin boundary — boots locked, locks on hide, wipes the bag",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/locker-store.test.ts"
+          },
+          {
+            "id": "origin-band",
+            "label": "origin band and More sheet tables",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/locker-band.test.ts"
+          },
+          {
+            "id": "origin-seat-model",
+            "label": "origin state precedence, window foot and elsewhere-surfaces",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/locker-view-model.test.ts"
+          },
+          {
+            "id": "origin-states",
+            "label": "origin designed states — dayone, offline, pending, window end",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/LockerItemsView.test.tsx"
+          },
+          {
+            "id": "origin-walls",
+            "label": "origin gates — first run, lock, denied",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/LockerWall.test.tsx"
+          },
+          {
+            "id": "origin-reveal",
+            "label": "origin sealed field, reveal countdown and permit gate",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/LockerFields.test.tsx"
+          },
+          {
+            "id": "origin-review",
+            "label": "origin review registers and all clear",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/LockerReviewView.test.tsx"
+          },
+          {
+            "id": "online-only-seat",
+            "label": "online-only write door on the origin seat",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/lib/replica/locker-online-only.test.ts"
+          },
+          {
+            "id": "otpauth",
+            "label": "otpauth seed grammar for the camera scan",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/locker/otpauth.test.ts"
           }
         ]
       },
@@ -3476,11 +3547,81 @@
         "doc": "docs/apps/tally-scenarios.md",
         "scenarios": [
           {
-            "id": "interface-held",
-            "label": "rendered interface",
+            "id": "designed-states",
+            "label": "designed dayone",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/states.test.tsx"
+          },
+          {
+            "id": "figure-derivation",
+            "label": "figure sign convention and formatting",
             "layer": "unit",
-            "status": "held",
-            "citation": "#831"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/format.test.ts"
+          },
+          {
+            "id": "splits",
+            "label": "split resolution and odd-penny placement",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/split-model.test.ts"
+          },
+          {
+            "id": "schedules",
+            "label": "recurring schedule sentences and withheld verbs",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/schedule-model.test.ts"
+          },
+          {
+            "id": "writes",
+            "label": "write payloads and refusal narration",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tally/writes.test.ts"
+          },
+          {
+            "id": "derived-origin",
+            "label": "derived origin journey — read-time figures and no verb this seat cannot fire",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs"
+          },
+          {
+            "id": "origin-band",
+            "label": "origin band, Waiting slot and More sheet tables",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/tally-band.test.ts"
+          },
+          {
+            "id": "origin-seat-model",
+            "label": "origin state precedence, honest window foot and the outbox's Waiting rows",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/tally-view-model.test.ts"
+          },
+          {
+            "id": "origin-read-plane",
+            "label": "origin read plane — denial as data, search races, forgetting a payload",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/tally-store.test.ts"
+          },
+          {
+            "id": "origin-balances",
+            "label": "origin Balances — hero derivation, All settled, day one and the sign convention",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/BalancesView.test.tsx"
+          },
+          {
+            "id": "origin-waiting",
+            "label": "origin Waiting — the doors this transport has, and the two verbs it does not",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/WaitingView.test.tsx"
           }
         ]
       },
@@ -3981,7 +4122,7 @@
         "label": "Home apps",
         "runner": "tests/agent-e2e-mobile/run-home-apps-suite.mjs",
         "budgetDoc": "tests/agent-e2e-mobile/flows/home-apps-budget.md",
-        "budgetMinutes": 11,
+        "budgetMinutes": 12,
         "flows": [
           {
             "id": "docs-drive",
@@ -4011,6 +4152,12 @@
             "id": "people-roster",
             "label": "People roster",
             "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs",
+            "flow": null
+          },
+          {
+            "id": "tally-derived",
+            "label": "Tally derived",
+            "owner": "tests/agent-e2e-mobile/flows/tally-derived.mjs",
             "flow": null
           },
           {

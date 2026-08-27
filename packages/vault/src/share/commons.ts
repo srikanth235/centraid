@@ -1333,8 +1333,12 @@ function resolveCommonsContainer(
   if (declared.resolution === "tally-expense") {
     const row = db
       .prepare("SELECT group_id FROM tally_expense WHERE expense_id = ?")
-      .get(value) as { group_id: string } | undefined;
-    return row ? active(declared.containerType, row.group_id) : undefined;
+      .get(value) as { group_id: string | null } | undefined;
+    // A group-less 1:1 expense (GAPS #4) has no commons container at all, so
+    // it resolves to no grant and stays a private local write.
+    return row?.group_id
+      ? active(declared.containerType, row.group_id)
+      : undefined;
   }
   if (declared.resolution === "folder-descendant") {
     const direct = active(declared.containerType, value);

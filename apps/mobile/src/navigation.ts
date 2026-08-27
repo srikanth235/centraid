@@ -13,6 +13,8 @@ import type {
   NativeStackScreenProps,
 } from "@react-navigation/native-stack";
 
+import type { LockerItemType } from "@centraid/blueprints/apps/locker/types";
+
 export type PhotosStackParamList = {
   // Band shelf on this screen (do not push a second copy). `more` is a sheet, never a destination.
   // Longhand, not `Exclude<BandDestinationKey, "more">`: the frame may not import an app
@@ -68,6 +70,63 @@ export type DocsStackParamList = {
   DocsStorage: undefined;
 };
 
+export type LockerStackParamList = {
+  // The four band PLACES live on this one route; Item, Add/edit, Trash, Access
+  // history and the three elsewhere-surfaces are pushed, because each is a
+  // subject with a back row rather than a place. Longhand, not
+  // `Exclude<LockerBandDestinationKey, "more">`: the frame may not import an
+  // app (`scripts/check-import-boundaries.ts`); `LockerScreen.tsx`'s band
+  // handler pins the two.
+  LockerHome:
+    | { destination?: "items" | "watch" | "gen" | "search" }
+    | undefined;
+  // Title and type ride along so the app bar and the permit gate need no
+  // replica round-trip — and so the gate can name the field this TYPE seals
+  // before any read has happened. Never restate the union here: an unfamiliar
+  // type must still reach the item screen, which degrades it.
+  LockerItem: {
+    itemId: string;
+    title: string;
+    type: LockerItemType;
+  };
+  // No `itemId` means a new item. `generated` seeds the password field from
+  // the generator's "Put it on an item".
+  LockerEdit: { itemId?: string; generated?: string } | undefined;
+  LockerAccess: undefined;
+  LockerTrash: undefined;
+  // The surfaces whose door is on another seat, one screen, one param.
+  LockerSurface: { surface: "import" | "export" | "fill" };
+};
+
+export type TallyStackParamList = {
+  // The four band PLACES live on this one route; every other surface is
+  // pushed, because each is a subject with a back row rather than a place.
+  // Longhand, not `Exclude<TallyBandDestinationKey, "more">`: the frame may not
+  // import an app (`scripts/check-import-boundaries.ts`); `TallyScreen.tsx`'s
+  // band handler pins the two.
+  TallyHome:
+    | { destination?: "balances" | "activity" | "groups" | "contrib" }
+    | undefined;
+  // The group's name rides along so the app bar needs no round trip before the
+  // ledger lands, and so a slow read never paints under the previous group.
+  TallyGroup: { groupId: string; name: string };
+  TallyFriend: { partyId: string; name: string };
+  // The id alone: the entry itself is already in whichever ledger payload the
+  // member tapped it out of, and re-reading it would be a second copy.
+  TallyExpense: { expenseId: string };
+  // No `expenseId` means a new expense; `groupId` seeds the group chip, and
+  // its absence is the group-less 1:1 case rather than a missing value.
+  TallyAdd: { groupId?: string; expenseId?: string } | undefined;
+  TallyReceipt: { expenseId: string };
+  TallySettle: { groupId?: string; partyId?: string } | undefined;
+  TallyRecurring: undefined;
+  TallySpending: undefined;
+  TallyTrash: undefined;
+  TallySearch: undefined;
+  // The surface whose door is on another seat, one screen, one param.
+  TallySurface: { surface: "export"; groupId?: string };
+};
+
 export type PeopleStackParamList = {
   // Same longhand as `DocsHome.destination`.
   PeopleHome: { destination?: "people" | "touch" | "search" } | undefined;
@@ -109,11 +168,11 @@ export type RootStackParamList = {
   Photos: NavigatorScreenParams<PhotosStackParamList>;
   Docs: NavigatorScreenParams<DocsStackParamList>;
   Agenda: NavigatorScreenParams<AgendaStackParamList>;
-  Locker: undefined;
+  Locker: NavigatorScreenParams<LockerStackParamList>;
   Tasks: undefined;
   People: NavigatorScreenParams<PeopleStackParamList>;
   Notes: undefined;
-  Tally: undefined;
+  Tally: NavigatorScreenParams<TallyStackParamList>;
   Assistant: undefined;
   AssistantFull: undefined;
   SystemOnPhone: undefined;
@@ -136,10 +195,8 @@ export type RootScreenProps<T extends keyof RootStackParamList> =
 export type HomeScreenProps = RootScreenProps<"Home">;
 export type CaptureScreenProps = RootScreenProps<"Capture">;
 export type ScanScreenProps = RootScreenProps<"Scan">;
-export type LockerScreenProps = RootScreenProps<"Locker">;
 export type TasksScreenProps = RootScreenProps<"Tasks">;
 export type NotesScreenProps = RootScreenProps<"Notes">;
-export type TallyScreenProps = RootScreenProps<"Tally">;
 export type AssistantScreenProps = RootScreenProps<"Assistant">;
 export type AssistantFullScreenProps = RootScreenProps<"AssistantFull">;
 export type SystemOnPhoneScreenProps = RootScreenProps<"SystemOnPhone">;
@@ -170,6 +227,26 @@ export type DocsScreenProps<T extends keyof DocsStackParamList> =
 
 export type DocsShellNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<DocsStackParamList>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type LockerScreenProps<T extends keyof LockerStackParamList> =
+  CompositeScreenProps<NativeStackScreenProps<LockerStackParamList, T>, Root>;
+
+/** Via `useNavigation()`, never a prop — so `LockerScreen.tsx` can wrap any
+ *  Locker surface without widening each screen's type. */
+export type LockerShellNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<LockerStackParamList>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type TallyScreenProps<T extends keyof TallyStackParamList> =
+  CompositeScreenProps<NativeStackScreenProps<TallyStackParamList, T>, Root>;
+
+/** Via `useNavigation()`, never a prop — so `TallyScreen.tsx` can wrap any
+ *  Tally surface without widening each screen's type. */
+export type TallyShellNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<TallyStackParamList>,
   NativeStackNavigationProp<RootStackParamList>
 >;
 

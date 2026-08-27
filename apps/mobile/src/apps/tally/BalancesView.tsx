@@ -1,0 +1,207 @@
+// BALANCES — who owes whom, on balance, then per person, then per group.
+//
+// THE HERO'S FIGURE IS THE TWO TOTALS THE DASHBOARD DERIVED, DIFFERENCED — not
+// a third sum over the rows below it. `owed − owe` is the same subtraction the
+// sub-line states in words, and it is the only arithmetic on this screen. The
+// sub-line names the counts it was derived FROM, which is what makes the figure
+// inspectable: a member can go and count those rows.
+//
+// ALL SETTLED IS STATED, NEVER CELEBRATED (§6). No tick, no colour, no
+// congratulation — the ledger is the point and not the score.
+//
+// DAY ONE AND DENIED LOOK NOTHING ALIKE. Denied never reaches here: the frame
+// puts up the gate before this view mounts. What is here is the invitation.
+
+import React, { useMemo } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+
+import {
+  allSettled,
+  figureTone,
+  money,
+  netFigure,
+  groupSubLabel,
+  personSubLabel,
+} from "@centraid/blueprints/apps/tally/format";
+import type { DashboardData } from "@centraid/blueprints/apps/tally/types";
+import {
+  ALL_SETTLED,
+  DAY_ONE,
+  DAY_ONE_ACT,
+  DAY_ONE_SUB,
+  EMPTY,
+  HERO_LEVEL,
+  HERO_OWE,
+  HERO_OWED,
+  HERO_SETTLED_SUB,
+  SECTIONS,
+  SECTION_META,
+  VERBS,
+  balancesHeroSub,
+  memberCount,
+} from "@centraid/blueprints/apps/tally/view-copy";
+import { identityInitials } from "@centraid/design";
+
+import { Text } from "../../kit/components/NativeText";
+import { spacing, t, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
+import type { TallyScreenState } from "./tally-view-model";
+import TallyNotice from "./TallyNotice";
+import type { TallyNoticeProps } from "./TallyNotice";
+import { Hero, LedgerRow, Section } from "./TallyParts";
+
+export interface BalancesViewProps {
+  data: DashboardData;
+  state: TallyScreenState;
+  notice: TallyNoticeProps;
+  onOpenFriend: (partyId: string, name: string) => void;
+  onOpenGroup: (groupId: string, name: string) => void;
+  onAddFriend: () => void;
+  onNewGroup: () => void;
+  onSettle: () => void;
+  onAddExpense: () => void;
+  /** Prepare a reminder about one friend's balance. It ALWAYS parks. */
+  onRemind: (friend: {
+    party_id: string;
+    name: string;
+    net_minor: number;
+  }) => void;
+}
+
+export default function BalancesView(
+  props: BalancesViewProps
+): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { data } = props;
+  const net = data.owed_total_minor - data.owe_total_minor;
+  const tone = figureTone(net);
+  const level =
+    allSettled(data.friends.map((friend) => friend.net_minor)) &&
+    allSettled(data.groups.map((group) => group.owner_net_minor));
+  const dayOne =
+    props.state === "dayone" ||
+    (data.friends.length === 0 && data.groups.length === 0);
+
+  return (
+    <ScrollView contentContainerStyle={styles.page}>
+      <TallyNotice {...props.notice} />
+
+      {dayOne ? (
+        <View style={styles.dayOne}>
+          <Text style={styles.dayOneTitle}>{DAY_ONE}</Text>
+          <Text style={styles.dayOneBody}>{DAY_ONE_SUB}</Text>
+          <Text
+            accessibilityRole="button"
+            onPress={props.onAddExpense}
+            style={styles.dayOneAct}
+          >
+            {DAY_ONE_ACT}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <Hero
+            figure={netFigure(net, data.currency, "Settled")}
+            netMinor={net}
+            label={
+              tone === "settled"
+                ? HERO_LEVEL
+                : tone === "net"
+                  ? HERO_OWE
+                  : HERO_OWED
+            }
+            sub={
+              level
+                ? HERO_SETTLED_SUB
+                : balancesHeroSub(
+                    money(data.owed_total_minor, data.currency),
+                    money(data.owe_total_minor, data.currency),
+                    data.expense_count ?? 0,
+                    data.settlement_count ?? 0
+                  )
+            }
+            acts={[{ label: VERBS.settleUp, onPress: props.onSettle }]}
+          />
+          {level ? <Text style={styles.settled}>{ALL_SETTLED}</Text> : null}
+        </>
+      )}
+
+      <Section
+        label={SECTIONS.people}
+        meta={SECTION_META.people}
+        empty={EMPTY.people}
+        filled={data.friends.length > 0}
+        act={{ label: VERBS.addFriend, onPress: props.onAddFriend }}
+      >
+        {data.friends.map((friend) => (
+          <LedgerRow
+            key={friend.party_id}
+            initials={friend.initials || identityInitials(friend.name)}
+            title={friend.name}
+            figure={{
+              netMinor: friend.net_minor,
+              text: netFigure(friend.net_minor, data.currency),
+              sub: personSubLabel(friend.net_minor),
+            }}
+            {
+              // ONLY WHERE THERE IS SOMETHING TO REMIND ABOUT. A level
+              // balance has nothing owed, and a row that owes YOU money is the
+              // one a reminder is for. It parks — it is never sent from here.
+              ...(friend.net_minor > 0
+                ? {
+                    act: {
+                      label: VERBS.remind,
+                      onPress: () => props.onRemind(friend),
+                    },
+                  }
+                : {})
+            }
+            onPress={() => props.onOpenFriend(friend.party_id, friend.name)}
+          />
+        ))}
+      </Section>
+
+      <Section
+        label={SECTIONS.groups}
+        meta={SECTION_META.groups}
+        empty={EMPTY.groups}
+        filled={data.groups.length > 0}
+        act={{ label: VERBS.newGroup, onPress: props.onNewGroup }}
+      >
+        {data.groups.map((group) => (
+          <LedgerRow
+            key={group.group_id}
+            title={group.name}
+            meta={memberCount(group.member_count)}
+            figure={{
+              netMinor: group.owner_net_minor,
+              text: netFigure(group.owner_net_minor, data.currency),
+              sub: groupSubLabel(group.owner_net_minor),
+            }}
+            onPress={() => props.onOpenGroup(group.group_id, group.name)}
+          />
+        ))}
+      </Section>
+    </ScrollView>
+  );
+}
+
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    dayOne: {
+      gap: spacing[2],
+      paddingHorizontal: spacing[4],
+      paddingVertical: spacing[5],
+    },
+    dayOneAct: { ...t("control"), color: colors.text, marginTop: spacing[2] },
+    dayOneBody: { ...t("small"), color: colors.textSoft },
+    dayOneTitle: { ...t("title"), color: colors.text },
+    page: { paddingBottom: spacing[6] },
+    settled: {
+      ...t("small"),
+      color: colors.textSoft,
+      paddingHorizontal: spacing[4],
+      paddingTop: spacing[2],
+    },
+  });

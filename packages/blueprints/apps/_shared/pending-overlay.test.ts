@@ -50,8 +50,17 @@ describe("pending-write overlay law", () => {
     });
     expect(expense.optimistic.map((row) => row.rowId)).toStrictEqual([
       "pending:intent-1:expense",
+      "pending:intent-1:payer-0",
       "pending:intent-1:split-0",
     ]);
+    expect(expense.optimistic[1]).toMatchObject({
+      entity: "tally.expense_payer",
+      values: {
+        expense_id: "pending:intent-1:expense",
+        party_id: "me",
+        paid_minor: 1200,
+      },
+    });
     expect(
       projectPendingWrite(tasksPendingProjection, {
         appId: "tasks",

@@ -1,157 +1,139 @@
-import { displayText } from "../../_shared/untrusted.ts";
-// `<section class="v-list">` — the search box + filtered/sorted row list for
-// the current nav. The search input is a controlled input driven by `search`
-// (app.tsx calls
-// `render()` synchronously on every keystroke, same as any other state
-// change here — see logic.ts's `applySearchInput` for the debounced fetch
-// that runs behind it).
-import { catOf, monoOf, subOf, warnColor } from "../format.ts";
+// THE ITEMS ROUTE (README-Locker §1, §5) — the browsable half of the app.
+//
+// What is on this screen is METADATA: titles, usernames, addresses and tags.
+// The status line says so in the frame above, and the window's foot says how
+// much of the vault this is. Nothing here is a secret, which is why every row
+// can be drawn without a permit and why opening one costs one.
+//
+// DAY ONE IS AN OFFER, NOT AN ABSENCE. `Nothing is kept here yet` carries two
+// ways in — the import and one login by hand — because the first item is the
+// one that proves the reveal is worth its cost. A filter that matches nothing
+// is a DIFFERENT state and says so on its own terms.
+import type { ReactNode } from "react";
+
+import { showsEmptyState } from "../../_shared/view-state-kit.ts";
+import { showsWindowEnd, windowEndCopy } from "../format.ts";
 import type { LockerRow } from "../types.ts";
-import { Icon } from "./Shared.tsx";
+import {
+  DAY_ONE_ADD,
+  DAY_ONE_BODY,
+  DAY_ONE_IMPORT,
+  DAY_ONE_TITLE,
+  NO_MATCH,
+  SHOW_MORE,
+} from "../view-copy.ts";
+import { ItemRow } from "./Rows.tsx";
 
-import styles from "./List.module.css";
-import shared from "./shared.module.css";
+import styles from "./Rows.module.css";
 
-function ListRow({
-  item,
-  selectedId,
-  onSelect,
+export interface LockerListProps {
+  /** The rows this filter shows, already sorted by `format.rowsFor`. */
+  rows: readonly LockerRow[];
+  /** How many rows the whole window holds, whatever this filter shows. Day one
+   *  is a fact about the WINDOW; "nothing matches" is a fact about the lens. */
+  windowCount: number;
+  /** How many live items EXIST, as the vault counted them — the other half of
+   *  "300 of 312". `null` when the count could not be read. */
+  total: number | null;
+  /** Has a read landed? Nothing is empty until one has. */
+  loaded: boolean;
+  /** Older items exist beyond the window. */
+  truncated: boolean;
+  onOpen: (itemId: string) => void;
+  /** The row's one quiet verb: copy the username, which is metadata and needs
+   *  no permit. Omitted for a row with nothing to copy. */
+  onCopyUsername: (row: LockerRow) => void;
+  onShowMore: () => void;
+  onImport: () => void;
+  onAdd: () => void;
+}
+
+/** The day-one block: one sentence, one more that says why, and two ways in. */
+function DayOne({
+  onImport,
+  onAdd,
 }: {
-  item: LockerRow;
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-}) {
-  const wc = warnColor(item);
-  const title = displayText(item.title);
+  onImport: () => void;
+  onAdd: () => void;
+}): ReactNode {
   return (
-    <button
-      type="button"
-      className={styles.item}
-      aria-current={selectedId === item.item_id}
-      onClick={() => onSelect(item.item_id)}
-    >
-      <span
-        className={shared.itile}
-        style={{ background: catOf(item.type).color }}
-      >
-        {monoOf(item)}
-      </span>
-      <span className={shared.imain}>
-        <span className={shared.ititle}>
-          {title}
-          {item.favorite ? (
-            <span className={styles.star}>
-              <Icon
-                name="starFill"
-                size={12}
-                fill="currentColor"
-                stroke="none"
-              />
-            </span>
-          ) : null}
-          {wc ? (
-            <span className={styles.warnDot} style={{ background: wc }} />
-          ) : null}
-        </span>
-        <span className={shared.isub}>{displayText(subOf(item) || "—")}</span>
-      </span>
-    </button>
+    <div className="kit-empty" data-variant="day-one">
+      <div className="kit-empty-card">
+        <div className="kit-empty-title">{DAY_ONE_TITLE}</div>
+        <div className="kit-empty-sub">{DAY_ONE_BODY}</div>
+        <div className={styles.screenActs}>
+          <button type="button" className="kit-btn" onClick={onImport}>
+            {DAY_ONE_IMPORT}
+          </button>
+          <button type="button" className="kit-btn" onClick={onAdd}>
+            {DAY_ONE_ADD}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
-export function LockerList({
-  pool,
-  listTitle,
-  allCount,
-  search,
-  selectedId,
-  onOpenSide,
-  onSelect,
-  onSearchInput,
-  onClearSearch,
-  onNewItem,
-}: {
-  pool: LockerRow[];
-  listTitle: string;
-  allCount: number;
-  search: string;
-  selectedId: string | null;
-  onOpenSide: () => void;
-  onSelect: (id: string) => void;
-  onSearchInput: (value: string) => void;
-  onClearSearch: () => void;
-  onNewItem: () => void;
-}) {
+/** A lens with nothing under it. Its own sentence, and no act: the way out of
+ *  an empty filter is the filter, which is already on screen. */
+function NoMatch(): ReactNode {
   return (
-    <section className={styles.list}>
-      <div className={styles.listTop}>
-        <div className={styles.listHead}>
-          <button
-            type="button"
-            className={styles.hamburger}
-            aria-label="Menu"
-            onClick={onOpenSide}
-          >
-            <Icon name="menu" sw={1.75} />
-          </button>
-          <span className={styles.listTitle}>{listTitle}</span>
-          <span className={styles.listCount}>{pool.length}</span>
-        </div>
-        <div className={styles.search}>
-          <Icon name="search" sw={1.75} size={15} />
-          <input
-            id="lockerSearchInput"
-            type="search"
-            placeholder={`Search ${allCount} items`}
-            autoComplete="off"
-            value={search}
-            onChange={(e) => onSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape" && search) {
-                e.preventDefault();
-                onClearSearch();
-              }
-            }}
-          />
-        </div>
+    <div className="kit-empty" data-variant="no-match">
+      <div className="kit-empty-card">
+        <div className="kit-empty-title">{NO_MATCH}</div>
       </div>
-      <div className={styles.items}>
-        {pool.length === 0 ? (
-          <div className="kit-empty">
-            <div className="kit-empty-icon">
-              <Icon
-                name={search.trim() ? "search" : "lock"}
-                sw={1.6}
-                size={20}
-              />
-            </div>
-            <div className="kit-empty-title">
-              {search.trim() ? "No matches" : "Nothing here"}
-            </div>
-            <div className="kit-empty-sub">
-              {search.trim()
-                ? "Try a different search term."
-                : "Add a login, card, or note to get started."}
-            </div>
+    </div>
+  );
+}
+
+export function LockerList(props: LockerListProps): ReactNode {
+  const empty = showsEmptyState({
+    loaded: props.loaded,
+    count: props.rows.length,
+  });
+  // Two different facts, and they look nothing alike: an empty VAULT offers a
+  // first move; an empty LENS says only that this lens is empty.
+  if (empty && props.windowCount === 0) {
+    return <DayOne onImport={props.onImport} onAdd={props.onAdd} />;
+  }
+  if (empty) return <NoMatch />;
+
+  return (
+    <div className={styles.sections}>
+      <div className={styles.section}>
+        {props.rows.map((row) => (
+          <ItemRow
+            key={row.item_id}
+            row={row}
+            onOpen={props.onOpen}
+            {...(row.subtitle && row.type === "login"
+              ? {
+                  verb: {
+                    label: "Copy username",
+                    run: () => props.onCopyUsername(row),
+                  },
+                }
+              : {})}
+          />
+        ))}
+      </div>
+
+      {showsWindowEnd(props.loaded, props.rows.length) ? (
+        <div className={styles.windowEnd}>
+          <span className={styles.num}>
+            {windowEndCopy(props.windowCount, props.truncated, props.total)}
+          </span>
+          {props.truncated ? (
             <button
               type="button"
               className="kit-btn"
-              onClick={search.trim() ? onClearSearch : onNewItem}
+              onClick={props.onShowMore}
             >
-              {search.trim() ? "Clear search" : "Add item"}
+              {SHOW_MORE}
             </button>
-          </div>
-        ) : (
-          pool.map((item) => (
-            <ListRow
-              key={item.item_id}
-              item={item}
-              selectedId={selectedId}
-              onSelect={onSelect}
-            />
-          ))
-        )}
-      </div>
-    </section>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

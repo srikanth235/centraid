@@ -8,6 +8,7 @@ import {
 
 const EXPENSE_FIELDS = [
   "group_id",
+  "split_method",
   "description",
   "amount_minor",
   "original_amount_minor",
@@ -55,6 +56,33 @@ const expenseProjection = ({
       ...pendingInputValues(input, EXPENSE_FIELDS),
     }),
   ];
+  // The payer rows are projected too, so an offline expense folds through the
+  // same multi-payer path the canonical one does instead of reading as unpaid.
+  if (Array.isArray(input.payers)) {
+    input.payers.forEach((raw, index) => {
+      if (!raw || typeof raw !== "object") return;
+      const payer = raw as Record<string, unknown>;
+      const payerId = stablePendingRowId(intentId, `payer-${index}`);
+      mutations.push(
+        pendingUpsert("tally.expense_payer", payerId, {
+          __centraid_row_id: payerId,
+          expense_id: expenseId,
+          ...pendingInputValues(payer, ["party_id", "paid_minor"]),
+        })
+      );
+    });
+  } else if (typeof input.paid_by === "string") {
+    const payerId = stablePendingRowId(intentId, "payer-0");
+    mutations.push(
+      pendingUpsert("tally.expense_payer", payerId, {
+        __centraid_row_id: payerId,
+        expense_id: expenseId,
+        party_id: input.paid_by,
+        paid_minor:
+          typeof input.amount_minor === "number" ? input.amount_minor : 0,
+      })
+    );
+  }
   if (Array.isArray(input.splits)) {
     input.splits.forEach((raw, index) => {
       if (!raw || typeof raw !== "object") return;
@@ -158,6 +186,27 @@ export const tallyPendingProjection = definePendingProjection({
             : {}),
         }),
       ];
+    },
+    // Re-allocation rewrites lines and shares wholesale; the optimistic copy
+    // patches the expense row it belongs to so the surface stops claiming the
+    // old cut while the write is in flight.
+    "reallocate-receipt": ({ input }) =>
+      pendingPatch("tally.expense", input.expense_id, input),
+    "set-group-simplification": ({ input }) =>
+      pendingPatch("tally.group", input.group_id, {
+        simplify_opt_in: input.simplify ? 1 : 0,
+      }),
+    "leave-group": ({ input }) =>
+      pendingPatch("tally.group", input.group_id, input),
+    "archive-group": ({ input }) =>
+      pendingPatch("tally.group", input.group_id, {
+        archived_at: input.archived === false ? null : new Date().toISOString(),
+      }),
+    nudge: {
+      excluded: true,
+      // An optimistic copy would claim a reminder nobody has agreed to.
+      reason:
+        "A nudge always parks for the owner's confirmation, so there is no outcome to show optimistically.",
     },
     "materialize-recurring-expense": {
       excluded: true,

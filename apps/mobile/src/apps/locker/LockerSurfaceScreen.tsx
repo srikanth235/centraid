@@ -1,0 +1,118 @@
+// THE THREE SURFACES THIS SEAT CANNOT PERFORM — Import, Export and Companion.
+//
+// SURFACES.md's seat column is the whole argument: Import and Export are
+// `custodian` and Companion is the browser extension's. None of them has a
+// door on a phone, so none of them is drawn as a control. Each is drawn as
+// what it IS — its lede, its facts — plus one sentence saying where the act
+// happens, which is the origin-capabilities rule: no dead controls, and no
+// pretending an act is available because its name is in a menu.
+//
+// The facts are the shared table's (`route-copy.ts`); only the where-sentence
+// is this seat's, because where an act happens is exactly the fact that
+// differs by seat (docs/blueprint-seats.md, "search is not one behaviour").
+
+import React, { useMemo } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+
+import { Text } from "../../kit/components/NativeText";
+import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
+import type { LockerScreenProps } from "../../navigation";
+import { lockerSurfaceCopy } from "./locker-view-model";
+import LockerScreen from "./LockerScreen";
+import { useLockerVault } from "./useLockerVault";
+
+/** Which `ROUTE_TITLE` key each surface carries. */
+const ROUTE_OF = {
+  export: "export",
+  fill: "fill",
+  import: "import",
+} as const;
+
+export default function LockerSurfaceScreen({
+  navigation,
+  route,
+}: LockerScreenProps<"LockerSurface">): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const vault = useLockerVault();
+  const surface = route.params.surface;
+  const copy = lockerSurfaceCopy(surface, vault.rows.length);
+
+  return (
+    <LockerScreen
+      current="more"
+      hideBand
+      onBack={() => navigation.popTo("LockerHome", { destination: "items" })}
+      route={ROUTE_OF[surface]}
+    >
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.head}>
+          <Text accessibilityRole="header" style={styles.title}>
+            {copy.title}
+          </Text>
+          <Text
+            style={[
+              styles.lede,
+              copy.net === true
+                ? { borderColor: colors.net, color: colors.net }
+                : undefined,
+            ]}
+          >
+            {copy.lede}
+          </Text>
+        </View>
+
+        {copy.facts.map((fact) => (
+          <View key={fact.key} style={styles.fact}>
+            <Text style={styles.factKey}>{fact.key}</Text>
+            <View style={styles.factBody}>
+              {fact.value ? (
+                <Text style={styles.factValue}>{fact.value}</Text>
+              ) : null}
+              {fact.note ? (
+                <Text style={styles.factNote}>{fact.note}</Text>
+              ) : null}
+            </View>
+          </View>
+        ))}
+
+        {/* No control, and the reason in its place. */}
+        <Text style={styles.where}>{copy.where}</Text>
+      </ScrollView>
+    </LockerScreen>
+  );
+}
+
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    fact: {
+      borderTopColor: colors.line,
+      borderTopWidth: borders.hairline,
+      flexDirection: "row",
+      gap: spacing[3],
+      paddingHorizontal: spacing[4],
+      paddingVertical: spacing[3],
+    },
+    factBody: { flex: 1, gap: spacing[1], minWidth: 0 },
+    factKey: { ...t("eyebrow"), color: colors.textFaint, width: 92 },
+    factNote: { ...t("mono"), color: colors.textFaint },
+    factValue: { ...t("small"), color: colors.text },
+    head: { gap: spacing[2], padding: spacing[4] },
+    lede: {
+      ...t("small"),
+      borderRadius: radii.md,
+      color: colors.textSoft,
+    },
+    scroll: { paddingBottom: spacing[6] },
+    title: { ...t("title"), color: colors.text },
+    where: {
+      ...t("small"),
+      borderTopColor: colors.line,
+      borderTopWidth: borders.hairline,
+      color: colors.textSoft,
+      marginTop: spacing[3],
+      paddingHorizontal: spacing[4],
+      paddingTop: spacing[4],
+    },
+  });

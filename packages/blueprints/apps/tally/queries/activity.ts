@@ -4,7 +4,7 @@
  * into "You added … in …" / "Alex paid you …" sentences.
  */
 
-import { loadTally, personOf } from "./dashboard.ts";
+import { deniedPayload, loadTally, personOf } from "./dashboard.ts";
 
 export default async function activityHandler({ ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
@@ -27,10 +27,14 @@ export default async function activityHandler({ ctx }: HandlerArgs) {
       }
       rows.push({
         kind: "expense",
+        // The ids the feed needs to open the expense it names (issue #872).
+        expense_id: e.expense_id,
+        group_id: e.group_id,
         date: e.spent_on,
         description: e.description,
         category: e.category,
-        group_name: groupName.get(e.group_id) || "",
+        // A group-less 1:1 expense names no group, and says so by omission.
+        group_name: e.group_id ? (groupName.get(e.group_id) ?? "") : "",
         paid_by: e.paid_by,
         paid_by_name: personOf(data, e.paid_by).name,
         amount_minor: e.amount_minor,
@@ -52,12 +56,11 @@ export default async function activityHandler({ ctx }: HandlerArgs) {
     rows.sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return { me, currency: data.currency, activity: rows };
   } catch (error) {
-    const e = error as { code?: string; message?: string };
     return {
       me: null,
       currency: "USD",
       activity: [],
-      vaultDenied: { code: e.code, message: e.message },
+      vaultDenied: deniedPayload(error),
     };
   }
 }

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#872) an ambient script cannot be split — the first `import`/`export` turns it into a module and every global below stops being global, so all shell-client and handler contracts are restated in this one file by construction.
 // Global ambient types for the blueprint apps (TS + CSS-modules conversion).
 //
 // These are GLOBALS on purpose: handlers and page code reference `HandlerArgs`,
@@ -284,6 +285,45 @@ interface CentraidCommonsIntent {
   settledAt?: string;
 }
 
+/** The steward's answer to one Commons request (#872). Restated structurally
+ *  rather than imported — this ambient file cannot import — and kept in step
+ *  with `InlineCommonsIntentDecision` in packages/client's inline bridge. */
+interface CentraidCommonsIntentDecision {
+  intentId: string;
+  grantId: string;
+  decision: "approve" | "decline";
+  /** The intent's status AFTER the answer, read off the seat that holds it. */
+  status: CentraidCommonsIntent["status"];
+  /** `false` when the request had already settled before this answer arrived. */
+  decided: boolean;
+  reason?: string;
+  sequence?: number;
+  receiptId: string;
+}
+
+/** One staged import batch (#290), as the review surface lists it. */
+interface CentraidImportBatch {
+  batchId: string;
+  status: "draft" | "published" | "discarded";
+  createdAt: string;
+  resolvedAt: string | null;
+  summary: Record<string, number>;
+  kind: string | null;
+  label: string | null;
+}
+
+/** One staged row awaiting the owner's review. */
+interface CentraidImportRow {
+  seq: number;
+  entityType: string;
+  externalId: string;
+  disposition: "create" | "update" | "skip" | "merge-candidate";
+  note: string | null;
+  publishedEntityId: string | null;
+  /** "columns seen → what they become", already phrased by the gateway. */
+  mapping: string;
+}
+
 /** One scope's answer in a `readAll` fan-out. Errors are data, never throws. */
 type CentraidScopeRead<T> =
   | { scope: string; ok: true; data: T }
@@ -360,6 +400,54 @@ interface CentraidClient {
     intentId: string;
     scope?: string;
   }) => Promise<{ status: string; cancelled: boolean }>;
+  /**
+   * The STEWARD's answer to one member request (#872) — approve runs it on the
+   * signed rail, decline settles it `denied` with these words. Absent on a host
+   * that has no such door, and a surface must then draw NO Approve/Decline
+   * rather than a control that cannot fire.
+   *
+   * `scope` names the seat the answer is given FROM. The gateway finds the
+   * intent's own seat and refuses anyone who is not that grant's steward; a
+   * member withdrawing their own request uses `cancelCommonsIntent` instead.
+   * An answer that arrived after the request already settled comes back
+   * `decided: false` with the status that actually stands — not an error.
+   */
+  decideCommonsIntent?: (opts: {
+    intentId: string;
+    decision: "approve" | "decline";
+    reason?: string;
+    scope?: string;
+  }) => Promise<CentraidCommonsIntentDecision>;
+  /**
+   * THE STAGED-IMPORT WORKFLOW (#290): a dropped file becomes a reviewable
+   * DRAFT batch, its rows are read, and the batch is then published or
+   * discarded. Absent on hosts without the owner import plane.
+   *
+   * ONLINE-ONLY BY CONSTRUCTION — never a replica session, never the
+   * pending-write outbox: the payload is the file itself, secrets included,
+   * and a durable offline queue is exactly where it must not sit.
+   *
+   * ACTIVE-VAULT SCOPED, hence NO `scope` argument: the import plane answers
+   * for whichever vault the gateway has mounted, which is a different axis from
+   * an app's mounted scopes. An app cannot stage into a secondary audience, and
+   * the missing argument says so instead of accepting one and ignoring it.
+   */
+  stageImport?: (file: File) => Promise<{
+    batchId: string;
+    kind: string;
+    staged: Record<string, number>;
+    total: number;
+    unrouted: string[];
+  }>;
+  importBatches?: () => Promise<CentraidImportBatch[]>;
+  importRows?: (batchId: string) => Promise<CentraidImportRow[]>;
+  publishImport?: (batchId: string) => Promise<{
+    created: number;
+    updated: number;
+    skipped: number;
+    failed: unknown[];
+  }>;
+  discardImport?: (batchId: string) => Promise<{ receiptId: string }>;
   /** Place an entity into another mounted audience vault. */
   place?: (opts: {
     linkToken: string;

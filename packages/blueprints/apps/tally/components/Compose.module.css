@@ -1,0 +1,477 @@
+/* The composing surfaces' vocabulary (spec §5's field row, plus the editor,
+   the allocation table and the receipt's two columns). Geometry only — every
+   colour, face and rhythm is read from the shared token layer the shell
+   injects, and this file declares none of its own.
+
+   ONE SHAPE FOR ADD EXPENSE, SETTLE UP AND EXPORT. All three are a head, a
+   lede, the things you type, chips for everything else, and a foot that says
+   where the write will land before you press it. Drawing three editors would
+   be three chances for the key column to land on a different edge.
+
+   THE KEY COLUMN IS FIXED AND THE VALUE COLUMN TAKES THE SLACK, so a member
+   reads down one edge rather than following a ragged one. It narrows on touch
+   because 140px of key beside 390px of pane is not a column, it is a margin. */
+
+/* ---------- The editor ---------- */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  max-inline-size: 720px;
+  padding-block: var(--sp-4) var(--sp-5);
+}
+
+.head {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+  margin: 0;
+}
+
+.lede {
+  font: var(--t-body);
+  color: var(--text-soft);
+  max-inline-size: 60ch;
+  text-wrap: pretty;
+  margin: 0;
+  padding-block: var(--sp-1) var(--sp-3);
+}
+
+/* ---------- The field row (§5) ---------- */
+
+.field {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.key {
+  flex: none;
+  inline-size: 140px;
+  padding-block-start: var(--sp-2);
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+@media (pointer: coarse) {
+  .key {
+    inline-size: 104px;
+  }
+}
+
+.body {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.value {
+  font: var(--t-body);
+  color: var(--text);
+  text-wrap: pretty;
+}
+
+/* The note under a value: the rule it follows and, where relevant, the gap tag
+   a reviewer reads straight off the surface. */
+.note {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  text-wrap: pretty;
+}
+
+/* A CHIP RUN IS NEVER THE ROW'S SUBJECT. It wraps rather than scrolls inside a
+   field, because a field row already has a fixed key column beside it and a
+   second scroll axis inside one is a place chips go to hide.
+
+   It is a real `fieldset`, so the set's name is the platform's to announce.
+   The browser's own box and inline padding go: they would be a second
+   container this row does not have. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+/* The two things a member TYPES. The field is the row's subject and takes its
+   slack — this is the one `flex: 1` in the file, and it is an input. */
+.typedRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.typedKey {
+  composes: key;
+  padding-block-start: 0;
+}
+.typed {
+  flex: 1;
+  min-inline-size: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+}
+@media (pointer: coarse) {
+  .typed {
+    font: var(--t-reading);
+    letter-spacing: normal;
+  }
+}
+.typed::placeholder {
+  color: var(--text-disabled);
+}
+/* An amount is a number, so it is tabular and bidi-isolated like every other
+   number in the product. */
+.typedNum {
+  composes: typed;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+/* A short typed value inside a field row — a currency code, a rate, a date. */
+.inline {
+  inline-size: 100%;
+  max-inline-size: 220px;
+}
+
+/* ---------- The allocation table ---------- */
+
+.tableHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-block: var(--sp-4) var(--sp-1);
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+
+.allocRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: 36px;
+  border-block-end: 1px solid var(--line);
+}
+@media (pointer: coarse) {
+  .allocRow {
+    min-block-size: var(--target-min);
+  }
+}
+.allocName {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--t-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.allocValue {
+  flex: none;
+  font: var(--t-body);
+  color: var(--text);
+}
+.allocInput {
+  flex: none;
+  inline-size: 96px;
+  text-align: end;
+}
+.allocNote {
+  flex: none;
+  inline-size: 150px;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+@media (pointer: coarse) {
+  .allocNote {
+    display: none;
+  }
+}
+
+/* The reconcile line. It states the arithmetic either way — a table that
+   balances says so, and one that does not says by how much. */
+.reconcile {
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  padding-block: var(--sp-2);
+  text-wrap: pretty;
+}
+/* NOT A FILL AND NOT A WARNING BADGE: an unbalanced allocation is a fact the
+   sentence already carries, and `--net` on its type is the whole signal. */
+.reconcile[data-off="true"] {
+  color: var(--net);
+}
+
+/* ---------- The foot ---------- */
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-block-start: var(--sp-5);
+  flex-wrap: wrap;
+}
+.footCopy {
+  flex: 1;
+  min-inline-size: 200px;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  text-wrap: pretty;
+}
+/* The foot of a surface whose commit sends bytes off the device reads in the
+   `--net` register — the one place in this app that is not about owing. */
+.footCopy[data-net="true"] {
+  color: var(--net);
+}
+.footActs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* ---------- The expense's own head ---------- */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  max-inline-size: 720px;
+  padding-block: var(--sp-3) var(--sp-5);
+}
+.detailHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-block-end: var(--sp-3);
+}
+.detailFig {
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  color: var(--text);
+}
+.detailTitle {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+  margin: 0;
+}
+.detailLede {
+  font: var(--t-body);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}
+
+/* The pending strip: what a held write says on the surface it belongs to,
+   with the verbs the outbox permits. An outline, never a fill. */
+.strip {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  margin-block-end: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  flex-wrap: wrap;
+}
+.stripCopy {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}
+
+/* ---------- Revisions ---------- */
+
+.revision {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.revWhen {
+  flex: none;
+  inline-size: 140px;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+@media (pointer: coarse) {
+  .revWhen {
+    inline-size: 96px;
+  }
+}
+.revWhat {
+  flex: 1;
+  min-inline-size: 160px;
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}
+.revActs {
+  flex: none;
+}
+
+/* ---------- The receipt ---------- */
+
+.receiptBody {
+  display: flex;
+  gap: var(--sp-4);
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.shot {
+  flex: none;
+  inline-size: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.shotImage {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+}
+.lines {
+  flex: 1;
+  min-inline-size: 260px;
+  display: flex;
+  flex-direction: column;
+}
+.lineRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: 40px;
+  padding-block: var(--sp-1);
+  border-block-end: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+@media (pointer: coarse) {
+  .lineRow {
+    min-block-size: var(--target-min);
+  }
+}
+.lineTitle {
+  flex: 1;
+  min-inline-size: 120px;
+  font: var(--t-body);
+  color: var(--text);
+}
+.lineAmount {
+  flex: none;
+  font: var(--t-body);
+  color: var(--text);
+}
+.lineWho {
+  flex: none;
+  display: flex;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+/* The two tables Add expense grew with the last three divisions. Each is a
+   stack of the row shapes already above it, so a payer row and an allocation
+   row line their columns up rather than each finding their own edge. */
+.payerTable,
+.lineTable {
+  flex: 1;
+  min-inline-size: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  align-items: flex-start;
+}
+/* Taking a line out is a quiet verb on the row it belongs to, never a filled
+   control: the row is the subject, and removing it is an aside. */
+.lineDrop {
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+/* ---------- The simplification proposal ---------- */
+
+.proposal {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: 36px;
+  border-block-end: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.proposalWho {
+  flex: 1;
+  min-inline-size: 120px;
+  font: var(--t-body);
+  color: var(--text);
+}
+.proposalAmount {
+  flex: none;
+  font: var(--t-label-on);
+  color: var(--text);
+}
+.proposalWhy {
+  flex: none;
+  inline-size: 220px;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+@media (pointer: coarse) {
+  .proposalWhy {
+    display: none;
+  }
+}
+
+/* ---------- The small composing sheets ---------- */
+
+.sheetForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-block: var(--sp-2);
+}
+.sheetLabel {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+.sheetBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* Numbers are tabular and bidi-isolated wherever they appear, including inside
+   a sentence — `today · £84.20` reorders under RTL without the isolate. */
+.num {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+}

@@ -2,6 +2,12 @@
 
 ## Open
 
+- **`packages/blueprints/index.json` colorKeys disagree with the apps' own hues.** The
+  catalog lists Locker as `indigo` and Tally as `forest`, while the v17 handoff and both
+  `app.json` files say rose and indigo respectively. Pre-existing before #872 (that change
+  set touched only the `version` lines of those stanzas); whichever surface reads the
+  catalog colour draws the wrong hue. Surfaced by the #872 receipt audit.
+
 - **Banner-heavy modules are a size smell, not a comment smell.** The files
   that need many section banners to stay navigable —
   `packages/server/src/engine/handlers/dispatcher.ts`,
@@ -255,6 +261,53 @@
   as a longevity observation rather than a defect: the two tables should
   either both gain a purge or the design note should say why unbounded growth
   is acceptable. Not pinned — no invariant is currently violated.
+
+- **A composite write-marker the demo purge can never address.**
+  `add_receipt_expense` stamps
+  `ctx.wrote("tally.expense_line_allocation", "<lineId>:<partyId>")` — a joined
+  key, where every other marker is a single primary-key value. The demo-purge
+  walk resolves a marker by asking `pkColumn` for the table's key and deleting
+  where it equals the id, so a composite can never match a row and those
+  allocations are simply invisible to it. Harmless today: allocations are
+  children of a line whose own marker IS addressable, and nothing in the demo
+  set purges by that path. It is recorded because it is the same hazard the
+  #873 payer work deliberately avoided (`tally_expense_payer` rows are written
+  under the expense's own id, not a `expense:party` pair), so the two should be
+  made consistent in one deliberate pass rather than each discovered again.
+  Surfaced during the #873 Tally backend slice. Not pinned — no invariant is
+  currently violated.
+
+- **A new sealed column is only draft-band-safe if two lists agree.**
+  `SEALED_COLUMNS` in `packages/vault/src/schema/sealed.ts` says which cells
+  are ciphertext at rest; `SEALED_PAYLOAD_FIELDS` says which keys the import
+  staging plane must seal inside a `sync_import_row.payload_json`. They are
+  separate registries with no structural link, so a column added to the first
+  and not the second is sealed everywhere durable EXCEPT the draft band, and
+  nothing said so. #873 hit exactly that: Locker's three sidecar columns
+  (`item_field.value_sealed`, `item_history.password`,
+  `item_passkey.private_key`) landed in `SEALED_COLUMNS` alone, and a custom
+  field's secret, a previous password and a passkey's key material would have
+  sat in a draft row in the clear. Caught PRE-MERGE by the T3 canary, which
+  stages one row per `SEALED_COLUMNS` entry and now fails when the two lists
+  disagree, and fixed in the same change. Recorded as a gap CLASS rather than a
+  fixed bug: the canary catches the omission for `SEALED_PAYLOAD_FIELDS`, but
+  the same "two registries, one implied invariant" shape recurs wherever a
+  sealed column needs a second declaration, and the durable fix is to derive
+  the payload list from the column list rather than to keep them in step by
+  hand.
+
+- **The #825 Atlas grant-plane exclusion has outlived its reason.**
+  `atlasCensus` skips `share.grant` and `share.fulfillment` on first paint, and
+  the comment at the `continue` said why plainly: two more `COUNT(*)` would
+  push the first-paint SQL budget past 140. #873 batched the census counts into
+  one compound statement per file, so registering a table costs a scan but
+  never a statement, and the budget fell 140 → 13 — which retires that
+  rationale entirely. The census could honestly count the grant plane again for
+  no statement cost. It was NOT re-included here, because whether Atlas should
+  show grants as a data kind is a payload-shape and product question (the grant
+  surfaces already answer "how many grants", and Atlas showing a second count
+  could disagree with them), not a budget one. Wants its own issue, with the
+  budget argument no longer available on either side.
 
 ## Resolved
 
