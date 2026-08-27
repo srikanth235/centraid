@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-26T13:31:40.563Z",
-  "passed": 1355,
+  "generatedAt": "2026-08-27T05:25:27.132Z",
+  "passed": 1405,
   "failed": 2,
   "skipped": 0,
   "skippedTests": 37,
@@ -86,20 +86,20 @@
   "unmappedFailed": [],
   "unmatchedOwners": [],
   "appSeatCells": {
-    "declared": 20,
+    "declared": 22,
     "unowned": 0,
-    "skipped": 4
+    "skipped": 2
   },
   "appStateCells": {
-    "declared": 40,
-    "unowned": 9,
-    "skipped": 7
+    "declared": 51,
+    "unowned": 5,
+    "skipped": 0
   },
   "appScenarioCells": {
-    "owned": 72,
+    "owned": 92,
     "gap": 0,
     "bug": 0,
-    "skipped": 1
+    "skipped": 0
   },
   "cellsSolid": 42,
   "cellsPartial": 94,
@@ -284,9 +284,9 @@
     "failed": 0
   },
   "journeyCounts": {
-    "journeys": 17,
+    "journeys": 18,
     "passed": 0,
-    "missing": 17,
+    "missing": 18,
     "unbudgeted": 6
   },
   "consentLedgerCounts": {
