@@ -1,7 +1,4 @@
-// App-facing formatters. Each one lowers a shared contract from the token
-// layer (`../format.js`, `../identity.js`) into the shape blueprint app code
-// asks for — an empty string rather than a placeholder, minor units rather
-// than a float, the viewer's local day rather than the UTC slice.
+// App-facing formatters: token-layer contracts in the shape blueprint code asks for.
 
 import { formatBytes, formatRelativeTime } from "../format.js";
 

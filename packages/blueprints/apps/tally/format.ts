@@ -8,9 +8,8 @@
 // sign means.
 //
 // NOTHING HERE DERIVES A BALANCE. Every `*_minor` argument arrives already
-// folded by `queries/dashboard.ts`'s one engine; these functions choose a
-// word, an absolute value and a tone. The moment a function in this file
-// started summing shares, two balance engines would exist.
+// folded by `queries/dashboard.ts`; these functions choose a word, an absolute
+// value and a tone. Summing shares here would be a second engine.
 import { fmtMoney, identityHueKey } from "@centraid/design";
 
 import type { Role } from "./types.ts";

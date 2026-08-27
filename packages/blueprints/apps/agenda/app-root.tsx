@@ -577,10 +577,8 @@ export function Root({
     );
   }
 
-  // Renders only where there is something to declare. Offline is the host
-  // `data-gateway-status` stamp via `libraryReachability` (#864), never the
-  // browser online flag — a desktop with no network still reaches the local
-  // gateway. `readFailedState` still takes precedence below.
+  // Offline is the host `data-gateway-status` stamp (#864), never the browser
+  // online flag. `readFailedState` still takes precedence below.
   const offline =
     libraryReachability({
       hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,

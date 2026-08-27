@@ -397,9 +397,6 @@ export function useComposeState(seed: { today: string }): ComposeState {
   const revisions =
     history && history.forExpense === expenseId ? history.rows : null;
 
-  // Stable identity: `app-root` puts `compose` in `go` / frame-effect deps, so
-  // a fresh object each render re-contributes the bar and the host re-renders
-  // (React #185 on the desktop e2e day-one journey).
   return useMemo(
     () => ({
       bagRef,

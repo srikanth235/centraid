@@ -170,10 +170,6 @@ describe("Tally’s honest states", () => {
    * against by luck.
    */
   test("contributing the bar does not re-enter the room", async () => {
-    // The shell's real frame store re-renders the host on `setAppBar`. A new
-    // `compose` / `acts` / `go` identity each paint re-contributes the bar and
-    // maxes out the update depth (desktop e2e, React #185). Stub frames hide
-    // that, so this host bumps on contribution the way the shell does.
     (window as unknown as { centraid: unknown }).centraid = {
       read: ({ query }: { query: string }) =>
         query === "dashboard"

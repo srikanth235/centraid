@@ -30,14 +30,7 @@ export function formatBytes(value: number): string {
   return `${size.toFixed(1)} ${units[unit] ?? "KB"}`;
 }
 
-/**
- * Minor units → localized currency string ("€12.34"), tolerant of gaps.
- *
- * Lives in the token layer (Expo-reachable) rather than
- * `@centraid/design/elements`, which has no `react-native` condition.
- * Keep the same contract as `@centraid/client` `formatCurrencyMinor` so web
- * Home, Tally, and Capture never diverge on invalid ISO codes.
- */
+/** Minor units → localized currency; Expo-reachable (same contract as client). */
 export function fmtMoney(
   minor: number | null | undefined,
   currency?: string

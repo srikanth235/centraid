@@ -160,10 +160,6 @@ test("Tasks files and completes a task on the custodian seat, and the Logbook su
     const box = taskRow.locator("button[aria-pressed]").first();
     await expect(box).toHaveAttribute("aria-pressed", "false");
     await box.click();
-    // Complete is fire-and-forget: the row can leave the board on the pending
-    // overlay before the replica has the new rowVersion. Wait for the outcome
-    // line so the seat write below does not OCC-conflict against that in-flight
-    // complete (same shape as notes.spec.ts).
     await expect(statusLine(page)).toContainText("Done", { timeout: 30_000 });
 
     // A completed task leaves the board and appears in the Logbook, pressed.
@@ -174,11 +170,7 @@ test("Tasks files and completes a task on the custodian seat, and the Logbook su
       page.getByRole("button", { name: TASK_TITLE, exact: true }).first()
     ).toHaveAttribute("aria-pressed", "true");
 
-    // THE SEAT ASSERTION, stated directly. A second write through the same door
-    // the app's own handlers use must come back `executed` — never `queued`,
-    // never `in-flight`. This is the one fact that distinguishes this file from
-    // its viewer-seat mirror. Poll with a fresh intent id: a first `conflict`
-    // on a frozen id is durable and would never become `executed`.
+    // THE SEAT ASSERTION: `executed`, never `queued`. Fresh intent id per poll.
     await expect
       .poll(
         () =>

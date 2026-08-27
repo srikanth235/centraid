@@ -61,6 +61,18 @@ the source-scan no longer sees `navigator.onLine`.
 One receipt for this umbrella; no child issues. #858, #870, #675 stay as
 signal, not children.
 
+## User impact
+
+Opening Tally on a desk no longer crashes the room (the v17 tree was
+re-contributing the app bar until React hit maximum update depth). Completing
+a task and then writing through the same door no longer loses the seat
+assertion to an in-flight complete.
+
+First-run: start fresh, clear the sample week, open Tally — Balances shows
+day one instead of the error boundary. Evidence:
+`artifacts/e2e/ui-impact/desktop-tasks-custodian.png`, emitted by
+`apps/desktop/tests/e2e/tasks.spec.ts`.
+
 ## Decisions
 
 - **Do not add a `react-native` condition to `@centraid/design/elements`.** The
