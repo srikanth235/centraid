@@ -121,9 +121,14 @@ test("Locker refuses the viewer seat with the manifest-declared wall", async ({
   // lock screen dialog must never appear on this seat.
   const refusal = page.getByTestId("inline-app-seat-refusal");
   await expect(refusal).toBeVisible({ timeout: 30_000 });
-  await expect(refusal).toContainText("Locker isn’t available here");
   await expect(refusal).toContainText(
-    "Locker opens on a paired device, not in a browser — for now."
+    "Locker does not open on a shared browser"
+  );
+  await expect(refusal).toContainText(
+    "A shared browser cannot hold the user-presence boundary this app depends on, so Locker refuses the seat outright."
+  );
+  await expect(refusal).toContainText(
+    "Use the desktop app beside your gateway, or your phone."
   );
   await expect(refusal.getByRole("button")).toHaveCount(0);
   await expect(page.getByText("Protect your Locker")).toHaveCount(0);

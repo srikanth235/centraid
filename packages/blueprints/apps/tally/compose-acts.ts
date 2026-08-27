@@ -1,25 +1,16 @@
 // THE ACTS — every write this app can take, wired to the one door.
 //
-// Separated from `compose-state.ts` because they are two different concerns
-// with two different lifetimes: the bag is what a member has typed, and this
-// is what happens when they press the thing. Keeping them apart is also what
-// lets the orchestrator hand the composing routes the group id they need
-// BEFORE the ledger read that answers it — the bag is built first, the reads
-// stand on it, and the acts close over both.
+// Separated from `compose-state.ts`: the bag is what a member has typed; this
+// is what happens when they press. The orchestrator can hand composing routes
+// the group id they need before the ledger read that answers it.
 //
-// UNDO ONLY WHERE A TRUE REVERSE WRITE EXISTS, and this file is where that
-// rule is actually enforced. Three pairs qualify: trash ↔ restore, an edit ↔
-// the vault's own `undo-expense` snapshot, and pause ↔ resume, which are the
-// same write with the other word. Adding an expense, settling up, minting a
-// friend, skipping an occurrence and materialising one all state their outcome
-// and offer nothing to press.
+// UNDO ONLY WHERE A TRUE REVERSE WRITE EXISTS. Three pairs: trash ↔ restore,
+// an edit ↔ `undo-expense`, pause ↔ resume. Adding, settling, minting a
+// friend, skipping and materialising state their outcome and offer no reverse.
 //
 // A SURFACE STAYS STANDING WHEN ITS WRITE DOES NOT LAND. `ledger.write`
-// answers `false` on a refusal and puts the vault's own reason on the status
-// line; a commit that navigated away regardless would lose what the member
-// typed and leave them reading a refusal about a screen they can no longer
-// see.
-import { useCallback } from "react";
+// answers `false` on a refusal; navigating away would lose the typed draft.
+import { useCallback, useMemo } from "react";
 
 import { COMPOSE_OUTCOMES } from "./compose-copy.ts";
 import type { ComposeState } from "./compose-state.ts";
@@ -104,7 +95,10 @@ export function useComposeActs(args: {
   const { compose, ledger, members, currency, go, openGroupId } = args;
   const act = ledger.write;
   const bagRef = compose.bagRef;
-  const participants = members.map((member) => member.party_id);
+  const participants = useMemo(
+    () => members.map((member) => member.party_id),
+    [members]
+  );
 
   const openEditFrom = useCallback(
     (entry: LedgerEntry) => compose.openEdit(draftFromEntry(entry)),
@@ -464,20 +458,38 @@ export function useComposeActs(args: {
     [act, compose, openGroupId]
   );
 
-  return {
-    openEditFrom,
-    commitExpense,
-    commitSettle,
-    commitSheet,
-    restore,
-    undo,
-    pauseTemplate,
-    skipTemplate,
-    materialise,
-    contribVerb,
-    removeMember,
-    reallocate,
-    setSimplify,
-    nudge,
-  };
+  return useMemo(
+    () => ({
+      openEditFrom,
+      commitExpense,
+      commitSettle,
+      commitSheet,
+      restore,
+      undo,
+      pauseTemplate,
+      skipTemplate,
+      materialise,
+      contribVerb,
+      removeMember,
+      reallocate,
+      setSimplify,
+      nudge,
+    }),
+    [
+      openEditFrom,
+      commitExpense,
+      commitSettle,
+      commitSheet,
+      restore,
+      undo,
+      pauseTemplate,
+      skipTemplate,
+      materialise,
+      contribVerb,
+      removeMember,
+      reallocate,
+      setSimplify,
+      nudge,
+    ]
+  );
 }

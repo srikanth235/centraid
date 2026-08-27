@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { act, createElement } from "react";
+import { act, createElement, useMemo, useReducer } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -169,6 +169,42 @@ describe("Tally’s honest states", () => {
    * updates it produces are act-covered rather than warned about and asserted
    * against by luck.
    */
+  test("contributing the bar does not re-enter the room", async () => {
+    (window as unknown as { centraid: unknown }).centraid = {
+      read: ({ query }: { query: string }) =>
+        query === "dashboard"
+          ? Promise.resolve(BARE)
+          : Promise.resolve({ me: "me", currency: "GBP", activity: [] }),
+      commonsIntents: () => Promise.resolve([]),
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    reactRoot = createRoot(container);
+    function Host() {
+      const [, bump] = useReducer((n: number) => n + 1, 0);
+      const frame = useMemo<InlineFrame>(
+        () => ({
+          setAppBar: () => bump(),
+          setStatus: () => undefined,
+          clearStatus: () => undefined,
+          claimBand: () => undefined,
+        }),
+        []
+      );
+      return createElement(Root, {
+        rootRef: () => undefined,
+        frame,
+      });
+    }
+    await act(async () => {
+      reactRoot?.render(createElement(Host));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+    expect(container.textContent).toContain(DAY_ONE);
+  });
+
   async function settle(fire: () => void): Promise<void> {
     await act(async () => {
       fire();

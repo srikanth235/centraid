@@ -30,6 +30,26 @@ export function formatBytes(value: number): string {
   return `${size.toFixed(1)} ${units[unit] ?? "KB"}`;
 }
 
+/** Minor units → localized currency; Expo-reachable (same contract as client). */
+export function fmtMoney(
+  minor: number | null | undefined,
+  currency?: string
+): string {
+  const value = Number(minor ?? 0) / 100;
+  const code =
+    typeof currency === "string" && /^[A-Za-z]{3}$/u.test(currency)
+      ? currency.toUpperCase()
+      : "USD";
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+    }).format(value);
+  } catch {
+    return `${value.toFixed(2)} ${code}`.trim();
+  }
+}
+
 /**
  * The viewer's local YYYY-MM-DD for an instant — never the UTC slice.
  *

@@ -2,23 +2,23 @@
 import { existsSync as _v } from "node:fs";
 import { readFile as c } from "node:fs/promises";
 import w from "node:path";
-import H from "node:path";
-var d = H.resolve(import.meta.dirname, ".."),
+import G from "node:path";
+var o = G.resolve(import.meta.dirname, ".."),
   i = "__centraidAutomationRuntimeDir";
 function t() {
   let v = globalThis[i];
-  if (typeof v === "string" && v.length > 0) return H.resolve(v);
+  if (typeof v === "string" && v.length > 0) return G.resolve(v);
   if (process.env?.CENTRAID_AUTOMATION_RUNTIME_DIR)
-    return H.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
-  return H.join(d, "runtime");
+    return G.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
+  return G.join(o, "runtime");
 }
-var y = t(),
-  P = H.join(y, "models");
-import { existsSync as f, readFileSync as a, statSync as e } from "node:fs";
+var L = t(),
+  P = G.join(L, "models");
+import { existsSync as N, readFileSync as a, statSync as e } from "node:fs";
 import M from "node:path";
 import { pathToFileURL as vv } from "node:url";
-var u;
-class F extends Error {
+var U;
+class C extends Error {
   constructor(v, B) {
     super(
       `Automation model runtime dependency "${v}" is not installed. ` +
@@ -29,23 +29,23 @@ class F extends Error {
     this.name = "RuntimeNotInstalledError";
   }
 }
-function S(v, B = y) {
+function S(v, B = L) {
   let q = M.join(B, "node_modules");
-  if (!f(q)) throw new F(v);
+  if (!N(q)) throw new C(v);
   let J = M.join(q, ...v.split("/"));
   try {
     let $ = b(J);
     if ($ === null) throw Error(`no entry point in ${J}`);
     return $;
   } catch ($) {
-    throw new F(v, $);
+    throw new C(v, $);
   }
 }
 function b(v, B = 0) {
   let q = M.join(v, "package.json"),
-    J = f(q) ? JSON.parse(a(q, "utf8")) : {},
+    J = N(q) ? JSON.parse(a(q, "utf8")) : {},
     $ = [
-      ...N($v(J.exports)),
+      ...y($v(J.exports)),
       ...(typeof J.main === "string" ? [J.main] : []),
       "index.js",
     ];
@@ -56,16 +56,16 @@ function b(v, B = 0) {
   return null;
 }
 function qv(v, B) {
-  let q = I(v);
+  let q = E(v);
   if (q?.isFile()) return v;
   if (q?.isDirectory()) return B >= 4 ? null : b(v, B + 1);
   for (let J of [".js", ".json", ".node"]) {
     let $ = `${v}${J}`;
-    if (I($)?.isFile()) return $;
+    if (E($)?.isFile()) return $;
   }
   return null;
 }
-function I(v) {
+function E(v) {
   try {
     return e(v);
   } catch {
@@ -78,27 +78,27 @@ function $v(v) {
   let B = v;
   return "." in B ? B["."] : B;
 }
-function N(v, B = 0) {
+function y(v, B = 0) {
   if (typeof v === "string") return [v];
   if (B > 8 || v === null || typeof v !== "object") return [];
-  if (Array.isArray(v)) return v.flatMap(($) => N($, B + 1));
+  if (Array.isArray(v)) return v.flatMap(($) => y($, B + 1));
   let q = v,
     J = [];
   for (let $ of ["require", "node", "default"])
-    if ($ in q) J.push(...N(q[$], B + 1));
+    if ($ in q) J.push(...y(q[$], B + 1));
   return J;
 }
 async function z() {
-  if (u) return u;
+  if (U) return U;
   let v = S("onnxruntime-node");
-  return ((u = await import(vv(v).href)), u);
+  return ((U = await import(vv(v).href)), U);
 }
 var A;
 async function x(v) {
   A ??= new Map();
   let B = A.get(v);
   if (B) return B;
-  if (!f(v)) throw new F(v);
+  if (!N(v)) throw new C(v);
   let q = z().then((J) => J.InferenceSession.create(v));
   A.set(v, q);
   try {
@@ -177,7 +177,7 @@ function m(v) {
   function _(K) {
     let Y = new TextEncoder().encode(K),
       Z = "";
-    for (let U of Y) Z += B.get(U) ?? "";
+    for (let H of Y) Z += B.get(H) ?? "";
     return Z;
   }
   function Q(K) {
@@ -188,19 +188,19 @@ function m(v) {
   }
   function X(K, Y = Wv) {
     let Z = Vv(K),
-      U = [];
-    for (let r of Z) {
-      let o = _(r);
-      for (let s of Q(o)) {
-        let E = v.vocab.get(s);
-        if (E !== void 0) U.push(E);
+      H = [];
+    for (let h of Z) {
+      let s = _(h);
+      for (let d of Q(s)) {
+        let I = v.vocab.get(d);
+        if (I !== void 0) H.push(I);
       }
     }
-    let h = Y - 2,
-      n = U.slice(0, Math.max(0, h)),
-      L = [W, ...n, j];
-    while (L.length < Y) L.push(0);
-    return L;
+    let n = Y - 2,
+      r = H.slice(0, Math.max(0, n)),
+      f = [W, ...r, j];
+    while (f.length < Y) f.push(0);
+    return f;
   }
   return { encode: X };
 }
@@ -217,7 +217,7 @@ function D(v = P) {
     (q) => _v(w.join(B, q))
   );
 }
-function Gv(v) {
+function uv(v) {
   let B = [];
   for (let q of v.split(`
 `)) {
@@ -228,21 +228,21 @@ function Gv(v) {
   }
   return B;
 }
-var C;
-async function Hv() {
-  if (C) return C;
+var F;
+async function Gv() {
+  if (F) return F;
   let [v, B] = await Promise.all([c(Xv, "utf8"), c(Zv, "utf8")]),
     q = JSON.parse(v);
-  return ((C = m({ vocab: new Map(Object.entries(q)), merges: Gv(B) })), C);
+  return ((F = m({ vocab: new Map(Object.entries(q)), merges: uv(B) })), F);
 }
-function Uv(v) {
+function Hv(v) {
   let B = 0;
   for (let J of v) B += J * J;
   let q = Math.sqrt(B);
   if (q === 0) return Array.from(v);
   return Array.from(v, (J) => J / q);
 }
-function uv(v, B) {
+function Uv(v, B) {
   let q = B[0],
     J = q ? v[q] : void 0;
   if (!J || !(J.data instanceof Float32Array))
@@ -251,7 +251,7 @@ function uv(v, B) {
 }
 async function R(v) {
   try {
-    let q = (await Hv()).encode(v.text, wv),
+    let q = (await Gv()).encode(v.text, wv),
       J = await z(),
       $ = await x(jv),
       W = {
@@ -262,17 +262,17 @@ async function R(v) {
         ),
       },
       j = await $.run(W),
-      _ = Uv(uv(j, $.outputNames));
+      _ = Hv(Uv(j, $.outputNames));
     return { id: v.id, vector: _ };
   } catch (B) {
     return { id: v.id, error: B instanceof Error ? B.message : String(B) };
   }
 }
 var k = 16,
-  G = "dpv:ServiceProvision",
+  u = "dpv:ServiceProvision",
   T = R,
   p = D;
-function hv(v) {
+function nv(v) {
   ((T = v?.infer ?? R), (p = v?.weightsPresent ?? D));
 }
 function Av() {
@@ -292,7 +292,7 @@ async function Mv(v, B) {
       where: [{ column: "variant", op: "in", value: ["text", "transcript"] }],
       orderBy: { column: "derivative_id", dir: "desc" },
       limit: 1,
-      purpose: G,
+      purpose: u,
     })
   ).rows?.[0];
   if (!J) return "";
@@ -303,11 +303,11 @@ async function Mv(v, B) {
       { column: "variant", op: "eq", value: "embedding" },
     ],
     limit: 1,
-    purpose: G,
+    purpose: u,
   });
   return l($.rows?.[0], B, J.derivative_id) ? J.derivative_id : "";
 }
-async function Fv({ ctx: v, log: B }) {
+async function Cv({ ctx: v, log: B }) {
   let q = Av();
   if (!q)
     return { summary: "text embedding skipped — model assets unavailable" };
@@ -335,7 +335,7 @@ async function Fv({ ctx: v, log: B }) {
       ],
       orderBy: { column: "derivative_id", dir: "asc" },
       limit: k,
-      purpose: G,
+      purpose: u,
     }),
     W = 0,
     j = 0;
@@ -347,7 +347,7 @@ async function Fv({ ctx: v, log: B }) {
         { column: "variant", op: "eq", value: "embedding" },
       ],
       limit: 1,
-      purpose: G,
+      purpose: u,
     });
     if (l(X.rows?.[0], q, Q.derivative_id)) {
       j += 1;
@@ -357,7 +357,7 @@ async function Fv({ ctx: v, log: B }) {
       contentId: Q.content_id,
       variant: Q.variant,
       maxBytes: 1048576,
-      purpose: G,
+      purpose: u,
     });
     if (K?.status !== "ok" || K.kind !== "text")
       throw Error(`content ${Q.content_id}: ${Q.variant} text is unavailable`);
@@ -376,7 +376,7 @@ async function Fv({ ctx: v, log: B }) {
         capability: "embed-text",
         source_version: Q.derivative_id,
       },
-      purpose: G,
+      purpose: u,
     }),
       (W += 1));
   }
@@ -392,4 +392,4 @@ async function Fv({ ctx: v, log: B }) {
     },
   };
 }
-export { hv as setEmbedTextRuntimeForTests, Fv as default };
+export { nv as setEmbedTextRuntimeForTests, Cv as default };

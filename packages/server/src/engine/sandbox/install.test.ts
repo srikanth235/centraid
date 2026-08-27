@@ -21,9 +21,14 @@ describe(installWorkerSandbox, () => {
   test("captures the host fetch before revoking it", () => {
     resetWorkerSandboxForTests();
     const before = globalThis.fetch;
-    const handle = installWorkerSandbox(appHandlerPolicy());
+    const argv = [...process.argv];
+    const handle = installWorkerSandbox(appHandlerPolicy(), {
+      redactLaunchArgs: true,
+    });
     expect(handle.hostFetch).toBe(before);
     expect(handle.policy.lane).toBe("app-handler");
+    expect(process.argv).toStrictEqual(argv.slice(0, 1));
+    expect(process.execArgv).toStrictEqual([]);
   });
 
   test("revokes ambient network authority in a denied lane", () => {

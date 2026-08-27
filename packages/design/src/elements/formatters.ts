@@ -1,33 +1,8 @@
-// App-facing formatters. Each one lowers a shared contract from the token
-// layer (`../format.js`, `../identity.js`) into the shape blueprint app code
-// asks for — an empty string rather than a placeholder, minor units rather
-// than a float, the viewer's local day rather than the UTC slice.
+// App-facing formatters: token-layer contracts in the shape blueprint code asks for.
 
 import { formatBytes, formatRelativeTime } from "../format.js";
 
-export { localDayKey } from "../format.js";
-
-/** Minor units → localized currency string ("€12.34"), tolerant of gaps. */
-export function fmtMoney(
-  minor: number | null | undefined,
-  currency?: string
-): string {
-  // Keep the same contract as @centraid/client formatCurrencyMinor so web
-  // Home, Tally, and Capture never diverge on invalid ISO codes.
-  const value = Number(minor ?? 0) / 100;
-  const code =
-    typeof currency === "string" && /^[A-Za-z]{3}$/u.test(currency)
-      ? currency.toUpperCase()
-      : "USD";
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: code,
-    }).format(value);
-  } catch {
-    return `${value.toFixed(2)} ${code}`.trim();
-  }
-}
+export { fmtMoney, localDayKey } from "../format.js";
 
 /** "5m" / "3h" / "2d" — the notifications-style relative timestamp. */
 export function relTime(iso: string): string {
