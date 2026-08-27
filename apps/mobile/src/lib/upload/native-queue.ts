@@ -6,6 +6,7 @@
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { OpSqliteDriver } from "../replica/op-sqlite-driver";
+import type { PendingUploadGroup } from "../replica/storage-accounting";
 import { webCryptoUploadCrypto } from "./crypto";
 import type { UploadCrypto } from "./crypto";
 import { enqueueLocalFile } from "./enqueue";
@@ -28,7 +29,7 @@ import type { DrainSummary, UploadPolicy } from "./uploader";
  * `store.ts` for why. Production places it in the native durable,
  * backup-excluded replica directory so OS cache cleanup cannot evict intents.
  */
-const UPLOAD_DB_NAME = "centraid-uploads.db";
+export const UPLOAD_DB_NAME = "centraid-uploads.db";
 
 export interface UploadQueueOptions {
   gatewayBaseUrl: string;
@@ -110,6 +111,11 @@ export class UploadQueue {
 
   pending(): UploadItem[] {
     return this.store.pending();
+  }
+
+  /** Per-target-vault pending bytes/counts, aggregated in SQL — no rows. */
+  pendingStorageGroups(): PendingUploadGroup[] {
+    return this.store.pendingStorageGroups();
   }
 
   /** Ledger lookup by content sha — the F11 probe and the F6 outcome check. */

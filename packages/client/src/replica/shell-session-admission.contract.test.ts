@@ -350,21 +350,142 @@ describe("shell-session-admission", () => {
       expect(fetcher).toHaveBeenCalledTimes(2);
       await session.close();
     });
+
+    test("a severed gateway settles the writes behind the failed head, then drains each exactly once", async () => {
+      let severed = true;
+      const outbox: ReplicaIntent[] = [];
+      const executed: string[] = [];
+      const find = (intentId: string): ReplicaIntent => {
+        const intent = outbox.find((item) => item.intentId === intentId);
+        if (!intent) throw new Error(`Unknown intent ${intentId}`);
+        return intent;
+      };
+      const replica = coordinator({
+        // A durable, ordered outbox: the head keeps its place across a failed
+        // attempt, which is what leaves later writes unclaimed.
+        enqueue: vi.fn<ShellReplicaCoordinator["enqueue"]>(async (input) => {
+          const intent: ReplicaIntent = {
+            ...queuedIntent(input.intentId ?? "unnamed"),
+            action: input.action,
+            input: input.input,
+            createdOrder: outbox.length + 1,
+          };
+          outbox.push(intent);
+          return { ...intent };
+        }),
+        claimNextIntent: vi.fn<ShellReplicaCoordinator["claimNextIntent"]>(
+          async () => {
+            const next = outbox.find((intent) => intent.state === "queued");
+            if (!next) return undefined;
+            next.state = "sending";
+            next.attempts += 1;
+            return { ...next };
+          }
+        ),
+        markIntentTransportFailed: vi.fn<
+          ShellReplicaCoordinator["markIntentTransportFailed"]
+        >(async (intentId, reason) => {
+          const intent = find(intentId);
+          intent.state = "queued";
+          intent.reason = reason;
+          return { ...intent };
+        }),
+        markIntentAwaitingChange: vi.fn<
+          ShellReplicaCoordinator["markIntentAwaitingChange"]
+        >(async (intentId) => {
+          const intent = find(intentId);
+          intent.state = "awaiting-change";
+          return { ...intent };
+        }),
+      });
+      const fetcher = vi.fn<ReplicaFetcher>((_baseUrl, _pathname, init) => {
+        // The harness severs the transport, not `navigator.onLine`: the tab
+        // still believes it is online, so every write takes the drain path.
+        if (severed) throw new TypeError("Harness gateway is unreachable");
+        const intentId = (JSON.parse(String(init.body)) as { intentId: string })
+          .intentId;
+        executed.push(intentId);
+        return Promise.resolve(responseFor(intentId, "executed"));
+      });
+      const eventTarget = new EventTarget();
+      const session = new ReplicaShellSession(
+        { baseUrl: "https://gateway.example", vaultId: "vault" },
+        replica,
+        { fetcher, eventTarget, isOnline: () => true, retryDelayMs: 60_000 }
+      );
+      await session.start({
+        mode: "memory",
+        cursor: { epoch: "e", seq: 1 },
+        schemaEpoch: "s",
+      });
+
+      const queuedReason =
+        "saved locally; retrying when the gateway is reachable";
+      const both = Promise.all([
+        session.write("todos", {
+          intentId: "rename-first",
+          action: "rename",
+          input: { title: "First" },
+        }),
+        session.write("todos", {
+          intentId: "rename-second",
+          action: "rename",
+          input: { title: "Second" },
+        }),
+      ]);
+
+      await expect(settledWithinTicks(both)).resolves.toStrictEqual([
+        { intentId: "rename-first", status: "queued", reason: queuedReason },
+        { intentId: "rename-second", status: "queued", reason: queuedReason },
+      ]);
+      expect(executed).toStrictEqual([]);
+
+      severed = false;
+      eventTarget.dispatchEvent(new Event("online"));
+
+      await vi.waitFor(() =>
+        expect(executed).toStrictEqual(["rename-first", "rename-second"])
+      );
+      expect(outbox.map((intent) => intent.state)).toStrictEqual([
+        "awaiting-change",
+        "awaiting-change",
+      ]);
+      await session.close();
+    });
   });
 });
 
 function responseFor(
   intentId: string,
-  status: "parked",
-  reason: string
+  status: "parked" | "executed",
+  reason?: string
 ): Response {
   return new Response(
     JSON.stringify({
       protocolVersion: 1,
-      outcome: { intentId, status, reason },
+      outcome: { intentId, status, ...(reason ? { reason } : {}) },
     }),
     { status: 200, headers: { "content-type": "application/json" } }
   );
+}
+
+/**
+ * Bound the wait in ticks, not seconds: the #846 measurement waited 30s for a
+ * settlement that never came, and a slow settlement is the same defect.
+ */
+async function settledWithinTicks<T>(
+  work: Promise<T>,
+  turns = 3
+): Promise<T | "never-settled"> {
+  const sentinel = (async () => {
+    for (let turn = 0; turn < turns; turn += 1)
+      // oxlint-disable-next-line no-await-in-loop -- (#880) turns are sequential by definition
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    return "never-settled" as const;
+  })();
+  return Promise.race([work, sentinel]);
 }
 
 function deferred<T>(): {

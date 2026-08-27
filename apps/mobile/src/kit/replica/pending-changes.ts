@@ -10,13 +10,25 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 
+import type { PendingChangeStatus } from "../../lib/replica/multi-vault-session";
+
 export interface PendingChange {
   id: string;
   vaultId: string;
   vaultLabel: string;
-  status: string;
+  status: PendingChangeStatus;
+  /** `${appId}: ${action}`; seats parse it, the sheet presents `action`. */
   label: string;
+  appId?: string;
+  action?: string;
   reason?: string;
+  /** Transport attempts so far, and the first admission (ISO-8601): together
+   *  they separate a slow row from a stuck one. */
+  attempts?: number;
+  enqueuedAt?: string;
+  /** Conflict only, and both or neither: the versions the overlay copy prints. */
+  expectedVersion?: number;
+  actualVersion?: number;
   kind: "replica" | "placement";
 }
 

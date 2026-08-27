@@ -18,6 +18,7 @@ import { WINDOW_RULE } from "@centraid/blueprints/apps/locker/view-copy";
 import {
   CUSTODIAN_SEAT_NOTE,
   lockerPendingCount,
+  lockerPendingLine,
   lockerScreenState,
   lockerSurfaceCopy,
   lockerWindowFoot,
@@ -121,5 +122,52 @@ describe(lockerSurfaceCopy, () => {
     const facts = lockerSurfaceCopy("export", 42).facts;
     expect(facts[0]?.value).toContain("42 items");
     expect(lockerSurfaceCopy("export", 42).net).toBe(true);
+  });
+});
+
+// The count says HOW MANY; this says WHAT the first one waits on (#880).
+// Locker reads through the gateway's own query handlers, so the device-global
+// outbox is the only honest source for the sentence.
+describe(lockerPendingLine, () => {
+  const change = (
+    over: Record<string, unknown> = {}
+  ): {
+    id: string;
+    label: string;
+    status: string;
+    reason?: string;
+  } => ({
+    id: "intent-1",
+    label: "locker: star-item",
+    status: "queued",
+    ...over,
+  });
+
+  it("says nothing when nothing of Locker's is outstanding", () => {
+    expect(lockerPendingLine([])).toBeNull();
+    expect(
+      lockerPendingLine([change({ label: "tasks: add-task" })])
+    ).toBeNull();
+  });
+
+  it("names the connection a queued metadata write waits on", () => {
+    expect(lockerPendingLine([change()])).toBe("Waiting for a connection.");
+  });
+
+  it("names the STEWARD a parked write waits on", () => {
+    expect(
+      lockerPendingLine([
+        change({ status: "parked", reason: "Waiting for Ravi." }),
+      ])
+    ).toBe("Waiting for Ravi.");
+  });
+
+  it("skips a status the overlay grammar has no rung for", () => {
+    expect(
+      lockerPendingLine([
+        change({ status: "awaiting-change" }),
+        change({ id: "intent-2", status: "sending" }),
+      ])
+    ).toBe("Sending this change.");
   });
 });

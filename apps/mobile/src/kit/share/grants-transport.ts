@@ -1,4 +1,7 @@
-import { grantDoor } from "@centraid/blueprints/apps/_shared/grant-door";
+import {
+  grantDoor,
+  GrantUnreachableError,
+} from "@centraid/blueprints/apps/_shared/grant-door";
 import type {
   GrantDoor,
   GrantWireCalls,
@@ -41,29 +44,52 @@ function grantsUrl(
   return url;
 }
 
+/** A phone is off the network most days it is carried, and `fetch` rejects
+ *  rather than answering when the request never left the device. Only THIS
+ *  layer knows that, so it marks the error; the door reads the mark instead of
+ *  inventing an outage from a message it did not send. */
+async function reach(
+  send: () => Promise<Response>,
+  op: string
+): Promise<Response> {
+  try {
+    return await send();
+  } catch (error) {
+    throw new GrantUnreachableError(op, error);
+  }
+}
+
 /** The native seat's calls, in the shape `grantDoor` takes. */
 export function nativeGrantCalls(baseUrl: string): GrantWireCalls {
-  const get = (url: URL | string): Promise<Response> =>
-    fetch(url, { headers: apiHeaders() });
-  const post = (url: URL | string, payload?: unknown): Promise<Response> =>
-    fetch(url, {
-      method: "POST",
-      headers: apiHeaders(
-        payload === undefined ? {} : { "content-type": "application/json" }
-      ),
-      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-    });
+  const get = (url: URL | string, op: string): Promise<Response> =>
+    reach(() => fetch(url, { headers: apiHeaders() }), op);
+  const post = (
+    url: URL | string,
+    op: string,
+    payload?: unknown
+  ): Promise<Response> =>
+    reach(
+      () =>
+        fetch(url, {
+          method: "POST",
+          headers: apiHeaders(
+            payload === undefined ? {} : { "content-type": "application/json" }
+          ),
+          ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+        }),
+      op
+    );
   return {
     async subjects() {
       const op = "read shareable subjects";
       return grantJson(
-        await get(new URL(ROUTES.vaultGrantSubjects, baseUrl)),
+        await get(new URL(ROUTES.vaultGrantSubjects, baseUrl), op),
         op
       );
     },
     async forParty(partyId) {
       const op = "read what this person can reach";
-      const response = await get(grantsUrl(baseUrl, { partyId }));
+      const response = await get(grantsUrl(baseUrl, { partyId }), op);
       // `audience_not_found` is a real answer, not a failure.
       if (response.status === 404) return undefined;
       return grantJson(response, op);
@@ -71,7 +97,8 @@ export function nativeGrantCalls(baseUrl: string): GrantWireCalls {
     async forAudience(kind, id) {
       const op = "read this audience's shares";
       const response = await get(
-        grantsUrl(baseUrl, { audienceKind: kind, audienceId: id })
+        grantsUrl(baseUrl, { audienceKind: kind, audienceId: id }),
+        op
       );
       // An unknown audience is a real answer, so it comes back as `undefined`.
       if (response.status === 404) return undefined;
@@ -80,19 +107,20 @@ export function nativeGrantCalls(baseUrl: string): GrantWireCalls {
     async forSubject(subjectType, subjectId) {
       const op = "read who this is shared with";
       return grantJson(
-        await get(grantsUrl(baseUrl, { subjectType, subjectId })),
+        await get(grantsUrl(baseUrl, { subjectType, subjectId }), op),
         op
       );
     },
     async create(request: GrantRequest) {
       const op = "share";
-      return grantJson(await post(grantsUrl(baseUrl), request), op);
+      return grantJson(await post(grantsUrl(baseUrl), op, request), op);
     },
     async revoke(grantId) {
       const op = "revoke this share";
       return grantJson(
         await post(
-          new URL(vaultGrantRevokePath(encodeURIComponent(grantId)), baseUrl)
+          new URL(vaultGrantRevokePath(encodeURIComponent(grantId)), baseUrl),
+          op
         ),
         op
       );

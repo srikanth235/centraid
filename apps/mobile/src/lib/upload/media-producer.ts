@@ -3,6 +3,7 @@ import { File } from "expo-file-system";
 import { Store } from "../../storage";
 import { authHeader } from "../gateway";
 import type { MobileReplicaSession } from "../replica/native-session";
+import { foldPendingUploadGroups } from "../replica/storage-accounting";
 import { generateDeviceDerivatives } from "./derivatives-native";
 import { withDrainLock } from "./drain-lock";
 import { sha256OfFile } from "./enqueue";
@@ -97,7 +98,9 @@ async function drainToSettlement(
 ): Promise<string> {
   await withDrainLock(async () => {
     // Foreground service owned only here; reconcile never starts it.
-    UploadForegroundService.start(queue.pending().length);
+    UploadForegroundService.start(
+      foldPendingUploadGroups(queue.pendingStorageGroups()).total.itemCount
+    );
     try {
       const summary = await queue.drain();
       if (summary.settled + summary.deduped > 0)

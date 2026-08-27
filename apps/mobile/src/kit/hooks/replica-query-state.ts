@@ -1,4 +1,7 @@
-import type { ReplicaRow } from "@centraid/client/replica/native";
+import type {
+  ReplicaCoverage,
+  ReplicaRow,
+} from "@centraid/client/replica/native";
 
 export type ReplicaQueryConnection =
   | "loading"
@@ -14,6 +17,8 @@ export interface ReplicaQueryState {
   connection: ReplicaQueryConnection;
   unavailableReason?: string;
   lastSyncedAt?: string;
+  /** `partial` means these rows are a readable preview, not the whole library. */
+  coverage?: ReplicaCoverage;
   refresh: () => Promise<void>;
 }
 
@@ -23,19 +28,30 @@ export interface CombinedReplicaQueryState {
   connection: ReplicaQueryConnection;
   unavailableReason?: string;
   lastSyncedAt?: string;
+  coverage?: ReplicaCoverage;
 }
 
 export function replicaQueryConnection(input: {
   ready: boolean;
   hasSession: boolean;
-  reachability?: "device-offline" | "gateway-asleep" | "syncing" | "current";
+  reachability?:
+    | "device-offline"
+    | "gateway-asleep"
+    | "sync-paused"
+    | "syncing"
+    | "current";
 }): ReplicaQueryConnection {
   if (!input.ready) return "loading";
   if (!input.hasSession) return "unavailable";
   if (input.reachability === "syncing") return "syncing";
   if (
     input.reachability === "device-offline" ||
-    input.reachability === "gateway-asleep"
+    input.reachability === "gateway-asleep" ||
+    // A paused sync reads as `offline` here rather than gaining a sixth value
+    // every consumer would have to learn: what this enum tells an app is
+    // whether the rows may be stale, and under the member's own transfer rules
+    // they may. The reason is a status-bar sentence, not an app-level branch.
+    input.reachability === "sync-paused"
   )
     return "offline";
   return "current";
@@ -64,11 +80,23 @@ export function combineReplicaQueryStates(
   const lastSyncedAt = states
     .flatMap((state) => (state.lastSyncedAt ? [state.lastSyncedAt] : []))
     .sort((a, b) => b.localeCompare(a))[0];
+  // Conservative, like the reader's own aggregate: one partial entity keeps the
+  // combined screen partial. A complete claim needs every part to claim it.
+  const coverages = states.flatMap((state) =>
+    state.coverage ? [state.coverage] : []
+  );
+  const coverage: ReplicaCoverage | undefined =
+    coverages.length === 0
+      ? undefined
+      : coverages.every((entry) => entry === "complete")
+        ? "complete"
+        : "partial";
   return {
     loading: states.some((state) => state.loading),
     connection,
     ...(error ? { error } : {}),
     ...(unavailableReason ? { unavailableReason } : {}),
     ...(lastSyncedAt ? { lastSyncedAt } : {}),
+    ...(coverage ? { coverage } : {}),
   };
 }

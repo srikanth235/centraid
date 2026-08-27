@@ -7,7 +7,18 @@
     "packages/server/src/routes/commons-*.ts",
     "packages/server/src/routes/edges-*.ts",
     "packages/vault/src/grant/*.ts",
-    "packages/vault/src/share/*.ts"
+    "packages/vault/src/share/*.ts",
+    "packages/blueprints/apps/_shared/GrantSheet.tsx",
+    "packages/blueprints/apps/_shared/grant-audiences.ts",
+    "packages/blueprints/apps/_shared/grant-copy.ts",
+    "packages/blueprints/apps/_shared/grant-door.ts",
+    "packages/blueprints/apps/_shared/grant-gateway.ts",
+    "packages/blueprints/apps/_shared/share-kit.ts",
+    "packages/blueprints/apps/_shared/named-circle-selection.ts",
+    "packages/blueprints/apps/_shared/commons-invite.ts",
+    "packages/blueprints/apps/people/grant-dashboard.ts",
+    "apps/mobile/src/kit/share/*.ts",
+    "apps/mobile/src/kit/share/*.tsx"
   ],
   "allowlist": []
 }

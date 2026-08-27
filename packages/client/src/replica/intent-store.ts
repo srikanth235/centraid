@@ -17,6 +17,8 @@ const META = "meta";
 const OUTCOMES = "outcomes";
 const INTENT_STORE_VERSION = 3;
 const STATE_CREATED_ORDER = "stateCreatedOrder";
+/** Journal cap: `listSettled` cannot read past it. */
+const SETTLED_JOURNAL_LIMIT = 5_000;
 
 interface IntentMeta {
   key: "nextOrder";
@@ -196,17 +198,22 @@ export class IndexedDbIntentStore implements IntentRecordStore {
       createdOrder: existing.createdOrder,
     };
     const outcome = buildIntentOutcome(settled);
-    // Outcome journaling and payload scrubbing share one transaction: a
-    // restart can observe either the queued intent or its terminal outcome,
-    // never a silently lost delivery.
-    tx.objectStore(OUTCOMES).put(clone(outcome));
+    // One transaction: a reload sees the queued intent or its outcome, never
+    // a lost delivery.
+    const outcomes = tx.objectStore(OUTCOMES);
+    outcomes.put(clone(outcome));
     store.delete(intentId);
+    await pruneOutcomeJournal(outcomes);
     await transactionDone(tx);
     return clone(settled);
   }
 
   async listSettled(limit = 500): Promise<IntentOutcome[]> {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 5_000)
+    if (
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > SETTLED_JOURNAL_LIMIT
+    )
       throw new ReplicaProtocolError("Settled outcome limit is invalid");
     const tx = this.db.transaction(OUTCOMES, "readonly");
     const values = (await requestResult(
@@ -237,6 +244,18 @@ export class IndexedDbIntentStore implements IntentRecordStore {
     this.close();
     await requestResult(this.factory.deleteDatabase(this.name));
   }
+}
+
+async function pruneOutcomeJournal(outcomes: IDBObjectStore): Promise<void> {
+  const count = await requestResult(outcomes.count());
+  if (count <= SETTLED_JOURNAL_LIMIT) return;
+  const stored = (await requestResult(outcomes.getAll())) as IntentOutcome[];
+  const expired = stored
+    .sort((left, right) =>
+      (right.settledAt ?? "").localeCompare(left.settledAt ?? "")
+    )
+    .slice(SETTLED_JOURNAL_LIMIT);
+  for (const outcome of expired) outcomes.delete(outcome.intentId);
 }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {

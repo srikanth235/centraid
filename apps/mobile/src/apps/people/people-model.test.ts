@@ -11,6 +11,7 @@ import {
   applyRosterFilter,
   avatarFill,
   projectDashboard,
+  projectPersonDetail,
   projectRoster,
   rosterSub,
   searchRoster,
@@ -201,5 +202,61 @@ describe("[law:people-avatar-hue] the stored hue round-trips across surfaces", (
     expect(derived.startsWith("ring:")).toBe(true);
     // Keyed by the id, so a rename never moves them.
     expect(avatarFill({ party_id: "p1" }, ring)).toBe(derived);
+  });
+});
+
+describe("mounted-source provenance on the roster row", () => {
+  const roster = (
+    profile: Record<string, unknown>
+  ): ReturnType<typeof projectRoster> =>
+    projectRoster({
+      profiles: [{ party_id: "p1", created_at: iso(10), ...profile }],
+      parties: [{ party_id: "p1", display_name: "Ana" }],
+      tags: [],
+      concepts: [],
+      schemes: [],
+      dates: [],
+      bindings: null,
+    });
+
+  it("carries the profile row's own canWrite and every source label", () => {
+    const { people } = roster({
+      __centraidCanWrite: false,
+      __centraidScopeLabels: ["Studio"],
+    });
+    expect(people[0]?.canWrite).toBe(false);
+    expect(people[0]?.scopeLabels).toStrictEqual(["Studio"]);
+  });
+
+  it("reads an unstamped roster as the member's own", () => {
+    const { people } = roster({});
+    expect(people[0]?.canWrite).toBe(true);
+    expect(people[0]?.scopeLabels).toStrictEqual([]);
+  });
+
+  it("keeps the profile row itself, so the shared overlay reader can be asked", () => {
+    const { people } = roster({ __centraid_pending_key: "intent-1" });
+    expect(people[0]?.raw["__centraid_pending_key"]).toBe("intent-1");
+  });
+
+  it("carries the three facts down to the one-person screen", () => {
+    const { people } = roster({
+      __centraidCanWrite: false,
+      __centraidScopeLabels: ["Studio"],
+    });
+    const detail = projectPersonDetail({
+      person: people[0]!,
+      channels: [],
+      partyNames: new Map(),
+      dates: [],
+      notes: [],
+      activityLinks: [],
+      activities: [],
+      activityNotes: [],
+      concepts: [],
+      shareLinks: null,
+    });
+    expect(detail.canWrite).toBe(false);
+    expect(detail.scopeLabels).toStrictEqual(["Studio"]);
   });
 });

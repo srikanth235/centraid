@@ -96,7 +96,15 @@ interface StoredSchema {
  * `bootstrapBegin` and `bootstrapCommit`, and its presence-without-meta is what
  * makes a half-applied replica unmistakable after a crash: `status().cursor`
  * stays null until commit writes `replica_meta`, so a partial replica can never
- * present itself as complete, and the next open re-bootstraps from scratch.
+ * present itself as complete.
+ *
+ * It also carries the walk's POSITION, which is what makes an interrupted
+ * bootstrap resumable across a process death (#880): `resume_after` is the
+ * gateway's opaque continuation token for the next page, and
+ * `commit_cursor_*` is page one's cursor — the delta floor the completed walk
+ * must still commit at. Both are written in the same transaction as the rows
+ * of the page they describe, so a kill between pages loses at most the page
+ * that was in flight.
  */
 interface StoredBootstrapProgress {
   protocol_version: number;
@@ -104,6 +112,10 @@ interface StoredBootstrapProgress {
   schema_epoch: string;
   cursor_epoch: string | null;
   cursor_seq: number | null;
+  resume_after: string | null;
+  commit_cursor_epoch: string | null;
+  commit_cursor_seq: number | null;
+  pages_applied: number;
 }
 
 interface StoredSearchRow extends StoredRow {
@@ -111,8 +123,80 @@ interface StoredSearchRow extends StoredRow {
   snippet: string | null;
 }
 
-const LOCAL_REPLICA_SCHEMA_VERSION = 6;
+/** Where an interrupted windowed bootstrap left off. */
+export interface ReplicaBootstrapResume {
+  /**
+   * Continuation token for the next page, or null when every page already
+   * landed and only the commit plus its convergence replay remain.
+   */
+  after: string | null;
+  /** Page one's cursor: where the completed walk commits and replays from. */
+  commitCursor: ReplicaCursor;
+  /** Pages already durably applied — progress reporting only. */
+  pages: number;
+}
 
+/** One page's durable walk position, recorded with that page's rows. */
+export interface ReplicaBootstrapAdvance {
+  /** Continuation token for the NEXT page; null once the walk is exhausted. */
+  after: string | null;
+  /** Page one's cursor. Recorded once — a resumed walk keeps the original. */
+  commitCursor: ReplicaCursor;
+  /** Pages durably applied including this one. */
+  pages: number;
+}
+
+/** Live SQLite footprint of one replica database. */
+export interface ReplicaStorageBytes {
+  pageSize: number;
+  pageCount: number;
+  /** Pages on the freelist — reclaimable by `PRAGMA incremental_vacuum`. */
+  freePages: number;
+  bytes: number;
+  freeBytes: number;
+}
+
+const LOCAL_REPLICA_SCHEMA_VERSION = 8;
+
+/**
+ * Rows written into (or removed from) the FTS index between `optimize` runs.
+ * FTS5 `optimize` merges every b-tree segment into one — cheap on a small
+ * index, minutes on a large one — so it is bounded by this counter rather than
+ * run per batch. One bootstrap window is 5,000 rows, so a full 90,000-row walk
+ * optimizes about four times on the way plus once at its commit.
+ */
+const FTS_OPTIMIZE_ROW_INTERVAL = 20_000;
+
+/**
+ * Deletions in ONE change batch that make it worth reclaiming freed pages. A
+ * fifth of a bootstrap window: far above ordinary sync churn, and squarely in
+ * the range a scoped purge or a trimmed era arrives in.
+ */
+const LARGE_DELETION_BATCH = 1_000;
+
+/**
+ * `replica_row.row_key` is a surrogate INTEGER PRIMARY KEY whose value is also
+ * the rowid of that row's `replica_search` entry — the one thing that keeps
+ * search-index maintenance logarithmic (#880).
+ *
+ * FTS5 leaves `shape_id`/`entity`/`row_id` UNINDEXED, so addressing an entry by
+ * that triple is a full table scan of the index; at 21,000 rows the scan-per-row
+ * delete every `indexRow`/`deleteRow` issues cost 125s of a bootstrap that now
+ * costs 0.7s. Addressing by rowid instead turns each one into a b-tree lookup.
+ *
+ * Explicit, not implicit: VACUUM (which {@link ReplicaSqliteStore.reclaimFreePages}
+ * runs) renumbers the rowids of a table WITHOUT an INTEGER PRIMARY KEY, which
+ * would silently desynchronize the two tables. Declaring `row_key` pins the
+ * value for the life of the row. The `(shape_id, entity, row_id)` UNIQUE index
+ * that replaces the old primary key serves every lookup the old one did,
+ * including the prefix scan the dropped `replica_row_entity` index used to.
+ *
+ * Rejected alternatives: an external-content FTS5 table (`content=`) is the
+ * textbook fix, but its delete protocol requires replaying each entry's original
+ * column values, and its content column would have to be the derived search body
+ * — a second stored copy of every indexed field. A side mapping table would add
+ * a third write per row for a key `replica_row` can carry itself.
+ */
 const DDL = `
   CREATE TABLE IF NOT EXISTS replica_bootstrap_progress (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -120,7 +204,11 @@ const DDL = `
     vault_id TEXT NOT NULL,
     schema_epoch TEXT NOT NULL,
     cursor_epoch TEXT,
-    cursor_seq INTEGER
+    cursor_seq INTEGER,
+    resume_after TEXT,
+    commit_cursor_epoch TEXT,
+    commit_cursor_seq INTEGER,
+    pages_applied INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS replica_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -145,17 +233,17 @@ const DDL = `
     FOREIGN KEY (shape_id) REFERENCES replica_shape(shape_id) ON DELETE CASCADE
   );
   CREATE TABLE IF NOT EXISTS replica_row (
+    row_key INTEGER PRIMARY KEY,
     shape_id TEXT NOT NULL,
     entity TEXT NOT NULL,
     row_id TEXT NOT NULL,
     payload_json TEXT NOT NULL,
     oversized_json TEXT NOT NULL,
     server_version INTEGER NOT NULL DEFAULT 0 CHECK (server_version >= 0),
-    PRIMARY KEY (shape_id, entity, row_id),
+    UNIQUE (shape_id, entity, row_id),
     FOREIGN KEY (shape_id, entity)
       REFERENCES replica_entity_schema(shape_id, entity) ON DELETE CASCADE
   );
-  CREATE INDEX IF NOT EXISTS replica_row_entity ON replica_row(shape_id, entity);
   CREATE VIRTUAL TABLE IF NOT EXISTS replica_search USING fts5(
     shape_id UNINDEXED,
     entity UNINDEXED,
@@ -173,12 +261,26 @@ const DDL = `
 `;
 
 /**
+ * Resolves a row's search-index rowid inside the statement that needs it — see
+ * the note on {@link DDL}. Keeping the lookup in SQL is what makes the rowid
+ * discipline free: index maintenance issues exactly the statements it always
+ * did, with a covering-index probe where a whole-index scan used to be. A row
+ * this replica does not hold resolves to NULL, which matches nothing — the same
+ * no-op the scan performed.
+ */
+const SEARCH_ROWID = `(SELECT row_key FROM replica_row
+     WHERE shape_id = ? AND entity = ? AND row_id = ?)`;
+
+/**
  * The entire replica store logic, written once over {@link ReplicaSqliteDriver}.
  * Fully synchronous — the async {@link import('./store.js').ReplicaStore}
  * surface is added by the transport-specific wrappers (worker RPC on web, a
  * thin promise wrapper on native).
  */
 export class ReplicaSqliteStore {
+  /** Rows written into or removed from the FTS index since the last optimize. */
+  private indexedSinceOptimize = 0;
+
   constructor(
     protected readonly driver: ReplicaSqliteDriver,
     private readonly expectedVaultId: string,
@@ -245,18 +347,53 @@ export class ReplicaSqliteStore {
       for (const row of snapshot.rows) this.upsert(row);
       this.writeMeta(snapshot, snapshot.cursor);
     });
+    this.reclaimFreePages();
+    this.optimizeSearchIndex();
     return snapshot.cursor;
   }
 
   /**
-   * Open a windowed bootstrap: clear the replica, install the page-1 catalog and
-   * record the header durably. No `replica_meta` row is written, so until
-   * {@link bootstrapCommit} the replica reports no cursor and the session
-   * re-bootstraps from scratch — a crash between pages can never leave a partial
-   * replica claiming to be complete. Re-opening a bootstrap restarts it.
+   * Open a windowed bootstrap. No `replica_meta` row is written, so until
+   * {@link bootstrapCommit} the replica reports no cursor — a crash between
+   * pages can never leave a partial replica claiming to be complete.
+   *
+   * Re-opening a bootstrap RESUMES it (#880). An open walk for the same schema
+   * epoch that already recorded its page-one cursor keeps its rows, its catalog
+   * and its position, and the returned {@link ReplicaBootstrapResume} tells the
+   * driver which page to fetch next; the replay-from-page-one invariant is
+   * preserved because the ORIGINAL page-one cursor is what comes back. A
+   * 90,000-row walk killed by the OS every window would otherwise restart at
+   * page one forever. Anything else — a different schema epoch, a walk that
+   * never got past its first page, or an explicit `restart` — clears and starts
+   * over.
    */
-  bootstrapBegin(header: ReplicaBootstrapHeader): void {
+  bootstrapBegin(
+    header: ReplicaBootstrapHeader,
+    options?: { restart?: boolean }
+  ): ReplicaBootstrapResume | undefined {
     this.validateHeader(header);
+    const open = this.bootstrapProgress();
+    const resumable =
+      options?.restart !== true &&
+      open !== undefined &&
+      open.schema_epoch === header.schemaEpoch &&
+      open.commit_cursor_epoch !== null &&
+      open.commit_cursor_seq !== null &&
+      // The kept catalog must still be the one the rows will be validated
+      // against. Same epoch with a different shape set is a grant change, and
+      // resuming onto it would fail every page with an unknown shape entity —
+      // a wedge, because the stale progress row would outlive each attempt.
+      this.sameShapeCatalog(header.shapes);
+    if (resumable && open) {
+      return {
+        after: open.resume_after,
+        commitCursor: {
+          epoch: open.commit_cursor_epoch as string,
+          seq: open.commit_cursor_seq as number,
+        },
+        pages: open.pages_applied,
+      };
+    }
     this.transaction(() => {
       this.clear();
       this.writeShapes(header.shapes);
@@ -267,11 +404,21 @@ export class ReplicaSqliteStore {
         [header.protocolVersion, header.vaultId, header.schemaEpoch]
       );
     });
+    this.reclaimFreePages();
+    return undefined;
   }
 
-  /** Apply one window of rows atomically against the open bootstrap's catalog. */
-  bootstrapPage(rows: readonly ReplicaSnapshotRow[]): void {
+  /**
+   * Apply one window of rows atomically against the open bootstrap's catalog.
+   * `advance` records the walk position in the SAME transaction as the rows it
+   * describes, which is what makes the resume above exact rather than hopeful.
+   */
+  bootstrapPage(
+    rows: readonly ReplicaSnapshotRow[],
+    advance?: ReplicaBootstrapAdvance
+  ): void {
     this.requireBootstrapProgress();
+    if (advance) validateCursor(advance.commitCursor);
     this.transaction(() => {
       for (const row of rows) {
         const schema = this.schema(row.shapeId, row.entity);
@@ -283,21 +430,47 @@ export class ReplicaSqliteStore {
         this.validateRow(row, schema);
         this.upsert(row, schema);
       }
+      if (!advance) return;
+      // COALESCE, not assignment: the commit cursor belongs to the walk's FIRST
+      // page and a resumed walk must not adopt a newer one — that would skip
+      // the deltas the convergence replay exists to apply.
+      this.run(
+        `UPDATE replica_bootstrap_progress
+            SET resume_after = ?,
+                pages_applied = ?,
+                commit_cursor_epoch = COALESCE(commit_cursor_epoch, ?),
+                commit_cursor_seq = COALESCE(commit_cursor_seq, ?)
+          WHERE singleton = 1`,
+        [
+          advance.after,
+          advance.pages,
+          advance.commitCursor.epoch,
+          advance.commitCursor.seq,
+        ]
+      );
     });
+    this.maybeOptimizeSearchIndex();
   }
 
   /**
    * Publish the first window as an explicitly partial preview. `status()` still
    * reports no durable cursor, so a crash restarts bootstrap; reads may paint
    * the newest landed era while lazy backfill continues.
+   *
+   * Monotonic within an epoch: a partial preview accepts change batches, which
+   * advance this same cursor, and a RESUMED walk's page one arrives with a
+   * newer-but-not-necessarily-newest cursor. Moving it backwards would make the
+   * next feed batch a cursor gap and cost the whole partial replica.
    */
   bootstrapPreview(cursor: ReplicaCursor): void {
     this.requireBootstrapProgress();
     validateCursor(cursor);
     this.run(
       `UPDATE replica_bootstrap_progress
-          SET cursor_epoch = ?, cursor_seq = ? WHERE singleton = 1`,
-      [cursor.epoch, cursor.seq]
+          SET cursor_epoch = ?, cursor_seq = ?
+        WHERE singleton = 1
+          AND (cursor_epoch IS NULL OR cursor_epoch <> ? OR cursor_seq < ?)`,
+      [cursor.epoch, cursor.seq, cursor.epoch, cursor.seq]
     );
   }
 
@@ -322,6 +495,9 @@ export class ReplicaSqliteStore {
       );
       this.run("DELETE FROM replica_bootstrap_progress WHERE singleton = 1");
     });
+    // A cold start writes the whole index one window at a time, which leaves
+    // FTS5 at its most fragmented exactly when the first search happens.
+    this.optimizeSearchIndex();
     return cursor;
   }
 
@@ -377,6 +553,16 @@ export class ReplicaSqliteStore {
         );
       }
     });
+    this.maybeOptimizeSearchIndex();
+    // A batch this deletion-heavy is a scoped purge arriving as deltas (an app
+    // grant withdrawn, an era trimmed), not ordinary churn: hand its pages back
+    // rather than leaving a phone that just freed rows no freer on disk.
+    if (
+      batch.changes.filter((change) => change.op === "delete").length >=
+      LARGE_DELETION_BATCH
+    ) {
+      this.reclaimFreePages();
+    }
     return {
       cursor: batch.to,
       invalidations: dedupeInvalidations(invalidations),
@@ -499,10 +685,7 @@ export class ReplicaSqliteStore {
               replica_search.rank AS rank,
               snippet(replica_search, -1, '⟦', '⟧', '…', 12) AS snippet
          FROM replica_search
-         JOIN replica_row
-           ON replica_row.shape_id = replica_search.shape_id
-          AND replica_row.entity = replica_search.entity
-          AND replica_row.row_id = replica_search.row_id
+         JOIN replica_row ON replica_row.row_key = replica_search.rowid
         WHERE replica_search MATCH ?
           AND replica_search.shape_id = ? AND replica_search.entity = ?
         ORDER BY replica_search.rank${tieOrder}
@@ -607,6 +790,26 @@ export class ReplicaSqliteStore {
 
   wipe(): void {
     this.transaction(() => this.clear());
+    this.reclaimFreePages();
+  }
+
+  /**
+   * Live SQLite footprint, for the Phone storage screen's per-vault database
+   * total. `dbstat` is a compile-time option op-sqlite does not ship, so this
+   * is the page arithmetic every build has: `freeBytes` is what a
+   * {@link reclaimFreePages} pass would hand back to the filesystem.
+   */
+  storageBytes(): ReplicaStorageBytes {
+    const pageSize = this.pragmaNumber("page_size");
+    const pageCount = this.pragmaNumber("page_count");
+    const freePages = this.pragmaNumber("freelist_count");
+    return {
+      pageSize,
+      pageCount,
+      freePages,
+      bytes: pageSize * pageCount,
+      freeBytes: pageSize * freePages,
+    };
   }
 
   private writeShapes(shapes: readonly ReplicaShape[]): void {
@@ -650,10 +853,27 @@ export class ReplicaSqliteStore {
     );
   }
 
-  private requireBootstrapProgress(): StoredBootstrapProgress {
-    const progress = this.one<StoredBootstrapProgress>(
-      "SELECT protocol_version, vault_id, schema_epoch FROM replica_bootstrap_progress WHERE singleton = 1"
+  private sameShapeCatalog(shapes: readonly ReplicaShape[]): boolean {
+    const stored = this.all<{ shape_id: string }>(
+      "SELECT shape_id FROM replica_shape ORDER BY shape_id"
+    ).map((row) => row.shape_id);
+    const incoming = shapes.map((shape) => shape.shapeId).sort();
+    return (
+      stored.length === incoming.length &&
+      stored.every((shapeId, index) => shapeId === incoming[index])
     );
+  }
+
+  private bootstrapProgress(): StoredBootstrapProgress | undefined {
+    return this.one<StoredBootstrapProgress>(
+      `SELECT protocol_version, vault_id, schema_epoch, cursor_epoch, cursor_seq,
+              resume_after, commit_cursor_epoch, commit_cursor_seq, pages_applied
+         FROM replica_bootstrap_progress WHERE singleton = 1`
+    );
+  }
+
+  private requireBootstrapProgress(): StoredBootstrapProgress {
+    const progress = this.bootstrapProgress();
     if (!progress) {
       throw new ReplicaProtocolError("No replica bootstrap is open");
     }
@@ -700,6 +920,71 @@ export class ReplicaSqliteStore {
         `PRAGMA user_version = ${LOCAL_REPLICA_SCHEMA_VERSION};`
       );
     });
+    this.enableIncrementalVacuum();
+  }
+
+  /**
+   * SQLite accepts `auto_vacuum` only on an empty database or through a full
+   * VACUUM, and a replica that keeps the default NONE never returns a purged
+   * era's pages to the filesystem. The schema rebuild above is the one cheap
+   * moment to flip it: every replica table has just been dropped, so the VACUUM
+   * that applies the mode rewrites an almost-empty file.
+   *
+   * Best effort by design. VACUUM needs an exclusive lock and this file is read
+   * through a second op-sqlite handle under `journal_mode=DELETE`; a busy
+   * database leaves the mode at NONE, which is exactly today's behavior — never
+   * a store that fails to open. Journal mode is NOT touched here (see
+   * `apps/mobile/src/lib/replica/op-sqlite-driver.ts`).
+   */
+  private enableIncrementalVacuum(): void {
+    try {
+      this.driver.exec("PRAGMA auto_vacuum=INCREMENTAL;");
+      this.driver.exec("VACUUM;");
+    } catch {
+      /* Shrinking is an optimization; the replica opens either way. */
+    }
+  }
+
+  /**
+   * Hand a large deletion's pages back after `clear()` or a scoped purge.
+   *
+   * `PRAGMA incremental_vacuum` yields ONE ROW PER FREED PAGE, so a driver that
+   * materializes rows (op-sqlite, node:sqlite) reclaims the whole freelist in
+   * one call while sqlite-wasm's `exec` stops after the first. Hence the check
+   * and the VACUUM fallback: it is portable, and right after a purge it rewrites
+   * an almost-empty file. A database whose `auto_vacuum` flip never took has no
+   * reclaimable freelist and falls out at the first test.
+   */
+  private reclaimFreePages(): void {
+    try {
+      if (this.pragmaNumber("freelist_count") === 0) return;
+      this.all("PRAGMA incremental_vacuum");
+      if (this.pragmaNumber("freelist_count") === 0) return;
+      this.driver.exec("VACUUM;");
+    } catch {
+      /* See enableIncrementalVacuum: reclaiming space is never load-bearing. */
+    }
+  }
+
+  /** Bounded FTS5 merge; see {@link FTS_OPTIMIZE_ROW_INTERVAL}. */
+  private maybeOptimizeSearchIndex(): void {
+    if (this.indexedSinceOptimize < FTS_OPTIMIZE_ROW_INTERVAL) return;
+    this.optimizeSearchIndex();
+  }
+
+  private optimizeSearchIndex(): void {
+    this.indexedSinceOptimize = 0;
+    try {
+      this.run("INSERT INTO replica_search(replica_search) VALUES('optimize')");
+    } catch {
+      /* A merge that could not run leaves a correct, merely slower, index. */
+    }
+  }
+
+  private pragmaNumber(pragma: string): number {
+    const row = this.one<Record<string, unknown>>(`PRAGMA ${pragma}`);
+    const value = row ? Object.values(row)[0] : undefined;
+    return typeof value === "number" ? value : 0;
   }
 
   private meta(): MetaRow | undefined {
@@ -811,10 +1096,12 @@ export class ReplicaSqliteStore {
       );
       if (current && current.server_version > serverVersion) return;
     }
-    this.run(
-      "DELETE FROM replica_search WHERE shape_id = ? AND entity = ? AND row_id = ?",
-      [shapeId, entity, rowId]
-    );
+    this.indexedSinceOptimize += 1;
+    this.run(`DELETE FROM replica_search WHERE rowid = ${SEARCH_ROWID}`, [
+      shapeId,
+      entity,
+      rowId,
+    ]);
     this.run(
       "DELETE FROM replica_search_gap WHERE shape_id = ? AND entity = ? AND row_id = ?",
       [shapeId, entity, rowId]
@@ -826,10 +1113,12 @@ export class ReplicaSqliteStore {
   }
 
   private indexRow(row: ReplicaSnapshotRow, schema: ReplicaEntitySchema): void {
-    this.run(
-      "DELETE FROM replica_search WHERE shape_id = ? AND entity = ? AND row_id = ?",
-      [row.shapeId, row.entity, row.rowId]
-    );
+    this.indexedSinceOptimize += 1;
+    this.run(`DELETE FROM replica_search WHERE rowid = ${SEARCH_ROWID}`, [
+      row.shapeId,
+      row.entity,
+      row.rowId,
+    ]);
     this.run(
       "DELETE FROM replica_search_gap WHERE shape_id = ? AND entity = ? AND row_id = ?",
       [row.shapeId, row.entity, row.rowId]
@@ -870,8 +1159,17 @@ export class ReplicaSqliteStore {
       parts.push(String(value));
     }
     this.run(
-      "INSERT INTO replica_search(shape_id, entity, row_id, body) VALUES (?, ?, ?, ?)",
-      [row.shapeId, row.entity, row.rowId, parts.join("\n")]
+      `INSERT INTO replica_search(rowid, shape_id, entity, row_id, body)
+       VALUES (${SEARCH_ROWID}, ?, ?, ?, ?)`,
+      [
+        row.shapeId,
+        row.entity,
+        row.rowId,
+        row.shapeId,
+        row.entity,
+        row.rowId,
+        parts.join("\n"),
+      ]
     );
   }
 

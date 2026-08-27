@@ -45,6 +45,8 @@ export interface IntentQueueOptions {
   idFactory?: ReplicaIdFactory;
   /** RN Hermes has no `crypto.subtle`; native hosts inject an expo-crypto digest. */
   digest?: ReplicaDigest;
+  /** Retract a store's alert (native writes one) for a predecessor startup retires. */
+  onSupersededRetired?: (intentId: string) => void;
 }
 
 const SYNTHETIC_PENDING_ROW = /^pending:(?<intentId>[^:]+):/u;
@@ -262,14 +264,17 @@ export function presentPendingIntentMutation(
     intentId: intent.intentId,
     state: intent.conflict ? "conflict" : intent.state,
     action: intent.action,
+    attempts: intent.attempts,
     ...(intent.reason ? { reason: intent.reason } : {}),
     ...(intent.conflict ? { conflict: intent.conflict } : {}),
+    ...(intent.enqueuedAt ? { enqueuedAt: intent.enqueuedAt } : {}),
   }) as OptimisticMutation;
 }
 
 export class IntentQueue {
   readonly #idFactory: ReplicaIdFactory;
   readonly #digest: ReplicaDigest;
+  readonly #onSupersededRetired: ((intentId: string) => void) | undefined;
 
   constructor(
     private readonly store: IntentRecordStore,
@@ -277,6 +282,7 @@ export class IntentQueue {
   ) {
     this.#idFactory = options.idFactory ?? webCryptoIdFactory;
     this.#digest = options.digest ?? webCryptoDigest;
+    this.#onSupersededRetired = options.onSupersededRetired;
   }
 
   async enqueue(input: EnqueueIntentInput): Promise<ReplicaIntent> {
@@ -290,6 +296,9 @@ export class IntentQueue {
       input: input.input,
       state: "queued",
       attempts: 0,
+      // One stamp for every rail; `add` returns the existing record, so a
+      // replayed id keeps its first admission.
+      enqueuedAt: new Date().toISOString(),
       optimistic: input.optimistic ?? [],
       dependencies: input.dependencies ?? [],
       ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
@@ -550,9 +559,8 @@ export class IntentQueue {
       dependencies: existing.dependencies,
       baseVersions,
     };
-    // Add-first keeps a visible local fact across a crash. The private marker
-    // lets startup finish the truthful old-outcome settlement if interruption
-    // lands between these two unchanged store primitives.
+    // Add-first keeps a visible local fact across a crash; the marker lets
+    // startup finish the predecessor's settlement.
     const replacement = await this.enqueue(replacementInput);
     await this.settleRetained(existing);
     return replacement;
@@ -585,6 +593,7 @@ export class IntentQueue {
           const superseded = byId.get(supersededId);
           if (!actionableAttention(superseded)) return;
           await this.settleRetained(superseded);
+          this.#onSupersededRetired?.(supersededId);
           byId.delete(supersededId);
         }
       );

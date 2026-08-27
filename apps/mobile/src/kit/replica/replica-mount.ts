@@ -2,6 +2,7 @@
 // answerable offline. `ReplicaProvider` holds only the lifecycle.
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { File } from "expo-file-system";
 
 import { fetchReplicaBootstrapPage } from "@centraid/client/replica/native";
 import type {
@@ -123,7 +124,8 @@ export async function refreshCachedScopes(
 }
 
 /** Refresh BEFORE the read, never instead of it. A scope granted mid-session
- *  mounts only on the next launch. */
+ *  reaches the mounted four only when the provider re-plans the mount —
+ *  activating it does that; otherwise it waits for the next launch. */
 export async function mountedScopes(
   identity: Awaited<ReturnType<typeof resolveIdentity>>,
   storageLocation?: string
@@ -183,6 +185,98 @@ export async function loadFreshness(
   return new Map(
     rows.filter((row): row is readonly [string, string] => row[1] !== null)
   );
+}
+
+/** Must match `NativeVaultChangeFeed`'s and `NativeMultiplexChangeFeed`'s own
+ *  private key builders; neither is exported, and both are owned elsewhere. */
+function restoredCacheKeys(gatewayId: string, vaultId: string): string[] {
+  const suffix = encodeURIComponent(`${gatewayId} ${vaultId}`);
+  return [
+    freshnessKey(gatewayId, vaultId),
+    `centraid:multiplex-cursor:${suffix}`,
+    `centraid:vault-change-cursor:${suffix}`,
+  ];
+}
+
+/** An absent or zero-byte database is a container this replica never wrote. */
+function replicaFileHasData(databaseName: string): boolean {
+  try {
+    const file = new File(databaseName);
+    return file.exists && (file.size ?? 0) > 0;
+  } catch {
+    // An unreadable path is not evidence of a restore; keep the cursor.
+    return true;
+  }
+}
+
+/**
+ * Drop cursors and stamps a restored container inherited (#880).
+ *
+ * The replica databases sit in the module-owned durable directory and never
+ * ride Auto Backup, D2D transfer, or an iCloud restore. The SSE resume cursors
+ * and freshness stamps beside them are ordinary app storage, so a restored
+ * device wakes up holding another phone's cursor over an empty replica: the
+ * feed resumes at a sequence for rows this device never had and every change
+ * before it is missing without a word. The Android manifest excludes that store
+ * outright; this is the same rule enforced from inside the app, which is also
+ * where an iOS restore and any future backup-rule change pass.
+ *
+ * Returns the vaults whose cache was discarded, so bootstrap starts clean.
+ */
+export async function discardRestoredReplicaCache(
+  gatewayId: string,
+  scopes: readonly MountedReplicaScope[],
+  hasReplicaData: (databaseName: string) => boolean = replicaFileHasData
+): Promise<string[]> {
+  const cleared = await Promise.all(
+    scopes.map(async (scope) => {
+      if (hasReplicaData(scope.databaseName)) return undefined;
+      const keys = restoredCacheKeys(gatewayId, scope.vaultId);
+      const cached = await Promise.all(
+        keys.map((key) => AsyncStorage.getItem(key).catch(() => null))
+      );
+      // A first launch after pairing has no database and no cache either —
+      // that is a cold start, not a restore, and it must stay silent.
+      if (cached.every((value) => value === null)) return undefined;
+      await Promise.all(
+        keys.map((key) => AsyncStorage.removeItem(key).catch(() => undefined))
+      );
+      return scope.vaultId;
+    })
+  );
+  return cleared.filter((vaultId): vaultId is string => vaultId !== undefined);
+}
+
+/** Live SQLite family: the main file plus every rollback/WAL sidecar. */
+const SQLITE_SIDECARS = ["-journal", "-wal", "-shm"] as const;
+
+export function replicaDatabaseFamily(databaseName: string): string[] {
+  return [
+    databaseName,
+    ...SQLITE_SIDECARS.map((suffix) => `${databaseName}${suffix}`),
+  ];
+}
+
+/**
+ * Reclaim one revoked scope's bytes.
+ *
+ * A purge empties the tables in place, so the file stays at full size for a
+ * vault this phone may never see again. Only a REVOKED scope reaches here: a
+ * vault merely evicted by the four-scope cap is still enrolled and its replica
+ * is an asset, not garbage. A bare database name means op-sqlite's own default
+ * location, which this module cannot address — the storage screen reports those
+ * bytes rather than this deleting the wrong file.
+ */
+export function deleteReplicaDatabaseFamily(databaseName: string): void {
+  if (!databaseName.includes("/")) return;
+  for (const path of replicaDatabaseFamily(databaseName)) {
+    try {
+      const file = new File(path);
+      if (file.exists) file.delete();
+    } catch {
+      // A sidecar the OS already removed is the outcome asked for.
+    }
+  }
 }
 
 export async function removeCachedScope(

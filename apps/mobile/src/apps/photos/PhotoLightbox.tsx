@@ -49,6 +49,7 @@ import {
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
+import type { PlacementRecord } from "../../lib/replica/multi-vault-reader";
 import {
   listCommonsResidents,
   retainCommonsItem,
@@ -92,6 +93,37 @@ import {
 
 // Gesture construction lives in lightbox-gestures.ts — see the comment there
 // for why the builder chains must stay outside component render bodies.
+
+/**
+ * SIX ANSWERS, SIX SENTENCES (#880). `place()` settles at any of the placement
+ * statuses, and only two of them are "waiting for the network": `denied` and
+ * `failed` reach that answer with the gateway right there, so announcing them
+ * as queued tells the member to wait for something that already finished, and
+ * hides a permission change behind an outage. The words are the Pending-changes
+ * sheet's own (`kit/replica/ReplicaStatusBar.tsx` `humanStatus`), because one
+ * act may not carry two names across two surfaces.
+ */
+function placementLine(
+  status: PlacementRecord["status"],
+  kind: "add" | "move"
+): string {
+  switch (status) {
+    case "executed":
+      return kind === "move"
+        ? "Placement complete — the target copy committed before the source was removed."
+        : "Placement complete — the photo is now available in both vaults.";
+    case "denied":
+      return "Placement denied — permission changed before it could be applied.";
+    case "failed":
+      return "Placement could not be applied — Pending changes has the reason.";
+    case "parked":
+      return "Placement needs attention — answer it in Pending changes.";
+    case "in-flight":
+      return "Placement is being applied right now.";
+    case "queued":
+      return "Placement queued — it will resume when the gateway is reachable.";
+  }
+}
 
 export default function PhotoLightbox({
   route,
@@ -366,13 +398,7 @@ export default function PhotoLightbox({
       sourceVaultId,
       targetVaultId,
     });
-    postStatus(
-      result.status === "executed"
-        ? kind === "move"
-          ? "Placement complete — the target copy committed before the source was removed."
-          : "Placement complete — the photo is now available in both vaults."
-        : "Placement queued — it will resume when the gateway is reachable."
-    );
+    postStatus(placementLine(result.status, kind));
   };
 
   const saveToMyVault = async (): Promise<void> => {

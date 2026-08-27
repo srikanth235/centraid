@@ -1,6 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit #738 cohesive intent lifecycle contract
 import { describe, expect, test, vi } from "vitest";
 
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
+
 import { MemoryIntentStore } from "./intent-store.js";
 import { IntentQueue, pendingIntentIdFromInput } from "./intents.js";
 
@@ -131,6 +133,28 @@ describe(IntentQueue, () => {
         reason: "owner denied",
       },
     ]);
+  });
+
+  test("stamps the first admission so every rail can age a stuck write", async () => {
+    const clock = useFakeClock("2026-08-27T09:00:00.000Z");
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => "intent-stamped",
+    });
+    const write = {
+      appId: "agenda",
+      action: "complete",
+      input: { taskId: "task-1" },
+    };
+    await expect(queue.enqueue(write)).resolves.toMatchObject({
+      enqueuedAt: "2026-08-27T09:00:00.000Z",
+    });
+
+    // A replayed id is the same durable admission, so its age keeps running.
+    clock.set("2026-08-27T09:30:00.000Z");
+    await expect(queue.enqueue(write)).resolves.toMatchObject({
+      enqueuedAt: "2026-08-27T09:00:00.000Z",
+    });
+    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
   });
 
   test("Commons expiry dismissal may remove a locally parked row without recording execution", async () => {

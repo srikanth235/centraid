@@ -6,6 +6,9 @@ import type {
 import { buildIntentOutcome } from "./intent-record-store.js";
 import type { IntentOutcome, IntentState, ReplicaIntent } from "./types.js";
 
+/** Journal cap: `listSettled` cannot read past it. Same bound as the durable stores this one stands in for. */
+const SETTLED_JOURNAL_LIMIT = 5_000;
+
 export class MemoryIntentStore implements IntentRecordStore {
   readonly #records = new Map<string, ReplicaIntent>();
   readonly #outcomes = new Map<string, IntentOutcome>();
@@ -94,10 +97,17 @@ export class MemoryIntentStore implements IntentRecordStore {
     this.#records.delete(intentId);
     const outcome = buildIntentOutcome(settled);
     this.#outcomes.set(intentId, outcome);
+    this.pruneOutcomeJournal();
     return clone(settled);
   }
 
   async listSettled(limit = 500): Promise<IntentOutcome[]> {
+    if (
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > SETTLED_JOURNAL_LIMIT
+    )
+      throw new ReplicaProtocolError("Settled outcome limit is invalid");
     return [...this.#outcomes.values()]
       .sort((left, right) =>
         (right.settledAt ?? "").localeCompare(left.settledAt ?? "")
@@ -116,6 +126,15 @@ export class MemoryIntentStore implements IntentRecordStore {
 
   async destroy(): Promise<void> {
     await this.clear();
+  }
+
+  /** Insertion order is settlement order, so the oldest go first even inside one millisecond. */
+  private pruneOutcomeJournal(): void {
+    while (this.#outcomes.size > SETTLED_JOURNAL_LIMIT) {
+      const oldest = this.#outcomes.keys().next();
+      if (oldest.done) return;
+      this.#outcomes.delete(oldest.value);
+    }
   }
 }
 

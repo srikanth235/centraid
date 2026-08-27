@@ -103,10 +103,9 @@ export function viewerChromeHeight(insetTop: number): number {
   return insetTop + VIEWER_CHROME_CHIP + VIEWER_CHROME_INSET * 2;
 }
 
-/** The ONE sentence for this truth on the phone (§6, §18). Two strings saying
- *  the same thing leave a member with no way to know they are one fact. */
-export const READ_ONLY_VAULT_REASON =
-  "This vault is read-only for you, so meaning cannot be written into it.";
+/** The ONE sentence for this truth on the phone (§6, §18). Since #880 it
+ *  lives in `kit/replica/row-provenance.ts`, read by five apps. */
+export { READ_ONLY_SOURCE_REASON as READ_ONLY_VAULT_REASON } from "../../kit/replica/row-provenance";
 
 /** Kept on the phone: swipe and the strip are one control from two directions,
  *  and dropping it makes the phone a slideshow. */

@@ -18,6 +18,10 @@ import type {
   MenuGroup,
   MenuRow,
 } from "../../kit/components/AnchoredMenu";
+import {
+  READ_ONLY_SOURCE_REASON,
+  refusedLabel,
+} from "../../kit/replica/row-provenance";
 import type { MobileDriveDoc } from "./docs-projection";
 
 export interface DocMenuHandlers {
@@ -35,17 +39,32 @@ export interface DocMenuHandlers {
 }
 
 export function buildDocMenu(
-  doc: Pick<MobileDriveDoc, "trashed" | "starred" | "folder_id">,
+  doc: Pick<MobileDriveDoc, "trashed" | "starred" | "folder_id"> & {
+    /** The row's OWN canonical role (#880): the five writing verbs degrade
+     *  together off it, and the three reads never do. */
+    canWrite?: boolean;
+  },
   folders: readonly Folder[],
   on: DocMenuHandlers
 ): MenuGroup[] {
+  const writable = doc.canWrite !== false;
+  const refuse = (label: string): string =>
+    writable ? label : refusedLabel(label, READ_ONLY_SOURCE_REASON);
+
   if (doc.trashed) {
     // Restore puts its folder and its star back exactly as they were; the
     // slot's purge countdown is the only other thing a trashed row says.
     return [
       {
         key: "trash",
-        rows: [{ key: "restore", label: "Restore", onSelect: on.restore }],
+        rows: [
+          {
+            key: "restore",
+            label: refuse("Restore"),
+            disabled: !writable,
+            onSelect: on.restore,
+          },
+        ],
       },
     ];
   }
@@ -61,6 +80,7 @@ export function buildDocMenu(
       key: "move:top",
       label: "No folder",
       checked: doc.folder_id === null,
+      disabled: !writable,
       onSelect: () => on.moveTo(null),
     },
     ...folders.map(
@@ -68,6 +88,7 @@ export function buildDocMenu(
         key: `move:${folder.folder_id}`,
         label: folder.name,
         checked: doc.folder_id === folder.folder_id,
+        disabled: !writable,
         onSelect: () => on.moveTo(folder.folder_id),
       })
     ),
@@ -75,12 +96,28 @@ export function buildDocMenu(
 
   const actGroup: MenuRow[] = [
     doc.starred
-      ? { key: "unstar", label: "Unstar", onSelect: on.unstar }
-      : { key: "star", label: "Star", onSelect: on.star },
-    { key: "rename", label: "Rename…", onSelect: on.rename },
+      ? {
+          key: "unstar",
+          label: refuse("Unstar"),
+          disabled: !writable,
+          onSelect: on.unstar,
+        }
+      : {
+          key: "star",
+          label: refuse("Star"),
+          disabled: !writable,
+          onSelect: on.star,
+        },
+    {
+      key: "rename",
+      label: refuse("Rename…"),
+      disabled: !writable,
+      onSelect: on.rename,
+    },
     // "A folder is a label on the document" — moving is retagging, so the
-    // whole label set fits in one submenu rather than a picker screen.
-    { key: "move", label: "Move to", rows: moveRows },
+    // whole label set fits in one submenu rather than a picker screen. A
+    // submenu row carries no `disabled`, so the refusal rides on its rows.
+    { key: "move", label: refuse("Move to"), rows: moveRows },
   ];
 
   return [
@@ -89,7 +126,13 @@ export function buildDocMenu(
     {
       key: "trash",
       rows: [
-        { key: "trash", label: "Trash", destructive: true, onSelect: on.trash },
+        {
+          key: "trash",
+          label: refuse("Trash"),
+          destructive: true,
+          disabled: !writable,
+          onSelect: on.trash,
+        },
       ],
     },
   ];

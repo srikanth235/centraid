@@ -3,13 +3,21 @@
 // native queue, sealer, imaging and file modules are all injected via mocks so
 // the pure orchestration runs under node.
 
+import { rmSync } from "node:fs";
+import path from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+
 import type { NativeReplicaSession } from "../replica/native-session";
+import type { PendingUploadGroup } from "../replica/storage-accounting";
 import type * as TypeImport_1mtgsk8 from "./derivatives-native";
 import type * as TypeImport_tjnyu from "./expo-native";
 import { backupDeviceMedia } from "./media-producer";
 import type * as TypeImport_181nh9s from "./native-digest";
+import { NodeSqliteFileDriver } from "./node-sqlite-driver";
+import { PENDING_PAGE_LIMIT, UploadQueueStore } from "./store";
 
 type ExpoFileSystem = typeof import("expo-file-system");
 type StorageModule = typeof import("../../storage");
@@ -23,7 +31,7 @@ const H = vi.hoisted(() => {
     existing: unknown;
     finalState: string;
     lastError?: string;
-    pendingCount: number;
+    pendingGroups: PendingUploadGroup[];
     unfinishedFollowup: boolean;
     capturedInput?: Record<string, unknown>;
     capturedFollowup?: Record<string, unknown>;
@@ -38,12 +46,18 @@ const H = vi.hoisted(() => {
   const q: QueueState = {
     existing: undefined,
     finalState: "settled",
-    pendingCount: 1,
+    pendingGroups: [{ bytes: 100, itemCount: 1, videoCount: 0 }],
     unfinishedFollowup: false,
     closed: false,
   };
+  /** Every denominator the notification was started with, in order. */
+  const foregroundTotals: number[] = [];
   const fgs = {
-    start: vi.fn<ForegroundServiceModule["UploadForegroundService"]["start"]>(),
+    start: vi.fn<ForegroundServiceModule["UploadForegroundService"]["start"]>(
+      (total) => {
+        foregroundTotals.push(total);
+      }
+    ),
     update:
       vi.fn<ForegroundServiceModule["UploadForegroundService"]["update"]>(),
     stop: vi.fn<ForegroundServiceModule["UploadForegroundService"]["stop"]>(),
@@ -69,14 +83,21 @@ const H = vi.hoisted(() => {
         q.capturedFollowup = makeFollowup({ sha256: q.item.sha256 });
       return q.item;
     },
-    pending: () => Array.from({ length: q.pendingCount }, () => ({})),
+    pendingStorageGroups: () => q.pendingGroups,
     drain: async () => ({ settled: 1, deduped: 0, failed: 0, halted: false }),
     hasFollowupForItem: () => q.unfinishedFollowup,
     close: () => {
       q.closed = true;
     },
   };
-  return { q, fgs, deletedFiles, generateDeviceDerivatives, fakeQueue };
+  return {
+    q,
+    fgs,
+    foregroundTotals,
+    deletedFiles,
+    generateDeviceDerivatives,
+    fakeQueue,
+  };
 });
 
 vi.mock(import("./native-queue"), () => ({
@@ -137,16 +158,45 @@ vi.mock(import("expo-file-system"), () => ({
   } as unknown as ExpoFileSystem["File"],
 }));
 
-const { q, fgs, deletedFiles, generateDeviceDerivatives } = H;
+const { q, fgs, foregroundTotals, deletedFiles, generateDeviceDerivatives } = H;
 
 const session = {} as NativeReplicaSession;
+
+/**
+ * Group rows produced by the real store rather than written by hand, so the
+ * foreground-service denominator is whatever SQL actually answers for a
+ * backlog this deep — a `pending()`-shaped read would cap it at one page.
+ */
+function seedPendingGroups(count: number): PendingUploadGroup[] {
+  const dir = tempDirSync("centraid-producer-queue-");
+  const driver = new NodeSqliteFileDriver(path.join(dir, "uploads.db"));
+  try {
+    const store = UploadQueueStore.create(driver);
+    for (let index = 0; index < count; index += 1) {
+      store.enqueue({
+        itemId: `queued-${index}`,
+        sha256: index.toString(16).padStart(64, "0"),
+        localUri: `file://cam/IMG-${index}.heic`,
+        targetVaultId: "vault-personal",
+        plaintextSize: 100,
+        sealedSize: 227,
+        frameCount: 1,
+        partCount: 1,
+      });
+    }
+    return store.pendingStorageGroups();
+  } finally {
+    driver.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 describe("media-producer", () => {
   beforeEach(() => {
     q.existing = undefined;
     q.finalState = "settled";
     q.lastError = undefined;
-    q.pendingCount = 1;
+    q.pendingGroups = [{ bytes: 100, itemCount: 1, videoCount: 0 }];
     q.unfinishedFollowup = false;
     q.capturedInput = undefined;
     q.capturedFollowup = undefined;
@@ -172,6 +222,7 @@ describe("media-producer", () => {
     });
     fgs.start.mockClear();
     fgs.stop.mockClear();
+    foregroundTotals.length = 0;
   });
 
   describe(backupDeviceMedia, () => {
@@ -212,7 +263,7 @@ describe("media-producer", () => {
     });
 
     it("owns the foreground service across the drain and always closes the queue", async () => {
-      q.pendingCount = 3;
+      q.pendingGroups = seedPendingGroups(3);
       await backupDeviceMedia(session, "http://gw", {
         localUri: "file://cam/IMG.heic",
         mediaType: "image/heic",
@@ -222,6 +273,20 @@ describe("media-producer", () => {
       expect(fgs.start).toHaveBeenCalledWith(3);
       expect(fgs.stop).toHaveBeenCalledOnce();
       expect(q.closed).toBe(true);
+    });
+
+    it("counts a backlog deeper than one queue page, not the page", async () => {
+      q.pendingGroups = seedPendingGroups(PENDING_PAGE_LIMIT + 3);
+      await backupDeviceMedia(session, "http://gw", {
+        localUri: "file://cam/IMG.heic",
+        mediaType: "image/heic",
+        plaintextSize: 1_000,
+        kind: "photo",
+      });
+      expect(
+        foregroundTotals,
+        "the notification's denominator is the whole queue"
+      ).toStrictEqual([PENDING_PAGE_LIMIT + 3]);
     });
 
     it("skips the derivative pipeline for audio (F11) and for an already-queued sha", async () => {

@@ -1,12 +1,5 @@
 import React, { useMemo, useState } from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 
 import { formatRelativeTime } from "@centraid/design";
 
@@ -21,10 +14,25 @@ import { Text } from "../components/NativeText";
 import OutOfRoom from "../components/OutOfRoom";
 import { borders, family, radii, t, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
-import { replicaStatusRow } from "./replica-status";
+import PendingChangesSheet from "./PendingChangesSheet";
+import {
+  replicaCoverageRow,
+  replicaStatusRow,
+  revokedNoticeRow,
+} from "./replica-status";
 import { useReplica } from "./ReplicaProvider";
 
 const DIVERGENCE_MS = 24 * 60 * 60 * 1_000;
+
+/**
+ * Where the switch that would un-pause sync actually is.
+ *
+ * `sync-paused` is the member's own transfer rules refusing the radio, so
+ * pulling again re-hits the same rule and a Refresh here would be a control
+ * that cannot work (replica-status.ts). The rules live on Backup health, and
+ * saying so is the whole action this state can honestly offer.
+ */
+const TRANSFER_RULES_HINT = "Change these under Backup health in Settings.";
 
 /**
  * Human status only: no cursor, epoch, replica, or internal storage jargon.
@@ -58,6 +66,9 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     scopes = [],
     reachability = "device-offline",
     bootstrapProgress = [],
+    coverage,
+    revokedNotices = [],
+    dismissRevokedNotice,
     refresh,
     storageFull,
   } = useReplica();
@@ -79,6 +90,12 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     () => replicaStatusRow(reachability),
     [reachability]
   );
+  // The durable partial-library label, for the relaunch where no in-process
+  // bootstrap survives to report pages (replica-status.ts).
+  const coverageLabel = replicaCoverageRow({
+    ...(coverage ? { coverage } : {}),
+    bootstrapping: bootstrapProgress.length > 0,
+  }).label;
   // Red when the member can act on it, neutral when they are waiting.
   const tint = actionable ? colors.danger : colors.textFaint;
   const refreshReplica = (): void => {
@@ -135,6 +152,10 @@ export default function ReplicaStatusBar(): React.JSX.Element {
           actionLabel={STORAGE_FULL_ACTION_LABEL}
           onAction={() => {
             clearPinnedThumbnailPacks();
+            // Freeing the packs is only half of it: the coordinator parked the
+            // feed when the disk filled and stays parked until it is told the
+            // room exists (coordinator.ts `resumeAfterStorageFull`).
+            session?.resumeAfterStorageFull();
             void refresh?.();
           }}
         />
@@ -199,6 +220,34 @@ export default function ReplicaStatusBar(): React.JSX.Element {
           ) : null}
         </View>
       ) : null}
+      {reachability === "sync-paused" ? (
+        <View style={[styles.hint, { backgroundColor: colors.bgSunken }]}>
+          <Text style={[styles.hintText, { color: colors.textSoft }]}>
+            {TRANSFER_RULES_HINT}
+          </Text>
+        </View>
+      ) : null}
+      {revokedNotices.map((notice) => {
+        const row = revokedNoticeRow(notice);
+        return (
+          <View
+            key={notice.vaultId}
+            style={[styles.hint, { backgroundColor: colors.bgSunken }]}
+          >
+            <Text style={[styles.hintText, { color: colors.textSoft }]}>
+              {row.label}
+            </Text>
+            <Pressable
+              accessibilityLabel={`${row.action} ${notice.label}`}
+              onPress={() => dismissRevokedNotice?.(notice.vaultId)}
+            >
+              <Text style={[styles.refreshText, { color: colors.accent }]}>
+                {row.action}
+              </Text>
+            </Pressable>
+          </View>
+        );
+      })}
       {bootstrap ? (
         <View style={[styles.bootstrap, { backgroundColor: colors.bgSunken }]}>
           <Icon name="download-cloud" size={13} color={colors.accent} />
@@ -210,6 +259,14 @@ export default function ReplicaStatusBar(): React.JSX.Element {
               </Text>
             )}
             {bootstrap.suffix}
+          </Text>
+        </View>
+      ) : null}
+      {coverageLabel ? (
+        <View style={[styles.bootstrap, { backgroundColor: colors.bgSunken }]}>
+          <Icon name="download-cloud" size={13} color={colors.accent} />
+          <Text style={[styles.bootstrapText, { color: colors.textSoft }]}>
+            {coverageLabel}
           </Text>
         </View>
       ) : null}
@@ -237,152 +294,19 @@ export default function ReplicaStatusBar(): React.JSX.Element {
           ))}
         </View>
       ) : null}
-      <Modal
+      <PendingChangesSheet
         visible={open}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setOpen(false)}
-      >
-        <View style={[styles.sheet, { backgroundColor: colors.bg }]}>
-          <View style={styles.sheetHeader}>
-            <View>
-              <Text style={[styles.title, { color: colors.text }]}>
-                Pending changes
-              </Text>
-              <Text style={[styles.subtitle, { color: colors.textSoft }]}>
-                Saved on this phone until each target accepts them
-              </Text>
-            </View>
-            <Pressable onPress={() => setOpen(false)}>
-              <Icon name="x" size={24} color={colors.text} />
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.list}>
-            {pending.length === 0 ? (
-              <Text style={[styles.empty, { color: colors.textSoft }]}>
-                Nothing is waiting.
-              </Text>
-            ) : (
-              pending.map((item) => {
-                const terminal = ["failed", "denied", "executed"].includes(
-                  item.status
-                );
-                return (
-                  <View
-                    key={`${item.kind}:${item.vaultId}:${item.id}`}
-                    style={[
-                      styles.card,
-                      {
-                        backgroundColor: colors.bgElev,
-                        borderColor: colors.line,
-                      },
-                    ]}
-                  >
-                    <View style={styles.cardCopy}>
-                      <Text style={[styles.cardTitle, { color: colors.text }]}>
-                        {item.label}
-                      </Text>
-                      <Text
-                        style={[styles.cardMeta, { color: colors.textSoft }]}
-                      >
-                        {item.vaultLabel} · {humanStatus(item.status)}
-                      </Text>
-                      {item.reason ? (
-                        <Text style={[styles.reason, { color: colors.danger }]}>
-                          {item.reason}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Pressable
-                      onPress={() => {
-                        if (terminal)
-                          session?.dismissPendingChange(
-                            item.id,
-                            item.vaultId,
-                            item.kind
-                          );
-                        else
-                          void session
-                            ?.cancelPendingChange(
-                              item.id,
-                              item.vaultId,
-                              item.kind
-                            )
-                            .then(refreshPending);
-                        refreshPending();
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.action,
-                          {
-                            color: terminal ? colors.textSoft : colors.danger,
-                          },
-                        ]}
-                      >
-                        {terminal ? "Dismiss" : "Cancel"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                );
-              })
-            )}
-            {scopes.map((scope) => (
-              <Text
-                key={scope.vaultId}
-                style={[styles.source, { color: colors.textFaint }]}
-              >
-                {scope.label}:{" "}
-                {scope.updatedAt
-                  ? `updated ${formatRelativeTime(Date.parse(scope.updatedAt))}`
-                  : "not updated yet"}
-              </Text>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
+        onClose={() => setOpen(false)}
+        pending={pending}
+        scopes={scopes}
+        actions={session}
+        refresh={refreshPending}
+      />
     </>
   );
 }
 
-function humanStatus(status: string): string {
-  switch (status) {
-    case "queued":
-      return "waiting to send";
-    case "sending":
-    case "in-flight":
-    case "awaiting-change":
-      return "being applied";
-    case "parked":
-      return "needs attention";
-    case "denied":
-      return "permission changed";
-    case "failed":
-      return "could not apply";
-    case "executed":
-      return "complete";
-    default:
-      return status;
-  }
-}
-
 const styles = StyleSheet.create({
-  action: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
-  card: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    borderWidth: borders.hairline,
-    flexDirection: "row",
-    gap: 12,
-    padding: 14,
-  },
-  cardCopy: { flex: 1 },
-  cardMeta: {
-    fontFamily: family.sansRegular,
-    fontSize: t("control").fontSize,
-    marginTop: 3,
-  },
-  cardTitle: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   outOfRoomWrap: { padding: 14 },
   bootstrap: {
     alignItems: "center",
@@ -412,18 +336,23 @@ const styles = StyleSheet.create({
     fontSize: t("control").fontSize,
   },
   dot: { borderRadius: radii.sm, height: 7, width: 7 },
-  empty: {
+  hint: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
+    marginHorizontal: 14,
+    padding: 8,
+  },
+  hintText: {
+    flex: 1,
     fontFamily: family.sansRegular,
-    fontSize: t("body").fontSize,
-    paddingVertical: 40,
-    textAlign: "center",
+    fontSize: t("control").fontSize,
   },
   label: {
     flex: 1,
     fontFamily: family.sansRegular,
     fontSize: t("control").fontSize,
   },
-  list: { gap: 10, padding: 18 },
   pending: {
     alignItems: "center",
     borderRadius: radii.pill,
@@ -433,11 +362,6 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   pendingText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
-  reason: {
-    fontFamily: family.sansRegular,
-    fontSize: t("control").fontSize,
-    marginTop: 6,
-  },
   refresh: {
     alignItems: "center",
     flexDirection: "row",
@@ -445,25 +369,12 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   refreshText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
-  sheet: { flex: 1 },
-  sheetHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 18,
-  },
   source: {
     fontFamily: family.sansRegular,
     fontSize: t("mono").fontSize,
     marginTop: 4,
   },
   spacer: { flex: 1 },
-  subtitle: {
-    fontFamily: family.sansRegular,
-    fontSize: t("control").fontSize,
-    marginTop: 3,
-  },
-  title: { fontFamily: family.sansMedium, fontSize: t("title").fontSize },
   wrap: {
     alignItems: "center",
     borderBottomWidth: borders.hairline,

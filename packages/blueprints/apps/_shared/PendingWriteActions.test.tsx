@@ -44,6 +44,38 @@ describe(PendingWriteActions, () => {
     expect(openApprovals).toHaveBeenCalledOnce();
   });
 
+  test("an attempted write that is still queued says how long it has waited", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    const queued = {
+      [PENDING_OVERLAY_FIELDS.key]: "intent-stuck",
+      [PENDING_OVERLAY_FIELDS.action]: "rename",
+      [PENDING_OVERLAY_FIELDS.status]: "queued",
+      [PENDING_OVERLAY_FIELDS.enqueuedAt]: new Date(
+        Date.now() - 12 * 60_000
+      ).toISOString(),
+    };
+    await act(async () => {
+      root?.render(
+        createElement(PendingWriteActions, {
+          row: { ...queued, [PENDING_OVERLAY_FIELDS.attempts]: 3 },
+        })
+      );
+    });
+    expect(container.textContent).toContain("Queued 12m ago");
+
+    // Never attempted is offline, not stuck: the chip already says so.
+    await act(async () => {
+      root?.render(
+        createElement(PendingWriteActions, {
+          row: { ...queued, [PENDING_OVERLAY_FIELDS.attempts]: 0 },
+        })
+      );
+    });
+    expect(container.textContent).not.toContain("Queued");
+  });
+
   test("conflicts retain version detail plus edit, retry, and discard", async () => {
     const retryPendingWrite = vi.fn<() => Promise<boolean>>(() =>
       Promise.resolve(true)

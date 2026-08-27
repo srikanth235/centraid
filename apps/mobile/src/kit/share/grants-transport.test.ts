@@ -10,7 +10,21 @@
 //  3. An audience this vault has no record of is a real answer (`undefined`),
 //     not a thrown failure — it is a different fact from an audience with
 //     nothing shared.
+//  4. A REFUSAL IS NOT AN OUTAGE. `fetch` rejecting means the request never
+//     left the phone and the gateway said nothing; a 4xx/5xx means it said
+//     something. Same shape as the Tally read plane's pin
+//     (`apps/mobile/src/apps/tally/tally-store.test.ts`) and the rule in
+//     docs/mobile-offline.md: two facts, two sentences.
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+import {
+  GRANT_FAILED,
+  GRANT_UNREACHABLE,
+  REGISTRY_UNREADABLE,
+  REVOKE_FAILED,
+  REVOKE_UNREACHABLE,
+} from "@centraid/blueprints/apps/_shared/grant-copy";
+import { isGrantUnreachable } from "@centraid/blueprints/apps/_shared/grant-door";
 
 import { nativeGrantCalls, nativeGrantDoor } from "./grants-transport";
 
@@ -143,7 +157,7 @@ describe("the native grant transport", () => {
         subjectId: "secret-1",
         capability: "view",
       });
-      expect(outcome).toStrictEqual({ ok: false, message });
+      expect(outcome).toStrictEqual({ ok: false, message, reach: "refused" });
     });
 
     test("the revoke sentence is the route's, verbatim", async () => {
@@ -163,6 +177,7 @@ describe("the native grant transport", () => {
       await expect(nativeGrantDoor(BASE).subjects()).resolves.toStrictEqual({
         readable: false,
         offers: [],
+        reach: "refused",
       });
     });
 
@@ -229,6 +244,78 @@ describe("the native grant transport", () => {
         capability: "view",
       });
       expect(outcome).toMatchObject({ ok: true, outcome: "exists" });
+    });
+  });
+
+  describe("a gateway that never answered is not a gateway that said no", () => {
+    /** What `fetch` does on a phone with no route to the host. */
+    function offline(): void {
+      vi.stubGlobal("fetch", () =>
+        Promise.reject(new TypeError("Network request failed"))
+      );
+    }
+
+    const REQUEST = {
+      audienceKind: "party" as const,
+      audienceId: "party-priya",
+      subjectType: "core.document",
+      subjectId: "doc-1",
+      capability: "view" as const,
+    };
+
+    test("the transport marks the failure rather than leaving the door to guess", async () => {
+      offline();
+      await expect(nativeGrantCalls(BASE).create(REQUEST)).rejects.toSatisfy(
+        isGrantUnreachable
+      );
+      // A gateway that ANSWERED is never marked, however unhappy the answer.
+      stubFetch(() => ({ status: 500, body: { error: "boom" } }));
+      await expect(
+        nativeGrantCalls(BASE).create(REQUEST)
+      ).rejects.not.toSatisfy(isGrantUnreachable);
+    });
+
+    test("sharing offline reads as unsent, never as a refusal", async () => {
+      offline();
+      const outcome = await nativeGrantDoor(BASE).create(REQUEST);
+      expect(outcome).toStrictEqual({
+        ok: false,
+        message: GRANT_UNREACHABLE,
+        reach: "unreachable",
+      });
+      // The two sentences are actually different words, not one string reused.
+      expect(GRANT_UNREACHABLE).not.toBe(GRANT_FAILED);
+    });
+
+    test("revoking offline reads as unsent, never as a refusal", async () => {
+      offline();
+      await expect(
+        nativeGrantDoor(BASE).revoke("grant-1")
+      ).resolves.toStrictEqual({
+        ok: false,
+        message: REVOKE_UNREACHABLE,
+        reach: "unreachable",
+      });
+      expect(REVOKE_UNREACHABLE).not.toBe(REVOKE_FAILED);
+    });
+
+    test("the registry is unknown offline and refused when the gateway says so", async () => {
+      offline();
+      await expect(nativeGrantDoor(BASE).subjects()).resolves.toStrictEqual({
+        readable: false,
+        offers: [],
+        reach: "unreachable",
+      });
+      // Both are `readable: false`; only `reach` tells the surface which
+      // sentence to print, and REGISTRY_UNREADABLE is not the offline one.
+      expect(REGISTRY_UNREADABLE).not.toContain("out of reach");
+    });
+
+    test("a refused write keeps the gateway's own words, offline copy never borrowed", async () => {
+      const message = "this vault will not share that";
+      stubFetch(() => ({ status: 403, body: { error: "denied", message } }));
+      const outcome = await nativeGrantDoor(BASE).create(REQUEST);
+      expect(outcome).toStrictEqual({ ok: false, message, reach: "refused" });
     });
   });
 });

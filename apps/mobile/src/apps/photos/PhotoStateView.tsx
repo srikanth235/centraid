@@ -12,6 +12,7 @@ import { Text } from "../../kit/components/NativeText";
 import SelectChip from "../../kit/components/SelectChip";
 import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { usePendingChanges } from "../../kit/replica/pending-changes";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -23,6 +24,7 @@ import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
+import { photosPendingLine } from "./photos-pending";
 import {
   NO_DOWNLOAD_REASON,
   batchFavorite,
@@ -57,6 +59,8 @@ export default function PhotoStateView({
   const { session } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
+  const { pending } = usePendingChanges(session);
+  const pendingLine = photosPendingLine(pending);
   const [selection, setSelection] = useState(new Set<string>());
   const params = route.params;
   const mode = params.mode;
@@ -319,6 +323,11 @@ export default function PhotoStateView({
         ) : null}
       </View>
       <ReplicaStatusBar />
+      {pendingLine ? (
+        <Text style={[styles.note, { color: colors.textSoft }]}>
+          {pendingLine}
+        </Text>
+      ) : null}
       {mode === "trash" ? (
         <>
           {/* Restore promise once here, not folded into the meta line (proto:4445). */}

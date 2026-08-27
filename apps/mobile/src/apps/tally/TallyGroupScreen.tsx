@@ -90,6 +90,7 @@ import type { TallyAsk } from "./TallyAskSheet";
 import TallyEntryRow from "./TallyEntryRow";
 import { Hero, LedgerRow, Section } from "./TallyParts";
 import TallyScreen from "./TallyScreen";
+import TallyShareGroup from "./TallyShareGroup";
 import { useTallyVault } from "./useTallyVault";
 
 /** Whoever a transfer runs between, named off the members the query derived. */
@@ -305,10 +306,12 @@ export default function TallyGroupScreen({
           ))}
         </Section>
 
-        {/* The group's own life acts, below its ledger: leaving and archiving
-            each ask first, in §6's own words, and deleting states the vault's
-            refusal before the question rather than after the press. */}
+        {/* The group's own life acts, below its ledger: sharing comes first
+            because it is the one that ADDS, leaving and archiving each ask
+            first, in §6's own words, and deleting states the vault's refusal
+            before the question rather than after the press. */}
         <Section label={SECTIONS.groups} meta={SECTION_META.groups} filled>
+          <TallyShareGroup groupId={groupId} />
           <LedgerRow
             title={VERBS.leave}
             meta={LEAVE_BODY}

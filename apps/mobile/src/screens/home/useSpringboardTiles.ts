@@ -1,13 +1,14 @@
 // Per-app data plumbing for the Home springboard (#708 A).
 //
 // Home has no grant of its own: every read goes out under the OWNING app's id,
-// so a tile shows only what its app may already read offline. Every read
-// carries an explicit `limit` — unbounded reads silently default to 1000 rows
-// (packages/client/src/replica/query.ts) — and `orderBy` only where the tile
-// means "the newest", since the evaluator sorts before it slices and the
-// ordered read costs the pushdown page. Locker issues NO read: its items sit
-// behind an online, session-gated RPC. Memoize every `request` — an inline
-// literal re-reads each render.
+// so a tile shows only what its app may already read offline. The requests
+// themselves — and the reasons each one is bounded in WORK and not merely in
+// rows returned — live in ./home-tile-reads, where they are pinned against the
+// mounted reader's SQL. Locker issues NO read: its items sit behind an online,
+// session-gated RPC. A request handed to `useReplicaQuery` must keep a stable
+// identity across renders or the tile re-reads on every one: the module
+// constants already do, and the two that depend on render state (the month's
+// expenses, the body lookups) are memoized here.
 
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
@@ -19,8 +20,14 @@ import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import type { ReplicaQueryState } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { expandEvent } from "../../kit/schedule/recurrence";
-import type { NativeReadRequest } from "../../lib/replica/native-session";
 import { pinnedThumbnailUri } from "../../lib/replica/thumbnail-pack";
+import {
+  expenseTileRead,
+  HOME_ORDERED_TILE_READS,
+  HOME_TILE_LIMITS,
+  HOME_TILE_READS,
+  idFilter,
+} from "./home-tile-reads";
 import {
   countUpcoming,
   monthStartDate,
@@ -35,36 +42,10 @@ import {
 } from "./tile-model";
 import type { AgendaOccurrence, TileData, TileStatus } from "./tile-model";
 
-const LIMITS = {
-  documents: 300,
-  events: 500,
-  exceptions: 500,
-  expenses: 500,
-  notes: 300,
-  photos: 200,
-  profiles: 300,
-  tasks: 500,
-} as const;
-
 const AGENDA_HORIZON_DAYS = 30;
 const AGENDA_COUNT_DAYS = 7;
 
 const BODY_LOOKUP_ROWS = 12;
-
-/** Bounded: an unbounded second read blows past the 1000-row default. */
-function idFilter(
-  entity: string,
-  column: string,
-  ids: readonly string[]
-): NativeReadRequest {
-  return ids.length === 0
-    ? { entity, where: [{ column, op: "eq", value: "__none__" }], limit: 1 }
-    : {
-        entity,
-        where: [{ column, op: "in", value: [...ids] }],
-        limit: Math.max(ids.length, 1),
-      };
-}
 
 /** `unavailable` and a failed read stay `unknown` — neither is evidence the
  *  app is empty, and only a settled empty read may claim first-run. */
@@ -113,31 +94,9 @@ export function useSpringboardTiles(): Map<string, TileData> {
     }, [])
   );
 
-  const photos = useReplicaQuery(
-    "photos",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "media.asset",
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "captured_at", dir: "desc" },
-        limit: LIMITS.photos,
-      }),
-      []
-    )
-  );
+  const photos = useReplicaQuery("photos", HOME_ORDERED_TILE_READS.photos);
 
-  const documents = useReplicaQuery(
-    "docs",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "core.document",
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: LIMITS.documents,
-      }),
-      []
-    )
-  );
+  const documents = useReplicaQuery("docs", HOME_ORDERED_TILE_READS.documents);
   const docBodyIds = useMemo(
     () => topIds(documents.rows, "current_content_id"),
     [documents.rows]
@@ -150,18 +109,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
     )
   );
 
-  const notes = useReplicaQuery(
-    "notes",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "knowledge.note",
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: LIMITS.notes,
-      }),
-      []
-    )
-  );
+  const notes = useReplicaQuery("notes", HOME_ORDERED_TILE_READS.notes);
   const noteBodyIds = useMemo(
     () => topIds(notes.rows, "body_content_id"),
     [notes.rows]
@@ -174,34 +122,10 @@ export function useSpringboardTiles(): Map<string, TileData> {
     )
   );
 
-  const events = useReplicaQuery(
-    "agenda",
-    useMemo(
-      (): NativeReadRequest => ({ entity: "core.event", limit: LIMITS.events }),
-      []
-    )
-  );
-  const exceptions = useReplicaQuery(
-    "agenda",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "schedule.recurrence_exception",
-        limit: LIMITS.exceptions,
-      }),
-      []
-    )
-  );
+  const events = useReplicaQuery("agenda", HOME_TILE_READS.events);
+  const exceptions = useReplicaQuery("agenda", HOME_TILE_READS.exceptions);
 
-  const profiles = useReplicaQuery(
-    "people",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "people.profile",
-        limit: LIMITS.profiles,
-      }),
-      []
-    )
-  );
+  const profiles = useReplicaQuery("people", HOME_TILE_READS.profiles);
   const partyIds = useMemo(
     () => topIds(profiles.rows, "party_id"),
     [profiles.rows]
@@ -211,36 +135,14 @@ export function useSpringboardTiles(): Map<string, TileData> {
     useMemo(() => idFilter("core.party", "party_id", partyIds), [partyIds])
   );
 
-  const tasks = useReplicaQuery(
-    "tasks",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "schedule.task",
-        limit: LIMITS.tasks,
-      }),
-      []
-    )
-  );
+  const tasks = useReplicaQuery("tasks", HOME_TILE_READS.tasks);
 
   const monthStart = monthStartDate(now);
   const expenses = useReplicaQuery(
     "tally",
-    useMemo(
-      (): NativeReadRequest => ({
-        entity: "tally.expense",
-        where: [
-          { column: "deleted_at", op: "is-null" },
-          { column: "spent_on", op: "gte", value: monthStart },
-        ],
-        limit: LIMITS.expenses,
-      }),
-      [monthStart]
-    )
+    useMemo(() => expenseTileRead(monthStart), [monthStart])
   );
-  const vault = useReplicaQuery(
-    "tally",
-    useMemo((): NativeReadRequest => ({ entity: "core.vault", limit: 4 }), [])
-  );
+  const vault = useReplicaQuery("tally", HOME_TILE_READS.vault);
 
   return useMemo(() => {
     const tiles = new Map<string, TileData>();
@@ -254,7 +156,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "photos",
       status: combineStatus([photos], mosaic.length > 0),
       count: photos.rows.length,
-      countCapped: capped(photos.rows, LIMITS.photos),
+      countCapped: capped(photos.rows, HOME_TILE_LIMITS.photos),
       countLabel: "photos",
       body: { kind: "photos", photos: mosaic },
     });
@@ -264,7 +166,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "docs",
       status: combineStatus([documents, docContents], docRows.length > 0),
       count: documents.rows.length,
-      countCapped: capped(documents.rows, LIMITS.documents),
+      countCapped: capped(documents.rows, HOME_TILE_LIMITS.documents),
       countLabel: "documents",
       body: { kind: "docs", rows: docRows },
     });
@@ -274,7 +176,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "notes",
       status: combineStatus([notes, noteContents], note !== undefined),
       count: notes.rows.length,
-      countCapped: capped(notes.rows, LIMITS.notes),
+      countCapped: capped(notes.rows, HOME_TILE_LIMITS.notes),
       countLabel: "notes",
       body: {
         kind: "notes",
@@ -314,7 +216,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "people",
       status: combineStatus([profiles, parties], faces.length > 0),
       count: peopleTotal,
-      countCapped: capped(profiles.rows, LIMITS.profiles),
+      countCapped: capped(profiles.rows, HOME_TILE_LIMITS.profiles),
       countLabel: "people",
       body: {
         kind: "people",
@@ -328,7 +230,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "tasks",
       status: combineStatus([tasks], taskRows.length > 0),
       count: openTasks(tasks.rows).length,
-      countCapped: capped(tasks.rows, LIMITS.tasks),
+      countCapped: capped(tasks.rows, HOME_TILE_LIMITS.tasks),
       countLabel: "open",
       body: { kind: "tasks", rows: taskRows },
     });
@@ -337,7 +239,7 @@ export function useSpringboardTiles(): Map<string, TileData> {
       appId: "tally",
       status: combineStatus([expenses, vault], expenses.rows.length > 0),
       count: expenses.rows.length,
-      countCapped: capped(expenses.rows, LIMITS.expenses),
+      countCapped: capped(expenses.rows, HOME_TILE_LIMITS.expenses),
       countLabel: "this month",
       body: {
         kind: "tally",

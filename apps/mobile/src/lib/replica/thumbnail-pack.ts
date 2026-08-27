@@ -1,11 +1,19 @@
 import { Directory, File } from "expo-file-system";
 
-import { replicaStorageDirectory } from "../../../modules/centraid-storage";
+import {
+  nativeDirectorySize,
+  replicaStorageDirectory,
+} from "../../../modules/centraid-storage";
 import { authHeader } from "../gateway";
 import { THUMBNAIL_SOURCE_BUDGET_BYTES } from "./offline-budgets";
 
 export { THUMBNAIL_SOURCE_BUDGET_BYTES } from "./offline-budgets";
 const RECENT_WINDOW_MS = 90 * 24 * 60 * 60 * 1_000;
+
+/** Stats per event-loop turn while walking a pack: a pack at the 128 MiB
+ *  ceiling is ~9,300 files, two crossings each, and doing them in one task
+ *  drops frames on whatever surface triggered the refresh. */
+const STAT_BATCH = 250;
 
 export interface PinnedThumbnailCandidate {
   contentId: string;
@@ -19,6 +27,15 @@ function packDirectory(scopeId: string): Directory | undefined {
   const root = replicaStorageDirectory();
   if (!root) return undefined;
   return new Directory(root, "thumbnail-pack", encodeURIComponent(scopeId));
+}
+
+/** Filesystem path of a pack for the native sizer — `Directory.uri` is a
+ *  `file://` URI and `directorySize` takes a path, so they do not swap. */
+function packPath(scopeId?: string): string | undefined {
+  const root = replicaStorageDirectory();
+  if (!root) return undefined;
+  const base = `${root.replace(/\/+$/u, "")}/thumbnail-pack`;
+  return scopeId ? `${base}/${encodeURIComponent(scopeId)}` : base;
 }
 
 function filename(contentId: string): string {
@@ -82,6 +99,7 @@ export function pinnedThumbnailUri(
 export async function refreshPinnedThumbnailPack(
   candidates: readonly PinnedThumbnailCandidate[]
 ): Promise<void> {
+  if (!replicaStorageDirectory()) return;
   const byScope = new Map<string, PinnedThumbnailCandidate[]>();
   const floor = Date.now() - RECENT_WINDOW_MS;
   for (const candidate of candidates) {
@@ -93,21 +111,33 @@ export async function refreshPinnedThumbnailPack(
     ]);
   }
   const known = packIndex();
+  const work = [...byScope].flatMap(([scopeId, rows]) => {
+    const missing = [...rows]
+      .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
+      .filter(
+        (row) =>
+          !known.has(
+            `${encodeURIComponent(scopeId)}/${filename(row.contentId)}`
+          )
+      );
+    return missing.length > 0 ? [{ scopeId, missing }] : [];
+  });
+  if (work.length === 0) return;
+  // A pack download is bytes over the same radio as the upload drain, so it
+  // answers to the same durable policy: Wi-Fi-only, metered, roaming and
+  // charger rules decide, never "it is only thumbnails". Imported here rather
+  // than at the top so the battery/network modules behind the policy load only
+  // when bytes are actually about to move — every surface that merely READS a
+  // pack goes through this module too.
+  const { nativeSyncAllowed } = await import("../upload/native-policy");
+  if (!(await nativeSyncAllowed())) return;
   await Promise.all(
-    [...byScope].map(async ([scopeId, rows]) => {
+    work.map(async ({ scopeId, missing }) => {
       const directory = packDirectory(scopeId);
       if (!directory) return;
       directory.create({ idempotent: true, intermediates: true });
-      const missing = [...rows]
-        .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
-        .filter(
-          (row) =>
-            !known.has(
-              `${encodeURIComponent(scopeId)}/${filename(row.contentId)}`
-            )
-        );
       await downloadWithConcurrency(missing, directory);
-      enforceBudget(directory);
+      await enforceBudget(scopeId, directory);
     })
   );
   invalidateIndex();
@@ -152,11 +182,9 @@ async function downloadWithConcurrency(
 }
 
 export function clearPinnedThumbnailPacks(): void {
-  const root = replicaStorageDirectory();
   invalidateIndex();
-  if (!root) return;
-  const directory = new Directory(root, "thumbnail-pack");
-  if (directory.exists) directory.delete();
+  const directory = rootPackDirectory();
+  if (directory?.exists) directory.delete();
 }
 
 export function clearPinnedThumbnailPack(scopeId: string): void {
@@ -165,31 +193,83 @@ export function clearPinnedThumbnailPack(scopeId: string): void {
   if (directory?.exists) directory.delete();
 }
 
+/**
+ * Bytes in one scope's pack, or in every pack when `scopeId` is omitted. A
+ * total is all this answers, so it takes the native one-crossing walk instead
+ * of statting up to ~9,300 files on the JS thread; the JavaScript listing
+ * survives only as the fallback for a build without the native module.
+ */
 export function thumbnailPackBytes(scopeId?: string): number {
-  const root = replicaStorageDirectory();
-  if (!root) return 0;
-  const directory = scopeId
-    ? packDirectory(scopeId)
-    : new Directory(root, "thumbnail-pack");
+  const path = packPath(scopeId);
+  if (path === undefined) return 0;
+  const native = nativeDirectorySize(path);
+  if (native !== undefined) return native;
+  const directory = scopeId ? packDirectory(scopeId) : rootPackDirectory();
   if (!directory?.exists) return 0;
   return files(directory).reduce((sum, file) => sum + file.size, 0);
 }
 
-function enforceBudget(directory: Directory): void {
+/**
+ * Oldest-first eviction back under this source's budget. "Are we over?" is a
+ * total, so it asks the native sizer in one crossing and returns untouched in
+ * the common under-budget case; only the over-budget path pays for the
+ * listing, since eviction order needs a per-file modification time no total
+ * can supply. The walk stays inside one source's directory, so an overfull
+ * pack can only ever evict its own thumbnails.
+ */
+async function enforceBudget(
+  scopeId: string,
+  directory: Directory
+): Promise<void> {
   invalidateIndex();
-  const ordered = files(directory).sort(
-    (left, right) =>
-      (left.modificationTime ?? 0) - (right.modificationTime ?? 0)
+  const path = packPath(scopeId);
+  const total = path === undefined ? undefined : nativeDirectorySize(path);
+  if (total !== undefined && total <= THUMBNAIL_SOURCE_BUDGET_BYTES) return;
+  const stats = await statsYielding(directory);
+  const ordered = stats.sort(
+    (left, right) => left.modificationTime - right.modificationTime
   );
-  let bytes = ordered.reduce((sum, file) => sum + file.size, 0);
-  for (const file of ordered) {
+  let bytes = ordered.reduce((sum, entry) => sum + entry.size, 0);
+  for (const entry of ordered) {
     if (bytes <= THUMBNAIL_SOURCE_BUDGET_BYTES) return;
-    bytes -= file.size;
-    file.delete();
+    bytes -= entry.size;
+    entry.file.delete();
   }
 }
 
+interface PackFileStat {
+  file: File;
+  size: number;
+  modificationTime: number;
+}
+
+/** `Directory.list()` has no asynchronous form, but the per-file crossings are
+ *  the bulk of the cost and those are ours to spread across turns. */
+async function statsYielding(directory: Directory): Promise<PackFileStat[]> {
+  const stats: PackFileStat[] = [];
+  for (const file of files(directory)) {
+    if (stats.length > 0 && stats.length % STAT_BATCH === 0) {
+      // oxlint-disable-next-line no-await-in-loop -- yielding the thread between batches IS the work here; a Promise.all would put every stat back in one task
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    }
+    stats.push({
+      file,
+      size: file.size,
+      modificationTime: file.modificationTime ?? 0,
+    });
+  }
+  return stats;
+}
+
+function rootPackDirectory(): Directory | undefined {
+  const root = replicaStorageDirectory();
+  return root ? new Directory(root, "thumbnail-pack") : undefined;
+}
+
 function files(directory: Directory): File[] {
+  if (!directory.exists) return [];
   return directory
     .list()
     .flatMap((entry) =>

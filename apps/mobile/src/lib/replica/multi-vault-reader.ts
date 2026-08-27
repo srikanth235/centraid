@@ -11,6 +11,7 @@ import {
   replicaSearchRequiredColumns,
   replicaLocalSearchSpec,
   ReplicaProtocolError,
+  REPLICA_SYNTHETIC_PRIMARY_KEY,
 } from "@centraid/client/replica/native";
 import type {
   OptimisticMutation,
@@ -33,8 +34,17 @@ import {
 import type { StoredReplicaRow } from "./multi-vault-provenance";
 import type { NativeReadRequest, NativeSearchRequest } from "./native-session";
 import { MAX_MOUNTED_NATIVE_SCOPES } from "./offline-budgets";
-import { planReplicaRead } from "./replica-read-pushdown";
-import type { ReplicaReadPlan } from "./replica-read-pushdown";
+import {
+  planReplicaRead,
+  replicaFilterSql,
+  replicaOrderPagesSafely,
+  replicaOrderProbeSql,
+} from "./replica-read-pushdown";
+import type {
+  ReplicaOrderProbeRow,
+  ReplicaOrderPushdown,
+  ReplicaReadPlan,
+} from "./replica-read-pushdown";
 
 /**
  * Column names `dedupeReplicaRowsByContent` collapses rows on. An entity that
@@ -134,7 +144,16 @@ interface AttachedScope extends MountedReplicaScope {
   alias: string;
 }
 
-const OVERLAY_STATES = new Set([
+/**
+ * Outbox states an overlay still projects from. `executed` is the one excluded:
+ * it settles the row out of the table. `conflict` is the state a conflicted
+ * intent is PRESENTED as (`presentPendingIntentMutation`) rather than a stored
+ * `IntentState`; it stays in the list so the SQL filter below matches the JS
+ * predicate it replaced exactly. Bound into `WHERE state IN (…)` so the
+ * `replica_intent_outbox_state (state, created_order)` index does the work
+ * instead of every read parsing the whole outbox.
+ */
+const OVERLAY_STATES = [
   "queued",
   "sending",
   "awaiting-change",
@@ -142,7 +161,16 @@ const OVERLAY_STATES = new Set([
   "denied",
   "conflict",
   "failed",
-]);
+] as const;
+
+/**
+ * Ceiling on the rows one federated search may pull out of the FTS indexes.
+ * The overlay contribution is bounded INTO this page rather than allowed to
+ * refuse the read: rows a pending mutation addresses are composed separately
+ * (address-bounded, below), so a large outbox costs a bounded page and not an
+ * offline search that stops working (#880).
+ */
+const MAX_SEARCH_FETCH_ROWS = 10_000;
 
 /**
  * One op-sqlite connection with every mounted vault attached.
@@ -201,11 +229,22 @@ export class MultiVaultReplicaReader {
   ): Promise<ReplicaReadWireResult> {
     const purpose = request.purpose ?? DEFAULT_REPLICA_PURPOSE;
     const schemas = await this.schemasForAll(appId, purpose, request.entity);
-    const overlays = await this.overlaysForAll(appId, request.entity, schemas);
+    const [overlays, contentHashed] = await Promise.all([
+      this.overlaysForAll(appId, request.entity, schemas),
+      this.contentHashed(appId, purpose, request.entity),
+    ]);
+    const orderPushdown = await this.orderPushdown(
+      appId,
+      purpose,
+      request,
+      schemas,
+      contentHashed
+    );
     const planned = planReplicaRead({
       request,
-      contentHashed: await this.contentHashed(appId, purpose, request.entity),
+      contentHashed,
       scopeCount: this.#scopes.length,
+      ...(orderPushdown === undefined ? {} : { orderPushdown }),
     });
     // SQL pushdown sees only canonical payload_json. A projection can change a
     // filtered column, so compose the normal bounded hits with exactly the
@@ -225,15 +264,23 @@ export class MultiVaultReplicaReader {
       overlays
     );
     const limit = planned.perScopeLimit;
-    if (limit === undefined || result.rows.length >= limit) return result;
-    // A short page only proves there is no more data when nothing was cut off.
-    // Dedupe collapses rows, so a saturated scope page can hide rows the
-    // unlimited read would have surfaced: pay for the full scan exactly then.
+    if (limit === undefined) return result;
     const saturated = this.#scopes.some(
       (_scope, index) =>
         canonicalPage.filter((row) => row.scope_index === index).length ===
         limit
     );
+    // The pushed page ceiling cut the caller's limit down. A scope that then
+    // fills that ceiling provably has more rows behind it, so report the page
+    // as partial instead of letting a capped answer read as the whole vault.
+    // An unbounded re-read would buy nothing: the evaluator truncates at the
+    // same 100,000 rows.
+    if (planned.clampedLimit === true && saturated)
+      return { ...result, coverage: "partial" };
+    if (result.rows.length >= limit) return result;
+    // A short page only proves there is no more data when nothing was cut off.
+    // Dedupe collapses rows, so a saturated scope page can hide rows the
+    // unlimited read would have surfaced: pay for the full scan exactly then.
     if (!saturated) return result;
     return this.evaluate(
       appId,
@@ -342,15 +389,19 @@ export class MultiVaultReplicaReader {
     const overlays = await this.overlaysForAll(appId, request.entity, schemas);
     const indexed = new Set(required);
     const limit = Math.min(Math.max(request.limit ?? 100, 1), 1_000);
-    const overlayCount = [...overlays.values()].reduce(
-      (count, mutations) => count + mutations.length,
+    // Only a delete or an upsert that touches an INDEXED column can take a
+    // canonical hit out of the composed page; every other pending mutation
+    // leaves the FTS ranking alone. Over-fetch by that count rather than by the
+    // whole outbox, and cap the page: a phone with ten thousand queued writes
+    // keeps searching, because rows those writes address are pulled in by id
+    // below instead of by inflating the ranked page.
+    const displacing = [...overlays.values()].reduce(
+      (count, mutations) =>
+        count +
+        mutations.filter((mutation) => displaces(mutation, indexed)).length,
       0
     );
-    const fetchLimit = limit + overlayCount;
-    if (fetchLimit > 10_000)
-      throw new OnlineOnlyError(
-        "the pending federated search overlay exceeds the local bounded work limit"
-      );
+    const fetchLimit = Math.min(limit + displacing, MAX_SEARCH_FETCH_ROWS);
     const match = replicaFtsMatchExpression(request.query);
     const parameters: ReplicaBindValue[] = [];
     const union = this.#scopes
@@ -389,6 +440,11 @@ export class MultiVaultReplicaReader {
       parameters
     );
     const hits: ReplicaRowEnvelope[] = [];
+    // Pending rows rank ahead of every canonical hit, in scope then composition
+    // order. The counter runs across scopes so the position stays unique however
+    // large the outbox is — it used to stride by the fetch page, which collides
+    // once a scope composes more pending rows than that page holds.
+    let pendingPosition = 0;
     for (const schema of schemas) {
       const scope = this.#scopes[schema.scope_index]!;
       const scopeRows = combined.filter(
@@ -451,7 +507,7 @@ export class MultiVaultReplicaReader {
           mutations,
           storedSchema(request.entity, schema)
         )
-          .flatMap((row, index) => {
+          .flatMap((row) => {
             if (!indexedRowIds.has(row.rowId))
               return hitIds.has(row.rowId) ? [row] : [];
             const local = replicaPendingSearchMatch(
@@ -460,16 +516,12 @@ export class MultiVaultReplicaReader {
               request.query
             );
             if (!local.matches) return [];
+            const rank = replicaPendingSearchRank(pendingPosition);
+            pendingPosition += 1;
             return [
               {
                 ...row,
-                values: {
-                  ...row.values,
-                  _rank: replicaPendingSearchRank(
-                    schema.scope_index * fetchLimit + index
-                  ),
-                  _snippet: local.snippet,
-                },
+                values: { ...row.values, _rank: rank, _snippet: local.snippet },
               },
             ];
           })
@@ -616,9 +668,11 @@ export class MultiVaultReplicaReader {
                  WHERE sh.app_id = ? AND sh.purpose = ? AND r.entity = ?${plan.filterSql}`;
         if (plan.perScopeLimit === undefined) return select;
         parameters.push(plan.perScopeLimit);
-        // A compound arm cannot carry its own LIMIT; wrapping each one keeps
-        // the page per source rather than across the union.
-        return `SELECT * FROM (${select} LIMIT ?)`;
+        // A compound arm cannot carry its own ORDER BY/LIMIT; wrapping each one
+        // keeps the page per source rather than across the union. The JS
+        // evaluator re-sorts the union, so this ordering only decides which
+        // rows each source contributes, never the order they come back in.
+        return `SELECT * FROM (${select}${plan.orderSql} LIMIT ?)`;
       })
       .join(" UNION ALL ");
     return this.query<ScopedStoredRow>(`SELECT * FROM (${union})`, parameters);
@@ -703,15 +757,20 @@ export class MultiVaultReplicaReader {
           []
         );
         if (!table[0]) return;
+        // State and app are what SQL can decide: the state column is indexed,
+        // and `appId` is a scalar at the top of the stored record. Entity and
+        // shape stay in JS because they live inside the record's `optimistic`
+        // ARRAY — one intent can address several of them, so no scalar column
+        // or path expression answers for the whole row.
         const records = await this.query<StoredIntentRow>(
           `SELECT record_json FROM ${scope.alias}.replica_intent_outbox
+            WHERE state IN (${OVERLAY_STATES.map(() => "?").join(", ")})
+              AND json_extract(record_json, '$.appId') = ?
             ORDER BY created_order`,
-          []
+          [...OVERLAY_STATES, appId]
         );
         const mutations = records.flatMap((row) => {
           const intent = JSON.parse(row.record_json) as ReplicaIntent;
-          if (!OVERLAY_STATES.has(intent.state) || intent.appId !== appId)
-            return [];
           return intent.optimistic
             .filter(
               (mutation) =>
@@ -724,6 +783,66 @@ export class MultiVaultReplicaReader {
       })
     );
     return result;
+  }
+
+  /**
+   * Prove — or refuse — an ordered per-scope page for this request.
+   *
+   * The evaluator escalates a mixed-type comparison, an undisclosed order
+   * column, and a tie it cannot break, so SQL may only page when none of the
+   * three can occur anywhere in the filtered set. One aggregate pass per scope
+   * settles it without a single payload crossing into JS; everything the pass
+   * cannot rule out falls back to today's whole-entity read.
+   */
+  private async orderPushdown(
+    appId: string,
+    purpose: string,
+    request: NativeReadRequest,
+    schemas: readonly ScopedEntitySchemaRow[],
+    contentHashed: boolean
+  ): Promise<ReplicaOrderPushdown | undefined> {
+    const orderBy = request.orderBy;
+    const first = schemas[0];
+    if (!orderBy || request.limit === undefined || !first) return undefined;
+    // The plan refuses a page for a content-hashed entity across several
+    // scopes; probing one would be a scan with no page to earn it back.
+    if (contentHashed && this.#scopes.length > 1) return undefined;
+    // An opaque identity has no exposed tie-break, so the evaluator escalates
+    // ties instead of ordering them — and a page could hide the tied row.
+    if (first.primary_key === REPLICA_SYNTHETIC_PRIMARY_KEY) return undefined;
+    if (
+      schemas.some(
+        (schema) =>
+          schema.primary_key !== first.primary_key ||
+          schema.has_unavailable_fields === 1
+      )
+    )
+      return undefined;
+    // Ordering on a column the shape does not carry is a payload-shaped name
+    // the payload has no value for; only stored columns page.
+    if (!parseStringArray(first.columns_json).includes(orderBy.column))
+      return undefined;
+    const probe = replicaOrderProbeSql(orderBy.column, first.primary_key);
+    if (probe === undefined) return undefined;
+    const filter = replicaFilterSql(request.where);
+    if (!filter.complete) return undefined;
+    const parameters: ReplicaBindValue[] = [];
+    const union = this.#scopes
+      .map((scope) => {
+        parameters.push(appId, purpose, request.entity, ...filter.params);
+        return `SELECT ${probe}
+                  FROM ${scope.alias}.replica_row AS r
+                  JOIN ${scope.alias}.replica_entity_schema AS es
+                    ON es.shape_id = r.shape_id AND es.entity = r.entity
+                  JOIN ${scope.alias}.replica_shape AS sh
+                    ON sh.shape_id = r.shape_id
+                 WHERE sh.app_id = ? AND sh.purpose = ? AND r.entity = ?${filter.sql}`;
+      })
+      .join(" UNION ALL ");
+    const probed = await this.query<ReplicaOrderProbeRow>(union, parameters);
+    return replicaOrderPagesSafely(probed)
+      ? { primaryKey: first.primary_key }
+      : undefined;
   }
 
   /**
@@ -827,6 +946,17 @@ export class MultiVaultReplicaReader {
         }
     );
   }
+}
+
+/** Can this pending mutation remove a canonical hit from a composed page? */
+function displaces(
+  mutation: OptimisticMutation,
+  indexed: ReadonlySet<string>
+): boolean {
+  return (
+    mutation.op === "delete" ||
+    Object.keys(mutation.values).some((column) => indexed.has(column))
+  );
 }
 
 function mergeScopedRows(

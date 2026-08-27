@@ -16,12 +16,14 @@ import {
   capabilityUnchangedOutcome,
   deliveryLabel,
   GRANT_SHEET_TITLE,
+  GRANTS_UNREACHABLE,
   GRANTS_UNREADABLE,
   grantedOutcome,
   groupContributionNote,
   nothingSharedYet,
   reachLabel,
   reachNote,
+  REGISTRY_UNREACHABLE,
   REGISTRY_UNREADABLE,
   REVOKE_CANCEL_ACTION,
   REVOKE_CONFIRM_ACTION,
@@ -29,6 +31,7 @@ import {
   revokeConfirmTitle,
   subjectNotOfferable,
 } from "./grant-copy.ts";
+import { isGrantUnreachable } from "./grant-door.ts";
 import type { GrantDoor, SubjectRegistry } from "./grant-door.ts";
 import { webGrantDoor } from "./grant-gateway.ts";
 import {
@@ -171,10 +174,12 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
         if (!active) return;
         setAudienceKnown(read.known);
         setStanding(read.grants);
-      } catch {
+      } catch (error) {
         if (!active) return;
         setStanding([]);
-        setRefusal(GRANTS_UNREADABLE);
+        setRefusal(
+          isGrantUnreachable(error) ? GRANTS_UNREACHABLE : GRANTS_UNREADABLE
+        );
       }
     });
     return () => {
@@ -213,9 +218,15 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     picked ?? defaultCapability(alreadyStanding)
   );
   const noun = subject ? subjectNoun(subject.subjectType) : "shared item";
-  // Three states: unread, empty-for-subject, unreadable. Only the middle is refusal.
+  // Unread, empty-for-subject, refused, unreachable. Only the second refuses.
   const registryPending = registry === null;
-  const registryUnreadable = registry !== null && !registry.readable;
+  const registryProblem =
+    registry !== null && !registry.readable
+      ? registry.reach === "unreachable"
+        ? REGISTRY_UNREACHABLE
+        : REGISTRY_UNREADABLE
+      : null;
+  const registryUnreadable = registryProblem !== null;
   const notOfferable =
     Boolean(subject) &&
     registry !== null &&
@@ -416,8 +427,8 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                 {notOfferable ? (
                   <p className={styles.refusal}>{subjectNotOfferable(noun)}</p>
                 ) : null}
-                {registryUnreadable ? (
-                  <p className={styles.refusal}>{REGISTRY_UNREADABLE}</p>
+                {registryProblem ? (
+                  <p className={styles.refusal}>{registryProblem}</p>
                 ) : null}
               </section>
 

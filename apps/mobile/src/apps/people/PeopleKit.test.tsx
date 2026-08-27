@@ -141,3 +141,70 @@ describe("[law:people-star-a11y] the star names its object and its direction", (
     );
   });
 });
+
+describe("[law:people-readonly-star] a person in a read-only source withholds the star", () => {
+  const READ_ONLY =
+    "This vault is read-only for you, so meaning cannot be written into it.";
+
+  afterEach(() => {
+    dispose?.();
+    dispose = undefined;
+  });
+
+  it("refuses the press instead of letting the write throw, and says why", () => {
+    let toggled = 0;
+    const el = render(
+      <StarButton
+        name="Ana"
+        starred={false}
+        disabled
+        disabledHint={READ_ONLY}
+        onToggle={() => (toggled += 1)}
+      />
+    );
+    const button = nodesOf(el, "button")[0];
+    press(button);
+    expect(toggled).toBe(0);
+    expect(button?.getAttribute("aria-disabled")).toBe("true");
+    expect(button?.dataset.hint).toBe(READ_ONLY);
+  });
+
+  it("still names Star/Unstar — a withheld verb is not an anonymous one", () => {
+    const el = render(
+      <StarButton name="Ana" starred disabled onToggle={() => undefined} />
+    );
+    expect(nodesOf(el, "button")[0]?.getAttribute("aria-label")).toBe(
+      "Unstar Ana"
+    );
+  });
+});
+
+describe("[law:people-row-pending] a queued People change says so on its own row", () => {
+  afterEach(() => {
+    dispose?.();
+    dispose = undefined;
+  });
+
+  it("draws the overlay sentence as a third line under the sub", () => {
+    const el = render(
+      <PersonRow
+        name="Ana"
+        sub="architect"
+        pending="Pending change: Waiting for Ravi."
+        last
+      />
+    );
+    expect(nodesOf(el, "span").map((node) => node.textContent)).toContain(
+      "Pending change: Waiting for Ravi."
+    );
+  });
+
+  it("draws nothing where there is no pending change", () => {
+    const el = render(<PersonRow name="Ana" sub="architect" last />);
+    expect(
+      nodesOf(el, "span").some((node) =>
+        (node.textContent ?? "").startsWith("Pending change:")
+      )
+    ).toBe(false);
+  });
+});

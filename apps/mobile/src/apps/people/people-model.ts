@@ -29,10 +29,25 @@ import type {
 import { IDENTITY_HUE_KEYS, identityHueKey } from "@centraid/design";
 import type { ColorKey } from "@centraid/design";
 
+import { rowCanWrite, rowScopeLabels } from "../../kit/replica/row-provenance";
 import type { PersonShareLinks } from "./people-share-model";
 
 /** A replica row, untyped — every reader narrows per column. */
 export type Row = Record<string, unknown>;
+
+/** A projected person plus the PROFILE row's provenance and pending stamps
+ *  (#880) — the canonical role a star or trash takes. */
+export type MobilePersonRow = PersonRow & {
+  canWrite: boolean;
+  scopeLabels: readonly string[];
+  raw: Row;
+};
+
+export type MobilePersonDetail = PersonDetail & {
+  canWrite: boolean;
+  scopeLabels: readonly string[];
+  raw: Row;
+};
 
 export const str = (row: Row, key: string): string | null => {
   const value = row[key];
@@ -90,7 +105,7 @@ export interface RosterInput {
 }
 
 export interface RosterProjection {
-  people: PersonRow[];
+  people: MobilePersonRow[];
   trash: TrashedPerson[];
   lists: Array<{ list_id: string; name: string }>;
   linksAvailable: boolean;
@@ -168,8 +183,8 @@ export function projectRoster(input: RosterInput): RosterProjection {
   const live = input.profiles.filter((row) => !str(row, "deleted_at"));
   const gone = input.profiles.filter((row) => str(row, "deleted_at"));
 
-  const people: PersonRow[] = live
-    .map((profile): PersonRow => {
+  const people: MobilePersonRow[] = live
+    .map((profile): MobilePersonRow => {
       const partyId = str(profile, "party_id") ?? "";
       return {
         party_id: partyId,
@@ -184,6 +199,9 @@ export function projectRoster(input: RosterInput): RosterProjection {
         reminders: remindersByParty.get(partyId) ?? [],
         linked: linksAvailable ? vaultCountByParty.has(partyId) : null,
         vault_count: vaultCountByParty.get(partyId) ?? 0,
+        canWrite: rowCanWrite(profile),
+        scopeLabels: rowScopeLabels(profile),
+        raw: profile,
       };
     })
     // Newest first — the query's order (`orderBy created_at desc`).
@@ -217,11 +235,11 @@ export function projectRoster(input: RosterInput): RosterProjection {
 // Filter and subtitle restate `components/RosterRoute.tsx` (unimportable).
 
 /** A row whose link fact is unknown answers NEITHER chip: unknown ≠ unlinked. */
-export function applyRosterFilter(
-  people: readonly PersonRow[],
+export function applyRosterFilter<T extends PersonRow>(
+  people: readonly T[],
   filter: RosterFilter,
   now = Date.now()
-): PersonRow[] {
+): T[] {
   if (filter === "starred") return people.filter((person) => person.starred);
   if (filter === "due")
     return people.filter((person) => isOverdue(person, now));
@@ -232,8 +250,7 @@ export function applyRosterFilter(
   return [...people];
 }
 
-/** `Linked · architect`, or the role alone — a binding carries only an id, so
- *  `Linked` stands where a vault name cannot. */
+/** `Linked · architect`, or the role alone: a binding carries only an id. */
 export function rosterSub(person: PersonRow): string {
   if (person.linked !== true) return person.role;
   return person.role ? `${LINK.linked} · ${person.role}` : LINK.linked;
@@ -242,11 +259,11 @@ export function rosterSub(person: PersonRow): string {
 /** Name + role + notes, case-insensitive substring. The replica exposes no
  *  People search shape, so the window in hand is the whole corpus — a
  *  departure from the web FTS5 shelf, logged in `INTEGRATION-NOTES.md`. */
-export function searchRoster(
-  people: readonly PersonRow[],
+export function searchRoster<T extends PersonRow>(
+  people: readonly T[],
   notesByParty: ReadonlyMap<string, readonly string[]>,
   term: string
-): PersonRow[] {
+): T[] {
   const needle = term.trim().toLocaleLowerCase("en-US");
   if (!needle) return [];
   return people.flatMap((person) => {
@@ -376,7 +393,7 @@ export function projectDashboard(input: DashboardInput): DashboardData {
 // interactions, sharing plane. Lists, tasks, gifts, debts and relationships
 // are excluded; their placeholders are banned.
 export interface PersonDetailInput {
-  person: PersonRow;
+  person: MobilePersonRow;
   /** ALL `social.contact_channel` rows — other parties' rows feed the
    *  duplicate-value warning. */
   channels: readonly Row[];
@@ -392,7 +409,9 @@ export interface PersonDetailInput {
   shareLinks: PersonShareLinks | null;
 }
 
-export function projectPersonDetail(input: PersonDetailInput): PersonDetail {
+export function projectPersonDetail(
+  input: PersonDetailInput
+): MobilePersonDetail {
   const partyId = input.person.party_id;
 
   const theirChannels = input.channels.filter(
@@ -521,5 +540,8 @@ export function projectPersonDetail(input: PersonDetailInput): PersonDetail {
     interactions,
     vaults: input.shareLinks?.vaults ?? null,
     pending_invites: input.shareLinks?.pending_invites ?? null,
+    canWrite: input.person.canWrite,
+    scopeLabels: input.person.scopeLabels,
+    raw: input.person.raw,
   };
 }

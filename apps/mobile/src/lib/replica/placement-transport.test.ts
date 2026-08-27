@@ -16,6 +16,7 @@ import {
   listCommonsResidents,
   listCommonsInvitations,
   listCommonsRecovery,
+  postCommons,
   postPlacement,
   recoverCommons,
   PlacementSubmissionError,
@@ -363,5 +364,65 @@ describe("Save resident Commons item", () => {
         itemId: "doc-1",
       },
     ]);
+  });
+});
+
+describe(postCommons, () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("compiles a container on the registry's commons route", async () => {
+    let capturedUrl: string | undefined;
+    let capturedBody: unknown;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL, init?: RequestInit) => {
+        capturedUrl = url.toString();
+        capturedBody = JSON.parse(String(init?.body));
+        return jsonResponse(201, {
+          grantId: "grant-1",
+          circleId: "circle-1",
+          state: "invited",
+          currentSizeBytes: 0,
+          claims: [{ partyId: "party-ana", claimToken: "token-1" }],
+        });
+      })
+    );
+
+    await expect(
+      postCommons(BASE_URL, {
+        containerType: "tally.group",
+        containerId: "group-1",
+        sourceVaultId: "vault-a",
+        members: [{ partyId: "party-ana", capability: "read+write" }],
+        circleId: "circle-1",
+      })
+    ).resolves.toMatchObject({ grantId: "grant-1", state: "invited" });
+    expect(capturedUrl).toBe(
+      new URL(ROUTES.gatewayCommons, BASE_URL).toString()
+    );
+    expect(capturedBody).toStrictEqual({
+      originVaultId: "vault-a",
+      containerType: "tally.group",
+      containerId: "group-1",
+      members: [{ partyId: "party-ana", capability: "read+write" }],
+      circleId: "circle-1",
+    });
+  });
+
+  test("a 403 raises a typed 'denied' share error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(403, { message: "not the steward" }))
+    );
+    await expect(
+      postCommons(BASE_URL, {
+        containerType: "tally.group",
+        containerId: "group-1",
+        sourceVaultId: "vault-a",
+        members: [],
+      })
+    ).rejects.toThrow(PlacementSubmissionError);
   });
 });

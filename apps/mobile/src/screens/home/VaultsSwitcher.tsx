@@ -40,11 +40,13 @@ import {
   motionDuration,
   useReducedMotion,
 } from "../../kit/hooks/useReducedMotion";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { family, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listVaults } from "../../lib/gateway";
 import type { VaultRow } from "../../lib/gateway";
 import { forgetVaultLink, switchVaultLink } from "../../lib/phone-link";
+import { MAX_MOUNTED_NATIVE_SCOPES } from "../../lib/replica/offline-budgets";
 import {
   addActiveGatewayVault,
   getActiveVaultLink,
@@ -56,6 +58,15 @@ import type { VaultLink } from "../../lib/vault-links";
 
 const DEFAULT_ICON: IconName = "Sparkle";
 const SHEET_TRAVEL = 720; // ≥ max sheet height, so the closed sheet sits fully off-screen.
+
+// The mounted read plane holds four vaults at once — a deliberate bound on file
+// descriptors, query fan-out, radio fan-out and frame work (docs/mobile-offline.md).
+// Past four, the switcher is the surface that must say which saved Vaults this
+// phone is actually carrying; the rest are one tap from being carried, since
+// activating one re-plans the mount.
+const CAP_NOTE = "Four vaults stay on this phone at a time.";
+const RESIDENT_SUB = "On this phone";
+const NON_RESIDENT_SUB = "Over the four-vault limit";
 
 export interface VaultsSwitcherProps {
   open: boolean;
@@ -111,6 +122,11 @@ export default function VaultsSwitcher({
   );
   const [addable, setAddable] = useState<AddableVault[]>([]);
   const [busy, setBusy] = useState(false);
+  const { scopes } = useReplica();
+  const mountedVaultIds = useMemo(
+    () => new Set((scopes ?? []).map((scope) => scope.vaultId)),
+    [scopes]
+  );
 
   useEffect(
     () =>
@@ -245,6 +261,20 @@ export default function VaultsSwitcher({
 
   const active = vaultLinks.find((s) => s.id === activeId);
   const others = vaultLinks.filter((s) => s.id !== activeId);
+  // Residency is a fact about ONE gateway's mounted set, so only that gateway's
+  // saved Vaults may be judged by it; a Vault on another desktop is absent for
+  // an entirely different reason and stays unlabelled.
+  // A replica still mounting has no mounted set to report, and every row would
+  // read as evicted. Silence until there is a fact.
+  const capped =
+    active !== undefined &&
+    mountedVaultIds.size > 0 &&
+    vaultLinks.filter((s) => s.gatewayId === active.gatewayId).length >
+      MAX_MOUNTED_NATIVE_SCOPES;
+  const residencyOf = (vault: VaultLink): string | undefined => {
+    if (!capped || vault.gatewayId !== active?.gatewayId) return undefined;
+    return mountedVaultIds.has(vault.vaultId) ? RESIDENT_SUB : NON_RESIDENT_SUB;
+  };
 
   return (
     <Modal
@@ -291,6 +321,9 @@ export default function VaultsSwitcher({
             {others.length > 0 ? (
               <>
                 <Text style={styles.sectionLabel}>SWITCH TO</Text>
+                {capped ? (
+                  <Text style={styles.sectionNote}>{CAP_NOTE}</Text>
+                ) : null}
                 {others.map((vault) => (
                   <VaultLinkRow
                     key={vault.id}
@@ -298,6 +331,7 @@ export default function VaultsSwitcher({
                     styles={styles}
                     vault={vault}
                     disabled={busy}
+                    residency={residencyOf(vault)}
                     onPress={() => onSwitch(vault)}
                     onForget={() => onForget(vault)}
                   />
@@ -410,6 +444,7 @@ function VaultLinkRow({
   styles,
   vault,
   disabled,
+  residency,
   onPress,
   onForget,
 }: {
@@ -417,6 +452,8 @@ function VaultLinkRow({
   styles: ReturnType<typeof makeStyles>;
   vault: VaultLink;
   disabled: boolean;
+  /** Set only while the four-scope cap is actually binding this gateway. */
+  residency?: string;
   onPress: () => void;
   onForget: () => void;
 }): React.JSX.Element {
@@ -442,7 +479,8 @@ function VaultLinkRow({
             {vault.vaultName || vault.desktopName || "VaultLink"}
           </Text>
           <Text style={styles.rowSub} numberOfLines={1}>
-            {vault.desktopName ||
+            {residency ||
+              vault.desktopName ||
               (vault.vaultId === "" ? "Setting up…" : "Saved")}
           </Text>
         </View>
@@ -623,6 +661,7 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 4,
       marginTop: 10,
     },
+    sectionNote: { ...t("small"), color: colors.textFaint, marginBottom: 2 },
     sheet: {
       backgroundColor: colors.bgElev,
       borderTopLeftRadius: radii.lg,

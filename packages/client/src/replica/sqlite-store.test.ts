@@ -176,7 +176,7 @@ describe("sqlite-store", () => {
               returnValue: "resultRows",
             })
             .map((row) => ({ ...row }))
-        ).toStrictEqual([{ user_version: 6 }]);
+        ).toStrictEqual([{ user_version: 8 }]);
         expect(
           db
             .exec({

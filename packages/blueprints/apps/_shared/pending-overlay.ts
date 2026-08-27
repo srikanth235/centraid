@@ -15,6 +15,9 @@ export const PENDING_OVERLAY_FIELDS = {
   steward: "__centraid_pending_steward",
   expectedVersion: "__centraid_pending_expected_version",
   actualVersion: "__centraid_pending_actual_version",
+  /** Member-facing, not engine-private: together they separate slow from stuck. */
+  attempts: "__centraid_pending_attempts",
+  enqueuedAt: "__centraid_pending_enqueued_at",
 } as const;
 
 export type PendingOverlayStatus =
@@ -113,6 +116,9 @@ export interface PendingOverlayPresentation {
   stewardLabel?: string;
   expectedVersion?: number;
   actualVersion?: number;
+  /** Transport attempts so far, and the first admission (ISO-8601). */
+  attempts?: number;
+  enqueuedAt?: string;
 }
 
 export interface PendingIntentPresentationInput {
@@ -124,6 +130,8 @@ export interface PendingIntentPresentationInput {
     expectedVersion: number;
     actualVersion: number;
   };
+  attempts?: number;
+  enqueuedAt?: string;
 }
 
 export function definePendingProjection<T extends PendingProjectionDeclaration>(
@@ -214,6 +222,12 @@ export function decoratePendingMutation<T extends PendingProjectionMutation>(
       [PENDING_OVERLAY_FIELDS.status]: status,
       [PENDING_OVERLAY_FIELDS.action]: intent.action,
       ...(reason ? { [PENDING_OVERLAY_FIELDS.reason]: reason } : {}),
+      ...(typeof intent.attempts === "number"
+        ? { [PENDING_OVERLAY_FIELDS.attempts]: intent.attempts }
+        : {}),
+      ...(intent.enqueuedAt
+        ? { [PENDING_OVERLAY_FIELDS.enqueuedAt]: intent.enqueuedAt }
+        : {}),
       ...(intent.conflict
         ? {
             [PENDING_OVERLAY_FIELDS.expectedVersion]:
@@ -243,6 +257,8 @@ export function readPendingOverlay(
   const stewardLabel = row[PENDING_OVERLAY_FIELDS.steward];
   const expectedVersion = row[PENDING_OVERLAY_FIELDS.expectedVersion];
   const actualVersion = row[PENDING_OVERLAY_FIELDS.actualVersion];
+  const attempts = row[PENDING_OVERLAY_FIELDS.attempts];
+  const enqueuedAt = row[PENDING_OVERLAY_FIELDS.enqueuedAt];
   return {
     key,
     status,
@@ -251,6 +267,8 @@ export function readPendingOverlay(
     ...(typeof stewardLabel === "string" ? { stewardLabel } : {}),
     ...(typeof expectedVersion === "number" ? { expectedVersion } : {}),
     ...(typeof actualVersion === "number" ? { actualVersion } : {}),
+    ...(typeof attempts === "number" ? { attempts } : {}),
+    ...(typeof enqueuedAt === "string" ? { enqueuedAt } : {}),
   };
 }
 

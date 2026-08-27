@@ -101,6 +101,8 @@ describe("reading an overlay back off a row", () => {
         [PENDING_OVERLAY_FIELDS.steward]: null,
         [PENDING_OVERLAY_FIELDS.expectedVersion]: "4",
         [PENDING_OVERLAY_FIELDS.actualVersion]: "7",
+        [PENDING_OVERLAY_FIELDS.attempts]: "3",
+        [PENDING_OVERLAY_FIELDS.enqueuedAt]: 1_770_000_000_000,
       })
     );
     expect(read).toStrictEqual({
@@ -118,6 +120,8 @@ describe("reading an overlay back off a row", () => {
           [PENDING_OVERLAY_FIELDS.steward]: "Asha's phone",
           [PENDING_OVERLAY_FIELDS.expectedVersion]: 4,
           [PENDING_OVERLAY_FIELDS.actualVersion]: 7,
+          [PENDING_OVERLAY_FIELDS.attempts]: 3,
+          [PENDING_OVERLAY_FIELDS.enqueuedAt]: "2026-08-27T09:00:00.000Z",
         })
       )
     ).toStrictEqual({
@@ -128,6 +132,8 @@ describe("reading an overlay back off a row", () => {
       stewardLabel: "Asha's phone",
       expectedVersion: 4,
       actualVersion: 7,
+      attempts: 3,
+      enqueuedAt: "2026-08-27T09:00:00.000Z",
     });
   });
 });

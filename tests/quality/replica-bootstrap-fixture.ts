@@ -22,6 +22,9 @@ export async function exerciseWindowedBootstrap(
   const target: WindowedBootstrapTarget = {
     async bootstrapBegin() {
       stored.clear();
+      // No persisted walk in this lane: every run measures a cold bootstrap,
+      // so the driver always starts at page one.
+      return undefined;
     },
     async bootstrapPage(rows) {
       for (const row of rows) stored.set(row.rowId, row);

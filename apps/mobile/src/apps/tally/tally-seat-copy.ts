@@ -81,3 +81,21 @@ export const WAITING_OWN_SCOPE =
 export function waitingCount(total: number): string {
   return `${total} ${total === 1 ? "contribution" : "contributions"}`;
 }
+
+// ─── Sharing a group, the one act that never queues ─────────────────────────
+
+/**
+ * WHY THIS VERB IS WITHHELD OFFLINE.
+ *
+ * Every other act here records offline, having an optimistic projection
+ * (`tally-writes.ts`). Sharing has none — it is a commons compilation on the
+ * gateway, and `MultiVaultReplicaSession.share` rejects while disconnected by
+ * design — so the row draws the SENTENCE instead of the verb, Due next's own
+ * shape. A refusal from a REACHABLE gateway is the other answer and keeps the
+ * vault's words, posted verbatim, never paraphrased into this one.
+ */
+export const SHARE_GROUP_VERB = "Share group";
+export const SHARE_GROUP_META =
+  "one invitation each, redeemed in their own vault";
+export const SHARE_GROUP_OFFLINE =
+  "Sharing needs a gateway connection · an invitation cannot be queued";

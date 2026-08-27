@@ -34,7 +34,11 @@ import {
   setLockerGenerated,
   showMoreLockerItems,
 } from "./locker-store";
-import { lockerPendingCount, lockerScreenState } from "./locker-view-model";
+import {
+  lockerPendingCount,
+  lockerPendingLine,
+  lockerScreenState,
+} from "./locker-view-model";
 import LockerGenView from "./LockerGenView";
 import LockerItemsView from "./LockerItemsView";
 import LockerReviewView from "./LockerReviewView";
@@ -54,6 +58,7 @@ export default function LockerHome({
   const destination = route.params?.destination ?? "items";
 
   const pendingCount = lockerPendingCount(pending);
+  const pendingWait = lockerPendingLine(pending);
   const state = lockerScreenState({
     conflicted: vault.rows.some(isConflicted),
     denied: vault.denied !== null,
@@ -134,6 +139,7 @@ export default function LockerHome({
         onOpen={openItem}
         onShowMore={() => void showMoreLockerItems()}
         pending={pendingCount}
+        waiting={pendingWait}
         rows={vault.rows}
         state={state}
         truncated={vault.truncated}
@@ -147,6 +153,7 @@ export default function LockerHome({
     navigation,
     openItem,
     pendingCount,
+    pendingWait,
     state,
     vault.bag.generated,
     vault.bag.searchResults,

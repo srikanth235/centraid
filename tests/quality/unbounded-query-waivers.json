@@ -1,4 +1,27 @@
 {
-  "approvedDeviation": null,
-  "entries": []
+  "approvedDeviation": "#880 W0.1 seeds the mobile replica-read waivers as the P3 gate extends over apps/mobile/src for the first time.",
+  "_why": "The five entries are what extending the P3 gate over the phone found — recorded debts with named successors, not new exemptions. Seeding them is what makes the gate enforceable: an unbounded growth-entity read with no entry now fails.",
+  "_comment": "One entry per unbounded read of a growth entity. `query` is `<file>` for a blueprint query handler whose SELECT carries no bound, or `<file>#<entity>` for a read request. `reason` says why the read is unbounded TODAY and what replaces it. A stale entry — one whose read became bounded or disappeared — fails the gate, so this list can only shrink. Owner: tests/quality/user-facing-qualities.test.ts, test `P3: repo-authored query handlers are bounded or explicitly waived`.",
+  "entries": [
+    {
+      "query": "apps/mobile/src/apps/docs/useVersionChain.ts#core.content_item",
+      "reason": "The version chain is resolved by walking core.link first, so the content ids the chain needs do not exist when this read is issued. core.content_item is the content-hashed entity, and the mounted reader refuses a per-scope page for one across several scopes (docs/mobile-offline.md), so a limit here would bound the answer and not the work. Successor: the id-filtered second read Home already uses for document bodies (home-tile-reads.ts idFilter), #880."
+    },
+    {
+      "query": "apps/mobile/src/apps/notes/useNotes.ts#knowledge.note",
+      "reason": "Notes' library reads the whole note set and partitions it in JS — the People journal is a PLACE, so journal notes are filtered OUT of the library rather than merged into it — which means the visible page is not known at read time. knowledge.note does page inside SQLite (single-column TEXT key, TEXT order column, no content hash), so the recorded successor is a windowed ordered read like Home's notes tile, #880."
+    },
+    {
+      "query": "apps/mobile/src/apps/photos/FaceReview.tsx#media.asset",
+      "reason": "Face review pairs every unreviewed media.face_region with its asset metadata (no bytes cross the replica) to build the queue. The region read that decides the queue is itself unwindowed, so an asset page could drop the very assets the queue still has to show. Successor: window the region read, then fetch assets by the queued region ids, #880."
+    },
+    {
+      "query": "apps/mobile/src/apps/photos/PhotoStateView.tsx#media.asset",
+      "reason": "Bounded by product shape rather than by limit: the request filters deleted_at not-null, which the reader pushes as SQL, so the read costs the trash and never the library. It exists only to recover source_asset_id for purge ORDER (#711) — the timeline projection carries no lineage — and the trash is a set the member empties, not one that grows with the vault."
+    },
+    {
+      "query": "apps/mobile/src/apps/photos/PhotosSearch.tsx#core.content_item",
+      "reason": "The search itself is bounded (session.search limit 300); this second read only supplies titles for the hits. core.content_item is content-hashed, so the reader refuses a per-scope page across several scopes and a limit would bound the answer without bounding the work. Successor: filter this read by the content ids the bounded search returned, #880."
+    }
+  ]
 }

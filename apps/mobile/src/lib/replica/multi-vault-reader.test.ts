@@ -11,6 +11,10 @@ import {
   IntentQueue,
   ReplicaSqliteStore,
 } from "@centraid/client/replica/native";
+import type {
+  IntentState,
+  ReplicaBindValue,
+} from "@centraid/client/replica/native";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { MultiVaultReplicaReader } from "./multi-vault-reader";
@@ -442,6 +446,162 @@ async function seedPendingDocuments(
   driver.close();
 }
 
+/** Minimal payloads: this fixture is about row COUNT, not payload shape. */
+function seedBulkDocuments(file: string, vaultId: string, count: number): void {
+  seed(file, vaultId, vaultId);
+  const database = new DatabaseSync(file);
+  const insert = database.prepare(
+    `INSERT INTO replica_row
+       (shape_id, entity, row_id, payload_json, oversized_json)
+     VALUES ('docs-default', 'core.document', ?, ?, '[]')`
+  );
+  database.exec("BEGIN IMMEDIATE");
+  for (let index = 0; index < count; index += 1) {
+    const rowId = `bulk-${String(index).padStart(7, "0")}`;
+    insert.run(rowId, `{"document_id":"${rowId}"}`);
+  }
+  database.exec("COMMIT");
+  database.close();
+}
+
+/** Record what each read asked SQLite for, and how much it got back. */
+class RecordingDriver extends NodeSqliteDriver {
+  readonly reads: Array<{ sql: string; rows: number }> = [];
+
+  override async allAsync<T extends object>(
+    sql: string,
+    bind: readonly ReplicaBindValue[] = []
+  ): Promise<T[]> {
+    const rows = await super.allAsync<T>(sql, bind);
+    this.reads.push({ sql, rows: rows.length });
+    return rows;
+  }
+}
+
+/**
+ * Fill the durable outbox straight through one prepared statement. `IntentQueue`
+ * owns a transaction per intent, which is the right shape for a write and the
+ * wrong one for a ten-thousand-row fixture; the DDL still comes from the real
+ * store so the table and its `(state, created_order)` index are the shipped ones.
+ */
+function seedSyntheticOutbox(
+  file: string,
+  vaultId: string,
+  options: {
+    count: number;
+    appId?: string;
+    state?: IntentState;
+    startOrder?: number;
+  }
+): void {
+  const driver = new NodeSqliteDriver(file);
+  SqliteIntentStore.create(driver);
+  driver.close();
+
+  const appId = options.appId ?? "docs";
+  const state = options.state ?? "queued";
+  const startOrder = options.startOrder ?? 0;
+  const database = new DatabaseSync(file);
+  const insert = database.prepare(
+    `INSERT INTO replica_intent_outbox
+       (intent_id, created_order, state, payload_hash, record_json)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  database.exec("BEGIN IMMEDIATE");
+  for (let index = 0; index < options.count; index += 1) {
+    const createdOrder = startOrder + index;
+    const intentId = `${appId}-${state}-${vaultId}-${index}`;
+    const rowId = `pending-${intentId}`;
+    insert.run(
+      intentId,
+      createdOrder,
+      state,
+      "a".repeat(64),
+      JSON.stringify({
+        intentId,
+        payloadHash: "a".repeat(64),
+        appId,
+        action: "create-document",
+        input: { document_id: rowId },
+        state,
+        createdOrder,
+        attempts: 0,
+        optimistic: [
+          {
+            op: "upsert",
+            shapeId: "docs-default",
+            entity: "core.document",
+            rowId,
+            values: {
+              document_id: rowId,
+              title: `Pending needle ${index}`,
+              current_content_id: null,
+              created_at: "2026-08-11T00:00:00.000Z",
+              updated_at: "2026-08-11T00:00:00.000Z",
+              deleted_at: null,
+            },
+          },
+        ],
+      })
+    );
+  }
+  database.exec("COMMIT");
+  database.close();
+}
+
+interface SearchAtScale {
+  /** Rows returned, and how many of them the pending writes supplied. */
+  returned: number;
+  pending: number;
+  /** Distinct pending ranks: a large outbox must not collide ordering slots. */
+  ranks: number;
+  /** The canonical hit is still reachable behind all that pending work. */
+  canonical: unknown[];
+}
+
+async function searchAtScale(pending: number): Promise<SearchAtScale> {
+  const root = tempDirSync(`centraid-search-pending-${pending}-`);
+  const personal = path.join(root, "personal.db");
+  seed(personal, "personal", "p");
+  seedSyntheticOutbox(personal, "personal", { count: pending });
+  const reader = new MultiVaultReplicaReader(
+    new NodeSqliteDriver(path.join(root, "mounted.db")),
+    [
+      {
+        vaultId: "personal",
+        label: "Personal",
+        canWrite: true,
+        databaseName: personal,
+      },
+    ]
+  );
+
+  try {
+    const [needles, canonical] = await Promise.all([
+      reader.search("docs", {
+        entity: "core.document",
+        query: "needle",
+        limit: 20,
+      }),
+      reader.search("docs", {
+        entity: "core.document",
+        query: "house",
+        limit: 20,
+      }),
+    ]);
+    return {
+      returned: needles.rows.length,
+      pending: needles.rows.filter((row) =>
+        String(row.values.title).startsWith("Pending needle")
+      ).length,
+      ranks: new Set(needles.rows.map((row) => row.values._rank)).size,
+      canonical: canonical.rows.map((row) => row.values.document_id),
+    };
+  } finally {
+    reader.close();
+  }
+}
+
 /**
  * Encode a reproducible sample of the product's 256px/82%-quality thumbnail
  * rung. The smooth gradients plus bounded sensor-like grain exercise JPEG
@@ -827,6 +987,97 @@ describe(MultiVaultReplicaReader, () => {
     expect(result.cursor).toStrictEqual({ epoch: "mounted", seq: 0 });
     reader.close();
   });
+
+  test("reports partial coverage when the pushed page ceiling caps the answer", async () => {
+    const root = tempDirSync("centraid-page-ceiling-");
+    const personal = path.join(root, "personal.db");
+    seedBulkDocuments(personal, "personal", 100_001);
+    const reader = new MultiVaultReplicaReader(
+      new NodeSqliteDriver(path.join(root, "mounted.db")),
+      [
+        {
+          vaultId: "personal",
+          label: "Personal",
+          canWrite: true,
+          databaseName: personal,
+        },
+      ]
+    );
+
+    const asked = await reader.read("docs", {
+      entity: "core.document",
+      limit: 250_000,
+    });
+
+    // The evaluator caps its own page at the same 100,000 rows, so the rows are
+    // the rows either way. What would otherwise be silent is that this is not
+    // the whole of what the caller asked for.
+    expect(asked.rows).toHaveLength(100_000);
+    expect(asked.coverage).toBe("partial");
+    reader.close();
+  }, 60_000);
+
+  test("parses only the outbox rows that can overlay the read", async () => {
+    const root = tempDirSync("centraid-overlay-filter-");
+    const personal = path.join(root, "personal.db");
+    seed(personal, "personal", "p");
+    seedSyntheticOutbox(personal, "personal", { count: 3, startOrder: 0 });
+    seedSyntheticOutbox(personal, "personal", {
+      count: 4,
+      appId: "notes",
+      startOrder: 100,
+    });
+    seedSyntheticOutbox(personal, "personal", {
+      count: 5,
+      state: "executed",
+      startOrder: 200,
+    });
+    const driver = new RecordingDriver(path.join(root, "mounted.db"));
+    const reader = new MultiVaultReplicaReader(driver, [
+      {
+        vaultId: "personal",
+        label: "Personal",
+        canWrite: true,
+        databaseName: personal,
+      },
+    ]);
+
+    const page = await reader.read("docs", {
+      entity: "core.document",
+      limit: 50,
+    });
+
+    const outbox = driver.reads.filter((read) =>
+      read.sql.includes("FROM scope_0.replica_intent_outbox")
+    );
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]!.sql).toContain("WHERE state IN (?, ?, ?, ?, ?, ?, ?)");
+    expect(outbox[0]!.sql).toContain(
+      "json_extract(record_json, '$.appId') = ?"
+    );
+    // Only the three overlay-state Docs intents cross into JavaScript. The
+    // other app's four and the five settled ones are never parsed at all.
+    expect(outbox[0]!.rows).toBe(3);
+    expect(page.rows).toHaveLength(4);
+    reader.close();
+  });
+
+  // A thousand pending writes used to inflate the per-scope FTS page by a
+  // thousand rows; ten thousand used to refuse the read outright.
+  const surviving = {
+    returned: 20,
+    pending: 20,
+    ranks: 20,
+    canonical: ["document-p"],
+  };
+
+  test("federated search survives a thousand pending writes", async () => {
+    await expect(searchAtScale(1_000)).resolves.toStrictEqual(surviving);
+  });
+
+  test("federated search survives ten thousand pending writes", async () => {
+    await expect(searchAtScale(10_000)).resolves.toStrictEqual(surviving);
+  }, 30_000);
 
   test("holds the 50k-item + 200-pending ten-year read/search budgets", async () => {
     const root = tempDirSync("centraid-household-");

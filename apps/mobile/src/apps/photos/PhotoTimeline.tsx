@@ -3,7 +3,7 @@
 // `timeline-rows.ts` and `justify.ts`; this file is the view and the gestures.
 
 import { FlashList } from "@shopify/flash-list";
-import type { FlashListRef } from "@shopify/flash-list";
+import type { FlashListRef, ListRenderItemInfo } from "@shopify/flash-list";
 import * as Haptics from "expo-haptics";
 import React, {
   useCallback,
@@ -251,6 +251,77 @@ export default function PhotoTimeline({
     if (day !== undefined) onVisibleDay(day);
   };
 
+  // Stable across every render this list does NOT depend on — a scrub label, a
+  // refresh flag, a scroll offset. Inline in the JSX, `renderItem` was a new
+  // function each time, which is FlashList's signal that every mounted cell
+  // needs re-rendering, and `PhotoTile`'s memo never got to bail out.
+  const renderRow = useCallback(
+    ({ item }: ListRenderItemInfo<TimelineRow>): React.JSX.Element =>
+      item.type === "month" ? (
+        <View style={styles.month}>
+          {/* The month's NAME and nothing else (see `timeline-rows.ts`). */}
+          <Text style={styles.monthTitle} numberOfLines={1}>
+            {item.title}
+          </Text>
+        </View>
+      ) : item.type === "day" ? (
+        <View style={styles.day}>
+          <Text style={styles.dayTitle} numberOfLines={1}>
+            {item.title}
+          </Text>
+          {item.place ? (
+            <Text style={styles.place} numberOfLines={1}>
+              {item.place}
+            </Text>
+          ) : null}
+          {selecting ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Select ${item.title}`}
+              onPress={() =>
+                onSelectionChange(
+                  new Set([
+                    ...selection,
+                    ...item.assets.map((asset) => asset.id),
+                  ])
+                )
+              }
+              style={styles.selectDayTarget}
+            >
+              <Text style={styles.selectDay}>Select day</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.row}>
+          {item.tiles.map((tile) => (
+            <PhotoTile
+              key={tile.asset.id}
+              asset={tile.asset}
+              width={tile.width}
+              height={tile.height}
+              rung={rung}
+              selected={selection.has(tile.asset.id)}
+              selecting={selecting}
+              vaults={vaults}
+              onOpen={handleOpen}
+              onSelect={toggle}
+            />
+          ))}
+        </View>
+      ),
+    [
+      handleOpen,
+      onSelectionChange,
+      rung,
+      selecting,
+      selection,
+      styles,
+      toggle,
+      vaults,
+    ]
+  );
+
   const scrub = (ratio: number): void => {
     const index = Math.min(
       rows.length - 1,
@@ -280,61 +351,7 @@ export default function PhotoTimeline({
           keyExtractor={(item) => item.key}
           getItemType={(item) => item.type}
           stickyHeaderIndices={stickyIndices}
-          renderItem={({ item }) =>
-            item.type === "month" ? (
-              <View style={styles.month}>
-                {/* The month's NAME and nothing else (see `timeline-rows.ts`). */}
-                <Text style={styles.monthTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-              </View>
-            ) : item.type === "day" ? (
-              <View style={styles.day}>
-                <Text style={styles.dayTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                {item.place ? (
-                  <Text style={styles.place} numberOfLines={1}>
-                    {item.place}
-                  </Text>
-                ) : null}
-                {selecting ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Select ${item.title}`}
-                    onPress={() =>
-                      onSelectionChange(
-                        new Set([
-                          ...selection,
-                          ...item.assets.map((asset) => asset.id),
-                        ])
-                      )
-                    }
-                    style={styles.selectDayTarget}
-                  >
-                    <Text style={styles.selectDay}>Select day</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            ) : (
-              <View style={styles.row}>
-                {item.tiles.map((tile) => (
-                  <PhotoTile
-                    key={tile.asset.id}
-                    asset={tile.asset}
-                    width={tile.width}
-                    height={tile.height}
-                    rung={rung}
-                    selected={selection.has(tile.asset.id)}
-                    selecting={selecting}
-                    vaults={vaults}
-                    onOpen={handleOpen}
-                    onSelect={toggle}
-                  />
-                ))}
-              </View>
-            )
-          }
+          renderItem={renderRow}
           onScrollBeginDrag={() => setScrubLabel("")}
           onMomentumScrollEnd={notePlace}
           onScrollEndDrag={notePlace}

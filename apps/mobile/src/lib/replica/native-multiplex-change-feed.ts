@@ -25,6 +25,9 @@ interface ScopeState {
   listener?: (message: VaultChangeMessage) => void;
   active: boolean;
   rebootstrapRequired: boolean;
+  /** Newest cursor not yet written to durable storage. */
+  pendingCursor?: VaultChangeCursor;
+  persistTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface ScopeFrame {
@@ -32,6 +35,15 @@ interface ScopeFrame {
   event: "change" | "cursor" | "rebootstrap" | "revoked";
   data: unknown;
 }
+
+/**
+ * Quiet window before a scope's resume cursor is written, matching the
+ * single-vault feed (native-change-feed.ts). The multiplex feed missed it: a
+ * 1,000-change frame wrote the cursor 1,000 times AND rebuilt the replica
+ * context 1,000 times, because both were driven from the per-change cursor
+ * advance rather than from the frame.
+ */
+const CURSOR_PERSIST_DEBOUNCE_MS = 1_000;
 
 export interface NativeMultiplexChangeFeedOptions {
   gatewayAuth: GatewayAuth;
@@ -101,11 +113,14 @@ export class NativeMultiplexChangeFeed {
         state.cursor = { ...cursor };
         state.cursorLoaded = true;
         state.rebootstrapRequired = false;
-        await this.persist(state);
+        this.clearPending(state);
+        await this.persist(state.vaultId, state.cursor);
         this.reconnect();
       },
       setActive: (active) => {
         state.active = active;
+        // Backgrounding is the last reliable moment to land the resume cursor.
+        if (!active) void this.flush(state);
         this.reconnect();
       },
     };
@@ -119,7 +134,17 @@ export class NativeMultiplexChangeFeed {
 
   close(): void {
     this.stop();
+    // Teardown flushes: a debounced cursor lost on kill costs a replay, but
+    // only if it is written at all — dropping it silently regresses the cursor.
+    void this.flushAll();
     this.#states.clear();
+  }
+
+  /** Land every debounced cursor now (teardown, or an explicit background). */
+  async flushAll(): Promise<void> {
+    await Promise.all(
+      [...this.#states.values()].map((state) => this.flush(state))
+    );
   }
 
   private reconnect(): void {
@@ -181,6 +206,9 @@ export class NativeMultiplexChangeFeed {
     if (!state) return;
     if (scopeFrame.event === "revoked") {
       state.rebootstrapRequired = true;
+      // Drop the debounced write too, or it lands after the removal and
+      // resurrects the cursor of a scope this phone no longer holds.
+      this.clearPending(state);
       void this.#storage.removeItem(this.storageKey(state.vaultId));
       this.#onScopeRevoked?.(state.vaultId);
       this.reconnect();
@@ -197,7 +225,7 @@ export class NativeMultiplexChangeFeed {
     if (scopeFrame.event === "cursor") {
       const cursor = parseCursor(scopeFrame.data);
       if (!cursor) return;
-      this.acceptCursor(state, cursor);
+      if (this.advanceCursor(state, cursor)) this.settleFrame(state);
       state.listener?.({ type: "centraid:vault-cursor", cursor });
       return;
     }
@@ -206,21 +234,50 @@ export class NativeMultiplexChangeFeed {
       | undefined;
     const pageCursor = parseCursor(page?.cursor);
     const values = Array.isArray(page?.changes) ? page.changes : [];
+    // ONE frame, ONE settle. Advancing the in-memory cursor is free; the disk
+    // write and the freshness callback behind it are not, and a page of a
+    // thousand changes has exactly one newest cursor to report.
+    let advanced = false;
     for (const value of values) {
       const change = parseChange(value, pageCursor ?? state.cursor);
       if (!change) continue;
-      this.acceptCursor(state, change.cursor);
+      advanced = this.advanceCursor(state, change.cursor) || advanced;
       state.listener?.({ type: "centraid:vault-change", detail: change });
     }
-    if (pageCursor) this.acceptCursor(state, pageCursor);
+    if (pageCursor)
+      advanced = this.advanceCursor(state, pageCursor) || advanced;
+    if (advanced) this.settleFrame(state);
   }
 
-  private acceptCursor(state: ScopeState, cursor: VaultChangeCursor): void {
+  /** In-memory only: returns whether the cursor actually moved forward. */
+  private advanceCursor(state: ScopeState, cursor: VaultChangeCursor): boolean {
     if (cursor.epoch === state.cursor.epoch && cursor.seq < state.cursor.seq)
-      return;
+      return false;
     state.cursor = cursor;
+    return true;
+  }
+
+  /** The per-frame cost: one freshness signal, one debounced durable write. */
+  private settleFrame(state: ScopeState): void {
     this.#onScopeUpdated?.(state.vaultId);
-    void this.persist(state);
+    state.pendingCursor = state.cursor;
+    if (state.persistTimer) return;
+    state.persistTimer = setTimeout(() => {
+      state.persistTimer = undefined;
+      void this.flush(state);
+    }, CURSOR_PERSIST_DEBOUNCE_MS);
+  }
+
+  private clearPending(state: ScopeState): void {
+    if (state.persistTimer) clearTimeout(state.persistTimer);
+    state.persistTimer = undefined;
+    state.pendingCursor = undefined;
+  }
+
+  private async flush(state: ScopeState): Promise<void> {
+    const cursor = state.pendingCursor;
+    this.clearPending(state);
+    if (cursor) await this.persist(state.vaultId, cursor);
   }
 
   private activeStates(): ScopeState[] {
@@ -272,9 +329,9 @@ export class NativeMultiplexChangeFeed {
     }
   }
 
-  private persist(state: ScopeState): Promise<void> {
+  private persist(vaultId: string, cursor: VaultChangeCursor): Promise<void> {
     return this.#storage
-      .setItem(this.storageKey(state.vaultId), JSON.stringify(state.cursor))
+      .setItem(this.storageKey(vaultId), JSON.stringify(cursor))
       .catch(() => undefined);
   }
 

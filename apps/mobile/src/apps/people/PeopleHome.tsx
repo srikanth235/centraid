@@ -17,6 +17,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import {
+  pendingChangeLabel,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
   agoLabel,
   cadenceLabel,
   daysSinceContact,
@@ -42,7 +46,6 @@ import {
   filterChips,
 } from "@centraid/blueprints/apps/people/people-copy";
 import type {
-  PersonRow as PersonRowModel,
   RosterFilter,
   TouchCounts,
 } from "@centraid/blueprints/apps/people/types";
@@ -55,6 +58,7 @@ import SkeletonRows from "../../kit/components/SkeletonRows";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import {
   borders,
   pageMargin,
@@ -66,6 +70,7 @@ import {
 import type { PeopleScreenProps } from "../../navigation";
 import type { PeopleBandKey } from "./people-band";
 import { applyRosterFilter, rosterSub, searchRoster } from "./people-model";
+import type { MobilePersonRow } from "./people-model";
 import { usePeopleWrites } from "./people-writes";
 import {
   Caption,
@@ -210,7 +215,7 @@ function RosterBody({
   filter: RosterFilter;
   onFilter: (filter: RosterFilter) => void;
   onOpen: (partyId: string) => void;
-  onStar: (person: PersonRowModel) => void;
+  onStar: (person: MobilePersonRow) => void;
   onAdd: () => void;
 }): React.JSX.Element {
   const rows = useMemo(
@@ -281,12 +286,16 @@ function RosterRow({
   onOpen,
   onStar,
 }: {
-  person: PersonRowModel;
+  person: MobilePersonRow;
   onOpen: (partyId: string) => void;
-  onStar: (person: PersonRowModel) => void;
+  onStar: (person: MobilePersonRow) => void;
 }): React.JSX.Element {
   const overdue = isOverdue(person);
   const sub = rosterSub(person);
+  // Until #880 the roster had no pending marker, so an offline add read as a
+  // failure while its row was durable (QUALITY.md).
+  const overlay = readPendingOverlay(person.raw);
+  const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
     <PersonRow
       avatar={person}
@@ -302,11 +311,14 @@ function RosterRow({
       {...(overdue
         ? { meta: agoLabel(daysSinceContact(person)), metaNet: true }
         : {})}
+      {...(pending ? { pending } : {})}
       onOpen={() => onOpen(person.party_id)}
       star={
         <StarButton
           name={person.name}
           starred={person.starred}
+          disabled={!person.canWrite}
+          disabledHint={READ_ONLY_SOURCE_REASON}
           onToggle={() => onStar(person)}
         />
       }
@@ -452,7 +464,7 @@ function SearchBody({
   filter: RosterFilter;
   onFilter: (filter: RosterFilter) => void;
   onOpen: (partyId: string) => void;
-  onStar: (person: PersonRowModel) => void;
+  onStar: (person: MobilePersonRow) => void;
 }): React.JSX.Element {
   const { colors, targetMin } = useTheme();
   const active: RosterFilter =
@@ -541,14 +553,16 @@ function SearchRow({
   onOpen,
   onStar,
 }: {
-  person: PersonRowModel;
+  person: MobilePersonRow;
   onOpen: (partyId: string) => void;
-  onStar: (person: PersonRowModel) => void;
+  onStar: (person: MobilePersonRow) => void;
 }): React.JSX.Element {
   const overdue = isOverdue(person);
   // The snippet answers "why is this row here" better than the role the
   // member already knows.
   const sub = person.snippet ?? person.role;
+  const overlay = readPendingOverlay(person.raw);
+  const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
     <PersonRow
       avatar={person}
@@ -557,11 +571,14 @@ function SearchRow({
       {...(overdue
         ? { meta: agoLabel(daysSinceContact(person)), metaNet: true }
         : {})}
+      {...(pending ? { pending } : {})}
       onOpen={() => onOpen(person.party_id)}
       star={
         <StarButton
           name={person.name}
           starred={person.starred}
+          disabled={!person.canWrite}
+          disabledHint={READ_ONLY_SOURCE_REASON}
           onToggle={() => onStar(person)}
         />
       }

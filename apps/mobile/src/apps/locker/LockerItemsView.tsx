@@ -56,6 +56,7 @@ export interface LockerItemsViewProps {
   onFilter: (filter: ItemFilter) => void;
   state: LockerScreenState;
   pending: number;
+  waiting?: string | null;
   lastReadAt: string | null;
   loaded: boolean;
   truncated: boolean;
@@ -133,6 +134,7 @@ export default function LockerItemsView(
       <LockerNotice
         state={props.state}
         pending={props.pending}
+        waiting={props.waiting ?? null}
         lastReadAt={props.lastReadAt}
       />
       {props.offerDevice ? (

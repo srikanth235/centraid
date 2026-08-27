@@ -364,6 +364,14 @@ The packed tile geometry, overlay slots, skeleton, viewer stack, scrub rails, fi
 | Both apps draw offline and stale as two notices, not Tasks' folded one. | Keep. | Locker's offline sentence names what still works and its stale one names when the replica last matched; Tally's are the same split. A lag nobody measured is not a lag, so the stale notice waits for a landed read. |
 | Leave/archive/simplification/export/import/access commits are drawn against the ask, with the commit inert and the gap named in its field note. | Keep until each backend lands. | GAPS.md tags `[backend-needed]`/`[open-question]` and the #872 rulings: a drawn-but-honest surface beats a hidden one, and no control is allowed to pretend. The register of what each needs lives on the issue. |
 
+## The phone's pending-write line (#880)
+
+The shared pending-overlay law gives every seat one vocabulary for a queued write. One rung of it diverges by platform, deliberately.
+
+| Divergence | Decision | Enforcement / reason |
+| --- | --- | --- |
+| A queued write is marked "stuck" after **one hour** on the phone, where the browser marks the same row as soon as it is queued ("Queued …"). | Keep both. | A browser tab that holds a queued write is a tab someone is looking at: if it has not gone out, that is news now. A phone is routinely offline — in a pocket, on a plane, on a metered radio the transfer rules refuse — and the background pass wakes opportunistically, so four wakes fit comfortably inside the hour. Marking a phone write stuck at the moment it queues would make the ordinary offline case read as a fault, which is the one thing the overlay law forbids. The line the phone eventually draws carries the age and the attempt count ("Queued 3h ago · 2 attempts"), so the escalation says what it knows. Reasoned at the literal in `apps/mobile/src/kit/replica/pending-copy.ts`; the current decision is [decisions.md](decisions.md#mobile-offline-scale-and-sharing-880) M-stuck. |
+
 ## The app navigation rail (#835)
 
 Where the shipped rails depart from the v16 design reference, and why. The reference is a prototype of intended structure, not production code; where it and `packages/design` disagree the package wins, and where it and this repo's shelf tables disagree the tables win — a rail row is an arrangement of destinations the app already has, never a source of new ones. The ruling behind the rail is in [decisions](decisions.md#the-app-navigation-rail-835).

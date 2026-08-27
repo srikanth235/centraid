@@ -8,6 +8,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 - **Journey ownership**: origin `tests/agent-e2e-mobile/flows/tally-derived.mjs`; custodian `apps/desktop/tests/e2e/tally.spec.ts`; viewer `skip` in `tests/matrix.json#appSeats` pending the web seat's own journey.
 - **Structural exclusions**: see `tests/matrix.json#appEngines` (record-only: custody skipped).
 - **Origin seat**: the phone draws every origin-seat route of the v17 surface inventory's Tally table. It OWNS Receipt — SURFACES.md gives capture to `origin (read on others)` — and Export is the one surface whose door is elsewhere, drawn as facts plus the sentence naming where the act happens rather than as a control. Waiting draws the phone's own durable outbox and hands a steward-only act to the shell's Approvals inbox: no mobile transport reaches the gateway's per-intent decide door, so neither Approve nor Decline is offered (`TALLY_CONTRIB_DOORS.decide = false`).
+- **Sharing**: `tally.group` is v1's one edit-capable subject, so the group's share row is the phone's ONE commons producer — offline it withholds the verb rather than queueing an invitation, and the first compile binds the commons to the group circle's stored roster ([decisions.md](../decisions.md#mobile-offline-scale-and-sharing-880)).
 - **Read plane**: reads are the gateway's query handlers, because `queries/dashboard.ts` holds the one balance engine; writes are the replica's, with an optimistic projection each, so recording never needs the gateway. See [docs/mobile-offline.md](../mobile-offline.md#durable-path-and-at-rest-decision).
 
 | Tally scenario | U | C | E | Owner / evidence |
@@ -23,3 +24,6 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | origin read plane — denial as data, search races, forgetting a payload | ✅ | — | — | `apps/mobile/src/apps/tally/tally-store.test.ts` |
 | origin Balances — hero derivation, All settled, day one and the sign convention | — | ✅ | — | `apps/mobile/src/apps/tally/BalancesView.test.tsx` |
 | origin Waiting — the doors this transport has, and the two verbs it does not | — | ✅ | — | `apps/mobile/src/apps/tally/WaitingView.test.tsx` |
+| origin pending writes survive a process restart — same intent ids, same overlay | — | — | ✅ | `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` |
+| origin share-a-group row — the phone's one commons producer, withheld offline | — | ✅ | — | `apps/mobile/src/apps/tally/TallyShareGroup.test.tsx` |
+| origin sharing journey — mint an invitation, redeem the claim on the mounted plane | — | — | ✅ | `tests/agent-e2e-mobile/flows/sharing-invite.mjs` |

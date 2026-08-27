@@ -70,8 +70,11 @@ export function LinkTicketPanel({
   gatewayBase,
   onLinked,
 }: {
-  /** The device's own currently-mounted vault (mobile is single-vault-at-a-
-   *  time, unlike the desktop household view — no picker needed). */
+  /** The FOCUSED vault, which is the one a link ticket is minted for and
+   *  redeemed into. Several vaults can be mounted at once — Sharing's read
+   *  plane spans all of them (`sharing-reads.ts`) — but a link is a ceremony
+   *  between two named vaults, so it takes the member's current one rather
+   *  than a picker over a set they did not choose from. */
   vaultId?: string;
   colors: ReturnType<typeof useTheme>["colors"];
   gatewayBase?: string;

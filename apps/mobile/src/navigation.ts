@@ -147,7 +147,12 @@ export type AgendaStackParamList = {
 export type SettingsStackParamList = {
   Settings: undefined;
   Approvals: undefined;
-  Sharing: undefined;
+  // A tapped `centraid://commons-invite` link lands HERE with the claim it
+  // carried (`deep-links.ts`), because Sharing is where an invitation is
+  // redeemed; pasting one is the same door. `claimToken` is a ONE-TIME secret
+  // riding a route param, so `Sharing.tsx` clears both the moment it has read
+  // them — nothing may persist a navigation state still holding it.
+  Sharing: { stewardVaultId?: string; claimToken?: string } | undefined;
   PhoneStorage: { signalCause?: string } | undefined;
   // Frame screen, never Photos stack (#712): policy also covers Docs scans and Notes attachments.
   BackupHealth: { signalCause?: string } | undefined;

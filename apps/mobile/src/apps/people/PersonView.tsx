@@ -21,6 +21,10 @@ import React, { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 import {
+  pendingOverlayCopy,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
   cadenceLineLabel,
   isOverdue,
   monthDayLabel,
@@ -44,6 +48,7 @@ import ChipsBlock from "../../kit/components/ChipsBlock";
 import { Text } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import TopSafeArea from "../../kit/components/TopSafeArea";
+import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import { pageMargin, spacing, t, useTheme } from "../../kit/theme";
 import type { PeopleScreenProps } from "../../navigation";
 import { usePeopleWrites } from "./people-writes";
@@ -153,6 +158,9 @@ export default function PersonView({
     const linksAvailable = vaults !== null;
     const linked = (vaults?.length ?? 0) > 0;
     const overdue = isOverdue(person);
+    const writable = person.canWrite;
+    const sources = person.scopeLabels.join(" · ");
+    const pending = readPendingOverlay(person.raw);
 
     const composerCommits = (
       <>
@@ -160,13 +168,20 @@ export default function PersonView({
         <Verb label={VERBS.cancel} quiet onPress={() => setComposer(null)} />
       </>
     );
+    // WITHHELD, not disabled: there is no writable target to copy into.
     const addVerb = (key: ComposerKey): React.ReactNode =>
-      composing(key) ? null : (
+      composing(key) || !writable ? null : (
         <Verb label={VERBS.add} onPress={() => openComposer(key)} />
       );
 
     return (
       <ScrollView contentContainerStyle={styles.scroll}>
+        {/* Stated once, above everything this person's screen offers. */}
+        {writable ? null : (
+          <Text style={[t("annotLabel"), { color: colors.net }]}>
+            {READ_ONLY_SOURCE_REASON}
+          </Text>
+        )}
         {/* Hero: avatar with the 2px link ring, name, role, star. */}
         <View style={styles.hero}>
           <PersonAvatar
@@ -190,6 +205,8 @@ export default function PersonView({
           <StarButton
             name={person.name}
             starred={person.starred}
+            disabled={!writable}
+            disabledHint={READ_ONLY_SOURCE_REASON}
             onToggle={() => void writes.toggleStar(person)}
           />
         </View>
@@ -220,6 +237,19 @@ export default function PersonView({
           {cadenceLineLabel(person.cadence_days, person)}
         </Text>
 
+        {sources ? (
+          <Text style={[t("annotLabel"), { color: colors.textFaint }]}>
+            {`Source · ${sources}`}
+          </Text>
+        ) : null}
+
+        {/* A change still on this phone, steward wait included. */}
+        {pending ? (
+          <Text style={[t("annotLabel"), { color: colors.textSoft }]}>
+            {pendingOverlayCopy(pending)}
+          </Text>
+        ) : null}
+
         {/* AT MOST ONE FILLED CONTROL PER VIEW: Log is the act this screen
             exists for; Edit stands beside it outlined. (Share / Link vault
             are withheld — module head.) */}
@@ -227,6 +257,7 @@ export default function PersonView({
           <Button
             label={VERBS.log}
             variant="primary"
+            disabled={!writable}
             onPress={() =>
               navigation.navigate("PersonLog", { personId: partyId })
             }
@@ -234,6 +265,7 @@ export default function PersonView({
           <Button
             label={VERBS.edit}
             variant="secondary"
+            disabled={!writable}
             onPress={() =>
               navigation.navigate("PersonEditor", { personId: partyId })
             }
@@ -332,6 +364,7 @@ export default function PersonView({
                     <Verb
                       label="✕"
                       quiet
+                      disabled={!writable}
                       accessibilityLabel={LABELS.removeChannel(channel.kind)}
                       onPress={() => void writes.deleteChannel(channel)}
                     />
@@ -383,6 +416,7 @@ export default function PersonView({
                 trailing={
                   <Verb
                     label={date.reminder_on ? VERBS.mute : VERBS.remind}
+                    disabled={!writable}
                     onPress={() =>
                       void writes.toggleReminder(
                         date.date_id,
@@ -437,6 +471,7 @@ export default function PersonView({
           <Button
             label={VERBS.merge}
             variant="secondary"
+            disabled={!writable}
             onPress={() =>
               navigation.navigate("PersonMerge", { personId: partyId })
             }
@@ -444,6 +479,7 @@ export default function PersonView({
           <Button
             label={VERBS.trash}
             variant="destructive"
+            disabled={!writable}
             onPress={() => setConfirmTrash(true)}
           />
         </Commits>

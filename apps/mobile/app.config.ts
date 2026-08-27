@@ -79,6 +79,13 @@ export default function createExpoConfig({
     android: {
       package: "dev.centraid.mobile",
       versionCode: BUILD,
+      // Centraid opts out of Android Auto Backup entirely: resume cursors,
+      // the cached scope manifest and Keystore-wrapped SecureStore blobs
+      // restored onto a phone with an empty replica claim rows that device
+      // never had (android/.../replica_backup_rules.xml). The manifest already
+      // says so; declaring it here is what stops a future `expo prebuild` from
+      // regenerating the manifest without it.
+      allowBackup: false,
       adaptiveIcon: {
         foregroundImage: "../../assets/adaptive-icon.png",
         backgroundColor: "#3EC8B4",

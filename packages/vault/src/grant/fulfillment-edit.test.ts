@@ -160,7 +160,7 @@ describe("grant/fulfillment-edit", () => {
     );
   });
 
-  test("co-contribution ships for tally.group only", () => {
+  test("a folder is shareable for view only, so every write into it refuses", () => {
     const { origin, originBoot } = household();
     const now = nowIso();
     const ravi = addParty(origin.vault, "Ravi", now);
@@ -188,25 +188,30 @@ describe("grant/fulfillment-edit", () => {
       members: [{ partyId: ravi, capability: "read+write" }],
       now,
     });
+    // `view`, because the registry offers a folder nothing else (#825, ruling
+    // G-edit): albums and folders are view-capable and their edit strategy is
+    // deferred, so an `edit` grant over one cannot be minted at all.
     createShareGrant(origin.vault, {
       audience: { kind: "party", id: ravi },
       subjectType: "docs.folder",
       subjectId: folderId,
-      capability: "edit",
+      capability: "view",
       grantedAt: now,
       grantedBy: originBoot.ownerPartyId,
     });
 
-    // Adding a document to someone else's shared folder is co-contribution,
-    // and v1 does not offer it — the write is refused, never applied.
+    // Adding a document to someone else's shared folder, and editing one
+    // already inside it, refuse for the SAME reason in v1: the folder is
+    // shared for view. The commons rail is live either way — it is the grant
+    // that stops short, not the routing.
     expect(
       routeShareGrantEdit(origin.vault, {
         command: "core.add_document",
         commandInput: { folder_id: folderId },
       })?.refusal
-    ).toBe("co-contribution to docs.folder is not offered in v1");
-    // Editing the CONTENT of a document already in that folder is the shipped
-    // v1 surface, and it routes to the same commons rail.
+    ).toBe(
+      `core.add_document writes into docs.folder ${folderId}, which is shared for view only`
+    );
     const documentId = uuidv7();
     origin.vault
       .prepare(
@@ -225,7 +230,25 @@ describe("grant/fulfillment-edit", () => {
       containerId: folderId,
       actable: true,
     });
-    expect(edit?.refusal).toBeUndefined();
+    expect(edit?.refusal).toBe(
+      `core.edit_document writes into docs.folder ${folderId}, which is shared for view only`
+    );
+
+    // The co-contribution guard behind that refusal is still real: asked with
+    // an edit-bearing audience, the folder still answers "not offered in v1".
+    // Defence in depth for a grant row minted before the registry narrowed.
+    expect(
+      shareGrantEditRefusal(
+        routeShareGrantEdit(origin.vault, {
+          command: "core.add_document",
+          commandInput: { folder_id: folderId },
+        })!,
+        (edit?.grants ?? []).map((grant) => ({
+          ...grant,
+          capability: "edit" as ShareGrantCapability,
+        }))
+      )
+    ).toBe("co-contribution to docs.folder is not offered in v1");
   });
 
   test("an edit grant with no commons rail is refused, never applied privately", () => {

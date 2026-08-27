@@ -550,7 +550,7 @@
           "wallClockCost": "low",
           "knob": "tests/quality/unbounded-query-waivers.json",
           "governance": "waiver-gated",
-          "redLastDemonstrated": "2026-08-01"
+          "redLastDemonstrated": "2026-08-27"
         },
         {
           "id": "P4",
@@ -3622,6 +3622,27 @@
             "layer": "component",
             "status": "owned",
             "owner": "apps/mobile/src/apps/tally/WaitingView.test.tsx"
+          },
+          {
+            "id": "origin-pending-restart",
+            "label": "origin pending writes survive a process restart — same intent ids, same overlay",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx"
+          },
+          {
+            "id": "origin-share-group",
+            "label": "origin share-a-group row — the phone's one commons producer, withheld offline",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/tally/TallyShareGroup.test.tsx"
+          },
+          {
+            "id": "origin-sharing",
+            "label": "origin sharing journey — mint an invitation, redeem the claim on the mounted plane",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs"
           }
         ]
       },
@@ -4231,6 +4252,12 @@
             "label": "Native v0 resilience",
             "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
             "flow": "mobile-native-v0-resilience"
+          },
+          {
+            "id": "sharing-invite",
+            "label": "Sharing invite",
+            "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
+            "flow": "mobile-sharing-invite"
           },
           {
             "id": "places-seat",
@@ -4863,6 +4890,24 @@
       "tier": "e2e",
       "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
       "minimumTests": 1
+    },
+    {
+      "id": "mobile-sharing-invite",
+      "name": "The phone mints an invitation from a Tally group, withholds the verb with its own sentence while the gateway is out of reach, and loads the surface that redeems one",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
+      "minimumTests": 15
+    },
+    {
+      "id": "mobile-pending-restart-journey",
+      "name": "An expense recorded through the rendered Tally cover with the gateway unreachable still draws its queued row, under the same durable intent id, after session, reader and store are rebuilt over the same SQLite file",
+      "surface": "mobile",
+      "dimension": "offline",
+      "tier": "integration",
+      "owner": "apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx",
+      "minimumTests": 4
     },
     {
       "id": "tunnel-wire",

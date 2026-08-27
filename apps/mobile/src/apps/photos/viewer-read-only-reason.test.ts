@@ -8,6 +8,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import { READ_ONLY_VAULT_REASON, VIEWER_BOTTOM_ACTIONS } from "./viewer-model";
 
 const TOOLBAR_SRC = fs.readFileSync(
@@ -32,6 +33,10 @@ describe("READ_ONLY_VAULT_REASON — one sentence for one truth", () => {
     expect(READ_ONLY_VAULT_REASON).toBe(
       "This vault is read-only for you, so meaning cannot be written into it."
     );
+  });
+
+  it("IS the kit's one sentence since #880 — Docs, Tasks, Agenda and People say it too", () => {
+    expect(READ_ONLY_VAULT_REASON).toBe(READ_ONLY_SOURCE_REASON);
   });
 
   it("is what PhotoLightboxToolbar, PhotoLightbox and the overflow menu import — never re-typed", () => {

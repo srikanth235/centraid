@@ -5,8 +5,20 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
-import { ShareIntentGate, processShareIntent } from "./share-ingest";
-import type { ShareIngestPorts, SharedIntentFileLike } from "./share-ingest";
+import {
+  SHARE_STAGING_STALE_MS,
+  SHARE_STAGING_SWEEP_LIMIT,
+  ShareIntentGate,
+  discardShareIntentFiles,
+  processShareIntent,
+  shareTargetChoices,
+  sweepStaleShareStaging,
+} from "./share-ingest";
+import type {
+  ShareIngestPorts,
+  ShareStagingEntry,
+  SharedIntentFileLike,
+} from "./share-ingest";
 
 const session = {} as NativeReplicaSession;
 const GATEWAY = "http://127.0.0.1:8787";
@@ -157,6 +169,120 @@ describe("processShareIntent lifecycle", () => {
       "gateway unreachable"
     );
     expect(ports.reset).toHaveBeenCalledOnce();
+  });
+});
+
+describe("staged share files", () => {
+  it("deletes every staged copy the member declined (#880 W4.6)", () => {
+    const deleted: string[] = [];
+    discardShareIntentFiles((path) => deleted.push(path), {
+      files: [
+        file({ mimeType: "image/jpeg", path: "file:///group/a.jpg" }),
+        file({ mimeType: "application/pdf", path: "file:///group/b.pdf" }),
+      ],
+    });
+    expect(deleted).toStrictEqual([
+      "file:///group/a.jpg",
+      "file:///group/b.pdf",
+    ]);
+  });
+
+  it("has nothing to delete for a text-only share", () => {
+    const deleteStaged = vi.fn<(path: string) => void>();
+    discardShareIntentFiles(deleteStaged, { files: [], text: "hello" });
+    expect(deleteStaged).not.toHaveBeenCalled();
+  });
+});
+
+describe(sweepStaleShareStaging, () => {
+  const NOW = Date.parse("2026-08-27T12:00:00.000Z");
+
+  function sweep(
+    entries: readonly ShareStagingEntry[] | undefined
+  ): readonly string[] {
+    const deleted: string[] = [];
+    sweepStaleShareStaging({
+      stagedEntries: () => entries,
+      deleteStaged: (uri) => deleted.push(uri),
+      now: () => NOW,
+    });
+    return deleted;
+  }
+
+  function entry(
+    uri: string,
+    ageMs: number,
+    isDirectory = false
+  ): ShareStagingEntry {
+    return { uri, isFile: !isDirectory, lastModifiedMs: NOW - ageMs };
+  }
+
+  it("removes stale staged copies and leaves fresh ones for the ingest", () => {
+    expect(
+      sweep([
+        entry("file:///group/stale.jpg", SHARE_STAGING_STALE_MS + 1),
+        entry("file:///group/fresh.jpg", SHARE_STAGING_STALE_MS - 1),
+      ])
+    ).toStrictEqual(["file:///group/stale.jpg"]);
+  });
+
+  it("never touches a directory — the app group carries more than staging", () => {
+    expect(
+      sweep([
+        entry("file:///group/Library", SHARE_STAGING_STALE_MS * 30, true),
+        entry("file:///group/stale.pdf", SHARE_STAGING_STALE_MS * 30),
+      ])
+    ).toStrictEqual(["file:///group/stale.pdf"]);
+  });
+
+  it("leaves an entry whose timestamp could not be read", () => {
+    expect(
+      sweep([{ uri: "file:///group/unknown.jpg", isFile: true }])
+    ).toStrictEqual([]);
+  });
+
+  it("no-ops when the staging directory does not exist", () => {
+    expect(sweep(undefined)).toStrictEqual([]);
+  });
+
+  it("stays bounded — one sweep never walks an unbounded container", () => {
+    const stale = Array.from(
+      { length: SHARE_STAGING_SWEEP_LIMIT + 20 },
+      (_, i) => entry(`file:///group/${i}.jpg`, SHARE_STAGING_STALE_MS * 2)
+    );
+    expect(sweep(stale)).toHaveLength(SHARE_STAGING_SWEEP_LIMIT);
+  });
+});
+
+describe(shareTargetChoices, () => {
+  it("skips the chooser when one vault can be written", () => {
+    expect(
+      shareTargetChoices([
+        { vaultId: "home", label: "Home", canWrite: true },
+        { vaultId: "shared", label: "Shared", canWrite: false },
+      ])
+    ).toStrictEqual([]);
+  });
+
+  it("offers only the writable vaults when there is a real choice", () => {
+    expect(
+      shareTargetChoices([
+        { vaultId: "home", label: "Home", canWrite: true },
+        { vaultId: "work", label: "Work", canWrite: true },
+        { vaultId: "shared", label: "Shared", canWrite: false },
+      ])
+    ).toStrictEqual([
+      { vaultId: "home", label: "Home", canWrite: true },
+      { vaultId: "work", label: "Work", canWrite: true },
+    ]);
+  });
+
+  it("skips the chooser when nothing is writable", () => {
+    expect(
+      shareTargetChoices([
+        { vaultId: "shared", label: "Shared", canWrite: false },
+      ])
+    ).toStrictEqual([]);
   });
 });
 

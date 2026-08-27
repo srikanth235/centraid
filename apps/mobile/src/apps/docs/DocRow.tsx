@@ -15,6 +15,10 @@ import React, { useMemo, useRef } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { View as RNView } from "react-native";
 
+import {
+  pendingChangeLabel,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { typeMeta } from "@centraid/blueprints/apps/docs/format";
 
 import type { MenuAnchor } from "../../kit/components/AnchoredMenu";
@@ -51,6 +55,10 @@ export default function DocRow({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const moreRef = useRef<RNView | null>(null);
   const mark = docRowState(doc, { offline });
+  // Where a queued write is, on the row it changed (#880) — its own line, as
+  // the one state slot's ladder is a fact about the document.
+  const overlay = readPendingOverlay(doc.raw);
+  const pending = overlay ? pendingChangeLabel(overlay) : "";
 
   const openMenu = (): void => {
     const node = moreRef.current;
@@ -79,6 +87,11 @@ export default function DocRow({
         {snippet ? (
           <Text numberOfLines={1} style={styles.snippet}>
             {snippet}
+          </Text>
+        ) : null}
+        {pending ? (
+          <Text numberOfLines={1} style={styles.pending}>
+            {pending}
           </Text>
         ) : null}
       </View>
@@ -134,6 +147,8 @@ export function DocGridTile({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const mark = docRowState(doc, { offline });
   const kind = typeMeta(doc.media_type, doc.title);
+  const overlay = readPendingOverlay(doc.raw);
+  const pending = overlay ? pendingChangeLabel(overlay) : "";
   return (
     <Pressable
       accessibilityRole="button"
@@ -163,6 +178,11 @@ export function DocGridTile({
           {mark.kind === "glyph" ? "on this device only" : mark.text}
         </Text>
       ) : null}
+      {pending ? (
+        <Text numberOfLines={1} style={styles.pending}>
+          {pending}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -187,6 +207,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderTopColor: colors.line,
       borderTopWidth: borders.hairline,
     },
+    pending: { ...t("small"), color: colors.textFaint },
     snippet: { ...t("small"), color: colors.textFaint },
     state: { ...t("small"), color: colors.textSoft, flexShrink: 1 },
     tile: {

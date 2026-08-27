@@ -1,7 +1,9 @@
 // Member-facing readout of native-queue.ts's ledger (#711), one place so
-// screens cannot disagree. FAILS CLOSED: unreadable → zeroed + readable:false.
+// screens cannot disagree. Totals are SQL. FAILS CLOSED: unreadable →
+// zeroed + readable:false.
 
 import { authHeader } from "../../lib/gateway";
+import { foldPendingUploadGroups } from "../../lib/replica/storage-accounting";
 import { UploadQueue } from "../../lib/upload/native-queue";
 import { memberFacingError } from "../member-error";
 
@@ -33,23 +35,12 @@ export function readTransferQueue(gatewayBase: string): TransferQueueCounts {
       gatewayBaseUrl: gatewayBase,
       headers: authHeader,
     });
-    const pending = queue.pending();
+    const totals = foldPendingUploadGroups(queue.pendingStorageGroups());
     return {
-      pending: pending.length,
-      pendingVideos: pending.filter((item) =>
-        item.mediaType?.startsWith("video/")
-      ).length,
-      bytes: pending.reduce((sum, item) => sum + item.plaintextSize, 0),
-      failures: pending.flatMap((item) =>
-        item.lastError
-          ? [
-              {
-                ...(item.filename ? { filename: item.filename } : {}),
-                lastError: memberFacingError(item.lastError),
-              },
-            ]
-          : []
-      ),
+      pending: totals.total.itemCount,
+      pendingVideos: totals.videoCount,
+      bytes: totals.total.bytes,
+      failures: readFailures(queue),
       readable: true,
     };
   } catch {
@@ -57,4 +48,17 @@ export function readTransferQueue(gatewayBase: string): TransferQueueCounts {
   } finally {
     queue?.close();
   }
+}
+
+function readFailures(queue: UploadQueue): TransferQueueFailure[] {
+  return queue.pending().flatMap((item) =>
+    item.lastError
+      ? [
+          {
+            ...(item.filename ? { filename: item.filename } : {}),
+            lastError: memberFacingError(item.lastError),
+          },
+        ]
+      : []
+  );
 }

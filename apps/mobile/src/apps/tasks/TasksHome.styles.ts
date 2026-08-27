@@ -64,6 +64,12 @@ export const makeTasksStyles = (colors: ThemeColors) =>
     num: { ...t("mono"), color: colors.textFaint },
     pane: { gap: spacing[2], padding: spacing[4] },
     pendingWords: { ...t("annotLabel"), color: colors.textFaint },
+    readOnly: {
+      ...t("annotLabel"),
+      color: colors.textSoft,
+      paddingHorizontal: spacing[4],
+      paddingTop: spacing[2],
+    },
     primary: {
       alignItems: "center",
       backgroundColor: colors.accentFill,

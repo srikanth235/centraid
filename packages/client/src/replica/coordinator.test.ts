@@ -17,6 +17,7 @@ import { IntentQueue } from "./intents.js";
 import { NodeSqliteDriver } from "./node-sqlite-test-driver.js";
 import { guardReplicaRow } from "./query.js";
 import { ReplicaSqliteStore } from "./store-core.js";
+import type { ReplicaBootstrapAdvance } from "./store-core.js";
 import type { ReplicaStore } from "./store.js";
 import type {
   ApplyChangesResult,
@@ -1059,6 +1060,130 @@ describe(ReplicaCoordinator, () => {
     ).toHaveLength(0);
     await replica.close();
   });
+
+  test("a disk-full delta parks the feed instead of retrying it forever", async () => {
+    const core = new ReplicaSqliteStore(new NodeSqliteDriver(), "vault");
+    const base = promisedStore(core);
+    // What op-sqlite's driver hands up once normalized (#708): the name is the
+    // contract this package classifies on.
+    const diskFull = Object.assign(new Error("database or disk is full"), {
+      name: "ReplicaStorageFullError",
+    });
+    let applies = 0;
+    const store: ReplicaStore = {
+      ...base,
+      applyChanges: () => {
+        applies += 1;
+        throw diskFull;
+      },
+    };
+    const feed = createFeed();
+    // Plain recorders, not mocks: what this test is about is the notice the
+    // surface receives and how many times the loop pulled, and both are state.
+    const storageFullNotices: unknown[] = [];
+    const onStorageFull = (error: unknown): void => {
+      storageFullNotices.push(error);
+    };
+    let pulls = 0;
+    const pullChanges: ReplicaChangePuller = async (
+      cursor
+    ): Promise<ReplicaChangeBatch> => {
+      pulls += 1;
+      return {
+        protocolVersion: 1,
+        schemaEpoch: "schema",
+        from: cursor,
+        to: { epoch: "epoch", seq: cursor.seq + 1 },
+        changes: [],
+      };
+    };
+    const replica = new ReplicaCoordinator(
+      store,
+      new IntentQueue(new MemoryIntentStore()),
+      { changeFeed: feed, pullChanges, feedRetryDelayMs: 0, onStorageFull }
+    );
+    await replica.bootstrap(snapshot);
+
+    feed.emit({
+      type: "centraid:vault-cursor",
+      cursor: { epoch: "epoch", seq: 1 },
+    });
+    await vi.waitFor(() =>
+      expect(storageFullNotices).toStrictEqual([diskFull])
+    );
+    // The 1 s retry cadence would have run this many times over by now.
+    await flushMacrotasks();
+    await flushMacrotasks();
+
+    expect(applies).toBe(1);
+    expect(pulls).toBe(1);
+    expect(replica.storageFull).toBe(true);
+    expect(replica.storageFullError).toBe(diskFull);
+    // Nothing was wiped: the rows and the cursor are exactly as they were.
+    expect((await store.status()).cursor).toStrictEqual({
+      epoch: "epoch",
+      seq: 0,
+    });
+
+    // A later feed frame must not restart the loop either.
+    feed.emit({
+      type: "centraid:vault-cursor",
+      cursor: { epoch: "epoch", seq: 2 },
+    });
+    await flushMacrotasks();
+    expect(pulls).toBe(1);
+
+    await replica.close();
+  });
+
+  test("freeing space resumes the parked feed", async () => {
+    const core = new ReplicaSqliteStore(new NodeSqliteDriver(), "vault");
+    const base = promisedStore(core);
+    let outOfRoom = true;
+    const store: ReplicaStore = {
+      ...base,
+      applyChanges: (batch) => {
+        if (!outOfRoom) return base.applyChanges(batch);
+        throw Object.assign(new Error("database or disk is full"), {
+          name: "ReplicaStorageFullError",
+        });
+      },
+    };
+    const feed = createFeed();
+    const replica = new ReplicaCoordinator(
+      store,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        changeFeed: feed,
+        feedRetryDelayMs: 0,
+        pullChanges: async (cursor): Promise<ReplicaChangeBatch> => ({
+          protocolVersion: 1,
+          schemaEpoch: "schema",
+          from: cursor,
+          to: { epoch: "epoch", seq: 1 },
+          changes: [],
+        }),
+      }
+    );
+    await replica.bootstrap(snapshot);
+    feed.emit({
+      type: "centraid:vault-cursor",
+      cursor: { epoch: "epoch", seq: 1 },
+    });
+    await vi.waitFor(() => expect(replica.storageFull).toBe(true));
+
+    outOfRoom = false;
+    replica.resumeAfterStorageFull();
+
+    await vi.waitFor(async () =>
+      expect((await store.status()).cursor).toStrictEqual({
+        epoch: "epoch",
+        seq: 1,
+      })
+    );
+    expect(replica.storageFull).toBe(false);
+    await replica.close();
+  });
 });
 
 function windowedHeader(): ReplicaBootstrapHeader {
@@ -1091,12 +1216,15 @@ function promisedStore(core: ReplicaSqliteStore): ReplicaStore {
     status: () => Promise.resolve(core.status() as ReplicaStatus),
     catalog: () => Promise.resolve(core.catalog()),
     bootstrap: (full: ReplicaSnapshot) => Promise.resolve(core.bootstrap(full)),
-    bootstrapBegin: (header: ReplicaBootstrapHeader) => {
-      core.bootstrapBegin(header);
-      return Promise.resolve(undefined);
-    },
-    bootstrapPage: (rows: ReplicaSnapshotRow[]) => {
-      core.bootstrapPage(rows);
+    bootstrapBegin: (
+      header: ReplicaBootstrapHeader,
+      options?: { restart?: boolean }
+    ) => Promise.resolve(core.bootstrapBegin(header, options)),
+    bootstrapPage: (
+      rows: ReplicaSnapshotRow[],
+      advance?: ReplicaBootstrapAdvance
+    ) => {
+      core.bootstrapPage(rows, advance);
       return Promise.resolve(undefined);
     },
     bootstrapPreview: (cursor: ReplicaCursor) => {

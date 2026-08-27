@@ -1,5 +1,7 @@
 import type { MouseEvent } from "react";
 
+import { formatRelativeTime } from "@centraid/design";
+
 import {
   pendingOverlayCanDiscard,
   pendingOverlayCanRetry,
@@ -23,6 +25,13 @@ export function PendingWriteActions({
       : undefined;
   const retryable = pendingOverlayCanRetry(pending);
   const discardable = pendingOverlayCanDiscard(pending);
+  // Attempted and still queued is stuck, not merely offline — say since when.
+  const stuckSince =
+    pending.status === "queued" &&
+    (pending.attempts ?? 0) > 0 &&
+    pending.enqueuedAt
+      ? formatRelativeTime(pending.enqueuedAt)
+      : undefined;
   const act =
     (action: () => void | Promise<unknown>) =>
     (event: MouseEvent<HTMLButtonElement>) => {
@@ -48,6 +57,7 @@ export function PendingWriteActions({
       {pending.status === "parked" || retryable ? (
         <small>{pendingOverlayCopy(pending)}</small>
       ) : null}
+      {stuckSince ? <small>Queued {stuckSince}</small> : null}
       {pending.status === "parked" ? (
         window.centraid.openApprovals ? (
           <button

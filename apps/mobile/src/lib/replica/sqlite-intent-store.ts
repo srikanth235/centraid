@@ -17,7 +17,8 @@ const DDL = `
     created_order INTEGER NOT NULL UNIQUE,
     state TEXT NOT NULL,
     payload_hash TEXT NOT NULL,
-    record_json TEXT NOT NULL
+    record_json TEXT NOT NULL,
+    enqueued_at TEXT
   );
   CREATE INDEX IF NOT EXISTS replica_intent_outbox_state
     ON replica_intent_outbox(state, created_order);
@@ -39,6 +40,9 @@ const DDL = `
     record_json TEXT NOT NULL
   );
 `;
+
+/** Journal cap: `listSettled` refuses to read past this, so older rows are unreachable. */
+const SETTLED_JOURNAL_LIMIT = 5_000;
 
 interface StoredIntentRow {
   record_json: string;
@@ -63,18 +67,24 @@ interface AttentionRow {
 }
 
 /**
- * SQLite-backed durable outbox for React Native, satisfying {@link IntentRecordStore}
- * with the same guarantees as the browser IndexedDB store: idempotent add
- * (an id reused with a different payload hash is rejected), atomic claimNext,
- * and settle-returns-while-scrubbing the sensitive input. It lives in its own
- * tables in the shared replica database, so the store's schema rebuild, `wipe`
- * and rebootstrap never touch queued intents.
+ * The React Native outbox: {@link IntentRecordStore} over SQLite. Its tables
+ * are its own inside the shared replica database, so a schema rebuild, `wipe`
+ * or rebootstrap never touches queued intents.
  */
 export class SqliteIntentStore implements IntentRecordStore {
   private constructor(private readonly driver: ReplicaSqliteDriver) {}
 
   static create(driver: ReplicaSqliteDriver): SqliteIntentStore {
     driver.exec(DDL);
+    // Durable member state: widen it by ALTER, never by rebuild.
+    const columns = driver.all<{ name: string }>(
+      "PRAGMA table_info(replica_intent_outbox)"
+    );
+    if (!columns.some((column) => column.name === "enqueued_at")) {
+      driver.exec(
+        "ALTER TABLE replica_intent_outbox ADD COLUMN enqueued_at TEXT"
+      );
+    }
     return new SqliteIntentStore(driver);
   }
 
@@ -191,6 +201,7 @@ export class SqliteIntentStore implements IntentRecordStore {
       this.driver.run("DELETE FROM replica_intent_outbox WHERE intent_id = ?", [
         intentId,
       ]);
+      this.pruneOutcomeJournal();
       return clone(settled);
     });
   }
@@ -217,6 +228,19 @@ export class SqliteIntentStore implements IntentRecordStore {
     });
   }
 
+  /** First admission per queued intent; absent for rows queued before the column. */
+  enqueuedTimes(): Map<string, string> {
+    const rows = this.driver.all<{
+      intent_id: string;
+      enqueued_at: string | null;
+    }>("SELECT intent_id, enqueued_at FROM replica_intent_outbox");
+    return new Map(
+      rows.flatMap((row) =>
+        row.enqueued_at ? [[row.intent_id, row.enqueued_at] as const] : []
+      )
+    );
+  }
+
   attention(): NativeIntentAttention[] {
     return this.driver
       .all<AttentionRow>(
@@ -241,8 +265,7 @@ export class SqliteIntentStore implements IntentRecordStore {
   }
 
   close(): void {
-    // The op-sqlite handle is owned by the session (shared with the store); the
-    // queue closes through the store, not here.
+    // The session owns the shared op-sqlite handle; closing runs through the store.
   }
 
   async destroy(): Promise<void> {
@@ -280,10 +303,11 @@ export class SqliteIntentStore implements IntentRecordStore {
     return row ? parseIntent(row.record_json) : undefined;
   }
 
+  /** Keep `enqueued_at` out of the conflict clause: the first insert stamps it for good. */
   private insert(record: ReplicaIntent): void {
     this.driver.run(
-      `INSERT INTO replica_intent_outbox(intent_id, created_order, state, payload_hash, record_json)
-         VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO replica_intent_outbox(intent_id, created_order, state, payload_hash, record_json, enqueued_at)
+         VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(intent_id) DO UPDATE SET
          created_order = excluded.created_order,
          state = excluded.state,
@@ -295,7 +319,23 @@ export class SqliteIntentStore implements IntentRecordStore {
         record.state,
         record.payloadHash,
         stringify(record),
+        new Date().toISOString(),
       ]
+    );
+  }
+
+  /** Oldest settled first. */
+  private pruneOutcomeJournal(): void {
+    const [count] = this.driver.all<{ rows: number }>(
+      "SELECT COUNT(*) AS rows FROM replica_intent_outcome"
+    );
+    if ((count?.rows ?? 0) <= SETTLED_JOURNAL_LIMIT) return;
+    this.driver.run(
+      `DELETE FROM replica_intent_outcome WHERE intent_id NOT IN (
+         SELECT intent_id FROM replica_intent_outcome
+          ORDER BY settled_at DESC, intent_id DESC LIMIT ?
+       )`,
+      [SETTLED_JOURNAL_LIMIT]
     );
   }
 
@@ -306,10 +346,20 @@ export class SqliteIntentStore implements IntentRecordStore {
     return row?.value ?? 1;
   }
 
+  /**
+   * `work()` must be synchronous, as the guard enforces: BEGIN IMMEDIATE holds
+   * the write lock on the one handle the replica store shares, so an await
+   * would enlist a foreign write here and roll it back with ours.
+   */
   private transaction<T>(work: () => T): T {
     this.driver.exec("BEGIN IMMEDIATE");
     try {
       const result = work();
+      if (result instanceof Promise) {
+        throw new ReplicaProtocolError(
+          "Intent-store transactions must run synchronous work"
+        );
+      }
       this.driver.exec("COMMIT");
       return result;
     } catch (error) {
@@ -319,9 +369,8 @@ export class SqliteIntentStore implements IntentRecordStore {
   }
 }
 
-/** JSON round-trip clone; every stored intent is JSON-safe by contract. */
 function clone<T>(value: T): T {
-  // oxlint-disable-next-line unicorn/prefer-structured-clone -- (#419) React Native 0.81/Hermes ships no structuredClone; intents are JSON-safe by contract and are persisted as JSON anyway; governance: allow-no-unjustified-suppressions runtime capability gap
+  // oxlint-disable-next-line unicorn/prefer-structured-clone -- (#419) Hermes ships no structuredClone; intents are JSON-safe by contract; governance: allow-no-unjustified-suppressions runtime capability gap
   return JSON.parse(JSON.stringify(value)) as T;
 }
 

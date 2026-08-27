@@ -7,11 +7,7 @@
 
 import { useMemo } from "react";
 
-import type {
-  DashboardData,
-  PersonDetail,
-  PersonRow,
-} from "@centraid/blueprints/apps/people/types";
+import type { DashboardData } from "@centraid/blueprints/apps/people/types";
 
 import {
   combineReplicaQueryStates,
@@ -23,7 +19,12 @@ import {
   projectPersonDetail,
   projectRoster,
 } from "./people-model";
-import type { RosterProjection, Row } from "./people-model";
+import type {
+  MobilePersonDetail,
+  MobilePersonRow,
+  RosterProjection,
+  Row,
+} from "./people-model";
 import { projectShareLinks } from "./people-share-model";
 
 const APP = "people";
@@ -215,9 +216,9 @@ export interface PersonData {
   connection: ReplicaQueryState["connection"];
   unavailableReason?: string;
   /** Null past loading = the id no longer resolves (trashed or merged away). */
-  person: PersonDetail | null;
+  person: MobilePersonDetail | null;
   /** The roster window found in; handed to the share sheet as audience list (#825). */
-  roster: readonly PersonRow[];
+  roster: readonly MobilePersonRow[];
 }
 
 /** One person in full: rides `usePeople()`'s window for identity, star and

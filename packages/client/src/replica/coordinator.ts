@@ -13,6 +13,10 @@ import type {
 } from "./intents.js";
 import { LiveQueryRegistry } from "./live-query-registry.js";
 import { LiveQuery } from "./live-query.js";
+import type {
+  ReplicaBootstrapAdvance,
+  ReplicaBootstrapResume,
+} from "./store-core.js";
 import type { ReplicaStore } from "./store.js";
 import type {
   EnqueueIntentInput,
@@ -57,6 +61,22 @@ export interface ReplicaCoordinatorOptions extends IntentQueueOptions {
   feedRetryDelayMs?: number;
   onRebootstrapRequired?: (detail: unknown) => void;
   onCursorAdvanced?: (cursor: ReplicaCursor, schemaEpoch: string) => void;
+  /**
+   * Classify a store failure as "the device is out of room". Defaults to the
+   * normalized error the native driver already raises for every SQLITE_FULL /
+   * ENOSPC variant (`apps/mobile/src/lib/replica/replica-storage-error.ts`),
+   * matched by name so this package keeps no second copy of that taxonomy.
+   */
+  isStorageFull?: (error: unknown) => boolean;
+  /** Fires once when the feed pauses out of room, and never while paused. */
+  onStorageFull?: (error: unknown) => void;
+}
+
+/** The name `asReplicaStorageError` stamps on every normalized disk-full error. */
+const STORAGE_FULL_ERROR_NAME = "ReplicaStorageFullError";
+
+function isNormalizedStorageFullError(error: unknown): boolean {
+  return error instanceof Error && error.name === STORAGE_FULL_ERROR_NAME;
 }
 
 export interface ReplicaCoordinatorCreated {
@@ -77,6 +97,10 @@ export class ReplicaCoordinator {
   readonly #onCursorAdvanced:
     | ((cursor: ReplicaCursor, schemaEpoch: string) => void)
     | undefined;
+  readonly #isStorageFull: (error: unknown) => boolean;
+  readonly #onStorageFull: ((error: unknown) => void) | undefined;
+  /** The out-of-room pause; see {@link storageFull}. */
+  #storageFullError: unknown | undefined;
   #unsubscribeFeed: (() => void) | undefined;
   #feedTarget: ReplicaCursor | undefined;
   #feedSync: Promise<void> | undefined;
@@ -104,6 +128,8 @@ export class ReplicaCoordinator {
       | "feedRetryDelayMs"
       | "onRebootstrapRequired"
       | "onCursorAdvanced"
+      | "isStorageFull"
+      | "onStorageFull"
     > = {}
   ) {
     if (options.changeFeed && !options.pullChanges) {
@@ -116,6 +142,8 @@ export class ReplicaCoordinator {
     this.#feedRetryDelayMs = options.feedRetryDelayMs ?? 1_000;
     this.#onRebootstrapRequired = options.onRebootstrapRequired;
     this.#onCursorAdvanced = options.onCursorAdvanced;
+    this.#isStorageFull = options.isStorageFull ?? isNormalizedStorageFullError;
+    this.#onStorageFull = options.onStorageFull;
     if (this.#feed)
       this.#unsubscribeFeed = this.#feed.subscribe(this.onFeedMessage);
   }
@@ -140,19 +168,30 @@ export class ReplicaCoordinator {
   /**
    * Windowed bootstrap, page-wise. No cursor is published until
    * {@link bootstrapCommit}, so an interrupted walk reports "not
-   * bootstrapped" rather than a partial catalog.
+   * bootstrapped" rather than a partial catalog. The resume state the store
+   * returns is what lets the driver pick a killed walk back up (#880); a store
+   * that does not persist one answers undefined and the walk starts over.
    */
-  async bootstrapBegin(header: ReplicaBootstrapHeader): Promise<void> {
+  async bootstrapBegin(
+    header: ReplicaBootstrapHeader,
+    options?: { restart?: boolean }
+  ): Promise<ReplicaBootstrapResume | undefined> {
     this.resetFeedGeneration();
     // Claim BEFORE the call posts: worker RPC calls order by issue time, so
     // every later wipe must be held off instead.
     this.#bootstrapOpen = true;
-    await this.walkStep(() => this.worker.bootstrapBegin(header));
+    const resume = await this.walkStep(() =>
+      this.worker.bootstrapBegin(header, options)
+    );
     this.emitInvalidations([{ shapeId: "*", entity: "*", source: "purge" }]);
+    return resume ?? undefined;
   }
 
-  async bootstrapPage(rows: ReplicaSnapshotRow[]): Promise<void> {
-    await this.walkStep(() => this.worker.bootstrapPage(rows));
+  async bootstrapPage(
+    rows: ReplicaSnapshotRow[],
+    advance?: ReplicaBootstrapAdvance
+  ): Promise<void> {
+    await this.walkStep(() => this.worker.bootstrapPage(rows, advance));
     this.emitInvalidations([
       { shapeId: "*", entity: "*", source: "canonical" },
     ]);
@@ -175,6 +214,7 @@ export class ReplicaCoordinator {
       return await step();
     } catch (error) {
       this.#bootstrapOpen = false;
+      this.noteStorageFull(error);
       throw error;
     }
   }
@@ -224,6 +264,9 @@ export class ReplicaCoordinator {
       if (error instanceof ReplicaRebootstrapRequiredError) {
         await this.requireRebootstrap(error);
       }
+      // A disk that filled mid-delta is not a protocol failure and must not be
+      // retried at the feed's fixed cadence; it pauses the feed instead.
+      this.noteStorageFull(error);
       throw error;
     }
   }
@@ -490,6 +533,7 @@ export class ReplicaCoordinator {
       this.#feedSync ||
       this.#feedRetryTimer ||
       this.#closed ||
+      this.#storageFullError !== undefined ||
       !this.#feedTarget
     )
       return;
@@ -571,7 +615,7 @@ export class ReplicaCoordinator {
    * both resolve immediately.
    */
   async syncNow(): Promise<void> {
-    if (!this.#pullChanges || this.#closed) return;
+    if (!this.#pullChanges || this.#closed || this.storageFull) return;
     // Ride out any in-flight feed sync: both would otherwise pull the same
     // cursor and post the batch twice.
     await this.awaitFeedSyncIdle();
@@ -652,7 +696,17 @@ export class ReplicaCoordinator {
   }
 
   private scheduleFeedRetry(): void {
-    if (this.#feedRetryTimer || this.#closed || !this.#feedTarget) return;
+    if (
+      this.#feedRetryTimer ||
+      this.#closed ||
+      // Out of room, the retry cadence is not the answer: every attempt would
+      // fail the same way one second later, forever. The feed stays parked
+      // until the person frees space (docs/mobile-offline.md: sync pauses,
+      // replica rows and pending intents remain untouched).
+      this.#storageFullError !== undefined ||
+      !this.#feedTarget
+    )
+      return;
     this.#feedRetryTimer = setTimeout(() => {
       this.#feedRetryTimer = undefined;
       this.startFeedSync();
@@ -694,6 +748,43 @@ export class ReplicaCoordinator {
     if (this.#feedRetryTimer) clearTimeout(this.#feedRetryTimer);
     this.#feedRetryTimer = undefined;
     this.clearFeedFailures();
+  }
+
+  /**
+   * The device ran out of room. Park the feed — an in-flight pull is aborted
+   * and no retry is scheduled — and report it once. Nothing is wiped: replica
+   * rows and pending intents are exactly what must survive this.
+   */
+  private noteStorageFull(error: unknown): void {
+    if (this.#storageFullError !== undefined || !this.#isStorageFull(error))
+      return;
+    this.#storageFullError = error;
+    this.#feedAbort?.abort();
+    this.#feedAbort = undefined;
+    if (this.#feedRetryTimer) clearTimeout(this.#feedRetryTimer);
+    this.#feedRetryTimer = undefined;
+    this.#onStorageFull?.(error);
+  }
+
+  /** True while sync is parked for lack of device storage. */
+  get storageFull(): boolean {
+    return this.#storageFullError !== undefined;
+  }
+
+  /** The normalized disk-full error the screens render, while parked. */
+  get storageFullError(): unknown {
+    return this.#storageFullError;
+  }
+
+  /**
+   * Space was freed (thumbnail cache emptied, phone storage cleared). Unpark
+   * the feed and let the pending target catch up.
+   */
+  resumeAfterStorageFull(): void {
+    if (this.#storageFullError === undefined) return;
+    this.#storageFullError = undefined;
+    this.clearFeedFailures();
+    this.startFeedSync();
   }
 
   private recordFeedFailure(signature: string): boolean {

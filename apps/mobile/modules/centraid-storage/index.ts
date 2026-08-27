@@ -20,6 +20,8 @@ export function replicaStorageDirectory(): string | undefined {
   return native?.replicaDirectory();
 }
 
-export function nativeDirectorySize(path: string): number {
-  return native?.directorySize(path) ?? 0;
+/** Bytes under `path` in one crossing; `undefined` means the module is
+ *  unlinked, NOT an empty directory — callers fall back to a JS walk. */
+export function nativeDirectorySize(path: string): number | undefined {
+  return native?.directorySize(path);
 }

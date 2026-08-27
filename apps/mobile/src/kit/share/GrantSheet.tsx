@@ -16,16 +16,19 @@ import {
   capabilityUnchangedOutcome,
   deliveryLabel,
   GRANT_SHEET_TITLE,
+  GRANTS_UNREACHABLE,
   GRANTS_UNREADABLE,
   grantedOutcome,
   groupContributionNote,
   nothingSharedYet,
   reachLabel,
   reachNote,
+  REGISTRY_UNREACHABLE,
   REGISTRY_UNREADABLE,
   REVOKE_CONFIRM_ACTION,
   subjectNotOfferable,
 } from "@centraid/blueprints/apps/_shared/grant-copy";
+import { isGrantUnreachable } from "@centraid/blueprints/apps/_shared/grant-door";
 import type {
   GrantDoor,
   SubjectRegistry,
@@ -193,10 +196,12 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
         if (!active) return;
         setAudienceKnown(read.known);
         setStanding(read.grants);
-      } catch {
+      } catch (error) {
         if (!active) return;
         setStanding([]);
-        setRefusal(GRANTS_UNREADABLE);
+        setRefusal(
+          isGrantUnreachable(error) ? GRANTS_UNREACHABLE : GRANTS_UNREADABLE
+        );
       }
     });
     return () => {
@@ -224,9 +229,15 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     picked ?? defaultCapability(alreadyStanding)
   );
   const noun = subject ? subjectNoun(subject.subjectType) : "shared item";
-  // Three states: unread, empty-for-subject, unreadable. Only the middle is refusal.
+  // Unread, empty-for-subject, refused, unreachable. Only the second refuses.
   const registryPending = registry === null;
-  const registryUnreadable = registry !== null && !registry.readable;
+  const registryProblem =
+    registry !== null && !registry.readable
+      ? registry.reach === "unreachable"
+        ? REGISTRY_UNREACHABLE
+        : REGISTRY_UNREADABLE
+      : null;
+  const registryUnreadable = registryProblem !== null;
   const notOfferable =
     Boolean(subject) &&
     registry !== null &&
@@ -451,9 +462,9 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                     {subjectNotOfferable(noun)}
                   </Text>
                 ) : null}
-                {registryUnreadable ? (
+                {registryProblem ? (
                   <Text style={[styles.note, { color: colors.net }]}>
-                    {REGISTRY_UNREADABLE}
+                    {registryProblem}
                   </Text>
                 ) : null}
               </View>

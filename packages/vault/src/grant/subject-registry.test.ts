@@ -5,6 +5,7 @@ import {
   COMMONS_COMMAND_ROUTES,
   isCommonsCommandActable,
 } from "../share/commons-routing.js";
+import { SHARE_GRANT_CO_CONTRIBUTION_TYPES } from "./fulfillment-edit.js";
 import {
   fulfillmentAnswerFor,
   isOfferableSubjectType,
@@ -47,17 +48,40 @@ describe("grant/subject-registry", () => {
     expect(fulfillmentAnswerFor(locker, "edit")).toBeUndefined();
   });
 
-  test("the edit answer matches the commons routing table's actable facts", () => {
+  test("edit is offered for the one v1 co-contribution type, and no other", () => {
+    // Ruling G-edit (#825): v1 ships edit co-contribution for `tally.group`
+    // only; albums and folders are view-capable and their edit strategy is
+    // deferred. The registry is what the route publishes and what both share
+    // sheets draw pills from, so a wider answer here offers a verb the write
+    // door refuses.
+    expect(
+      SHARE_SUBJECT_REGISTRY.filter(
+        (entry) => entry.fulfillment.edit !== undefined
+      ).map((entry) => entry.subjectType)
+    ).toStrictEqual([...SHARE_GRANT_CO_CONTRIBUTION_TYPES]);
+    expect([...SHARE_GRANT_CO_CONTRIBUTION_TYPES]).toStrictEqual([
+      "tally.group",
+    ]);
+    expect(fulfillmentAnswerFor("core.document", "edit")).toBeUndefined();
+    expect(fulfillmentAnswerFor("docs.folder", "edit")).toBeUndefined();
+    expect(fulfillmentAnswerFor("core.document", "view")).toBe(
+      "closure-reprojection"
+    );
+    expect(fulfillmentAnswerFor("docs.folder", "view")).toBe(
+      "closure-reprojection"
+    );
+  });
+
+  test("every edit answer names a container the routing table can act on", () => {
+    // Narrower than actable is the ruling; WIDER than actable would be a
+    // write with no commons rail — a local mutation the next compile reverts.
     for (const entry of SHARE_SUBJECT_REGISTRY) {
+      if (entry.fulfillment.edit === undefined) continue;
       expect(
-        entry.fulfillment.edit !== undefined,
-        `${entry.subjectType} edit vs actable routes`
-      ).toBe(ACTABLE_CONTAINER_TYPES.has(entry.subjectType));
-    }
-    // Stated the other way round: every actable container type the routing
-    // table declares is an offerable subject that offers edit.
-    for (const containerType of ACTABLE_CONTAINER_TYPES) {
-      expect(fulfillmentAnswerFor(containerType, "edit")).toBe(
+        ACTABLE_CONTAINER_TYPES.has(entry.subjectType),
+        `${entry.subjectType} offers edit without an actable route`
+      ).toBe(true);
+      expect(fulfillmentAnswerFor(entry.subjectType, "edit")).toBe(
         "commons-routing"
       );
     }

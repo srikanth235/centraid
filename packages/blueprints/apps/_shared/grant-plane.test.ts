@@ -97,13 +97,13 @@ describe("parsing the grant wire", () => {
 
   test("the registry is read from the wire, and an unreadable one offers nothing", () => {
     const offers = parseSubjectOffers([
-      { subjectType: "core.document", capabilities: ["view", "edit"] },
-      { subjectType: "media.asset", capabilities: ["view"] },
+      { subjectType: "tally.group", capabilities: ["view", "edit"] },
+      { subjectType: "core.document", capabilities: ["view"] },
       { subjectType: "broken.thing", capabilities: ["comment"] },
     ]);
     expect(offers.map((offer) => offer.subjectType)).toStrictEqual([
+      "tally.group",
       "core.document",
-      "media.asset",
     ]);
     expect(parseSubjectOffers(undefined)).toStrictEqual([]);
   });
@@ -149,13 +149,13 @@ describe("absent is never empty", () => {
 
 describe("what the registry offers", () => {
   const offers = parseSubjectOffers([
-    { subjectType: "core.document", capabilities: ["view", "edit"] },
-    { subjectType: "media.asset", capabilities: ["view"] },
+    { subjectType: "tally.group", capabilities: ["view", "edit"] },
+    { subjectType: "core.document", capabilities: ["view"] },
   ]);
 
   test("edit is offered only where a strategy answers it", () => {
-    expect(offersCapability(offers, "core.document", "edit")).toBe(true);
-    expect(offersCapability(offers, "media.asset", "edit")).toBe(false);
+    expect(offersCapability(offers, "tally.group", "edit")).toBe(true);
+    expect(offersCapability(offers, "core.document", "edit")).toBe(false);
   });
 
   test("a subject the registry does not name is refused, not defaulted open", () => {

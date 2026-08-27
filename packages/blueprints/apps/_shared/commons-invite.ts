@@ -36,12 +36,17 @@ export function parseCommonsInvite(value: string): CommonsInviteClaim | null {
   }
 }
 
+/* Step 2 states the v1 limit rather than a workaround for it (#825): a share
+ * is fulfilled through the host's own vault registry, so both vaults have to
+ * be mounted on the SAME gateway. A grant to a party whose vault lives on
+ * another gateway parks at `syncing` and stays there — telling the receiver to
+ * "connect first" would promise a path that does not exist yet. */
 export function commonsInviteMessage(inviteUri: string): string {
   return [
     "Centraid shared-space invitation",
     "",
     "1. Install Centraid and create your vault.",
-    "2. If the sharer is on another gateway, connect with them first.",
+    "2. Your vault must sit on the same gateway as theirs — sharing reaches no further yet.",
     "3. In People & circles, paste and redeem this invitation.",
     "4. Review its current size, then Accept or Refuse.",
     "",

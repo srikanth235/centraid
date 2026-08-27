@@ -24,16 +24,47 @@ const noteActiveIdentity = vi.hoisted(() =>
   )
 );
 
+const store = vi.hoisted(() => ({
+  values: new Map<string, string>(),
+  removed: [] as string[],
+}));
+
 vi.mock(
   import("@react-native-async-storage/async-storage") as Promise<unknown>,
   () => ({
     default: {
-      getItem: async () => null,
-      setItem: async () => undefined,
-      removeItem: async () => undefined,
+      getItem: async (key: string) => store.values.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        store.values.set(key, value);
+      },
+      removeItem: async (key: string) => {
+        store.removed.push(key);
+        store.values.delete(key);
+      },
     },
   })
 );
+
+const files = vi.hoisted(() => ({
+  present: new Set<string>(),
+  deleted: [] as string[],
+}));
+
+vi.mock(import("expo-file-system") as Promise<unknown>, () => ({
+  File: class {
+    constructor(readonly uri: string) {}
+    get exists(): boolean {
+      return files.present.has(this.uri);
+    }
+    get size(): number {
+      return files.present.has(this.uri) ? 4_096 : 0;
+    }
+    delete(): void {
+      files.deleted.push(this.uri);
+      files.present.delete(this.uri);
+    }
+  },
+}));
 
 vi.mock(import("../../lib/gateway") as Promise<unknown>, () => ({
   authHeader: () => ({ Authorization: "Bearer test-mobile" }),
@@ -59,7 +90,36 @@ vi.mock(import("../../lib/vault-links") as Promise<unknown>, () => ({
   noteActiveIdentity,
 }));
 
-const { resolveIdentity } = await import("./replica-mount");
+const {
+  deleteReplicaDatabaseFamily,
+  discardRestoredReplicaCache,
+  freshnessKey,
+  replicaDatabaseFamily,
+  resolveIdentity,
+} = await import("./replica-mount");
+
+type MountedScope = Awaited<
+  ReturnType<typeof import("./replica-mount").mountedScopes>
+>[number];
+
+function mounted(vaultId: string, databaseName: string): MountedScope {
+  return { vaultId, label: `${vaultId} vault`, canWrite: true, databaseName };
+}
+
+const GATEWAY = "gateway-1";
+
+function cursorKeys(vaultId: string): string[] {
+  const suffix = encodeURIComponent(`${GATEWAY} ${vaultId}`);
+  return [
+    freshnessKey(GATEWAY, vaultId),
+    `centraid:multiplex-cursor:${suffix}`,
+    `centraid:vault-change-cursor:${suffix}`,
+  ];
+}
+
+function seedCache(vaultId: string): void {
+  for (const key of cursorKeys(vaultId)) store.values.set(key, "1");
+}
 
 const ENDPOINT_ID =
   "2315e0468b58adbbf0411da619288dbbb334b40d14ff4ca51cf32a0693367a01";
@@ -174,5 +234,122 @@ describe("resolveIdentity picks a durable gateway namespace", () => {
 
     expect(identity.gatewayId).toBe("manual");
     expect(identity.gatewayId).not.toContain("127.0.0.1");
+  });
+});
+
+// A restored Android/iOS container is the one case where the phone holds a
+// cursor for rows it has never had: the replica databases are backup-excluded
+// and the AsyncStorage beside them was not. Resuming from an inherited cursor
+// skips every change beneath it, forever and silently.
+describe("what a restored container may resume from", () => {
+  beforeEach(() => {
+    store.values.clear();
+    store.removed.length = 0;
+  });
+
+  test("discards cursors and stamps when the replica database is gone", async () => {
+    seedCache("vault-1");
+
+    await expect(
+      discardRestoredReplicaCache(
+        GATEWAY,
+        [mounted("vault-1", "/replica/vault-1.sqlite3")],
+        () => false
+      )
+    ).resolves.toStrictEqual(["vault-1"]);
+
+    for (const key of cursorKeys("vault-1"))
+      expect(store.values.has(key)).toBe(false);
+  });
+
+  test("leaves a scope whose database really is on disk alone", async () => {
+    seedCache("vault-1");
+
+    await expect(
+      discardRestoredReplicaCache(
+        GATEWAY,
+        [mounted("vault-1", "/replica/vault-1.sqlite3")],
+        () => true
+      )
+    ).resolves.toStrictEqual([]);
+
+    expect(store.removed).toStrictEqual([]);
+    for (const key of cursorKeys("vault-1"))
+      expect(store.values.get(key)).toBe("1");
+  });
+
+  // A first launch after pairing has neither a database nor a cache. Treating
+  // that as a restore would spend three writes per scope on every cold start
+  // and, worse, teach the reader that a missing file always means a restore.
+  test("a first launch after pairing is a cold start, not a restore", async () => {
+    await expect(
+      discardRestoredReplicaCache(
+        GATEWAY,
+        [mounted("vault-1", "/replica/vault-1.sqlite3")],
+        () => false
+      )
+    ).resolves.toStrictEqual([]);
+
+    expect(store.removed).toStrictEqual([]);
+  });
+
+  test("judges each mounted scope on its own database", async () => {
+    seedCache("vault-1");
+    seedCache("vault-2");
+
+    await expect(
+      discardRestoredReplicaCache(
+        GATEWAY,
+        [
+          mounted("vault-1", "/replica/vault-1.sqlite3"),
+          mounted("vault-2", "/replica/vault-2.sqlite3"),
+        ],
+        (databaseName) => databaseName.endsWith("vault-2.sqlite3")
+      )
+    ).resolves.toStrictEqual(["vault-1"]);
+
+    for (const key of cursorKeys("vault-2"))
+      expect(store.values.get(key)).toBe("1");
+  });
+});
+
+describe("reclaiming a revoked scope's bytes", () => {
+  beforeEach(() => {
+    files.present.clear();
+    files.deleted.length = 0;
+  });
+
+  test("the family is the main file plus every live sidecar", () => {
+    expect(replicaDatabaseFamily("/replica/vault-1.sqlite3")).toStrictEqual([
+      "/replica/vault-1.sqlite3",
+      "/replica/vault-1.sqlite3-journal",
+      "/replica/vault-1.sqlite3-wal",
+      "/replica/vault-1.sqlite3-shm",
+    ]);
+  });
+
+  test("deletes every family member that exists, and nothing else", () => {
+    files.present.add("/replica/vault-1.sqlite3");
+    files.present.add("/replica/vault-1.sqlite3-wal");
+    files.present.add("/replica/vault-2.sqlite3");
+
+    deleteReplicaDatabaseFamily("/replica/vault-1.sqlite3");
+
+    expect(files.deleted).toStrictEqual([
+      "/replica/vault-1.sqlite3",
+      "/replica/vault-1.sqlite3-wal",
+    ]);
+    expect(files.present.has("/replica/vault-2.sqlite3")).toBe(true);
+  });
+
+  // op-sqlite's own default location, which this module cannot address. The
+  // storage screen reports those bytes rather than this guessing at a path and
+  // deleting some other app's file.
+  test("refuses a bare database name it cannot place", () => {
+    files.present.add("replica.sqlite3");
+
+    deleteReplicaDatabaseFamily("replica.sqlite3");
+
+    expect(files.deleted).toStrictEqual([]);
   });
 });

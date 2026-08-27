@@ -46,6 +46,10 @@ export const ROUTES = {
 
 export type RouteName = keyof typeof ROUTES;
 
+/** Mounts one `gatewayReplicaChanges` subscription accepts (#880). The phone
+ *  attaches the same N — one wire agreement, not two budgets. */
+export const MAX_MULTIPLEX_REPLICA_SCOPES = 4;
+
 export function vaultConnectionPath(encodedConnectionId: string): string {
   return `${ROUTES.vaultConnections}/${encodedConnectionId}`;
 }

@@ -31,6 +31,13 @@ export function parseModule(absPath, text) {
     reexports: [], // { spec, star, names: [{ imported, exported, typeOnly }], typeOnly }
     exportList: [], // { local, exported, typeOnly } — `export { a as b }` with no specifier
     localExports: new Map(), // exported name → "value" | "type"
+    // The identifier a `default` export is declared under, when it has one
+    // (`export default function ShareSheet`, `export default ShareSheet`).
+    // `default` is not a usable identifier, so the analyzer's same-file rule
+    // has to look the declaration up under this name instead. Anonymous
+    // defaults (`export default () => …`) leave it undefined, which is
+    // correct: nothing in the file can reference them.
+    defaultLocal: undefined,
     declKinds: new Map(), // top-level declaration name → "value" | "type"
     valueUse: new Map(), // identifier → count of value-position uses
     typeUse: new Map(), // identifier → count of type-position uses
@@ -40,6 +47,10 @@ export function parseModule(absPath, text) {
 
   const hasExportModifier = (stmt) =>
     stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ===
+    true;
+
+  const hasDefaultModifier = (stmt) =>
+    stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword) ===
     true;
 
   const bindingNames = (name, out) => {
@@ -62,6 +73,21 @@ export function parseModule(absPath, text) {
       const clause = stmt.importClause;
       if (!clause) continue; // side-effect import: no bindings, no reach
       const clauseTypeOnly = clause.isTypeOnly === true;
+      // `import ShareSheet from "./ShareSheet"` binds the target's `default`
+      // export. Skipping this clause is what made every default-exported
+      // component look unreached no matter how many screens mounted it.
+      if (clause.name) {
+        info.imports.push({
+          spec,
+          names: [
+            {
+              imported: "default",
+              local: clause.name.text,
+              typeOnly: clauseTypeOnly,
+            },
+          ],
+        });
+      }
       if (clause.namedBindings) {
         if (ts.isNamespaceImport(clause.namedBindings)) {
           info.namespaceImports.push({
@@ -117,7 +143,19 @@ export function parseModule(absPath, text) {
       continue;
     }
 
+    // `export default <expression>`. `export = x` (isExportEquals) is CommonJS
+    // interop and has no import form in this repo, so it is not a capability.
+    if (ts.isExportAssignment(stmt)) {
+      if (stmt.isExportEquals !== true) {
+        info.localExports.set("default", "value");
+        if (ts.isIdentifier(stmt.expression))
+          info.defaultLocal = stmt.expression.text;
+      }
+      continue;
+    }
+
     const exported = hasExportModifier(stmt);
+    const isDefault = exported && hasDefaultModifier(stmt);
     if (ts.isInterfaceDeclaration(stmt) || ts.isTypeAliasDeclaration(stmt)) {
       info.declKinds.set(stmt.name.text, "type");
       if (exported) info.localExports.set(stmt.name.text, "type");
@@ -126,9 +164,16 @@ export function parseModule(absPath, text) {
       ts.isClassDeclaration(stmt) ||
       ts.isEnumDeclaration(stmt)
     ) {
+      // `export default function ShareSheet` is exported as `default`, never
+      // as `ShareSheet` — importers cannot name it, so neither may the graph.
+      if (isDefault) {
+        info.localExports.set("default", "value");
+        if (stmt.name) info.defaultLocal = stmt.name.text;
+      }
       if (stmt.name) {
         info.declKinds.set(stmt.name.text, "value");
-        if (exported) info.localExports.set(stmt.name.text, "value");
+        if (exported && !isDefault)
+          info.localExports.set(stmt.name.text, "value");
       }
     } else if (ts.isVariableStatement(stmt)) {
       for (const decl of stmt.declarationList.declarations) {
@@ -192,6 +237,11 @@ export function parseModule(absPath, text) {
 
   const visit = (node, inTypeBefore) => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return;
+    // `export default ShareSheet` names the declaration the way
+    // `export { ShareSheet as default }` does — a re-export site, not a call.
+    // Counting it would rescue every default export under the same-file rule,
+    // which is the same defect `declaredNameNodes` exists to prevent.
+    if (ts.isExportAssignment(node) && ts.isIdentifier(node.expression)) return;
     if (declaredNameNodes.has(node)) return;
     const inType =
       inTypeBefore ||
