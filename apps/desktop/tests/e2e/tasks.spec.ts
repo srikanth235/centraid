@@ -11,6 +11,7 @@ import {
   launchApp,
   makeEnv,
   openAppFromPalette,
+  statusLine,
   waitForHome,
 } from "./fixtures";
 
@@ -159,6 +160,11 @@ test("Tasks files and completes a task on the custodian seat, and the Logbook su
     const box = taskRow.locator("button[aria-pressed]").first();
     await expect(box).toHaveAttribute("aria-pressed", "false");
     await box.click();
+    // Complete is fire-and-forget: the row can leave the board on the pending
+    // overlay before the replica has the new rowVersion. Wait for the outcome
+    // line so the seat write below does not OCC-conflict against that in-flight
+    // complete (same shape as notes.spec.ts).
+    await expect(statusLine(page)).toContainText("Done", { timeout: 30_000 });
 
     // A completed task leaves the board and appears in the Logbook, pressed.
     await expect(taskRow).toHaveCount(0, { timeout: 30_000 });
@@ -171,31 +177,34 @@ test("Tasks files and completes a task on the custodian seat, and the Logbook su
     // THE SEAT ASSERTION, stated directly. A second write through the same door
     // the app's own handlers use must come back `executed` — never `queued`,
     // never `in-flight`. This is the one fact that distinguishes this file from
-    // its viewer-seat mirror.
-    const custodianOutcome = await page.evaluate(
-      async ({ title }) => {
-        type Board = {
-          open: Array<{ task_id: string; title: string }>;
-          logbook: Array<{ task_id: string; title: string }>;
-        };
-        const board = await window.centraid.read<Board>({
-          query: "board",
-          input: {},
-        });
-        const task = [...board.open, ...board.logbook].find(
-          (row) => row.title === title
-        );
-        if (!task) return "no-such-task";
-        const outcome = await window.centraid.write({
-          action: "edit",
-          input: { task_id: task.task_id, title },
-          intentId: "tasks-desktop-e2e-custodian-edit",
-        });
-        return outcome.status;
-      },
-      { title: TASK_TITLE }
-    );
-    expect(custodianOutcome).toBe("executed");
+    // its viewer-seat mirror. Poll with a fresh intent id: a first `conflict`
+    // on a frozen id is durable and would never become `executed`.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async ({ title }) => {
+            type Board = {
+              open: Array<{ task_id: string; title: string }>;
+              logbook: Array<{ task_id: string; title: string }>;
+            };
+            const board = await window.centraid.read<Board>({
+              query: "board",
+              input: {},
+            });
+            const task = [...board.open, ...board.logbook].find(
+              (row) => row.title === title
+            );
+            if (!task) return "no-such-task";
+            const outcome = await window.centraid.write({
+              action: "edit",
+              input: { task_id: task.task_id, title },
+              intentId: `tasks-desktop-e2e-custodian-edit-${Date.now()}`,
+            });
+            return outcome.status;
+          }),
+        { timeout: 60_000 }
+      )
+      .toBe("executed");
 
     // A task and what happened to it are vault rows on the LOCAL gateway, not
     // renderer state: the completed row must come back in the Logbook — and

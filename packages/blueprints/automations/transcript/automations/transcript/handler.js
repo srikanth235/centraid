@@ -4,14 +4,14 @@ import { existsSync as l } from "node:fs";
 import N from "node:path";
 import H from "node:path";
 import { pathToFileURL as D } from "node:url";
-var f = H.resolve(import.meta.dirname, ".."),
+var R = H.resolve(import.meta.dirname, ".."),
   T = "__centraidAutomationRuntimeDir";
 function x() {
   let z = globalThis[T];
   if (typeof z === "string" && z.length > 0) return H.resolve(z);
   if (process.env?.CENTRAID_AUTOMATION_RUNTIME_DIR)
     return H.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
-  return H.join(f, "runtime");
+  return H.join(R, "runtime");
 }
 var C = x(),
   B = H.join(C, "models");
@@ -210,12 +210,12 @@ var M = 2,
   Q = "dpv:ServiceProvision",
   S = 67108864,
   b = U,
-  R = v;
+  f = v;
 function Nz(z) {
-  ((b = z?.transcribe ?? U), (R = z?.weightsPresent ?? v));
+  ((b = z?.transcribe ?? U), (f = z?.weightsPresent ?? v));
 }
 function Jz() {
-  return R() ? E : null;
+  return f() ? E : null;
 }
 async function Kz(z, G) {
   let K = (
@@ -308,8 +308,8 @@ async function Vz({ ctx: z, log: G }) {
     });
     if (!j || j.error)
       throw Error(j?.error ?? `asset ${Z.asset_id}: ASR returned no result`);
-    let I = typeof j.text === "string" ? j.text.trim() : "";
-    if (!I) {
+    let _ = typeof j.text === "string" ? j.text.trim() : "";
+    if (!_) {
       ((W += 1), G.info(`asset ${Z.asset_id}: no speech detected`));
       continue;
     }
@@ -317,7 +317,7 @@ async function Vz({ ctx: z, log: G }) {
       command: "core.set_extracted_text",
       input: {
         content_id: Z.content_id,
-        text: I,
+        text: _,
         variant: "transcript",
         capability: "transcript",
         model: J,
@@ -326,8 +326,8 @@ async function Vz({ ctx: z, log: G }) {
     }),
       (q += 1));
   }
-  let _ = $.rows?.at(-1)?.asset_id;
-  if (_) await z.state.set("cursor", _);
+  let I = $.rows?.at(-1)?.asset_id;
+  if (I) await z.state.set("cursor", I);
   return {
     summary: `transcribed ${q}; skipped ${W}; bounded batch ${$.rows?.length ?? 0}/${M}`,
     output: {

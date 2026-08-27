@@ -11,7 +11,7 @@
 // NOTHING HERE FOLDS A FIGURE. Every net, share and total arrives derived from
 // `queries/dashboard.ts`'s one balance engine; this module moves payloads and
 // records when they landed.
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import type { InlineFrame } from "../inline-types.ts";
@@ -337,5 +337,8 @@ export function useLedgerReads(args: {
   // one subscription inside a data module, where nobody looking for "when does
   // this app re-read" would think to look.
 
-  return { ...snapshot, refresh, write, say, forget };
+  return useMemo(
+    () => ({ ...snapshot, refresh, write, say, forget }),
+    [snapshot, refresh, write, say, forget]
+  );
 }

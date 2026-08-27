@@ -578,8 +578,8 @@ export function Root({
   }
 
   // Renders only where there is something to declare. Offline is the host
-  // `data-gateway-status` stamp via `libraryReachability` (#864), never
-  // `navigator.onLine` — a desktop with no network still reaches the local
+  // `data-gateway-status` stamp via `libraryReachability` (#864), never the
+  // browser online flag — a desktop with no network still reaches the local
   // gateway. `readFailedState` still takes precedence below.
   const offline =
     libraryReachability({

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { formatBytes, formatRelativeTime, localDayKey } from "./format.js";
+import {
+  formatBytes,
+  formatRelativeTime,
+  fmtMoney,
+  localDayKey,
+} from "./format.js";
 
 describe("canonical formatter contract", () => {
   test("formatBytes uses one binary scale across profiles", () => {
@@ -17,6 +22,12 @@ describe("canonical formatter contract", () => {
     expect(formatRelativeTime(now - 30_000, now)).toBe("just now");
     expect(formatRelativeTime(now - 90 * 60_000, now)).toBe("1h ago");
     expect(formatRelativeTime(now - 2 * 86_400_000, now)).toBe("2d ago");
+  });
+
+  test("fmtMoney uses minor units and falls back on a bad ISO code", () => {
+    expect(fmtMoney(1234, "USD")).toMatch(/12[.,]34/u);
+    expect(fmtMoney(null, "not-a-code")).toMatch(/0[.,]00/u);
+    expect(fmtMoney(undefined)).toMatch(/0[.,]00/u);
   });
 
   test("localDayKey keys the named zone, never the UTC prefix", () => {

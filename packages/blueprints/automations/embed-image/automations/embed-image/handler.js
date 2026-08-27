@@ -11,11 +11,11 @@ function p() {
     return j.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
   return j.join(x, "runtime");
 }
-var C = p(),
-  O = j.join(C, "models");
-import { existsSync as P, readFileSync as c, statSync as l } from "node:fs";
+var F = p(),
+  O = j.join(F, "models");
+import { existsSync as u, readFileSync as c, statSync as s } from "node:fs";
 import _ from "node:path";
-import { pathToFileURL as s } from "node:url";
+import { pathToFileURL as l } from "node:url";
 var w;
 class A extends Error {
   constructor($, q) {
@@ -28,9 +28,9 @@ class A extends Error {
     this.name = "RuntimeNotInstalledError";
   }
 }
-function N($, q = C) {
+function P($, q = F) {
   let v = _.join(q, "node_modules");
-  if (!P(v)) throw new A($);
+  if (!u(v)) throw new A($);
   let B = _.join(v, ...$.split("/"));
   try {
     let Q = y(B);
@@ -42,7 +42,7 @@ function N($, q = C) {
 }
 function y($, q = 0) {
   let v = _.join($, "package.json"),
-    B = P(v) ? JSON.parse(c(v, "utf8")) : {},
+    B = u(v) ? JSON.parse(c(v, "utf8")) : {},
     Q = [
       ...L(d(B.exports)),
       ...(typeof B.main === "string" ? [B.main] : []),
@@ -55,18 +55,18 @@ function y($, q = 0) {
   return null;
 }
 function h($, q) {
-  let v = k($);
+  let v = R($);
   if (v?.isFile()) return $;
   if (v?.isDirectory()) return q >= 4 ? null : y($, q + 1);
   for (let B of [".js", ".json", ".node"]) {
     let Q = `${$}${B}`;
-    if (k(Q)?.isFile()) return Q;
+    if (R(Q)?.isFile()) return Q;
   }
   return null;
 }
-function k($) {
+function R($) {
   try {
-    return l($);
+    return s($);
   } catch {
     return null;
   }
@@ -87,18 +87,18 @@ function L($, q = 0) {
     if (Q in v) B.push(...L(v[Q], q + 1));
   return B;
 }
-async function z() {
+async function f() {
   if (w) return w;
-  let $ = N("onnxruntime-node");
-  return ((w = await import(s($).href)), w);
+  let $ = P("onnxruntime-node");
+  return ((w = await import(l($).href)), w);
 }
 var U;
 async function T($) {
   U ??= new Map();
   let q = U.get($);
   if (q) return q;
-  if (!P($)) throw new A($);
-  let v = z().then((B) => B.InferenceSession.create($));
+  if (!u($)) throw new A($);
+  let v = f().then((B) => B.InferenceSession.create($));
   U.set($, v);
   try {
     return await v;
@@ -110,7 +110,7 @@ import { pathToFileURL as n } from "node:url";
 var M;
 async function o() {
   if (M) return M;
-  let $ = N("sharp");
+  let $ = P("sharp");
   return ((M = (await import(n($).href)).default), M);
 }
 async function I($, q) {
@@ -144,13 +144,13 @@ function E($) {
   return Y;
 }
 var b = "clip-vit-b-32@1",
-  F = V.join(O, "clip"),
-  t = V.join(F, "visual.onnx"),
-  L0 = V.join(F, "textual.onnx"),
-  P0 = V.join(F, "vocab.json"),
-  N0 = V.join(F, "merges.txt"),
-  D = 224;
-function u($ = O) {
+  C = V.join(O, "clip"),
+  t = V.join(C, "visual.onnx"),
+  L0 = V.join(C, "textual.onnx"),
+  u0 = V.join(C, "vocab.json"),
+  P0 = V.join(C, "merges.txt"),
+  N = 224;
+function z($ = O) {
   let q = V.join($, "clip");
   return ["visual.onnx", "textual.onnx", "vocab.json", "merges.txt"].every(
     (v) => a(V.join(q, v))
@@ -170,19 +170,19 @@ function $0($, q) {
     throw Error("embed: expected a float32 tensor as the model's first output");
   return B.data;
 }
-async function f($) {
+async function D($) {
   try {
     let q = Buffer.from($.bytes, "base64"),
-      v = await I(q, D),
+      v = await I(q, N),
       B = E(v),
-      Q = await z(),
+      Q = await f(),
       Y = await T(t),
       J = {
         [Y.inputNames[0] ?? "pixel_values"]: new Q.Tensor("float32", B, [
           1,
           3,
-          D,
-          D,
+          N,
+          N,
         ]),
       },
       X = await Y.run(J),
@@ -192,12 +192,12 @@ async function f($) {
     return { id: $.id, error: q instanceof Error ? q.message : String(q) };
   }
 }
-var R = 16,
+var k = 16,
   Z = "dpv:ServiceProvision",
-  S = f,
-  m = u;
-function u0($) {
-  ((S = $?.infer ?? f), (m = $?.weightsPresent ?? u));
+  S = D,
+  m = z;
+function z0($) {
+  ((S = $?.infer ?? D), (m = $?.weightsPresent ?? z));
 }
 function q0() {
   return m() ? b : null;
@@ -246,7 +246,7 @@ async function v0({ ctx: $, log: q }) {
         { column: "deleted_at", op: "is-null" },
       ],
       orderBy: { column: "asset_id", dir: "asc" },
-      limit: R,
+      limit: k,
       purpose: Z,
     }),
     K = 0,
@@ -305,13 +305,13 @@ async function v0({ ctx: $, log: q }) {
   let X = Y.rows?.at(-1)?.asset_id;
   if (X) await $.state.set("cursor", X);
   return {
-    summary: `embedded ${K} images; skipped ${J}; bounded batch ${Y.rows?.length ?? 0}/${R}`,
+    summary: `embedded ${K} images; skipped ${J}; bounded batch ${Y.rows?.length ?? 0}/${k}`,
     output: {
       derived: K,
       skipped: J,
       model: v,
-      rearm: (Y.rows?.length ?? 0) === R,
+      rearm: (Y.rows?.length ?? 0) === k,
     },
   };
 }
-export { u0 as setEmbedImageRuntimeForTests, v0 as default };
+export { z0 as setEmbedImageRuntimeForTests, v0 as default };

@@ -22,7 +22,14 @@
 // true the moment a write landed. So this holds `expenseId`, the orchestrator
 // re-finds the row in the group ledger it re-read, and until that read lands
 // the route renders NOTHING — absent is not empty.
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import type { RefObject } from "react";
 
 import type { ComposeOverlay } from "./components/ComposeSheets.tsx";
@@ -385,32 +392,62 @@ export function useComposeState(seed: { today: string }): ComposeState {
     };
   }, [expenseId]);
 
-  return {
-    bagRef,
-    bump,
-    groupId,
-    expenseId,
-    // A list that belongs to another expense is ABSENT here, not shown under
-    // this one's name.
-    revisions:
-      history && history.forExpense === expenseId ? history.rows : null,
-    patchDraft,
-    setDivision,
-    setEntry,
-    setPayer,
-    setLines,
-    addLine,
-    patchSettle,
-    patchExport,
-    toggleLine,
-    show,
-    close,
-    openAdd,
-    openEdit,
-    openExpense,
-    openSettle,
-    seedSelection,
-  };
+  // A list that belongs to another expense is ABSENT here, not shown under
+  // this one's name.
+  const revisions =
+    history && history.forExpense === expenseId ? history.rows : null;
+
+  // Stable identity: `app-root` puts `compose` in `go` / frame-effect deps, so
+  // a fresh object each render re-contributes the bar and the host re-renders
+  // (React #185 on the desktop e2e day-one journey).
+  return useMemo(
+    () => ({
+      bagRef,
+      bump,
+      groupId,
+      expenseId,
+      revisions,
+      patchDraft,
+      setDivision,
+      setEntry,
+      setPayer,
+      setLines,
+      addLine,
+      patchSettle,
+      patchExport,
+      toggleLine,
+      show,
+      close,
+      openAdd,
+      openEdit,
+      openExpense,
+      openSettle,
+      seedSelection,
+    }),
+    [
+      bagRef,
+      bump,
+      groupId,
+      expenseId,
+      revisions,
+      patchDraft,
+      setDivision,
+      setEntry,
+      setPayer,
+      setLines,
+      addLine,
+      patchSettle,
+      patchExport,
+      toggleLine,
+      show,
+      close,
+      openAdd,
+      openEdit,
+      openExpense,
+      openSettle,
+      seedSelection,
+    ]
+  );
 }
 
 /**

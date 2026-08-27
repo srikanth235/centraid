@@ -20,7 +20,12 @@ export {
   identityInk,
 } from "./identity";
 export type { IdentityPaletteKey } from "./identity";
-export { formatBytes, formatRelativeTime, localDayKey } from "./format";
+export {
+  formatBytes,
+  formatRelativeTime,
+  fmtMoney,
+  localDayKey,
+} from "./format";
 
 export { themes, lightTheme, darkTheme, THEME_PRESETS } from "./themes";
 export {

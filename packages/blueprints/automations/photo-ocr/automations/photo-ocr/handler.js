@@ -1,21 +1,21 @@
 import { existsSync as uq } from "node:fs";
 import { readFile as mq } from "node:fs/promises";
 import M from "node:path";
-import E from "node:path";
+import D from "node:path";
 // governance: allow-repo-hygiene file-size-limit (#731) the self-contained OCR/PDF handler is one deployable runtime unit; splitting its bundled model/runtime rail would duplicate the content-resolution and bounded-batch invariants.
 // Generated recognition automation. Source: packages/model-runtime/automation-handlers.
 import { pathToFileURL as aq } from "node:url";
-var Cq = E.resolve(import.meta.dirname, ".."),
+var Cq = D.resolve(import.meta.dirname, ".."),
   zq = "__centraidAutomationRuntimeDir";
 function _q() {
   let q = globalThis[zq];
-  if (typeof q === "string" && q.length > 0) return E.resolve(q);
+  if (typeof q === "string" && q.length > 0) return D.resolve(q);
   if (process.env?.CENTRAID_AUTOMATION_RUNTIME_DIR)
-    return E.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
-  return E.join(Cq, "runtime");
+    return D.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
+  return D.join(Cq, "runtime");
 }
 var m = _q(),
-  x = E.join(m, "models");
+  g = D.join(m, "models");
 function Mq(q) {
   if (q.length === 0) throw Error("argmax: row must be non-empty");
   let K = 0,
@@ -29,25 +29,25 @@ function Mq(q) {
 function Zq(q, K, Q = 0) {
   let Z = [],
     $ = [],
-    G;
+    W;
   for (let V of q) {
-    let { index: W, value: X } = Mq(V);
-    if (W !== G && W !== Q) {
-      let Y = K[W];
+    let { index: G, value: X } = Mq(V);
+    if (G !== W && G !== Q) {
+      let Y = K[G];
       if (Y !== void 0) (Z.push(Y), $.push(X));
     }
-    G = W;
+    W = G;
   }
-  let J = $.length === 0 ? 0 : $.reduce((V, W) => V + W, 0) / $.length;
+  let J = $.length === 0 ? 0 : $.reduce((V, G) => V + G, 0) / $.length;
   return { text: Z.join(""), confidence: J };
 }
 function $q(q, K, Q, Z) {
   let $ = Math.max(q, K),
-    G = $ > Q ? Q / $ : 1,
-    J = (V) => Math.max(Z, Math.round((V * G) / Z) * Z);
+    W = $ > Q ? Q / $ : 1,
+    J = (V) => Math.max(Z, Math.round((V * W) / Z) * Z);
   return { width: J(q), height: J(K) };
 }
-function g(q, K, Q) {
+function x(q, K, Q) {
   let Z = Q.width / K.width,
     $ = Q.height / K.height;
   return { x: q.x * Z, y: q.y * $, width: q.width * Z, height: q.height * $ };
@@ -60,58 +60,58 @@ function Jq(q) {
     Math.round(q.height),
   ];
 }
-function Gq(q, K, Q) {
+function Wq(q, K, Q) {
   let Z = Math.max(0, Math.min(K, Math.round(q.x))),
     $ = Math.max(0, Math.min(Q, Math.round(q.y))),
-    G = Math.max(Z, Math.min(K, Math.round(q.x + q.width))),
+    W = Math.max(Z, Math.min(K, Math.round(q.x + q.width))),
     J = Math.max($, Math.min(Q, Math.round(q.y + q.height)));
-  return [Z, $, G - Z, J - $];
+  return [Z, $, W - Z, J - $];
 }
 function Oq(q, K, Q, Z = 0.3) {
   let $ = new Uint8Array(K * Q);
-  for (let G = 0; G < $.length; G++) $[G] = (q[G] ?? 0) >= Z ? 1 : 0;
+  for (let W = 0; W < $.length; W++) $[W] = (q[W] ?? 0) >= Z ? 1 : 0;
   return $;
 }
 function Tq(q, K, Q, Z = 1) {
   let $ = new Uint8Array(K * Q),
-    G = [],
+    W = [],
     J = [];
   for (let V = 0; V < q.length; V++) {
     if (!q[V] || $[V]) continue;
     (J.push(V), ($[V] = 1));
     let {
-        POSITIVE_INFINITY: W,
+        POSITIVE_INFINITY: G,
         POSITIVE_INFINITY: X,
         NEGATIVE_INFINITY: Y,
         NEGATIVE_INFINITY: j,
       } = Number,
       A = 0;
     while (J.length > 0) {
-      let H = J.pop(),
-        U = H % K,
-        L = Math.floor(H / K);
-      ((W = Math.min(W, U)),
+      let U = J.pop(),
+        H = U % K,
+        L = Math.floor(U / K);
+      ((G = Math.min(G, H)),
         (X = Math.min(X, L)),
-        (Y = Math.max(Y, U)),
+        (Y = Math.max(Y, H)),
         (j = Math.max(j, L)),
         A++);
       let B = [
-        U > 0 ? H - 1 : -1,
-        U < K - 1 ? H + 1 : -1,
-        L > 0 ? H - K : -1,
-        L < Q - 1 ? H + K : -1,
+        H > 0 ? U - 1 : -1,
+        H < K - 1 ? U + 1 : -1,
+        L > 0 ? U - K : -1,
+        L < Q - 1 ? U + K : -1,
       ];
       for (let N of B) if (N >= 0 && q[N] && !$[N]) (($[N] = 1), J.push(N));
     }
     if (A >= Z)
-      G.push({
-        box: { x: W, y: X, width: Y - W + 1, height: j - X + 1 },
+      W.push({
+        box: { x: G, y: X, width: Y - G + 1, height: j - X + 1 },
         area: A,
       });
   }
-  return G;
+  return W;
 }
-function Eq(q, K, Q = 1.5) {
+function Dq(q, K, Q = 1.5) {
   let Z = 2 * (q.width + q.height);
   if (Z <= 0) return q;
   let $ = (K * Q) / Z;
@@ -122,49 +122,49 @@ function Eq(q, K, Q = 1.5) {
     height: q.height + $ * 2,
   };
 }
-function Dq(q, K, Q) {
+function Eq(q, K, Q) {
   let Z = Math.max(0, Math.min(K, Math.round(q.x))),
     $ = Math.max(0, Math.min(Q, Math.round(q.y))),
-    G = Math.max(0, Math.min(K, Math.round(q.x + q.width))),
+    W = Math.max(0, Math.min(K, Math.round(q.x + q.width))),
     J = Math.max(0, Math.min(Q, Math.round(q.y + q.height)));
-  return { x: Z, y: $, width: Math.max(0, G - Z), height: Math.max(0, J - $) };
+  return { x: Z, y: $, width: Math.max(0, W - Z), height: Math.max(0, J - $) };
 }
 function Iq(q, K, Q) {
   let Z = Math.max(0, Math.floor(Q.x)),
     $ = Math.max(0, Math.floor(Q.y)),
-    G = Math.max(Z, Math.ceil(Q.x + Q.width)),
+    W = Math.max(Z, Math.ceil(Q.x + Q.width)),
     J = Math.max($, Math.ceil(Q.y + Q.height)),
     V = 0,
-    W = 0;
+    G = 0;
   for (let X = $; X < J; X++)
-    for (let Y = Z; Y < G; Y++) ((V += q[X * K + Y] ?? 0), W++);
-  return W === 0 ? 0 : V / W;
+    for (let Y = Z; Y < W; Y++) ((V += q[X * K + Y] ?? 0), G++);
+  return G === 0 ? 0 : V / G;
 }
 function Vq(q, K, Q, Z = {}) {
   let {
       binaryThreshold: $ = 0.3,
-      boxScoreThreshold: G = 0.5,
+      boxScoreThreshold: W = 0.5,
       unclipRatio: J = 1.5,
       minArea: V = 4,
     } = Z,
-    W = Oq(q, K, Q, $),
-    X = Tq(W, K, Q, V),
+    G = Oq(q, K, Q, $),
+    X = Tq(G, K, Q, V),
     Y = [];
   for (let j of X) {
     let A = Iq(q, K, j.box);
-    if (A < G) continue;
-    let H = Eq(j.box, j.area, J),
-      U = Dq(H, K, Q);
-    if (U.width <= 0 || U.height <= 0) continue;
-    Y.push({ box: U, score: A });
+    if (A < W) continue;
+    let U = Dq(j.box, j.area, J),
+      H = Eq(U, K, Q);
+    if (H.width <= 0 || H.height <= 0) continue;
+    Y.push({ box: H, score: A });
   }
   return Y;
 }
 import { existsSync as p, readFileSync as Pq, statSync as Sq } from "node:fs";
 import S from "node:path";
-import { pathToFileURL as vq } from "node:url";
+import { pathToFileURL as fq } from "node:url";
 var I;
-class v extends Error {
+class f extends Error {
   constructor(q, K) {
     super(
       `Automation model runtime dependency "${q}" is not installed. ` +
@@ -177,48 +177,48 @@ class v extends Error {
 }
 function _(q, K = m) {
   let Q = S.join(K, "node_modules");
-  if (!p(Q)) throw new v(q);
+  if (!p(Q)) throw new f(q);
   let Z = S.join(Q, ...q.split("/"));
   try {
     let $ = Yq(Z);
     if ($ === null) throw Error(`no entry point in ${Z}`);
     return $;
   } catch ($) {
-    throw new v(q, $);
+    throw new f(q, $);
   }
 }
 function Yq(q, K = 0) {
   let Q = S.join(q, "package.json"),
     Z = p(Q) ? JSON.parse(Pq(Q, "utf8")) : {},
     $ = [
-      ...h(fq(Z.exports)),
+      ...h(Rq(Z.exports)),
       ...(typeof Z.main === "string" ? [Z.main] : []),
       "index.js",
     ];
-  for (let G of $) {
-    let J = Rq(S.resolve(q, G), K);
+  for (let W of $) {
+    let J = vq(S.resolve(q, W), K);
     if (J !== null) return J;
   }
   return null;
 }
-function Rq(q, K) {
-  let Q = Wq(q);
+function vq(q, K) {
+  let Q = Gq(q);
   if (Q?.isFile()) return q;
   if (Q?.isDirectory()) return K >= 4 ? null : Yq(q, K + 1);
   for (let Z of [".js", ".json", ".node"]) {
     let $ = `${q}${Z}`;
-    if (Wq($)?.isFile()) return $;
+    if (Gq($)?.isFile()) return $;
   }
   return null;
 }
-function Wq(q) {
+function Gq(q) {
   try {
     return Sq(q);
   } catch {
     return null;
   }
 }
-function fq(q) {
+function Rq(q) {
   if (typeof q === "string") return q;
   if (q === null || typeof q !== "object") return;
   let K = q;
@@ -234,18 +234,18 @@ function h(q, K = 0) {
     if ($ in Q) Z.push(...h(Q[$], K + 1));
   return Z;
 }
-async function R() {
+async function v() {
   if (I) return I;
   let q = _("onnxruntime-node");
-  return ((I = await import(vq(q).href)), I);
+  return ((I = await import(fq(q).href)), I);
 }
 var P;
 async function l(q) {
   P ??= new Map();
   let K = P.get(q);
   if (K) return K;
-  if (!p(q)) throw new v(q);
-  let Q = R().then((Z) => Z.InferenceSession.create(q));
+  if (!p(q)) throw new f(q);
+  let Q = v().then((Z) => Z.InferenceSession.create(q));
   P.set(q, Q);
   try {
     return await Q;
@@ -254,11 +254,11 @@ async function l(q) {
   }
 }
 import { pathToFileURL as yq } from "node:url";
-var f;
+var R;
 async function c() {
-  if (f) return f;
+  if (R) return R;
   let q = _("sharp");
-  return ((f = (await import(yq(q).href)).default), f);
+  return ((R = (await import(yq(q).href)).default), R);
 }
 async function d(q) {
   let Q = (await c())(Buffer.from(q)),
@@ -273,12 +273,12 @@ async function d(q) {
 }
 async function Xq(q, K, Q) {
   let $ = (await c())(Buffer.from(q)),
-    { data: G, info: J } = await $.resize({ width: K, height: Q, fit: "fill" })
+    { data: W, info: J } = await $.resize({ width: K, height: Q, fit: "fill" })
       .removeAlpha()
       .raw()
       .toBuffer({ resolveWithObject: !0 });
   return {
-    data: new Uint8Array(G.buffer, G.byteOffset, G.byteLength),
+    data: new Uint8Array(W.buffer, W.byteOffset, W.byteLength),
     width: J.width,
     height: J.height,
   };
@@ -287,26 +287,26 @@ function jq(q, K) {
   let Q = Math.max(0, Math.min(q.width, Math.round(K.x))),
     Z = Math.max(0, Math.min(q.height, Math.round(K.y))),
     $ = Math.max(Q, Math.min(q.width, Math.round(K.x + K.width))),
-    G = Math.max(Z, Math.min(q.height, Math.round(K.y + K.height))),
+    W = Math.max(Z, Math.min(q.height, Math.round(K.y + K.height))),
     J = $ - Q,
-    V = G - Z,
-    W = new Uint8Array(J * V * 3);
+    V = W - Z,
+    G = new Uint8Array(J * V * 3);
   for (let X = 0; X < V; X++) {
     let Y = ((Z + X) * q.width + Q) * 3,
       j = X * J * 3;
-    W.set(q.data.subarray(Y, Y + J * 3), j);
+    G.set(q.data.subarray(Y, Y + J * 3), j);
   }
-  return { data: W, width: J, height: V };
+  return { data: G, width: J, height: V };
 }
-async function Uq(q, K, Q) {
+async function Hq(q, K, Q) {
   let $ = (await c())(Buffer.from(q.data), {
       raw: { width: q.width, height: q.height, channels: 3 },
     }),
-    { data: G, info: J } = await $.resize({ width: K, height: Q, fit: "fill" })
+    { data: W, info: J } = await $.resize({ width: K, height: Q, fit: "fill" })
       .raw()
       .toBuffer({ resolveWithObject: !0 });
   return {
-    data: new Uint8Array(G.buffer, G.byteOffset, G.byteLength),
+    data: new Uint8Array(W.buffer, W.byteOffset, W.byteLength),
     width: J.width,
     height: J.height,
   };
@@ -316,24 +316,24 @@ var wq = [0.485, 0.456, 0.406],
 function s(q) {
   let { width: K, height: Q, data: Z } = q,
     $ = K * Q,
-    G = new Float32Array($ * 3);
+    W = new Float32Array($ * 3);
   for (let J = 0; J < $; J++)
     for (let V = 0; V < 3; V++) {
-      let W = (Z[J * 3 + V] ?? 0) / 255;
-      G[V * $ + J] = (W - wq[V]) / bq[V];
+      let G = (Z[J * 3 + V] ?? 0) / 255;
+      W[V * $ + J] = (G - wq[V]) / bq[V];
     }
-  return G;
+  return W;
 }
 var n = "pp-ocrv4@1",
-  r = M.join(x, "ocr"),
-  xq = M.join(r, "det.onnx"),
-  gq = M.join(r, "rec.onnx"),
+  r = M.join(g, "ocr"),
+  gq = M.join(r, "det.onnx"),
+  xq = M.join(r, "rec.onnx"),
   hq = M.join(r, "dict.txt"),
   pq = 960,
   lq = 32,
   y = 48,
   cq = 320;
-function o(q = x) {
+function o(q = g) {
   let K = M.join(q, "ocr");
   return ["det.onnx", "rec.onnx", "dict.txt"].every((Q) => uq(M.join(K, Q)));
 }
@@ -356,20 +356,20 @@ async function rq(q) {
     Q = $q(K.width, K.height, pq, lq),
     Z = await Xq(q, Q.width, Q.height),
     $ = s(Z),
-    G = await R(),
-    J = await l(xq),
+    W = await v(),
+    J = await l(gq),
     V = J.inputNames[0] ?? "x",
-    W = await J.run({
-      [V]: new G.Tensor("float32", $, [1, 3, Q.height, Q.width]),
+    G = await J.run({
+      [V]: new W.Tensor("float32", $, [1, 3, Q.height, Q.width]),
     }),
     X = J.outputNames[0],
-    Y = X ? W[X]?.data : void 0;
+    Y = X ? G[X]?.data : void 0;
   if (!Y || !(Y instanceof Float32Array))
     throw Error("ocr: detector did not return a float32 probability map");
   return {
-    boxes: Vq(Y, Q.width, Q.height).map(({ box: H, score: U }) => ({
-      box: Jq(g(H, Q, K)),
-      score: U,
+    boxes: Vq(Y, Q.width, Q.height).map(({ box: U, score: H }) => ({
+      box: Jq(x(U, Q, K)),
+      score: H,
     })),
     native: K,
   };
@@ -377,53 +377,53 @@ async function rq(q) {
 async function oq(q) {
   let K = y / q.height,
     Q = Math.min(cq, Math.max(y, Math.round(q.width * K))),
-    Z = await Uq(q, Q, y),
+    Z = await Hq(q, Q, y),
     $ = s(Z),
-    G = await R(),
-    J = await l(gq),
+    W = await v(),
+    J = await l(xq),
     V = J.inputNames[0] ?? "x",
-    W = await J.run({ [V]: new G.Tensor("float32", $, [1, 3, y, Q]) }),
+    G = await J.run({ [V]: new W.Tensor("float32", $, [1, 3, y, Q]) }),
     X = J.outputNames[0],
-    Y = X ? W[X] : void 0;
+    Y = X ? G[X] : void 0;
   if (!Y || !(Y.data instanceof Float32Array))
     throw Error("ocr: recognizer did not return a float32 tensor");
   let j = await nq(),
     A = j.length,
-    H = Y.data.length / A,
-    U = [];
-  for (let L = 0; L < H; L++) {
+    U = Y.data.length / A,
+    H = [];
+  for (let L = 0; L < U; L++) {
     let B = Array.from(Y.data.subarray(L * A, (L + 1) * A));
-    U.push(B);
+    H.push(B);
   }
-  return Zq(U, j);
+  return Zq(H, j);
 }
 async function a(q) {
   try {
     let K = Buffer.from(q.bytes, "base64"),
       { boxes: Q, native: Z } = await rq(K),
       $ = await d(K),
-      G =
+      W =
         q.originalWidth && q.originalHeight
           ? { width: q.originalWidth, height: q.originalHeight }
           : { width: Z.width, height: Z.height },
       V = (
         await Promise.all(
-          Q.map(async (W) => {
-            let [X, Y, j, A] = W.box,
-              H = jq($, { x: X, y: Y, width: j, height: A });
-            if (H.width <= 0 || H.height <= 0) return;
-            let U = await oq(H);
-            if (!U.text) return;
-            let L = Gq(
-              g({ x: X, y: Y, width: j, height: A }, Z, G),
-              G.width,
-              G.height
+          Q.map(async (G) => {
+            let [X, Y, j, A] = G.box,
+              U = jq($, { x: X, y: Y, width: j, height: A });
+            if (U.width <= 0 || U.height <= 0) return;
+            let H = await oq(U);
+            if (!H.text) return;
+            let L = Wq(
+              x({ x: X, y: Y, width: j, height: A }, Z, W),
+              W.width,
+              W.height
             );
             if (L[2] <= 0 || L[3] <= 0) return;
-            return { text: U.text, confidence: U.confidence, box: L };
+            return { text: H.text, confidence: H.confidence, box: L };
           })
         )
-      ).filter((W) => W !== void 0);
+      ).filter((G) => G !== void 0);
     return { id: q.id, regions: V };
   } catch (K) {
     return { id: q.id, error: K instanceof Error ? K.message : String(K) };
@@ -431,9 +431,9 @@ async function a(q) {
 }
 var i = 16,
   O = "dpv:ServiceProvision",
-  D = "ocr-v1",
+  E = "ocr-v1",
   t = "built-in",
-  Hq = a,
+  Uq = a,
   Lq = o,
   Aq = async () => {
     let q = _("pdfjs-dist/legacy/build/pdf.mjs");
@@ -441,7 +441,7 @@ var i = 16,
   },
   Fq = Aq;
 function PK(q) {
-  ((Hq = q?.recognize ?? a),
+  ((Uq = q?.recognize ?? a),
     (Lq = q?.weightsPresent ?? o),
     (Fq = q?.loadPdfJs ?? Aq));
 }
@@ -453,13 +453,13 @@ function e(q, K, Q) {
       : [];
   return q.regions.flatMap((Z, $) => {
     if (!Z || typeof Z.text !== "string") return [];
-    let G = Z.confidence;
-    if (G !== void 0 && (typeof G !== "number" || G < 0 || G > 1)) return [];
+    let W = Z.confidence;
+    if (W !== void 0 && (typeof W !== "number" || W < 0 || W > 1)) return [];
     let J = Array.isArray(Z.box) && Z.box.length === 4 ? Z.box : null,
       V =
         J &&
         J.every(
-          (W) => typeof W === "number" && Number.isSafeInteger(W) && W >= 0
+          (G) => typeof G === "number" && Number.isSafeInteger(G) && G >= 0
         ) &&
         J[2] > 0 &&
         J[3] > 0 &&
@@ -470,7 +470,7 @@ function e(q, K, Q) {
         text: Z.text,
         order: $,
         ...(V ? { box: J } : {}),
-        ...(G === void 0 ? {} : { confidence: G }),
+        ...(W === void 0 ? {} : { confidence: W }),
       },
     ];
   });
@@ -501,14 +501,14 @@ function iq(q) {
   return K;
 }
 async function qq(q) {
-  let K = await Hq(q);
+  let K = await Uq(q);
   if (!K || K.error) throw Error(K?.error ?? "OCR returned no result");
   return K;
 }
 async function tq(q) {
   globalThis.DOMMatrix ??= class {
-    constructor(W = [1, 0, 0, 1, 0, 0]) {
-      [this.a, this.b, this.c, this.d, this.e, this.f] = W;
+    constructor(G = [1, 0, 0, 1, 0, 0]) {
+      [this.a, this.b, this.c, this.d, this.e, this.f] = G;
     }
   };
   let K = await Fq(),
@@ -516,7 +516,7 @@ async function tq(q) {
     Z = await K.getDocument({ data: new Uint8Array(Q), disableWorker: !0 })
       .promise,
     $ = [],
-    G,
+    W,
     J = Math.min(Z.numPages, 64);
   for (let V = 1; V <= J; V += 1) {
     let Y = (await (await Z.getPage(V)).getTextContent()).items
@@ -545,16 +545,16 @@ async function tq(q) {
         ((F.canvas.width = 0), (F.canvas.height = 0));
       }
     }
-    G ??= await K.getDocument({
+    W ??= await K.getDocument({
       data: new Uint8Array(Q),
       disableWorker: !0,
       CanvasFactory: A,
     }).promise;
-    let H = await G.getPage(V),
-      U = H.getViewport({ scale: 2 }),
-      L = j.createCanvas(Math.ceil(U.width), Math.ceil(U.height)),
+    let U = await W.getPage(V),
+      H = U.getViewport({ scale: 2 }),
+      L = j.createCanvas(Math.ceil(H.width), Math.ceil(H.height)),
       B = L.getContext("2d");
-    await H.render({ canvas: L, canvasContext: B, viewport: U }).promise;
+    await U.render({ canvas: L, canvasContext: B, viewport: H }).promise;
     let N = L.toBuffer("image/png").toString("base64"),
       z = await qq({ id: `capture:${V}`, bytes: N, mediaType: "image/png" });
     for (let F of z.regions ?? []) $.push({ ...F, page: V });
@@ -573,11 +573,11 @@ async function eq(q) {
     Q = e(K),
     Z = Q.filter((J) => J.confidence !== void 0),
     $ = Z.length ? Z.reduce((J, V) => J + V.confidence, 0) / Z.length : void 0,
-    G = Bq(Q);
+    W = Bq(Q);
   return {
-    summary: G ? "Capture OCR completed" : "Capture OCR found no legible text",
+    summary: W ? "Capture OCR completed" : "Capture OCR found no legible text",
     output: {
-      text: G,
+      text: W,
       engine: "automation",
       model: n,
       ...($ === void 0 ? {} : { confidence: $ }),
@@ -640,19 +640,19 @@ async function QK({ ctx: q, log: K }) {
     if (Z) throw Error("delegate OCR requires an explicit pinned model");
     return { summary: "OCR skipped — automation model assets unavailable" };
   }
-  let G = q.input?.promptRev;
-  if (Z && G && G !== D)
+  let W = q.input?.promptRev;
+  if (Z && W && W !== E)
     throw Error(
-      `delegate OCR: the engine profile pins prompt revision "${G}", but this handler ships "${D}"`
+      `delegate OCR: the engine profile pins prompt revision "${W}", but this handler ships "${E}"`
     );
   let J = q.input?.profileId ?? t,
     V = J === t ? "" : `:${J}`,
-    W = `${Z ? "delegate" : "deterministic"}:${$}:${Z ? D : "local"}${V}`,
+    G = `${Z ? "delegate" : "deterministic"}:${$}:${Z ? E : "local"}${V}`,
     X = await q.state.get("selection");
-  if (X !== W) {
+  if (X !== G) {
     let B = X === void 0 && !Z ? await qK(q, $, J) : "";
     (await q.state.set("cursor", B),
-      await q.state.set("selection", W),
+      await q.state.set("selection", G),
       await q.state.delete("confirmedModel"));
   }
   let Y = (await q.state.get("cursor")) ?? "",
@@ -667,8 +667,8 @@ async function QK({ ctx: q, log: K }) {
       purpose: O,
     }),
     A = (j.rows ?? []).filter((B) => B.kind === "photo" || B.kind === "scan"),
-    H = 0,
-    U = 0;
+    U = 0,
+    H = 0;
   for (let B of A) {
     let z = (
         await q.vault.read({
@@ -687,8 +687,8 @@ async function QK({ ctx: q, log: K }) {
         typeof z?.payload_json === "string"
           ? JSON.parse(z.payload_json).prompt_rev
           : z?.prompt_rev;
-    if (z?.model === F && (!Z || T === D)) {
-      U += 1;
+    if (z?.model === F && (!Z || T === E)) {
+      H += 1;
       continue;
     }
     let k;
@@ -713,7 +713,7 @@ async function QK({ ctx: q, log: K }) {
     } else k = await KK(q, B);
     let Kq = Bq(k);
     if (!Kq) {
-      ((U += 1), K.info(`photo ${B.asset_id}: no legible text`));
+      ((H += 1), K.info(`photo ${B.asset_id}: no legible text`));
       continue;
     }
     let b = k.filter((C) => C.confidence !== void 0),
@@ -730,20 +730,20 @@ async function QK({ ctx: q, log: K }) {
         model: F,
         regions: Nq,
         ...(J === t ? {} : { profile: J }),
-        ...(Z ? { prompt_rev: D } : {}),
+        ...(Z ? { prompt_rev: E } : {}),
         ...(Qq === void 0 ? {} : { confidence: Qq }),
       },
       purpose: O,
     }),
-      (H += 1));
+      (U += 1));
   }
   let L = j.rows?.at(-1)?.asset_id;
   if (L) await q.state.set("cursor", L);
   return {
-    summary: `OCR derived ${H}; skipped ${U}; batch ${j.rows?.length ?? 0}/${i}`,
+    summary: `OCR derived ${U}; skipped ${H}; batch ${j.rows?.length ?? 0}/${i}`,
     output: {
-      derived: H,
-      skipped: U,
+      derived: U,
+      skipped: H,
       model: Z ? ((await q.state.get("confirmedModel")) ?? $) : $,
       rearm: (j.rows?.length ?? 0) === i,
     },

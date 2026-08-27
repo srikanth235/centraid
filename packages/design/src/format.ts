@@ -31,6 +31,33 @@ export function formatBytes(value: number): string {
 }
 
 /**
+ * Minor units → localized currency string ("€12.34"), tolerant of gaps.
+ *
+ * Lives in the token layer (Expo-reachable) rather than
+ * `@centraid/design/elements`, which has no `react-native` condition.
+ * Keep the same contract as `@centraid/client` `formatCurrencyMinor` so web
+ * Home, Tally, and Capture never diverge on invalid ISO codes.
+ */
+export function fmtMoney(
+  minor: number | null | undefined,
+  currency?: string
+): string {
+  const value = Number(minor ?? 0) / 100;
+  const code =
+    typeof currency === "string" && /^[A-Za-z]{3}$/u.test(currency)
+      ? currency.toUpperCase()
+      : "USD";
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+    }).format(value);
+  } catch {
+    return `${value.toFixed(2)} ${code}`.trim();
+  }
+}
+
+/**
  * The viewer's local YYYY-MM-DD for an instant — never the UTC slice.
  *
  * Lives in the token layer (Expo-reachable) rather than
