@@ -129,3 +129,21 @@ diff and issue #878 — and adjudicated the required checks. Verdicts:
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-27 | grok | 01a04196-7d03-7801-919d-4a24a4114503 |
+| 2026-08-27 | codex | 01a04266-cd44-74b3-b1ce-28782f2db90b |
+
+## Follow-up evidence — PR #879
+
+The PR-gate run `33049554789` left three red outcomes. Both Linux and macOS
+desktop jobs failed at the same Tasks poll: `page.evaluate` destructured
+`title` without receiving its argument. `verify` passed every test but missed
+the seeded server-engine line floor by 0.02 points (`83.98%` vs `84%`); the
+miss was in the shared sandbox scope, not in a changed product source file.
+
+This worktree fixes the poll by passing `{ title: TASK_TITLE }` and adds a
+regression assertion in
+`packages/server/src/engine/sandbox/install.test.ts` for the worker-only
+`redactLaunchArgs` sandbox path. Local evidence: `bun run build`, full
+`bun run typecheck`, `bun run format:check`,
+the six-file sandbox lane (84 tests), and the focused Tasks desktop e2e (1
+test) all pass. The PR-gate checklist above remains open until GitHub reruns
+the workflow on the updated head.

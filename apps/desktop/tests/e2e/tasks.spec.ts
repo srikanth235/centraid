@@ -174,26 +174,29 @@ test("Tasks files and completes a task on the custodian seat, and the Logbook su
     await expect
       .poll(
         () =>
-          page.evaluate(async ({ title }) => {
-            type Board = {
-              open: Array<{ task_id: string; title: string }>;
-              logbook: Array<{ task_id: string; title: string }>;
-            };
-            const board = await window.centraid.read<Board>({
-              query: "board",
-              input: {},
-            });
-            const task = [...board.open, ...board.logbook].find(
-              (row) => row.title === title
-            );
-            if (!task) return "no-such-task";
-            const outcome = await window.centraid.write({
-              action: "edit",
-              input: { task_id: task.task_id, title },
-              intentId: `tasks-desktop-e2e-custodian-edit-${Date.now()}`,
-            });
-            return outcome.status;
-          }),
+          page.evaluate(
+            async ({ title }) => {
+              type Board = {
+                open: Array<{ task_id: string; title: string }>;
+                logbook: Array<{ task_id: string; title: string }>;
+              };
+              const board = await window.centraid.read<Board>({
+                query: "board",
+                input: {},
+              });
+              const task = [...board.open, ...board.logbook].find(
+                (row) => row.title === title
+              );
+              if (!task) return "no-such-task";
+              const outcome = await window.centraid.write({
+                action: "edit",
+                input: { task_id: task.task_id, title },
+                intentId: `tasks-desktop-e2e-custodian-edit-${Date.now()}`,
+              });
+              return outcome.status;
+            },
+            { title: TASK_TITLE }
+          ),
         { timeout: 60_000 }
       )
       .toBe("executed");
