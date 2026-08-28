@@ -7,17 +7,11 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// AGENDA'S COMPACT BAND on the web seat (#882): UI-impact evidence, and the
-// regression test for the defect behind it. The band used to offer Month, which
-// is absent by type on a phone — pressing it drew the DAY grid and lit the DAY
-// tab, so the band named one place and the canvas showed another. Month is gone
-// and Search took the slot, which is load-bearing in the other direction: the
-// app bar withdraws its own Search on compact BELIEVING the band carries it, so
-// a band without Search would leave the seat with no way into search at all.
-//
-// The SHIPPED Agenda `Root` mounts against a stubbed `window.centraid`, its
-// frame contributions render through the shipped shell `AppBand` — nothing
-// about the band or the views is reimplemented here.
+// Agenda's compact band (#882): UI-impact evidence, and the regression test for
+// the defect behind it. Month drew the DAY grid and lit the DAY tab; Search
+// holds that slot now, load-bearing because the bar withdraws its own Search on
+// compact BELIEVING the band carries it. The shipped `Root` and shell `AppBand`
+// mount here — no band or view is reimplemented.
 
 const here = import.meta.dirname;
 const REPO_ROOT = path.resolve(here, "../../../..");
@@ -38,16 +32,15 @@ const BAND_TABS = ["Day", "Schedule", "Waiting on", "Search", "More"];
 const SEARCH_LABEL = "Search agenda";
 const AWAITING = "No answer yet";
 
-/** The seat the shell gives an inline app: a bar fed by `setAppBar`, the app,
- *  and the claimed band under it. `compact` is the shell's own answer. */
+/** The seat the shell gives an inline app: bar, app, claimed band. */
 const entry = (compact: boolean): string => `
 import { createElement, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Root } from ${JSON.stringify(AGENDA_ROOT)};
 import AppBand from ${JSON.stringify(APP_BAND)};
 
-// Two events today, one of them unanswered — so Schedule and Waiting on hold
-// different rows and a view that draws the wrong one is visible as such.
+// Two events, one unanswered: Schedule and Waiting on hold different rows,
+// so a view drawing the wrong one is visible as such.
 const start = new Date();
 start.setHours(9, 0, 0, 0);
 const at = (hours) => new Date(start.getTime() + hours * 3600000).toISOString();
@@ -147,8 +140,8 @@ async function bundle(
   };
 }
 
-/** The bar and band are the frame's; the pane is the only column that gives
- *  width back, which is what Agenda's own width observer measures. */
+/** The pane is the only column that gives width back — what Agenda's own
+ *  width observer measures. */
 const HARNESS_CSS = `
   body { margin: 0; background: var(--bg); color: var(--text); }
   .seat { display: flex; flex-direction: column; height: 100vh; }
@@ -193,15 +186,14 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
   const awaiting = page.getByText(AWAITING);
   const barSearch = page.locator(`#appbar button[aria-label="${SEARCH_LABEL}"]`);
 
-  // ── The four destinations plus the frame's More. Month is absent BY TYPE:
-  // seven columns at 390px are unreadable, and a tab that draws another view is
-  // worse than a tab that is not there.
+  // Four destinations plus the frame's More. Month is absent BY TYPE: a tab
+  // that draws another view is worse than a tab that is not there.
   await expect(band).toBeVisible();
   await expect(band.locator("fieldset button")).toHaveText(BAND_TABS);
   await expect(tab("Month")).toHaveCount(0);
 
-  // ── Pressing a destination lands on the view it NAMES — canvas and lit tab
-  // agreeing. Schedule and Waiting on are lists; only Day draws a grid.
+  // A destination lands on the view it NAMES, canvas and lit tab agreeing;
+  // only Day draws a grid.
   await expect(current).toHaveText("Day");
   await expect(grid).toHaveAttribute("data-columns", "1");
 
@@ -227,9 +219,8 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
     path: path.join(EVIDENCE_DIR, EVIDENCE_PNG),
   });
 
-  // ── The bar withdrew its own Search here, so the band's Search is the only
-  // way in — and it opens a FIELD rather than becoming a fifth view: the canvas
-  // and the lit tab both stay where they were.
+  // The bar withdrew Search here, so the band's is the only way in — and it
+  // opens a FIELD, not a fifth view: canvas and lit tab stay put.
   await expect(barSearch).toHaveCount(0);
   await expect(page.getByRole("searchbox")).toHaveCount(0);
   await tab("Search").click();
@@ -241,8 +232,7 @@ test("Agenda's compact band offers Search, never Month, and lands where it says"
   await page.getByRole("button", { exact: true, name: "Close" }).click();
   await expect(page.getByRole("searchbox")).toHaveCount(0);
 
-  // ── The withdrawal is a SWAP, not a loss: off compact the bar carries Search
-  // itself and no band is claimed at all.
+  // A SWAP, not a loss: off compact the bar carries Search and no band exists.
   await mount(page, false, 1280);
   await expect(barSearch).toHaveCount(1);
   await expect(page.locator('nav[data-band="app"]')).toHaveCount(0);
