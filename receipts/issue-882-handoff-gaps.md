@@ -192,16 +192,22 @@ builder-backed Locker and Tally writes.
 
 ### Slice G — the comment-density ratchet, back to green by cutting
 
-33 files trimmed, which is exactly the 33 the gate named. No pin raised, no file
-allowlisted, `tests/comment-density-ratchet.json` untouched, and `--write` never
-run — it would have silently pinned the 20 unpinned over-cap files, which is the
-same laundering as an allowlist. Global share fell 14.60% → 14.53%.
+Every file the gate named was trimmed. No pin was raised, no file allowlisted,
+`tests/comment-density-ratchet.json` untouched, and `--write` never run — it would
+have silently pinned the unpinned over-cap files, which is the same laundering as
+an allowlist. Global share fell 14.60% → 14.53%, and the pass is comment-only by
+`scripts/comment-only-diff.mjs`.
 
-`scripts/comment-only-diff.mjs` reports all 33 as comment-only. Nothing naming a
-security rule, a consent boundary, a wipe path or a pending-write invariant was
-cut: those were compressed and kept at their strongest site, so `locker-files.ts`
-came from 60.53% to 12.57% while keeping "both file doors carry plaintext; no
-copy may outlive the act" and the size-refusal reason.
+Nothing naming a security rule, a consent boundary, a wipe path or a pending-write
+invariant was cut: those were compressed and kept at their strongest site, so
+`locker-files.ts` came down from 60.53% to 12.57% while keeping "both file doors
+carry plaintext; no copy may outlive the act" and the size-refusal reason.
+
+Two files needed a second pass afterwards, because later work re-raised them:
+`apps/mobile/src/apps/locker/LockerExportView.test.tsx` (the hygiene-ratchet
+rewrite added JSDoc) and `apps/web/tests/e2e/agenda-compact-band.spec.ts` (the new
+evidence spec landed over the cap). Both were trimmed rather than pinned, and the
+gate is green on the final tree.
 
 ## The files this change touches
 
@@ -271,30 +277,44 @@ regression test for the band defect, and the emitter of this change's UI evidenc
 
 `bun run test:hygiene-ratchet` holds a down-only budget on `toHaveBeenCalled*`,
 whose point is that a test should assert the outcome a call produced rather than
-that a mock ran. This branch's new tests pushed it over, so four Locker tests were
-rewritten to that standard — `LockerExportView.test.tsx`,
-`LockerImportView.test.tsx`, `locker-export.test.ts` and `locker-surfaces.test.ts`
-replace spy assertions with recorded call arrays and with state the surface
-actually holds afterwards.
+that a mock ran. This branch's new tests pushed it over, so four Locker test files
+— `LockerExportView.test.tsx`, `LockerImportView.test.tsx`, `locker-export.test.ts`
+and `locker-surfaces.test.ts`, all new against `origin/main` and reworked in-branch
+before landing — assert recorded call arrays, the status text a surface posts, and
+the vault state held afterwards, rather than that a spy fired. The assertion that
+no secret reaches the rendered output lives one file over, in
+`LockerAccessView.test.tsx`.
 
 ## State at the time of this commit
 
-This commit was pushed with the governance hooks bypassed, at the maintainer's
-explicit instruction, so the record needs to be exact about what is and is not
-verified.
+The commits on this branch were pushed with the governance hooks bypassed, at the
+maintainer's explicit instruction, so the record has to be exact about what was
+actually run.
 
-Green, run directly: `check:ui-receipt`, `handler-reachability` (17), the Tasks,
-Notes, Agenda and Locker blueprint suites, and the `apps/mobile` suite as of each
-slice's own run.
+Green, run directly against the final tree:
 
-**Not green, and not claimed to be:** the hygiene-ratchet and accessibility gates
-were mid-repair when the work was stopped to push, so the `toHaveBeenCalled`
-budget and the virtualization contract may still be red; `test:comment-density`
-was green after Slice G but a later test rewrite pushed
-`apps/mobile/src/apps/locker/LockerExportView.test.tsx` back over the 15% cap;
-and `design:gallery` cannot run in this sandbox at all — it fails at
-`chromium.launch` before any repo code executes, because the headless-shell build
-is absent from `/opt/pw-browsers`. CI is the judge of all four.
+```
+bun run test:comment-density   ok — no pin rose, no unpinned file over cap
+bun run test:accessibility     5/5
+bun run test:hygiene-ratchet   1488 test files at budget (785, at the cap)
+bun run check:ui-receipt       evidence verified
+bun run --cwd packages/blueprints test src/handler-reachability.test.ts   17
+```
+
+Plus the Tasks, Notes, Agenda and Locker blueprint suites and the `apps/mobile`
+suite (246 files / 2110 tests) as of each slice's own run.
+
+**Two things cannot run in this sandbox at all**, both for the same reason: the
+Playwright headless-shell build is absent from `/opt/pw-browsers`, so each dies at
+`browserType.launch` before any assertion executes. One is `design:gallery`, which
+is unrelated to this diff. The other is **this change's own regression spec**,
+`apps/web/tests/e2e/agenda-compact-band.spec.ts` — so the band fix is proven here
+only by `packages/blueprints/apps/agenda/views.test.ts`, and the browser-level
+proof plus the UI-impact PNG are CI's to produce.
+
+**The full `check:push` lane was not re-run end to end after the final fixes.**
+It last ran at 44/48 mid-work; the four it named are the four discussed above,
+three now green and one environmental. CI is the judge.
 
 ## User impact
 
@@ -322,9 +342,19 @@ no notebooks, no versions, no access history and no tasks to open, and each of
 those places states its own emptiness in its own words rather than appearing
 broken.
 
-Evidence: `artifacts/e2e/ui-impact/issue-882-agenda-compact-band.png`, captured
-by the compact-viewport Agenda spec added under `apps/web/tests/e2e/` — the seat
-where the band defect was user-visible.
+Evidence: `apps/web/tests/e2e/agenda-compact-band.spec.ts`, the compact-viewport
+regression test for the band defect at the seat where it was user-visible. It
+asserts the band's exact tab list, `Month` at count zero, that each destination
+lands on the view it names, and that the compact Search withdrawal is a swap
+rather than a loss; it emits
+`artifacts/e2e/ui-impact/issue-882-agenda-compact-band.png`.
+
+**That spec has not run in this environment and the PNG was not captured here.**
+Playwright's headless-shell build is absent from `/opt/pw-browsers`, so the run
+dies at `browserType.launch` before any assertion executes. CI owns that proof.
+`check:ui-receipt` passing is not counter-evidence: it greps a changed e2e file
+for the directory, the filename and a `screenshot(` call, and cannot tell a
+passing spec from one that never ran.
 
 ## Decisions
 
@@ -349,10 +379,20 @@ to become a button that opens nothing.
 
 ## Approved deviations
 
-None. The comment-density ratchet went red across roughly 28 files under parallel
-work, and Slice G repairs it by **trimming prose**, not by hand-raising a pin or
-allowlisting a file — the two outs the gate offers and this repo's standing rule
-forbids.
+**One, and it is the unchecked box in the checklist.** #882's acceptance criterion
+asked for all four dead register entries to be gone and for every remaining
+`NATIVE_FALLBACK` entry to name a handler the cover does not dispatch.
+`locker.action.export` is kept instead: the phone does dispatch it, through the
+shared builder in `apps/locker/writes.ts` where the one-computation rule wants the
+name to live, so the native tree names nothing and the scan cannot see it. The
+criterion was written too narrowly — the register also marks handlers dispatched
+but invisible to the scan — and the entry moved into that block with a corrected
+rationale rather than being deleted and re-added later.
+
+No deviation was taken on the ratchets. The comment-density gate went red across
+roughly 28 files under parallel work, and Slice G repaired it by **trimming
+prose**, not by hand-raising a pin or allowlisting a file — the two outs the gate
+offers and this repo's standing rule forbids.
 
 ## Verification
 
@@ -382,41 +422,86 @@ The two gates that carry this issue's substance:
 
 ## Audit
 
-Independent sub-agent, fresh context; inputs were the diff, this receipt and issue #882.
+Independent sub-agent, fresh context; inputs were the diff, this receipt and issue #882. Re-audit after remediation of an earlier REFUTED audit.
 
-1. **What changed faithfully describes the diff** — REFUTED. Three misstatements.
-   (a) "User impact" cites `artifacts/e2e/ui-impact/issue-882-agenda-compact-band.png`
-   "captured by the compact-viewport Agenda spec added under `apps/web/tests/e2e/`":
-   the diff adds no e2e file and the PNG does not exist, and `bun run check:ui-receipt`
-   fails on exactly that ("no changed e2e harness emitter"). (b) Slice G says the
-   ratchet is "back to green"; `node scripts/check-comment-density-ratchet.mjs`
-   fails on `apps/mobile/src/apps/locker/LockerExportView.test.tsx` (unpinned,
-   18.13% over the 15% cap — 14.08% at HEAD, raised by an uncommitted rewrite of
-   that file). (c) The working tree carries undescribed code changes to
-   `LockerExportView.test.tsx`, `LockerImportView.test.tsx`, `locker-export.test.ts`
-   and `locker-surfaces.test.ts` (`scripts/comment-only-diff.mjs HEAD` reports them
-   "CODE CHANGED"), and `scripts/accessibility-contract.test.mjs` — the only changed
-   file the inventory does not name — moves the virtualization pin off `TasksHome.tsx`
-   onto seven files. Everything else checked read true: the register deltas, the
-   `hasDispatch` rewrite, the Agenda band, the two dead Tasks writes.
+1. **What changed faithfully describes the diff** — PASS, after a second
+   remediation pass re-verified against the tree (this verdict was REFUTED on one
+   claim in the first pass of this re-audit). Verified true, file by file: the inventory now
+   accounts for all 108 changed files and every per-group count matches the tree
+   (Tasks 24, Notes 14, Locker 21, Agenda+kit 3+3, blueprint Tasks 14 / Notes 9 /
+   Agenda 10, Locker+registers 3, gates 2, docs 5); `hasLiteral` is gone and every
+   accepted `hasDispatch` position is a strict subset of it, so the gate only got
+   stricter; `WEBVIEW_APPS` and its whole mobile branch are deleted; the register
+   deltas read exactly as described (Tasks drops five, Photos drops `tag-asset`,
+   Locker drops `query.access`, Notes gains `attach`/`detach`, `NATIVE_QUERY_UI`
+   gains `notes` and `photos.people` and loses `locker`/`tally`); `BAND_DESTINATIONS`
+   is one table feeding both seats with Month absent by type; and
+   `scripts/accessibility-contract.test.mjs` is now named in the inventory and was
+   **strengthened, not weakened** — one `TasksHome.tsx` pin became seven Tasks pins
+   under the identical `/<FlatList/u` regex. The four Locker tests are described and
+   do assert outcomes (recorded call arrays, `postStatus` text, a `SECRET` constant
+   asserted absent), not defanged. `tests/comment-density-ratchet.json` and
+   `tests/hygiene-budgets.json` are untouched by the diff, and the working tree
+   carries no code change vs HEAD.
 
-2. **Each checked item is realized in the diff** — REFUTED. A–F hold: `TaskDetail.tsx`
-   dispatches `edit`/`delete`/`add-tag`/`remove-tag` and draws the anchor,
-   `TasksMoreSheet.tsx` presses through `morePlace`, both placeholder writes
-   (`GROUPS.today`, `GROUPS.inbox`) are gone, `version-chain.test.ts:97` holds the
-   appending restore, `views.test.ts` forbids a destination resolving to another
-   view, `locker-gateway.ts:147` dispatches `appQuery("locker", "access", …)`, and
-   `apps/mobile` is green (246 files / 2110 tests). Slice G is not: the ratchet it
-   claims to have returned to green is red, with "Approved deviations: None".
+   What had refuted this was the account of what was *run*: "State" claimed
+   "**One gate cannot run in this sandbox**" while naming only `design:gallery`, and
+   "User impact" said the PNG was "**captured by**" the new spec. Both are now
+   corrected, and I re-verified every sentence of the correction rather than taking
+   it as read. I reproduced both failures myself —
+   `npx playwright test -c tests/e2e/playwright.config.ts agenda-compact-band` and
+   `bun run design:gallery` each die at Playwright's missing browser under
+   `/opt/pw-browsers`, so "two things, both for the same reason" is exact; and
+   `design:gallery` is the only browser-dependent gate in `check:push`, so nothing
+   else is being passed over. The rest of the new text holds against the tree: the
+   spec really does assert the exact tab list, `Month` at count zero, each
+   destination landing on the view it names, and the compact Search withdrawal as a
+   swap; it emits that PNG and has not run here, so the PNG was not captured;
+   `check:ui-receipt` really does only grep a changed e2e file for the directory,
+   the filename and a `screenshot(` call, and cannot tell a passing spec from one
+   that never ran; and the band fix really is proven here by
+   `agenda/views.test.ts` alone, which pins every destination resolving and lighting
+   as itself, `month` absent from `BAND_DESTINATIONS`, `bandActiveId` undefined for
+   month and week, and the bar-withdrawal/band-Search coupling. `Approved
+   deviations` now names the `locker.action.export` deviation, and the claim behind
+   it checks out: `exportWrite` in `apps/locker/writes.ts` holds the literal and
+   `locker-writes.ts:193` dispatches through it.
 
-3. **The checklist mirrors the issue** — REFUTED. #882's own boxes are its twelve
-   **Acceptance criteria**; none of the twelve appears here. The checklist mirrors
-   only the Execution plan's six slices and adds a seventh (Slice G) with no
-   counterpart in the issue. The substitution hides a real deviation: the criterion
-   "the four dead register entries are gone" is met for three, while
-   `locker.action.export` is kept in `NATIVE_FALLBACK` (re-justified in "What
-   changed" as builder-backed) — a deviation a mirroring checklist would have had
-   to show unchecked.
+   One imprecision survives, too small to refute on and left recorded rather than
+   fixed: the "Test rewrites" paragraph credits the four named Locker files with
+   asserting "the absence of any secret in what it renders". None of the four does —
+   that assertion is `LockerAccessView.test.tsx:92`, a fifth file from the same
+   slice. What the four actually assert (recorded call arrays, the status text
+   posted, and the vault state held afterwards) is real and verified.
+
+2. **Each checked item is realized in the diff** — PASS. All eleven checked criteria
+   land in code: the row opens (`TaskRow.tsx:96`) and `TaskDetailFields.tsx:84`
+   draws the anchor cards; `TasksMoreSheet.tsx:31` presses every row through
+   `morePlace` over the shared shelf segments; quick add carries
+   `FIELDS.when|where|priority|landsIn` with the lands-in foot;
+   `TasksToolbar.tsx:46` is one `horizontal` ScrollView; `TasksProjects.tsx` asks
+   for area and scope and both literal-name writes are gone; the overdue part alone
+   takes `styles.numAttention` while priority rides the title line;
+   `NotesHome.tsx:491` dispatches `restore-note-version` and
+   `version-chain.test.ts:97` asserts the pre-restore chain survives inside the new;
+   `locker-gateway.ts:147` dispatches `appQuery("locker","access",…)` and
+   `LockerAccessView.test.tsx:92` asserts no secret is rendered; the divergences doc
+   carries the replacement Tasks/Notes phone-scope rows. Run against this tree:
+   `apps/mobile` 246 files / 2110 tests, blueprint Tasks/Notes/Agenda/Locker 50 / 978,
+   `handler-reachability` 17, both package typechecks and the e2e tsconfig clean,
+   `test:comment-density` ok, `test:accessibility` 5/5, `test:hygiene-ratchet` at
+   budget (785) with no budget file touched. Slice G's claim now holds.
+
+3. **The checklist mirrors the issue** — PASS. All twelve of #882's acceptance
+   criteria appear, in the issue's order, in the issue's own words; the slice plan
+   was demoted to prose below the list. The one unchecked box is the honest one:
+   `locker.action.export` is genuinely still in `NATIVE_FALLBACK`, and the stated
+   reason checks out — `exportWrite` in `packages/blueprints/apps/locker/writes.ts`
+   holds the literal, `locker-writes.ts:193` calls it and posts
+   `action: write.action`, so the phone does dispatch it and the mobile scan cannot
+   see it. The other three dead entries are gone. One residue: "Approved deviations —
+   None" now sits alongside an acceptance criterion the receipt itself marks as
+   deviated; that line should name it.
 
 ## Out of scope
 
