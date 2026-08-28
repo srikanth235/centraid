@@ -2,6 +2,15 @@
 
 ## Open
 
+- **Three surfaces #882 added to the phone are unvirtualized.**
+  `apps/mobile/src/apps/notes/NotesPlaces.tsx`, `NotesHistory.tsx` and
+  `apps/mobile/src/apps/locker/LockerAccessView.tsx` render through a `ScrollView`
+  with `.map()` rather than a `FlatList`, and none is pinned by
+  `scripts/accessibility-contract.test.mjs`. Locker's Access history is the one
+  that will bite first: the phone route carries no `item_id`, so it reads **every**
+  item's history — an unbounded list with no windowing. Found by the independent
+  audit on #882, not a regression of any existing contract (these files are new),
+  and the fix is the same shape the Tasks board already uses.
 - **Agenda's search field appears to stall while you type.** The input is
   controlled off `state.search`, but `applySearchInput` is a trailing-edge 200ms
   debounce, so the value the field renders only catches up after the pause.
