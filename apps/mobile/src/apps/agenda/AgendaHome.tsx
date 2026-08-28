@@ -1,10 +1,9 @@
 // Agenda on the phone: Day, Schedule and Waiting on, with the band the app
-// has claimed carrying the four destinations.
+// has claimed carrying those three plus Search.
 //
 // THERE IS NO MONTH OR WEEK GRID HERE. A seven-column grid at 390pt gives
-// 42pt cells, under the 44pt tap-target floor, so both fall back to Day —
-// the same fallback the web surface makes at a narrow width, decided once in
-// `agenda-band.ts` and honoured here.
+// 42pt cells, under the 44pt tap-target floor, so neither is a destination —
+// decided once in the blueprint table `agenda-band.ts` derives from.
 //
 // THE GRID IS FOR THINGS WITH A TIME COST: every row below came from
 // `core.event`. The day-context layers decorate a day and NEVER become a row

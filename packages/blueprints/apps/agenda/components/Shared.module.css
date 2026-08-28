@@ -11,6 +11,22 @@
   background: var(--dot-hue, var(--text-faint));
 }
 
+/* The Search destination's row. It spans the pane, so it reads the inherited
+   page margin like every other row. */
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--agenda-margin);
+  border-block-end: 1px solid var(--line);
+}
+
+.searchField {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+}
+
 /* Numerics: tabular figures plus the bidi isolation that keeps `today, 17:00`
    from reordering under RTL. The two always travel together. */
 .num {

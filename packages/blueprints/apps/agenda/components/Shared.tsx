@@ -1,13 +1,50 @@
 // EVERY vault string passes through `displayText` before the DOM — it strips
 // invisible control/bidi characters. Links take `safeExternalUrl`: escaping
 // never makes `javascript:` safe.
-import type { ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 
 import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { snippetSegments } from "../format.ts";
-import { PENDING_MARK } from "../view-copy.ts";
+import { CLOSE, PENDING_MARK, SEARCH_LABEL } from "../view-copy.ts";
 
 import styles from "./Shared.module.css";
+
+/** Where the band's Search tab and the bar's Search icon both land. */
+export function SearchField({
+  value,
+  onSearch,
+  onClose,
+}: {
+  value: string;
+  onSearch: (value: string) => void;
+  onClose: () => void;
+}): ReactNode {
+  return (
+    <div className={styles.searchRow}>
+      <label className={styles.searchField}>
+        <span className="kit-sr-only">{SEARCH_LABEL}</span>
+        <input
+          id="searchInput"
+          type="search"
+          className="kit-input"
+          placeholder={SEARCH_LABEL}
+          value={value}
+          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+            onSearch(event.target.value)
+          }
+        />
+      </label>
+      <button
+        type="button"
+        className="kit-icon-btn"
+        aria-label={CLOSE}
+        onClick={onClose}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
 
 export function CalendarDot({ hue }: { hue: string | null }): ReactNode {
   if (!hue) return null;

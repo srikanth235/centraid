@@ -34,7 +34,7 @@ import { ListView } from "./components/ListViews.tsx";
 import { MoreSheet } from "./components/MoreSheet.tsx";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { CalendarList, MiniMonth } from "./components/Rail.tsx";
-import { EmptyState } from "./components/Shared.tsx";
+import { EmptyState, SearchField } from "./components/Shared.tsx";
 import {
   dueCountFor,
   dueTasksFor,
@@ -67,6 +67,7 @@ import {
   partlyDeniedLine,
 } from "./view-copy.ts";
 import {
+  BAND_SEARCH_ID,
   bucketByDay,
   defaultView,
   findEvent,
@@ -131,6 +132,7 @@ export function Root({
   const [ready, setReady] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [consent, setConsent] = useState<{ message: string } | null>(null);
   /** A read that came back FAILED — the only evidence for "out of reach". */
   const [readFailedState, setReadFailedState] = useState(false);
@@ -358,6 +360,12 @@ export function Root({
     },
     [load]
   );
+
+  /** A closed field that still filters is a hidden filter. */
+  const closeSearch = useCallback(() => {
+    logic.clearSearch();
+    setSearchOpen(false);
+  }, [logic]);
 
   const toggleCalendar = useCallback((calendarId: string) => {
     const hidden = stateRef.current.hiddenCals;
@@ -619,7 +627,7 @@ export function Root({
         onToday: goToday,
         onStep: step,
         onNew: openCreate,
-        onSearch: () => setMoreOpen(true),
+        onSearch: () => setSearchOpen(true),
       })
     );
   }, [
@@ -644,7 +652,10 @@ export function Root({
     frame.claimBand(
       bandClaim(
         view,
-        (segment) => setView(segment as ViewKind),
+        (segment) => {
+          if (segment === BAND_SEARCH_ID) setSearchOpen(true);
+          else setView(segment as ViewKind);
+        },
         () => setMoreOpen((open) => !open)
       )
     );
@@ -766,6 +777,13 @@ export function Root({
           ) : (
             <span>{RAIL_DAY_CONTEXT_EMPTY}</span>
           ),
+          searchField: searchOpen ? (
+            <SearchField
+              value={state.search}
+              onSearch={(value) => logic.applySearchInput(value)}
+              onClose={closeSearch}
+            />
+          ) : null,
           stateRow,
           canvas,
           detail: selected ? (
@@ -796,15 +814,13 @@ export function Root({
             />
           ) : null,
           overlays,
-          // Carries the search FIELD: the rail holds filters but no field.
+          // The rail's filters where there is no rail — never a second Search.
           moreSheet: moreOpen ? (
             <MoreSheet
               calendars={data.calendars}
               hidden={state.hiddenCals}
               hueFor={hueFor}
-              search={state.search}
               onToggleCalendar={toggleCalendar}
-              onSearch={(value) => logic.applySearchInput(value)}
               onClose={() => setMoreOpen(false)}
             />
           ) : null,
