@@ -1,26 +1,50 @@
 // Tasks on the phone (Tasks spec §1–§7; #834). EVERY destination — the four
-// band places, the six lenses behind More, the detail place — is a value this
-// file switches on (`tasks-places.ts`); the navigator gives Tasks ONE route.
+// band places, the six lenses behind More, the detail place, one project — is a
+// value this file switches on (`tasks-places.ts`); the navigator gives Tasks
+// ONE route.
 // THE ARITHMETIC IS THE WEB APP'S: groups, rules and strings come from
 // `@centraid/blueprints/apps/tasks/*`; this file draws and dispatches.
-// A FLATLIST, NOT A SCROLLVIEW (no upper bound on rows).
 // FILING IS A LONG-PRESS AND A DESTINATION; the row's own `sort_order` is
 // carried through `organize-task`, not reset behind manual order.
+// A CHECK-OFF LANDS ON THE ONE STATUS LINE with Undo, never a toast.
 
 import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, Pressable, View } from "react-native";
 
-import { isOpen } from "@centraid/blueprints/apps/tasks/logic";
-import { allowsQuickAdd } from "@centraid/blueprints/apps/tasks/shelves";
-import type { Task } from "@centraid/blueprints/apps/tasks/types";
 import {
-  DAY_ONE,
+  lensedRows,
+  nextSort,
+  sortGroups,
+  toggleLens,
+  TASKS_SCOPE,
+} from "@centraid/blueprints/apps/tasks/board-view";
+import type {
+  TasksLensKey,
+  TasksSortKey,
+} from "@centraid/blueprints/apps/tasks/board-view";
+import { openCountByProject } from "@centraid/blueprints/apps/tasks/projects";
+import {
+  QUICK_ADD_EMPTY,
+  quickAddFiling,
+  quickAddInput,
+  quickAddReady,
+} from "@centraid/blueprints/apps/tasks/quick-add";
+import type { QuickAddDraft } from "@centraid/blueprints/apps/tasks/quick-add";
+import {
+  allowsQuickAdd,
+  showsBoard,
+} from "@centraid/blueprints/apps/tasks/shelves";
+import type { Project, Task } from "@centraid/blueprints/apps/tasks/types";
+import {
+  DONE,
   GROUPS,
-  QUICK_ADD,
-  TODAY_DONE,
+  UNDO,
+  shelfCopy,
 } from "@centraid/blueprints/apps/tasks/view-copy";
+import { landedTaskId } from "@centraid/blueprints/apps/tasks/writes";
 
-import { Text, TextInput } from "../../kit/components/NativeText";
+import { Text } from "../../kit/components/NativeText";
+import { postStatus } from "../../kit/components/status-line";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import {
   READ_ONLY_SOURCE_REASON,
@@ -29,21 +53,32 @@ import {
 import { useTheme } from "../../kit/theme";
 import type { TasksScreenProps as TasksRouteProps } from "../../navigation";
 import TaskDetail from "./TaskDetail";
-import TaskRow, { isClosed } from "./TaskRow";
+import { isClosed } from "./TaskRow";
 import { TASKS_MORE_LABEL } from "./tasks-band";
-import { findTask, flattenGroups, groupsFor } from "./tasks-groups";
-import type { TasksListItem } from "./tasks-groups";
+import {
+  findTask,
+  flattenGroups,
+  groupsFor,
+  windowItems,
+} from "./tasks-groups";
 import { bandKeyFor, placeTitle, shelfForPlace } from "./tasks-places";
 import type { TasksPlaceKey } from "./tasks-places";
-import { logbookShown } from "./tasks-seat-copy";
 import TasksCatchUp from "./TasksCatchUp";
+import TasksDenied from "./TasksDenied";
 import { makeTasksStyles } from "./TasksHome.styles";
 import TasksMoreSheet from "./TasksMoreSheet";
 import TasksPlaceHeader from "./TasksPlaceHeader";
+import TasksProject from "./TasksProject";
+import TasksProjects from "./TasksProjects";
+import TasksQuickAdd from "./TasksQuickAdd";
 import TasksReminders from "./TasksReminders";
+import TasksRows from "./TasksRows";
 import TasksScreen from "./TasksScreen";
 import TasksSearch from "./TasksSearch";
+import TasksToolbar from "./TasksToolbar";
 import { useTasks, useTasksWrite } from "./useTasks";
+
+const WINDOW_STEP = 50;
 
 export default function TasksHome({
   navigation,
@@ -51,15 +86,29 @@ export default function TasksHome({
   const { colors } = useTheme();
   const styles = useMemo(() => makeTasksStyles(colors), [colors]);
   const board = useTasks();
+  const replica = useReplica();
   const write = useTasksWrite(navigation);
   const [place, setPlace] = useState<TasksPlaceKey>("today");
-  /** Beside the destination, not instead of it: closing returns to the row. */
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null);
   // ONE CLOCK PER MOUNT, so headers and rows cannot straddle midnight.
   const [now, setNow] = useState(() => new Date().toISOString());
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState<QuickAddDraft>(QUICK_ADD_EMPTY);
+  const [lenses, setLenses] = useState<readonly TasksLensKey[]>([]);
+  const [sort, setSort] = useState<TasksSortKey>("priority");
+  const [limit, setLimit] = useState(WINDOW_STEP);
   /** The task a long-press picked up, waiting for somewhere to land. */
   const [moving, setMoving] = useState<Task | null>(null);
+
+  const scopes = useMemo(
+    () =>
+      (replica.scopes ?? []).map((scope) => ({
+        id: scope.vaultId,
+        label: scope.label,
+        canWrite: scope.canWrite,
+      })),
+    [replica.scopes]
+  );
 
   const projectName = useCallback(
     (id: string | null | undefined): string | null =>
@@ -67,54 +116,78 @@ export default function TasksHome({
     [board.projects]
   );
 
-  const groups = useMemo(
-    () =>
-      groupsFor({
-        place,
-        tasks: board.tasks,
-        now,
-        projectName: (id) => projectName(id) ?? GROUPS.inbox,
-      }),
-    [board.tasks, now, place, projectName]
+  const shelf = shelfForPlace(place) ?? null;
+  // THE TOOLBAR REACHES ONLY WHERE IT IS DRAWN: off the board a lens is a
+  // hidden filter, and the sort would overrule the Logbook's own order.
+  const rows = useMemo(
+    () => (showsBoard(shelf) ? lensedRows(board.tasks, lenses) : board.tasks),
+    [board.tasks, lenses, shelf]
   );
 
+  const groups = useMemo(() => {
+    const found = groupsFor({
+      place,
+      tasks: rows,
+      now,
+      projectName: (id) => projectName(id) ?? GROUPS.inbox,
+    });
+    if (!found) return null;
+    return showsBoard(shelf) ? sortGroups(found, sort) : found;
+  }, [now, place, projectName, rows, shelf, sort]);
+
   const items = useMemo(() => (groups ? flattenGroups(groups) : []), [groups]);
+  const shownItems = useMemo(() => windowItems(items, limit), [items, limit]);
 
   const readOnly = useMemo(() => {
-    const rows = items.flatMap((item) =>
+    const held = items.flatMap((item) =>
       item.kind === "task" ? [item.task] : []
     );
-    return rows.length > 0 && rows.every((task) => !rowCanWrite(task));
+    return held.length > 0 && held.every((task) => !rowCanWrite(task));
   }, [items]);
 
-  const toggle = useCallback(
-    (task: Task) => {
-      if (!rowCanWrite(task)) return;
+  const setStatus = useCallback(
+    (task: Task, status: Task["status"]) => {
       void write(
         "set-status",
-        {
-          task_id: task.task_id,
-          status: isClosed(task) ? "needs-action" : "completed",
-        },
+        { task_id: task.task_id, status },
         task.scope_id
       );
     },
     [write]
   );
 
+  const toggle = useCallback(
+    (task: Task) => {
+      if (!rowCanWrite(task)) return;
+      if (isClosed(task)) {
+        setStatus(task, "needs-action");
+        return;
+      }
+      setStatus(task, "completed");
+      // Undo IS reopening — the same door the box offers, said in words.
+      postStatus(DONE, {
+        action: { label: UNDO, run: () => setStatus(task, "needs-action") },
+      });
+    },
+    [setStatus]
+  );
+
   const openTask = useCallback((task: Task) => setOpenTaskId(task.task_id), []);
 
-  const capture = useCallback(() => {
-    const title = draft.trim();
-    if (!title) return;
-    setDraft("");
-    void write("add", {
-      title,
-      ...(place === "today" ? { due_at: now.slice(0, 10) } : {}),
-    });
-  }, [draft, now, place, write]);
+  const capture = useCallback(async (): Promise<void> => {
+    if (!quickAddReady(draft)) return;
+    const filed = draft;
+    setDraft(QUICK_ADD_EMPTY);
+    const outcome = await write(
+      "add",
+      quickAddInput(filed, now),
+      filed.scopeId
+    );
+    const taskId = landedTaskId(outcome);
+    const filing = taskId ? quickAddFiling(filed, taskId) : null;
+    if (filing) await write("organize-task", filing, filed.scopeId);
+  }, [draft, now, write]);
 
-  /** File the picked-up task, preserving its own manual order. */
   const fileInto = useCallback(
     (projectId: string) => {
       const task = moving;
@@ -133,7 +206,7 @@ export default function TasksHome({
     [moving, write]
   );
 
-  // Pull-to-refresh re-reads the clock too: after midnight, "today" changed.
+  // After midnight, "today" changed: a refresh re-reads the clock too.
   const handleRefresh = useCallback(async (): Promise<void> => {
     setNow(new Date().toISOString());
     await board.refresh();
@@ -145,8 +218,8 @@ export default function TasksHome({
   }, [handleRefresh]);
 
   const moveAllToToday = useCallback(
-    (rows: readonly Task[]) => {
-      for (const row of rows) {
+    (batch: readonly Task[]) => {
+      for (const row of batch) {
         if (!rowCanWrite(row)) continue;
         void write(
           "edit",
@@ -158,128 +231,73 @@ export default function TasksHome({
     [now, write]
   );
 
-  const renderItem = useCallback(
-    ({ item }: { item: TasksListItem }): React.JSX.Element => {
-      if (item.kind === "header") {
-        return (
-          <View style={styles.groupHead}>
-            <Text
-              style={[
-                styles.groupLabel,
-                item.group.attention ? styles.groupLabelAttention : undefined,
-              ]}
-            >
-              {item.group.label}
-            </Text>
-            {item.group.meta ? (
-              <Text style={styles.num}>{item.group.meta}</Text>
-            ) : null}
-            {/* Withheld where no row could take it. */}
-            {item.group.attention &&
-            item.group.rows.some((row) => rowCanWrite(row)) ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={GROUPS.moveAll}
-                onPress={() => moveAllToToday(item.group.rows)}
-                style={styles.headVerb}
-              >
-                <Text style={styles.verbText}>{GROUPS.moveAll}</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        );
-      }
-      return (
-        <TaskRow
-          task={item.task}
-          now={now}
-          styles={styles}
-          projectName={projectName(item.task.project_id)}
-          child={item.child === true}
-          picked={moving?.task_id === item.task.task_id}
-          onToggle={toggle}
-          onOpen={openTask}
-          onPickUp={setMoving}
-        />
-      );
-    },
-    [moveAllToToday, moving, now, openTask, projectName, styles, toggle]
+  /** The Inbox's ONE gesture per undecided task; elsewhere the long-press. */
+  const inboxAct = useMemo(
+    () =>
+      place === "inbox"
+        ? {
+            label: GROUPS.file,
+            run: (task: Task) => {
+              setMoving(task);
+              setPlace("projects");
+            },
+          }
+        : undefined,
+    [place]
   );
 
-  const projectsPane = (
-    <View style={styles.pane}>
-      {board.projects.map((project) => (
-        <View key={project.project_id} style={styles.projectRow}>
-          <Text style={styles.title}>{project.name}</Text>
-          <Text style={styles.num}>
-            {
-              board.tasks.filter(
-                (task) => task.project_id === project.project_id && isOpen(task)
-              ).length
-            }
-          </Text>
-          {moving ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={project.name}
-              onPress={() => fileInto(project.project_id)}
-              style={styles.headVerb}
-            >
-              <Text style={styles.verbText}>{GROUPS.addTask}</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={project.name}
-              onPress={() => {
-                void write("save-section", {
-                  project_id: project.project_id,
-                  name: GROUPS.today,
-                });
-              }}
-              style={styles.headVerb}
-            >
-              <Text style={styles.verbText}>{GROUPS.today}</Text>
-            </Pressable>
-          )}
-        </View>
-      ))}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={GROUPS.addTask}
-        onPress={() => {
-          void write("save-project", { name: GROUPS.inbox });
-        }}
-        style={styles.primary}
-      >
-        <Text style={styles.primaryText}>{GROUPS.addTask}</Text>
-      </Pressable>
-    </View>
-  );
+  const boardPlace = groups !== null && showsBoard(shelf);
 
   const rowsList = (
-    <FlatList
-      data={items}
-      keyExtractor={(item) => item.key}
-      renderItem={renderItem}
-      ListEmptyComponent={
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>
-            {board.tasks.length === 0 ? DAY_ONE : TODAY_DONE}
-          </Text>
-        </View>
-      }
-      // The Logbook here has no denominator; the foot says so.
-      ListFooterComponent={
-        place === "logbook" ? (
-          <Text style={styles.num}>
-            {logbookShown(items.filter((item) => item.kind === "task").length)}
-          </Text>
-        ) : null
-      }
-      contentContainerStyle={styles.listContent}
-      refreshing={board.loading}
+    <TasksRows
+      place={place}
+      items={shownItems.items}
+      shown={shownItems.shown}
+      total={shownItems.total}
+      now={now}
+      styles={styles}
+      loading={board.loading}
+      dayOne={board.tasks.length === 0}
+      moving={moving}
+      {...(inboxAct ? { act: inboxAct } : {})}
+      projectName={projectName}
+      onToggle={toggle}
+      onOpen={openTask}
+      onPickUp={setMoving}
+      onMoveAll={moveAllToToday}
+      onShowMore={() => setLimit(limit + WINDOW_STEP)}
       onRefresh={onRefresh}
+    />
+  );
+
+  const openProject: Project | undefined = board.projects.find(
+    (project) => project.project_id === openProjectId
+  );
+
+  const projectsPane = openProject ? (
+    <TasksProject
+      project={openProject}
+      sections={board.sections}
+      tasks={board.tasks}
+      now={now}
+      styles={styles}
+      write={write}
+      onBack={() => setOpenProjectId(null)}
+      onToggle={toggle}
+      onOpen={openTask}
+    />
+  ) : (
+    <TasksProjects
+      projects={board.projects}
+      counts={openCountByProject(board.tasks)}
+      scopes={scopes}
+      filing={moving !== null}
+      styles={styles}
+      onOpen={setOpenProjectId}
+      onFile={fileInto}
+      onCreate={(input, scopeId) => {
+        void write("save-project", input, scopeId);
+      }}
     />
   );
 
@@ -323,11 +341,17 @@ export default function TasksHome({
   const openRow = findTask(board.tasks, openTaskId);
   const behindMore = bandKeyFor(place) === "more" && place !== "more";
   const quickAdd =
-    !openRow &&
-    allowsQuickAdd(shelfForPlace(place) ?? null) &&
-    place !== "more";
+    !openRow && !openProject && allowsQuickAdd(shelf) && place !== "more";
+  const refusal = board.error && board.tasks.length === 0 ? board.error : null;
 
-  const body = openRow ? (
+  const body = refusal ? (
+    <TasksDenied
+      receipt={refusal}
+      scope={TASKS_SCOPE}
+      when={now.slice(0, 16).replace("T", " ")}
+      styles={styles}
+    />
+  ) : openRow ? (
     <TaskDetail
       task={openRow}
       now={now}
@@ -348,6 +372,17 @@ export default function TasksHome({
           styles={styles}
         />
       ) : null}
+      {boardPlace ? (
+        <TasksToolbar
+          count={shownItems.total}
+          unit={shelfCopy(shelf).unit}
+          lenses={lenses}
+          sort={sort}
+          styles={styles}
+          onLens={(key) => setLenses(toggleLens(lenses, key))}
+          onSort={() => setSort(nextSort(sort))}
+        />
+      ) : null}
       {placeBody}
     </>
   );
@@ -357,6 +392,7 @@ export default function TasksHome({
       current={bandKeyFor(place)}
       onDestination={(key) => {
         setOpenTaskId(null);
+        setOpenProjectId(null);
         setPlace(key);
       }}
       onHome={() => navigation.navigate("Home")}
@@ -366,33 +402,15 @@ export default function TasksHome({
         <Text style={styles.readOnly}>{READ_ONLY_SOURCE_REASON}</Text>
       ) : null}
       {body}
-      {/* Capture at the foot: one field + one filled control; it files where
-          the member is looking. */}
-      {quickAdd ? (
-        <View style={styles.capture}>
-          <TextInput
-            accessibilityLabel={QUICK_ADD.add}
-            placeholder={QUICK_ADD.touchPlaceholder}
-            placeholderTextColor={colors.textGhost}
-            value={draft}
-            onChangeText={setDraft}
-            onSubmitEditing={capture}
-            style={styles.captureField}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={QUICK_ADD.add}
-            accessibilityState={{ disabled: draft.trim().length === 0 }}
-            disabled={draft.trim().length === 0}
-            onPress={capture}
-            style={[
-              styles.primary,
-              draft.trim().length === 0 ? styles.primaryOff : undefined,
-            ]}
-          >
-            <Text style={styles.primaryText}>{QUICK_ADD.add}</Text>
-          </Pressable>
-        </View>
+      {quickAdd && !refusal ? (
+        <TasksQuickAdd
+          draft={draft}
+          projects={board.projects}
+          scopes={scopes}
+          styles={styles}
+          onDraft={setDraft}
+          onAdd={() => void capture()}
+        />
       ) : null}
     </TasksScreen>
   );

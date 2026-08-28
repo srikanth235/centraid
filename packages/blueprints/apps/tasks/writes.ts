@@ -47,6 +47,12 @@ export function landedTask<T extends { task_id: string; title: string }>(
   );
 }
 
+/** The id `add` minted, or `null` while the write is still queued. */
+export function landedTaskId(outcome: unknown): string | null {
+  const output = (outcome as { output?: { task_id?: unknown } } | null)?.output;
+  return typeof output?.task_id === "string" ? output.task_id : null;
+}
+
 /** The delete-confirm's own write: remove the row, do not cancel it. */
 export function removeTaskWrite(taskId: string): {
   action: "delete";

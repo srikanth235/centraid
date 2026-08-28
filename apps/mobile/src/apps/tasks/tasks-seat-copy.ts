@@ -39,3 +39,8 @@ export const ATTACHED_SEAT_NOTE = "Pinned where the files are, not from here.";
 /** The detail place's own two rows of chrome. */
 export const NOTE_PLACEHOLDER = "A note, for the version of you on Friday";
 export const TAG_PLACEHOLDER = "Add a tag";
+
+export const READING_TASKS = "Reading your tasks";
+
+export const PROJECT_NAME_PLACEHOLDER = "What is this project for?";
+export const TASK_NAME_PLACEHOLDER = "What is it?";

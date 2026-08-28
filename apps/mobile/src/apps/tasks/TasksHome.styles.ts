@@ -77,6 +77,9 @@ export const makeTasksStyles = (colors: ThemeColors) =>
     chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing[2] },
     chipText: { ...t("control"), color: colors.textSoft },
     chipTextOn: { color: colors.text },
+    // A project's dot is a CONTENT marker on the row, never a control: no
+    // press, no state, and `aria-hidden` on every seat that has one.
+    dot: { borderRadius: radii.pill, height: 8, width: 8 },
     detailNote: {
       ...t("body"),
       color: colors.textSoft,
@@ -150,6 +153,9 @@ export const makeTasksStyles = (colors: ThemeColors) =>
     // Every number is tabular and bidi-isolated: without the isolate,
     // `today, 17:00` reorders under RTL and a member reads a time nobody wrote.
     num: { ...t("mono"), color: colors.textFaint },
+    // OVERDUE IS THE ATTENTION TONE, NEVER RED, and it is worn by the ONE part
+    // that is overdue rather than by the whole meta line.
+    numAttention: { color: colors.seam },
     pane: { gap: spacing[2], padding: spacing[4] },
     pendingWords: { ...t("annotLabel"), color: colors.textFaint },
     placeHead: {
@@ -166,6 +172,9 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingTop: spacing[2],
     },
+    // Optional, so it reserves nothing: the mark is absent at level 0 and the
+    // title takes the whole line.
+    priorityMark: { ...t("eyebrow"), color: colors.textSoft },
     primary: {
       alignItems: "center",
       backgroundColor: colors.accentFill,
@@ -185,6 +194,7 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       gap: spacing[2],
       minHeight: TOUCH,
     },
+    rowActs: { alignItems: "center", flexDirection: "row", gap: spacing[2] },
     rowChild: { paddingStart: spacing[6] },
     rowMain: { flex: 1, justifyContent: "center", minHeight: TOUCH },
     rowPending: {
@@ -211,11 +221,30 @@ export const makeTasksStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[3],
     },
     title: { ...t("body"), color: colors.text, flexShrink: 1 },
+    titleLine: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing[2],
+    },
     titleDone: {
       color: colors.textFaint,
       textDecorationLine: "line-through",
     },
+    // ONE HORIZONTAL SCROLLER, never a wrap: three chips and a verb cannot
+    // stack at 390px without pushing the first task off the screen.
+    toolbar: {
+      borderBottomColor: colors.line,
+      borderBottomWidth: borders.hairline,
+    },
+    toolbarRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing[2],
+      paddingHorizontal: spacing[4],
+      paddingVertical: spacing[2],
+    },
     // The vault marker is a read-only STATUS chip, never a control colour.
     vault: { ...t("eyebrow"), color: colors.textFaint },
     verbText: { ...t("control"), color: colors.textSoft },
+    windowFoot: { alignItems: "center", gap: spacing[2], padding: spacing[4] },
   });

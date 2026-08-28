@@ -9,7 +9,6 @@ import React from "react";
 import { Pressable, View } from "react-native";
 
 import { readPendingOverlay } from "@centraid/blueprints/apps/_shared/pending-overlay";
-import { dueLabel, metaParts } from "@centraid/blueprints/apps/tasks/format";
 import type { Task } from "@centraid/blueprints/apps/tasks/types";
 import {
   PENDING_ROW,
@@ -23,6 +22,7 @@ import {
   rowCanWrite,
 } from "../../kit/replica/row-provenance";
 import { useTheme } from "../../kit/theme";
+import { taskRowModel } from "./tasks-row-model";
 import type { TasksStyles } from "./TasksHome.styles";
 
 export function isClosed(task: Task): boolean {
@@ -39,6 +39,8 @@ export interface TaskRowProps {
   onToggle: (task: Task) => void;
   onOpen: (task: Task) => void;
   onPickUp?: (task: Task) => void;
+  /** The row's ONE act where the place gives it one (the Inbox). */
+  act?: { label: string; run: (task: Task) => void };
 }
 
 export default function TaskRow({
@@ -51,6 +53,7 @@ export default function TaskRow({
   onToggle,
   onOpen,
   onPickUp,
+  act,
 }: TaskRowProps): React.JSX.Element {
   const { colors } = useTheme();
   // The pending marker is drawn INLINE: one unsettled row in one app is not
@@ -60,15 +63,11 @@ export default function TaskRow({
   );
   const done = isClosed(task);
   const writable = rowCanWrite(task);
-  const meta =
-    metaParts({
-      task,
-      now,
-      ...(projectName ? { projectName } : {}),
-    })
-      .map((part) => part.text)
-      .join(" · ") ||
-    (dueLabel(task.due_at, now) ?? "");
+  const { meta, priority } = taskRowModel({
+    task,
+    now,
+    ...(projectName ? { projectName } : {}),
+  });
 
   return (
     <View
@@ -98,15 +97,28 @@ export default function TaskRow({
         {...(writable && onPickUp ? { onLongPress: () => onPickUp(task) } : {})}
         style={styles.rowMain}
       >
-        <Text
-          numberOfLines={1}
-          style={[styles.title, done ? styles.titleDone : undefined]}
-        >
-          {task.title}
-        </Text>
-        {meta ? (
+        <View style={styles.titleLine}>
+          <Text
+            numberOfLines={1}
+            style={[styles.title, done ? styles.titleDone : undefined]}
+          >
+            {task.title}
+          </Text>
+          {priority ? (
+            <Text style={styles.priorityMark}>{priority}</Text>
+          ) : null}
+        </View>
+        {meta.length > 0 ? (
           <Text numberOfLines={1} style={styles.num}>
-            {meta}
+            {meta.map((part, index) => (
+              <Text
+                key={part.text}
+                style={part.attention ? styles.numAttention : undefined}
+              >
+                {index > 0 ? " · " : ""}
+                {part.text}
+              </Text>
+            ))}
           </Text>
         ) : null}
         {pending ? (
@@ -115,7 +127,21 @@ export default function TaskRow({
           </Text>
         ) : null}
       </Pressable>
-      {task.scope_id ? <Text style={styles.vault}>{VAULT_MARKER}</Text> : null}
+      <View style={styles.rowActs}>
+        {task.scope_id ? (
+          <Text style={styles.vault}>{VAULT_MARKER}</Text>
+        ) : null}
+        {act && writable ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${act.label} ${task.title}`}
+            onPress={() => act.run(task)}
+            style={styles.headVerb}
+          >
+            <Text style={styles.verbText}>{act.label}</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }

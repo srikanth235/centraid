@@ -39,18 +39,19 @@ export function catchUpWrites(
   }));
 }
 
-/** Date-only first, then moment, then title — a date-only task has no moment
- *  and must not string-sort after a 17:00 meeting (the midnight problem). */
-export function byDue(a: Task, b: Task): number {
+/** Date-only first, then moment — a date-only task has no moment and must not
+ *  string-sort after a 17:00 meeting. Undated sorts LAST (ruling 4). Same-day
+ *  rows stay TIED here, for callers that break the tie their own way. */
+export function byDueDay(a: Task, b: Task): number {
   const left = a.next_due ?? a.due_at ?? "";
   const right = b.next_due ?? b.due_at ?? "";
-  // Undated sorts LAST, never first (ruling 4).
-  if (left === "" || right === "") {
-    if (left !== right) return left === "" ? 1 : -1;
-    return a.title.localeCompare(b.title);
-  }
-  if (left !== right) return left < right ? -1 : 1;
-  return a.title.localeCompare(b.title);
+  if (left === right) return 0;
+  if (left === "" || right === "") return left === "" ? 1 : -1;
+  return left < right ? -1 : 1;
+}
+
+export function byDue(a: Task, b: Task): number {
+  return byDueDay(a, b) || a.title.localeCompare(b.title);
 }
 
 /** Today: overdue first with its own header and its own verbs, then today. */

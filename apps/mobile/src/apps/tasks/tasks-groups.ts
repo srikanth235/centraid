@@ -1,9 +1,6 @@
 // Which rows each place shows. THE ARITHMETIC IS THE WEB APP'S: every group
-// here comes back from `apps/tasks/logic.ts`; this module only says which of
-// those answers a place is asking for.
-//
-// `null` means the place draws a surface of its own rather than a row list, so
-// a new place cannot fall through to Today's rows by accident.
+// comes back from `apps/tasks/logic.ts`. `null` means the place draws a
+// surface of its own, so a new one cannot fall through to Today's rows.
 
 import { weekdayName } from "@centraid/blueprints/apps/tasks/format";
 import {
@@ -39,8 +36,6 @@ export function groupsFor(input: TasksGroupsInput): TaskGroup[] | null {
   return null;
 }
 
-/** A row by id, families included. The board holds roots with their children
- *  nested, so a subtask is only reachable through its parent. */
 export function findTask(
   rows: readonly Task[],
   taskId: string | null
@@ -56,11 +51,32 @@ export function findTask(
   return undefined;
 }
 
-/** One flat item the list draws: a group header, or a task under it — the
- *  child rides the same list so virtualization reaches it. */
 export type TasksListItem =
   | { kind: "header"; key: string; group: TaskGroup }
   | { kind: "task"; key: string; task: Task; child?: boolean };
+
+/** A header whose rows all fell past the edge is dropped — a group name over
+ *  nothing is a claim the list is not making. */
+export function windowItems(
+  items: readonly TasksListItem[],
+  window: number
+): { items: TasksListItem[]; shown: number; total: number } {
+  const total = items.filter((item) => item.kind === "task").length;
+  if (total <= window) return { items: [...items], shown: total, total };
+  const kept: TasksListItem[] = [];
+  let shown = 0;
+  for (const item of items) {
+    if (item.kind === "task") {
+      if (shown >= window) break;
+      shown += 1;
+    }
+    kept.push(item);
+  }
+  while (kept.length > 0 && kept[kept.length - 1]?.kind === "header") {
+    kept.pop();
+  }
+  return { items: kept, shown, total };
+}
 
 export function flattenGroups(groups: readonly TaskGroup[]): TasksListItem[] {
   return groups.flatMap((group) => [

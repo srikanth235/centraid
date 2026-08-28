@@ -14,7 +14,12 @@ import {
 import type { Task } from "@centraid/blueprints/apps/tasks/types";
 import { GROUPS } from "@centraid/blueprints/apps/tasks/view-copy";
 
-import { findTask, flattenGroups, groupsFor } from "./tasks-groups";
+import {
+  findTask,
+  flattenGroups,
+  groupsFor,
+  windowItems,
+} from "./tasks-groups";
 import type { TasksPlaceKey } from "./tasks-places";
 
 const NOW = "2026-08-21T09:00:00Z";
@@ -79,5 +84,40 @@ describe("the flat list the FlatList walks", () => {
     expect(findTask([parent], "p")?.task_id).toBe("p");
     expect(findTask([parent], null)).toBeUndefined();
     expect(findTask([parent], "missing")).toBeUndefined();
+  });
+});
+
+describe("the window and the foot that states it", () => {
+  const items = flattenGroups([
+    { key: "a", label: "A", rows: [task({ task_id: "1" })] },
+    {
+      key: "b",
+      label: "B",
+      rows: [task({ task_id: "2" }), task({ task_id: "3" })],
+    },
+  ]);
+
+  it("says nothing is behind it when nothing is", () => {
+    const window = windowItems(items, 10);
+    expect(window).toStrictEqual({ items, shown: 3, total: 3 });
+  });
+
+  it("counts ROWS, never the headers riding with them", () => {
+    const window = windowItems(items, 2);
+    expect(window.shown).toBe(2);
+    expect(window.total).toBe(3);
+    expect(window.items.map((item) => item.key)).toStrictEqual([
+      "h:a",
+      "1",
+      "h:b",
+      "2",
+    ]);
+  });
+
+  it("drops a header whose every row fell past the edge", () => {
+    expect(windowItems(items, 1).items.map((item) => item.key)).toStrictEqual([
+      "h:a",
+      "1",
+    ]);
   });
 });

@@ -64,6 +64,7 @@ export const GROUPS = {
   catchUp: "Catch up",
   showMore: "Show more",
   addTask: "Add task",
+  file: "File",
 } as const;
 
 /** Two earned-quiet states, never one ambiguous "all clear" (§9). */
@@ -143,6 +144,7 @@ export const FIELDS = {
   when: "When",
   time: "Time",
   where: "Where",
+  area: "Area",
   project: "Project",
   priority: "Priority",
   effort: "Effort",
@@ -272,6 +274,48 @@ export const QUICK_ADD = {
 export function landsInFoot(place: string, vault: string): string {
   return `${place} · ${vault}`;
 }
+
+/** `none` is a CHOICE, so it rides the row rather than sitting outside it. */
+export const QUICK_ADD_WHEN = [
+  { key: "today", label: "Today" },
+  { key: "tomorrow", label: "Tomorrow" },
+  { key: "weekend", label: "This weekend" },
+  { key: "next-week", label: "Next week" },
+  { key: "none", label: "No date" },
+] as const;
+
+export const LENSES = [
+  { key: "effort", label: "Fits in 30 min" },
+  { key: "mine", label: "Mine" },
+  { key: "house", label: "House" },
+] as const;
+
+/** The toggle names the order it WILL take, never the one it is in. */
+export const SORT_LABELS = {
+  priority: "Priority within date",
+  manual: "Manual order",
+} as const;
+
+export function boardCount(shown: number, unit: string): string {
+  const singular = unit.endsWith("s") ? unit.slice(0, -1) : unit;
+  return `${shown} ${shown === 1 ? singular : unit}`;
+}
+
+/** A project may also belong to neither. */
+export const AREAS = ["Home", "Work"] as const;
+
+export const NEW_PROJECT = {
+  title: "New project",
+  name: "Name",
+  verb: "Create project",
+  note: "A project needs a name, an area, and the vault it lives in.",
+} as const;
+
+export const SECTIONS = {
+  none: "No section",
+  add: "Add section",
+  name: "Section name",
+} as const;
 
 export const SEARCH_COPY = {
   placeholder: "Search tasks",
