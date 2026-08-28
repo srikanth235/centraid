@@ -120,8 +120,26 @@ export function revokeConfirmBody(audienceLabel: string, noun: string): string {
 export const REVOKE_CONFIRM_ACTION = "Revoke";
 export const REVOKE_CANCEL_ACTION = "Keep sharing";
 
+/* REFUSED IS NOT UNREACHABLE (#880). A request that never left the device and
+ * a gateway that answered no are different facts, and one sentence for both
+ * makes an outage read as a refusal — the collapse this repo pins against
+ * elsewhere (`apps/mobile/src/apps/tally/tally-store.test.ts`,
+ * `docs/mobile-offline.md`). The `_FAILED` / `_UNREADABLE` sentences below are
+ * the GATEWAY'S half: it answered, and nothing it said may be replaced with a
+ * network story. The `_UNREACHABLE` sentences are the transport's half: no
+ * answer exists, so none is put in the gateway's mouth. `grant-door.ts` picks
+ * between them; it never guesses, the seat's transport says which happened. */
+
 export const GRANTS_UNREADABLE = "Shares could not be read.";
+export const GRANTS_UNREACHABLE =
+  "Shares could not be read — the gateway is out of reach.";
 
 export const REGISTRY_UNREADABLE = "Shareable items could not be read.";
+export const REGISTRY_UNREACHABLE =
+  "Shareable items are unknown — the gateway is out of reach.";
 export const GRANT_FAILED = "The share could not be recorded.";
+export const GRANT_UNREACHABLE =
+  "The share was not sent — the gateway is out of reach.";
 export const REVOKE_FAILED = "The share could not be revoked.";
+export const REVOKE_UNREACHABLE =
+  "The revoke was not sent — the gateway is out of reach.";

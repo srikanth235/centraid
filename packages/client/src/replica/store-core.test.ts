@@ -1,6 +1,9 @@
 // Proves the ReplicaSqliteStore core is driver-neutral: the same corpus runs
 // against the sqlite-wasm adapter (the web engine) and a node:sqlite adapter
 // (the CI stand-in for op-sqlite, which cannot load under vitest on macOS/node).
+// This half is the row, change-batch and search spec; the windowed bootstrap
+// walk and page reclamation are `store-core-bootstrap-walk.test.ts`, and the
+// node-driver maintenance suite is `store-core-storage-lifecycle.test.ts`.
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import type { Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { beforeAll, describe, expect, test } from "vitest";
@@ -14,7 +17,8 @@ import {
 import { NodeSqliteDriver } from "./node-sqlite-test-driver.js";
 import { SqliteReplicaStore } from "./sqlite-store.js";
 import { ReplicaSqliteStore } from "./store-core.js";
-import type { ReplicaChangeBatch, ReplicaSnapshot } from "./types.js";
+import { searchableSnapshot, snapshot } from "./store-core.test-fixtures.js";
+import type { ReplicaChangeBatch } from "./types.js";
 
 let sqlite3: Sqlite3Static;
 
@@ -24,103 +28,6 @@ describe("store-core", () => {
   });
 
   type MakeStore = () => ReplicaSqliteStore;
-
-  function snapshot(): ReplicaSnapshot {
-    return {
-      protocolVersion: 1,
-      vaultId: "vault-a",
-      schemaEpoch: "schema-1",
-      cursor: { epoch: "replica-1", seq: 2 },
-      shapes: [
-        {
-          shapeId: "shape-agenda",
-          appId: "agenda",
-          purpose: "dpv:ServiceProvision",
-          entities: [
-            {
-              entity: "core.event",
-              primaryKey: "event_id",
-              columns: ["event_id", "title", "status", "starts_at", "body"],
-              hasUnavailableFields: true,
-            },
-          ],
-        },
-      ],
-      rows: [
-        {
-          shapeId: "shape-agenda",
-          entity: "core.event",
-          rowId: "event-1",
-          values: {
-            event_id: "event-1",
-            title: "Earlier",
-            status: "open",
-            starts_at: "2026-07-15T08:00:00.000Z",
-          },
-          oversizedFields: ["body"],
-        },
-        {
-          shapeId: "shape-agenda",
-          entity: "core.event",
-          rowId: "event-2",
-          values: {
-            event_id: "event-2",
-            title: "Later",
-            status: "open",
-            starts_at: "2026-07-15T10:00:00.000Z",
-            body: "small",
-          },
-        },
-      ],
-    };
-  }
-
-  function searchableSnapshot(): ReplicaSnapshot {
-    return {
-      protocolVersion: 1,
-      vaultId: "vault-a",
-      schemaEpoch: "schema-search",
-      cursor: { epoch: "replica-search", seq: 1 },
-      shapes: [
-        {
-          shapeId: "shape-photos",
-          appId: "photos",
-          purpose: "dpv:ServiceProvision",
-          entities: [
-            {
-              entity: "core.content_item",
-              primaryKey: "content_id",
-              columns: ["content_id", "title", "deleted_at", "created_at"],
-            },
-          ],
-        },
-      ],
-      rows: [
-        {
-          shapeId: "shape-photos",
-          entity: "core.content_item",
-          rowId: "photo-new",
-          values: {
-            content_id: "photo-new",
-            title: "Today at the park",
-            deleted_at: null,
-            created_at: "2026-07-15T10:00:00.000Z",
-          },
-        },
-        {
-          shapeId: "shape-photos",
-          entity: "core.content_item",
-          rowId: "photo-off-window",
-          values: {
-            content_id: "photo-off-window",
-            title: "Moonlit campsite in Ladakh",
-            deleted_at: null,
-            created_at: "2024-01-01T10:00:00.000Z",
-          },
-        },
-      ],
-    };
-  }
 
   function runStoreConformance(makeStore: MakeStore): void {
     test("bootstraps a shape and executes a bounded local read", () => {
@@ -407,6 +314,92 @@ describe("store-core", () => {
       }
     });
 
+    test("an index churned by upserts and deletes answers like a freshly built one", () => {
+      // The FTS index is addressed by rowid rather than rescanned (see the DDL
+      // note on `replica_row.row_key`). Rowid discipline is only worth anything
+      // if it leaves the SAME index behind: this drives one store through
+      // update, delete and re-add, builds a second store directly at the
+      // resulting row set, and compares the search answers whole — hit set,
+      // order, bm25 `_rank` and `_snippet` included.
+      const churned = makeStore();
+      const clean = makeStore();
+      try {
+        const base = searchableSnapshot();
+        const renamed = {
+          shapeId: "shape-photos",
+          entity: "core.content_item",
+          rowId: "photo-off-window",
+          values: {
+            content_id: "photo-off-window",
+            title: "Moonlit terrace garden in Ladakh",
+            deleted_at: null,
+            created_at: "2024-01-01T10:00:00.000Z",
+          },
+        };
+        const added = {
+          shapeId: "shape-photos",
+          entity: "core.content_item",
+          rowId: "photo-added",
+          values: {
+            content_id: "photo-added",
+            title: "Terrace garden after the rain",
+            deleted_at: null,
+            created_at: "2026-08-01T10:00:00.000Z",
+          },
+        };
+        const kept = {
+          shapeId: "shape-photos",
+          entity: "core.content_item",
+          rowId: "photo-kept",
+          values: {
+            content_id: "photo-kept",
+            title: "Garden gate",
+            deleted_at: null,
+            created_at: "2026-08-02T10:00:00.000Z",
+          },
+        };
+
+        churned.bootstrap({ ...base, rows: [...base.rows, kept] });
+        churned.applyChanges({
+          protocolVersion: 1,
+          schemaEpoch: base.schemaEpoch,
+          from: base.cursor,
+          to: { epoch: base.cursor.epoch, seq: base.cursor.seq + 1 },
+          changes: [
+            { op: "upsert", ...renamed },
+            {
+              op: "delete",
+              shapeId: "shape-photos",
+              entity: "core.content_item",
+              rowId: "photo-new",
+            },
+            { op: "upsert", ...added },
+          ],
+        });
+        clean.bootstrap({ ...base, rows: [renamed, added, kept] });
+
+        const query = { shapeId: "shape-photos", entity: "core.content_item" };
+        for (const text of ["garden", "terrace garden", "moon", "gate"]) {
+          expect(churned.search({ ...query, query: text }).rows).toStrictEqual(
+            clean.search({ ...query, query: text }).rows
+          );
+        }
+        // Not vacuously equal: the churn really did move the hit set.
+        expect(
+          churned
+            .search({ ...query, query: "garden" })
+            .rows.map((row) => row.rowId)
+            .sort()
+        ).toStrictEqual(["photo-added", "photo-kept", "photo-off-window"]);
+        expect(churned.search({ ...query, query: "park" }).rows).toStrictEqual(
+          []
+        );
+      } finally {
+        churned.close();
+        clean.close();
+      }
+    });
+
     test("epoch mismatch wipes canonical state and requires a new snapshot", () => {
       const store = makeStore();
       try {
@@ -445,131 +438,6 @@ describe("store-core", () => {
           epoch: "replica-1",
           seq: 2,
         });
-      } finally {
-        store.close();
-      }
-    });
-
-    test("applies a windowed bootstrap page-wise and reads it after commit", () => {
-      const store = makeStore();
-      try {
-        const full = snapshot();
-        const header = {
-          protocolVersion: full.protocolVersion,
-          vaultId: full.vaultId,
-          schemaEpoch: full.schemaEpoch,
-          shapes: full.shapes,
-        };
-        store.bootstrapBegin(header);
-        // One row per page, as the windowed protocol would deliver them.
-        store.bootstrapPage([full.rows[0]!]);
-        store.bootstrapPage([full.rows[1]!]);
-        expect(store.bootstrapCommit(full.cursor)).toStrictEqual({
-          epoch: "replica-1",
-          seq: 2,
-        });
-        expect(store.status()).toStrictEqual({
-          cursor: { epoch: "replica-1", seq: 2 },
-          schemaEpoch: "schema-1",
-          coverage: "complete",
-          durability: "durable",
-        });
-        expect(store.catalog()).toStrictEqual(full.shapes);
-        expect(
-          store
-            .read({ shapeId: "shape-agenda", entity: "core.event" })
-            .rows.map((row) => row.rowId)
-            .sort()
-        ).toStrictEqual(["event-1", "event-2"]);
-      } finally {
-        store.close();
-      }
-    });
-
-    test("an uncommitted windowed bootstrap never presents as complete", () => {
-      const store = makeStore();
-      try {
-        const full = snapshot();
-        store.bootstrapBegin({
-          protocolVersion: full.protocolVersion,
-          vaultId: full.vaultId,
-          schemaEpoch: full.schemaEpoch,
-          shapes: full.shapes,
-        });
-        store.bootstrapPage([full.rows[0]!]);
-        // Simulates a crash before the final page: rows exist, but no cursor does,
-        // so the replica is indistinguishable from one that never bootstrapped and
-        // reads fail closed rather than returning a partial library.
-        expect(store.status()).toStrictEqual({
-          cursor: null,
-          schemaEpoch: null,
-          coverage: "partial",
-          durability: "durable",
-        });
-        expect(() =>
-          store.read({ shapeId: "shape-agenda", entity: "core.event" })
-        ).toThrow(ReplicaRebootstrapRequiredError);
-      } finally {
-        store.close();
-      }
-    });
-
-    test("reopening a bootstrap discards the previous partial attempt", () => {
-      const store = makeStore();
-      try {
-        const full = snapshot();
-        const header = {
-          protocolVersion: full.protocolVersion,
-          vaultId: full.vaultId,
-          schemaEpoch: full.schemaEpoch,
-          shapes: full.shapes,
-        };
-        store.bootstrapBegin(header);
-        store.bootstrapPage([full.rows[0]!]);
-        store.bootstrapBegin(header);
-        store.bootstrapPage([full.rows[1]!]);
-        store.bootstrapCommit(full.cursor);
-        expect(
-          store
-            .read({ shapeId: "shape-agenda", entity: "core.event" })
-            .rows.map((row) => row.rowId)
-        ).toStrictEqual(["event-2"]);
-      } finally {
-        store.close();
-      }
-    });
-
-    test("rejects bootstrap pages and commits outside an open bootstrap", () => {
-      const store = makeStore();
-      try {
-        expect(() => store.bootstrapPage([snapshot().rows[0]!])).toThrow(
-          ReplicaProtocolError
-        );
-        expect(() =>
-          store.bootstrapCommit({ epoch: "replica-1", seq: 2 })
-        ).toThrow(ReplicaProtocolError);
-        // A committed bootstrap closes its progress; a stray page must not reopen it.
-        store.bootstrap(snapshot());
-        expect(() => store.bootstrapPage([snapshot().rows[0]!])).toThrow(
-          ReplicaProtocolError
-        );
-      } finally {
-        store.close();
-      }
-    });
-
-    test("rejects a windowed bootstrap for another vault before any row lands", () => {
-      const store = makeStore();
-      try {
-        const full = snapshot();
-        expect(() =>
-          store.bootstrapBegin({
-            protocolVersion: full.protocolVersion,
-            vaultId: "vault-other",
-            schemaEpoch: full.schemaEpoch,
-            shapes: full.shapes,
-          })
-        ).toThrow(ReplicaRebootstrapRequiredError);
       } finally {
         store.close();
       }

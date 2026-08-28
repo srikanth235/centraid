@@ -11,6 +11,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { GrantUnreachableError } from "@centraid/blueprints/apps/_shared/grant-door";
 import type { GrantDoor } from "@centraid/blueprints/apps/_shared/grant-door";
 import type {
   GrantRecord,
@@ -124,10 +125,18 @@ vi.mock(
     }) as never
 );
 
+// Registry truth (G-edit): only tally.group carries edit in v1.
 const OFFERS: GrantSubjectOffer[] = [
-  { subjectType: "core.document", capabilities: ["view", "edit"] },
+  { subjectType: "tally.group", capabilities: ["view", "edit"] },
+  { subjectType: "core.document", capabilities: ["view"] },
   { subjectType: "media.asset", capabilities: ["view"] },
 ];
+
+const GROUP_SUBJECT = {
+  subjectType: "tally.group",
+  subjectId: "group-1",
+  label: "Ski trip",
+};
 
 const AUDIENCES = [
   { kind: "party" as const, id: "party-priya", label: "Priya" },
@@ -246,6 +255,7 @@ describe("the grant sheet, native seat", () => {
         onClose: () => {
           closed += 1;
         },
+        subjects: [GROUP_SUBJECT],
       });
 
       await act(async () => press("Ravi").click());
@@ -256,10 +266,10 @@ describe("the grant sheet, native seat", () => {
         {
           audienceKind: "party",
           audienceId: "party-ravi",
-          subjectType: "core.document",
-          subjectId: "doc-1",
+          subjectType: "tally.group",
+          subjectId: "group-1",
           capability: "edit",
-          subjectLabel: "Trip plan",
+          subjectLabel: "Ski trip",
         },
       ]);
       expect(status).toStrictEqual(["Ravi can edit it"]);
@@ -292,8 +302,12 @@ describe("the grant sheet, native seat", () => {
     });
 
     test("a capability the route did not change is not reported as a change", async () => {
-      const standing = standingGrant();
+      const standing = standingGrant({
+        subjectType: "tally.group",
+        subjectId: "group-1",
+      });
       const status = await render({
+        subjects: [GROUP_SUBJECT],
         door: stubDoor({
           forParty: () =>
             Promise.resolve({
@@ -336,6 +350,7 @@ describe("the grant sheet, native seat", () => {
     test("a registry still being read refuses nothing and offers no Share", async () => {
       let answer: () => void = () => undefined;
       await render({
+        subjects: [GROUP_SUBJECT],
         door: stubDoor({
           subjects: () =>
             new Promise((resolve) => {
@@ -361,10 +376,55 @@ describe("the grant sheet, native seat", () => {
       expect(container?.textContent).toContain(
         "Shareable items could not be read."
       );
+      expect(container?.textContent).not.toContain("out of reach");
       expect(container?.textContent).not.toContain(
         "cannot be shared as a standing grant"
       );
       expect(press("Share").getAttribute("aria-disabled")).toBe("true");
+    });
+
+    test("a registry nobody could ask is unknown, not refused", async () => {
+      await render({
+        door: stubDoor({
+          subjects: () =>
+            Promise.resolve({
+              readable: false,
+              offers: [],
+              reach: "unreachable" as const,
+            }),
+        }),
+      });
+      expect(container?.textContent).toContain(
+        "Shareable items are unknown — the gateway is out of reach."
+      );
+      expect(container?.textContent).not.toContain(
+        "Shareable items could not be read."
+      );
+    });
+
+    test("a read that never left the device says so, not that it was refused", async () => {
+      await render({
+        door: stubDoor({
+          forParty: () =>
+            Promise.reject(
+              new GrantUnreachableError("read what this person can reach")
+            ),
+        }),
+      });
+      expect(container?.textContent).toContain(
+        "Shares could not be read — the gateway is out of reach."
+      );
+      expect(container?.textContent).not.toContain("Shares could not be read.");
+    });
+
+    test("a gateway that refused the read is not reported as an outage", async () => {
+      await render({
+        door: stubDoor({
+          forParty: () => Promise.reject(new Error("the vault refused that")),
+        }),
+      });
+      expect(container?.textContent).toContain("Shares could not be read.");
+      expect(container?.textContent).not.toContain("out of reach");
     });
 
     test("a person this vault has no record of says that, and nothing else", async () => {

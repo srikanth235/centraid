@@ -1,9 +1,11 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage } from "node:http";
 
-import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
+import { MAX_MULTIPLEX_REPLICA_SCOPES } from "@centraid/core/protocol";
+import { AUTHED_DEVICE_HEADER, SseStream } from "@centraid/server/engine";
 import {
   currentReplicaLogState,
   parseReplicaCursor,
+  ReplicaRebootstrapRequiredError,
   subscribeReplicaCommits,
 } from "@centraid/vault";
 import type { ReplicaCursor } from "@centraid/vault";
@@ -16,11 +18,11 @@ import {
   replicaShapeIds,
   sameReplicaShapeIds,
 } from "./replica-projection.js";
+import type { ReplicaProjectedPage } from "./replica-projection.js";
 import { sendJson } from "./route-helpers.js";
 
 export const MULTIPLEX_REPLICA_CHANGES_PATH =
   "/centraid/_gateway/replica/changes";
-const MAX_MULTIPLEX_SCOPES = 4;
 
 interface MountRequest {
   vaultId: string;
@@ -89,6 +91,7 @@ export function makeMultiplexReplicaRouteHandler(
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders?.();
+    const stream = new SseStream(res);
 
     const states = mounts.map<MountedState>((mount) => ({
       ...mount,
@@ -113,35 +116,75 @@ export function makeMultiplexReplicaRouteHandler(
     let heartbeatAt = Date.now();
 
     try {
-      while (true) {
-        if (closed) break;
+      /*
+       * A LOOP, not recursion (#659), and one page per mount per pass. A mount
+       * whose page reports `hasMore` re-enters immediately instead of falling
+       * into the wait below, so a 50k-change backlog drains at projection speed
+       * rather than one page per heartbeat. Round-robin rather than draining
+       * one mount to completion first: a phone with a busy vault and a quiet
+       * one must not have the quiet one starved behind the busy one's backlog.
+       * Mount state stays sovereign throughout — each pass re-reads that
+       * mount's enrollment, projects from that mount's own cursor, and emits
+       * frames tagged with its own `vaultId`.
+       */
+      for (;;) {
+        // Socket gone: the client hung up, or SseStream dropped it for
+        // backpressure and destroyed the response. Re-read every pass,
+        // including after a `continue` from a multi-page drain — that path
+        // never yields to the event loop, so `stream.closed` is the only
+        // in-band evidence a drop happened mid-drain.
+        if (closed || stream.closed) break;
         signaled = false;
+        let drained = true;
         for (const state of states) {
           if (state.terminal) continue;
           const enrollment = enrollments.get(deviceId, state.vaultId);
           const plane = vaults.get(state.vaultId);
           if (!plane || !enrollment || enrollment.revoked) {
-            writeScope(res, state.vaultId, "revoked", {
+            writeScope(stream, state.vaultId, "revoked", {
               reason: "device-access-changed",
             });
             state.terminal = true;
             continue;
           }
-          const page = projectReplicaPage(
-            plane.db.vault,
-            {
-              canWrite: !enrollment.revoked,
-              rememberDevice: enrollment.rememberDevice,
-            },
-            state.cursor,
-            options.limit ?? 1_000
-          );
+          // Doorbell only: this plane wakes the phone, which then pulls the
+          // rows over that vault's own replica lane. The projection still
+          // reads and predicate-tests each changed row — doorbell visibility
+          // and the wire row id need it — but `doorbellOnly` stops it short of
+          // copying row values into a `batch.changes` this route would drop.
+          let page: ReplicaProjectedPage;
+          try {
+            page = projectReplicaPage(
+              plane.db.vault,
+              {
+                canWrite: !enrollment.revoked,
+                rememberDevice: enrollment.rememberDevice,
+              },
+              state.cursor,
+              options.limit ?? 1_000,
+              { doorbellOnly: true }
+            );
+          } catch (error) {
+            // One mount's cursor fell behind its vault's retention floor, or
+            // its epoch rolled: a scoped fact. Rebootstrapping that mount
+            // must not take the other sovereign mounts' streams down with it,
+            // so the frame is scoped and only this mount stops projecting —
+            // it resumes on the reconnect the phone makes after bootstrapping.
+            if (!(error instanceof ReplicaRebootstrapRequiredError))
+              throw error;
+            writeScope(stream, state.vaultId, "rebootstrap", {
+              reason: error.reason,
+              state: error.state,
+            });
+            state.terminal = true;
+            continue;
+          }
           if (
             page.rebootstrapReason ||
             (state.baseline &&
               !sameReplicaShapeIds(page.shapes, state.baseline))
           ) {
-            writeScope(res, state.vaultId, "rebootstrap", {
+            writeScope(stream, state.vaultId, "rebootstrap", {
               reason: page.rebootstrapReason ?? "shape-changed",
               state: currentReplicaLogState(plane.db.vault),
             });
@@ -149,21 +192,26 @@ export function makeMultiplexReplicaRouteHandler(
           }
           state.baseline ??= replicaShapeIds(page.shapes);
           if (page.doorbell.length > 0) {
-            writeScope(res, state.vaultId, "change", {
+            writeScope(stream, state.vaultId, "change", {
               changes: page.doorbell,
               cursor: page.batch.to,
             });
           }
           if (!sameCursor(state.cursor, page.batch.to)) {
-            writeScope(res, state.vaultId, "cursor", page.batch.to);
+            writeScope(stream, state.vaultId, "cursor", page.batch.to);
             state.cursor = page.batch.to;
           }
+          // `hasMore` only ever accompanies a page that advanced this mount's
+          // cursor, so the drain below always makes progress.
+          if (page.batch.hasMore) drained = false;
         }
+        if (closed || stream.closed) break;
+        // More pages waiting on some mount: project the next one right away.
+        if (!drained) continue;
         if (Date.now() - heartbeatAt >= heartbeatMs) {
-          res.write(": heartbeat\n\n");
+          stream.comment("heartbeat");
           heartbeatAt = Date.now();
         }
-        if (closed) break;
         // oxlint-disable-next-line no-await-in-loop -- each SSE heartbeat waits for the next commit signal
         await new Promise<void>((resolve) => {
           let settled = false;
@@ -187,7 +235,7 @@ export function makeMultiplexReplicaRouteHandler(
       for (const unsubscribe of unsubscribes) unsubscribe();
       req.off("close", close);
       res.off("close", close);
-      if (!res.writableEnded) res.end();
+      stream.end();
     }
     return true;
   };
@@ -198,9 +246,11 @@ function parseMounts(raw: string | null): MountRequest[] {
   if (
     !Array.isArray(parsed) ||
     parsed.length === 0 ||
-    parsed.length > MAX_MULTIPLEX_SCOPES
+    parsed.length > MAX_MULTIPLEX_REPLICA_SCOPES
   ) {
-    throw new Error(`mounts must contain 1..${MAX_MULTIPLEX_SCOPES} scopes`);
+    throw new Error(
+      `mounts must contain 1..${MAX_MULTIPLEX_REPLICA_SCOPES} scopes`
+    );
   }
   const seen = new Set<string>();
   return parsed.map((value) => {
@@ -234,15 +284,17 @@ function callerDeviceId(req: IncomingMessage): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+// One frame, one vault: `vaultId` is inside the payload so a scope frame can
+// never carry another mount's cursor or rows. Every frame goes through the
+// bounded writer (#659) — a phone that stops draining is dropped and resumes
+// from its own durable per-vault cursor on reconnect.
 function writeScope(
-  res: ServerResponse,
+  stream: SseStream,
   vaultId: string,
   event: string,
   data: unknown
 ): void {
-  res.write(
-    `event: scope\ndata: ${JSON.stringify({ vaultId, event, data })}\n\n`
-  );
+  stream.event("scope", JSON.stringify({ vaultId, event, data }));
 }
 
 function sameCursor(left: ReplicaCursor, right: ReplicaCursor): boolean {

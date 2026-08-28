@@ -10,8 +10,10 @@
 import {
   capabilityLabel,
   deliveryLabel,
+  GRANTS_UNREACHABLE,
   GRANTS_UNREADABLE,
 } from "../_shared/grant-copy.ts";
+import { isGrantUnreachable } from "../_shared/grant-door.ts";
 import type { GrantDoor } from "../_shared/grant-door.ts";
 import {
   channelReach,
@@ -52,6 +54,9 @@ export async function readPartyGrants(
       grants: liveGrants(answer.grants),
     };
   } catch (error) {
+    // An unreachable gateway said nothing, so nothing is quoted (L-read).
+    if (isGrantUnreachable(error))
+      return { kind: "unavailable", message: GRANTS_UNREACHABLE };
     // Keep the route's own words where it sent any.
     const message = error instanceof Error ? error.message.trim() : "";
     return {

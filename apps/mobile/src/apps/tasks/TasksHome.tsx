@@ -34,6 +34,10 @@ import {
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  READ_ONLY_SOURCE_REASON,
+  rowCanWrite,
+} from "../../kit/replica/row-provenance";
 import { useTheme } from "../../kit/theme";
 import type { TasksScreenProps as TasksRouteProps } from "../../navigation";
 import { TASKS_MORE_ROWS } from "./tasks-band";
@@ -98,8 +102,16 @@ export default function TasksHome({
 
   const items = useMemo(() => flatten(groups), [groups]);
 
+  const readOnly = useMemo(() => {
+    const rows = items.flatMap((item) =>
+      item.kind === "task" ? [item.task] : []
+    );
+    return rows.length > 0 && rows.every((task) => !rowCanWrite(task));
+  }, [items]);
+
   const complete = useCallback(
     (task: Task) => {
+      if (!rowCanWrite(task)) return;
       void write(
         "set-status",
         { task_id: task.task_id, status: "completed" },
@@ -153,6 +165,7 @@ export default function TasksHome({
   const moveAllToToday = useCallback(
     (rows: readonly Task[]) => {
       for (const row of rows) {
+        if (!rowCanWrite(row)) continue;
         void write(
           "edit",
           { task_id: row.task_id, due_at: now.slice(0, 10) },
@@ -179,7 +192,9 @@ export default function TasksHome({
             {item.group.meta ? (
               <Text style={styles.num}>{item.group.meta}</Text>
             ) : null}
-            {item.group.attention ? (
+            {/* Withheld where no row could take it. */}
+            {item.group.attention &&
+            item.group.rows.some((row) => rowCanWrite(row)) ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={GROUPS.moveAll}
@@ -200,6 +215,7 @@ export default function TasksHome({
         task as unknown as Record<string, unknown>
       );
       const done = task.status === "completed" || task.status === "cancelled";
+      const writable = rowCanWrite(task);
       const project = projectName(task.project_id);
       const meta =
         metaParts({
@@ -222,7 +238,9 @@ export default function TasksHome({
           <Pressable
             accessibilityRole="checkbox"
             accessibilityLabel={task.title}
-            accessibilityState={{ checked: done }}
+            accessibilityState={{ checked: done, disabled: !writable }}
+            accessibilityHint={writable ? undefined : READ_ONLY_SOURCE_REASON}
+            disabled={!writable}
             onPress={() => complete(task)}
             style={styles.box}
           >
@@ -232,7 +250,7 @@ export default function TasksHome({
             accessibilityRole="button"
             accessibilityLabel={task.title}
             accessibilityState={{ selected: moving?.task_id === task.task_id }}
-            onLongPress={() => setMoving(task)}
+            {...(writable ? { onLongPress: () => setMoving(task) } : {})}
             style={styles.rowMain}
           >
             <Text
@@ -356,6 +374,9 @@ export default function TasksHome({
       onHome={() => navigation.navigate("Home")}
     >
       <ReplicaStatusBar />
+      {readOnly ? (
+        <Text style={styles.readOnly}>{READ_ONLY_SOURCE_REASON}</Text>
+      ) : null}
       {body}
       {/* Capture at the foot: one field + one filled control; it files where
           the member is looking. */}

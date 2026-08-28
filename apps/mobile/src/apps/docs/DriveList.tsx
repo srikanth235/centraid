@@ -29,6 +29,7 @@ import { Text, TextInput } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { postStatus } from "../../kit/components/status-line";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
+import { readOnlyRouteReason } from "../../kit/replica/row-provenance";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsShellNavigation } from "../../navigation";
@@ -192,6 +193,8 @@ export default function DriveList({
     });
   };
 
+  const readOnlyReason = readOnlyRouteReason(docs);
+
   const emptyView = emptyStateView({
     shelf,
     loaded: !loading,
@@ -212,6 +215,9 @@ export default function DriveList({
         noun="Docs"
         onRetry={() => void refresh()}
       />
+      {readOnlyReason ? (
+        <Text style={styles.readOnly}>{readOnlyReason}</Text>
+      ) : null}
       {loading && docs.length === 0 ? (
         <SkeletonRows accessibilityLabel="Reading documents" />
       ) : emptyView.visible ? (
@@ -364,6 +370,12 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 10,
     },
     quietLabel: { ...t("control"), color: colors.textSoft },
+    readOnly: {
+      ...t("small"),
+      color: colors.textSoft,
+      paddingBottom: 8,
+      paddingHorizontal: 18,
+    },
     renameActions: {
       flexDirection: "row",
       gap: 8,

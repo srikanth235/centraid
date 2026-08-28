@@ -12,10 +12,16 @@ import { GrantSheet } from "./GrantSheet.tsx";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 export const OFFERS: GrantSubjectOffer[] = [
-  { subjectType: "core.document", capabilities: ["view", "edit"] },
+  { subjectType: "core.document", capabilities: ["view"] },
   { subjectType: "media.asset", capabilities: ["view"] },
   { subjectType: "tally.group", capabilities: ["view", "edit"] },
 ];
+
+export const GROUP_SUBJECT = {
+  subjectType: "tally.group",
+  subjectId: "group-1",
+  label: "Ski trip",
+};
 
 export const AUDIENCES = [
   { kind: "party" as const, id: "party-priya", label: "Priya" },

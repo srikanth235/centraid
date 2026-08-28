@@ -4,6 +4,8 @@
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { enrichPendingRows } from "@centraid/blueprints/apps/_shared/pending-overlay";
+
 import { mountBlock, nodesOf } from "../../test/react-native-stub";
 import DocRow from "./DocRow";
 import type { MobileDriveDoc } from "./docs-projection";
@@ -51,6 +53,9 @@ function doc(overrides: Partial<MobileDriveDoc> = {}): MobileDriveDoc {
     custody_state: null,
     shared_with: null,
     folderGone: false,
+    canWrite: true,
+    scopeLabels: ["Home"],
+    raw: {},
     ...overrides,
   };
 }
@@ -124,5 +129,60 @@ describe(DocRow, () => {
     expect(texts(container)).toContain(
       "…this tenancy shall end on the twelfth day…"
     );
+  });
+
+  it("says nothing about a pending change on a settled row", () => {
+    const container = render(
+      <DocRow doc={doc()} offline={false} onOpen={noop} onMenu={noop} />
+    );
+    expect(
+      texts(container).some((text) => text.startsWith("Pending change:"))
+    ).toBe(false);
+  });
+
+  it("names the connection a queued row is waiting for", () => {
+    const [queued] = enrichPendingRows(
+      [
+        {
+          __centraid_pending_key: "intent-1",
+          __centraid_pending_status: "queued",
+          __centraid_pending_action: "rename",
+        },
+      ],
+      []
+    );
+    const container = render(
+      <DocRow
+        doc={doc({ raw: queued! })}
+        offline={false}
+        onOpen={noop}
+        onMenu={noop}
+      />
+    );
+    expect(texts(container)).toContain(
+      "Pending change: Waiting for a connection."
+    );
+  });
+
+  it("names the STEWARD a parked row is waiting for, not a generic hold", () => {
+    const [parked] = enrichPendingRows(
+      [
+        {
+          __centraid_pending_key: "intent-2",
+          __centraid_pending_status: "queued",
+          __centraid_pending_action: "trash",
+        },
+      ],
+      [{ intentId: "intent-2", status: "parked", stewardLabel: "Ravi" }]
+    );
+    const container = render(
+      <DocRow
+        doc={doc({ raw: parked! })}
+        offline={false}
+        onOpen={noop}
+        onMenu={noop}
+      />
+    );
+    expect(texts(container)).toContain("Pending change: Waiting for Ravi.");
   });
 });

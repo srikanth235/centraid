@@ -19,6 +19,8 @@
 // Pure: no `react-native` import, so `locker-view-model.test.ts` asserts it
 // directly.
 
+import { pendingOverlayCopy } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import type { PendingOverlayStatus } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import { windowEndCopy } from "@centraid/blueprints/apps/locker/format";
 import {
   EXPORT_FORMAT_NOTE,
@@ -140,7 +142,53 @@ export function lockerWindowFoot(
 export function lockerPendingCount(
   pending: readonly { label: string }[]
 ): number {
-  return pending.filter((change) => change.label.startsWith("locker:")).length;
+  return pending.filter((change) => change.label.startsWith(APP_PREFIX)).length;
+}
+
+const APP_PREFIX = "locker:";
+
+const OVERLAY_STATUSES: readonly PendingOverlayStatus[] = [
+  "queued",
+  "sending",
+  "parked",
+  "denied",
+  "conflict",
+  "failed",
+  "expired",
+  "cancelled",
+];
+
+/**
+ * WHAT the outstanding metadata write is waiting for, in the shared overlay's
+ * own words — including a steward's "waiting for …" (#880).
+ *
+ * `pendingNotice(n)` counts; this names. Locker reads its rows through the
+ * gateway's own query handlers rather than the replica plane
+ * (docs/mobile-offline.md, "Locker is stricter"), so no Locker row can carry
+ * the overlay stamps and the DEVICE-GLOBAL outbox is the only honest source
+ * for this sentence. A status the overlay grammar has no rung for is skipped
+ * rather than coerced into one.
+ */
+export function lockerPendingLine(
+  pending: readonly {
+    id: string;
+    label: string;
+    status: string;
+    reason?: string;
+  }[]
+): string | null {
+  for (const change of pending) {
+    if (!change.label.startsWith(APP_PREFIX)) continue;
+    const status = OVERLAY_STATUSES.find((rung) => rung === change.status);
+    if (!status) continue;
+    return pendingOverlayCopy({
+      key: change.id,
+      status,
+      action: change.label.slice(APP_PREFIX.length).trim(),
+      ...(change.reason ? { reason: change.reason } : {}),
+    });
+  }
+  return null;
 }
 
 // ─── 2 · The surfaces whose door is on another seat ──────────────────────────

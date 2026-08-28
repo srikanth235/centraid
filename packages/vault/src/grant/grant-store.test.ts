@@ -144,9 +144,11 @@ describe("grant/grant-store", () => {
     const now = nowIso();
     const party = addParty(db, "Meera", now);
     const subjectId = uuidv7();
+    // `tally.group`, because the repeat below asks at `edit` and that is the
+    // one subject type v1 offers edit for (#825, ruling G-edit).
     const first = createShareGrant(db, {
       audience: { kind: "party", id: party },
-      subjectType: "docs.folder",
+      subjectType: "tally.group",
       subjectId,
       capability: "view",
       grantedAt: now,
@@ -155,7 +157,7 @@ describe("grant/grant-store", () => {
 
     const again = createShareGrant(db, {
       audience: { kind: "party", id: party },
-      subjectType: "docs.folder",
+      subjectType: "tally.group",
       subjectId,
       capability: "edit",
       grantedAt: "2030-01-01T00:00:00.000Z",
@@ -176,7 +178,7 @@ describe("grant/grant-store", () => {
           `INSERT INTO share_grant
              (grant_id, audience_kind, audience_id, subject_type, subject_id,
               capability, granted_at, revoked_at, granted_by, max_size_bytes)
-           VALUES (?, 'party', ?, 'docs.folder', ?, 'edit', ?, NULL, ?, NULL)`
+           VALUES (?, 'party', ?, 'tally.group', ?, 'edit', ?, NULL, ?, NULL)`
         )
         .run(uuidv7(), party, subjectId, now, originBoot.ownerPartyId)
     ).toThrow(/UNIQUE/u);
@@ -246,7 +248,7 @@ describe("grant/grant-store", () => {
       audience: { kind: "party", id: party },
       subjectType: "core.document",
       subjectId,
-      capability: "edit",
+      capability: "view",
       grantedAt: "2031-03-01T00:00:00.000Z",
       grantedBy: originBoot.ownerPartyId,
     });
@@ -320,7 +322,7 @@ describe("grant/grant-store", () => {
       audience: { kind: "party", id: party },
       subjectType: "docs.folder",
       subjectId: uuidv7(),
-      capability: "edit",
+      capability: "view",
       grantedAt: now,
       grantedBy: originBoot.ownerPartyId,
     });

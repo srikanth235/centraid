@@ -6,7 +6,12 @@
  * (`known: false`), not a read failure.
  */
 
-import { GRANT_FAILED, REVOKE_FAILED } from "./grant-copy.ts";
+import {
+  GRANT_FAILED,
+  GRANT_UNREACHABLE,
+  REVOKE_FAILED,
+  REVOKE_UNREACHABLE,
+} from "./grant-copy.ts";
 import type {
   GrantAudienceKind,
   GrantCapability,
@@ -22,6 +27,33 @@ import {
   parseGrants,
   parseSubjectOffers,
 } from "./grant-plane.ts";
+
+/**
+ * The transport's own verdict, raised by a seat when the request never reached
+ * the gateway. It is a MARKED error rather than an inference here, because only
+ * the transport knows whether anything left the device — this door sees a
+ * rejected promise either way, and guessing from the message would turn a
+ * gateway's own words into an outage story or the reverse.
+ */
+export class GrantUnreachableError extends Error {
+  readonly grantTransport = "unreachable" as const;
+  constructor(op: string, cause?: unknown) {
+    super(`${op}: the gateway could not be reached`, { cause });
+    this.name = "GrantUnreachableError";
+  }
+}
+
+/** Duck-typed on purpose: a seat bundled through a separate module graph still
+ *  answers true, where `instanceof` would silently answer false. */
+export function isGrantUnreachable(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error as { grantTransport?: unknown }).grantTransport === "unreachable"
+  );
+}
+
+/** Why a read or write did not land. Two words, never one. */
+export type GrantFailureReach = "unreachable" | "refused";
 
 export interface GrantWireCalls {
   subjects: () => Promise<unknown>;
@@ -41,10 +73,12 @@ export interface PartyReach {
   grants: GrantRecord[];
 }
 
-/** `readable` keeps "refused" distinct from "could not ask". */
+/** `readable` keeps "refused" distinct from "could not ask", and `reach` keeps
+ *  the two ways of not-asking apart. `reach` is absent when `readable`. */
 export interface SubjectRegistry {
   readable: boolean;
   offers: GrantSubjectOffer[];
+  reach?: GrantFailureReach;
 }
 
 export interface AudienceGrants {
@@ -62,11 +96,11 @@ export type GrantCreateOutcome =
       standing: GrantCapability;
       grant: GrantRecord;
     }
-  | { ok: false; message: string };
+  | { ok: false; message: string; reach: GrantFailureReach };
 
 export type GrantRevokeOutcome =
   | { ok: true; message: string }
-  | { ok: false; message: string };
+  | { ok: false; message: string; reach: GrantFailureReach };
 
 export interface GrantDoor {
   subjects: () => Promise<SubjectRegistry>;
@@ -83,9 +117,18 @@ function body(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function refusal(error: unknown, fallback: string): string {
+/** An unreachable gateway said NOTHING, so its own words are not available to
+ *  quote and the transport's internal message is not member-facing copy. A
+ *  refusal keeps the route's words where it sent any. */
+function outcomeMessage(
+  error: unknown,
+  refused: string,
+  unreachable: string
+): { message: string; reach: GrantFailureReach } {
+  if (isGrantUnreachable(error))
+    return { message: unreachable, reach: "unreachable" };
   const message = error instanceof Error ? error.message.trim() : "";
-  return message.length ? message : fallback;
+  return { message: message.length ? message : refused, reach: "refused" };
 }
 
 export function grantDoor(calls: GrantWireCalls): GrantDoor {
@@ -97,8 +140,12 @@ export function grantDoor(calls: GrantWireCalls): GrantDoor {
           readable: true,
           offers: parseSubjectOffers(body(await calls.subjects()).subjects),
         };
-      } catch {
-        return { readable: false, offers: [] };
+      } catch (error) {
+        return {
+          readable: false,
+          offers: [],
+          reach: isGrantUnreachable(error) ? "unreachable" : "refused",
+        };
       }
     },
 
@@ -145,7 +192,10 @@ export function grantDoor(calls: GrantWireCalls): GrantDoor {
           };
         return { ok: true, outcome, ...(grant ? { grant } : {}) };
       } catch (error) {
-        return { ok: false, message: refusal(error, GRANT_FAILED) };
+        return {
+          ok: false,
+          ...outcomeMessage(error, GRANT_FAILED, GRANT_UNREACHABLE),
+        };
       }
     },
 
@@ -158,7 +208,10 @@ export function grantDoor(calls: GrantWireCalls): GrantDoor {
             : REVOKE_FAILED;
         return { ok: true, message };
       } catch (error) {
-        return { ok: false, message: refusal(error, REVOKE_FAILED) };
+        return {
+          ok: false,
+          ...outcomeMessage(error, REVOKE_FAILED, REVOKE_UNREACHABLE),
+        };
       }
     },
   };

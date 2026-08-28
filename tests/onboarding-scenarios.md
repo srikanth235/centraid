@@ -256,7 +256,7 @@ Reset with `xcrun simctl erase` unless a scenario says otherwise.
 | H6 | Compat unknown while offline | Pair, then go offline before the capability probe caches `"supported"` | `Reconnect to the desktop once to verify it supports this mobile offline version.` |
 | H7 | Banner suppressed during onboarding | Force a replica error while still on the connect step | `ReplicaErrorBanner` is suppressed while `!onboarded` — confirm no red banner leaks into onboarding |
 | H8 | Bootstrap progress | Watch a vault with lots of history | Phases `first-page → backfill → complete`; line reads `<label>: recent items ready; older history syncing` |
-| H9 | Scope cap | Pair a gateway with more than four vaults | At most `MAX_MOUNTED_NATIVE_SCOPES` (4) mount, active vault first |
+| H9 | Scope cap | Pair a gateway with more than four vaults | At most `MAX_MOUNTED_NATIVE_SCOPES` (4) mount, active vault first. Since #880 the cap is disclosed rather than silent: the vaults switcher names which saved vaults are resident on this phone and which are over the four-vault limit, and activating an unmounted one re-plans and remounts live — no relaunch |
 | H10 | No notification prompt during onboarding | Complete G1 on an erased sim | Push wake registers a token **only if** notification permission was already granted → no prompt during first run |
 
 ## I. Mobile — returning, offline, revoked

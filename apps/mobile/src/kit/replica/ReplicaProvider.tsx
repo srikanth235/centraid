@@ -21,10 +21,6 @@ import {
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
-import type {
-  MobileCompatibilityDisposition,
-  MobileGatewayFeatures,
-} from "../../lib/replica/mobile-gateway-compatibility-core";
 import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { MultiVaultReplicaSession } from "../../lib/replica/multi-vault-session";
@@ -59,63 +55,51 @@ import type { VaultLink } from "../../lib/vault-links";
 import { Store } from "../../storage";
 import { planMount } from "./mount-plan";
 import {
+  createBootstrapTracker,
+  createFreshnessStore,
+  createRevokedNoticeStore,
+  REPLICA_LOADING,
+} from "./replica-context";
+import type {
+  PublishReplicaValue,
+  ReplicaContextValue,
+} from "./replica-context";
+import {
+  deleteReplicaDatabaseFamily,
+  discardRestoredReplicaCache,
   fetcher,
-  freshnessKey,
   loadFreshness,
   mountedScopes,
   refreshCachedScopes,
   removeCachedScope,
   resolveIdentity,
 } from "./replica-mount";
-import { settledReachability } from "./replica-status";
-import type { ReplicaReachability } from "./replica-status";
+import { loadRevokedNotices, settledReachability } from "./replica-status";
 
 export { REPLICA_UNPAIRED_MESSAGE } from "./replica-mount";
 
 export type { ReplicaReachability } from "./replica-status";
+export type {
+  ReplicaBootstrapProgress,
+  ReplicaContextValue,
+  ReplicaScopeFreshness,
+} from "./replica-context";
 
-export interface ReplicaScopeFreshness extends MountedReplicaScope {
-  updatedAt?: string;
-}
-
-export interface ReplicaBootstrapProgress {
-  vaultId: string;
-  vaultLabel: string;
-  phase: "first-page" | "backfill";
-  pages: number;
-}
-
-export interface ReplicaContextValue {
-  session?: MultiVaultReplicaSession;
-  gatewayBase?: string;
-  /** Visible VaultLink filter / default write target; not a session identity. */
-  vaultId?: string;
-  scopes?: readonly ReplicaScopeFreshness[];
-  ready: boolean;
-  online: boolean;
-  reachability?: ReplicaReachability;
-  bootstrapProgress?: readonly ReplicaBootstrapProgress[];
-  refresh?: () => Promise<void>;
-  /** C1(b) is a blocking wall: no route-specific degraded modes on skew. */
-  compatibility?: MobileCompatibilityDisposition;
-  /** `undefined` is UNKNOWN, not off — a gated surface stays visible until a
-   *  gateway answers. */
-  features?: MobileGatewayFeatures;
-  error?: string;
-  /** The `out of room` state (#708): the driver hit SQLITE_FULL/ENOSPC. */
-  storageFull?: boolean;
-}
-
-const REPLICA_LOADING: ReplicaContextValue = {
-  scopes: [],
-  ready: false,
-  online: false,
-  reachability: "device-offline",
-};
 const ReplicaContext = createContext<ReplicaContextValue>(REPLICA_LOADING);
 
 /** Long enough for a wifi/cellular handoff to settle, short enough to feel live. */
 const NETWORK_FLAP_WINDOW_MS = 1_500;
+
+/**
+ * Quiet window before a freshness stamp reaches AsyncStorage and the context.
+ *
+ * A busy multiplex frame advances several scopes' cursors, and this callback
+ * used to cost one disk write plus one context rebuild — every `useReplica()`
+ * consumer re-rendering — per advance. Matches the change feed's own cursor
+ * debounce (native-change-feed.ts): only the newest stamp matters, and losing
+ * an unwritten one costs a replay, not data.
+ */
+const FRESHNESS_COMMIT_WINDOW_MS = 1_000;
 
 /** RN's scheduler owns "the UI is usable now" — never substitute a timeout. */
 function afterInteractions(): Promise<void> {
@@ -148,11 +132,43 @@ export function ReplicaProvider({
   }, []);
 
   const gatewayKey = active?.gatewayId ?? (hydrated ? "unpaired" : "loading");
+  const activeVaultId = active?.vaultId;
   const [retryNonce, setRetryNonce] = useState(0);
+  const [mountNonce, setMountNonce] = useState(0);
   const [built, setBuilt] = useState<{
     gatewayKey: string;
     value: ReplicaContextValue;
   }>();
+
+  // Activating a vault outside the mounted four RE-PLANS the mount. A switch is
+  // otherwise only a re-key of the write target, which leaves the Space a
+  // member just opened unreadable until the app is relaunched. The four-scope
+  // cap (docs/mobile-offline.md) bounds what is open at once, not which vaults
+  // a member may open, so the honest response to activating the fifth is to
+  // rebuild the set around it.
+  const remountedFor = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (
+      !activeVaultId ||
+      built?.gatewayKey !== gatewayKey ||
+      !built.value.ready
+    )
+      return;
+    if (built.value.scopes?.some((scope) => scope.vaultId === activeVaultId)) {
+      remountedFor.current = undefined;
+      return;
+    }
+    // One attempt per vault. A scope the gateway will not hand back — revoked
+    // mid-mount, or gone from the manifest — must not spin the mount forever.
+    if (remountedFor.current === activeVaultId) return;
+    remountedFor.current = activeVaultId;
+    // Retract the published session BEFORE the teardown: consumers read `ready`
+    // and stop issuing reads, so an in-flight read cannot land on a facade that
+    // is closing. Durable outboxes are per-vault SQLite files, so the swap is
+    // open/close — no queued write is at risk.
+    setBuilt(undefined);
+    setMountNonce((current) => current + 1);
+  }, [activeVaultId, built, gatewayKey]);
 
   useEffect(() => {
     if (!hydrated || gatewayKey === "loading") return undefined;
@@ -161,7 +177,20 @@ export function ReplicaProvider({
     let multiplex: NativeMultiplexChangeFeed | undefined;
     let networkSubscription: { remove: () => void } | undefined;
     let reachabilityWork: CoalescedWork | undefined;
+    let freshnessWork: CoalescedWork | undefined;
+    let flushFreshness = async (): Promise<void> => undefined;
     const looseDrivers: Array<{ close: () => void }> = [];
+    // Every mid-mount update goes through here: a torn-down mount publishes
+    // nothing, and a mount whose gateway key has moved on never overwrites the
+    // one that replaced it.
+    const publish: PublishReplicaValue = (patch) => {
+      if (cancelled) return;
+      setBuilt((current) =>
+        current?.gatewayKey === gatewayKey
+          ? { gatewayKey, value: patch(current.value) }
+          : current
+      );
+    };
 
     void (async () => {
       try {
@@ -202,7 +231,10 @@ export function ReplicaProvider({
         });
         const storageLocation = replicaStorageDirectory();
         const scopes = await mountedScopes(identity, storageLocation);
-        const freshness = await loadFreshness(identity.gatewayId, scopes);
+        // BEFORE any stamp or cursor is read. A restored container carries the
+        // previous device's resume cursors over an empty replica; resuming from
+        // one loses every change beneath it, silently.
+        await discardRestoredReplicaCache(identity.gatewayId, scopes);
         // At most ONCE per mount, from whichever moment first sees the gateway
         // reachable: gating on `identity.online` alone leaves a device that
         // mounted offline unregistered for push until it relaunches online.
@@ -224,61 +256,44 @@ export function ReplicaProvider({
         if (cancelled) return;
         let connected = identity.online;
         const sessions = new Map<string, NativeReplicaSession>();
+        // Kept per vault, not just until the session takes over: a revoked
+        // scope's file cannot be deleted while its handle is still open, and
+        // `purge()` deliberately leaves that handle alive.
+        const scopeDrivers = new Map<string, { close: () => void }>();
         const revokedScopeIds = new Set<string>();
-        const bootstrapProgress = new Map<string, ReplicaBootstrapProgress>();
-        const reportBootstrapProgress = (
-          scope: MountedReplicaScope,
-          progress: {
-            phase: "first-page" | "backfill" | "complete";
-            pages: number;
+        const reclaimRevokedReplica = (scope: MountedReplicaScope): void => {
+          try {
+            scopeDrivers.get(scope.vaultId)?.close();
+          } catch {
+            // A handle the purge already tore down is one less thing to close.
           }
-        ): void => {
-          if (cancelled) return;
-          if (progress.phase === "complete") {
-            bootstrapProgress.delete(scope.vaultId);
-          } else {
-            bootstrapProgress.set(scope.vaultId, {
-              vaultId: scope.vaultId,
-              vaultLabel: scope.label,
-              phase: progress.phase,
-              pages: progress.pages,
-            });
-          }
-          setBuilt((current) =>
-            current?.gatewayKey === gatewayKey
-              ? {
-                  gatewayKey,
-                  value: {
-                    ...current.value,
-                    bootstrapProgress: [...bootstrapProgress.values()],
-                  },
-                }
-              : current
-          );
+          scopeDrivers.delete(scope.vaultId);
+          deleteReplicaDatabaseFamily(scope.databaseName);
         };
+        const bootstrap = createBootstrapTracker(publish);
+        const freshness = createFreshnessStore({
+          storage: AsyncStorage,
+          gatewayId: identity.gatewayId,
+          initial: await loadFreshness(identity.gatewayId, scopes),
+          publish,
+        });
+        freshnessWork = coalesceWork(
+          freshness.commit,
+          FRESHNESS_COMMIT_WINDOW_MS
+        );
         const updateScopeFreshness = (vaultId: string): void => {
-          const updatedAt = new Date().toISOString();
-          freshness.set(vaultId, updatedAt);
-          void AsyncStorage.setItem(
-            freshnessKey(identity.gatewayId, vaultId),
-            updatedAt
-          );
-          setBuilt((current) =>
-            current?.gatewayKey === gatewayKey
-              ? {
-                  gatewayKey,
-                  value: {
-                    ...current.value,
-                    scopes: (current.value.scopes ?? []).map((scope) =>
-                      scope.vaultId === vaultId
-                        ? { ...scope, updatedAt }
-                        : scope
-                    ),
-                  },
-                }
-              : current
-          );
+          freshness.stamp(vaultId);
+          freshnessWork?.signal();
         };
+        // Teardown is the last reliable moment to land a stamp, exactly as
+        // backgrounding is for the feed's resume cursor.
+        flushFreshness = freshness.commit;
+        const revoked = createRevokedNoticeStore({
+          storage: AsyncStorage,
+          gatewayId: identity.gatewayId,
+          initial: await loadRevokedNotices(AsyncStorage, identity.gatewayId),
+          publish,
+        });
         multiplex = new NativeMultiplexChangeFeed({
           gatewayAuth: {
             baseUrl: identity.auth.baseUrl,
@@ -291,29 +306,30 @@ export function ReplicaProvider({
             void (async () => {
               try {
                 if (facade) await facade.revokeScope(vaultId);
-                else await sessions.get(vaultId)?.purge();
+                else {
+                  // Revoked before the facade exists: the same trace is owed.
+                  const scope = scopes.find(
+                    (candidate) => candidate.vaultId === vaultId
+                  );
+                  if (scope) revoked.note(scope);
+                  await sessions.get(vaultId)?.purge();
+                  if (scope) reclaimRevokedReplica(scope);
+                }
               } finally {
                 sessions.delete(vaultId);
-                bootstrapProgress.delete(vaultId);
+                bootstrap.forget(vaultId);
                 clearPinnedThumbnailPack(vaultId);
-                freshness.delete(vaultId);
+                freshness.forget(vaultId);
                 await removeCachedScope(identity.gatewayId, vaultId).catch(
                   () => undefined
                 );
-                setBuilt((current) =>
-                  current?.gatewayKey === gatewayKey
-                    ? {
-                        gatewayKey,
-                        value: {
-                          ...current.value,
-                          scopes: (current.value.scopes ?? []).filter(
-                            (scope) => scope.vaultId !== vaultId
-                          ),
-                          bootstrapProgress: [...bootstrapProgress.values()],
-                        },
-                      }
-                    : current
-                );
+                publish((value) => ({
+                  ...value,
+                  scopes: (value.scopes ?? []).filter(
+                    (scope) => scope.vaultId !== vaultId
+                  ),
+                  bootstrapProgress: bootstrap.current(),
+                }));
               }
             })().catch(() => undefined);
           },
@@ -341,14 +357,21 @@ export function ReplicaProvider({
               bootstrapWindow: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
               progressiveBootstrap: true,
               onBootstrapProgress: (progress) =>
-                reportBootstrapProgress(scope, progress),
+                bootstrap.report(scope, progress),
+              // Out of room parks this scope's feed; the phone, not the vault,
+              // is what ran out, so one paused scope raises the state for all.
+              onStorageFull: () =>
+                publish((value) => ({ ...value, storageFull: true })),
             });
             if (revokedScopeIds.has(scope.vaultId)) {
               await session.purge();
               looseDrivers.splice(looseDrivers.indexOf(driver), 1);
+              scopeDrivers.set(scope.vaultId, driver);
+              reclaimRevokedReplica(scope);
               return;
             }
             sessions.set(scope.vaultId, session);
+            scopeDrivers.set(scope.vaultId, driver);
             looseDrivers.splice(looseDrivers.indexOf(driver), 1);
           })
         );
@@ -372,6 +395,8 @@ export function ReplicaProvider({
           isConnected: () => connected,
           isNetworkWorkAllowed: nativeSyncAllowed,
           onScopePulled: updateScopeFreshness,
+          onScopeRevoked: revoked.note,
+          reclaimRevokedReplica,
           sendPlacement: (input) => postPlacement(currentBase, input),
           sendCommons: (input) => postCommons(currentBase, input),
         });
@@ -379,6 +404,24 @@ export function ReplicaProvider({
           await facade.close();
           return;
         }
+        // Durable coverage, read at mount and after every pull. Without it a
+        // relaunch after a kill mid-backfill renders a truncated library with
+        // nothing saying so: the in-process bootstrap that would have reported
+        // pages died with the old process (docs/mobile-offline.md).
+        const refreshCoverage = async (): Promise<void> => {
+          const status = await facade?.status().catch(() => undefined);
+          if (!status) return;
+          publish((value) => ({
+            ...value,
+            coverage: status.coverage,
+            scopes: (value.scopes ?? []).map((scope) => {
+              const coverage = status.scopes.find(
+                (entry) => entry.vaultId === scope.vaultId
+              )?.coverage;
+              return coverage ? { ...scope, coverage } : scope;
+            }),
+          }));
+        };
         const refreshReachability = async (
           network: Network.NetworkState
         ): Promise<void> => {
@@ -406,17 +449,10 @@ export function ReplicaProvider({
                 })) ?? features;
             } catch (wallError) {
               if (wallError instanceof MobileGatewayCompatibilityError) {
-                setBuilt((current) =>
-                  current?.gatewayKey === gatewayKey
-                    ? {
-                        gatewayKey,
-                        value: {
-                          ...current.value,
-                          compatibility: wallError.disposition,
-                        },
-                      }
-                    : current
-                );
+                publish((value) => ({
+                  ...value,
+                  compatibility: wallError.disposition,
+                }));
                 return;
               }
               throw wallError;
@@ -429,47 +465,39 @@ export function ReplicaProvider({
             // for push here.
             sendEventualWork(liveBase);
           }
-          setBuilt((current) =>
-            current?.gatewayKey === gatewayKey
-              ? {
-                  gatewayKey,
-                  value: {
-                    ...current.value,
-                    ...(liveBase ? { gatewayBase: liveBase } : {}),
-                    ...(features ? { features } : {}),
-                    online: connected,
-                    reachability: deviceOnline
-                      ? liveBase
-                        ? "syncing"
-                        : "gateway-asleep"
-                      : "device-offline",
-                  },
-                }
-              : current
-          );
+          publish((value) => ({
+            ...value,
+            ...(liveBase ? { gatewayBase: liveBase } : {}),
+            ...(features ? { features } : {}),
+            online: connected,
+            // The one pass that runs whatever the radio said: re-read the
+            // pause so a resume from the storage screen clears the state.
+            storageFull: facade?.storageFull === true,
+            reachability: deviceOnline
+              ? liveBase
+                ? "syncing"
+                : "gateway-asleep"
+              : "device-offline",
+          }));
           if (liveBase) {
-            const pulled = await facade
-              ?.pullNow()
-              .then(() => true)
-              .catch(() => false);
+            const outcome = await facade?.pullScopes().catch(() => undefined);
             // `syncing` above is set OPTIMISTICALLY, so every pass reaching here
             // MUST settle: an unconditional settle is what stops a pull that
             // never lands from pinning "Syncing recent changes…" on screen.
-            const landed = pulled === true;
-            if (!cancelled) {
-              setBuilt((current) =>
-                current?.gatewayKey === gatewayKey
-                  ? {
-                      gatewayKey,
-                      value: {
-                        ...current.value,
-                        online: landed,
-                        reachability: settledReachability(landed),
-                      },
-                    }
-                  : current
-              );
-            }
+            //
+            // A pull the transfer rules refused is NOT a landed pull: `.then(()
+            // => true)` used to read the refusal as freshness and paint the
+            // settled, silent `current` over data that was never fetched.
+            const policyBlocked = outcome?.policyBlocked === true;
+            const landed = outcome !== undefined && !policyBlocked;
+            await refreshCoverage();
+            publish((value) => ({
+              ...value,
+              // The gateway answered `/info`; the rules, not the radio,
+              // stopped the pull, so connectivity stands.
+              online: policyBlocked ? connected : landed,
+              reachability: settledReachability(landed, policyBlocked),
+            }));
           }
         };
         const refresh = async (): Promise<void> => {
@@ -487,7 +515,11 @@ export function ReplicaProvider({
                 ? { updatedAt: freshness.get(scope.vaultId) }
                 : {}),
             })),
-            bootstrapProgress: [...bootstrapProgress.values()],
+            bootstrapProgress: bootstrap.current(),
+            ...(revoked.current().length > 0
+              ? { revokedNotices: revoked.current() }
+              : {}),
+            dismissRevokedNotice: revoked.forget,
             ready: true,
             ...(features ? { features } : {}),
             online: connected,
@@ -510,6 +542,7 @@ export function ReplicaProvider({
           latestNetwork = network;
           reachabilityWork?.signal();
         });
+        void refreshCoverage();
         void afterInteractions().then(() => {
           if (!cancelled) void refresh();
         });
@@ -540,12 +573,15 @@ export function ReplicaProvider({
     return () => {
       cancelled = true;
       reachabilityWork?.cancel();
+      freshnessWork?.cancel();
+      // Cancel drops the timer, not the stamps: land them before the mount goes.
+      void flushFreshness();
       networkSubscription?.remove();
       void facade?.close();
       multiplex?.close();
       for (const driver of looseDrivers) driver.close();
     };
-  }, [gatewayKey, hydrated, retryNonce]);
+  }, [gatewayKey, hydrated, mountNonce, retryNonce]);
 
   const base = built?.gatewayKey === gatewayKey ? built.value : REPLICA_LOADING;
   const value = {

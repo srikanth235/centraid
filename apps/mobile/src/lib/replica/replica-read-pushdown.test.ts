@@ -39,8 +39,14 @@ const SHAPES = [
 interface DocumentSeed {
   document_id: string;
   title: string | number;
-  size: number;
+  size: number | null;
   created_at: string;
+}
+
+interface ContentSeed {
+  content_id: string;
+  title: string;
+  sha256: string;
 }
 
 /** Count what actually crosses the driver, which is what pushdown is about. */
@@ -107,6 +113,36 @@ function seed(
   }
   database.exec("COMMIT");
   database.close();
+}
+
+function seedContentItems(file: string, items: readonly ContentSeed[]): void {
+  const database = new DatabaseSync(file);
+  const insert = database.prepare(
+    `INSERT INTO replica_row
+       (shape_id, entity, row_id, payload_json, oversized_json)
+     VALUES ('docs-default', 'core.content_item', ?, ?, '[]')`
+  );
+  database.exec("BEGIN IMMEDIATE");
+  for (const item of items) insert.run(item.content_id, JSON.stringify(item));
+  database.exec("COMMIT");
+  database.close();
+}
+
+/** Scripts whose UTF-8 bytes order differently from their code points. */
+const TITLES = ["Doc", "Éclair", "école", "日記", "Zebra"];
+
+/**
+ * Ties on every ordered column, holes where the evaluator sorts nulls, and the
+ * same shape in two vaults: the fixture a per-scope page can only survive by
+ * paging on the evaluator's own total key, under its own BINARY collation.
+ */
+function orderedSeeds(vaultId: string, count: number): DocumentSeed[] {
+  return Array.from({ length: count }, (_, index) => ({
+    document_id: `${vaultId}-${String(index).padStart(3, "0")}`,
+    title: `${TITLES[index % TITLES.length]!} ${String(index).padStart(3, "0")}`,
+    size: index % 5 === 0 ? null : index % 7,
+    created_at: `2026-01-0${(index % 9) + 1}T00:00:00.000Z`,
+  }));
 }
 
 function documentSeeds(vaultId: string, count: number): DocumentSeed[] {
@@ -185,7 +221,7 @@ describe(planReplicaRead, () => {
     ).toBe(25);
   });
 
-  test("refuses to page when a clause or an order stays in JavaScript", () => {
+  test("refuses to page when a clause or an unproven order stays in JavaScript", () => {
     expect(
       planReplicaRead({
         request: {
@@ -196,6 +232,8 @@ describe(planReplicaRead, () => {
         scopeCount: 1,
       }).perScopeLimit
     ).toBeUndefined();
+    // No probe verdict means the order column was never shown to be
+    // type-uniform, so the read stays whole.
     expect(
       planReplicaRead({
         request: { limit: 25, orderBy: { column: "created_at", dir: "desc" } },
@@ -203,6 +241,56 @@ describe(planReplicaRead, () => {
         scopeCount: 1,
       }).perScopeLimit
     ).toBeUndefined();
+  });
+
+  test("pages a proven order on the evaluator's own column-then-key order", () => {
+    const plan = planReplicaRead({
+      request: { limit: 25, orderBy: { column: "created_at", dir: "desc" } },
+      contentHashed: false,
+      scopeCount: 4,
+      orderPushdown: { primaryKey: "document_id" },
+    });
+    expect(plan.perScopeLimit).toBe(25);
+    expect(plan.orderSql).toBe(
+      " ORDER BY json_extract(r.payload_json, '$.created_at') DESC," +
+        " json_extract(r.payload_json, '$.document_id') ASC"
+    );
+    expect(plan.clampedLimit).toBe(false);
+  });
+
+  test("never pages on mounted-scope provenance, which SQL cannot see", () => {
+    // These columns are composed onto the envelope after SQL has run, so a
+    // pushed ORDER BY or filter would read NULL for every row.
+    const plan = planReplicaRead({
+      request: {
+        limit: 25,
+        orderBy: { column: "__centraidScopeId", dir: "asc" },
+        where: [{ column: "__centraidScopeId", op: "eq", value: "personal" }],
+      },
+      contentHashed: false,
+      scopeCount: 2,
+      orderPushdown: { primaryKey: "document_id" },
+    });
+    expect(plan.filterSql).toBe("");
+    expect(plan.orderSql).toBe("");
+    expect(plan.perScopeLimit).toBeUndefined();
+  });
+
+  test("flags the page ceiling when it cuts the caller's limit down", () => {
+    const ceiling = (limit: number) =>
+      planReplicaRead({
+        request: { limit },
+        contentHashed: false,
+        scopeCount: 1,
+      });
+    expect(ceiling(100_000)).toMatchObject({
+      perScopeLimit: 100_000,
+      clampedLimit: false,
+    });
+    expect(ceiling(250_000)).toMatchObject({
+      perScopeLimit: 100_000,
+      clampedLimit: true,
+    });
   });
 });
 
@@ -336,6 +424,37 @@ describe("mounted reads with pushdown", () => {
     reader.close();
   });
 
+  test("a page that dedupe collapses is re-read whole, not answered short", async () => {
+    const root = tempDirSync("centraid-pushdown-saturated-");
+    const personal = path.join(root, "personal.db");
+    seed(personal, "personal", documentSeeds("personal", 3));
+    // `seed` already stored one `identical-bytes` row; four more make the first
+    // page of three collapse into a single badged row.
+    seedContentItems(personal, [
+      ...Array.from({ length: 4 }, (_, index) => ({
+        content_id: `same-${index}`,
+        title: `Same ${index}`,
+        sha256: "identical-bytes",
+      })),
+      ...Array.from({ length: 5 }, (_, index) => ({
+        content_id: `unique-${index}`,
+        title: `Unique ${index}`,
+        sha256: `distinct-${index}`,
+      })),
+    ]);
+    const { reader } = mount(root, [
+      { vaultId: "personal", databaseName: personal },
+    ]);
+
+    const page = await reader.read("docs", {
+      entity: "core.content_item",
+      limit: 3,
+    });
+
+    expect(page.rows).toHaveLength(3);
+    reader.close();
+  });
+
   test("equal bytes in two vaults keep both source badges", async () => {
     const root = tempDirSync("centraid-pushdown-badges-");
     const personal = path.join(root, "personal.db");
@@ -351,6 +470,148 @@ describe("mounted reads with pushdown", () => {
       entity: "core.content_item",
       limit: 1,
     });
+    expect(contents.rows).toHaveLength(1);
+    expect(contents.rows[0]!.values.__centraidScopeIds).toStrictEqual([
+      "personal",
+      "family",
+    ]);
+    reader.close();
+  });
+});
+
+describe("ordered mounted reads with pushdown", () => {
+  test("a paged ordered read answers exactly what the whole-entity evaluator answers", async () => {
+    const root = tempDirSync("centraid-pushdown-order-");
+    const personal = path.join(root, "personal.db");
+    const family = path.join(root, "family.db");
+    seed(personal, "personal", orderedSeeds("personal", 40));
+    seed(family, "family", orderedSeeds("family", 40));
+    const { reader } = mount(root, [
+      { vaultId: "personal", databaseName: personal },
+      { vaultId: "family", databaseName: family },
+    ]);
+
+    const orders = [
+      { column: "size", dir: "asc" as const },
+      { column: "size", dir: "desc" as const },
+      { column: "created_at", dir: "desc" as const },
+      { column: "title", dir: "asc" as const },
+    ];
+    const compared = await Promise.all(
+      orders.map(async (orderBy) => {
+        // A read with no limit is never paged, so it is the evaluator's own
+        // answer over every row of both vaults.
+        const [whole, paged] = await Promise.all([
+          reader.read("docs", { entity: "core.document", orderBy }),
+          reader.read("docs", { entity: "core.document", orderBy, limit: 7 }),
+        ]);
+        return {
+          orderBy,
+          whole: whole.rows.length,
+          paged: paged.rows.map((row) => row.rowId),
+          expected: whole.rows.slice(0, 7).map((row) => row.rowId),
+        };
+      })
+    );
+
+    for (const outcome of compared) {
+      expect(outcome.whole).toBe(80);
+      expect({ order: outcome.orderBy, rows: outcome.paged }).toStrictEqual({
+        order: outcome.orderBy,
+        rows: outcome.expected,
+      });
+    }
+    reader.close();
+  });
+
+  test("an ordered page crosses the driver as a page, not as the whole entity", async () => {
+    const root = tempDirSync("centraid-pushdown-order-cost-");
+    const personal = path.join(root, "personal.db");
+    seed(personal, "personal", orderedSeeds("personal", 500));
+    const { reader, driver } = mount(root, [
+      { vaultId: "personal", databaseName: personal },
+    ]);
+
+    const recent = await reader.read("docs", {
+      entity: "core.document",
+      orderBy: { column: "created_at", dir: "desc" },
+      limit: 10,
+    });
+
+    expect(recent.rows).toHaveLength(10);
+    // Shape metadata, one aggregate probe verdict, and the ten-row page. The
+    // other 490 documents are ordered and dropped inside SQLite.
+    expect(driver.rowsReturned).toBeLessThan(20);
+    reader.close();
+  });
+
+  test("a paged ordered read cannot page past the row the evaluator escalates on", async () => {
+    const root = tempDirSync("centraid-pushdown-order-mixed-");
+    const personal = path.join(root, "personal.db");
+    seed(personal, "personal", [
+      ...documentSeeds("personal", 6),
+      {
+        document_id: "personal-numeric",
+        title: 42,
+        size: 6,
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    const { reader } = mount(root, [
+      { vaultId: "personal", databaseName: personal },
+    ]);
+
+    // SQLite sorts a numeric title below every text one, so a DESC page of two
+    // would leave it behind and quietly answer a question the evaluator refuses.
+    await expect(
+      reader.read("docs", {
+        entity: "core.document",
+        orderBy: { column: "title", dir: "desc" },
+        limit: 2,
+      })
+    ).rejects.toBeInstanceOf(OnlineOnlyError);
+    reader.close();
+  });
+
+  test("a paged ordered read still escalates on a field dropped for size", async () => {
+    const root = tempDirSync("centraid-pushdown-order-oversized-");
+    const personal = path.join(root, "personal.db");
+    seed(personal, "personal", documentSeeds("personal", 6), {
+      oversizedTitleOn: "personal-5",
+    });
+    const { reader } = mount(root, [
+      { vaultId: "personal", databaseName: personal },
+    ]);
+
+    // `personal-5` sorts outside an ASC page of two; the order column has to be
+    // disclosed on every row of the set, not merely on the page.
+    await expect(
+      reader.read("docs", {
+        entity: "core.document",
+        orderBy: { column: "title", dir: "asc" },
+        limit: 2,
+      })
+    ).rejects.toBeInstanceOf(OnlineOnlyError);
+    reader.close();
+  });
+
+  test("an ordered page of a content-hashed entity keeps every source badge", async () => {
+    const root = tempDirSync("centraid-pushdown-order-badges-");
+    const personal = path.join(root, "personal.db");
+    const family = path.join(root, "family.db");
+    seed(personal, "personal", documentSeeds("personal", 5));
+    seed(family, "family", documentSeeds("family", 5));
+    const { reader } = mount(root, [
+      { vaultId: "personal", databaseName: personal },
+      { vaultId: "family", databaseName: family },
+    ]);
+
+    const contents = await reader.read("docs", {
+      entity: "core.content_item",
+      orderBy: { column: "title", dir: "asc" },
+      limit: 1,
+    });
+
     expect(contents.rows).toHaveLength(1);
     expect(contents.rows[0]!.values.__centraidScopeIds).toStrictEqual([
       "personal",

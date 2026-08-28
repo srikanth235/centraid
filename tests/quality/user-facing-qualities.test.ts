@@ -212,6 +212,109 @@ function scanCopy(
   return flagged;
 }
 
+// P3 over the phone (#880). The mounted reader is not asked for SQL: a screen
+// hands `useReplicaQuery`/`session.read` a REQUEST — `{ entity, where, orderBy,
+// limit }` — and the reader compiles it (apps/mobile/src/lib/replica/
+// replica-read-pushdown.ts). So the mobile half of this gate walks request
+// literals and judges them exactly as the blueprint half judges
+// `ctx.vault.read({ entity })`: a growth entity with no `limit` and no
+// equality/`in` predicate is an unbounded read.
+//
+// Detection keys on the request SHAPE, not on the call site, for two reasons.
+// A request declared as data is still a read — Home's tile requests live in
+// `home-tile-reads.ts` as constants and reach the reader through a hook two
+// files away — and a call-site anchor would miss every one of them. And an
+// object that merely NAMES an entity is not a read: `BLUEPRINT_SEARCH_TARGETS`
+// carries `entity` beside `idField`/`labelFields`, so requiring every top-level
+// key to belong to the request vocabulary keeps descriptors out without an
+// allowlist. Comments are stripped first, so neither a commented-out `limit:`
+// nor prose can decide a verdict.
+const REPLICA_REQUEST_KEYS = new Set([
+  "entity",
+  "limit",
+  "orderBy",
+  "purpose",
+  "query",
+  "shapeId",
+  "where",
+]);
+
+/** Text and top-level key names of the object literal opening at `open`. */
+function replicaObjectLiteral(
+  source: string,
+  open: number
+): { body: string; keys: string[] } {
+  const keys: string[] = [];
+  let depth = 0;
+  let quote = "";
+  let index = open;
+  for (; index < source.length; index += 1) {
+    const char = source[index] as string;
+    if (quote) {
+      if (char === "\\") index += 1;
+      else if (char === quote) quote = "";
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "{" || char === "[" || char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === "}" || char === "]" || char === ")") {
+      depth -= 1;
+      if (depth === 0) break;
+      continue;
+    }
+    if (depth === 1 && /[A-Za-z_$]/u.test(char)) {
+      const word = /^[A-Za-z0-9_$]+/u.exec(source.slice(index))![0];
+      if (/^\s*:/u.test(source.slice(index + word.length))) keys.push(word);
+      index += word.length - 1;
+    }
+  }
+  return { body: source.slice(open, index + 1), keys };
+}
+
+/** The `{` that opens the object literal containing `index`, or -1. */
+function replicaEnclosingBrace(source: string, index: number): number {
+  let depth = 0;
+  for (let cursor = index; cursor >= 0; cursor -= 1) {
+    const char = source[cursor];
+    if (char === "}" || char === ")" || char === "]") depth += 1;
+    else if (char === "{" || char === "(" || char === "[") {
+      if (depth === 0) return char === "{" ? cursor : -1;
+      depth -= 1;
+    }
+  }
+  return -1;
+}
+
+/** `file#entity` for every unbounded growth-entity replica read in one file. */
+function scanReplicaReads(
+  file: string,
+  rawSource: string,
+  growthEntities: ReadonlySet<string>
+): string[] {
+  const source = stripComments(rawSource);
+  const unbounded: string[] = [];
+  for (const match of source.matchAll(
+    /entity:\s*["'](?<entity>[^"']+)["']/gu
+  )) {
+    const entity = match.groups?.["entity"];
+    if (!entity || !growthEntities.has(entity)) continue;
+    const open = replicaEnclosingBrace(source, match.index);
+    if (open < 0) continue;
+    const { body, keys } = replicaObjectLiteral(source, open);
+    if (!keys.every((key) => REPLICA_REQUEST_KEYS.has(key))) continue;
+    const bounded =
+      /\blimit\s*:/u.test(body) || /\bop\s*:\s*["'](?:eq|in)["']/u.test(body);
+    if (!bounded) unbounded.push(`${file}#${entity}`);
+  }
+  return unbounded;
+}
+
 describe("issue #679 user-facing quality gates", () => {
   test("A1/A3/A4: seven visible qualities own classified, governed, demonstrated-red gates", async () => {
     const matrix = await json("tests/matrix.json");
@@ -1159,8 +1262,20 @@ describe("issue #679 user-facing quality gates", () => {
 
   test("P3: repo-authored query handlers are bounded or explicitly waived", async () => {
     const waiverFile = await json("tests/quality/unbounded-query-waivers.json");
-    const waivers = new Set(waiverFile["entries"] as string[]);
-    const violations: string[] = [];
+    const entries = waiverFile["entries"] as Array<{
+      query: string;
+      reason: string;
+    }>;
+    // A waiver is a debt record, so it has to say what the debt is. An entry
+    // with no reason is a silent exemption, which is the thing the waiver file
+    // exists to prevent.
+    for (const entry of entries) {
+      expect(entry.query, JSON.stringify(entry)).toBeTypeOf("string");
+      expect(entry.reason.length, entry.query).toBeGreaterThan(8);
+    }
+    const waivers = new Set(entries.map((entry) => entry.query));
+    expect(waivers.size).toBe(entries.length);
+    const unbounded: string[] = [];
     const files: string[] = [];
     for (const pattern of [
       "packages/blueprints/apps/**/queries/*.js",
@@ -1178,7 +1293,7 @@ describe("issue #679 user-facing quality gates", () => {
       const bounded =
         /\bLIMIT\b/iu.test(source) ||
         /\b(?:COUNT|SUM|AVG|MAX|MIN)\s*\(/iu.test(source);
-      if (!bounded && !waivers.has(file)) violations.push(file);
+      if (!bounded) unbounded.push(file);
     }
     const growthEntities = new Set([
       "business.order",
@@ -1209,13 +1324,45 @@ describe("issue #679 user-facing quality gates", () => {
           entity &&
           growthEntities.has(entity) &&
           !/\blimit\s*:/u.test(body) &&
-          !/\bop\s*:\s*["'](?:eq|in)["']/u.test(body) &&
-          !waivers.has(`${file}#${entity}`)
+          !/\bop\s*:\s*["'](?:eq|in)["']/u.test(body)
         )
-          violations.push(`${file}#${entity}`);
+          unbounded.push(`${file}#${entity}`);
         offset = Math.max(cursor, offset + needle.length);
       }
     }
+    // The phone reads the same growth entities through the mounted replica.
+    const mobileFiles = (
+      await Promise.all(
+        ["apps/mobile/src/**/*.ts", "apps/mobile/src/**/*.tsx"].map(globFiles)
+      )
+    )
+      .flat()
+      .map((file) => file.replaceAll("\\", "/"))
+      .filter((file) => !COPY_SKIP_FILE.test(file))
+      .toSorted(compareStrings);
+    expect(mobileFiles.length).toBeGreaterThan(100);
+    const mobileReads = await Promise.all(
+      mobileFiles.map(async (file) =>
+        scanReplicaReads(
+          file,
+          await readFile(path.join(root, file), "utf8"),
+          growthEntities
+        )
+      )
+    );
+    unbounded.push(...mobileReads.flat());
+
+    const found = new Set(unbounded);
+    const violations = [
+      ...[...found]
+        .filter((query) => !waivers.has(query))
+        .map((query) => `unwaived ${query}`),
+      // A waiver that no longer matches an unbounded read must leave the file,
+      // or the debt list stops being a debt list.
+      ...[...waivers]
+        .filter((query) => !found.has(query))
+        .map((query) => `stale ${query}`),
+    ].toSorted(compareStrings);
     expect(violations).toStrictEqual([]);
   });
 

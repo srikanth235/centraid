@@ -36,6 +36,10 @@ import {
   unregisterRememberedReplicaIdentity,
 } from "./storage-manifest.js";
 import type { ReplicaIdentityInventory } from "./storage-manifest.js";
+import type {
+  ReplicaBootstrapAdvance,
+  ReplicaBootstrapResume,
+} from "./store-core.js";
 import { TerminalReplicaPurgeRetryLoop } from "./terminal-purge-retry.js";
 import { DEFAULT_REPLICA_PURPOSE } from "./types.js";
 import type {
@@ -103,8 +107,14 @@ export interface ShellReplicaCoordinator {
   bootstrap: (
     snapshot: Awaited<ReturnType<typeof fetchReplicaBootstrap>>
   ) => Promise<ReplicaCursor>;
-  bootstrapBegin?: (header: ReplicaBootstrapHeader) => Promise<void>;
-  bootstrapPage?: (rows: ReplicaSnapshotRow[]) => Promise<void>;
+  bootstrapBegin?: (
+    header: ReplicaBootstrapHeader,
+    options?: { restart?: boolean }
+  ) => Promise<ReplicaBootstrapResume | undefined>;
+  bootstrapPage?: (
+    rows: ReplicaSnapshotRow[],
+    advance?: ReplicaBootstrapAdvance
+  ) => Promise<void>;
   bootstrapPreview?: (cursor: ReplicaCursor) => Promise<void>;
   bootstrapCommit?: (
     cursor: ReplicaCursor,
@@ -612,8 +622,10 @@ export class ReplicaShellSession {
         gatewayAuth: this.gatewayAuth,
         // Wrap methods — a bare reference binds `this` to this object literal.
         target: {
-          bootstrapBegin: (header) => this.coordinator.bootstrapBegin!(header),
-          bootstrapPage: (rows) => this.coordinator.bootstrapPage!(rows),
+          bootstrapBegin: (header, begin) =>
+            this.coordinator.bootstrapBegin!(header, begin),
+          bootstrapPage: (rows, advance) =>
+            this.coordinator.bootstrapPage!(rows, advance),
           bootstrapPreview: this.coordinator.bootstrapPreview
             ? (rows) => this.coordinator.bootstrapPreview!(rows)
             : undefined,
@@ -720,11 +732,17 @@ export class ReplicaShellSession {
         .markIntentTransportFailed(intent.intentId, errorMessage(error))
         .catch(() => undefined);
       await this.waitForAdmissionRegistrations();
+      const queuedReason =
+        "saved locally; retrying when the gateway is reachable";
       this.resolveAdmissionWaiter(intent.intentId, {
         intentId: intent.intentId,
         status: "queued",
-        reason: "saved locally; retrying when the gateway is reachable",
+        reason: queuedReason,
       });
+      // The outbox keeps its order, so nothing behind the failed head is
+      // claimed until the retry: settle those writers on their durable
+      // admission instead of leaving them awaiting forever (#880).
+      this.resolveAdmissionWaitersAsQueued(queuedReason);
       this.scheduleRetry();
     }
   }

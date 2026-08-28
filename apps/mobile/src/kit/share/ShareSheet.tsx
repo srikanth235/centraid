@@ -52,6 +52,7 @@ export interface ShareSheetProps {
   itemIds?: readonly string[];
   appLabel?: string;
   onDone: (outcome: { verb: ShareVerb; ok: boolean; message: string }) => void;
+  preferredCircleId?: string;
 }
 
 export default function ShareSheet({
@@ -62,6 +63,7 @@ export default function ShareSheet({
   itemType,
   itemIds,
   onDone,
+  preferredCircleId,
 }: ShareSheetProps): React.JSX.Element {
   const { colors } = useTheme();
   const replica = useReplica();
@@ -81,6 +83,7 @@ export default function ShareSheet({
   const [selectedCircleId, setSelectedCircleId] = useState("");
   const [rosterRevision, setRosterRevision] = useState(0);
   const [inviteHandoffs, setInviteHandoffs] = useState<InviteHandoff[]>([]);
+  const preselectedRef = useRef(false);
   const openInputsRef = useRef({
     gatewayBase: replica.gatewayBase,
   });
@@ -93,6 +96,7 @@ export default function ShareSheet({
 
   useEffect(() => {
     if (!visible) return;
+    preselectedRef.current = false;
     const { gatewayBase } = openInputsRef.current;
     let active = true;
     void Promise.resolve().then(async () => {
@@ -136,6 +140,20 @@ export default function ShareSheet({
   });
   const members = selectedNativeShareMembers(destinations, selections);
   const namedCircles = useNamedShareCircles(destinations, ownerPartyId);
+
+  useEffect(() => {
+    if (!visible || preselectedRef.current || !preferredCircleId) return;
+    const circle = namedCircles.find(
+      (candidate) => candidate.circleId === preferredCircleId
+    );
+    if (!circle) return;
+    preselectedRef.current = true;
+    const preselected = selectionsForNativeCircle(destinations, circle);
+    void Promise.resolve().then(() => {
+      setSelectedCircleId(circle.circleId);
+      setSelections(preselected);
+    });
+  }, [destinations, namedCircles, preferredCircleId, visible]);
 
   const share = async (): Promise<void> => {
     if (!replica.session || !itemType || !itemIds?.length || !selected.length)

@@ -32,6 +32,34 @@ interface DocumentProducerInput {
   deleteSourceAfterSettle?: boolean;
 }
 
+export const SHARE_UNPAIRED_TITLE = "Can’t receive shares yet";
+export const SHARE_UNPAIRED_MESSAGE =
+  "Pair this phone with your Centraid desktop, then share again.";
+
+/** Older than this, a staged copy was abandoned by a crash, not a member. */
+export const SHARE_STAGING_STALE_MS = 24 * 60 * 60 * 1000;
+
+export const SHARE_STAGING_SWEEP_LIMIT = 200;
+
+export interface ShareStagingEntry {
+  uri: string;
+  isFile: boolean;
+  lastModifiedMs?: number;
+}
+
+export interface ShareStagingPorts {
+  /** `undefined` when the app-group staging root is absent. */
+  stagedEntries: () => readonly ShareStagingEntry[] | undefined;
+  deleteStaged: (uri: string) => void;
+  now: () => number;
+}
+
+export interface ShareTargetScope {
+  vaultId: string;
+  label: string;
+  canWrite: boolean;
+}
+
 export interface ShareIngestPorts {
   backupDeviceMedia: (
     session: MobileReplicaSession,
@@ -121,6 +149,50 @@ export async function processShareIntent(
   } finally {
     ports.reset();
   }
+}
+
+/**
+ * Only the settle path deletes, so a share nobody confirmed leaves plaintext in
+ * the app group at its default protection class, outside the durable directory
+ * (docs/mobile-offline.md, "Durable path and at-rest decision").
+ */
+export function discardShareIntentFiles(
+  deleteStaged: (path: string) => void,
+  shareIntent: SharedIntentLike
+): void {
+  for (const file of shareIntent.files ?? []) deleteStaged(file.path);
+}
+
+/**
+ * A crash between staging and ingest must not leak forever. Files only: the
+ * app group also carries the extension's `Library` tree, which is not staging.
+ */
+export function sweepStaleShareStaging(ports: ShareStagingPorts): number {
+  const entries = ports.stagedEntries();
+  if (!entries) return 0;
+  const cutoff = ports.now() - SHARE_STAGING_STALE_MS;
+  let swept = 0;
+  for (const entry of entries) {
+    if (swept >= SHARE_STAGING_SWEEP_LIMIT) break;
+    if (!entry.isFile) continue;
+    // Unreadable is not evidence of stale.
+    if (entry.lastModifiedMs === undefined || entry.lastModifiedMs > cutoff)
+      continue;
+    ports.deleteStaged(entry.uri);
+    swept += 1;
+  }
+  return swept;
+}
+
+/**
+ * Empty means no chooser: one writable vault is not a choice. Text and links
+ * never ask — Quick capture is speed-first and takes the focused vault.
+ */
+export function shareTargetChoices(
+  scopes: readonly ShareTargetScope[]
+): readonly ShareTargetScope[] {
+  const writable = scopes.filter((scope) => scope.canWrite);
+  return writable.length > 1 ? writable : [];
 }
 
 /** Re-entrancy guard (#431 test): no second pass while ingest is in flight. */

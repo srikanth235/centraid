@@ -7,6 +7,9 @@
 //  2. `edit` is drawn ONLY where the declared registry answers it, a registry
 //     still in flight refuses nothing, an unreadable one says which happened,
 //     and the co-contribution sentence belongs to a group and nothing else.
+//  2b. REFUSED IS NOT UNREACHABLE (#880): a gateway that answered no and one
+//     nothing reached each keep their own sentence, on the registry read and
+//     on the standing read alike.
 //  3. An invitation nobody has accepted reads as pending, never as an error;
 //     a person this vault has never reached says so in her own line; and a
 //     reach nothing has read yet says NOTHING about her, on either entry.
@@ -19,8 +22,10 @@ import { act } from "react";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { NOBODY_TO_SHARE_WITH } from "./grant-audiences.ts";
+import { GrantUnreachableError } from "./grant-door.ts";
 import type { GrantRequest } from "./grant-plane.ts";
 import {
+  GROUP_SUBJECT,
   OFFERS,
   buttons,
   mount,
@@ -49,6 +54,7 @@ describe("the grant sheet, web seat", () => {
         onClose: () => {
           closed += 1;
         },
+        subjects: [GROUP_SUBJECT],
       });
 
       const person = container.querySelector("select") as HTMLSelectElement;
@@ -66,10 +72,10 @@ describe("the grant sheet, web seat", () => {
         {
           audienceKind: "party",
           audienceId: "party-ravi",
-          subjectType: "core.document",
-          subjectId: "doc-1",
+          subjectType: "tally.group",
+          subjectId: "group-1",
           capability: "edit",
-          subjectLabel: "Trip plan",
+          subjectLabel: "Ski trip",
         },
       ]);
       expect(status).toStrictEqual(["Ravi can edit it"]);
@@ -87,8 +93,12 @@ describe("the grant sheet, web seat", () => {
     });
 
     test("a capability the route did not change is not reported as a change", async () => {
-      const standing = standingGrant();
+      const standing = standingGrant({
+        subjectType: "tally.group",
+        subjectId: "group-1",
+      });
       const { container, status } = await mount({
+        subjects: [GROUP_SUBJECT],
         door: stubDoor({
           forParty: () =>
             Promise.resolve({
@@ -120,6 +130,7 @@ describe("the grant sheet, web seat", () => {
           create: () =>
             Promise.resolve({
               ok: false as const,
+              reach: "refused" as const,
               message:
                 "media.asset can be shared for view, not for edit; editing it is not offered yet",
             }),
@@ -127,6 +138,33 @@ describe("the grant sheet, web seat", () => {
       });
       await act(async () => pressing(container, "Share").click());
       expect(container.textContent).toContain("editing it is not offered yet");
+    });
+
+    test("a read that never left the device says so, not that it was refused", async () => {
+      // The gateway said NOTHING, so its refusal sentence would put words in a
+      // mouth that never opened (#880).
+      const { container } = await mount({
+        door: stubDoor({
+          forParty: () =>
+            Promise.reject(
+              new GrantUnreachableError("read what this person can reach")
+            ),
+        }),
+      });
+      expect(container.textContent).toContain(
+        "Shares could not be read — the gateway is out of reach."
+      );
+      expect(container.textContent).not.toContain("Shares could not be read.");
+    });
+
+    test("a gateway that refused the read is not reported as an outage", async () => {
+      const { container } = await mount({
+        door: stubDoor({
+          forParty: () => Promise.reject(new Error("the vault refused that")),
+        }),
+      });
+      expect(container.textContent).toContain("Shares could not be read.");
+      expect(container.textContent).not.toContain("out of reach");
     });
   });
 
@@ -162,6 +200,7 @@ describe("the grant sheet, web seat", () => {
     test("a registry still being read refuses nothing and offers no Share", async () => {
       let answer: () => void = () => undefined;
       const { container } = await mount({
+        subjects: [GROUP_SUBJECT],
         door: stubDoor({
           subjects: () =>
             new Promise((resolve) => {
@@ -170,7 +209,7 @@ describe("the grant sheet, web seat", () => {
         }),
       });
       // Before the gateway answers, the sheet knows nothing about what a
-      // document may be shared as — and refuses on nobody's behalf.
+      // group may be shared as — and refuses on nobody's behalf.
       expect(container.textContent).not.toContain(
         "cannot be shared as a standing grant"
       );
@@ -189,10 +228,30 @@ describe("the grant sheet, web seat", () => {
       expect(container.textContent).toContain(
         "Shareable items could not be read."
       );
+      expect(container.textContent).not.toContain("out of reach");
       expect(container.textContent).not.toContain(
         "cannot be shared as a standing grant"
       );
       expect(pressing(container, "Share").disabled).toBe(true);
+    });
+
+    test("a registry nobody could ask is unknown, not refused", async () => {
+      const { container } = await mount({
+        door: stubDoor({
+          subjects: () =>
+            Promise.resolve({
+              readable: false,
+              offers: [],
+              reach: "unreachable" as const,
+            }),
+        }),
+      });
+      expect(container.textContent).toContain(
+        "Shareable items are unknown — the gateway is out of reach."
+      );
+      expect(container.textContent).not.toContain(
+        "Shareable items could not be read."
+      );
     });
 
     test("a stale standing edit does not post a verb the picker never drew", async () => {

@@ -115,6 +115,11 @@ export function useReplicaQuery(
     reachability: replica.reachability,
   });
   const lastSyncedAt = latestSync(replica.scopes);
+  // The wire result's coverage is authoritative for the rows in hand; the
+  // context's durable reading covers the moment before the first read resolves.
+  // Dropping it (as this hook did) is how an offline relaunch mid-backfill
+  // rendered a truncated library that claimed to be the whole thing.
+  const coverage = result?.coverage ?? replica.coverage;
 
   return {
     rows,
@@ -122,6 +127,7 @@ export function useReplicaQuery(
     connection,
     ...(!session && replica.error ? { unavailableReason: replica.error } : {}),
     ...(lastSyncedAt ? { lastSyncedAt } : {}),
+    ...(coverage ? { coverage } : {}),
     ...(error ? { error } : {}),
     refresh,
   };

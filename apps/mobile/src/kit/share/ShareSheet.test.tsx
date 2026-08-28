@@ -31,6 +31,9 @@ interface WriteResult {
 }
 
 const mocks = vi.hoisted(() => ({
+  circleMembers: [] as Record<string, unknown>[],
+  circles: [] as Record<string, unknown>[],
+  containers: [] as Record<string, unknown>[],
   parties: [] as Record<string, unknown>[],
   share: vi.fn<(input: unknown) => Promise<{ claims: unknown[] }>>(),
   write: vi.fn<(appId: string, input: unknown) => Promise<unknown>>(),
@@ -61,7 +64,7 @@ vi.mock(import("react-native"), async () => {
       onPress,
     }: {
       accessibilityLabel?: string;
-      accessibilityState?: { disabled?: boolean };
+      accessibilityState?: { disabled?: boolean; selected?: boolean };
       children?: React.ReactNode;
       disabled?: boolean;
       onPress?: () => void;
@@ -69,6 +72,7 @@ vi.mock(import("react-native"), async () => {
       element("button", {
         "aria-disabled": Boolean(disabled || accessibilityState?.disabled),
         "aria-label": accessibilityLabel,
+        "aria-selected": accessibilityState?.selected,
         children,
         onClick: disabled ? undefined : onPress,
         type: "button",
@@ -128,7 +132,11 @@ vi.mock(
             ? mocks.parties
             : request.entity === "core.vault"
               ? [{ owner_party_id: "owner" }]
-              : [],
+              : request.entity === "social.circle"
+                ? mocks.circles
+                : request.entity === "social.circle_member"
+                  ? mocks.circleMembers
+                  : mocks.containers,
       }),
     }) as never
 );
@@ -177,7 +185,7 @@ let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 const onDone = vi.fn<(outcome: unknown) => void>();
 
-async function render(): Promise<void> {
+async function render(preferredCircleId?: string): Promise<void> {
   await act(async () => {
     root = createRoot(container!);
     root.render(
@@ -189,6 +197,7 @@ async function render(): Promise<void> {
         onDone={onDone}
         sourceVaultId="owner-vault"
         visible
+        {...(preferredCircleId ? { preferredCircleId } : {})}
       />
     );
   });
@@ -231,23 +240,29 @@ async function type(text: string): Promise<void> {
   });
 }
 
-describe("ShareSheet quick-add", () => {
-  beforeEach(() => {
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    mocks.parties = [];
-    mocks.share.mockReset();
-    mocks.share.mockResolvedValue({ claims: [] });
-    mocks.write.mockReset();
-    onDone.mockReset();
-  });
+function openSheetContainer(): void {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  mocks.circleMembers = [];
+  mocks.circles = [];
+  mocks.containers = [];
+  mocks.parties = [];
+  mocks.share.mockReset();
+  mocks.share.mockResolvedValue({ claims: [] });
+  mocks.write.mockReset();
+  onDone.mockReset();
+}
 
-  afterEach(() => {
-    act(() => root?.unmount());
-    container?.remove();
-    root = undefined;
-    container = undefined;
-  });
+function closeSheetContainer(): void {
+  act(() => root?.unmount());
+  container?.remove();
+  root = undefined;
+  container = undefined;
+}
+
+describe("ShareSheet quick-add", () => {
+  beforeEach(openSheetContainer);
+  afterEach(closeSheetContainer);
 
   it("selects a person the gateway settled, and submits their real party id", async () => {
     mocks.write.mockImplementation(async () => {
@@ -322,5 +337,56 @@ describe("ShareSheet quick-add", () => {
 
     await press(button("Add anyway"));
     expect(mocks.write).toHaveBeenCalledOnce();
+  });
+});
+
+// A container that reuses its OWN circle is bound server-side to that circle's
+// exact stored roster and capabilities, so the sheet has to open already
+// submitting them — "choose people individually" would default every pick to
+// `read+write` and be refused for the drift.
+describe("ShareSheet preferred circle", () => {
+  beforeEach(() => {
+    openSheetContainer();
+    mocks.parties = [{ party_id: "ana", display_name: "Ana" }];
+    mocks.circles = [
+      { circle_id: "c1", owner_party_id: "owner", name: "Sitwell Road" },
+    ];
+    mocks.circleMembers = [
+      { circle_id: "c1", party_id: "owner", capability: "read+write" },
+      { circle_id: "c1", party_id: "ana", capability: "read" },
+    ];
+    mocks.containers = [{ group_id: "item-1", circle_id: "c1" }];
+  });
+
+  afterEach(closeSheetContainer);
+
+  it("opens with that circle selected, sourcing capability from its roster", async () => {
+    await render("c1");
+    expect(
+      buttonWithText("Named group · Sitwell Road").getAttribute("aria-selected")
+    ).toBe("true");
+    await press(buttonWithText("Share"));
+    const [submitted] = mocks.share.mock.calls[0] as [Record<string, unknown>];
+    expect(submitted["circleId"]).toBe("c1");
+    expect(submitted["members"]).toStrictEqual([
+      { partyId: "ana", capability: "read" },
+    ]);
+  });
+
+  it("selects nothing when no circle answers to that id", async () => {
+    await render("c-missing");
+    expect(buttonWithText("Share").getAttribute("aria-disabled")).toBe("true");
+    expect(mocks.share).not.toHaveBeenCalled();
+  });
+
+  it("detaches the circle the moment the member edits a capability", async () => {
+    await render("c1");
+    await press(buttonWithText("Can edit"));
+    await press(buttonWithText("Share"));
+    const [submitted] = mocks.share.mock.calls[0] as [Record<string, unknown>];
+    expect(submitted["circleId"]).toBeUndefined();
+    expect(submitted["members"]).toStrictEqual([
+      { partyId: "ana", capability: "read+write" },
+    ]);
   });
 });

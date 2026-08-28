@@ -1,6 +1,15 @@
 /* What the vault can HONOUR (#750): view = closure reprojection; edit =
  * commons routing where actable. `locker.item` absent — secrets are never
- * offered as a standing grant. */
+ * offered as a standing grant.
+ *
+ * EDIT IS NARROWER THAN ACTABLE (#825, ruling G-edit): v1 ships edit
+ * co-contribution for `tally.group` alone, and albums and folders are
+ * view-capable with their edit strategy deferred. `core.document` and
+ * `docs.folder` DO carry actable commons routes, but declaring `edit` here
+ * would publish a capability the write door refuses
+ * (`SHARE_GRANT_CO_CONTRIBUTION_TYPES` in `fulfillment-edit.ts`) — and both
+ * share sheets draw their capability pills straight off this registry, so a
+ * wider answer here is a control that cannot fire. */
 
 import type { ShareableItemType } from "../share/closure.js";
 import type { ShareGrantCapability } from "./grant-store.js";
@@ -28,11 +37,11 @@ export const SHARE_SUBJECT_REGISTRY: readonly ShareSubjectDeclaration[] = [
   },
   {
     subjectType: "core.document",
-    fulfillment: { view: "closure-reprojection", edit: "commons-routing" },
+    fulfillment: { view: "closure-reprojection" },
   },
   {
     subjectType: "docs.folder",
-    fulfillment: { view: "closure-reprojection", edit: "commons-routing" },
+    fulfillment: { view: "closure-reprojection" },
   },
   {
     subjectType: "media.asset",

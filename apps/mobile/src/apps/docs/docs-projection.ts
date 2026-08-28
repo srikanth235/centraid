@@ -2,7 +2,7 @@
 // the web `drive` query runs gateway-side, re-expressed pure and testable here.
 // Nothing is fabricated: every field is a replica fact or `null` where the
 // replica cannot say ("unknown" ≠ "shared with nobody"). No react-native or
-// replica imports: plain rows in, view models out (docs-projection.test.ts).
+// replica imports beyond the provenance readers (docs-projection.test.ts).
 
 import { canRender, typeMeta } from "@centraid/blueprints/apps/docs/format";
 import type {
@@ -15,6 +15,8 @@ import type {
 } from "@centraid/blueprints/apps/docs/types";
 import { rowStateMark } from "@centraid/blueprints/apps/docs/view-copy";
 import type { RowStateMark } from "@centraid/blueprints/apps/docs/view-copy";
+
+import { rowCanWrite, rowScopeLabels } from "../../kit/replica/row-provenance";
 
 /** One replica row, as `useReplicaQuery` hands it over. */
 export type EntityRow = Readonly<Record<string, unknown>>;
@@ -34,9 +36,14 @@ const num = (row: EntityRow, key: string): number | null => {
   return typeof value === "number" ? value : null;
 };
 
-/** A drive row plus the one phone-only fact: the folder tag points at a
- *  concept that no longer exists (§4.3 "folder deleted"). */
-export type MobileDriveDoc = DriveDoc & { folderGone: boolean };
+/** A drive row plus the phone-only facts: a folder tag pointing at a gone
+ *  concept (§4.3), and the DOCUMENT row's provenance/pending stamps (#880). */
+export type MobileDriveDoc = DriveDoc & {
+  folderGone: boolean;
+  canWrite: boolean;
+  scopeLabels: readonly string[];
+  raw: EntityRow;
+};
 
 export interface DriveEntityRows {
   documents: readonly EntityRow[];
@@ -219,6 +226,9 @@ export function projectDrive(rows: DriveEntityRows): DriveProjection {
           shared_with:
             sharesByDoc === null ? null : (sharesByDoc.get(id) ?? []),
           folderGone: folderConcept === null && orphanTagDocs.has(id),
+          canWrite: rowCanWrite(doc),
+          scopeLabels: rowScopeLabels(doc),
+          raw: doc,
         },
       ];
     })

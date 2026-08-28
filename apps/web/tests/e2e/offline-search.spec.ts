@@ -199,8 +199,8 @@ test("offline search reads a pending row's punctuation the way FTS5 does", async
   // Never remount Docs after the toggle: a fresh route walks the replica, which
   // cannot finish offline.
   await setHarnessControlOnline(page, false);
-  // NEITHER WRITE IS AWAITED: a second offline write queues and paints but never
-  // settles (write-rail defect, QUALITY.md); wait on the rendered rows.
+  // NEITHER WRITE IS AWAITED: not because one hangs (#880 W2.1 fixed that rail
+  // in `shell-session.ts`) but because the subject is the rendered rows.
   await page.evaluate(
     ({ renames }) => {
       for (const rename of renames) {

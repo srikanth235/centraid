@@ -7,13 +7,19 @@ vi.mock(import("expo/fetch"), () => ({
   fetch: vi.fn<(typeof import("expo/fetch"))["fetch"]>(),
 }));
 
-function memoryStorage(): AsyncStorageLike & { values: Map<string, string> } {
+function memoryStorage(): AsyncStorageLike & {
+  values: Map<string, string>;
+  writes: string[];
+} {
   const values = new Map<string, string>();
+  const writes: string[] = [];
   return {
     values,
+    writes,
     getItem: (key) => Promise.resolve(values.get(key) ?? null),
     setItem: (key, value) => {
       values.set(key, value);
+      writes.push(key);
       return Promise.resolve();
     },
     removeItem: (key) => {
@@ -21,6 +27,29 @@ function memoryStorage(): AsyncStorageLike & { values: Map<string, string> } {
       return Promise.resolve();
     },
   };
+}
+
+function scopeFrame(vaultId: string, changeCount: number): string {
+  return `event: scope\ndata: ${JSON.stringify({
+    vaultId,
+    event: "change",
+    data: {
+      changes: Array.from({ length: changeCount }, (_unused, index) => ({
+        cursor: { epoch: "1", seq: index + 1 },
+        entity: "media.asset",
+        rowId: `asset-${index}`,
+        op: "insert",
+        changedAt: "2026-08-27T09:00:00.000Z",
+      })),
+      cursor: { epoch: "1", seq: changeCount },
+    },
+  })}\n\n`;
+}
+
+function settle(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 describe(NativeMultiplexChangeFeed, () => {
@@ -73,5 +102,112 @@ describe(NativeMultiplexChangeFeed, () => {
     const lastMounts = new URL(requested.at(-1)!).searchParams.get("mounts");
     expect(lastMounts).toContain("personal");
     expect(lastMounts).not.toContain("family");
+  });
+
+  test("a thousand-change frame costs one cursor write and one freshness signal", async () => {
+    // THE REGRESSION THIS PINS (#880 W3.2). The single-vault feed debounces its
+    // resume cursor (native-change-feed.ts); this one did not. Every change
+    // wrote the cursor AND called `onScopeUpdated`, which in ReplicaProvider is
+    // a second AsyncStorage write plus a context rebuild — so one busy frame
+    // meant ~2,000 disk writes and 1,000 re-renders of every `useReplica()`
+    // consumer. Only the newest cursor of a frame has ever mattered.
+    const storage = memoryStorage();
+    const updated: string[] = [];
+    const changes: string[] = [];
+    const feed = new NativeMultiplexChangeFeed({
+      gatewayAuth: { baseUrl: "http://gateway", gatewayId: "gateway-1" },
+      storage,
+      minReconnectMs: 60_000,
+      maxReconnectMs: 60_000,
+      streamFetch: async () =>
+        new Response(scopeFrame("personal", 1_000), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }) as never,
+      onScopeUpdated: (vaultId) => updated.push(vaultId),
+    });
+    const personal = feed.scope("personal");
+    personal.subscribe((message) => changes.push(message.type));
+    personal.setActive(true);
+    await settle();
+
+    // Every change still reaches the session — the batching is about the
+    // cursor's cost, never about dropping a row.
+    expect(
+      changes.filter((type) => type === "centraid:vault-change")
+    ).toHaveLength(1_000);
+    expect(updated).toStrictEqual(["personal"]);
+    expect(storage.writes).toStrictEqual([]);
+
+    // Teardown flushes: a debounced cursor that is never written would regress
+    // the resume point on the next cold start.
+    feed.close();
+    await settle();
+    expect(storage.writes).toHaveLength(1);
+    expect(JSON.parse(storage.values.get(storage.writes[0]!)!)).toStrictEqual({
+      epoch: "1",
+      seq: 1_000,
+    });
+  });
+
+  test("backgrounding a scope lands its cursor before the stream drops", async () => {
+    const storage = memoryStorage();
+    const feed = new NativeMultiplexChangeFeed({
+      gatewayAuth: { baseUrl: "http://gateway", gatewayId: "gateway-1" },
+      storage,
+      minReconnectMs: 60_000,
+      maxReconnectMs: 60_000,
+      streamFetch: async () =>
+        new Response(scopeFrame("personal", 12), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }) as never,
+    });
+    const personal = feed.scope("personal");
+    personal.subscribe(() => undefined);
+    personal.setActive(true);
+    await settle();
+    expect(storage.writes).toStrictEqual([]);
+
+    personal.setActive(false);
+    await settle();
+    expect(storage.writes).toHaveLength(1);
+    expect(JSON.parse(storage.values.get(storage.writes[0]!)!)).toMatchObject({
+      seq: 12,
+    });
+    feed.close();
+  });
+
+  test("a revoked scope's debounced cursor never lands after the purge", async () => {
+    // The removal and the pending write race otherwise, and the loser is the
+    // removal: a cursor for a scope this phone no longer holds comes back.
+    const storage = memoryStorage();
+    const feed = new NativeMultiplexChangeFeed({
+      gatewayAuth: { baseUrl: "http://gateway", gatewayId: "gateway-1" },
+      storage,
+      minReconnectMs: 60_000,
+      maxReconnectMs: 60_000,
+      streamFetch: async (input) => {
+        const mounts = new URL(String(input)).searchParams.get("mounts") ?? "";
+        return new Response(
+          mounts.includes("family")
+            ? `${scopeFrame("family", 40)}event: scope\ndata: ${JSON.stringify({
+                vaultId: "family",
+                event: "revoked",
+                data: { reason: "device-access-changed" },
+              })}\n\n`
+            : "",
+          { status: 200, headers: { "content-type": "text/event-stream" } }
+        ) as never;
+      },
+    });
+    const family = feed.scope("family");
+    family.subscribe(() => undefined);
+    family.setActive(true);
+    await settle();
+
+    feed.close();
+    await settle();
+    expect([...storage.values.keys()]).toStrictEqual([]);
   });
 });

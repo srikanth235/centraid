@@ -263,6 +263,16 @@ Ruled 2026-08-19 by [#825](https://github.com/srikanth235/centraid/issues/825). 
 
 Per-grant size ceilings carry over unchanged from the commons limits; the grant plane adds no second budget. Circle grants recompile their roster on every fulfillment pass — a party added to a granted circle is delivered on the next pass with no re-grant — while grants the #825 migration decomposed into per-party rows are literal and do not follow roster drift; reaching a later addition there takes a new grant.
 
+## Mobile offline, scale and sharing (#880)
+
+Ruled 2026-08-27 by [#880](https://github.com/srikanth235/centraid/issues/880), against the mobile gaps register that wave closed. Two of the answers are deliberate non-goals; the third points at a divergence that is registered rather than fixed.
+
+| Id | Current decision |
+| --- | --- |
+| **M-nolink** | **There are no public or anonymous share links.** Every share is a standing grant to a named party or circle (G-audience), delivered as a replica under it, and every commons invitation is a one-time claim redeemed by a vault that is already enrolled on the same gateway. A URL anyone could open is not a shape this transport has: there is no unauthenticated read route, no bearer-token document view, and no origin willing to project rows to a party the vault cannot name. This is the transport architecture, not a missing feature — building it would mean a second delivery plane whose audience is "whoever has the string". |
+| **M-shareout** | **Share-out is offered where a shareable subject lives, and nowhere else.** The placement/grant registry is the one answer to what may be placed and which app owns it: album and photo (Photos), note (Notes), document and folder (Docs), group (Tally). On the phone that means Photos, Docs and Tally's group row draw the share verb, and People's person screen is the audience-first dashboard for the same grants. **Locker is structurally excluded** — `locker.item` is deliberately absent from `PlaceableItemType` (A7), because a secret is the one thing v0 refuses to let a member place; reopening it means arguing the case in [`placement-registry.ts`](../packages/blueprints/apps/_shared/placement-registry.ts), not widening a union. |
+| **M-stuck** | The phone's "stuck write" line waits an hour where the browser marks a queued write immediately. That is a **registered divergence, not a bug**: a phone is routinely offline and four background wakes fit inside the hour. See [design-divergences.md](design-divergences.md). |
+
 ## Rebuilding Agenda, Notes and Tasks (#834)
 
 Ruled 2026-08-21 by [#834](https://github.com/srikanth235/centraid/issues/834). Three of the four interfaces cleared by [#831](https://github.com/srikanth235/centraid/issues/831) are being drawn again from scratch. The rebuild needed four answers the contract did not hold — which product each app is measured against, where journal entries live inside Notes, how a calendar day learns facts owned by other apps, and whose work a due-task shelf may count. They are settled here ahead of the code waves, so no screen is drawn over a guess.

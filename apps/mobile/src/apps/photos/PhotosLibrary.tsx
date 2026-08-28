@@ -35,6 +35,7 @@ import {
   InCloudOriginalError,
   openDeviceOriginal,
 } from "./device-media";
+import { faceReviewCounts, photoLibraryCounts } from "./photos-library-counts";
 import { protectedAssetIdsFromPins } from "./photos-library-pins";
 import { styles } from "./PhotosLibrary.styles";
 import PhotosScreen from "./PhotosScreen";
@@ -168,7 +169,11 @@ export default function PhotosLibrary({
       ),
     [freeCandidates]
   );
-  const duplicateCount = assets.filter((asset) => asset.duplicateHint).length;
+  // One pass over the merged timeline for all four head counts, and one over
+  // the face rows for the other two. Inline in the head's JSX they re-walked
+  // the whole library every time this screen re-rendered for any reason.
+  const counts = useMemo(() => photoLibraryCounts(assets), [assets]);
+  const faceCounts = useMemo(() => faceReviewCounts(faces.rows), [faces.rows]);
   // Memoized because it is the list's `data`: an array rebuilt on every render
   // is a new identity, which makes the windowed list treat every album as a
   // changed row. The build itself is also a full entries × albums pass.
@@ -355,7 +360,7 @@ export default function PhotosLibrary({
               <Row
                 icon="heart"
                 title="Favorites"
-                meta={`${assets.filter((asset) => asset.favorite).length}`}
+                meta={`${counts.favorites}`}
                 colors={colors}
               />
             </Pressable>
@@ -369,7 +374,7 @@ export default function PhotosLibrary({
               <Row
                 icon="archive"
                 title="Archive"
-                meta={`${assets.filter((asset) => asset.archived).length}`}
+                meta={`${counts.archived}`}
                 colors={colors}
               />
             </Pressable>
@@ -383,7 +388,7 @@ export default function PhotosLibrary({
               <Row
                 icon="trash-2"
                 title="Trash"
-                meta={`${assets.filter((asset) => asset.deleted).length} · vault purge policy`}
+                meta={`${counts.deleted} · vault purge policy`}
                 colors={colors}
               />
             </Pressable>
@@ -395,7 +400,7 @@ export default function PhotosLibrary({
               <Row
                 icon="users"
                 title="People"
-                meta={`${new Set(faces.rows.map((row) => row.party_id).filter(Boolean)).size} people · ${faces.rows.filter((row) => row.review_state === "proposed").length} proposals`}
+                meta={`${faceCounts.people} people · ${faceCounts.proposals} proposals`}
                 colors={colors}
               />
             </Pressable>
@@ -407,7 +412,7 @@ export default function PhotosLibrary({
               <Row
                 icon="copy"
                 title="Duplicates review"
-                meta={`${duplicateCount} similarity hints`}
+                meta={`${counts.duplicates} similarity hints`}
                 colors={colors}
               />
             </Pressable>

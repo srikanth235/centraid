@@ -322,7 +322,7 @@ export async function postCommons(
   baseUrl: string,
   input: CommonsIntent
 ): Promise<CommonsRecord> {
-  const response = await fetch(new URL("/centraid/_gateway/commons", baseUrl), {
+  const response = await fetch(new URL(ROUTES.gatewayCommons, baseUrl), {
     method: "POST",
     headers: {
       ...authHeader(),

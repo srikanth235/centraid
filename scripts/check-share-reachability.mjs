@@ -192,8 +192,12 @@ export function runShareReachability(root, config) {
       for (const re of info.reexports) {
         if (re.star) {
           const target = resolveSpec(abs, re.spec);
+          // `export * from` deliberately does NOT carry `default` (ES2015
+          // §15.2.3), so a barrel over a default-exporting module must not
+          // make that component look re-exported.
           if (target)
-            for (const n of exportedNamesOf(target, seen)) names.add(n);
+            for (const n of exportedNamesOf(target, seen))
+              if (n !== "default") names.add(n);
         } else {
           for (const n of re.names) names.add(n.exported);
         }
@@ -283,7 +287,11 @@ export function runShareReachability(root, config) {
     if (!moduleRes.some((re) => re.test(rel))) continue;
     if (isTestPath(rel)) continue;
     for (const [name, kind] of info.localExports) {
-      if (kind === "value") targets.set(`${rel}#${name}`, newTarget(abs, name));
+      if (kind !== "value") continue;
+      // `default` is not an identifier: the same-file rule has to look the
+      // declaration up under the name it was declared with, when it has one.
+      const local = name === "default" ? info.defaultLocal : name;
+      targets.set(`${rel}#${name}`, newTarget(abs, local ?? name));
     }
     for (const e of info.exportList) {
       // Only names that originate here (not import-then-re-export laundering).

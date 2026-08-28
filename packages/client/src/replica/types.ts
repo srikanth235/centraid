@@ -267,6 +267,8 @@ export interface ReplicaIntent {
   state: IntentState;
   createdOrder: number;
   attempts: number;
+  /** First admission, ISO-8601. Absent on rows queued before the stamp existed. */
+  enqueuedAt?: string;
   optimistic: OptimisticMutation[];
   /** App-visible replica reads that must receive this intent's settlement signal. */
   dependencies?: ReplicaDependency[];

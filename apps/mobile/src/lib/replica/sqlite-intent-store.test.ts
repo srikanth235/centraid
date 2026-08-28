@@ -183,4 +183,53 @@ describe("SqliteIntentStore (node:sqlite stand-in)", () => {
   runIntentStoreConformance(() =>
     SqliteIntentStore.create(new NodeSqliteDriver())
   );
+
+  test("caps the settled journal at what listSettled can read", async () => {
+    const driver = new NodeSqliteDriver();
+    const store = SqliteIntentStore.create(driver);
+    for (let index = 0; index < 5_000; index += 1) {
+      driver.run(
+        `INSERT INTO replica_intent_outcome(intent_id, settled_at, record_json)
+         VALUES (?, ?, ?)`,
+        [
+          `old-${index}`,
+          new Date(Date.UTC(2020, 0, 1) + index * 1_000).toISOString(),
+          JSON.stringify({ intentId: `old-${index}`, status: "executed" }),
+        ]
+      );
+    }
+    await store.add(newIntent());
+    await store.claimNext();
+    await store.settle("intent-1", ["sending"], { state: "executed" });
+
+    const [count] = driver.all<{ rows: number }>(
+      "SELECT COUNT(*) AS rows FROM replica_intent_outcome"
+    );
+    expect(count?.rows).toBe(5_000);
+    const settled = await store.listSettled(5_000);
+    expect(settled[0]?.intentId).toBe("intent-1");
+    expect(settled.some((outcome) => outcome.intentId === "old-0")).toBe(false);
+  });
+
+  test("stamps the first admission and keeps it across a claim", async () => {
+    const store = SqliteIntentStore.create(new NodeSqliteDriver());
+    await store.add(newIntent());
+    const stamped = store.enqueuedTimes().get("intent-1");
+    expect(stamped).toBeTypeOf("string");
+    await store.claimNext();
+    expect(store.enqueuedTimes().get("intent-1")).toBe(stamped);
+    await store.settle("intent-1", ["sending"], { state: "executed" });
+    expect(store.enqueuedTimes().has("intent-1")).toBe(false);
+  });
+
+  test("refuses an async transaction body instead of committing outside the lock", () => {
+    const store = SqliteIntentStore.create(new NodeSqliteDriver());
+    const transaction = (
+      store as unknown as { transaction: <T>(work: () => T) => T }
+    ).transaction.bind(store);
+    expect(() => transaction(async () => undefined)).toThrow(
+      ReplicaProtocolError
+    );
+    expect(() => transaction(() => 1)).not.toThrow();
+  });
 });

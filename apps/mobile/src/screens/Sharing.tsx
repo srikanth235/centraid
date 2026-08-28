@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { parseCommonsInvite } from "@centraid/blueprints/apps/_shared/commons-invite";
+import type { CommonsInviteClaim } from "@centraid/blueprints/apps/_shared/commons-invite";
 import {
   SHARING_INVALID_INVITE,
   SHARING_STEWARD_PARKED,
@@ -31,9 +32,24 @@ import type {
   CommonsRecoveryGrant,
 } from "../lib/replica/placement-transport";
 import type { SettingsScreenProps } from "../navigation";
+import {
+  readShareScopes,
+  readShareSection,
+  SHARE_READ_LOADING,
+  shareAbsentLine,
+  sharePartialLine,
+} from "./sharing-reads";
+import type {
+  ScopedShareRead,
+  ShareRead,
+  ShareRowSource,
+  ShareScope,
+} from "./sharing-reads";
 import SharingLinkRow, { LinkTicketPanel } from "./SharingLinkRow";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const NOT_ASKED: ScopedShareRead<never> = { rows: [], missed: [] };
 
 function stewardLine(entry: CommonsRecoveryGrant): string {
   const silent = entry.steward.silentForMs;
@@ -55,76 +71,132 @@ function vaultLabel(vaultId: string, links: readonly GatewayLink[]): string {
   return vaultId;
 }
 
+/** Every mounted vault, not the focused one: pairing can grant several and up
+ *  to four are mounted. `scopes` is empty only before the replica has mounted,
+ *  where the focused vault is the one thing this device knows. */
+function sharingScopes(
+  scopes: readonly ShareScope[] | undefined,
+  vaultId: string | undefined
+): ShareScope[] {
+  if (scopes?.length)
+    return scopes.map(({ vaultId: id, label }) => ({ vaultId: id, label }));
+  return vaultId ? [{ vaultId, label: vaultId }] : [];
+}
+
 export default function SharingScreen({
   navigation,
+  route,
 }: SettingsScreenProps<"Sharing">): React.JSX.Element {
   const { colors } = useTheme();
   const replica = useReplica();
-  const [links, setLinks] = useState<GatewayLink[]>([]);
-  const [edges, setEdges] = useState<GatewayEdge[]>([]);
-  const [commonsInvitations, setCommonsInvitations] = useState<
-    CommonsInvitation[]
-  >([]);
-  const [commonsRecovery, setCommonsRecovery] = useState<
-    CommonsRecoveryGrant[]
-  >([]);
+  const [links, setLinks] =
+    useState<ShareRead<GatewayLink>>(SHARE_READ_LOADING);
+  const [edges, setEdges] =
+    useState<ShareRead<GatewayEdge>>(SHARE_READ_LOADING);
+  const [commonsInvitations, setCommonsInvitations] =
+    useState<ScopedShareRead<CommonsInvitation & ShareRowSource>>(NOT_ASKED);
+  const [commonsRecovery, setCommonsRecovery] =
+    useState<ScopedShareRead<CommonsRecoveryGrant & ShareRowSource>>(NOT_ASKED);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [busyId, setBusyId] = useState<string>();
   const [commonsInviteCode, setCommonsInviteCode] = useState("");
+  // One-time means one time: a token this screen has already handed to the
+  // claim request is never sent twice, however the effect is re-entered.
+  const spentClaims = useRef(new Set<string>());
+
+  const online = replica.online;
 
   const refresh = useCallback((): void => {
-    if (!replica.gatewayBase || !replica.vaultId) return;
-    void Promise.all([
-      listLinks(replica.gatewayBase),
-      listEdges(replica.gatewayBase),
-      listCommonsInvitations(replica.gatewayBase, replica.vaultId),
-      listCommonsRecovery(replica.gatewayBase, replica.vaultId),
-    ])
-      .then(
-        ([
-          nextLinks,
-          nextEdges,
-          nextCommonsInvitations,
-          nextCommonsRecovery,
-        ]) => {
-          setLinks(nextLinks);
-          setEdges(nextEdges);
-          setCommonsInvitations(nextCommonsInvitations);
-          setCommonsRecovery(nextCommonsRecovery);
-          setErrorMessage(undefined);
-        }
-      )
-      .catch((error: unknown) =>
-        setErrorMessage(error instanceof Error ? error.message : String(error))
-      );
-  }, [replica.gatewayBase, replica.vaultId]);
+    const base = replica.gatewayBase;
+    const scopes = sharingScopes(replica.scopes, replica.vaultId);
+    if (!base || !scopes.length) return;
+    // Four independent reads, four independent verdicts: one section's refusal
+    // may not blank the others, and none of them may answer with `[]`.
+    void readShareSection(() => listLinks(base), online).then(setLinks);
+    void readShareSection(() => listEdges(base), online).then(setEdges);
+    void readShareScopes(
+      scopes,
+      (vaultId) => listCommonsInvitations(base, vaultId),
+      online
+    ).then(setCommonsInvitations);
+    void readShareScopes(
+      scopes,
+      (vaultId) => listCommonsRecovery(base, vaultId),
+      online
+    ).then(setCommonsRecovery);
+  }, [online, replica.gatewayBase, replica.scopes, replica.vaultId]);
 
   useEffect(refresh, [refresh]);
 
-  const act = async (
-    id: string,
-    action: () => Promise<unknown>
-  ): Promise<void> => {
-    setBusyId(id);
-    try {
-      await action();
-      refresh();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyId(undefined);
-    }
-  };
-  const snapshots = edges.filter((edge) => edge.mode === "snapshot");
+  const act = useCallback(
+    async (id: string, action: () => Promise<unknown>): Promise<void> => {
+      setBusyId(id);
+      try {
+        await action();
+        refresh();
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusyId(undefined);
+      }
+    },
+    [refresh]
+  );
+
+  const redeem = useCallback(
+    (claim: CommonsInviteClaim): void => {
+      const base = replica.gatewayBase;
+      const actorVaultId = replica.vaultId;
+      if (!base || !actorVaultId) return;
+      void act("commons:claim", () =>
+        claimCommonsInvitation(
+          base,
+          actorVaultId,
+          claim.stewardVaultId,
+          claim.claimToken
+        )
+      );
+    },
+    [act, replica.gatewayBase, replica.vaultId]
+  );
+
+  // A tapped `centraid://commons-invite` lands here carrying the claim
+  // (`deep-links.ts`). It WAITS for the vault: a cold launch reaches this
+  // screen before the replica is mounted, and redeeming into no vault is how
+  // the claim used to get dropped. The moment it is spent, the token leaves
+  // navigation state — nothing persisted or restored may replay a one-time
+  // secret, and the ref makes the send itself happen exactly once.
+  useEffect(() => {
+    const stewardVaultId = route.params?.stewardVaultId;
+    const claimToken = route.params?.claimToken;
+    if (!stewardVaultId || !claimToken) return;
+    if (!replica.gatewayBase || !replica.vaultId) return;
+    if (spentClaims.current.has(claimToken)) return;
+    spentClaims.current.add(claimToken);
+    redeem({ stewardVaultId, claimToken });
+    navigation.setParams({
+      stewardVaultId: undefined,
+      claimToken: undefined,
+    });
+  }, [navigation, redeem, replica.gatewayBase, replica.vaultId, route.params]);
+
+  const snapshots =
+    edges.state === "read"
+      ? edges.rows.filter((edge) => edge.mode === "snapshot")
+      : [];
+  const linkRows = links.state === "read" ? links.rows : [];
   // A grant this seat already re-founded has a live successor, and a steward
   // this device simply cannot reach (`link-down`) proves nothing — neither is
   // a concern to put in front of the owner.
-  const recoveryConcerns = commonsRecovery.filter(
+  const recoveryConcerns = commonsRecovery.rows.filter(
     (entry) =>
       !entry.supersededBy &&
       (entry.steward.presence === "degraded" ||
         entry.steward.presence === "absent" ||
         entry.steward.presence === "parked")
+  );
+  const offered = commonsInvitations.rows.filter(
+    (row) => row.status === "pending"
   );
 
   return (
@@ -141,9 +213,11 @@ export default function SharingScreen({
           <Text style={[t("title"), { color: colors.text }]}>
             People &amp; circles
           </Text>
-          <Text style={[t("small"), { color: colors.textSoft }]}>
-            {links.length} {links.length === 1 ? "person" : "people"}
-          </Text>
+          {links.state === "read" ? (
+            <Text style={[t("small"), { color: colors.textSoft }]}>
+              {linkRows.length} {linkRows.length === 1 ? "person" : "people"}
+            </Text>
+          ) : null}
         </View>
       </View>
       <ScrollView contentContainerStyle={styles.body}>
@@ -153,8 +227,13 @@ export default function SharingScreen({
           </Text>
         ) : null}
 
-        {recoveryConcerns.length ? (
+        {recoveryConcerns.length || commonsRecovery.missed.length ? (
           <Section title="Shared-space recovery" colors={colors}>
+            <Absent
+              read={commonsRecovery}
+              noun="Shared spaces"
+              colors={colors}
+            />
             {recoveryConcerns.map((entry) => {
               const busyKey = `recover:${entry.grantId}`;
               return (
@@ -175,6 +254,9 @@ export default function SharingScreen({
                   </Text>
                   <Text style={[t("small"), { color: colors.textSoft }]}>
                     {stewardLine(entry)}
+                  </Text>
+                  <Text style={[t("small"), { color: colors.textFaint }]}>
+                    {entry.sourceLabel}
                   </Text>
                   {entry.steward.presence === "absent" ? (
                     <Pressable
@@ -233,19 +315,10 @@ export default function SharingScreen({
                 setErrorMessage(SHARING_INVALID_INVITE);
                 return;
               }
-              const actorVaultId = replica.vaultId;
-              if (!replica.gatewayBase || !actorVaultId) return;
               // Discard the raw one-time secret as soon as it is handed to the
               // authenticated claim request; never log or persist it.
               setCommonsInviteCode("");
-              void act("commons:claim", () =>
-                claimCommonsInvitation(
-                  replica.gatewayBase!,
-                  actorVaultId,
-                  claim.stewardVaultId,
-                  claim.claimToken
-                )
-              );
+              redeem(claim);
             }}
             style={[styles.pill, { borderColor: colors.line }]}
           >
@@ -253,74 +326,83 @@ export default function SharingScreen({
           </Pressable>
         </Section>
 
-        {commonsInvitations.some((row) => row.status === "pending") ? (
+        {offered.length || commonsInvitations.missed.length ? (
           <Section title="Shared spaces offered to you" colors={colors}>
-            {commonsInvitations
-              .filter((row) => row.status === "pending")
-              .map((row) => (
-                <View
-                  key={row.invitationId}
-                  style={[
-                    styles.card,
-                    {
-                      backgroundColor: colors.bgElev,
-                      borderColor: colors.line,
-                    },
-                  ]}
-                >
-                  <Text style={[t("body"), { color: colors.text }]}>
-                    Ongoing shared space from {row.stewardVaultId}
-                  </Text>
-                  <Text style={[t("small"), { color: colors.textSoft }]}>
-                    {formatBytes(row.currentSizeBytes)} now · nothing is written
-                    until you accept.
-                  </Text>
-                  <View style={styles.rowActions}>
-                    {(["accept", "refuse"] as const).map((answer) => {
-                      const busyKey = `commons:${row.invitationId}`;
-                      return (
-                        <Pressable
-                          key={answer}
-                          accessibilityRole="button"
-                          disabled={busyId === busyKey}
-                          onPress={() =>
-                            replica.gatewayBase &&
-                            replica.vaultId &&
-                            void act(busyKey, () =>
-                              answerCommonsInvitation(
-                                replica.gatewayBase!,
-                                row.invitationId,
-                                replica.vaultId!,
-                                answer
-                              )
+            <Absent
+              read={commonsInvitations}
+              noun="Shared spaces offered to you"
+              colors={colors}
+            />
+            {offered.map((row) => (
+              <View
+                key={`${row.sourceVaultId}:${row.invitationId}`}
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.bgElev,
+                    borderColor: colors.line,
+                  },
+                ]}
+              >
+                <Text style={[t("body"), { color: colors.text }]}>
+                  Ongoing shared space from {row.stewardVaultId}
+                </Text>
+                <Text style={[t("small"), { color: colors.textSoft }]}>
+                  {formatBytes(row.currentSizeBytes)} now · nothing is written
+                  until you accept.
+                </Text>
+                <Text style={[t("small"), { color: colors.textFaint }]}>
+                  {row.sourceLabel}
+                </Text>
+                <View style={styles.rowActions}>
+                  {(["accept", "refuse"] as const).map((answer) => {
+                    const busyKey = `commons:${row.invitationId}`;
+                    return (
+                      <Pressable
+                        key={answer}
+                        accessibilityRole="button"
+                        disabled={busyId === busyKey}
+                        onPress={() =>
+                          replica.gatewayBase &&
+                          void act(busyKey, () =>
+                            answerCommonsInvitation(
+                              replica.gatewayBase!,
+                              row.invitationId,
+                              row.sourceVaultId,
+                              answer
                             )
-                          }
-                          style={[styles.pill, { borderColor: colors.line }]}
+                          )
+                        }
+                        style={[styles.pill, { borderColor: colors.line }]}
+                      >
+                        <Text
+                          style={[
+                            t("control"),
+                            {
+                              color:
+                                answer === "accept"
+                                  ? colors.accent
+                                  : colors.textSoft,
+                            },
+                          ]}
                         >
-                          <Text
-                            style={[
-                              t("control"),
-                              {
-                                color:
-                                  answer === "accept"
-                                    ? colors.accent
-                                    : colors.textSoft,
-                              },
-                            ]}
-                          >
-                            {answer === "accept" ? "Accept" : "Refuse"}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                          {answer === "accept" ? "Accept" : "Refuse"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
-              ))}
+              </View>
+            ))}
           </Section>
         ) : null}
 
         <Section title="Recent copies between your vaults" colors={colors}>
-          {snapshots.length ? (
+          {edges.state === "absent" ? (
+            <Text style={[t("small"), { color: colors.textSoft }]}>
+              {shareAbsentLine("Copies between your vaults", edges.reach)}
+            </Text>
+          ) : snapshots.length ? (
             snapshots.map((edge) => (
               <View
                 key={edge.edgeId}
@@ -331,7 +413,7 @@ export default function SharingScreen({
               >
                 <View style={styles.rowBetween}>
                   <Text style={[t("body"), { color: colors.text }]}>
-                    {vaultLabel(edge.audienceVaultId, links)}
+                    {vaultLabel(edge.audienceVaultId, linkRows)}
                   </Text>
                   <Text style={[t("control"), { color: colors.textSoft }]}>
                     {edge.status}
@@ -359,14 +441,18 @@ export default function SharingScreen({
         </Section>
 
         <Section title="People" colors={colors}>
-          {links.length ? (
-            links.map((link) => (
+          {links.state === "absent" ? (
+            <Text style={[t("small"), { color: colors.textSoft }]}>
+              {shareAbsentLine("Who is linked", links.reach)}
+            </Text>
+          ) : linkRows.length ? (
+            linkRows.map((link) => (
               <SharingLinkRow
                 key={link.linkId}
                 link={link}
                 busy={busyId === link.linkId}
                 colors={colors}
-                label={vaultLabel(link.remoteVaultId ?? link.vaultB, links)}
+                label={vaultLabel(link.remoteVaultId ?? link.vaultB, linkRows)}
                 onApprove={() =>
                   replica.gatewayBase &&
                   void act(link.linkId, () =>
@@ -383,6 +469,27 @@ export default function SharingScreen({
         </Section>
       </ScrollView>
     </TopSafeArea>
+  );
+}
+
+/** What a multi-scope section could not look at. Silent when every mounted
+ *  vault answered — absence is only ever drawn from an observed failure. */
+function Absent({
+  read,
+  noun,
+  colors,
+}: {
+  read: ScopedShareRead<unknown>;
+  noun: string;
+  colors: ReturnType<typeof useTheme>["colors"];
+}): React.JSX.Element | null {
+  if (!read.missed.length || !read.reach) return null;
+  return (
+    <Text style={[t("small"), { color: colors.textSoft }]}>
+      {read.rows.length
+        ? sharePartialLine(read.missed)
+        : shareAbsentLine(noun, read.reach)}
+    </Text>
   );
 }
 

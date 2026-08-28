@@ -390,3 +390,45 @@ describe("helpers", () => {
     expect(kindIconName({ media_type: null, title: "x.bin" })).toBe("FileText");
   });
 });
+
+describe("mounted-source provenance on the drive row", () => {
+  const stamped = (extra: Record<string, unknown>): DriveEntityRows =>
+    fixtureRows({
+      documents: [
+        {
+          document_id: "doc-lease",
+          current_content_id: "content-lease",
+          title: "Lease — 14 Sitwell Road.pdf",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-08-01T00:00:00Z",
+          deleted_at: null,
+          purge_at: null,
+          ...extra,
+        },
+      ],
+    });
+
+  it("carries the document row's own canWrite and every source label", () => {
+    const { documents } = projectDrive(
+      stamped({
+        __centraidCanWrite: false,
+        __centraidScopeLabels: ["Studio", "Home"],
+      })
+    );
+    expect(documents[0]?.canWrite).toBe(false);
+    expect(documents[0]?.scopeLabels).toStrictEqual(["Studio", "Home"]);
+  });
+
+  it("reads an unstamped drive as the member's own", () => {
+    const { documents } = projectDrive(fixtureRows());
+    expect(documents.every((doc) => doc.canWrite)).toBe(true);
+    expect(documents[0]?.scopeLabels).toStrictEqual([]);
+  });
+
+  it("keeps the replica row itself, so the shared overlay reader can be asked", () => {
+    const { documents } = projectDrive(
+      stamped({ __centraid_pending_key: "intent-1" })
+    );
+    expect(documents[0]?.raw["__centraid_pending_key"]).toBe("intent-1");
+  });
+});

@@ -1,21 +1,29 @@
-import { File, Paths } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { formatBytes } from "@centraid/design";
 
+import { replicaStorageDirectory } from "../../modules/centraid-storage";
 import Icon from "../kit/components/Icon";
 import { Text } from "../kit/components/NativeText";
 import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import { density, family, metrics, radii, t, useTheme } from "../kit/theme";
-import { sqliteFamilyBytes } from "../lib/replica/storage-accounting";
+import { getReplicaBackgroundRegistrationStatus } from "../lib/replica/background-sync";
+import type { ReplicaBackgroundRegistrationStatus } from "../lib/replica/background-sync";
+import {
+  foldPendingUploadGroups,
+  otherPhoneStorage,
+  sqliteFamilyBytes,
+} from "../lib/replica/storage-accounting";
+import type { OtherPhoneStorage } from "../lib/replica/storage-accounting";
 import {
   clearPinnedThumbnailPacks,
   thumbnailPackBytes,
   THUMBNAIL_SOURCE_BUDGET_BYTES,
 } from "../lib/replica/thumbnail-pack";
-import { UploadQueue } from "../lib/upload/native-queue";
+import { UPLOAD_DB_NAME, UploadQueue } from "../lib/upload/native-queue";
 import type { SettingsScreenProps } from "../navigation";
 
 interface ScopeStorage {
@@ -27,32 +35,39 @@ interface ScopeStorage {
   pendingUploadCount: number;
 }
 
+const NO_OTHER_STORAGE: OtherPhoneStorage = {
+  uploadLedgerBytes: 0,
+  unmountedVaultBytes: 0,
+  unmountedVaultCount: 0,
+};
+
 export default function PhoneStorage({
   navigation,
   route,
 }: SettingsScreenProps<"PhoneStorage">): React.JSX.Element {
   const { colors } = useTheme();
-  const { scopes = [] } = useReplica();
+  const { scopes = [], session, refresh: refreshReplica } = useReplica();
+  const [background, setBackground] =
+    useState<ReplicaBackgroundRegistrationStatus>();
   const [rows, setRows] = useState<ScopeStorage[]>([]);
   const [unassignedPendingBytes, setUnassignedPendingBytes] = useState(0);
   const [unassignedPendingCount, setUnassignedPendingCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingVideos, setPendingVideos] = useState(0);
   const [queueReadable, setQueueReadable] = useState(true);
+  const [other, setOther] = useState<OtherPhoneStorage>(NO_OTHER_STORAGE);
   const [expandedVaultId, setExpandedVaultId] = useState<string>();
+  // Nothing here may cost the size of the queue or of a pack: the pending
+  // numbers are one SQL aggregate and each pack total one native walk.
+  // Reported semantics are unchanged (docs/mobile-offline.md).
   const refresh = useCallback(() => {
-    let pendingItems: ReturnType<UploadQueue["pending"]> = [];
+    let totals = foldPendingUploadGroups([]);
     let queue: UploadQueue | undefined;
     try {
       queue = UploadQueue.open({
         gatewayBaseUrl: "http://127.0.0.1",
       });
-      pendingItems = queue.pending();
-      setPendingCount(pendingItems.length);
-      setPendingVideos(
-        pendingItems.filter((item) => item.mediaType?.startsWith("video/"))
-          .length
-      );
+      totals = foldPendingUploadGroups(queue.pendingStorageGroups());
       setQueueReadable(true);
     } catch {
       // A busy upload writer is transient; next focus/refresh fills it in.
@@ -60,34 +75,55 @@ export default function PhoneStorage({
     } finally {
       queue?.close();
     }
-    const unassigned = pendingItems.filter((item) => !item.targetVaultId);
-    setUnassignedPendingBytes(
-      unassigned.reduce((sum, item) => sum + item.plaintextSize, 0)
-    );
-    setUnassignedPendingCount(unassigned.length);
+    setPendingCount(totals.total.itemCount);
+    setPendingVideos(totals.videoCount);
+    setUnassignedPendingBytes(totals.unassigned.bytes);
+    setUnassignedPendingCount(totals.unassigned.itemCount);
     setRows(
       scopes.map((scope) => {
+        const pending = totals.byVault.get(scope.vaultId);
         return {
           vaultId: scope.vaultId,
           label: scope.label,
           databaseBytes: sqliteFamilyBytes(scope.databaseName, fileBytes),
           thumbnailBytes: thumbnailPackBytes(scope.vaultId),
-          pendingUploadBytes: pendingItems
-            .filter((item) => item.targetVaultId === scope.vaultId)
-            .reduce((sum, item) => sum + item.plaintextSize, 0),
-          pendingUploadCount: pendingItems.filter(
-            (item) => item.targetVaultId === scope.vaultId
-          ).length,
+          pendingUploadBytes: pending?.bytes ?? 0,
+          pendingUploadCount: pending?.itemCount ?? 0,
         };
       })
+    );
+    setOther(
+      otherPhoneStorage(
+        replicaDirectoryFiles(),
+        scopes.map((scope) => scope.databaseName),
+        UPLOAD_DB_NAME
+      )
     );
   }, [scopes]);
   useEffect(() => {
     const timer = setTimeout(refresh, 0);
     return () => clearTimeout(timer);
   }, [refresh]);
+  // The durably recorded registration outcome, not a fresh attempt: a refused
+  // registration is otherwise invisible — Background App Refresh switched off
+  // looks exactly like a phone that has simply not been woken yet.
+  useEffect(() => {
+    let cancelled = false;
+    void getReplicaBackgroundRegistrationStatus().then(
+      (status) => {
+        if (!cancelled && status) setBackground(status);
+      },
+      () => undefined
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const backgroundNotice = backgroundSyncNotice(background);
+  const otherTotal = other.uploadLedgerBytes + other.unmountedVaultBytes;
   const total =
     unassignedPendingBytes +
+    otherTotal +
     rows.reduce(
       (sum, row) =>
         sum + row.databaseBytes + row.thumbnailBytes + row.pendingUploadBytes,
@@ -163,6 +199,25 @@ export default function PhoneStorage({
               {queueReadable
                 ? "These stay on this phone until their uploads finish."
                 : "The upload ledger is still here — reopen this page after making room."}
+            </Text>
+          </View>
+        ) : null}
+        {backgroundNotice ? (
+          <View
+            style={[
+              styles.attention,
+              {
+                backgroundColor: colors.bg,
+                borderColor: colors.line,
+                borderLeftColor: colors.attention,
+              },
+            ]}
+          >
+            <Text style={[styles.attentionTitle, { color: colors.text }]}>
+              {backgroundNotice.title}
+            </Text>
+            <Text style={[styles.attentionBody, { color: colors.textSoft }]}>
+              {backgroundNotice.body}
             </Text>
           </View>
         ) : null}
@@ -242,6 +297,32 @@ export default function PhoneStorage({
             </Text>
           </View>
         ) : null}
+        {otherTotal > 0 ? (
+          <>
+            <Text style={[styles.section, { color: colors.text }]}>
+              Other Centraid data on this phone
+            </Text>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgElev, borderColor: colors.line },
+              ]}
+            >
+              <StorageLine
+                label="Upload ledger · the queue's own database"
+                bytes={other.uploadLedgerBytes}
+                color={colors.textSoft}
+              />
+              {other.unmountedVaultCount > 0 ? (
+                <StorageLine
+                  label={`Vault databases not currently mounted · ${other.unmountedVaultCount}`}
+                  bytes={other.unmountedVaultBytes}
+                  color={colors.textSoft}
+                />
+              ) : null}
+            </View>
+          </>
+        ) : null}
         <Text style={[styles.section, { color: colors.text }]}>Room</Text>
         <View style={[styles.explainer, { backgroundColor: colors.bgSunken }]}>
           <Icon name="shield" size={18} color={colors.textSoft} />
@@ -278,6 +359,13 @@ export default function PhoneStorage({
             }
             color={pendingCount > 0 ? colors.attention : colors.textSoft}
           />
+          {otherTotal > 0 ? (
+            <StorageLine
+              label="Other Centraid data · stays"
+              bytes={otherTotal}
+              color={colors.textSoft}
+            />
+          ) : null}
         </View>
         <Pressable
           style={[styles.button, { borderColor: colors.line }]}
@@ -292,6 +380,12 @@ export default function PhoneStorage({
                   style: "destructive",
                   onPress: () => {
                     clearPinnedThumbnailPacks();
+                    // Room alone does not restart sync: the coordinator parked
+                    // the feed when the disk filled and stays parked until it
+                    // is told the space exists (coordinator.ts). The pull that
+                    // follows is what clears `out of room` from the status bar.
+                    session?.resumeAfterStorageFull();
+                    void refreshReplica?.();
                     refresh();
                   },
                 },
@@ -328,9 +422,49 @@ function StorageLine({
   );
 }
 
+/**
+ * What background sync can honestly claim about itself, when that is worth a
+ * row at all. A registered, permitted task says nothing here: a standing "it
+ * works" card is the badge §18 forbids, and the only states a member can act
+ * on are the two below.
+ */
+function backgroundSyncNotice(
+  status: ReplicaBackgroundRegistrationStatus | undefined
+): { title: string; body: string } | undefined {
+  if (!status) return undefined;
+  if (status.availability === "restricted")
+    return {
+      title: "Background App Refresh is off",
+      body: "Turn it back on in Settings to sync while Centraid is closed.",
+    };
+  if (status.backgroundTask.registered && status.pushTask.registered)
+    return undefined;
+  return {
+    title: "Background sync did not register",
+    body:
+      status.backgroundTask.reason ??
+      status.pushTask.reason ??
+      "This phone syncs while you have Centraid open.",
+  };
+}
+
 function fileBytes(path: string): number {
   const file = new File(path);
   return file.exists ? file.size : 0;
+}
+
+/** One shallow listing: a handful of database families plus the
+ *  `thumbnail-pack` subdirectory, whose contents are sized natively. */
+function replicaDirectoryFiles(): { name: string; size: number }[] {
+  const root = replicaStorageDirectory();
+  if (!root) return [];
+  const directory = new Directory(root);
+  if (!directory.exists) return [];
+  return directory
+    .list()
+    .flatMap((entry) =>
+      entry instanceof File ? [{ name: entry.name, size: entry.size }] : []
+    );
 }
 
 const styles = StyleSheet.create({

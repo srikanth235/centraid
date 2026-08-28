@@ -20,7 +20,7 @@ import { bytesFileSource } from "./file-source";
 import { DirectTransferError } from "./gateway-client";
 import type { DirectTransferClient } from "./gateway-client";
 import { NodeSqliteFileDriver } from "./node-sqlite-driver";
-import { UploadQueueStore } from "./store";
+import { PENDING_PAGE_LIMIT, UploadQueueStore } from "./store";
 import { UploadDrainer } from "./uploader";
 import type { PartPutter } from "./uploader";
 
@@ -304,6 +304,82 @@ describe("uploader", () => {
       };
       await drainAttempt(0);
       expect(store.bySha(SHA)?.state).toBe("failed");
+    });
+
+    // The drain loop's shape, at a depth the old form could not hold cheaply:
+    // it read every non-terminal row up front and tail-called itself once per
+    // item, so both its live rows and its chain of pending promises tracked
+    // the backlog. What is observable — and gated here — is that no read
+    // materializes more than a page, that the walk still covers the whole
+    // queue, and that the progress total is not lost to paging. (Async frames
+    // do not accumulate on V8's stack, so a stack-depth probe would pass under
+    // the recursive form too and is deliberately not asserted.)
+    it("drains a queue deeper than one page, one bounded read at a time", async () => {
+      const DEPTH = 1_000;
+      for (let index = 0; index < DEPTH; index += 1) {
+        const sha = index.toString(16).padStart(64, "0");
+        const frameCount = frameCountFor(BYTES.byteLength);
+        store.enqueue({
+          itemId: `item-${index}`,
+          sha256: sha,
+          localUri: "file://a.jpg",
+          plaintextSize: BYTES.byteLength,
+          sealedSize: sealedSizeFor(BYTES.byteLength, frameCount),
+          frameCount,
+          partCount: partCountFor(frameCount),
+        });
+      }
+      // A transport that settles without transferring: this test is about the
+      // shape of the drain loop, not about the bytes.
+      const totals: number[] = [];
+      const settling: DirectTransferClient = {
+        begin: async (input) => ({
+          alreadyPresent: true,
+          custody: "remote-only",
+          keyBase64: "",
+          completedParts: [],
+          settlement: { alreadyPresent: true, sha256: input.sha256 },
+        }),
+        recordPart: async () => undefined,
+        complete: async () => ({}),
+      };
+      const pages: number[] = [];
+      const pending = store.pending.bind(store);
+      store.pending = (limit?: number, afterOrder?: number) => {
+        const page = pending(limit, afterOrder);
+        pages.push(page.length);
+        return page;
+      };
+
+      const drain = new UploadDrainer({
+        store,
+        client: settling,
+        crypto,
+        openFile,
+        putPart: async () => '"etag"',
+        gatewayBaseUrl: FAKE_GATEWAY,
+        fetchImpl,
+        partConcurrency: 1,
+        onProgress: (progress) => totals.push(progress.total),
+      });
+      const summary = await drain.drainOnce();
+
+      expect(summary.settled, "every queued item drains in one pass").toBe(
+        DEPTH
+      );
+      expect(store.pendingCount()).toBe(0);
+      expect(
+        Math.max(...pages),
+        "no read materializes more than one page"
+      ).toBeLessThanOrEqual(PENDING_PAGE_LIMIT);
+      expect(
+        new Set(totals),
+        "progress reports the SQL total, not the page size"
+      ).toStrictEqual(new Set([DEPTH]));
+      expect(
+        pages,
+        "the queue is walked in pages, not read once in full"
+      ).toHaveLength(Math.ceil(DEPTH / PENDING_PAGE_LIMIT) + 1);
     });
 
     it("halts cleanly when policy denies transfer, leaving the item recoverable", async () => {

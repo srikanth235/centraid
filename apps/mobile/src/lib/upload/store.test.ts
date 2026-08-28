@@ -7,8 +7,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
+import {
+  foldPendingUploadGroups,
+  pendingBytesByVault,
+} from "../replica/storage-accounting";
 import { NodeSqliteFileDriver } from "./node-sqlite-driver";
-import { UploadQueueStore } from "./store";
+import { PENDING_PAGE_LIMIT, UploadQueueStore } from "./store";
 import type { NewUpload } from "./store";
 
 let dir: string;
@@ -82,6 +86,86 @@ describe("store", () => {
       expect(store.isTerminal("item-1")).toBe(true);
       expect(store.isTerminal("item-2")).toBe(true);
       expect(store.isTerminal("item-3")).toBe(false);
+    });
+
+    it("reads the queue in bounded pages keyed on created_order", () => {
+      for (let index = 0; index < PENDING_PAGE_LIMIT + 7; index += 1) {
+        store.enqueue(
+          upload({
+            itemId: `item-${index}`,
+            sha256: index.toString(16).padStart(64, "0"),
+          })
+        );
+      }
+
+      const first = store.pending();
+      expect(first, "a page, never the whole ledger").toHaveLength(
+        PENDING_PAGE_LIMIT
+      );
+      expect(store.pendingCount(), "the total is SQL, not rows").toBe(
+        PENDING_PAGE_LIMIT + 7
+      );
+
+      const second = store.pending(
+        PENDING_PAGE_LIMIT,
+        first.at(-1)!.createdOrder
+      );
+      expect(second).toHaveLength(7);
+      expect(
+        new Set([...first, ...second].map((item) => item.itemId)).size,
+        "the keyset cursor never re-reads a row"
+      ).toBe(PENDING_PAGE_LIMIT + 7);
+      expect(
+        store.pending(PENDING_PAGE_LIMIT, second.at(-1)!.createdOrder)
+      ).toStrictEqual([]);
+    });
+
+    it("aggregates pending bytes per durable target, matching a row-by-row sum", () => {
+      const rows: { size: number; vault?: string; mediaType?: string }[] = [
+        { size: 10, vault: "vault-personal", mediaType: "image/jpeg" },
+        { size: 25, vault: "vault-personal", mediaType: "video/quicktime" },
+        { size: 40, vault: "vault-family", mediaType: "video/mp4" },
+        // A legacy pre-target row: durable, and assigned to no vault.
+        { size: 7 },
+      ];
+      rows.forEach((row, index) => {
+        store.enqueue(
+          upload({
+            itemId: `item-${index}`,
+            sha256: index.toString(16).padStart(64, "0"),
+            plaintextSize: row.size,
+            ...(row.vault ? { targetVaultId: row.vault } : {}),
+            ...(row.mediaType ? { mediaType: row.mediaType } : {}),
+          })
+        );
+      });
+      // Terminal rows are not pending storage and must not be counted.
+      store.enqueue(
+        upload({
+          itemId: "item-settled",
+          sha256: "f".repeat(64),
+          plaintextSize: 1_000,
+          targetVaultId: "vault-personal",
+        })
+      );
+      store.settle("item-settled", { casAck: "replicated" });
+
+      const totals = foldPendingUploadGroups(store.pendingStorageGroups());
+      const byRow = pendingBytesByVault(store.pending());
+
+      expect(
+        Object.fromEntries(
+          [...totals.byVault].map(([vaultId, bucket]) => [
+            vaultId,
+            bucket.bytes,
+          ])
+        ),
+        "SQL aggregate equals the row sum"
+      ).toStrictEqual(Object.fromEntries(byRow.byVault));
+      expect(totals.unassigned.bytes).toBe(byRow.unassigned);
+      expect(totals.unassigned.bytes, "never folded into a vault").toBe(7);
+      expect(totals.total).toStrictEqual({ bytes: 82, itemCount: 4 });
+      expect(totals.videoCount, "case-sensitive video/* probe").toBe(2);
     });
 
     it("walks the item state machine and persists the settlement receipt", () => {

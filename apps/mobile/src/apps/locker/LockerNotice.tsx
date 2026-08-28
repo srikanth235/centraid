@@ -36,6 +36,7 @@ export interface LockerNoticeProps {
   state: LockerScreenState;
   /** How many metadata writes are still on this device. Never a secret. */
   pending: number;
+  waiting?: string | null;
   /** When the window last landed, for the stale sentence's clock. */
   lastReadAt: string | null;
 }
@@ -44,12 +45,13 @@ export interface LockerNoticeProps {
  *  (`ready`, `dayone`, `denied` and `loading` are screens, not rows). */
 export function lockerNoticeText(props: LockerNoticeProps): string | null {
   if (props.state === "offline") return OFFLINE_NOTICE;
-  if (props.state === "pending") return pendingNotice(props.pending);
+  if (props.state === "pending")
+    return props.waiting ?? pendingNotice(props.pending);
   if (props.state === "stale") {
     return props.lastReadAt ? staleNotice(clockAt(props.lastReadAt)) : null;
   }
   if (props.state === "conflict") return CONFLICT_NOTICE;
-  if (props.state === "parked") return PARKED_NOTICE;
+  if (props.state === "parked") return props.waiting ?? PARKED_NOTICE;
   if (props.state === "reauth") return REAUTH_NOTICE;
   return null;
 }

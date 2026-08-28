@@ -57,6 +57,46 @@ describe("native write outcome surface", () => {
     );
   });
 
+  it("routes a conflict to the row that still holds both versions", () => {
+    // THE REGRESSION THIS PINS (#880 W2.3). A conflict fell through to the
+    // generic failure line — "Change not applied: …" — which told a member
+    // their work was gone while the write was still retained on the phone with
+    // both versions and a retry waiting for them.
+    expect(
+      surfaceWriteOutcome({
+        intentId: "i-c",
+        status: "conflict",
+        reason: "This row changed somewhere else.",
+        conflict: {
+          entity: "expense",
+          rowId: "e-1",
+          expectedVersion: 3,
+          actualVersion: 5,
+        },
+      })
+    ).toBe(false);
+    const line = post.mock.lastCall?.[0] as string;
+    expect(line).toContain("Expected version 3; found 5.");
+    expect(line).toContain("Open Pending changes to retry or discard.");
+    expect(line).not.toContain("Change not applied");
+  });
+
+  it("lets a seat own the conflict door itself", () => {
+    let opened = false;
+    expect(
+      surfaceWriteOutcome(
+        { intentId: "i-c2", status: "conflict" },
+        {
+          onConflict: () => {
+            opened = true;
+          },
+        }
+      )
+    ).toBe(false);
+    expect(opened).toBe(true);
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("lets callers own parked/queued UX without double alerts", () => {
     const onParked = vi.fn<() => void>();
     const onQueued = vi.fn<() => void>();

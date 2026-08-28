@@ -304,6 +304,86 @@ test("an allowlist entry without a reason is a config error", (t) => {
   assert.match(result.configErrors[0], /non-empty reason/u);
 });
 
+// Default exports (#880). Every screen-level sharing component on the phone —
+// ShareSheet, GrantSheet, QuickAddPerson — is `export default`, and the pair
+// that reaches it is `import ShareSheet from "./ShareSheet"`. Before the
+// analyzer bound those two halves together, the import clause carried no named
+// bindings, so the caller was invisible and every such component was reported
+// as dead: the gate would have been unusable over the sharing UI.
+const DEFAULT_CAP = "export default function capability() {\n  return 1;\n}\n";
+
+test("a default import is a production caller of the module's default export", (t) => {
+  const root = fixture(t, {
+    "packages/core/src/share/cap.ts": DEFAULT_CAP,
+    "packages/core/src/serve.ts":
+      'import capability from "./share/cap.js";\ncapability();\n',
+  });
+  assert.deepEqual(runShareReachability(root, CONFIG).offenses, []);
+});
+
+test("an unreached default export is an offense under the name `default`", (t) => {
+  const root = fixture(t, { "packages/core/src/share/cap.ts": DEFAULT_CAP });
+  const { offenses } = runShareReachability(root, CONFIG);
+  assert.equal(offenses.length, 1);
+  assert.equal(
+    offenses[0].capability,
+    "packages/core/src/share/cap.ts#default"
+  );
+});
+
+test("`export default <local>` re-exports the declaration; it is not a same-file use", (t) => {
+  const declared =
+    "function capability() {\n  return 1;\n}\nexport default capability;\n";
+  const unused = fixture(t, { "packages/core/src/share/cap.ts": declared });
+  const { offenses } = runShareReachability(unused, CONFIG);
+  assert.equal(offenses.length, 1);
+  assert.equal(
+    offenses[0].capability,
+    "packages/core/src/share/cap.ts#default"
+  );
+
+  const used = fixture(t, {
+    "packages/core/src/share/cap.ts": `${declared}capability();\n`,
+  });
+  assert.deepEqual(runShareReachability(used, CONFIG).offenses, []);
+});
+
+test("`export *` does not carry `default`, so a barrel cannot launder one", (t) => {
+  const root = fixture(t, {
+    "packages/core/src/share/cap.ts": `${DEFAULT_CAP}export const named = 2;\n`,
+    "packages/core/src/index.ts": 'export * from "./share/cap.js";\n',
+    "packages/other/src/use.ts":
+      'import * as core from "@fix/core";\ncore.named;\ncore.default;\n',
+  });
+  const { offenses } = runShareReachability(root, CONFIG);
+  assert.deepEqual(
+    offenses.map((offense) => offense.capability),
+    ["packages/core/src/share/cap.ts#default"]
+  );
+});
+
+test("a default-imported binding used only in a type position is type-only", (t) => {
+  const root = fixture(t, {
+    "packages/core/src/share/cap.ts": DEFAULT_CAP,
+    "packages/other/src/use.ts":
+      'import capability from "@fix/core/share/cap.js";\nexport function f(x: typeof capability) {\n  return x;\n}\n',
+  });
+  const { offenses } = runShareReachability(root, CONFIG);
+  assert.equal(offenses.length, 1);
+  assert.match(offenses[0].why, /type-only reachers/u);
+});
+
+test("a re-exported default reaches its origin through the barrel", (t) => {
+  const root = fixture(t, {
+    "packages/core/src/share/cap.ts": DEFAULT_CAP,
+    "packages/core/src/index.ts":
+      'export { default as capability } from "./share/cap.js";\n',
+    "packages/other/src/use.ts":
+      'import { capability } from "@fix/core";\ncapability();\n',
+  });
+  assert.deepEqual(runShareReachability(root, CONFIG).offenses, []);
+});
+
 test("test classification follows the TESTING.md path conventions", () => {
   for (const p of [
     "packages/server/src/serve/vault-plane.test.ts",

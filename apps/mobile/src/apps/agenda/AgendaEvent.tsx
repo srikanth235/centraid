@@ -18,6 +18,10 @@ import { Text } from "../../kit/components/NativeText";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import {
+  READ_ONLY_SOURCE_REASON,
+  rowCanWrite,
+} from "../../kit/replica/row-provenance";
+import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
@@ -80,6 +84,8 @@ export default function AgendaEvent({
   const myAttendee = attendees.find(
     (row) => me !== undefined && String(row["party_id"]) === String(me)
   );
+
+  const writable = rowCanWrite(canonical);
 
   const pending = readPendingOverlay(
     (canonical ?? {}) as unknown as Record<string, unknown>
@@ -162,6 +168,11 @@ export default function AgendaEvent({
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {writable ? null : (
+          <Text style={[styles.readOnly, { color: colors.net }]}>
+            {READ_ONLY_SOURCE_REASON}
+          </Text>
+        )}
         <Text style={[styles.date, { color: colors.textSoft }]}>
           {new Intl.DateTimeFormat(undefined, {
             weekday: "long",
@@ -251,13 +262,28 @@ export default function AgendaEvent({
                 accessibilityRole="button"
                 accessibilityLabel={answer.label}
                 accessibilityState={{
+                  disabled: !writable,
                   selected:
                     String(myAttendee["partstat"] ?? "") === answer.partstat,
                 }}
-                style={[styles.rsvpButton, { borderColor: colors.lineStrong }]}
+                accessibilityHint={
+                  writable ? undefined : READ_ONLY_SOURCE_REASON
+                }
+                disabled={!writable}
+                style={[
+                  styles.rsvpButton,
+                  {
+                    borderColor: writable ? colors.lineStrong : colors.line,
+                  },
+                ]}
                 onPress={() => void rsvp(answer.partstat)}
               >
-                <Text style={[styles.rsvpText, { color: colors.text }]}>
+                <Text
+                  style={[
+                    styles.rsvpText,
+                    { color: writable ? colors.text : colors.textDisabled },
+                  ]}
+                >
                   {answer.label}
                 </Text>
               </Pressable>
@@ -268,11 +294,23 @@ export default function AgendaEvent({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Edit this event"
+          accessibilityState={{ disabled: !writable }}
+          accessibilityHint={writable ? undefined : READ_ONLY_SOURCE_REASON}
+          disabled={!writable}
           style={[styles.action, { borderBottomColor: colors.line }]}
           onPress={() => setEditOpen(true)}
         >
-          <Icon name="Pencil" size={18} color={colors.text} />
-          <Text style={[styles.actionText, { color: colors.text }]}>
+          <Icon
+            name="Pencil"
+            size={18}
+            color={writable ? colors.text : colors.textDisabled}
+          />
+          <Text
+            style={[
+              styles.actionText,
+              { color: writable ? colors.text : colors.textDisabled },
+            ]}
+          >
             Edit event
           </Text>
         </Pressable>
@@ -280,6 +318,9 @@ export default function AgendaEvent({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Ask to cancel this event"
+          accessibilityState={{ disabled: !writable }}
+          accessibilityHint={writable ? undefined : READ_ONLY_SOURCE_REASON}
+          disabled={!writable}
           style={[styles.action, { borderBottomColor: colors.line }]}
           onPress={() =>
             Alert.alert(
@@ -296,8 +337,17 @@ export default function AgendaEvent({
             )
           }
         >
-          <Icon name="XCircle" size={18} color={colors.danger} />
-          <Text style={[styles.actionText, { color: colors.danger }]}>
+          <Icon
+            name="XCircle"
+            size={18}
+            color={writable ? colors.danger : colors.textDisabled}
+          />
+          <Text
+            style={[
+              styles.actionText,
+              { color: writable ? colors.danger : colors.textDisabled },
+            ]}
+          >
             Ask to cancel
           </Text>
         </Pressable>
@@ -359,6 +409,7 @@ const styles = StyleSheet.create({
   parkedTitle: { ...t("bodyStrong") },
   pendingMark: { borderStartWidth: 2, paddingStart: 8 },
   pendingText: { ...t("annotLabel") },
+  readOnly: { ...t("annotLabel"), marginBottom: 8 },
   rsvpButton: {
     alignItems: "center",
     borderRadius: radii.pill,

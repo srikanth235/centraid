@@ -9,6 +9,7 @@ import { AppState } from "react-native";
 
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
+import { coalesceWork } from "../../lib/coalesce";
 import { authHeader } from "../../lib/gateway";
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
 import { pinnedThumbnailUri } from "../../lib/replica/thumbnail-pack";
@@ -45,6 +46,13 @@ const IDLE_UPLOAD_POLL_MS = 30_000;
 /** Debounce merged-timeline recomputes during the device walk; page one paints immediately. */
 const WALK_RECOMPUTE_DEBOUNCE_MS = 250;
 
+/**
+ * Invalidation burst window, mirroring the kit's `useReplicaQuery`: long
+ * enough to swallow one delta batch, short enough that a change made on
+ * another device still feels immediate.
+ */
+const REPLICA_INVALIDATION_WINDOW_MS = 120;
+
 const REPLICA_ENTITIES = [
   "media.asset",
   "core.content_item",
@@ -78,6 +86,8 @@ class PhotoTimelineEngine {
   #queueBase?: string;
   #uploadsInFlight = false;
   #recomputeTimer?: ReturnType<typeof setTimeout>;
+  #reading = false;
+  #readAgain = false;
 
   #assetRows: ReplicaRow[] = [];
   #contentRows: ReplicaRow[] = [];
@@ -154,10 +164,19 @@ class PhotoTimelineEngine {
       this.#generation += 1;
       this.#unsubscribe?.();
       this.#replicaLoading = true;
-      this.#unsubscribe = session.subscribe(
-        "photos",
-        () => void this.readReplica()
+      // A bootstrap emits one invalidation per committed page and the mounted
+      // session fans each one out per scope, so this listener fires in bursts
+      // of hundreds. Collapse a burst into one pass; the first read still runs
+      // straight away, because a cold Photos screen has nothing to show.
+      const coalesced = coalesceWork(
+        () => this.readReplica(),
+        REPLICA_INVALIDATION_WINDOW_MS
       );
+      const unsubscribe = session.subscribe("photos", coalesced.signal);
+      this.#unsubscribe = () => {
+        coalesced.cancel();
+        unsubscribe();
+      };
       void this.readReplica();
     }
     if (sessionChanged || baseChanged) this.refreshUploads();
@@ -211,7 +230,30 @@ class PhotoTimelineEngine {
     this.recompute();
   }
 
+  /**
+   * ONE replica pass at a time. Each pass is four full-projection reads that
+   * hold SHARED locks on every mounted vault, so stacking them against the
+   * writer that is still bootstrapping is the worst thing this engine can do.
+   * An invalidation that lands mid-pass marks the result stale and buys
+   * exactly one more pass afterwards, however many arrived.
+   */
   private async readReplica(): Promise<void> {
+    if (this.#reading) {
+      this.#readAgain = true;
+      return;
+    }
+    this.#reading = true;
+    try {
+      await this.readReplicaPass();
+    } finally {
+      this.#reading = false;
+    }
+    if (!this.#readAgain) return;
+    this.#readAgain = false;
+    return this.readReplica();
+  }
+
+  private async readReplicaPass(): Promise<void> {
     const session = this.#session;
     if (!session) return;
     const generation = this.#generation;
@@ -513,6 +555,8 @@ class PhotoTimelineEngine {
     this.#deviceStarted = false;
     this.#deviceLoading = true;
     this.#replicaLoading = true;
+    // An in-flight pass is already stale by generation; drop its follow-up too.
+    this.#readAgain = false;
     this.#assetRows = [];
     this.#contentRows = [];
     this.#derivativeRows = [];

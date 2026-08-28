@@ -12,6 +12,7 @@
 
 import type { ReplicaSqliteDriver } from "@centraid/client/replica/native";
 
+import type { PendingUploadGroup } from "../replica/storage-accounting";
 import { stableFollowupIntentId, toUploadFollowup } from "./followup-record";
 import type {
   NewUploadFollowup,
@@ -135,6 +136,17 @@ export interface NewUpload {
 
 const TERMINAL: readonly UploadItemState[] = ["settled", "failed"];
 
+/** The most queue rows one read materializes: a memory bound, not a product
+ *  limit. Whole-queue answers are a SQL aggregate or a walk over pages. */
+export const PENDING_PAGE_LIMIT = 500;
+
+interface PendingGroupRow {
+  vault_id: string | null;
+  item_count: number;
+  bytes: number | null;
+  video_count: number;
+}
+
 export class UploadQueueStore {
   private constructor(private readonly driver: ReplicaSqliteDriver) {}
 
@@ -184,13 +196,59 @@ export class UploadQueueStore {
     });
   }
 
-  pending(): UploadItem[] {
+  /**
+   * One page of the queue, oldest first — never the whole ledger. A phone that
+   * shot a wedding offline holds tens of thousands of non-terminal rows, and
+   * an unbounded `SELECT` made *starting* a drain cost the backlog rather than
+   * the work. `afterOrder` is a keyset cursor over `created_order` (UNIQUE and
+   * monotonic), so paging never re-reads a row. Callers that need only totals
+   * use `pendingCount` / `pendingStorageGroups`.
+   */
+  pending(limit: number = PENDING_PAGE_LIMIT, afterOrder = 0): UploadItem[] {
     return this.driver
       .all<ItemRow>(
-        `SELECT * FROM upload_item WHERE state NOT IN ('settled', 'failed')
-           ORDER BY created_order`
+        `SELECT * FROM upload_item
+           WHERE state NOT IN ('settled', 'failed') AND created_order > ?
+           ORDER BY created_order LIMIT ?`,
+        [afterOrder, limit]
       )
       .map(toItem);
+  }
+
+  pendingCount(): number {
+    return (
+      this.driver.all<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM upload_item
+           WHERE state NOT IN ('settled', 'failed')`
+      )[0]?.count ?? 0
+    );
+  }
+
+  /**
+   * Pending bytes per durable target vault, aggregated by SQLite: the storage
+   * screen wants the numbers, not the rows behind them. `target_vault_id IS
+   * NULL` stays its own group so a legacy pre-target row is reported honestly
+   * as unassigned. `GLOB` not `LIKE` for the video probe — GLOB is
+   * case-sensitive, matching the `startsWith("video/")` test it replaced.
+   */
+  pendingStorageGroups(): PendingUploadGroup[] {
+    return this.driver
+      .all<PendingGroupRow>(
+        `SELECT target_vault_id AS vault_id,
+                COUNT(*) AS item_count,
+                SUM(plaintext_size) AS bytes,
+                SUM(CASE WHEN media_type GLOB 'video/*' THEN 1 ELSE 0 END)
+                  AS video_count
+           FROM upload_item
+          WHERE state NOT IN ('settled', 'failed')
+          GROUP BY target_vault_id`
+      )
+      .map((row) => ({
+        ...(row.vault_id ? { targetVaultId: row.vault_id } : {}),
+        itemCount: row.item_count,
+        bytes: row.bytes ?? 0,
+        videoCount: row.video_count,
+      }));
   }
 
   all(): UploadItem[] {

@@ -2,6 +2,42 @@
 
 ## Open
 
+- **The #880 mobile wave's residuals, in one place.** Each is understood, none is a
+  regression, and every one is a follow-up somebody should be able to find:
+  - `has_unavailable_fields` silently reverts an ordered tile to a full read. The
+    pushdown probe refuses an undisclosed order column, which is correct — but the
+    fallback is invisible, so a tile that was paging yesterday can be reading the whole
+    entity today with nothing said anywhere.
+  - The pushed ordered sort is O(library) inside SQLite. `ORDER BY json_extract(...)`
+    has no index behind it; the win is that the rows never cross into JS. A stored,
+    indexed order column is the next lever.
+  - Steward "waiting for X" has no native producer. `stewardLabel` is never stamped by
+    the mobile session, so the honest overlay sentence the commons rail supports cannot
+    be drawn on the phone.
+  - First-open pre-bootstrap projections never backfill. A write admitted before
+    bootstrap keeps its empty optimistic row after the shape catalog arrives.
+  - Three web-seat sharing exports are dead and awaiting a deletion slice:
+    `packages/blueprints/apps/_shared/ShareSheet.tsx#ShareSheet`,
+    `packages/blueprints/apps/_shared/grant-plane.ts#offersCapability`, and
+    `packages/blueprints/apps/_shared/placement-registry.ts#PLACEABLE_ITEM_TYPES`. They
+    are held out of the reachability gate with reasons rather than allowlisted silently.
+  - The multiplex shape-changed path re-emits until the client reconnects. The scoped
+    rebootstrap frame is correct per mount, but a client that ignores it keeps being told.
+  - A non-rebootstrap projection error still tears down all mounts. Saying "this one
+    mount failed" needs wire vocabulary the protocol does not have yet, and inventing it
+    inside the route was refused.
+
+- **CI's Rust toolchain floats, so a clippy release can turn any branch red.**
+  `.github/workflows/ci.yml` installs `dtolnay/rust-toolchain` with `toolchain: stable`,
+  unpinned, while `packages/tunnel/data-plane/Cargo.toml` declares only `rust-version =
+  "1.91"` as an MSRV floor. On 2026-08-27 `stable` reached 1.98 and the new
+  `clippy::chunks_exact_to_as_chunks` lint took `static` red on #880's branch against a
+  crate that branch never touched — the same file having been green on `main` five hours
+  earlier. #880 fixed the one call site; the class is still open. Pinning the toolchain to
+  a known version (and moving it deliberately) is the durable fix, but it is a
+  governance-gated toolchain config change and deserves its own argument rather than a
+  drive-by pin.
+
 - **`packages/blueprints/index.json` colorKeys disagree with the apps' own hues.** The
   catalog lists Locker as `indigo` and Tally as `forest`, while the v17 handoff and both
   `app.json` files say rose and indigo respectively. Pre-existing before #872 (that change
@@ -45,20 +81,6 @@
   `apps/mobile/src/apps/photos/*.test.ts` `describe()` titles still carry
   `(issue #721 B5)`-style process stamps. Strings, not comments, so out of
   #861's comment-only scope; safe to rename in a test-title pass.
-
-- **A second offline write never settles its promise.** With the gateway
-  severed, the first `window.centraid.write` of a session resolves `queued` as
-  it should; every write issued after it in the same session queues, applies
-  its optimistic row, paints the pending chip — and never resolves or rejects.
-  Measured in `apps/web/tests/e2e/offline-search.spec.ts` (#846) with two
-  offline renames raced against a 30s timer, both orders round: the second one
-  reports `never-settled` whichever row it is, so it follows the ORDER, not the
-  row or its values. Nothing is lost — the outbox is correct and the reconnect
-  drain settles both — but a caller that awaits its own write hangs forever,
-  and any app that disables a control until the write returns strands it. That
-  spec routes around it by taking the pending rows from the UI instead of from
-  the promise. Not pinned: the durable behaviour is right and #846 is a search
-  fix, so this wants an issue of its own against the write rail.
 
 - **`countDeclaredTests` counts prose.** The regex in
   `scripts/test-report/matrix-grades.mjs` is `\b(?:test|it)(?:\.\w+)*\s*\(`,
@@ -311,6 +333,28 @@
 
 ## Resolved
 
+- #880 — A second offline write settles now. The defect was measured in
+  `apps/web/tests/e2e/offline-search.spec.ts` (#846): with the gateway severed
+  the first `window.centraid.write` resolved `queued`, and every write issued
+  after it queued, painted its pending chip and never resolved or rejected —
+  following the ORDER, not the row. Root cause was in
+  `packages/client/src/replica/shell-session.ts`: the harness severs the
+  transport but not `navigator.onLine`, so each write took the drain path and
+  installed an admission waiter, and `drainLoop`'s transport-failure branch
+  settled only the head it had claimed before scheduling a retry and returning.
+  The outbox keeps its order, so the failed head was re-claimed on every retry
+  and nothing behind it was ever claimed — its waiters sat forever. The branch
+  now settles every registered waiter as `queued`, the same discipline the
+  native rail (`apps/mobile/src/lib/replica/native-session.ts`) applies when
+  its drain stops early: a durable queue admission is an honest settlement, an
+  unresolved promise is not. Durable behaviour is unchanged — the reconnect
+  drain still executes each intent exactly once — and
+  `shell-session-admission.contract.test.ts` pins both halves in a
+  tick-bounded window. Cross-rail, `ReplicaIntent.enqueuedAt` is now stamped in
+  `IntentQueue.enqueue` and carried, with `attempts`, through the pending
+  overlay, so a seat can say how long a write has been stuck rather than only
+  that it is queued.
+
 - #842 — The `node:sqlite` bundling defect that made
   `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` uncollectable is
   fixed at the harness, and the class of failure is now gated. Root cause: the
@@ -331,6 +375,11 @@
   that reports `failed` with zero assertion results, so a suite that errors
   before collecting a single test can no longer read as absent to every
   counting gate (matrix floors, skip budget, quarantine ledger).
+  The debt this entry left open is now paid: #880 re-authored that journey as
+  `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` against the
+  rebuilt Tally cover — a real SQLite process restart, sabotage-verified, with
+  the same intent ids either side of the rebuild — and registered it as the
+  `origin-pending-restart` row in `tests/matrix.json#appScenarios`.
 
 - #816 — Removed `react-native-maps`. Nothing had imported it since Places
   moved to the shared `place-map.ts` projection, and #816 rules the phone's map

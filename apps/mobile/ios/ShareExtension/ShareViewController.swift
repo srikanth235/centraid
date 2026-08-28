@@ -24,6 +24,24 @@ class ShareViewController: UIViewController {
   let pdfContentType: String = UTType.pdf.identifier
   let vcardContentType: String = "public.vcard"
 
+  // The app group staging area holds PLAINTEXT copies of whatever was shared
+  // until the host app ingests them, so every copy written here takes the same
+  // data-protection class as the module-owned durable directory
+  // (docs/mobile-offline.md, "Durable path and at-rest decision") instead of
+  // the container's default. `completeUntilFirstUserAuthentication` is the
+  // strictest class this path can use: `complete` would make a staged file
+  // unreadable to a host app resuming the ingest from the background (#880).
+  private static let stagedProtection: FileProtectionType =
+    .completeUntilFirstUserAuthentication
+  private static let stagedWriteOptions: Data.WritingOptions =
+    [.completeFileProtectionUntilFirstUserAuthentication]
+
+  // Every copy this extension has staged. A share that never reaches the host
+  // app must not leave them behind, so the abort paths purge exactly this list.
+  // A share the OS kills mid-load is beyond reach here; the host app's start-up
+  // sweep (`share-ingest.ts`) is what collects those.
+  private var stagedURLs: [URL] = []
+
   // One attachment's load result. A hard load error aborts the whole share
   // rather than delivering a partial set (#431 F7). Text and web URLs stay
   // typed so the host opens preview-first Quick capture instead of silently
@@ -179,7 +197,8 @@ class ShareViewController: UIViewController {
       {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(
           UUID().uuidString + ".vcf")
-        try data.write(to: tmp)
+        try data.write(to: tmp, options: ShareViewController.stagedWriteOptions)
+        self.stagedURLs.append(tmp)
         return self.fileEntry(from: tmp)
       } else {
         NSLog("[ERROR] Cannot load vcard content")
@@ -200,7 +219,8 @@ class ShareViewController: UIViewController {
       {
         let tempFileURL = FileManager.default.temporaryDirectory.appendingPathComponent(
           UUID().uuidString + ".pkpass")
-        try data.write(to: tempFileURL)
+        try data.write(to: tempFileURL, options: ShareViewController.stagedWriteOptions)
+        self.stagedURLs.append(tempFileURL)
         return self.fileEntry(from: tempFileURL)
       } else {
         NSLog("[ERROR] Cannot load pkpass content: item was neither URL nor Data")
@@ -311,7 +331,8 @@ class ShareViewController: UIViewController {
     let screenshotPath = containerURL.appendingPathComponent(fileName)
 
     do {
-      try screenshotData.write(to: screenshotPath)
+      try screenshotData.write(to: screenshotPath, options: ShareViewController.stagedWriteOptions)
+      self.stagedURLs.append(screenshotPath)
 
       let fileExists = FileManager.default.fileExists(atPath: screenshotPath.path)
 
@@ -397,6 +418,9 @@ class ShareViewController: UIViewController {
   }
 
   private func dismissWithError(message: String? = nil) {
+    // Nothing is being handed over, so the copies staged so far are already
+    // garbage — delete them before the sheet goes away (#880).
+    self.purgeStaged()
     DispatchQueue.main.async {
       NSLog("[ERROR] Error loading application ! \(message!)")
       let alert = UIAlertController(
@@ -483,11 +507,29 @@ class ShareViewController: UIViewController {
         try FileManager.default.removeItem(at: dstURL)
       }
       try FileManager.default.copyItem(at: srcURL, to: dstURL)
+      // Tracked before the class is applied: bytes that exist but failed to be
+      // protected still have to be purgeable.
+      self.stagedURLs.append(dstURL)
+      // A copy inherits the SOURCE's protection class, so it has to be set
+      // again on the destination rather than assumed.
+      try FileManager.default.setAttributes(
+        [.protectionKey: ShareViewController.stagedProtection],
+        ofItemAtPath: dstURL.path)
     } catch (let error) {
       NSLog("Cannot copy item at \(srcURL) to \(dstURL): \(error)")
       return false
     }
     return true
+  }
+
+  /// Removes every copy this extension staged. Called when a share ends without
+  /// handing anything to the host app — a failed load, an unsupported mix, or a
+  /// missing host — so no plaintext outlives the sheet that produced it.
+  private func purgeStaged() {
+    for url in self.stagedURLs {
+      try? FileManager.default.removeItem(at: url)
+    }
+    self.stagedURLs.removeAll()
   }
 
   private func getSharedMediaFile(forVideo: URL, fileName: String, fileSize: Int?, mimeType: String)
@@ -521,7 +563,9 @@ class ShareViewController: UIViewController {
     do {
       let img = try assetImgGenerate.copyCGImage(
         at: CMTimeMakeWithSeconds(600, preferredTimescale: Int32(1.0)), actualTime: nil)
-      try UIImage.pngData(UIImage(cgImage: img))()?.write(to: thumbnailPath)
+      try UIImage.pngData(UIImage(cgImage: img))()?
+        .write(to: thumbnailPath, options: ShareViewController.stagedWriteOptions)
+      self.stagedURLs.append(thumbnailPath)
       saved = true
     } catch {
       saved = false

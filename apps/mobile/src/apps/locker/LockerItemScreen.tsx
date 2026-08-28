@@ -47,6 +47,7 @@ import {
 import Button from "../../kit/components/Button";
 import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
+import { usePendingChanges } from "../../kit/replica/pending-changes";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -68,6 +69,7 @@ import {
   confirmLockerPermit,
   dismissLockerPermit,
 } from "./locker-store";
+import { lockerPendingLine } from "./locker-view-model";
 import { starLockerItem, trashLockerItem } from "./locker-writes";
 import {
   LockerFieldRow,
@@ -93,6 +95,8 @@ export default function LockerItemScreen({
   const [now, setNow] = useState(() => Date.now());
   const [confirmingTrash, setConfirmingTrash] = useState(false);
   const replica = useReplica();
+  const { pending } = usePendingChanges(replica.session);
+  const pendingWait = lockerPendingLine(pending);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), TICK_MS);
@@ -149,6 +153,7 @@ export default function LockerItemScreen({
             {displayText(title)}
           </Text>
           <Text style={styles.lede}>{typeLabel(type)}</Text>
+          {pendingWait ? <Text style={styles.body}>{pendingWait}</Text> : null}
         </View>
 
         {detail === null ? (

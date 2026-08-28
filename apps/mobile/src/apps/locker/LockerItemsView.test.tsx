@@ -164,6 +164,26 @@ describe("the item list", () => {
     unmount();
   });
 
+  it("names the steward a parked write waits on, in place of the count", () => {
+    const { container, unmount } = mountBlock(
+      view({
+        pending: 1,
+        state: "parked",
+        waiting: "Waiting for Ravi.",
+      })
+    );
+    expect(textOf(container)).toContain("Waiting for Ravi.");
+    unmount();
+  });
+
+  it("keeps the counting sentence where the outbox can name no wait", () => {
+    const { container, unmount } = mountBlock(
+      view({ pending: 2, state: "pending", waiting: null })
+    );
+    expect(textOf(container)).toContain(pendingNotice(2));
+    unmount();
+  });
+
   it("offers Show more only where the read said there is more", () => {
     const bounded = mountBlock(view());
     expect(textOf(bounded.container)).toContain("2 in the vault");

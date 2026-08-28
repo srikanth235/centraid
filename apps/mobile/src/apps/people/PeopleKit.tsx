@@ -23,7 +23,7 @@ import { avatarFill } from "./people-model";
 
 export type LinkRing = "linked" | "unlinked" | "unknown";
 
-/** Star mark: 17px on a 24 grid, stroke 1.5 (handoff's own path). */
+/** Star mark: 17px on a 24 grid, stroke 1.5 (the handoff's path). */
 const STAR_PATH =
   "M12 3.8l2.6 5.2 5.7.9-4.1 4 1 5.7-5.2-2.8-5.2 2.8 1-5.7-4.1-4 5.7-.9z";
 
@@ -103,21 +103,34 @@ export function PersonAvatar({
 export function StarButton({
   name,
   starred,
+  disabled = false,
+  disabledHint,
   onToggle,
 }: {
   name: string;
   starred: boolean;
+  disabled?: boolean;
+  disabledHint?: string;
   onToggle: () => void;
 }): React.JSX.Element {
   const { colors, targetMin } = useTheme();
   const label = starred ? LABELS.unstar(name) : LABELS.star(name);
-  const stroke = starred ? colors.text : colors.textFaint;
+  const stroke = disabled
+    ? colors.textDisabled
+    : starred
+      ? colors.text
+      : colors.textFaint;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected: starred }}
-      onPress={onToggle}
+      accessibilityState={{ disabled, selected: starred }}
+      accessibilityHint={disabled ? disabledHint : undefined}
+      disabled={disabled}
+      onPress={() => {
+        if (disabled) return;
+        onToggle();
+      }}
       style={{
         alignItems: "center",
         justifyContent: "center",
@@ -133,7 +146,7 @@ export function StarButton({
           strokeWidth={1.5}
           strokeLinecap="round"
           strokeLinejoin="round"
-          fill={starred ? colors.text : "none"}
+          fill={starred && !disabled ? colors.text : "none"}
         />
       </Svg>
     </Pressable>
@@ -148,6 +161,7 @@ export interface PersonRowProps {
   subNumeric?: boolean;
   meta?: string;
   metaNet?: boolean;
+  pending?: string;
   /** Wrap the name instead of ellipsising (notes row). */
   wrap?: boolean;
   onOpen?: () => void;
@@ -175,6 +189,11 @@ export function PersonRow(props: PersonRowProps): React.JSX.Element {
           style={[styles.rowSub, props.subNumeric ? styles.numeric : undefined]}
         >
           {props.sub}
+        </Text>
+      ) : null}
+      {props.pending ? (
+        <Text numberOfLines={1} style={styles.rowPending}>
+          {props.pending}
         </Text>
       ) : null}
     </>
@@ -558,6 +577,7 @@ const makeStyles = (colors: ThemeColors) =>
     rowMain: { flex: 1, gap: 2, minWidth: 0 },
     rowMeta: { ...t("annotLabel"), flexShrink: 0 },
     rowName: { ...t("labelOn"), color: colors.text },
+    rowPending: { ...t("annotLabel"), color: colors.textSoft },
     rowSub: { ...t("annotLabel"), color: colors.textFaint },
     section: { paddingTop: spacing[4] },
     sectionCaret: { ...t("smallStrong"), color: colors.textSoft },

@@ -1,7 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import { replicaStatusRow, settledReachability } from "./replica-status";
+import type { AsyncStorageLike } from "../../lib/replica/native-change-feed";
+import {
+  dismissRevokedNotice,
+  loadRevokedNotices,
+  recordRevokedNotice,
+  replicaCoverageRow,
+  replicaStatusRow,
+  revokedNoticeRow,
+  settledReachability,
+} from "./replica-status";
 import type { ReplicaReachability } from "./replica-status";
+
+function memoryStorage(): AsyncStorageLike & { values: Map<string, string> } {
+  const values = new Map<string, string>();
+  return {
+    values,
+    getItem: (key) => Promise.resolve(values.get(key) ?? null),
+    setItem: (key, value) => {
+      values.set(key, value);
+      return Promise.resolve();
+    },
+    removeItem: (key) => {
+      values.delete(key);
+      return Promise.resolve();
+    },
+  };
+}
 
 describe("where a reachability pass lands", () => {
   it("never leaves the pass in flight", () => {
@@ -47,9 +72,19 @@ describe("what the replica bar says", () => {
 
   it("speaks only for states a member can act on or is waiting for", () => {
     const speaking = (
-      ["current", "device-offline", "gateway-asleep", "syncing"] as const
+      [
+        "current",
+        "device-offline",
+        "gateway-asleep",
+        "sync-paused",
+        "syncing",
+      ] as const
     ).filter((state: ReplicaReachability) => replicaStatusRow(state).label);
-    expect(speaking).toStrictEqual(["gateway-asleep", "syncing"]);
+    expect(speaking).toStrictEqual([
+      "gateway-asleep",
+      "sync-paused",
+      "syncing",
+    ]);
   });
 
   it("marks only the asleep gateway as actionable", () => {
@@ -74,9 +109,111 @@ describe("what the replica bar says", () => {
       "current",
       "device-offline",
       "gateway-asleep",
+      "sync-paused",
       "syncing",
     ] as const) {
       expect(replicaStatusRow(state).action ?? "").not.toContain("network");
     }
+  });
+});
+
+describe("a sync the member's own rules paused", () => {
+  // THE REGRESSION THIS PINS (#880 W2.2). A metered/battery refusal came back
+  // from the facade as "nothing threw", settled as `current`, and the bar then
+  // said nothing at all — the screen claiming freshness it never fetched.
+  it("is neither current nor a sleeping gateway", () => {
+    expect(settledReachability(false, true)).toBe("sync-paused");
+    // Even a "landed" boolean cannot outrank a pull that never happened.
+    expect(settledReachability(true, true)).toBe("sync-paused");
+    expect(settledReachability(true)).toBe("current");
+  });
+
+  it("says what stopped it and stays out of the danger ink", () => {
+    const row = replicaStatusRow("sync-paused");
+    expect(row.label).toBe("Sync paused by transfer rules");
+    // The member set these rules; a red dot would read as a fault they hit.
+    expect(row.actionable).toBe(false);
+    // And no button: pulling again re-hits the same rule.
+    expect(row.action).toBeUndefined();
+  });
+});
+
+describe("a library that is only partly here", () => {
+  // #880 W2.4: an app killed mid-backfill and relaunched offline has no live
+  // bootstrap to report pages, so coverage is the only thing left that knows.
+  it("labels a partial replica even with no bootstrap running", () => {
+    expect(
+      replicaCoverageRow({ coverage: "partial", bootstrapping: false }).label
+    ).toBe("Recent items ready; older history syncing");
+  });
+
+  it("stays silent for a complete replica, and for an unknown one", () => {
+    expect(
+      replicaCoverageRow({ coverage: "complete", bootstrapping: false })
+    ).toStrictEqual({ actionable: false });
+    expect(replicaCoverageRow({ bootstrapping: false }).label).toBeUndefined();
+  });
+
+  it("defers to a live bootstrap, which has the exact page count", () => {
+    expect(
+      replicaCoverageRow({ coverage: "partial", bootstrapping: true }).label
+    ).toBeUndefined();
+  });
+});
+
+describe("the trace a revoked scope leaves", () => {
+  const notice = {
+    vaultId: "family",
+    label: "Family",
+    at: "2026-08-27T09:00:00.000Z",
+  };
+
+  it("names the vault and how it left, and offers only dismissal", () => {
+    expect(revokedNoticeRow(notice)).toStrictEqual({
+      label: "No longer shared with you — Family was removed from this phone",
+      action: "Dismiss",
+    });
+  });
+
+  it("survives the relaunch after the purge, and clears on dismiss", async () => {
+    // THE POINT (#880 W4.4). The purge takes the rows, the cursor and the
+    // mount, so nothing else on the phone can afterwards say where a vault
+    // went. This record is written before the purge and outlives the process.
+    const storage = memoryStorage();
+    await recordRevokedNotice(storage, "gateway-1", notice);
+
+    await expect(
+      loadRevokedNotices(storage, "gateway-1")
+    ).resolves.toStrictEqual([notice]);
+    await expect(
+      dismissRevokedNotice(storage, "gateway-1", "family")
+    ).resolves.toStrictEqual([]);
+    await expect(
+      loadRevokedNotices(storage, "gateway-1")
+    ).resolves.toStrictEqual([]);
+    expect([...storage.values.keys()]).toStrictEqual([]);
+  });
+
+  it("keeps the first instant when the same revoked frame arrives twice", async () => {
+    const storage = memoryStorage();
+    await recordRevokedNotice(storage, "gateway-1", notice);
+    const again = await recordRevokedNotice(storage, "gateway-1", {
+      ...notice,
+      at: "2026-08-27T10:00:00.000Z",
+    });
+    expect(again).toStrictEqual([notice]);
+  });
+
+  it("keeps each gateway's notices apart, and reads a corrupt list as none", async () => {
+    const storage = memoryStorage();
+    await recordRevokedNotice(storage, "gateway-1", notice);
+    await expect(
+      loadRevokedNotices(storage, "gateway-2")
+    ).resolves.toStrictEqual([]);
+
+    storage.values.set("centraid:replica-revoked:gateway-3", "{not json");
+    await expect(
+      loadRevokedNotices(storage, "gateway-3")
+    ).resolves.toStrictEqual([]);
   });
 });

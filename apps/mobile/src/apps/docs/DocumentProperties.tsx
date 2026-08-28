@@ -15,6 +15,10 @@ import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import {
+  pendingOverlayCopy,
+  readPendingOverlay,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
   SHARED_WITH_KEY,
   sharedWithNote,
   STAGE_PROPS,
@@ -31,6 +35,7 @@ import { Text } from "../../kit/components/NativeText";
 import SkeletonRows from "../../kit/components/SkeletonRows";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
@@ -81,6 +86,9 @@ export default function DocumentProperties({
   }, [gatewayBase]);
 
   const custody = doc ? custodyMeta(doc.custody_state) : null;
+  // DETAIL surfaces only — the `scopeLabels` join `PhotoInfoSheet` shows.
+  const sources = doc?.scopeLabels.join(" · ") ?? "";
+  const pending = doc ? readPendingOverlay(doc.raw) : undefined;
 
   return (
     <DocsScreen current="all">
@@ -129,6 +137,15 @@ export default function DocumentProperties({
               net={doc.custody_state === "missing"}
               styles={styles}
             />
+            {sources ? (
+              <Row
+                k="Source"
+                v={sources}
+                note={doc.canWrite ? undefined : READ_ONLY_SOURCE_REASON}
+                net={!doc.canWrite}
+                styles={styles}
+              />
+            ) : null}
             {gatewayHost ? (
               <Row
                 k="Gateway"
@@ -169,6 +186,11 @@ export default function DocumentProperties({
             <Text style={styles.namesLabel}>Who this document names</Text>
             <Icon name="chevron-right" size={16} color={colors.textSoft} />
           </Pressable>
+
+          {/* A change still on this device, steward wait included. */}
+          {pending ? (
+            <Text style={styles.caption}>{pendingOverlayCopy(pending)}</Text>
+          ) : null}
 
           <Text style={styles.origin}>{STAGE_PROPS.origin}</Text>
           <Text style={styles.caption}>{PROPERTIES_BACKUP_WITHHELD}</Text>

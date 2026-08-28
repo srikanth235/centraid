@@ -90,3 +90,75 @@ describe(buildDocMenu, () => {
     expect(on.moveTo.mock.calls).toStrictEqual([["c-property"], [null]]);
   });
 });
+
+describe("a read-only source's row", () => {
+  const READ_ONLY =
+    "This vault is read-only for you, so meaning cannot be written into it.";
+
+  it("keeps Open, Versions and Properties — reads never degrade", () => {
+    const groups = buildDocMenu(
+      { trashed: false, starred: false, folder_id: null, canWrite: false },
+      folders,
+      handlers()
+    );
+    expect(labels(groups)[0]).toStrictEqual(["Open", "Versions", "Properties"]);
+    const reads = (groups[0]?.rows ?? []) as MenuActionRow[];
+    for (const row of reads) expect(row.disabled).toBeUndefined();
+  });
+
+  it("disables Star, Rename and Trash together and says why on each", () => {
+    const groups = buildDocMenu(
+      { trashed: false, starred: false, folder_id: null, canWrite: false },
+      folders,
+      handlers()
+    );
+    expect(labels(groups)[1]).toStrictEqual([
+      `Star — ${READ_ONLY}`,
+      `Rename… — ${READ_ONLY}`,
+      `Move to — ${READ_ONLY}`,
+    ]);
+    expect(labels(groups)[2]).toStrictEqual([`Trash — ${READ_ONLY}`]);
+    const star = groups[1]?.rows[0] as MenuActionRow;
+    const rename = groups[1]?.rows[1] as MenuActionRow;
+    const trash = groups[2]?.rows[0] as MenuActionRow;
+    expect([star.disabled, rename.disabled, trash.disabled]).toStrictEqual([
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it("disables every Move to target, not only the parent row", () => {
+    const groups = buildDocMenu(
+      { trashed: false, starred: false, folder_id: null, canWrite: false },
+      folders,
+      handlers()
+    );
+    const move = groups[1]?.rows[2] as MenuSubmenuRow;
+    expect(move.rows.map((row) => row.disabled)).toStrictEqual([
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it("refuses Restore on a trashed row from a source it cannot write", () => {
+    const groups = buildDocMenu(
+      { trashed: true, starred: false, folder_id: null, canWrite: false },
+      folders,
+      handlers()
+    );
+    expect(labels(groups)).toStrictEqual([[`Restore — ${READ_ONLY}`]]);
+    const restore = groups[0]?.rows[0] as MenuActionRow;
+    expect(restore.disabled).toBe(true);
+  });
+
+  it("treats an UNSTAMPED row as the member's own — a missing stamp is not a refusal", () => {
+    const groups = buildDocMenu(
+      { trashed: false, starred: false, folder_id: null },
+      folders,
+      handlers()
+    );
+    expect(labels(groups)[1]).toStrictEqual(["Star", "Rename…", "Move to"]);
+  });
+});

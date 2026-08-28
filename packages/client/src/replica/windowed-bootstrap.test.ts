@@ -1,125 +1,23 @@
+// The forward walk: every page applied, the commit pinned to the page-1 cursor
+// the convergence replay then starts from, durable intent outcomes reconciled
+// against that same cursor, the replay's pass budget, and the page shapes the
+// walk refuses outright. Interrupted walks — a mid-pagination 409, a killed
+// task resuming, a refused continuation — are `windowed-bootstrap-resume.test.ts`;
+// the doubles both suites share are in `windowed-bootstrap.test-fixtures.ts`.
 import { describe, expect, test, vi } from "vitest";
 
-import type { GatewayAuth } from "../gateway-auth.js";
-import {
-  ReplicaProtocolError,
-  ReplicaRebootstrapRequiredError,
-} from "./errors.js";
-import type { ReplicaFetcher } from "./shell-transport.js";
-import type {
-  IntentOutcome,
-  ReplicaBootstrapHeader,
-  ReplicaChangeBatch,
-  ReplicaCursor,
-  ReplicaSnapshotRow,
-} from "./types.js";
+import { ReplicaProtocolError } from "./errors.js";
+import type { IntentOutcome, ReplicaChangeBatch } from "./types.js";
 import { runWindowedBootstrap } from "./windowed-bootstrap.js";
-import type {
-  RunWindowedBootstrapOptions,
-  WindowedBootstrapTarget,
-} from "./windowed-bootstrap.js";
-
-const gatewayAuth: GatewayAuth = {
-  baseUrl: "http://127.0.0.1:18789",
-  gatewayId: "gateway-1",
-  vaultId: "vault-a",
-};
-
-const shapes = [
-  {
-    shapeId: "shape-photos",
-    appId: "photos",
-    purpose: "dpv:ServiceProvision",
-    entities: [
-      {
-        entity: "core.content_item",
-        primaryKey: "content_id",
-        columns: ["content_id", "title"],
-      },
-    ],
-  },
-];
-
-function row(id: string): ReplicaSnapshotRow {
-  return {
-    shapeId: "shape-photos",
-    entity: "core.content_item",
-    rowId: id,
-    values: { content_id: id, title: id },
-  };
-}
-
-/** Records the page-wise calls the driver makes so the walk can be asserted. */
-function createTarget(): WindowedBootstrapTarget & {
-  readonly rows: ReplicaSnapshotRow[];
-  readonly applied: ReplicaChangeBatch[];
-  header?: ReplicaBootstrapHeader;
-  committedAt?: ReplicaCursor;
-  committedOutcomes?: IntentOutcome[];
-  cursor: ReplicaCursor;
-} {
-  const rows: ReplicaSnapshotRow[] = [];
-  const applied: ReplicaChangeBatch[] = [];
-  return {
-    rows,
-    applied,
-    cursor: { epoch: "replica-1", seq: 0 },
-    async bootstrapBegin(header) {
-      this.header = header;
-      rows.length = 0;
-    },
-    async bootstrapPage(next) {
-      rows.push(...next);
-    },
-    async bootstrapCommit(cursor, header, outcomes) {
-      this.committedAt = cursor;
-      this.header = header;
-      this.committedOutcomes = outcomes ?? [];
-      this.cursor = cursor;
-      return cursor;
-    },
-    async applyChanges(batch) {
-      applied.push(batch);
-      for (const change of batch.changes) {
-        if (change.op === "delete") {
-          const index = rows.findIndex((item) => item.rowId === change.rowId);
-          if (index >= 0) rows.splice(index, 1);
-        } else rows.push(change);
-      }
-      this.cursor = batch.to;
-      return batch.to;
-    },
-  };
-}
-
-/** A fetcher serving scripted bootstrap pages keyed by the `after` token. */
-function createFetcher(
-  pages: Record<string, unknown>,
-  status: Record<string, number> = {}
-) {
-  const requests: string[] = [];
-  const fetcher: ReplicaFetcher = (_baseUrl, pathname) => {
-    requests.push(pathname);
-    const after = new URL(pathname, "http://x").searchParams.get("after") ?? "";
-    const body = pages[after];
-    const code = status[after] ?? 200;
-    return Promise.resolve(
-      new Response(JSON.stringify(body ?? { error: "missing_page" }), {
-        status: code,
-        headers: { "content-type": "application/json" },
-      })
-    );
-  };
-  return { fetcher, requests };
-}
-
-const emptyBatch = (cursor: ReplicaCursor): ReplicaChangeBatch => ({
-  protocolVersion: 1,
-  schemaEpoch: "schema-1",
-  from: cursor,
-  to: cursor,
-  changes: [],
-});
+import type { RunWindowedBootstrapOptions } from "./windowed-bootstrap.js";
+import {
+  createFetcher,
+  createTarget,
+  emptyBatch,
+  gatewayAuth,
+  row,
+  shapes,
+} from "./windowed-bootstrap.test-fixtures.js";
 
 describe(runWindowedBootstrap, () => {
   test("walks every page and applies all rows", async () => {
@@ -283,40 +181,6 @@ describe(runWindowedBootstrap, () => {
     ]);
   });
 
-  test("surfaces a mid-pagination 409 as a rebootstrap so the walk restarts", async () => {
-    const target = createTarget();
-    const { fetcher } = createFetcher(
-      {
-        "": {
-          protocolVersion: 1,
-          vaultId: "vault-a",
-          schemaEpoch: "schema-1",
-          cursor: { epoch: "replica-1", seq: 10 },
-          shapes,
-          rows: [row("photo-1")],
-          complete: false,
-          next: "token-2",
-        },
-        "token-2": {
-          error: "replica_rebootstrap_required",
-          reason: "schema-changed",
-        },
-      },
-      { "token-2": 409 }
-    );
-
-    await expect(
-      runWindowedBootstrap({
-        gatewayAuth,
-        target,
-        fetcher,
-        pullChanges: async (cursor) => emptyBatch(cursor),
-      })
-    ).rejects.toThrow(ReplicaRebootstrapRequiredError);
-    // Never committed: the partial walk cannot become a readable replica.
-    expect(target.committedAt).toBeUndefined();
-  });
-
   test("surfaces a malformed continuation token as a transport error", async () => {
     const target = createTarget();
     const { fetcher } = createFetcher(
@@ -382,6 +246,44 @@ describe(runWindowedBootstrap, () => {
       })
     ).rejects.toThrow(ReplicaProtocolError);
     expect(target.committedAt).toBeUndefined();
+  });
+
+  test("bounds the convergence replay instead of replaying forever", async () => {
+    const target = createTarget();
+    const { fetcher } = createFetcher({
+      "": {
+        protocolVersion: 1,
+        vaultId: "vault-a",
+        schemaEpoch: "schema-1",
+        cursor: { epoch: "replica-1", seq: 10 },
+        shapes,
+        rows: [],
+        complete: true,
+      },
+    });
+    // A log that always has one more commit: without a budget this never ends.
+    let passes = 0;
+    const pullChanges: RunWindowedBootstrapOptions["pullChanges"] = async (
+      cursor
+    ) => {
+      passes += 1;
+      return {
+        ...emptyBatch(cursor),
+        to: { epoch: cursor.epoch, seq: cursor.seq + 1 },
+      };
+    };
+
+    const cursor = await runWindowedBootstrap({
+      gatewayAuth,
+      target,
+      fetcher,
+      pullChanges,
+      maxConvergePasses: 5,
+    });
+
+    expect(passes, "the budget, not the log, ends the replay").toBe(5);
+    // Honest: the cursor reached is reported, and the feed continues from it.
+    expect(cursor).toStrictEqual({ epoch: "replica-1", seq: 15 });
   });
 
   test("rejects a page that claims completeness and a continuation at once", async () => {

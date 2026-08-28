@@ -19,10 +19,15 @@ import type {
   MultipartPartReceipt,
   SettlementReceipt,
 } from "./gateway-client";
+import { PENDING_PAGE_LIMIT } from "./store";
 import type { UploadItem, UploadQueueStore } from "./store";
 import { assertGatewayMintedUploadUrl } from "./transfer-policy";
 
 const MAX_ATTEMPTS = 5;
+/** Parts in flight per item, and so the sealer's peak transient cost:
+ *  `sealPart` (cbsf.ts) holds each part twice — 4 x 4 MiB of sealed frames in
+ *  its `body` array plus the concatenated 16 MiB it returns — so ~32 MiB live
+ *  per part, ~96 MiB here. Re-measure that before raising it. */
 const DEFAULT_PART_CONCURRENCY = 3;
 
 /** Puts one sealed part and returns the provider's ETag. */
@@ -78,34 +83,51 @@ export class UploadDrainer {
       deduped: 0,
       halted: false,
     };
-    const items = this.deps.store.pending();
-    const drainNext = async (index: number): Promise<DrainSummary> => {
-      const item = items[index];
-      if (item === undefined) return summary;
-      if (!(await this.allowed())) {
-        summary.halted = true;
-        return summary;
+    /*
+     * A LOOP, not recursion (#659) — the same de-recursion the replica SSE
+     * stream took, for the same reason: `drainNext(index + 1)` held every
+     * earlier item's promise alive until the last one settled, so a deep
+     * backlog cost memory proportional to the queue's LENGTH rather than to
+     * the item in flight. The queue is read one page at a time for the
+     * matching reason. `created_order` is UNIQUE and monotonic, so it doubles
+     * as the keyset cursor — a non-terminal failure returns its row to
+     * `pending` without rewinding the walk, which is what keeps one failing
+     * item from being retried forever inside a single pass.
+     */
+    const total = this.deps.store.pendingCount();
+    let completed = 0;
+    let afterOrder = 0;
+    for (;;) {
+      const page = this.deps.store.pending(PENDING_PAGE_LIMIT, afterOrder);
+      if (page.length === 0) return summary;
+      for (const item of page) {
+        afterOrder = item.createdOrder;
+        // oxlint-disable-next-line no-await-in-loop -- re-read per item so a Wi-Fi/charger change halts the drain promptly
+        if (!(await this.allowed())) {
+          summary.halted = true;
+          return summary;
+        }
+        this.deps.onProgress?.({
+          completed,
+          total,
+          sha256: item.sha256,
+        });
+        completed += 1;
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- one item at a time is the point: parallel items would multiply the sealer's transient memory
+          const outcome = await this.driveItem(item);
+          if (outcome === "deduped") summary.deduped += 1;
+          summary.settled += 1;
+        } catch (error) {
+          if (isKill(error)) throw error;
+          const terminal =
+            (error instanceof DirectTransferError && error.terminal) ||
+            item.attempts + 1 >= MAX_ATTEMPTS;
+          this.deps.store.fail(item.itemId, messageOf(error), terminal);
+          if (terminal) summary.failed += 1;
+        }
       }
-      this.deps.onProgress?.({
-        completed: index,
-        total: items.length,
-        sha256: item.sha256,
-      });
-      try {
-        const outcome = await this.driveItem(item);
-        if (outcome === "deduped") summary.deduped += 1;
-        summary.settled += 1;
-      } catch (error) {
-        if (isKill(error)) throw error;
-        const terminal =
-          (error instanceof DirectTransferError && error.terminal) ||
-          item.attempts + 1 >= MAX_ATTEMPTS;
-        this.deps.store.fail(item.itemId, messageOf(error), terminal);
-        if (terminal) summary.failed += 1;
-      }
-      return drainNext(index + 1);
-    };
-    return drainNext(0);
+    }
   }
 
   private async allowed(): Promise<boolean> {

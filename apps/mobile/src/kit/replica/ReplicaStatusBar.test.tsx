@@ -13,6 +13,8 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { PendingChange } from "./pending-changes";
+import { humanStatus, pendingChangeStuckLine } from "./pending-copy";
 import ReplicaStatusBar from "./ReplicaStatusBar";
 
 (
@@ -184,11 +186,39 @@ vi.mock(
     }) as unknown as Partial<PendingChangesModule>
 );
 
+/** What the sheet actually asked the outbox to do, in order. */
+const outbox = vi.hoisted(() => ({ calls: [] as string[][] }));
+
+const sessionMock = vi.hoisted(() => ({
+  retryPendingWrite: (intentId: string, vaultId?: string) => {
+    outbox.calls.push(["retry", intentId, vaultId ?? ""]);
+    return Promise.resolve({ status: "in-flight" });
+  },
+  discardPendingWrite: (intentId: string, vaultId?: string) => {
+    outbox.calls.push(["discard", intentId, vaultId ?? ""]);
+    return Promise.resolve(true);
+  },
+  cancelPendingChange: (id: string, vaultId: string) => {
+    outbox.calls.push(["cancel", id, vaultId]);
+    return Promise.resolve(true);
+  },
+  dismissPendingChange: (id: string, vaultId: string) => {
+    outbox.calls.push(["dismiss", id, vaultId]);
+  },
+  resumeAfterStorageFull: () => outbox.calls.push(["resume"]),
+}));
+
 const replicaMock = vi.hoisted(() => ({
+  coverage: undefined as string | undefined,
+  dismissed: [] as string[],
+  dismissRevokedNotice: (vaultId: string) => {
+    replicaMock.dismissed.push(vaultId);
+  },
   reachability: "current" as string,
   refresh: vi.fn<() => void>(),
+  revokedNotices: [] as unknown[],
   scopes: [] as unknown[],
-  session: undefined,
+  session: undefined as unknown,
   storageFull: false,
 }));
 
@@ -209,20 +239,40 @@ async function render(): Promise<void> {
   });
 }
 
-describe("pending-changes chip visibility (issue #711)", () => {
-  beforeEach(() => {
-    pendingMock.pending = [];
-    replicaMock.reachability = "current";
-    replicaMock.storageFull = false;
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    root = createRoot(container);
-  });
+function reset(): void {
+  vi.clearAllMocks();
+  outbox.calls.length = 0;
+  replicaMock.dismissed.length = 0;
+  pendingMock.pending = [];
+  replicaMock.coverage = undefined;
+  replicaMock.reachability = "current";
+  replicaMock.revokedNotices = [];
+  replicaMock.scopes = [];
+  replicaMock.session = undefined;
+  replicaMock.storageFull = false;
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+}
 
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
+function teardown(): void {
+  act(() => root.unmount());
+  container.remove();
+}
+
+/** The sheet is behind the chip, exactly as a member reaches it. */
+async function press(label: string): Promise<void> {
+  const control = container.querySelector(`[aria-label="${label}"]`);
+  if (!control) throw new Error(`no control labelled ${label}`);
+  await act(async () => {
+    control.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+}
+
+describe("pending-changes chip visibility (issue #711)", () => {
+  beforeEach(reset);
+
+  afterEach(teardown);
 
   it("hides the pending-changes chip when there is nothing pending", async () => {
     pendingMock.pending = [];
@@ -257,5 +307,157 @@ describe("pending-changes chip visibility (issue #711)", () => {
     await render();
     expect(container.textContent).toContain("Pending changes");
     expect(container.textContent).toContain("2");
+  });
+});
+
+const CONFLICT: PendingChange = {
+  id: "intent-1",
+  vaultId: "home",
+  vaultLabel: "Home",
+  status: "conflict",
+  label: "tally: add_expense",
+  appId: "tally",
+  action: "add_expense",
+  reason: "This row changed somewhere else.",
+  expectedVersion: 3,
+  actualVersion: 5,
+  attempts: 2,
+  kind: "replica",
+};
+
+describe("the pending sheet's body (issue #880 W2.3)", () => {
+  beforeEach(reset);
+
+  afterEach(teardown);
+
+  it("gives a conflict both versions and both doors, in any app", async () => {
+    // THE REGRESSION THIS PINS. The sheet printed the engine's own word
+    // ("conflict"), dropped the two versions the row was retained WITH, and
+    // offered one Dismiss — so the only way out of a conflicted write on this
+    // phone was to throw it away, and only Tally had grown anything better.
+    pendingMock.pending = [CONFLICT];
+    replicaMock.session = sessionMock;
+    await render();
+    await press("Pending changes 1");
+
+    expect(container.textContent).toContain("Tally · Add expense");
+    expect(container.textContent).toContain("changed somewhere else");
+    expect(container.textContent).toContain("Expected version 3; found 5.");
+    expect(container.textContent).toContain("Retry");
+    expect(container.textContent).toContain("Discard");
+    // Never the raw state, and never a Cancel for a write already settled.
+    expect(container.textContent).not.toContain("conflict");
+    expect(container.textContent).not.toContain("Cancel");
+  });
+
+  it("fires Retry against the vault that holds the write", async () => {
+    pendingMock.pending = [CONFLICT];
+    replicaMock.session = sessionMock;
+    await render();
+    await press("Pending changes 1");
+    await press("Retry Tally · Add expense");
+
+    expect(outbox.calls).toStrictEqual([["retry", "intent-1", "home"]]);
+  });
+
+  it("leaves a queued write its Cancel and no outbox verbs", async () => {
+    pendingMock.pending = [
+      { ...CONFLICT, status: "queued" as const, attempts: 0 },
+    ];
+    replicaMock.session = sessionMock;
+    await render();
+    await press("Pending changes 1");
+
+    expect(container.textContent).toContain("waiting to send");
+    expect(container.textContent).toContain("Cancel");
+    expect(container.textContent).not.toContain("Retry");
+    expect(container.textContent).not.toContain("Discard");
+  });
+});
+
+describe("what else the bar owes a member (issue #880)", () => {
+  beforeEach(reset);
+
+  afterEach(teardown);
+
+  it("labels a partial library when no bootstrap is left to report pages", async () => {
+    // The relaunch after a kill mid-backfill: the walk that would have counted
+    // pages died with the old process, so durable coverage is the only fact
+    // left that can say the library is short.
+    replicaMock.coverage = "partial";
+    await render();
+    expect(container.textContent).toContain(
+      "Recent items ready; older history syncing"
+    );
+  });
+
+  it("says where the switch is when transfer rules paused the sync", async () => {
+    replicaMock.reachability = "sync-paused";
+    await render();
+    expect(container.textContent).toContain("Sync paused by transfer rules");
+    expect(container.textContent).toContain(
+      "Change these under Backup health in Settings."
+    );
+    // A refresh here would re-hit the same rule, so it must not be offered.
+    expect(container.textContent).not.toContain("Sync now");
+  });
+
+  it("keeps a revoked scope's one trace until the member dismisses it", async () => {
+    replicaMock.revokedNotices = [
+      { vaultId: "studio", label: "Studio", at: "2026-08-27T09:00:00.000Z" },
+    ];
+    await render();
+    expect(container.textContent).toContain("No longer shared with you");
+    await press("Dismiss Studio");
+    expect(replicaMock.dismissed).toStrictEqual(["studio"]);
+  });
+});
+
+describe("the outbox vocabulary (issue #880 W2.3)", () => {
+  it("has a member's word for every state the outbox can be in", () => {
+    // Exhaustiveness is the compiler's job — `humanStatus` has no `default`
+    // arm, so a new state fails typecheck rather than reaching a member as an
+    // engine word. This pins the other half: none of the nine ARE that word.
+    const states = [
+      "queued",
+      "sending",
+      "in-flight",
+      "awaiting-change",
+      "parked",
+      "denied",
+      "conflict",
+      "failed",
+      "executed",
+    ] as const;
+    for (const state of states) {
+      const said = humanStatus(state);
+      expect(said).not.toBe(state);
+      expect(said.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("calls a row stuck only once every ordinary way back has passed", () => {
+    const now = Date.parse("2026-08-27T12:00:00.000Z");
+    const row = { ...CONFLICT, status: "queued" as const };
+    // Half an hour is a lunch out of coverage, not a fault.
+    expect(
+      pendingChangeStuckLine(
+        { ...row, enqueuedAt: "2026-08-27T11:30:00.000Z" },
+        now
+      )
+    ).toBeUndefined();
+    const stuck = pendingChangeStuckLine(
+      { ...row, enqueuedAt: "2026-08-27T08:00:00.000Z" },
+      now
+    );
+    expect(stuck).toContain("Queued");
+    expect(stuck).toContain("2 attempts");
+    // A settled row is not waiting for anything; it has already stopped.
+    expect(
+      pendingChangeStuckLine(
+        { ...CONFLICT, enqueuedAt: "2026-08-27T08:00:00.000Z" },
+        now
+      )
+    ).toBeUndefined();
   });
 });

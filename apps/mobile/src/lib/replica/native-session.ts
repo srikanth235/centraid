@@ -46,6 +46,7 @@ import { backoffSchedule } from "../backoff";
 import type { BackoffSchedule } from "../backoff";
 import { MobileIntentIds } from "./mobile-intent-id";
 import { NativeReplicaStore } from "./native-replica-store";
+import { isReplicaStorageFullError } from "./replica-storage-error";
 import { SqliteIntentStore } from "./sqlite-intent-store";
 import type { NativeIntentAttention } from "./sqlite-intent-store";
 
@@ -162,13 +163,17 @@ export interface CreateNativeReplicaSessionOptions {
     phase: "first-page" | "backfill" | "complete";
     pages: number;
   }) => void;
+  /**
+   * The device ran out of room and the coordinator parked the feed. Fires once
+   * per pause, so the mounting surface can raise `out of room` without polling.
+   */
+  onStorageFull?: (error: unknown) => void;
 }
 
 /**
- * Ceiling for the intent drainer's retry. Five minutes keeps a phone that lost
- * coverage overnight at a dozen wake-ups instead of thousands, and every signal
- * that could change the answer (reconnect, foreground, a new write) resets the
- * sequence, so nothing waits this long once the gateway is reachable again.
+ * Retry ceiling: five minutes keeps a phone that lost coverage overnight at a
+ * dozen wake-ups, not thousands. Reconnect, foreground and a new write each
+ * reset the sequence, so nothing waits this long once the gateway answers.
  */
 const MAX_INTENT_RETRY_DELAY_MS = 5 * 60_000;
 
@@ -182,9 +187,7 @@ interface Waiter {
  * store, the SQLite intent outbox, a `ReplicaCoordinator` and the HTTP transport
  * into: foreground delta pulls (on AppState active and on connect), an SSE feed
  * while active, feed teardown on background, and a rebootstrap flow that survives
- * without dropping queued intents. Exposes the read/search/write/subscribe
- * surface a future Photos UI consumes — no web admission barrier or
- * storage-manifest machinery.
+ * without dropping queued intents.
  */
 export class NativeReplicaSession implements MobileReplicaSession {
   readonly #coordinator: ReplicaCoordinator;
@@ -256,6 +259,16 @@ export class NativeReplicaSession implements MobileReplicaSession {
 
   get coordinator(): ReplicaCoordinator {
     return this.#coordinator;
+  }
+
+  /** True while this scope's sync is parked for lack of device storage. */
+  get storageFull(): boolean {
+    return this.#coordinator.storageFull;
+  }
+
+  /** Space was freed on the phone: unpark the feed for this scope. */
+  resumeAfterStorageFull(): void {
+    this.#coordinator.resumeAfterStorageFull();
   }
 
   async start(): Promise<this> {
@@ -485,6 +498,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     return this.#coordinator.status();
   }
 
+  /** `attempts` and `enqueuedAt` are what separate "sending" from "stuck". */
   async pendingChanges(): Promise<
     Array<
       | {
@@ -500,13 +514,20 @@ export class NativeReplicaSession implements MobileReplicaSession {
           appId: string;
           action: string;
           reason?: string;
+          attempts: number;
+          enqueuedAt?: string;
+          /** Conflict only: the two versions the overlay copy prints. */
+          expectedVersion?: number;
+          actualVersion?: number;
         }
       | NativeIntentAttention
     >
   > {
     const pending = await this.#coordinator.pendingIntents();
-    const retained = pending.flatMap((intent) =>
-      intent.state === "executed"
+    const enqueuedTimes = this.#intentStore.enqueuedTimes();
+    const retained = pending.flatMap((intent) => {
+      const enqueuedAt = enqueuedTimes.get(intent.intentId);
+      return intent.state === "executed"
         ? []
         : [
             {
@@ -515,9 +536,17 @@ export class NativeReplicaSession implements MobileReplicaSession {
               appId: intent.appId,
               action: intent.action,
               ...(intent.reason ? { reason: intent.reason } : {}),
+              attempts: intent.attempts,
+              ...(enqueuedAt ? { enqueuedAt } : {}),
+              ...(intent.conflict
+                ? {
+                    expectedVersion: intent.conflict.expectedVersion,
+                    actualVersion: intent.conflict.actualVersion,
+                  }
+                : {}),
             },
-          ]
-    );
+          ];
+    });
     const retainedIds = new Set(retained.map((intent) => intent.intentId));
     return [
       ...retained,
@@ -527,15 +556,19 @@ export class NativeReplicaSession implements MobileReplicaSession {
     ];
   }
 
+  /** A member's own cancel retires the intent; only a gateway denial is retained. */
   async cancelPendingChange(intentId: string): Promise<boolean> {
     const pending = await this.#coordinator.pendingIntents();
     if (!pending.some((intent) => intent.intentId === intentId)) return false;
+    const reason = "Cancelled on this device";
     await this.#coordinator.applyIntentOutcome({
       intentId,
       status: "denied",
-      reason: "Cancelled on this device",
+      reason,
     });
+    await this.#coordinator.discardIntent(intentId);
     this.#intentStore.dismissAttention(intentId);
+    this.resolveWaiter(intentId, { intentId, status: "denied", reason });
     return true;
   }
 
@@ -613,7 +646,13 @@ export class NativeReplicaSession implements MobileReplicaSession {
 
   async flushIntents(): Promise<void> {
     if (this.#closed || !this.#isConnected()) return;
-    if (!(await this.#isNetworkWorkAllowed())) return;
+    if (!(await this.#isNetworkWorkAllowed())) {
+      // A paused drain must not hang an awaited write(); the intent is durable.
+      this.settleWaitersAsQueued(
+        "saved locally; sync is paused on this network"
+      );
+      return;
+    }
     if (this.#drainPromise) {
       this.#drainRequested = true;
       return this.#drainPromise;
@@ -790,7 +829,11 @@ export class NativeReplicaSession implements MobileReplicaSession {
 
   private async drainLoop(): Promise<void> {
     const drainNextIntent = async (): Promise<void> => {
-      if (this.#closed || !this.#isConnected()) return;
+      if (this.#closed) return;
+      if (!this.#isConnected()) {
+        this.settleWaitersAsQueued("waiting for a connection");
+        return;
+      }
       let intent: ReplicaIntent | undefined;
       try {
         intent = await this.#coordinator.claimNextIntent();
@@ -816,6 +859,9 @@ export class NativeReplicaSession implements MobileReplicaSession {
       } catch (error) {
         if (isAuthorizationError(error)) {
           this.rejectWaiter(intent.intentId, error);
+          this.settleWaitersAsQueued(
+            "saved locally; the session is reconnecting"
+          );
           this.requireBootstrap();
           return;
         }
@@ -832,11 +878,14 @@ export class NativeReplicaSession implements MobileReplicaSession {
         await this.#coordinator
           .markIntentTransportFailed(intent.intentId, errorMessage(error))
           .catch(() => undefined);
+        const queuedReason =
+          "saved locally; retrying when the gateway is reachable";
         this.resolveWaiter(intent.intentId, {
           intentId: intent.intentId,
           status: "queued",
-          reason: "saved locally; retrying when the gateway is reachable",
+          reason: queuedReason,
         });
+        this.settleWaitersAsQueued(queuedReason);
         this.scheduleRetry();
         return;
       }
@@ -878,6 +927,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
     if (!waiters) return;
     this.#waiters.delete(intentId);
     for (const waiter of waiters) waiter.reject(error);
+  }
+
+  /** A durable admission is an honest settlement; an unresolved promise is not. */
+  private settleWaitersAsQueued(reason: string): void {
+    for (const intentId of Array.from(this.#waiters.keys()))
+      this.resolveWaiter(intentId, { intentId, status: "queued", reason });
   }
 
   private rejectWaiters(error: unknown): void {
@@ -952,7 +1007,13 @@ export async function createNativeReplicaSession(
     digest ??= nativeReplicaDigest;
     idFactory ??= nativeReplicaIdFactory;
   }
-  const intents = new IntentQueue(intentStore, { digest, idFactory });
+  const intents = new IntentQueue(intentStore, {
+    digest,
+    idFactory,
+    // Startup's handoff writes an attention row with no member gesture behind
+    // it to dismiss.
+    onSupersededRetired: (intentId) => intentStore.dismissAttention(intentId),
+  });
   let session: NativeReplicaSession | undefined = undefined;
   const coordinator = new ReplicaCoordinator(store, intents, {
     changeFeed: feed,
@@ -975,6 +1036,11 @@ export async function createNativeReplicaSession(
       ).catch(() => undefined);
     },
     onRebootstrapRequired: () => session?.requireBootstrap(),
+    // The op-sqlite taxonomy, not the normalized-name default: the driver
+    // raises the platform's own SQLITE_FULL/ENOSPC shapes, and only this
+    // classifier recognises all of them (./replica-storage-error).
+    isStorageFull: isReplicaStorageFullError,
+    onStorageFull: (error) => options.onStorageFull?.(error),
   });
   session = new NativeReplicaSession(coordinator, intentStore, {
     ...options,

@@ -5,17 +5,23 @@ import {
   readReplicaIntentOutcome,
   withReplicaSnapshot,
 } from "@centraid/vault";
-import type { ReplicaChangeEntry, ReplicaCursor } from "@centraid/vault";
+import type {
+  ReplicaChangeEntry,
+  ReplicaCursor,
+  ReplicaRow,
+} from "@centraid/vault";
 
 import {
   buildReplicaShapes,
   REPLICA_MAX_VALUE_BYTES,
   REPLICA_PROTOCOL_VERSION,
   replicaHistoricalRowState,
+  replicaRowColumns,
   replicaWireRowId,
   shapeReplicaRow,
 } from "./replica-shape.js";
 import type {
+  ReplicaRowWire,
   ReplicaServerShape,
   ReplicaShapeAccess,
 } from "./replica-shape.js";
@@ -299,6 +305,45 @@ interface CoalescedChange {
   last: ReplicaChangeEntry;
 }
 
+export interface ReplicaProjectionOptions {
+  /**
+   * Doorbell-only: the caller sends `doorbell` and drops `batch.changes`
+   * (the multiplex plane, where each vault's rows travel over its own lane).
+   * Row visibility and the wire row id are still computed per shape — the
+   * doorbell cannot be built without them — but the shaped `values` copy and
+   * the retained change map are skipped. Doorbell entries, cursors, shape ids
+   * and every rebootstrap trigger are identical to the full mode.
+   */
+  doorbellOnly?: boolean;
+}
+
+/**
+ * What the projection needs from a changed row: the wire row id under this
+ * shape, plus the wire payload when the caller will actually send rows.
+ */
+interface ShapedChangeRow {
+  rowId: string;
+  wire?: ReplicaRowWire;
+}
+
+function shapedChangeRow(
+  shape: ReplicaServerShape,
+  entity: string,
+  row: ReplicaRow,
+  nowMs: number,
+  doorbellOnly: boolean
+): ShapedChangeRow | undefined {
+  if (!doorbellOnly) {
+    const wire = shapeReplicaRow(shape, entity, row, nowMs);
+    return wire ? { rowId: wire.rowId, wire } : undefined;
+  }
+  // Same predicate + field-mask pass `shapeReplicaRow` runs, stopping before
+  // it copies the visible columns into a `values` object nobody reads here.
+  return replicaRowColumns(shape, entity, row, nowMs)
+    ? { rowId: replicaWireRowId(shape, entity, row.rowId) }
+    : undefined;
+}
+
 /**
  * Project one stable metadata page through current consent. The SQLite read
  * transaction pins the log watermark and all changed-row reads together.
@@ -307,8 +352,10 @@ export function projectReplicaPage(
   db: DatabaseSync,
   access: ReplicaShapeAccess & { deviceId?: string },
   since: ReplicaCursor,
-  limit = 1_000
+  limit = 1_000,
+  options: ReplicaProjectionOptions = {}
 ): ReplicaProjectedPage {
+  const doorbellOnly = options.doorbellOnly ?? false;
   return withReplicaSnapshot(db, (reader) => {
     const nowMs = Date.now();
     const shapes = buildReplicaShapes(
@@ -420,22 +467,27 @@ export function projectReplicaPage(
               );
         if (!previous.known) return rebootstrap();
         const shaped = row
-          ? shapeReplicaRow(shape, last.entity, row, nowMs)
+          ? shapedChangeRow(shape, last.entity, row, nowMs, doorbellOnly)
           : undefined;
         if (!previous.columns && !shaped) continue;
         const rowId =
           shaped?.rowId ?? replicaWireRowId(shape, last.entity, last.rowId);
-        const wire: ReplicaChangeWire = shaped
-          ? { op: "upsert", commitId: last.commitId, ...shaped }
-          : {
-              op: "delete",
-              commitId: last.commitId,
-              rowVersion: last.seq,
-              shapeId: shape.shapeId,
-              entity: last.entity,
-              rowId,
-            };
-        const projectedOp = wire.op === "delete" ? "delete" : last.op;
+        if (!doorbellOnly) {
+          const wire: ReplicaChangeWire = shaped?.wire
+            ? { op: "upsert", commitId: last.commitId, ...shaped.wire }
+            : {
+                op: "delete",
+                commitId: last.commitId,
+                rowVersion: last.seq,
+                shapeId: shape.shapeId,
+                entity: last.entity,
+                rowId,
+              };
+          changes.set(changeKey(shape.shapeId, last.entity, last.rowId), wire);
+        }
+        // A row no longer visible to this shape projects as a delete however
+        // the log recorded it; a visible one keeps the log's own op.
+        const projectedOp = shaped ? last.op : "delete";
         const affectedKey = `${rowId}\u0000${projectedOp}`;
         const wake = affected.get(affectedKey) ?? {
           op: projectedOp,
@@ -443,7 +495,6 @@ export function projectReplicaPage(
         };
         wake.shapeIds.push(shape.shapeId);
         affected.set(affectedKey, wake);
-        changes.set(changeKey(shape.shapeId, last.entity, last.rowId), wire);
       }
       for (const [key, wake] of affected) {
         const rowId = key.slice(0, key.lastIndexOf("\u0000"));

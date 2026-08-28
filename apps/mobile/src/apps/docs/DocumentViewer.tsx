@@ -33,6 +33,7 @@ import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import { imageSource, videoSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { READ_ONLY_SOURCE_REASON } from "../../kit/replica/row-provenance";
 import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -173,6 +174,8 @@ export default function DocumentViewer({
             <StageAction
               label={doc.starred ? STAGE_ACTIONS.starred : STAGE_ACTIONS.star}
               icon="star"
+              disabled={!doc.canWrite}
+              hint={READ_ONLY_SOURCE_REASON}
               onPress={() => void onStar(doc)}
               styles={styles}
             />
@@ -204,6 +207,8 @@ export default function DocumentViewer({
               label={STAGE_ACTIONS.trash}
               icon="trash-2"
               net
+              disabled={!doc.canWrite}
+              hint={READ_ONLY_SOURCE_REASON}
               onPress={() => void onTrash(doc)}
               styles={styles}
             />
@@ -212,6 +217,12 @@ export default function DocumentViewer({
 
         {doc ? (
           <View style={styles.statusRow}>
+            {/* Stated ONCE under the strip, never per greyed control. */}
+            {doc.canWrite ? null : (
+              <Text numberOfLines={2} style={styles.statusText}>
+                {READ_ONLY_SOURCE_REASON}
+              </Text>
+            )}
             <Text numberOfLines={1} style={styles.statusText}>
               {`${index + 1} of ${shelfDocs.length} in All` +
                 (custodyMeta(doc.custody_state)
@@ -245,22 +256,37 @@ function StageAction({
   label,
   icon,
   net,
+  disabled,
+  hint,
   onPress,
   styles,
 }: {
   label: string;
   icon: string;
   net?: boolean;
+  /** Withheld, not doomed: the strip below says why (#880). */
+  disabled?: boolean;
+  hint?: string;
   onPress: () => void;
   styles: ReturnType<typeof makeStyles>;
 }): React.JSX.Element {
   const { colors } = useTheme();
-  const color = net ? colors.net : colors.onStage;
+  const color = disabled
+    ? colors.onStageSoft
+    : net
+      ? colors.net
+      : colors.onStage;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      onPress={onPress}
+      accessibilityState={{ disabled: disabled === true }}
+      accessibilityHint={disabled ? hint : undefined}
+      disabled={disabled === true}
+      onPress={() => {
+        if (disabled === true) return;
+        onPress();
+      }}
       style={styles.action}
     >
       <Icon name={icon} size={18} color={color} />

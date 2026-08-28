@@ -7,7 +7,9 @@ import {
 import type {
   OptimisticMutation,
   ApplyChangesResult,
+  ReplicaBootstrapAdvance,
   ReplicaBootstrapHeader,
+  ReplicaBootstrapResume,
   ReplicaChangeBatch,
   ReplicaCursor,
   ReplicaSnapshotRow,
@@ -60,13 +62,18 @@ export class NativeReplicaStore implements ReplicaStore {
     return Promise.resolve(this.core.bootstrap(snapshot));
   }
 
-  bootstrapBegin(header: ReplicaBootstrapHeader): Promise<undefined> {
-    this.core.bootstrapBegin(header);
-    return Promise.resolve(undefined);
+  bootstrapBegin(
+    header: ReplicaBootstrapHeader,
+    options?: { restart?: boolean }
+  ): Promise<ReplicaBootstrapResume | undefined> {
+    return Promise.resolve(this.core.bootstrapBegin(header, options));
   }
 
-  bootstrapPage(rows: ReplicaSnapshotRow[]): Promise<undefined> {
-    this.core.bootstrapPage(rows);
+  bootstrapPage(
+    rows: ReplicaSnapshotRow[],
+    advance?: ReplicaBootstrapAdvance
+  ): Promise<undefined> {
+    this.core.bootstrapPage(rows, advance);
     return Promise.resolve(undefined);
   }
 

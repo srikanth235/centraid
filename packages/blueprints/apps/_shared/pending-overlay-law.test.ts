@@ -307,6 +307,32 @@ describe("decorating a mutation at read time", () => {
     );
   });
 
+  it("carries the age and attempt count that separate slow from stuck", () => {
+    const decorated = decoratePendingMutation(upsert, {
+      intentId: "i1",
+      state: "queued",
+      action: "add",
+      attempts: 4,
+      enqueuedAt: "2026-08-27T09:00:00.000Z",
+    });
+    if (decorated.op !== "upsert") throw new Error("expected an upsert");
+    expect(decorated.values[PENDING_OVERLAY_FIELDS.attempts]).toBe(4);
+    expect(decorated.values[PENDING_OVERLAY_FIELDS.enqueuedAt]).toBe(
+      "2026-08-27T09:00:00.000Z"
+    );
+  });
+
+  it("omits the age and attempt count when the rail reported neither", () => {
+    const decorated = decoratePendingMutation(upsert, {
+      intentId: "i1",
+      state: "queued",
+      action: "add",
+    });
+    if (decorated.op !== "upsert") throw new Error("expected an upsert");
+    expect(PENDING_OVERLAY_FIELDS.attempts in decorated.values).toBe(false);
+    expect(PENDING_OVERLAY_FIELDS.enqueuedAt in decorated.values).toBe(false);
+  });
+
   it("carries NO reason for a terminal state that named none", () => {
     const decorated = decoratePendingMutation(upsert, {
       intentId: "i1",
