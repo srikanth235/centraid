@@ -73,6 +73,11 @@ export function historyStatus(versions: number): string {
   return `${versions} versions · restoring appends, it never rewrites`;
 }
 
+export const HISTORY_UNREADABLE = "The version chain could not be read here.";
+export const HISTORY_NEEDS_NOTE = "Open a note to see its versions.";
+export const VERSION_TEXT_ELSEWHERE =
+  "This version's text is not on this device.";
+
 export function windowEnd(shown: number, total: number): string {
   const group = new Intl.NumberFormat();
   return `${group.format(shown)} of ${group.format(total)} · this is a window, not the whole library`;

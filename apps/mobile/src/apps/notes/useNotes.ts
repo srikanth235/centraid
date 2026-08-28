@@ -4,6 +4,10 @@ import {
   JOURNAL_ENTRY_NOTATION,
   JOURNAL_SCHEME_URI,
 } from "@centraid/blueprints/apps/_shared/journal-scheme";
+import {
+  projectNotebooks,
+  projectTagShelves,
+} from "@centraid/blueprints/apps/notes/filing";
 
 import {
   combineReplicaQueryStates,
@@ -87,11 +91,65 @@ export function useNotes() {
       )
     );
   }, [concepts.rows, schemes.rows, tags.rows]);
+  // Notebooks are collections (#274); the spine must name every one of them.
+  const collections = useReplicaQuery(
+    "notes",
+    useMemo(() => ({ entity: "core.collection" }), [])
+  );
+  const placements = useReplicaQuery(
+    "notes",
+    useMemo(
+      () => ({
+        entity: "core.collection_entry",
+        where: [{ column: "target_type", op: "eq", value: "knowledge.note" }],
+      }),
+      []
+    )
+  );
+  const built = useMemo(
+    () => buildNotes(notes.rows, contents.rows, links.rows, anchors.rows),
+    [anchors.rows, contents.rows, links.rows, notes.rows]
+  );
+  // COUNTS PROMISE ONLY WHAT A PLACE CAN OPEN: a journal entry (R-journal) and
+  // a trashed note count into no notebook and no tag.
+  const visible = useMemo(
+    () =>
+      new Set(
+        built.flatMap((note) =>
+          note.trashed || journalNoteIds.has(note.rawId) ? [] : [note.rawId]
+        )
+      ),
+    [built, journalNoteIds]
+  );
   return {
     journalNoteIds,
-    notes: useMemo(
-      () => buildNotes(notes.rows, contents.rows, links.rows, anchors.rows),
-      [anchors.rows, contents.rows, links.rows, notes.rows]
+    notes: built,
+    visibleNoteIds: visible,
+    notebooks: useMemo(
+      () =>
+        projectNotebooks({
+          collections: collections.rows,
+          entries: placements.rows,
+          visible,
+        }),
+      [collections.rows, placements.rows, visible]
+    ),
+    tagShelves: useMemo(
+      () =>
+        projectTagShelves({
+          tags: tags.rows,
+          concepts: concepts.rows,
+          visible,
+        }),
+      [concepts.rows, tags.rows, visible]
+    ),
+    chainRows: useMemo(
+      () => ({
+        links: links.rows,
+        concepts: concepts.rows,
+        schemes: schemes.rows,
+      }),
+      [concepts.rows, links.rows, schemes.rows]
     ),
     ...combineReplicaQueryStates([
       notes,
@@ -101,6 +159,8 @@ export function useNotes() {
       schemes,
       concepts,
       tags,
+      collections,
+      placements,
     ]),
   };
 }

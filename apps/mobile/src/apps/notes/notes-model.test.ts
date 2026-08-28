@@ -69,4 +69,40 @@ describe(buildNotes, () => {
     });
     expect(notes[0]?.backlinks).toHaveLength(1);
   });
+
+  it("carries the chain head and the purge date the vault gave it", () => {
+    const [live, trashed] = buildNotes(
+      [
+        {
+          note_id: "n1",
+          title: "Live",
+          body_content_id: "c1",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-02-01T00:00:00Z",
+        },
+        {
+          note_id: "n2",
+          title: "Trashed",
+          body_content_id: "c2",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-02T00:00:00Z",
+          deleted_at: "2026-01-03T00:00:00Z",
+          purge_at: "2026-02-02T00:00:00Z",
+        },
+      ],
+      [],
+      []
+    );
+
+    expect(live).toMatchObject({
+      bodyContentId: "c1",
+      createdAt: "2026-01-01T00:00:00Z",
+      trashed: false,
+    });
+    expect(live?.purgeAt).toBeUndefined();
+    expect(trashed).toMatchObject({
+      trashed: true,
+      purgeAt: "2026-02-02T00:00:00Z",
+    });
+  });
 });

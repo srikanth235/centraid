@@ -33,6 +33,7 @@ export const BAND_CLAIMING_APPS: readonly BandClaimingApp[] = [
   { id: "tasks", name: "Tasks" },
   { id: "locker", name: "Locker" },
   { id: "tally", name: "Tally" },
+  { id: "notes", name: "Notes" },
 ];
 
 export interface BandOwnerState {

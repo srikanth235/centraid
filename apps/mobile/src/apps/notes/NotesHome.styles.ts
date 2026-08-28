@@ -49,12 +49,19 @@ export const styles = StyleSheet.create({
     fontSize: t("mono").fontSize,
   },
   controls: {
+    alignItems: "center",
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
-  editor: { flex: 1, paddingHorizontal: 20 },
+  count: {
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
+    fontVariant: ["tabular-nums"],
+  },
+  editor: { paddingBottom: 24, paddingHorizontal: 20 },
   editorActions: {
     flexDirection: "row",
     gap: 9,
@@ -75,6 +82,21 @@ export const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: family.sansMedium,
     fontSize: t("reading").fontSize,
+  },
+  field: {
+    borderRadius: radii.lg,
+    borderWidth: borders.hairline,
+    flex: 1,
+    fontFamily: family.sansRegular,
+    fontSize: t("body").fontSize,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  fieldRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 8,
   },
   fill: { flex: 1 },
   header: {
@@ -146,6 +168,23 @@ export const styles = StyleSheet.create({
     ...t("small"),
     marginBottom: 12,
   },
+  row: {
+    alignItems: "center",
+    borderBottomWidth: borders.hairline,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 52,
+    paddingVertical: 8,
+  },
+  rowMeta: {
+    ...t("small"),
+    marginTop: 2,
+  },
+  rowName: {
+    fontFamily: family.sansMedium,
+    fontSize: t("reading").fontSize,
+  },
+  rowOpen: { flex: 1, justifyContent: "center", minHeight: 44 },
   search: {
     alignItems: "center",
     borderRadius: radii.lg,
@@ -161,6 +200,11 @@ export const styles = StyleSheet.create({
     fontFamily: family.sansRegular,
     fontSize: t("body").fontSize,
     minHeight: 42,
+  },
+  section: { gap: 4, paddingHorizontal: 20, paddingVertical: 10 },
+  sectionTitle: {
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
   },
   sheet: { flex: 1 },
   subtitle: {
