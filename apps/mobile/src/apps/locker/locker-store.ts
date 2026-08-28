@@ -64,14 +64,12 @@ import {
 } from "./locker-gateway";
 import type { VaultDenial } from "./locker-gateway";
 
-/** How often the boundary re-examines itself while a session is open: the
- *  sliding window and every revealed field's countdown are both read from the
- *  same tick, so a reveal cannot outlive a session by up to a second. */
+/** The sliding window and every reveal countdown are read from this one tick,
+ *  so a reveal cannot outlive its session. */
 const TICK_MS = 1000;
 
-/** How long a landed window may stand before the screen says it is behind the
- *  vault. Ten minutes: long enough that a member reading an item is not told
- *  their list is stale, short enough that one left open overnight is. */
+/** Long enough that a member reading an item is not told their list is stale,
+ *  short enough that one left open overnight is. */
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
 export interface LockerVaultState {
@@ -84,51 +82,37 @@ export interface LockerVaultState {
    *  bag, so no list is ever left standing behind a lock screen. */
   rows: LockerRow[];
   truncated: boolean;
-  /** How large a window this seat asked for, so *Show more* can ask for more. */
   limit: number;
   loaded: boolean;
   reading: boolean;
-  /** A read that failed for a reason that is not a refusal. */
   readError: string;
-  /** When the window last landed — the stale notice's own clock. */
   lastReadAt: string | null;
-  /** Has the window been standing long enough to say so? Decided on the
-   *  boundary's own tick rather than by a screen reading the clock during
-   *  render, which is a purity violation and an unstable result besides. */
+  /** Decided on the boundary's tick, never by a screen reading the clock
+   *  during render — that is a purity violation and unstable besides. */
   stale: boolean;
   /** The permit gate is standing, and this is what it is refusing so far. */
   permitError: string;
   permitBusy: boolean;
   /** A permit expired with nothing revealed (STATES.md, Locker / Re-auth). */
   reauth: boolean;
-  /** The app is not in the foreground: the switcher mask stands. */
   masked: boolean;
-  /** The enrolled device credential, or null where there is none. */
   credentialId: string | null;
-  /** A write is in flight against the control plane. */
   busy: boolean;
-  /** The last landed receipts window, and whether older ones stand beyond it.
-   *  `null` before one lands — an audit surface says nothing until it reads. */
+  /** `null` before one lands — an audit surface says nothing until it reads. */
   accessWindow: { window: number; truncated: boolean } | null;
   /** Why the receipts could not be read. A refusal is not an empty history. */
   accessError: string;
-  /** The staged import batches, or `null` before the list has landed. */
+  /** `null` before the list lands. */
   importBatches: StagedBatch[] | null;
-  /** Which draft is open for review. */
   openBatchId: string | null;
-  /** What the import workflow last said — staged, published, discarded, or
-   *  the refusal that stopped it. */
   importNote: string;
-  /** A surface read or an import act is in flight. */
   surfaceBusy: boolean;
 }
 
 /**
- * The slice `locker-surfaces.ts` owns — the only part of this store anything
- * outside this file may write. `bag` is in the set because Access history and
- * Import fill two fields the SHARED bag already declares (`accessEntries`,
- * `importRows`), so a lock takes both through `wipeSecretState` rather than
- * through a second rule this seat would have to remember.
+ * The only part of this store anything outside this file may write. `bag` is in
+ * the set so Access history and Import fill fields the SHARED bag declares and
+ * a lock takes both through `wipeSecretState`, not a second rule.
  */
 export type LockerSurfacePatch = Partial<
   Pick<

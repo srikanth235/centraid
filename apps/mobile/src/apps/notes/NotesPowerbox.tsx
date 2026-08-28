@@ -1,12 +1,9 @@
-// The `[[` powerbox on the phone (#882).
-//
-// Same seven kinds as the pointer seats, because both read
-// `link-targets-table.ts`; same exclusions, because the Notes probe is handed
-// the journal set (R-journal) and LOCKER IS NOT A KIND AT ALL — the sheet's
-// foot says so rather than leaving the absence to be noticed.
-//
-// One probe per kind, each isolated: a scope this replica was never granted
-// leaves its column ABSENT instead of emptying the sheet.
+// The `[[` powerbox on the phone. Same kinds and exclusions as the pointer
+// seats, because both read `link-targets-table.ts`: the probe is handed the
+// journal set (R-journal) and LOCKER IS NOT A KIND AT ALL, which the sheet's
+// foot says rather than leaving the absence to be noticed. One probe per kind,
+// each isolated, so a scope this replica was never granted leaves its column
+// ABSENT instead of emptying the sheet.
 
 import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";

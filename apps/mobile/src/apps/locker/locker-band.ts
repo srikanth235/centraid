@@ -7,12 +7,9 @@
 // `react-native` import here: `locker-band.test.ts` asserts these tables
 // directly and `LockerBand.tsx` renders them unchanged.
 //
-// AND THE SHEET'S OTHER HALF — where each row's act happens. Four of the five
-// are routes on this phone: Import drives the gateway's staged-import workflow,
-// Export issues the app's own `export` action, and Access history reads the
-// app's own `access` query. Only Companion is `elsewhere`, and permanently so —
-// it runs in a browser extension, beside the page, which is a place rather than
-// a gap. Its row still leads somewhere, because a greyed row teaches that
+// The sheet's other half names where each row's act happens. Companion is
+// permanently `elsewhere` — it runs in a browser extension, beside the page —
+// and its row still leads somewhere, because a greyed row would teach that
 // Companion is broken rather than that it lives in the browser.
 
 import {
@@ -181,10 +178,7 @@ export type LockerMoreScreen = Extract<
   "LockerAccess" | "LockerTrash" | "LockerSurface"
 >;
 
-/** Exhaustive: a row without a route fails typecheck, not at tap. Every row
- *  leads somewhere — Import, Export and Companion share one screen, which draws
- *  the first two as the surfaces they now are and the third as what it is plus
- *  where the act happens. */
+/** Exhaustive: a row without a route fails typecheck, not at tap. */
 export function resolveLockerMoreRoute(
   key: LockerMoreRowKey
 ): LockerMoreScreen {

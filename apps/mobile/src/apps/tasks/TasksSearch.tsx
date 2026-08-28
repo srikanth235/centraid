@@ -1,11 +1,7 @@
-// Search, and WHO ANSWERS IT (Tasks spec §1).
-//
-// The matching happens in the vault's FTS5 index, so this surface dispatches
-// the app's own `search` query rather than grepping the replica — a second
-// matcher on this device would rank differently from every other seat. That
-// makes it a GATEWAY read: with the desktop out of reach there is no answer,
-// and the surface says which of the two it is missing instead of drawing an
-// empty result set that reads as "nothing matches".
+// Search dispatches the app's own `search` query rather than grepping the
+// replica: a second matcher here would rank differently from every other
+// seat. That makes it a GATEWAY read, so out of reach the surface says what
+// it is missing instead of an empty set reading as "nothing matches".
 
 import React, { useEffect, useRef, useState } from "react";
 import { FlatList, View } from "react-native";

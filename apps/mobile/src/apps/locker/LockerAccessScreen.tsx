@@ -1,18 +1,6 @@
 // ACCESS HISTORY — `locker/access` (SURFACES.md: custodian AND origin).
-//
-// THIS SEAT READS THE RECEIPTS NOW. The `access` query is a manifested Locker
-// query like `items` or `trash`, so it comes through the same one door
-// (`locker-gateway.ts`) and needs the same live session. What used to stand
-// here — the register, the no-values rule, and a sentence naming where the same
-// receipts are read — is still on the screen, above the list rather than in
-// place of it.
-//
-// The read is online-only by construction and this seat has no cached answer to
-// fall back to, which is exactly right: a cached history would be a list of what
-// this device happened to hold, drawn as the vault's whole record.
-//
-// Every sentence is the shared table's; the projection is the shared model's.
-// The screen itself does nothing but mount the read and hand over what landed.
+// Never give this read a cached fallback: it would draw what this device
+// happened to hold as the vault's whole record.
 
 import React, { useEffect, useMemo } from "react";
 

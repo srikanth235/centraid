@@ -1,25 +1,18 @@
 // THE ONLY DOOR THIS SEAT HAS INTO LOCKER, and it is the gateway's — never
 // the replica's.
 //
-// Every read in the first section is an RPC to the app's own query handlers.
-// Nothing here touches `MobileReplicaSession.read`, and nothing here is cached
-// in SQLite: a passphrase, a memory-session token, a one-shot permit and a
-// revealed field are the four things this seat must never hand a durable store
-// (docs/mobile-offline.md, "Locker is stricter than the ordinary replica
-// plane"). The metadata writes — star, tags, trash, restore — DO go through
-// the replica's pending path, and they go through `locker-writes.ts`.
+// Every read here is an RPC to the app's own query handlers. Nothing touches
+// `MobileReplicaSession.read` and nothing is cached in SQLite: a passphrase, a
+// memory-session token, a one-shot permit and a revealed field are the four
+// things this seat must never hand a durable store (docs/mobile-offline.md,
+// "Locker is stricter than the ordinary replica plane"). The metadata writes —
+// star, tags, trash, restore — DO go through the replica's pending path, in
+// `locker-writes.ts`.
 //
-// The SECOND section is the staged-import plane, which is not an app query at
-// all — it is the gateway's own owner-tier workflow. It is here rather than in
-// a module of its own for the reason this file exists: one door. An import
-// payload is the file itself, every secret in it, so it must be as far from
-// the durable outbox as a typed password is, and the only way to keep that
-// promise checkable is to keep the calls that could break it in one place.
-//
-// The functions are thin on purpose. They name the query, they name what
-// comes back, and they leave every decision about what a payload MEANS to
-// `locker-store.ts` / `locker-surfaces.ts` and to the pure blueprint modules
-// they compose.
+// The staged-import plane belongs in this file for the same promise: an import
+// payload is the file itself, every secret in it, so it must stay as far from
+// the durable outbox as a typed password is, and keeping every call that could
+// break that in one place is what makes the promise checkable.
 
 import type {
   StagedBatch,
@@ -40,8 +33,7 @@ import {
   requireGatewayBase,
 } from "../../lib/gateway";
 
-/** The window the items read asks for. 300 is the query's own default and the
- *  number README-Locker §6's window sentence states; 2,000 is its ceiling. */
+/** The query's own default window; 2,000 is its ceiling. */
 export const ITEMS_WINDOW = 300;
 export const ITEMS_WINDOW_MAX = 2000;
 
@@ -128,8 +120,8 @@ export function lockerTrash(): Promise<RowsPayload> {
   return appQuery<RowsPayload>("locker", "trash", {});
 }
 
-/** The receipts window the access read asks for. 200 is the query's own
- *  default and the number `accessWindowCopy` states; 2,000 is its ceiling. */
+/** The query's own default receipts window, and the number `accessWindowCopy`
+ *  states. */
 export const ACCESS_WINDOW = 200;
 
 export interface AccessPayload {
@@ -143,14 +135,10 @@ export interface AccessPayload {
 /**
  * The receipt stream, under the grant's own `object_type` row filter.
  *
- * ONLINE-ONLY BY CONSTRUCTION, and that costs this seat nothing: receipts live
- * in journal.db, which the replica does not carry, and every read in this file
- * already goes to the gateway. There is no cached history to fall back to and
- * there must not be — a cached one would be a list of what this device
- * happened to hold, drawn as the vault's whole record.
- *
- * NO ROW CARRIES A VALUE. The query answers acts, items and column NAMES; the
- * projection that turns them into lines is the shared `access-model.ts`.
+ * ONLINE-ONLY BY CONSTRUCTION: there is no cached history to fall back to and
+ * there must not be — a cached one would draw what this device happened to hold
+ * as the vault's whole record. NO ROW CARRIES A VALUE; the query answers acts,
+ * items and column NAMES, and `access-model.ts` projects them into lines.
  */
 export function lockerAccess(
   sessionToken: string,
@@ -164,15 +152,12 @@ export function lockerAccess(
 
 // ─── The staged-import plane ────────────────────────────────────────────────
 //
-// `/centraid/_vault/imports` is the gateway's own owner-tier import workflow,
-// and it is where a password-manager CSV becomes `locker.item` rows
-// (`packages/vault/src/ingest/stage-file.ts`). It is the SAME door the phone's
-// first-run camera-roll import already uses, so nothing here is a new plane —
-// only a new caller.
+// The gateway's owner-tier workflow, where a password-manager CSV becomes
+// `locker.item` rows (`packages/vault/src/ingest/stage-file.ts`).
 //
-// DRAFT → REVIEW → PUBLISH, and nothing reaches the vault until the draft is
-// published. Every call is a direct online request: there is no queue behind
-// any of them, by construction, because the payload is the member's file.
+// DRAFT → REVIEW → PUBLISH: nothing reaches the vault until the draft is
+// published. Every call is a direct online request with no queue behind it, by
+// construction, because the payload is the member's file.
 
 const IMPORTS = "/centraid/_vault/imports";
 

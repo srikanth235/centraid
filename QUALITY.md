@@ -2,6 +2,13 @@
 
 ## Open
 
+- **Agenda's search field appears to stall while you type.** The input is
+  controlled off `state.search`, but `applySearchInput` is a trailing-edge 200ms
+  debounce, so the value the field renders only catches up after the pause.
+  Pre-existing, found while #882 moved the field out of the More sheet and
+  deliberately not changed there — that slice preserved the wiring rather than
+  altering behaviour under a band fix. The fix is to let the input hold its own
+  immediate value and debounce only the query.
 - **The #880 mobile wave's residuals, in one place.** Each is understood, none is a
   regression, and every one is a follow-up somebody should be able to find:
   - `has_unavailable_fields` silently reverts an ordered tile to a full read. The

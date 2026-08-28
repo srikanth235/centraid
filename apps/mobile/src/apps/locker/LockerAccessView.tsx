@@ -1,18 +1,9 @@
 // THE RECEIPTS, AS A LIST (README-Locker §1 `locker/access`, §2 "Receipts").
 //
-// AN AUDIT SURFACE NEVER INVENTS A ROW. Every line here comes out of
-// `consent.receipt` through the app's own `access` query; the projection that
-// turns a receipt into a line is the SHARED `access-model.ts`, so this seat and
-// the desktop cannot say different things about the same receipt.
-//
-// NO VALUE IS SHOWN. A reveal names the COLUMNS it opened and stops — that is
-// `ACCESS_NO_VALUES`, and it is true because a receipt has never carried a
-// value in the first place. NO REFUSAL IS HIDDEN: a denial lists like an
-// allowance, with its own mark.
-//
-// AND THREE ANSWERS, NEVER ONE EMPTINESS. Offline, refused and empty are
-// different facts: the read is online-only by construction, a refusal is not an
-// empty history, and "no receipt has been written yet" is day one.
+// AN AUDIT SURFACE NEVER INVENTS A ROW: the projection is the SHARED
+// `access-model.ts`. NO VALUE IS SHOWN — a reveal names the COLUMNS it opened
+// and stops. NO REFUSAL IS HIDDEN: a denial lists like an allowance. Offline,
+// refused and empty stay three facts, never one emptiness.
 
 import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -44,21 +35,17 @@ import SkeletonRows from "../../kit/components/SkeletonRows";
 import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-/** The word over a refused receipt. `--net` ink, and the only colour spent on
- *  this screen. */
 const REFUSED = "REFUSED";
 
 export interface LockerAccessViewProps {
-  /** `null` before a read has landed, or after one was refused — nothing is
-   *  empty until a read has come back. */
+  /** `null` until a read lands: nothing is empty before one comes back. */
   entries: readonly LockerAccessEntry[] | null;
   window: { window: number; truncated: boolean } | null;
-  /** The vault's own words for a refusal. Empty where there was none. */
   error: string;
   /** Receipts live in the journal, which this device does not carry. */
   offline: boolean;
-  /** Item titles from the window this session already read, so a row names the
-   *  item rather than its id. A receipt outside that window keeps its id. */
+  /** From the window this session already read; a receipt outside it keeps its
+   *  id. */
   titles: ReadonlyMap<string, string>;
 }
 

@@ -1,6 +1,5 @@
 // Pure derivations, so `views.test.ts` asserts product rules directly. The
 // grid is only for things with a time cost: day context decorates, never rows.
-// A multi-day event is visible on every local day it spans (`bucketByDay`).
 
 import type { BandDestination } from "../_shared/shelves.ts";
 import {
@@ -25,8 +24,7 @@ export const VIEWS: readonly ViewKind[] = [
 
 export const POINTER_VIEWS: readonly ViewKind[] = VIEWS;
 
-/** Month and Week absent BY TYPE: 7 columns at 390px are unreadable, and a
- *  destination that draws another is worse than an absent one. */
+/** Month and Week absent BY TYPE: 7 columns at 390px are unreadable. */
 export type TouchView = "day" | "schedule" | "waiting";
 
 export const TOUCH_VIEWS: readonly TouchView[] = ["day", "schedule", "waiting"];
@@ -36,8 +34,8 @@ export function resolveView(view: ViewKind, touch: boolean): ViewKind {
   return view;
 }
 
-/** Not a view: `appBar` withdraws the bar's own Search on compact only
- *  because the band carries this. */
+/** Not a view: `appBar` withdraws the bar's Search on compact because the band
+ *  carries this. */
 export const BAND_SEARCH_ID = "search";
 
 const BAND_ICONS: Readonly<Record<TouchView, string>> = {
@@ -46,7 +44,7 @@ const BAND_ICONS: Readonly<Record<TouchView, string>> = {
   waiting: "Users",
 };
 
-/** ONE table, both seats; four plus the frame's own More is the cap. */
+/** ONE table, both seats; four plus More is the cap. */
 export const BAND_DESTINATIONS: readonly BandDestination[] = [
   ...TOUCH_VIEWS.map((view) => ({
     id: view,
@@ -140,13 +138,13 @@ export function weekDays(anchor: Date): string[] {
   );
 }
 
-/** The vault decides; an all-day-long timed event is still timed. */
+/** The vault decides; a day-long timed event is still timed. */
 export function isAllDay(ev: AgEvent): boolean {
   return ev.recurrence_semantics === "all-day";
 }
 
-/** One row per local day an event occupies. All-day civil `dtend` is inclusive;
- *  timed `dtend` is the end instant. `clamped` means the run continues past midnight. */
+/** All-day civil `dtend` is inclusive; timed `dtend` is the end instant.
+ *  `clamped` means the run continues past midnight. */
 export function bucketByDay(
   list: readonly AgEvent[]
 ): Map<string, DaySegment[]> {
@@ -197,7 +195,7 @@ export function bucketByDay(
   return map;
 }
 
-/** The rail is above the grid: a whole-day fact has no position. */
+/** The rail sits above the grid: a whole-day fact has no position. */
 export function splitDay(segments: readonly DaySegment[]): {
   allDay: DaySegment[];
   timed: DaySegment[];
@@ -241,7 +239,7 @@ export function segmentBox(segment: DaySegment): {
   const dayStart = startOfDay(new Date(segment.segStart)).getTime();
   const top = ((segment.segStart - dayStart) / DAY_MS) * 100;
   const raw = ((segment.segEnd - segment.segStart) / DAY_MS) * 100;
-  // A zero-length event needs a ~20-minute floor.
+  // A zero-length event needs a 20-minute floor.
   return { top, height: Math.max(raw, (20 / (24 * 60)) * 100) };
 }
 
@@ -254,7 +252,7 @@ export function visibleEvents(
   );
 }
 
-/** Owner's PARTSTAT still `needs-action`; same rows the grid reads. */
+/** Owner's PARTSTAT still `needs-action`. */
 export function waitingOn(list: readonly AgEvent[]): AgEvent[] {
   return list.filter((ev) =>
     (ev.attendees ?? []).some(
@@ -276,7 +274,7 @@ export function myAttendance(
   return mine ? { party_id: mine.party_id, partstat: mine.partstat } : null;
 }
 
-/** Occurrences are addressable despite one `event_id`. */
+/** Occurrences stay addressable despite one `event_id`. */
 export function rowKey(ev: AgEvent): string {
   return ev.instance_key ?? ev.event_id;
 }

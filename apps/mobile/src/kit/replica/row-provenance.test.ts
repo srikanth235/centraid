@@ -1,11 +1,7 @@
-// The mounted plane's stamps, read once for every app (#880).
-//
-// The first half asserts the readers themselves. The second half asserts the
-// two screens with no render harness on this seat — Tasks' board and Agenda's
-// event — the way `apps/photos/viewer-read-only-reason.test.ts` already does
-// for the photo viewer: by reading their sources and requiring that the ONE
-// sentence is IMPORTED (never re-typed) and reaches JSX as element children,
-// so a sighted member reads the refusal and not only a screen reader.
+// The mounted plane's stamps, read once for every app (#880). Screens with no
+// render harness on this seat are asserted from their sources: the ONE sentence
+// must be IMPORTED, never re-typed, and reach JSX as element children, so a
+// sighted member reads the refusal and not only a screen reader.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -26,8 +22,6 @@ const source = (relative: string): string =>
   );
 
 const TASKS_SRC = source("apps/tasks/TasksHome.tsx");
-// Tasks' row is one component drawn by every place that lists rows, so the
-// row's own affordances are asserted where they live.
 const TASK_ROW_SRC = source("apps/tasks/TaskRow.tsx");
 const AGENDA_SRC = source("apps/agenda/AgendaEvent.tsx");
 const DRIVE_SRC = source("apps/docs/DriveList.tsx");

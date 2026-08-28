@@ -1,9 +1,6 @@
-// Where the More sheet's rows LEAD (#834).
-//
-// A row of the sheet that leads nowhere is worse than no row, so the round trip
-// is what this file holds: every row resolves to a place, every place resolves
-// back to the shelf the pointer seats address, and no lens lights a band tab
-// that is not where the member is standing.
+// Where the More sheet's rows LEAD (#834). A row that leads nowhere is worse
+// than no row, so this holds the round trip: every row resolves to a place
+// and back to the shelf the pointer seats address.
 
 import { describe, expect, it } from "vitest";
 
@@ -37,8 +34,8 @@ describe("the More sheet's destinations", () => {
   });
 
   it("refuses a shelf that is not a More destination", () => {
-    // Today is a band place; resolving it here would land the member on a lens
-    // silently rather than fail loudly.
+    // Today is a band place: resolving it here would land the member on a
+    // lens silently rather than fail loudly.
     expect(() => morePlace(null)).toThrow(/not a More destination/u);
   });
 

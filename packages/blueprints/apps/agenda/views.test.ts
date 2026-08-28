@@ -1,6 +1,4 @@
-// The view derivations, asserted directly rather than through a rendered
-// tree: where a grid lands when it opens, which day an event is drawn on, what
-// counts as all-day, what a multi-day run does, and who is waiting on whom.
+// The view derivations, asserted directly rather than through a rendered tree.
 
 import type { ReactElement, ReactNode } from "react";
 import { isValidElement } from "react";

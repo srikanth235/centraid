@@ -1,10 +1,6 @@
-// What the task detail place SAYS and WRITES (spec §5). Pure and DOM-free, so
-// the pointer editor and the phone's detail surface project one answer instead
-// of two that drift.
-//
-// THE FIELD LIST IS A PROJECTION, NOT A LAYOUT: a field is absent when the row
-// has no answer for it, so nothing draws a repeat control on a task that does
-// not repeat, or an anchor on one whose missed periods mean nothing.
+// What the task detail place SAYS and WRITES (spec §5). THE FIELD LIST IS A
+// PROJECTION, NOT A LAYOUT: a field is absent when the row has no answer for
+// it, so nothing draws a repeat control on a task that does not repeat.
 import { dueLabel, isDateOnly, priorityLevel, timeOfDay } from "./format.ts";
 import type { Project, Task, TaskStatus } from "./types.ts";
 import {
@@ -38,8 +34,7 @@ import {
 } from "./view-copy.ts";
 import { weekdayName } from "./when.ts";
 
-/** At five children the place states what the task has become and offers the
- *  promotion. The cap is a discipline, not an apology (§3). */
+/** The cap is a discipline, not an apology (§3). */
 export const PROMOTION_AT = 5;
 
 /** Minutes behind `EFFORT_CHIPS`, index for index; 0 is unset. */
@@ -50,9 +45,8 @@ export interface EffortChoice {
   minutes: number;
 }
 
-/** The effort choices that actually WRITE. `edit_task` takes `effort_min >= 1`
- *  (app.json), so `EFFORT_CHIPS[0]` would dispatch a no-op — it is the field's
- *  value when nothing is set, never a control. */
+/** `edit_task` takes `effort_min >= 1` (app.json), so `EFFORT_CHIPS[0]` is the
+ *  unset value, never a control. */
 export const EFFORT_CHOICES: readonly EffortChoice[] = EFFORT_CHIPS.slice(
   1
 ).map((label, index) => ({ label, minutes: EFFORT_MINUTES[index + 1] ?? 0 }));
@@ -74,8 +68,7 @@ export type TaskFieldKey =
 export interface TaskField {
   key: TaskFieldKey;
   label: string;
-  /** What the field states. `null` where the row's own control IS the answer
-   *  (the tag chips, the attachment list) and a summary would repeat it. */
+  /** `null` where the row's own control IS the answer. */
   value: string | null;
   notes: readonly string[];
 }
@@ -84,8 +77,7 @@ export interface TaskFieldsInput {
   task: Task;
   now: string;
   projectName?: string | null;
-  /** The vault this task was born in, and who else can see it where the seat
-   *  knows. A personal task passes nothing — personal is silence. */
+  /** A personal task passes nothing — personal is silence. */
   home?: { vault: string; who?: string } | null;
 }
 
@@ -97,8 +89,7 @@ export function anchorOf(task: Task): "scheduled" | "completion" {
   return task.recurrence_anchor ?? "scheduled";
 }
 
-/** The chosen card's own head — the anchor is stated in the words the member
- *  chose it by, never as the stored token. */
+/** The member's own words, never the stored token. */
 export function anchorHead(task: Task): string {
   const chosen = anchorOf(task);
   return ANCHOR_CARDS.find((card) => card.value === chosen)?.head ?? chosen;
@@ -114,8 +105,6 @@ export function familySize(task: Task): number {
   return task.children?.length ?? 0;
 }
 
-/** One level only — until the family outgrows the cap, when the note stops
- *  restating the rule and states what the task has become. */
 export function subtaskNotes(task: Task): readonly string[] {
   return familySize(task) >= PROMOTION_AT
     ? [PROMOTION_A, PROMOTION_B]
@@ -133,7 +122,6 @@ export function taskFields(input: TaskFieldsInput): TaskField[] {
       notes: [],
     },
   ];
-  // Time is the date-only/at-a-time distinction, and only a dated row has one.
   if (due) {
     fields.push({
       key: "time",
@@ -223,8 +211,7 @@ export function taskFields(input: TaskFieldsInput): TaskField[] {
   return fields;
 }
 
-/** Start/Stop, or nothing at all: a completed or released row has no run to
- *  begin or halt, and offering one would name a state it cannot reach. */
+/** A completed or released row has no run to begin or halt. */
 export function lifecycleAct(
   task: Task
 ): { verb: string; status: TaskStatus } | null {
@@ -236,9 +223,8 @@ export function lifecycleAct(
 }
 
 /**
- * `organize-task` is the ONE door for the anchor, and it requires the row's
- * `sort_order` — preserved, never reset, or the member's manual order collapses
- * every time they change an anchor.
+ * `organize-task` is the ONE door for the anchor and requires `sort_order`:
+ * preserved, never reset, or the member's manual order collapses.
  */
 export function anchorWrite(
   task: Task,
@@ -253,7 +239,7 @@ export function anchorWrite(
   };
 }
 
-/** Filing travels the same door for the same reason. */
+/** Same door, same reason. */
 export function projectWrite(
   task: Task,
   projectId: string | null

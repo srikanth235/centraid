@@ -43,24 +43,38 @@ vi.mock(import("react-native-svg"), async () => {
   return stub.svgStub() as unknown as typeof import("react-native-svg");
 });
 
-const noop = (): void => undefined;
+interface ExportOptions {
+  history: boolean;
+  trashed: boolean;
+}
 
-function view(
-  overrides: Partial<React.ComponentProps<typeof LockerExportView>> = {}
-): React.JSX.Element {
+/** Driven as its screen drives it, so a press is judged by what is DRAWN. */
+function Seat({
+  offline = false,
+  onRun,
+}: {
+  offline?: boolean;
+  onRun?: (options: ExportOptions) => void;
+}): React.JSX.Element {
+  const [confirming, setConfirming] = React.useState(false);
+  const [options, setOptions] = React.useState<ExportOptions>({
+    history: false,
+    trashed: false,
+  });
   return (
     <LockerExportView
       busy={false}
-      confirming={false}
-      includeHistory={false}
-      includeTrashed={false}
+      confirming={confirming}
+      includeHistory={options.history}
+      includeTrashed={options.trashed}
       items={42}
-      offline={false}
-      onAsk={noop}
-      onCancel={noop}
-      onOption={noop}
-      onRun={noop}
-      {...overrides}
+      offline={offline}
+      onAsk={() => setConfirming(true)}
+      onCancel={() => setConfirming(false)}
+      onOption={(option, on) =>
+        setOptions((prev) => ({ ...prev, [option]: on }))
+      }
+      onRun={() => onRun?.({ ...options })}
     />
   );
 }
@@ -76,9 +90,17 @@ function control(container: HTMLElement, label: string): HTMLElement {
   return found as HTMLElement;
 }
 
+function chip(container: HTMLElement, word: string): HTMLElement {
+  const chips = nodesOf(container, "button").filter((node) =>
+    (node.textContent ?? "").startsWith(word)
+  );
+  expect(chips).toHaveLength(1);
+  return chips[0] as HTMLElement;
+}
+
 describe("the export surface", () => {
   it("counts what would leave and states the consequence above the control", () => {
-    const { container, unmount } = mountBlock(view());
+    const { container, unmount } = mountBlock(<Seat />);
     expect(textOf(container)).toContain("42 items");
     expect(textOf(container)).toContain(EXPORT_LEDE);
     expect(textOf(container)).toContain(EXPORT_OPTIONS_NOTE);
@@ -86,45 +108,46 @@ describe("the export surface", () => {
   });
 
   it("opens the gate rather than writing — the commit control never exports", () => {
-    const asked = vi.fn<() => void>();
-    const ran = vi.fn<() => void>();
+    const runs: ExportOptions[] = [];
     const { container, unmount } = mountBlock(
-      view({ onAsk: asked, onRun: ran })
+      <Seat onRun={(options) => runs.push(options)} />
     );
-    press(control(container, EXPORT_COMMIT));
-    expect(asked).toHaveBeenCalledOnce();
-    expect(ran).not.toHaveBeenCalled();
     // Nothing that could write is on screen until the gate stands.
     expect(textOf(container)).not.toContain(EXPORT_CONFIRM_TITLE);
+    press(control(container, EXPORT_COMMIT));
+    expect(textOf(container)).toContain(EXPORT_CONFIRM_TITLE);
+    expect(runs).toStrictEqual([]);
     unmount();
   });
 
   it("names the consequence in the confirm, and writes only from its own verb", () => {
-    const ran = vi.fn<() => void>();
+    const runs: ExportOptions[] = [];
     const { container, unmount } = mountBlock(
-      view({ confirming: true, onRun: ran })
+      <Seat onRun={(options) => runs.push(options)} />
     );
+    press(control(container, EXPORT_COMMIT));
     expect(textOf(container)).toContain(EXPORT_CONFIRM_TITLE);
     expect(textOf(container)).toContain(EXPORT_LEDE);
     press(control(container, EXPORT_CONFIRM_LABEL));
-    expect(ran).toHaveBeenCalledOnce();
+    expect(runs).toStrictEqual([{ history: false, trashed: false }]);
     unmount();
   });
 
   it("lets the gate be answered no", () => {
-    const cancelled = vi.fn<() => void>();
-    const ran = vi.fn<() => void>();
+    const runs: ExportOptions[] = [];
     const { container, unmount } = mountBlock(
-      view({ confirming: true, onCancel: cancelled, onRun: ran })
+      <Seat onRun={(options) => runs.push(options)} />
     );
+    press(control(container, EXPORT_COMMIT));
     press(control(container, "Cancel"));
-    expect(cancelled).toHaveBeenCalledOnce();
-    expect(ran).not.toHaveBeenCalled();
+    // The gate is struck, and the file it guarded was never made.
+    expect(textOf(container)).not.toContain(EXPORT_CONFIRM_TITLE);
+    expect(runs).toStrictEqual([]);
     unmount();
   });
 
   it("withholds the control offline and states the reason in its place", () => {
-    const { container, unmount } = mountBlock(view({ offline: true }));
+    const { container, unmount } = mountBlock(<Seat offline />);
     expect(textOf(container)).toContain(EXPORT_OFFLINE);
     expect(
       nodesOf(container, "button").some((node) =>
@@ -135,15 +158,21 @@ describe("the export surface", () => {
   });
 
   it("leaves both file-worsening options off until they are asked for", () => {
-    const chosen = vi.fn<() => void>();
-    const { container, unmount } = mountBlock(view({ onOption: chosen }));
-    const chips = nodesOf(container, "button").filter((node) =>
-      (node.textContent ?? "").startsWith("Trashed")
+    const runs: ExportOptions[] = [];
+    const { container, unmount } = mountBlock(
+      <Seat onRun={(options) => runs.push(options)} />
     );
-    expect(chips).toHaveLength(1);
-    expect(chips[0]?.getAttribute("aria-selected")).toBe("false");
-    press(chips[0]);
-    expect(chosen).toHaveBeenCalledWith("trashed", true);
+    expect(chip(container, "Trashed").getAttribute("aria-selected")).toBe(
+      "false"
+    );
+    press(chip(container, "Trashed"));
+    expect(chip(container, "Trashed").getAttribute("aria-selected")).toBe(
+      "true"
+    );
+    // And the option the member turned on is the one the run carries.
+    press(control(container, EXPORT_COMMIT));
+    press(control(container, EXPORT_CONFIRM_LABEL));
+    expect(runs).toStrictEqual([{ history: false, trashed: true }]);
     unmount();
   });
 });

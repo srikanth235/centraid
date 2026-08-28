@@ -239,10 +239,10 @@ describe("the import bridge on this seat", () => {
     files.pick.mockResolvedValue({ filename: "logins.csv", text: "Title,Url" });
     wire.stage.mockResolvedValue({ batchId: "b1", staged: { create: 12 } });
     await stageLockerImportFile();
-    expect(wire.stage).toHaveBeenCalledWith({
-      filename: "logins.csv",
-      text: "Title,Url",
-    });
+    // The staging door received the picked file WHOLE, exactly once.
+    expect(wire.stage.mock.calls.flat()).toStrictEqual([
+      { filename: "logins.csv", text: "Title,Url" },
+    ]);
     expect(readLockerVault().importNote).toContain("nothing is in the vault");
     expect(wire.publish).not.toHaveBeenCalled();
     expect(readLockerVault().openBatchId).toBe("b1");
@@ -277,7 +277,8 @@ describe("the import bridge on this seat", () => {
   it("says a discarded draft wrote nothing", async () => {
     wire.discard.mockResolvedValue();
     await discardLockerImportDraft("b1");
-    expect(wire.discard).toHaveBeenCalledWith("b1");
+    // The discard door was named the one batch, and no other.
+    expect(wire.discard.mock.calls.flat()).toStrictEqual(["b1"]);
     expect(readLockerVault().importNote).toContain("nothing was written");
   });
 

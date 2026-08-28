@@ -1,11 +1,5 @@
-// The frame every Notes surface sits in (#882) — the shape `TasksScreen.tsx`
-// and `DocsScreen.tsx` proved: a screen that wraps itself in it cannot forget
-// the band, cannot forget the Home capsule, and cannot forget to reserve the
-// band's height out of its own content.
-//
-// NOTES HAS ONE ROUTE IN THE NAVIGATOR, so its destinations are places WITHIN
-// this screen rather than pushed stack entries — which is why the current
-// destination arrives as a prop instead of being read from route params.
+// The frame every Notes surface sits in, so no screen forgets the band, the
+// capsule, or reserving the band's height.
 
 import React from "react";
 import { StyleSheet, View } from "react-native";
@@ -31,8 +25,7 @@ export default function NotesScreen({
 }: NotesScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  // The frame's latch, per app — handing the band back on one Notes surface
-  // hands it back on all of them (`kit/band/band-owner.ts`).
+  // Per app: a handback on one Notes surface is a handback on all of them.
   const { bandOwner } = useBandOwner("notes");
 
   return (

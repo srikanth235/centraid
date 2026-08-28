@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-// The band's rules, asserted without a renderer.
-//
-// `agenda-band.ts` is deliberately free of `react-native` imports so the CAP,
-// the ownership latch and the destination table can be checked as values. What
-// this file really guards is that the phone's band and the pointer seats' band
-// are ONE table: ids, labels and icons are imported from the blueprint, so a
-// change there that did not reach here fails as a mismatch rather than
-// shipping as two vocabularies.
+// The band's rules, asserted without a renderer. What this guards: the phone's
+// band and the pointer seats' band are ONE table, so a blueprint change that
+// did not reach here fails as a mismatch rather than shipping two vocabularies.
 import { BAND_DESTINATIONS } from "@centraid/blueprints/apps/agenda/views";
 
 import {

@@ -151,21 +151,22 @@ describe("the import surface", () => {
   });
 
   it("publishes and discards only from the member's own tap", () => {
-    const published = vi.fn<(batchId: string) => void>();
-    const discarded = vi.fn<(batchId: string) => void>();
+    // What each door RECEIVED — the batch the tap named, and nothing before it.
+    const published: string[] = [];
+    const discarded: string[] = [];
     const { container, unmount } = mountBlock(
       view({
-        onDiscard: discarded,
-        onPublish: published,
+        onDiscard: (batchId) => discarded.push(batchId),
+        onPublish: (batchId) => published.push(batchId),
         openBatchId: "b1",
         rows: [LOGIN],
       })
     );
-    expect(published).not.toHaveBeenCalled();
+    expect(published).toStrictEqual([]);
     press(control(container, IMPORT_PUBLISH));
-    expect(published).toHaveBeenCalledWith("b1");
+    expect(published).toStrictEqual(["b1"]);
     press(control(container, IMPORT_DISCARD));
-    expect(discarded).toHaveBeenCalledWith("b1");
+    expect(discarded).toStrictEqual(["b1"]);
     unmount();
   });
 

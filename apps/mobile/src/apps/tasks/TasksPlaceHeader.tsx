@@ -1,8 +1,4 @@
-// The head every place inside the Tasks screen draws for itself.
-//
-// The back control names the DESTINATION it returns to, never the word "Back"
-// (README §Cross-app standardisation) — and it returns to a place within this
-// screen, because Tasks has one route and the navigator has nothing to pop.
+// The back control names the DESTINATION it returns to, never "Back".
 
 import React from "react";
 import { Pressable, View } from "react-native";
@@ -14,7 +10,7 @@ import type { TasksStyles } from "./TasksHome.styles";
 
 export interface TasksPlaceHeaderProps {
   title: string;
-  /** The return target's own name, used as the control's accessible label. */
+  /** The return target's own name — the accessible label. */
   backTo: string;
   onBack: () => void;
   styles: TasksStyles;

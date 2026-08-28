@@ -1,6 +1,4 @@
-// Notebooks and tags projected from raw vault rows — no IO, no JSX. Both
-// seats read this one derivation: the pointer seats through `queries/library`
-// and the phone straight off its replica.
+// Notebooks and tags projected from raw vault rows — no IO, no JSX.
 //
 // NOTEBOOKS ARE WHERE A NOTE LIVES; TAGS ARE HOW IT IS SEEN. Deleting a
 // notebook unfiles its notes and destroys none; removing a tag drops ONE edge
@@ -21,18 +19,15 @@ function order(row: VaultRow, key: string): number {
   return typeof value === "number" ? value : Number(value ?? 0) || 0;
 }
 
-/** A notebook plus the notes standing in it. */
 export interface NotebookShelf extends Notebook {
   noteIds: readonly string[];
 }
 
 export interface NotebookRows {
-  /** `core.collection` rows. */
   collections: readonly VaultRow[];
-  /** `core.collection_entry` rows. */
   entries: readonly VaultRow[];
-  /** Membership is counted over these ids only, so a count can never promise
-   *  a note the place cannot open (journal ids never reach here — R-journal). */
+  /** Membership is counted over these ids only, so a count can never promise a
+   *  note the place cannot open (R-journal). */
   visible?: ReadonlySet<string>;
 }
 
@@ -70,7 +65,6 @@ export function projectNotebooks(rows: NotebookRows): NotebookShelf[] {
     );
 }
 
-/** Filed nowhere. An unfiled note is not a lesser note — it still opens. */
 export function unfiledNoteIds(
   noteIds: readonly string[],
   shelves: readonly NotebookShelf[]
@@ -91,12 +85,11 @@ export function notebookIdsOfNote(
 export interface TagShelf {
   concept_id: string;
   label: string;
-  /** One edge per tagged note. Removing one removes THIS note's edge only. */
+  /** Removing one edge removes THIS note's edge only. */
   edges: ReadonlyArray<{ tag_id: string; note_id: string }>;
 }
 
 export interface TagRows {
-  /** `core.tag` rows. */
   tags: readonly VaultRow[];
   /** `core.concept` rows, for the shared label. */
   concepts: readonly VaultRow[];
@@ -104,9 +97,8 @@ export interface TagRows {
 }
 
 /**
- * The house vocabulary, alphabetical. A concept whose every edge fell outside
- * `visible` is DROPPED rather than shown with a zero — the same re-narrowing
- * `queries/library.ts` performs, so a journal-only tag cannot leak back in.
+ * A concept whose every edge fell outside `visible` is DROPPED, never shown
+ * with a zero, so a journal-only tag cannot leak back in.
  */
 export function projectTagShelves(rows: TagRows): TagShelf[] {
   const labels = new Map<string, string>();

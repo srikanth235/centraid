@@ -1,20 +1,14 @@
 import type { VaultRow } from "./filing.ts";
-// The note's body history as a value: the append-only `revises` content-item
-// chain, walked from the live head backwards, newest first.
-//
-// THE CHAIN IS APPEND-ONLY. A restore appends a new head pointing at the body
-// it brings back; nothing between is rewritten or dropped, which is why the
-// walk can only ever grow and why `current` is a position (index 0), never a
-// stored flag. Both seats read this walk — the pointer seats through
-// `queries/history.ts`'s vault reads, the phone off its own replica.
+// THE CHAIN IS APPEND-ONLY: a restore appends a new head pointing at the body
+// it brings back and nothing between is rewritten, which is why `current` is a
+// position (index 0) and never a stored flag.
 import { decodeTextContent } from "./format.ts";
 import type { NoteVersion } from "./types.ts";
 
 const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 const REVISES_NOTATION = "revises";
 const CONTENT_TYPE = "core.content_item";
-/** A cycle is possible (a restore points back at an older body); this bounds
- *  the walk regardless of how the edges are shaped. */
+/** A cycle is possible (a restore points back at an older body). */
 const MAX_CHAIN_STEPS = 500;
 
 function text(row: VaultRow, key: string): string {
@@ -23,13 +17,9 @@ function text(row: VaultRow, key: string): string {
 }
 
 export interface ChainRows {
-  /** The note's live `body_content_id` — the head of the chain. */
   headContentId: string;
-  /** `core.link` rows. */
   links: readonly VaultRow[];
-  /** `core.concept` rows. */
   concepts: readonly VaultRow[];
-  /** `core.concept_scheme` rows. */
   schemes: readonly VaultRow[];
 }
 
@@ -101,14 +91,12 @@ export function noteVersionChain(rows: ChainRows): NoteVersionChain {
 
 export interface VersionRows {
   chain: NoteVersionChain;
-  /** `core.content_item` rows for the chain's ids. */
   contents: readonly VaultRow[];
   /** The note's own `created_at`, for the oldest body's date. */
   createdAt?: string;
 }
 
-/** Newest first. An unreadable body is "" — the row says so rather than
- *  inventing text it does not hold. */
+/** An unreadable body is "", never invented text. */
 export function projectNoteVersions(rows: VersionRows): NoteVersion[] {
   const byId = new Map(
     rows.contents.flatMap((content): Array<[string, VaultRow]> => {

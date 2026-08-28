@@ -1,22 +1,16 @@
 // THE THREE SURFACES REACHED FROM *More* THAT ARE NOT ROUTES OF THEIR OWN —
-// Import, Export and Companion — and what each of them is on THIS seat.
+// Import, Export and Companion.
 //
-// TWO OF THEM PERFORM NOW. Import drives the gateway's staged-import workflow
-// (`locker-surfaces.ts`) and Export issues the app's own `export` action
-// (`locker-writes.ts`); both doors are the gateway's, both are online-only by
-// construction, and neither has any representation in the durable outbox. They
-// were drawn as facts plus a where-sentence while their doors lived on another
-// seat; the doors are reachable from here, so the facts became surfaces.
+// Import and Export perform here: both doors are the gateway's, both are
+// online-only by construction, and neither has any representation in the
+// durable outbox. Companion runs in the browser extension, so it is drawn as
+// what it IS plus a sentence saying where the act happens — the
+// origin-capabilities rule: no dead controls, and no pretending an act is
+// available because its name is in a menu.
 //
-// COMPANION DID NOT MOVE, AND IT IS NOT WAITING ON ANYTHING. It runs in the
-// browser extension, beside the page, which is not a gap but a place. It stays
-// drawn as what it IS — its lede, its facts — plus the sentence saying where the
-// act happens, which is the origin-capabilities rule: no dead controls, and no
-// pretending an act is available because its name is in a menu.
-//
-// The facts are the shared table's (`route-copy.ts`); only the where-sentence is
-// this seat's, because where an act happens is exactly the fact that differs by
-// seat (docs/blueprint-seats.md, "search is not one behaviour").
+// Facts come from the shared table (`route-copy.ts`); only the where-sentence
+// is this seat's, because where an act happens is the fact that differs by seat
+// (docs/blueprint-seats.md, "search is not one behaviour").
 
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -56,10 +50,8 @@ export default function LockerSurfaceScreen({
   const surface = route.params.surface;
   const online = replica.online;
 
-  // The two export options and the gate live in the screen, not the store: a
-  // lock withdraws this screen entirely (`LockerScreen.tsx` renders the wall in
-  // place of its children), so there is no way for an answered gate to survive
-  // one.
+  // Options and gate live in the screen, not the store: a lock withdraws this
+  // screen entirely, so an answered gate cannot survive one.
   const [includeTrashed, setIncludeTrashed] = useState(false);
   const [includeHistory, setIncludeHistory] = useState(false);
   const [confirming, setConfirming] = useState(false);

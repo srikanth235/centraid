@@ -1,19 +1,9 @@
-// THE EXPORT ACT, EXERCISED (#882) — the write half of the surface whose render
-// half is `LockerExportView.test.tsx`.
-//
-// What this pins:
-//
-//  1. IT IS ONLINE-ONLY, and not by a decision the call site makes: the flag
-//     rides the SHARED builder, so the native session's online-only door is what
-//     refuses to enqueue it. A mass reveal has no representation in the durable
-//     outbox at any layer.
-//  2. A PARK IS NARRATED AS A PARK. Off the owner's device the command parks;
-//     saying "written" would claim an act that did not run, and no file is
-//     handed over.
-//  3. NOTHING BACK MEANS NO FILE. A refusal or an empty answer never produces a
-//     file, and never claims one was written.
-//  4. THE PLAINTEXT IS NEVER HELD — it goes straight to the file door inside the
-//     call, and the call keeps no reference to it.
+// THE EXPORT ACT, EXERCISED — the write half of the surface whose render half
+// is `LockerExportView.test.tsx`. What this pins: the act is online-only
+// because the flag rides the SHARED builder, so a mass reveal has no
+// representation in the durable outbox at any layer; a park is narrated as a
+// park; nothing back means no file; and the plaintext goes straight to the file
+// door, never held by the call.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -96,24 +86,33 @@ const { exportLockerVault } = await import("./locker-writes");
 
 type Session = Parameters<typeof exportLockerVault>[0];
 
-/** A session that records what it was asked to write and answers with one
- *  online-only outcome. `postAction` is what the real session does with an
- *  online-only write; the shape here is its result shape. */
+/** Records what it was asked to write and answers with one online-only
+ *  outcome, in `postAction`'s own result shape. */
 type SessionWrite = (
   appId: string,
   input: Record<string, unknown>
 ) => Promise<unknown>;
 
+/** One entry the write door received, in the order it arrived. */
+interface WriteCall {
+  appId: string;
+  input: Record<string, unknown>;
+}
+
 function session(output: unknown): {
   session: Session;
-  write: ReturnType<typeof vi.fn<SessionWrite>>;
+  writes: WriteCall[];
 } {
-  const write = vi.fn<SessionWrite>().mockResolvedValue({
-    intentId: "online-only:locker:export",
-    status: "executed",
-    output,
-  });
-  return { session: { write } as unknown as Session, write };
+  const writes: WriteCall[] = [];
+  const write: SessionWrite = (appId, input) => {
+    writes.push({ appId, input });
+    return Promise.resolve({
+      intentId: "online-only:locker:export",
+      status: "executed",
+      output,
+    });
+  };
+  return { session: { write } as unknown as Session, writes };
 }
 
 const PAYLOAD = {
@@ -125,6 +124,13 @@ const PAYLOAD = {
 const posted = (): string =>
   status.post.mock.calls.map((call) => String(call[0])).join(" | ");
 
+/** The files the door was handed — the seat's only durable output. */
+const written = (): Array<{ csv: string; name: string }> =>
+  files.hand.mock.calls.map(([name, csv]) => ({
+    csv: String(csv),
+    name: String(name),
+  }));
+
 describe("exporting from this seat", () => {
   beforeEach(() => {
     files.hand.mockReset();
@@ -132,22 +138,27 @@ describe("exporting from this seat", () => {
   });
 
   it("issues the export online-only, with the two options it was given", async () => {
-    const { session: live, write } = session({ output: PAYLOAD });
+    const { session: live, writes } = session({ output: PAYLOAD });
     await exportLockerVault(live, { includeHistory: true });
-    expect(write).toHaveBeenCalledWith("locker", {
-      action: "export",
-      input: { confirm: true, include_history: true },
-      onlineOnly: true,
-    });
+    expect(writes).toStrictEqual([
+      {
+        appId: "locker",
+        input: {
+          action: "export",
+          input: { confirm: true, include_history: true },
+          onlineOnly: true,
+        },
+      },
+    ]);
   });
 
   it("hands the plaintext straight to the file door and says it was written", async () => {
     const { session: live } = session({ output: PAYLOAD });
     await exportLockerVault(live, {});
-    expect(files.hand).toHaveBeenCalledOnce();
-    const [name, csv] = files.hand.mock.calls[0] ?? [];
-    expect(name).toBe("locker-2026-08-27.csv");
-    expect(String(csv)).toContain("hunter2");
+    expect(written().map((file) => file.name)).toStrictEqual([
+      "locker-2026-08-27.csv",
+    ]);
+    expect(written()[0]?.csv).toContain("hunter2");
     expect(posted()).toContain(EXPORT_WRITTEN);
   });
 

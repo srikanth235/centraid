@@ -142,11 +142,23 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
   // gate meaningful over them. Notes recycles through FlashList rather than
   // FlatList; both virtualize, and the assertion names which one the screen
   // is expected to keep so a silent swap to a plain `map` cannot pass.
+  // Tasks' cover became a ROUTER in the #882 rebuild — `TasksHome.tsx` switches
+  // on a place and draws no list itself — so the pin moves to the files that own
+  // one, at the same strength: the board rows every board place draws (Today,
+  // Inbox, Upcoming, the Logbook), the project place and the project shelf,
+  // search, catch up, reminders, and a task's subtask family. `TasksToolbar`'s
+  // ScrollView is deliberately unnamed: four fixed lenses is a bounded row.
   const files = [
     ["apps/mobile/src/apps/photos/FaceReview.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/assistant/Assistant.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/agenda/AgendaHome.tsx", /<FlatList/u],
-    ["apps/mobile/src/apps/tasks/TasksHome.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/tasks/TasksRows.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/tasks/TasksProject.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/tasks/TasksProjects.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/tasks/TasksSearch.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/tasks/TasksCatchUp.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/tasks/TasksReminders.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/tasks/TaskDetail.tsx", /<FlatList/u],
     ["apps/mobile/src/apps/notes/NotesHome.tsx", /<FlashList/u],
   ];
   const sources = await Promise.all(files.map(([file]) => source(file)));

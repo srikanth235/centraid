@@ -225,8 +225,7 @@ export function Root({
       bump();
     };
 
-    /** Settled on its own: a denied People or Tasks slice leaves the grid
-     *  drawn and merely undecorated. */
+    /** A denied People or Tasks slice leaves the grid drawn, undecorated. */
     const applyContext = (next: DayContextData | null): void => {
       if (seq !== loadSeqRef.current) return;
       const usable = next && !next.vaultDenied;

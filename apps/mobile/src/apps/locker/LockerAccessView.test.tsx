@@ -1,15 +1,9 @@
-// The receipts list, rendered (#882).
+// The receipts list, rendered.
 //
-// WHAT IT MUST SHOW: the verb, the item, the COLUMNS a reveal opened, the page
-// origin of a fill, and a refusal listed like an allowance.
-//
-// WHAT IT MUST NEVER SHOW: a value. `ACCESS_NO_VALUES` is the promise, and this
-// suite is what keeps it true — a receipt carries no value in the first place,
-// so the only way one could appear on this screen is a future change deciding
-// to fetch it, which this test would fail rather than notice in review.
-//
-// AND FOUR ANSWERS, NEVER ONE EMPTINESS: not read yet, offline, refused, and
-// "no receipt has been written yet" are four different facts.
+// WHAT IT MUST NEVER SHOW: a value. `ACCESS_NO_VALUES` is the promise and this
+// suite is what keeps it true, so a change that fetched one would fail here
+// rather than be noticed in review. Not read yet, offline, refused and "no
+// receipt has been written yet" stay four facts, never one emptiness.
 
 // @vitest-environment jsdom
 import React from "react";
@@ -43,8 +37,8 @@ vi.mock(import("react-native-svg"), async () => {
   return stub.svgStub() as unknown as typeof import("react-native-svg");
 });
 
-/** The value a reveal opened. It is here so the assertions can name what must
- *  never appear; nothing hands it to the component, because nothing could. */
+/** Here so the assertions can name what must never appear; nothing hands it to
+ *  the component. */
 const SECRET = "hunter2";
 
 const REVEAL: LockerAccessEntry = {

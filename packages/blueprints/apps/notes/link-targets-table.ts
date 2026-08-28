@@ -1,20 +1,13 @@
-// What `[[` may point at, as a table. SEVEN KINDS; LOCKER IS NOT ONE — the
-// absence is structural here and stated on the sheet's foot
-// (`POWERBOX_FOOT`), so a secret can never become a link target by someone
-// adding a probe. `powerbox.ts#KIND_ORDER` orders what this table yields.
-//
-// Both seats read this one table: the gateway query probes it with FTS, the
-// phone with its replica's search. The journal exclusion (R-journal) is the
-// caller's `excluded` set — a journal entry is never a link target.
+// What `[[` may point at, as a table. LOCKER IS NOT A KIND — the absence is
+// structural, so a secret cannot become a link target by adding a probe.
 import type { VaultRow } from "./filing.ts";
 import type { LinkTarget } from "./types.ts";
 
 export interface LinkTargetKind {
   app: string;
   entity: string;
-  /** Column carrying the row's id. */
   id: string;
-  /** First non-empty wins as the title; a row with none is not a target. */
+  /** First non-empty wins; a row with none is not a target. */
   labels: readonly string[];
   subtitles: readonly string[];
 }
@@ -81,8 +74,8 @@ function first(row: VaultRow, fields: readonly string[]): string {
   return "";
 }
 
-/** Rows from one probe, as targets. `excluded` drops ids of that kind — the
- *  Notes probe passes the journal set, so an entry never surfaces. */
+/** `excluded` drops ids of that kind: the Notes probe passes the journal set,
+ *  so an entry never surfaces. */
 export function linkTargetsFrom(
   kind: LinkTargetKind,
   rows: readonly VaultRow[],

@@ -1,12 +1,7 @@
 // The Reminder lens (Tasks spec §1, ruling 4) — WHAT WILL REACH THIS PHONE.
-//
-// This is the seat that delivers a task reminder; the pointer seats say
-// due-ness in the pane and fire nothing. So the surface lists the rows that
-// carry both a lead time and a moment to count back from, and states the one
-// rule a delivered reminder obeys: snoozing moves the reminder, never the due
-// date. The snooze options are drawn as the VOCABULARY of a delivered
-// notification — they are labels here, not controls, because the act belongs
-// to the notification and not to this list.
+// This seat delivers task reminders, so it lists rows carrying both a lead
+// time and a moment to count back from. Snoozing moves the reminder, never
+// the due date; the snooze options are LABELS, not controls.
 
 import React from "react";
 import { FlatList, View } from "react-native";
