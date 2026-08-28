@@ -2,11 +2,7 @@ import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { IndexedDbIntentStore, MemoryIntentStore } from "./intent-store.js";
-
-// Filling the journal past its cap is 10k fake-IndexedDB transactions, which
-// does not fit the jsdom default; escalate the file rather than assert a
-// smaller journal than the one that ships (TESTING.md).
-vi.setConfig({ testTimeout: 30_000 });
+import type { IntentOutcome } from "./types.js";
 
 describe(IndexedDbIntentStore, () => {
   beforeEach(() => vi.stubGlobal("IDBKeyRange", IDBKeyRange));
@@ -19,15 +15,19 @@ describe(IndexedDbIntentStore, () => {
       factory
     );
     try {
-      for (let index = 0; index <= 5_000; index += 1) {
-        // oxlint-disable-next-line no-await-in-loop -- (#880) each settle is its own transaction
-        await settled(store, index);
-      }
+      // Seed the existing journal in one fixture transaction, then exercise
+      // the public settle path at the retention boundary. Replaying 10k
+      // transactions here only measures fake-IndexedDB setup cost.
+      await seedOutcomeJournal(store, 5_000);
+      await settled(store, 5_000);
       const journal = await store.listSettled(5_000);
       expect(journal).toHaveLength(5_000);
       expect(
         journal.some((outcome) => outcome.intentId === "intent-5000")
       ).toBe(true);
+      expect(journal.some((outcome) => outcome.intentId === "intent-0")).toBe(
+        false
+      );
     } finally {
       store.close();
     }
@@ -72,4 +72,40 @@ async function settled(
     dependencies: [],
   });
   await store.settle(`intent-${index}`, ["queued"], { state: "executed" });
+}
+
+async function seedOutcomeJournal(
+  store: IndexedDbIntentStore,
+  count: number
+): Promise<void> {
+  const db = (store as unknown as { db: IDBDatabase }).db;
+  const tx = db.transaction("outcomes", "readwrite");
+  const outcomes = tx.objectStore("outcomes");
+  for (let index = 0; index < count; index += 1) {
+    outcomes.put({
+      intentId: `intent-${index}`,
+      status: "executed",
+      settledAt: new Date(index).toISOString(),
+    } satisfies IntentOutcome);
+  }
+  await transactionDone(tx);
+}
+
+function transactionDone(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.addEventListener("complete", () => resolve(), { once: true });
+    transaction.addEventListener(
+      "error",
+      () => {
+        reject(transaction.error ?? new Error("IndexedDB transaction failed"));
+      },
+      { once: true }
+    );
+    transaction.addEventListener(
+      "abort",
+      () =>
+        reject(transaction.error ?? new Error("IndexedDB transaction aborted")),
+      { once: true }
+    );
+  });
 }

@@ -102,15 +102,15 @@ describe("store-core", () => {
         store.bootstrap({ ...full, rows: [] });
         const before = optimizeCount(driver);
         let cursor = full.cursor;
-        // 21 batches of 1,000 rows cross the 20,000-row merge interval once.
-        for (let batch = 0; batch < 21; batch += 1) {
+        // Cross the merge interval on the second batch.
+        for (const [batch, count] of [10_000, 10_001].entries()) {
           const to = { epoch: cursor.epoch, seq: cursor.seq + 1 };
           store.applyChanges({
             protocolVersion: 1,
             schemaEpoch: full.schemaEpoch,
             from: cursor,
             to,
-            changes: Array.from({ length: 1_000 }, (_, index) => ({
+            changes: Array.from({ length: count }, (_, index) => ({
               op: "upsert" as const,
               shapeId: "shape-agenda",
               entity: "core.event",

@@ -28,6 +28,9 @@ const logger = {
   error: () => undefined,
 };
 const cleanups: Array<() => Promise<void> | void> = [];
+type FixtureOptions = MultiplexReplicaRouteOptions & {
+  includeFamily?: boolean;
+};
 
 class MockResponse extends EventTarget {
   statusCode = 200;
@@ -91,13 +94,14 @@ function request(url: string, deviceId: string): IncomingMessage {
   }) as unknown as IncomingMessage;
 }
 
-async function fixture(options: MultiplexReplicaRouteOptions = {}): Promise<{
+async function fixture(options: FixtureOptions = {}): Promise<{
   personal: VaultPlane;
-  family: VaultPlane;
+  family?: VaultPlane;
   enrollments: EnrollmentStore;
   handler: ReturnType<typeof makeMultiplexReplicaRouteHandler>;
   deviceId: string;
 }> {
+  const { includeFamily = true, ...routeOptions } = options;
   const root = await tempDir(`multiplex-${crypto.randomUUID()}-`);
   const personal = openVaultPlane({
     bootstrap: true,
@@ -105,39 +109,39 @@ async function fixture(options: MultiplexReplicaRouteOptions = {}): Promise<{
     logger,
     enableWalShipper: false,
   });
-  const family = openVaultPlane({
-    bootstrap: true,
-    dir: path.join(root, "family"),
-    logger,
-    enableWalShipper: false,
-  });
+  const family = includeFamily
+    ? openVaultPlane({
+        bootstrap: true,
+        dir: path.join(root, "family"),
+        logger,
+        enableWalShipper: false,
+      })
+    : undefined;
   const enrollments = EnrollmentStore.open(path.join(root, "gateway.db"));
   const deviceId = "offline-phone";
   enrollments.enroll({
     endpointId: deviceId,
     label: "Offline phone",
     ownerLabel: "Priya",
-    vaultIds: [personal.boot.vaultId, family.boot.vaultId],
+    vaultIds: [personal.boot.vaultId, ...(family ? [family.boot.vaultId] : [])],
   });
-  const planes = new Map([
-    [personal.boot.vaultId, personal],
-    [family.boot.vaultId, family],
-  ]);
+  const planes = new Map([[personal.boot.vaultId, personal]]);
+  if (family) planes.set(family.boot.vaultId, family);
   const vaults = {
     get: (vaultId: string) => planes.get(vaultId),
   } as unknown as VaultRegistry;
   cleanups.push(
     () => fs.rm(root, { recursive: true, force: true }),
-    () => personal.stop(),
-    () => family.stop()
+    () => personal.stop()
   );
+  if (family) cleanups.push(() => family.stop());
   return {
     personal,
     family,
     enrollments,
     handler: makeMultiplexReplicaRouteHandler(vaults, enrollments, {
       heartbeatMs: 5,
-      ...options,
+      ...routeOptions,
     }),
     deviceId,
   };
@@ -200,15 +204,15 @@ describe("multiplex replica route", () => {
 
   test("reconnect emits one scoped tombstone without blocking a valid mount", async () => {
     const f = await fixture();
-    const familyState = currentReplicaLogState(f.family.db.vault);
-    f.enrollments.resetCheckpoint(f.deviceId, f.family.boot.vaultId, {
+    const familyState = currentReplicaLogState(f.family!.db.vault);
+    f.enrollments.resetCheckpoint(f.deviceId, f.family!.boot.vaultId, {
       ...familyState.watermark,
       schemaEpoch: familyState.schemaEpoch,
     });
     // Ownership of the family vault ends while the phone is offline — the
     // ownership analogue of a grant removal.
-    f.enrollments.owners.removeVault(f.family.boot.vaultId);
-    const req = request(streamPath([f.personal, f.family]), f.deviceId);
+    f.enrollments.owners.removeVault(f.family!.boot.vaultId);
+    const req = request(streamPath([f.personal, f.family!]), f.deviceId);
     const res = new MockResponse();
     res.onWrite = (chunk) => {
       if (chunk.includes('"event":"revoked"')) req.emit("close");
@@ -218,7 +222,7 @@ describe("multiplex replica route", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain(
-      `"vaultId":"${f.family.boot.vaultId}","event":"revoked"`
+      `"vaultId":"${f.family!.boot.vaultId}","event":"revoked"`
     );
     expect(res.body).not.toContain(
       `"vaultId":"${f.personal.boot.vaultId}","event":"revoked"`
@@ -229,7 +233,11 @@ describe("multiplex replica route", () => {
   test("a multi-page backlog drains without waiting for the heartbeat", async () => {
     // A heartbeat far longer than the test: every page after the first can only
     // arrive because the route re-projected immediately on `hasMore`.
-    const f = await fixture({ heartbeatMs: 600_000, limit: 1 });
+    const f = await fixture({
+      heartbeatMs: 600_000,
+      limit: 1,
+      includeFamily: false,
+    });
     const mounted = streamPath([f.personal]);
     const seqs = backlog(f.personal, 3, "drain");
     const req = request(mounted, f.deviceId);
@@ -248,16 +256,16 @@ describe("multiplex replica route", () => {
 
   test("draining pages keeps each mount on its own cursor", async () => {
     const f = await fixture({ heartbeatMs: 600_000, limit: 1 });
-    const mounted = streamPath([f.personal, f.family]);
+    const mounted = streamPath([f.personal, f.family!]);
     const personalSeqs = backlog(f.personal, 3, "personal");
-    const familySeqs = backlog(f.family, 2, "family");
+    const familySeqs = backlog(f.family!, 2, "family");
     const req = request(mounted, f.deviceId);
     const res = new MockResponse();
     res.onWrite = () => {
       const done =
         cursorsFor(res.body, f.personal.boot.vaultId).length ===
           personalSeqs.length &&
-        cursorsFor(res.body, f.family.boot.vaultId).length ===
+        cursorsFor(res.body, f.family!.boot.vaultId).length ===
           familySeqs.length;
       if (done) req.emit("close");
     };
@@ -266,7 +274,7 @@ describe("multiplex replica route", () => {
 
     const personalEpoch = currentReplicaLogState(f.personal.db.vault).watermark
       .epoch;
-    const familyEpoch = currentReplicaLogState(f.family.db.vault).watermark
+    const familyEpoch = currentReplicaLogState(f.family!.db.vault).watermark
       .epoch;
     expect(personalEpoch).not.toBe(familyEpoch);
     // Each mount advances through its own log, one page at a time, and no frame
@@ -274,7 +282,7 @@ describe("multiplex replica route", () => {
     expect(cursorsFor(res.body, f.personal.boot.vaultId)).toStrictEqual(
       personalSeqs.map((seq) => ({ epoch: personalEpoch, seq }))
     );
-    expect(cursorsFor(res.body, f.family.boot.vaultId)).toStrictEqual(
+    expect(cursorsFor(res.body, f.family!.boot.vaultId)).toStrictEqual(
       familySeqs.map((seq) => ({ epoch: familyEpoch, seq }))
     );
     for (const frame of scopeFrames(res.body)) {
@@ -289,21 +297,21 @@ describe("multiplex replica route", () => {
     ).watermark;
     // The family cursor this phone last persisted, then that vault moves on and
     // retention prunes past it while the phone is offline.
-    const stale = currentReplicaLogState(f.family.db.vault).watermark;
-    backlog(f.family, 2, "pruned");
-    pruneReplicaChanges(f.family.db.vault, {
+    const stale = currentReplicaLogState(f.family!.db.vault).watermark;
+    backlog(f.family!, 2, "pruned");
+    pruneReplicaChanges(f.family!.db.vault, {
       maxAgeMs: 0,
       now: new Date(Date.now() + 60_000),
     });
-    expect(currentReplicaLogState(f.family.db.vault).floor.seq).toBeGreaterThan(
-      stale.seq
-    );
+    expect(
+      currentReplicaLogState(f.family!.db.vault).floor.seq
+    ).toBeGreaterThan(stale.seq);
     const personalSeqs = backlog(f.personal, 3, "healthy");
     const req = request(
       `/centraid/_gateway/replica/changes?${new URLSearchParams({
         mounts: JSON.stringify([
           { vaultId: f.personal.boot.vaultId, cursor: personalCursor },
-          { vaultId: f.family.boot.vaultId, cursor: stale },
+          { vaultId: f.family!.boot.vaultId, cursor: stale },
         ]),
       })}`,
       f.deviceId
@@ -325,7 +333,7 @@ describe("multiplex replica route", () => {
       scopeFrames(res.body).filter((frame) => frame.event === "rebootstrap")
     ).toStrictEqual([
       {
-        vaultId: f.family.boot.vaultId,
+        vaultId: f.family!.boot.vaultId,
         event: "rebootstrap",
         data: expect.objectContaining({ reason: "retention" }),
       },
@@ -334,11 +342,15 @@ describe("multiplex replica route", () => {
     expect(
       cursorsFor(res.body, f.personal.boot.vaultId).map((cursor) => cursor.seq)
     ).toStrictEqual(personalSeqs);
-    expect(cursorsFor(res.body, f.family.boot.vaultId)).toStrictEqual([]);
+    expect(cursorsFor(res.body, f.family!.boot.vaultId)).toStrictEqual([]);
   });
 
   test("a phone that stops reading is dropped instead of buffered", async () => {
-    const f = await fixture({ heartbeatMs: 600_000, limit: 1 });
+    const f = await fixture({
+      heartbeatMs: 600_000,
+      limit: 1,
+      includeFamily: false,
+    });
     const mounted = streamPath([f.personal]);
     backlog(f.personal, 3, "stalled");
     const req = request(mounted, f.deviceId);
@@ -356,7 +368,7 @@ describe("multiplex replica route", () => {
   });
 
   test("an unknown vault still fails before opening a privacy-bearing stream", async () => {
-    const f = await fixture();
+    const f = await fixture({ includeFamily: false });
     const mounts = [
       {
         vaultId: "vault-never-known",
@@ -380,15 +392,15 @@ describe("multiplex replica route", () => {
 
   test("response failures still end the stream and release listeners", async () => {
     const f = await fixture();
-    const familyState = currentReplicaLogState(f.family.db.vault);
-    f.enrollments.resetCheckpoint(f.deviceId, f.family.boot.vaultId, {
+    const familyState = currentReplicaLogState(f.family!.db.vault);
+    f.enrollments.resetCheckpoint(f.deviceId, f.family!.boot.vaultId, {
       ...familyState.watermark,
       schemaEpoch: familyState.schemaEpoch,
     });
     // Ownership of the family vault ends while the phone is offline — the
     // ownership analogue of a grant removal.
-    f.enrollments.owners.removeVault(f.family.boot.vaultId);
-    const req = request(streamPath([f.personal, f.family]), f.deviceId);
+    f.enrollments.owners.removeVault(f.family!.boot.vaultId);
+    const req = request(streamPath([f.personal, f.family!]), f.deviceId);
     const res = new MockResponse();
     res.write = () => {
       throw new Error("socket write failed");

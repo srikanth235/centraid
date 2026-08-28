@@ -7,6 +7,7 @@
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-27 | claude-code | 1dae5cc9-a4e6-5a00-b2e4-c5984aa0130f |
+| 2026-08-28 | codex | 01a04417-aab1-7162-808e-2456eab49b35 |
 
 ## Checklist
 
@@ -444,6 +445,8 @@ bun run format:check
 Before → after: comment-density 99 violations (77 risen pins, 22 unpinned files over the 15% cap) → ok; hygiene ratchet `toBeTruthy` 381/378 and `toHaveBeenCalled*` 797/785 → both at budget with the budgets file untouched; engine conformance one custody finding at `apps/mobile/src/apps/photos/timeline-engine.test.ts:52` → ok; `tsc -p tests` one error at `tests/quality/replica-bootstrap-fixture.ts:23` → clean; quality knobs one stale `tests/matrix.json` fingerprint → no silent widening; native-state L4 red on both platforms → overall green.
 
 Observed on this branch at commit time: mobile suite 236 files / 2,032 tests green; packages/client 2,354 tests green; vault grant/share/seam suites 158 tests green; server multiplex/projection suites green; copy gate green with zero allowlist additions; matrix validation green. Measured evidence recorded above: ordered 5,000-of-50,000 read ~2.1x; Home photos tile ~2.5–3x; FTS maintenance 124.8 s → 0.45 s at 21k rows and 1.61 s at 90k; timeline invalidation storm 161 → 1 follow-up read passes; a 1,000-change SSE frame 2,000 → 1 persisted writes.
+
+CI wall-clock follow-up for PR #881: the initial PR run measured 2,342.3 s against the 2,321.0 s ceiling. The IndexedDB retention fixture now seeds its pre-boundary journal in one transaction before exercising the public settlement path; the storage lifecycle fixture still crosses the 20,000-row merge interval with two batches; and single-mount multiplex-route cases no longer open an unused family vault. Targeted verification passed for `packages/client/src/replica/intent-store.test.ts` (2 tests), `packages/client/src/replica/store-core-storage-lifecycle.test.ts` (5 tests), and `packages/server/src/routes/multiplex-replica-routes.test.ts` (7 tests); `bun run format:check`, `bun run lint`, comment-density, and the affected package typechecks also pass locally.
 
 ## Audit
 
