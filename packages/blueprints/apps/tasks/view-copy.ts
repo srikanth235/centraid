@@ -98,6 +98,7 @@ export const REENTRY_LEAD_B = "Move what still matters and release the rest.";
 export const REENTRY_FOOT_A =
   "Releasing keeps them in the Logbook as won't do.";
 export const REENTRY_FOOT_B = "It is an outcome, not a failure.";
+export const REENTRY_NONE = "Nothing came due while you were away.";
 
 /** One bulk verb each (§3). */
 export const REENTRY_BUCKETS = {
@@ -129,6 +130,7 @@ export function sittingSince(month: string): string {
 export const VAULT_MARKER = "HOUSE";
 
 export const DONE = "Done";
+export const WONT_DO = "Won't do";
 export const UNDO = "Undo";
 export const REOPEN = "Reopen";
 
@@ -139,18 +141,30 @@ export function doneNext(day: string): string {
 // The editor
 export const FIELDS = {
   when: "When",
+  time: "Time",
   where: "Where",
   project: "Project",
   priority: "Priority",
   effort: "Effort",
   repeats: "Repeats",
   anchor: "Anchor",
+  missed: "Missed",
   reminder: "Reminder",
   tags: "Tags",
   subtasks: "Subtasks",
+  attached: "Attached",
+  homeVault: "Home vault",
   landsIn: "Lands in",
   notes: "Notes",
 } as const;
+
+export function reminderLead(minutes: number): string {
+  return `${minutes} min`;
+}
+
+export const LIFECYCLE = { start: "Start", stop: "Stop" } as const;
+
+export const FIELD_EMPTY = "—";
 
 export const ANCHOR_NOTE =
   "The one choice that decides what a missed period means.";

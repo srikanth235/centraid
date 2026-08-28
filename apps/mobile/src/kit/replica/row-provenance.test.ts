@@ -26,6 +26,9 @@ const source = (relative: string): string =>
   );
 
 const TASKS_SRC = source("apps/tasks/TasksHome.tsx");
+// Tasks' row is one component drawn by every place that lists rows, so the
+// row's own affordances are asserted where they live.
+const TASK_ROW_SRC = source("apps/tasks/TaskRow.tsx");
 const AGENDA_SRC = source("apps/agenda/AgendaEvent.tsx");
 const DRIVE_SRC = source("apps/docs/DriveList.tsx");
 const PERSON_SRC = source("apps/people/PersonView.tsx");
@@ -109,7 +112,7 @@ describe("stated once above the route, never one refusing button at a time", () 
   });
 
   it("still offers the hint too, on the controls it withholds", () => {
-    expect(TASKS_SRC).toMatch(
+    expect(TASK_ROW_SRC).toMatch(
       /accessibilityHint=\{[^}]*READ_ONLY_SOURCE_REASON/u
     );
     expect(AGENDA_SRC).toMatch(
@@ -120,9 +123,9 @@ describe("stated once above the route, never one refusing button at a time", () 
   it("withholds the Tasks verbs off the row's own role rather than letting a tap throw", () => {
     // The checkbox refuses, the long-press that files a task is not attached,
     // and the group's move-all is withheld where no row could take it.
-    expect(TASKS_SRC).toMatch(/disabled=\{!writable\}/u);
-    expect(TASKS_SRC).toMatch(
-      /\{\.\.\.\(writable \? \{ onLongPress: \(\) => setMoving\(task\) \} : \{\}\)\}/u
+    expect(TASK_ROW_SRC).toMatch(/disabled=\{!writable\}/u);
+    expect(TASK_ROW_SRC).toMatch(
+      /\{\.\.\.\(writable && onPickUp \? \{ onLongPress: \(\) => onPickUp\(task\) \} : \{\}\)\}/u
     );
     expect(TASKS_SRC).toMatch(/rowCanWrite\(row\)/u);
   });

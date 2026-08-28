@@ -3,7 +3,7 @@
 import { showsEmptyState } from "../_shared/view-state-kit.ts";
 import { daysBetween, isOverdue } from "./format.ts";
 import type { BoardData, ReentryBucket, Task, TaskGroup } from "./types.ts";
-import { GROUPS, inboxMeta, overdueMeta } from "./view-copy.ts";
+import { DONE, GROUPS, WONT_DO, inboxMeta, overdueMeta } from "./view-copy.ts";
 import { isOpenStatus, landsToday } from "./when.ts";
 
 // `landsToday` and family nesting live in `when.ts` (#834) and are
@@ -142,6 +142,42 @@ export function allGroups(rows: readonly Task[]): TaskGroup[] {
     });
   }
   return groups;
+}
+
+export function byClosed(a: Task, b: Task): number {
+  const left = a.completed_at ?? "";
+  const right = b.completed_at ?? "";
+  if (left === right) return a.title.localeCompare(b.title);
+  if (left === "" || right === "") return left === "" ? 1 : -1;
+  return left < right ? 1 : -1;
+}
+
+/** The Logbook: two OUTCOMES, never one undifferentiated pile. */
+export function logbookGroups(rows: readonly Task[]): TaskGroup[] {
+  const closed = rows.filter((task) => !isOpen(task));
+  const groups: TaskGroup[] = [];
+  const done = closed
+    .filter((task) => task.status === "completed")
+    .toSorted(byClosed);
+  const released = closed
+    .filter((task) => task.status === "cancelled")
+    .toSorted(byClosed);
+  if (done.length > 0) groups.push({ key: "done", label: DONE, rows: done });
+  if (released.length > 0)
+    groups.push({ key: "wont-do", label: WONT_DO, rows: released });
+  return groups;
+}
+
+/** A lead time on an undated row reminds about nothing. */
+export function remindingTasks(rows: readonly Task[]): Task[] {
+  return rows
+    .filter(
+      (task) =>
+        isOpen(task) &&
+        typeof task.remind_before_min === "number" &&
+        Boolean(task.next_due ?? task.due_at)
+    )
+    .toSorted(byDue);
 }
 
 /** The Inbox: unfiled rows, an age signal on each, and no badge anywhere. */

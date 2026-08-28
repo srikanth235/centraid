@@ -25,6 +25,7 @@ const EVERY_STRING: string[] = [
   copy.REENTRY_LEAD_B,
   copy.REENTRY_FOOT_A,
   copy.REENTRY_FOOT_B,
+  copy.REENTRY_NONE,
   copy.MISSED_NOTE_A,
   copy.MISSED_NOTE_B,
   copy.ANCHOR_NOTE,
@@ -43,6 +44,9 @@ const EVERY_STRING: string[] = [
   copy.TAGS_NOTE_B,
   copy.HOME_VAULT_NOTE_A,
   copy.HOME_VAULT_NOTE_B,
+  copy.WONT_DO,
+  copy.LIFECYCLE.start,
+  copy.LIFECYCLE.stop,
   copy.PENDING_CHIP,
   copy.PENDING_ROW,
   copy.VAULT_MARKER,
@@ -134,6 +138,20 @@ describe("the copy table", () => {
     ]);
     expect(copy.ANCHOR_CARDS[0]?.tag).toBe("Rent.");
     expect(copy.ANCHOR_CARDS[1]?.tag).toBe("Watering.");
+  });
+
+  it("names every field the detail place draws, one word for one thing", () => {
+    for (const label of Object.values(copy.FIELDS)) {
+      expect(label.length).toBeGreaterThan(0);
+    }
+    expect(new Set(Object.values(copy.FIELDS)).size).toBe(
+      Object.values(copy.FIELDS).length
+    );
+  });
+
+  it("says the two logbook outcomes as outcomes, never as a verdict", () => {
+    expect(copy.DONE).toBe("Done");
+    expect(copy.WONT_DO).toBe("Won't do");
   });
 
   it("offers four priorities and five efforts, absent by default", () => {
