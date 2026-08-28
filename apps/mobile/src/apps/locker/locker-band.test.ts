@@ -6,9 +6,10 @@
 //  - handing the band back leaves the capsule and takes the tabs
 //  - the More sheet's labels and meta come from the shared surface table, so
 //    the phone cannot rename a surface the desktop rail already named
-//  - EVERY More row leads somewhere: the two this seat performs are routes,
-//    and the three whose door is on another seat share one screen that says
-//    so, rather than being drawn as controls that would go grey
+//  - EVERY More row leads somewhere: the four this seat performs are routes,
+//    and Companion — the one whose door is a browser extension — shares their
+//    screen and says so, rather than being drawn as a control that would go
+//    grey
 
 import { describe, expect, it } from "vitest";
 
@@ -70,17 +71,20 @@ describe("locker More sheet", () => {
     }
   });
 
-  it("performs Access history and Trash here and states the rest elsewhere", () => {
+  // Import and Export moved here in #882 — their doors are the gateway's and
+  // this seat reaches them. Companion is the only row left with none.
+  it("performs four of the five here and states Companion elsewhere", () => {
     const here = LOCKER_MORE_ROWS.filter((row) => row.reach === "here");
-    expect(here.map((row) => row.key)).toStrictEqual(["access", "trash"]);
+    expect(here.map((row) => row.key)).toStrictEqual([
+      "import",
+      "access",
+      "trash",
+      "export",
+    ]);
     const elsewhere = LOCKER_MORE_ROWS.filter(
       (row) => row.reach === "elsewhere"
     );
-    expect(elsewhere.map((row) => row.key)).toStrictEqual([
-      "import",
-      "export",
-      "fill",
-    ]);
+    expect(elsewhere.map((row) => row.key)).toStrictEqual(["fill"]);
   });
 
   it("routes every row — no row is a dead control", () => {

@@ -16,11 +16,10 @@ import { describe, expect, it } from "vitest";
 import { WINDOW_RULE } from "@centraid/blueprints/apps/locker/view-copy";
 
 import {
-  CUSTODIAN_SEAT_NOTE,
+  lockerFillCopy,
   lockerPendingCount,
   lockerPendingLine,
   lockerScreenState,
-  lockerSurfaceCopy,
   lockerWindowFoot,
 } from "./locker-view-model";
 import type { LockerStateInput } from "./locker-view-model";
@@ -101,27 +100,16 @@ describe(lockerPendingCount, () => {
   });
 });
 
-describe(lockerSurfaceCopy, () => {
-  it("gives each elsewhere-surface facts and a place the act happens", () => {
-    for (const key of ["import", "export", "fill"] as const) {
-      const copy = lockerSurfaceCopy(key, 42);
-      expect(copy.title).not.toBe("");
-      expect(copy.lede).not.toBe("");
-      expect(copy.facts.length).toBeGreaterThan(0);
-      expect(copy.where).not.toBe("");
-    }
-  });
-
-  it("sends the two custodian surfaces to the desktop and Companion to the extension", () => {
-    expect(lockerSurfaceCopy("import").where).toBe(CUSTODIAN_SEAT_NOTE);
-    expect(lockerSurfaceCopy("export").where).toBe(CUSTODIAN_SEAT_NOTE);
-    expect(lockerSurfaceCopy("fill").where).toContain("browser extension");
-  });
-
-  it("counts what an export would put in the clear", () => {
-    const facts = lockerSurfaceCopy("export", 42).facts;
-    expect(facts[0]?.value).toContain("42 items");
-    expect(lockerSurfaceCopy("export", 42).net).toBe(true);
+// Companion is the ONE surface left with no door on a phone (#882): Import and
+// Export perform here now, so the elsewhere table has a single member and
+// `lockerFillCopy` takes no key to pick between them.
+describe(lockerFillCopy, () => {
+  it("gives Companion facts and a place the act happens", () => {
+    const copy = lockerFillCopy();
+    expect(copy.title).not.toBe("");
+    expect(copy.lede).not.toBe("");
+    expect(copy.facts.length).toBeGreaterThan(0);
+    expect(copy.where).toContain("browser extension");
   });
 });
 

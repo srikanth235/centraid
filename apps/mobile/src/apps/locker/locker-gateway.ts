@@ -1,26 +1,44 @@
 // THE ONLY DOOR THIS SEAT HAS INTO LOCKER, and it is the gateway's — never
 // the replica's.
 //
-// Every read below is an RPC to the app's own query handlers. Nothing here
-// touches `MobileReplicaSession.read`, and nothing here is cached in SQLite:
-// a passphrase, a memory-session token, a one-shot permit and a revealed
-// field are the four things this seat must never hand a durable store
+// Every read in the first section is an RPC to the app's own query handlers.
+// Nothing here touches `MobileReplicaSession.read`, and nothing here is cached
+// in SQLite: a passphrase, a memory-session token, a one-shot permit and a
+// revealed field are the four things this seat must never hand a durable store
 // (docs/mobile-offline.md, "Locker is stricter than the ordinary replica
 // plane"). The metadata writes — star, tags, trash, restore — DO go through
 // the replica's pending path, and they go through `locker-writes.ts`.
 //
+// The SECOND section is the staged-import plane, which is not an app query at
+// all — it is the gateway's own owner-tier workflow. It is here rather than in
+// a module of its own for the reason this file exists: one door. An import
+// payload is the file itself, every secret in it, so it must be as far from
+// the durable outbox as a typed password is, and the only way to keep that
+// promise checkable is to keep the calls that could break it in one place.
+//
 // The functions are thin on purpose. They name the query, they name what
 // comes back, and they leave every decision about what a payload MEANS to
-// `locker-store.ts` and to the pure blueprint modules it composes.
+// `locker-store.ts` / `locker-surfaces.ts` and to the pure blueprint modules
+// they compose.
 
+import type {
+  StagedBatch,
+  StagedRow,
+} from "@centraid/blueprints/apps/locker/import-model";
 import type {
   AuthPayload,
   ItemsPayload,
+  LockerAccessEntry,
   LockerDetail,
   LockerRow,
 } from "@centraid/blueprints/apps/locker/types";
 
-import { appQuery } from "../../lib/gateway";
+import {
+  apiHeaders,
+  appQuery,
+  fetchJson,
+  requireGatewayBase,
+} from "../../lib/gateway";
 
 /** The window the items read asks for. 300 is the query's own default and the
  *  number README-Locker §6's window sentence states; 2,000 is its ceiling. */
@@ -108,4 +126,127 @@ export function lockerSearch(term: string): Promise<RowsPayload> {
 /** Trashed rows with their purge dates — the same secret-free shape. */
 export function lockerTrash(): Promise<RowsPayload> {
   return appQuery<RowsPayload>("locker", "trash", {});
+}
+
+/** The receipts window the access read asks for. 200 is the query's own
+ *  default and the number `accessWindowCopy` states; 2,000 is its ceiling. */
+export const ACCESS_WINDOW = 200;
+
+export interface AccessPayload {
+  entries?: LockerAccessEntry[];
+  window?: number;
+  truncated?: boolean;
+  authRequired?: boolean;
+  vaultDenied?: VaultDenial | null;
+}
+
+/**
+ * The receipt stream, under the grant's own `object_type` row filter.
+ *
+ * ONLINE-ONLY BY CONSTRUCTION, and that costs this seat nothing: receipts live
+ * in journal.db, which the replica does not carry, and every read in this file
+ * already goes to the gateway. There is no cached history to fall back to and
+ * there must not be — a cached one would be a list of what this device
+ * happened to hold, drawn as the vault's whole record.
+ *
+ * NO ROW CARRIES A VALUE. The query answers acts, items and column NAMES; the
+ * projection that turns them into lines is the shared `access-model.ts`.
+ */
+export function lockerAccess(
+  sessionToken: string,
+  limit: number = ACCESS_WINDOW
+): Promise<AccessPayload> {
+  return appQuery<AccessPayload>("locker", "access", {
+    auth_session: sessionToken,
+    limit,
+  });
+}
+
+// ─── The staged-import plane ────────────────────────────────────────────────
+//
+// `/centraid/_vault/imports` is the gateway's own owner-tier import workflow,
+// and it is where a password-manager CSV becomes `locker.item` rows
+// (`packages/vault/src/ingest/stage-file.ts`). It is the SAME door the phone's
+// first-run camera-roll import already uses, so nothing here is a new plane —
+// only a new caller.
+//
+// DRAFT → REVIEW → PUBLISH, and nothing reaches the vault until the draft is
+// published. Every call is a direct online request: there is no queue behind
+// any of them, by construction, because the payload is the member's file.
+
+const IMPORTS = "/centraid/_vault/imports";
+
+/** What staging one file answers with. `unrouted` is the refusal that matters:
+ *  a file the border recognised nothing in stages a draft holding no rows. */
+export interface StagedImport {
+  batchId: string;
+  kind?: string;
+  staged?: Record<string, number>;
+  total?: number;
+  unrouted?: string[];
+}
+
+export interface PublishedImport {
+  created?: number;
+  updated?: number;
+  skipped?: number;
+  failed?: unknown[];
+}
+
+/** Stage one picked file into a reviewable draft. The text is the file, so it
+ *  is handed straight to the border and never held by this module. */
+export async function stageLockerImport(input: {
+  filename: string;
+  text: string;
+}): Promise<StagedImport> {
+  const base = await requireGatewayBase();
+  return fetchJson<StagedImport>(`${base}${IMPORTS}`, {
+    body: JSON.stringify(input),
+    headers: apiHeaders({ "content-type": "application/json" }),
+    method: "POST",
+  });
+}
+
+/** Every batch the vault holds, in every status — `draftBatches` is what
+ *  narrows them to the drafts a review can act on. */
+export async function lockerImportBatches(): Promise<StagedBatch[]> {
+  const base = await requireGatewayBase();
+  const body = await fetchJson<{ batches?: StagedBatch[] }>(
+    `${base}${IMPORTS}`,
+    { headers: apiHeaders(), method: "GET" }
+  );
+  return body.batches ?? [];
+}
+
+/** One draft's staged rows, with the disposition each was given. Dispositions
+ *  and column mappings only — a staged row carries no value here. */
+export async function lockerImportRows(batchId: string): Promise<StagedRow[]> {
+  const base = await requireGatewayBase();
+  const body = await fetchJson<{ rows?: StagedRow[] }>(
+    `${base}${IMPORTS}/${encodeURIComponent(batchId)}`,
+    { headers: apiHeaders(), method: "GET" }
+  );
+  return body.rows ?? [];
+}
+
+/** Apply the draft. One act over the whole batch, and the vault wins every
+ *  collision — a row whose secret the vault already holds is skipped, not
+ *  overwritten. */
+export async function publishLockerImport(
+  batchId: string
+): Promise<PublishedImport> {
+  const base = await requireGatewayBase();
+  return fetchJson<PublishedImport>(
+    `${base}${IMPORTS}/${encodeURIComponent(batchId)}/publish`,
+    { headers: apiHeaders(), method: "POST" }
+  );
+}
+
+/** Drop the draft. Nothing was ever in the vault, so nothing is undone. */
+export async function discardLockerImport(batchId: string): Promise<void> {
+  const base = await requireGatewayBase();
+  await fetchJson<{ receiptId?: string }>(
+    `${base}${IMPORTS}/${encodeURIComponent(batchId)}/discard`,
+    { headers: apiHeaders(), method: "POST" }
+  );
 }

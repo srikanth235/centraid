@@ -4,11 +4,11 @@
 // and meta (`route-copy.ts` `SURFACE_TITLE` / `SURFACE_META`), so the sheet
 // cannot drift from what the desktop rail calls the same surfaces.
 //
-// TWO OF THEM ARE ROUTES HERE AND THREE ARE NOT, and the sheet says which.
-// Import and Export are custodian surfaces and Companion runs in a browser
-// extension (SURFACES.md's seat column); each still leads somewhere — a screen
-// that states what the surface is and where the act happens — because a greyed
-// row teaches that Import is broken rather than that it is elsewhere.
+// FOUR OF THEM ARE ROUTES HERE AND ONE IS NOT, and the sheet says which.
+// Companion runs in a browser extension, beside the page, so its row says
+// `elsewhere` in place of a count — and still leads somewhere, to a screen that
+// states what the surface is and where the act happens, because a greyed row
+// teaches that Companion is broken rather than that it lives in the browser.
 
 import React, { useMemo } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";

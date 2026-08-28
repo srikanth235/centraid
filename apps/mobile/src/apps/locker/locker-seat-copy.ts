@@ -57,3 +57,17 @@ export const BACK_TO_ITEMS = "Items";
 export const STAR_ITEM = "Star";
 export const UNSTAR_ITEM = "Remove the star";
 export const TRASH_ITEM = "Move to trash";
+
+/** The two ways a picked import file is refused before it is ever sent. Both
+ *  are facts about a PHONE — the whole file becomes one string in this
+ *  device's memory — so neither belongs in the shared table. */
+export const IMPORT_TOO_LARGE =
+  "That file is too large to read on this phone · export a smaller file, or import it on the desktop.";
+export const IMPORT_UNREADABLE =
+  "That file could not be read as text · a password-manager export is a CSV.";
+
+/** Where an export lands on a phone. The shared table says the file is written
+ *  on this device and never sent; this says which door it leaves through, which
+ *  is the fact a browser tab has no equivalent of. */
+export const EXPORT_HANDOFF =
+  "Written here, then handed to the system sheet · this phone keeps no copy once you have chosen where it goes.";

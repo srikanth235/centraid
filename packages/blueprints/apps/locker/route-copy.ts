@@ -327,6 +327,11 @@ export const IMPORT_DRAFTS_META = "staged, and not in the vault";
 export const IMPORT_NO_DRAFTS = "No draft is waiting.";
 export const IMPORT_ROWS = "The rows";
 export const IMPORT_ROWS_META = "each with the verdict the vault gave it";
+/** A staged draft that holds nothing. DIFFERENT from "no draft is waiting":
+ *  the draft exists and the border recognised nothing in the file, which is a
+ *  refusal to state rather than an empty list to draw. */
+export const IMPORT_NO_ROWS =
+  "Nothing in that file was recognised · the draft holds no rows, and discarding it writes nothing.";
 export const IMPORT_REVIEW_OPEN = "Review";
 export const IMPORT_OTHER_ENTITY =
   "not a Locker item · it lands in the app that owns it";

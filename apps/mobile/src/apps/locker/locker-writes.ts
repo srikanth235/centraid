@@ -13,8 +13,16 @@
 
 import { SEALED, draftFrom } from "@centraid/blueprints/apps/locker/draft";
 import {
+  exportCsv,
+  exportFileName,
+} from "@centraid/blueprints/apps/locker/export-file";
+import type { ExportPayload } from "@centraid/blueprints/apps/locker/export-file";
+import {
   EDIT_CREATED,
   EDIT_SAVED,
+  EXPORT_NOTHING,
+  EXPORT_PARKED,
+  EXPORT_WRITTEN,
   PURGED,
   RESTORED_WHOLE,
 } from "@centraid/blueprints/apps/locker/route-copy";
@@ -27,6 +35,7 @@ import {
 import {
   addItemWrite,
   editItemWrite,
+  exportWrite,
   purgeWrite,
   restoreWrite,
   starWrite,
@@ -36,10 +45,12 @@ import type { LockerWrite } from "@centraid/blueprints/apps/locker/writes";
 
 import { postStatus } from "../../kit/components/status-line";
 import {
+  nativeWriteOutput,
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
+import { handOffLockerExport } from "./locker-files";
 import { loadLockerItems } from "./locker-store";
 import { seedFromEntry } from "./otpauth";
 
@@ -147,4 +158,71 @@ export function purgeLockerItem(
   itemId: string
 ): Promise<boolean> {
   return issue(session, purgeWrite(itemId), PURGED);
+}
+
+/**
+ * THE ONE ACT THAT PRODUCES PLAINTEXT (README-Locker §6).
+ *
+ * It does not go through `issue` and the reason is not tidiness: `issue`
+ * announces a generic outcome and throws the payload away, and this act's whole
+ * point IS the payload. Its outcomes are §6's own three sentences — written,
+ * parked, nothing came back — rather than the write grammar's.
+ *
+ * ONLINE-ONLY, and not by a decision made here: `exportWrite` stamps the flag
+ * and the native session's online-only door is what refuses to enqueue it. A
+ * mass reveal has no representation in the durable outbox at any layer.
+ *
+ * PARKED OFF-OWNER. The command parks a mass reveal asked for on a device that
+ * is not the owner's, so the outcome is read from the write's own status and
+ * narrated as a park — saying "written" would claim an act that did not run.
+ *
+ * The plaintext is never held: it is turned into bytes and handed to the system
+ * sheet inside this call, and nothing keeps a reference to either.
+ */
+export async function exportLockerVault(
+  session: MobileReplicaSession | undefined,
+  options: { includeTrashed?: boolean; includeHistory?: boolean }
+): Promise<void> {
+  if (!session) {
+    surfaceWriteFailure(
+      new Error("This phone is not paired with a gateway."),
+      "Not exported"
+    );
+    return;
+  }
+  const write = exportWrite(options);
+  let outcome;
+  try {
+    outcome = await session.write("locker", {
+      action: write.action,
+      input: write.input as never,
+      onlineOnly: true,
+    });
+  } catch (error) {
+    surfaceWriteFailure(error, "Not exported");
+    return;
+  }
+  const settled = nativeWriteOutput(outcome) as
+    | { status?: string; reason?: string; output?: ExportPayload }
+    | undefined;
+  if (settled?.status === "parked") {
+    postStatus(EXPORT_PARKED);
+    return;
+  }
+  if (settled?.status === "denied") {
+    surfaceWriteFailure(new Error(settled.reason ?? ""), "Not exported");
+    return;
+  }
+  const payload = settled?.output;
+  if (!payload?.items) {
+    postStatus(EXPORT_NOTHING);
+    return;
+  }
+  try {
+    await handOffLockerExport(exportFileName(payload), exportCsv(payload));
+  } catch (error) {
+    surfaceWriteFailure(error, "Not exported");
+    return;
+  }
+  postStatus(EXPORT_WRITTEN);
 }

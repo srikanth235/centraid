@@ -15,6 +15,7 @@
 // (`locker-gateway.ts`), and clears this seat's clipboard (`locker-clipboard.ts`),
 // which the browser-shaped `clipboard.ts` cannot reach.
 
+import type { StagedBatch } from "@centraid/blueprints/apps/locker/import-model";
 import {
   isRevealExpired,
   permitFromAuth,
@@ -106,7 +107,41 @@ export interface LockerVaultState {
   credentialId: string | null;
   /** A write is in flight against the control plane. */
   busy: boolean;
+  /** The last landed receipts window, and whether older ones stand beyond it.
+   *  `null` before one lands — an audit surface says nothing until it reads. */
+  accessWindow: { window: number; truncated: boolean } | null;
+  /** Why the receipts could not be read. A refusal is not an empty history. */
+  accessError: string;
+  /** The staged import batches, or `null` before the list has landed. */
+  importBatches: StagedBatch[] | null;
+  /** Which draft is open for review. */
+  openBatchId: string | null;
+  /** What the import workflow last said — staged, published, discarded, or
+   *  the refusal that stopped it. */
+  importNote: string;
+  /** A surface read or an import act is in flight. */
+  surfaceBusy: boolean;
 }
+
+/**
+ * The slice `locker-surfaces.ts` owns — the only part of this store anything
+ * outside this file may write. `bag` is in the set because Access history and
+ * Import fill two fields the SHARED bag already declares (`accessEntries`,
+ * `importRows`), so a lock takes both through `wipeSecretState` rather than
+ * through a second rule this seat would have to remember.
+ */
+export type LockerSurfacePatch = Partial<
+  Pick<
+    LockerVaultState,
+    | "accessError"
+    | "accessWindow"
+    | "bag"
+    | "importBatches"
+    | "importNote"
+    | "openBatchId"
+    | "surfaceBusy"
+  >
+>;
 
 function initialState(): LockerVaultState {
   return {
@@ -127,6 +162,25 @@ function initialState(): LockerVaultState {
     masked: false,
     credentialId: null,
     busy: false,
+    accessWindow: null,
+    accessError: "",
+    importBatches: null,
+    openBatchId: null,
+    importNote: "",
+    surfaceBusy: false,
+  };
+}
+
+/** What a lock takes from Access history and Import. Their secret-bearing
+ *  halves ride the bag's own wipe; these are the companions. */
+function lockedSurfaceState(): LockerSurfacePatch {
+  return {
+    accessWindow: null,
+    accessError: "",
+    importBatches: null,
+    openBatchId: null,
+    importNote: "",
+    surfaceBusy: false,
   };
 }
 
@@ -152,6 +206,13 @@ export function subscribeLockerVault(notify: () => void): () => void {
 
 export function readLockerVault(): LockerVaultState {
   return state;
+}
+
+/** The one door `locker-surfaces.ts` writes through — typed to that slice so it
+ *  can never reach the session, the permits or the wipe. `readLockerVault()` is
+ *  the matching half, and there is deliberately no general setter. */
+export function setLockerSurfaceState(patch: LockerSurfacePatch): void {
+  set(patch);
 }
 
 /** Test seam. Production never resets — a process restart is the only reset,
@@ -236,6 +297,7 @@ export function lockNow(): void {
     stale: false,
     permitError: "",
     reauth: false,
+    ...lockedSurfaceState(),
   });
 }
 
