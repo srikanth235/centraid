@@ -1,29 +1,14 @@
 // THE WORDS THE EIGHT SURFACES BEYOND THE LIST SAY (README-Locker §5, §6, §9;
 // GAPS.md §3.3).
 //
-// `view-copy.ts` is the §6 verbatim table plus everything the list, the gates
-// and the notices say. This file is its other half — the field labels, the
-// section heads, and the field notes of the routes reached from the rail's
-// *Acts* group and the band. The split is the 500-line file rule and nothing
-// else: the two files are ONE table, and a sentence lives in whichever of them
-// its route reads.
+// This file and `view-copy.ts` are ONE table split only by the 500-line file
+// rule: a sentence lives in whichever of them its route reads. The notes below
+// state what each row DOES, never what it is waiting for; what remains out of
+// reach is stated as a LIMIT, never as a promise deferred.
 //
-// THE GAP TAGS ARE GONE, AND THAT IS THE NEWS (#872 U2). GAPS.md's rule was
-// that every engineering-ask tag appears on the surface itself, in the field
-// note, so a reviewer reading the screen sees the scope without reading the
-// register. The engineering those tags named has landed: custom fields, item and
-// password history, item-type breadth, several addresses, passkeys,
-// attachments, export, archive, duplicate, the alias read-back, the honest
-// window total and the access history all have doors now. So the notes below
-// state what each row DOES rather than what it is waiting for.
-//
-// What is still stated as a limit is stated as a LIMIT, never as a promise
-// deferred: breach checking and recently-used are rulings (GAPS §3.3 #6e,
-// #11), and the QR scan is the phone's control rather than this seat's.
-//
-// THE REGISTER IS §7's, the same as next door: item, reveal, conceal, permit,
-// receipt, passphrase, alias, review, verdict, window. Never "master
-// password", never "secure", never a reassurance adjective.
+// THE REGISTER IS §7's: item, reveal, conceal, permit, receipt, passphrase,
+// alias, review, verdict, window. Never "master password", never "secure",
+// never a reassurance adjective.
 
 import type { SearchStateCopy } from "../_shared/search-scaffold.ts";
 import type { UnrunnableRow } from "./review-model.ts";
@@ -327,6 +312,11 @@ export const IMPORT_DRAFTS_META = "staged, and not in the vault";
 export const IMPORT_NO_DRAFTS = "No draft is waiting.";
 export const IMPORT_ROWS = "The rows";
 export const IMPORT_ROWS_META = "each with the verdict the vault gave it";
+/** A staged draft that holds nothing. DIFFERENT from "no draft is waiting":
+ *  the draft exists and the border recognised nothing in the file, which is a
+ *  refusal to state rather than an empty list to draw. */
+export const IMPORT_NO_ROWS =
+  "Nothing in that file was recognised · the draft holds no rows, and discarding it writes nothing.";
 export const IMPORT_REVIEW_OPEN = "Review";
 export const IMPORT_OTHER_ENTITY =
   "not a Locker item · it lands in the app that owns it";

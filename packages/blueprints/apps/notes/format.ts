@@ -113,6 +113,26 @@ export function promote(note: {
   };
 }
 
+export function decodeTextContent(uri: unknown): string {
+  if (typeof uri !== "string" || !uri.startsWith("data:")) return "";
+  const comma = uri.indexOf(",");
+  if (comma < 0) return "";
+  const payload = uri.slice(comma + 1);
+  try {
+    if (!uri.slice(0, comma).includes(";base64"))
+      return decodeURIComponent(payload);
+    // Hermes has no Buffer; `atob`'s bytes still need UTF-8 decoding.
+    return decodeURIComponent(
+      Array.from(
+        globalThis.atob(payload),
+        (byte) => `%${byte.codePointAt(0)!.toString(16).padStart(2, "0")}`
+      ).join("")
+    );
+  } catch {
+    return "";
+  }
+}
+
 export type Segment =
   | { kind: "text"; from: number; to: number; text: string }
   | { kind: "check"; line: number; checked: boolean; text: string };

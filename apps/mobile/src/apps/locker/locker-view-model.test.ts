@@ -1,26 +1,16 @@
 // The phone's own derivations (STATES.md's Locker row; SURFACES.md's seats).
-//
-// What this pins:
-//
-//  - DENIED, DAY ONE AND LOADING ARE THREE ANSWERS, never one emptiness.
-//    Nothing is empty until a read has landed, and a denied read never
-//    renders as "nothing is kept here yet".
-//  - the precedence order between the seven states, because the order IS the
-//    argument and a re-ordering would be invisible in a screenshot
-//  - the window's foot says what it knows and never invents a denominator
-//  - the three elsewhere-surfaces each carry facts AND a where-sentence, so
-//    none of them can become a control with nothing behind it
+// The precedence order between the states IS the argument here — a re-ordering
+// would be invisible in a screenshot.
 
 import { describe, expect, it } from "vitest";
 
 import { WINDOW_RULE } from "@centraid/blueprints/apps/locker/view-copy";
 
 import {
-  CUSTODIAN_SEAT_NOTE,
+  lockerFillCopy,
   lockerPendingCount,
   lockerPendingLine,
   lockerScreenState,
-  lockerSurfaceCopy,
   lockerWindowFoot,
 } from "./locker-view-model";
 import type { LockerStateInput } from "./locker-view-model";
@@ -101,33 +91,20 @@ describe(lockerPendingCount, () => {
   });
 });
 
-describe(lockerSurfaceCopy, () => {
-  it("gives each elsewhere-surface facts and a place the act happens", () => {
-    for (const key of ["import", "export", "fill"] as const) {
-      const copy = lockerSurfaceCopy(key, 42);
-      expect(copy.title).not.toBe("");
-      expect(copy.lede).not.toBe("");
-      expect(copy.facts.length).toBeGreaterThan(0);
-      expect(copy.where).not.toBe("");
-    }
-  });
-
-  it("sends the two custodian surfaces to the desktop and Companion to the extension", () => {
-    expect(lockerSurfaceCopy("import").where).toBe(CUSTODIAN_SEAT_NOTE);
-    expect(lockerSurfaceCopy("export").where).toBe(CUSTODIAN_SEAT_NOTE);
-    expect(lockerSurfaceCopy("fill").where).toContain("browser extension");
-  });
-
-  it("counts what an export would put in the clear", () => {
-    const facts = lockerSurfaceCopy("export", 42).facts;
-    expect(facts[0]?.value).toContain("42 items");
-    expect(lockerSurfaceCopy("export", 42).net).toBe(true);
+// Companion is the ONE surface with no door on a phone, so `lockerFillCopy`
+// takes no key.
+describe(lockerFillCopy, () => {
+  it("gives Companion facts and a place the act happens", () => {
+    const copy = lockerFillCopy();
+    expect(copy.title).not.toBe("");
+    expect(copy.lede).not.toBe("");
+    expect(copy.facts.length).toBeGreaterThan(0);
+    expect(copy.where).toContain("browser extension");
   });
 });
 
-// The count says HOW MANY; this says WHAT the first one waits on (#880).
 // Locker reads through the gateway's own query handlers, so the device-global
-// outbox is the only honest source for the sentence.
+// outbox is the only honest source for this sentence (#880).
 describe(lockerPendingLine, () => {
   const change = (
     over: Record<string, unknown> = {}

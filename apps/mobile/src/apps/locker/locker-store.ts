@@ -15,6 +15,7 @@
 // (`locker-gateway.ts`), and clears this seat's clipboard (`locker-clipboard.ts`),
 // which the browser-shaped `clipboard.ts` cannot reach.
 
+import type { StagedBatch } from "@centraid/blueprints/apps/locker/import-model";
 import {
   isRevealExpired,
   permitFromAuth,
@@ -63,14 +64,12 @@ import {
 } from "./locker-gateway";
 import type { VaultDenial } from "./locker-gateway";
 
-/** How often the boundary re-examines itself while a session is open: the
- *  sliding window and every revealed field's countdown are both read from the
- *  same tick, so a reveal cannot outlive a session by up to a second. */
+/** The sliding window and every reveal countdown are read from this one tick,
+ *  so a reveal cannot outlive its session. */
 const TICK_MS = 1000;
 
-/** How long a landed window may stand before the screen says it is behind the
- *  vault. Ten minutes: long enough that a member reading an item is not told
- *  their list is stale, short enough that one left open overnight is. */
+/** Long enough that a member reading an item is not told their list is stale,
+ *  short enough that one left open overnight is. */
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
 export interface LockerVaultState {
@@ -83,30 +82,50 @@ export interface LockerVaultState {
    *  bag, so no list is ever left standing behind a lock screen. */
   rows: LockerRow[];
   truncated: boolean;
-  /** How large a window this seat asked for, so *Show more* can ask for more. */
   limit: number;
   loaded: boolean;
   reading: boolean;
-  /** A read that failed for a reason that is not a refusal. */
   readError: string;
-  /** When the window last landed — the stale notice's own clock. */
   lastReadAt: string | null;
-  /** Has the window been standing long enough to say so? Decided on the
-   *  boundary's own tick rather than by a screen reading the clock during
-   *  render, which is a purity violation and an unstable result besides. */
+  /** Decided on the boundary's tick, never by a screen reading the clock
+   *  during render — that is a purity violation and unstable besides. */
   stale: boolean;
   /** The permit gate is standing, and this is what it is refusing so far. */
   permitError: string;
   permitBusy: boolean;
   /** A permit expired with nothing revealed (STATES.md, Locker / Re-auth). */
   reauth: boolean;
-  /** The app is not in the foreground: the switcher mask stands. */
   masked: boolean;
-  /** The enrolled device credential, or null where there is none. */
   credentialId: string | null;
-  /** A write is in flight against the control plane. */
   busy: boolean;
+  /** `null` before one lands — an audit surface says nothing until it reads. */
+  accessWindow: { window: number; truncated: boolean } | null;
+  /** Why the receipts could not be read. A refusal is not an empty history. */
+  accessError: string;
+  /** `null` before the list lands. */
+  importBatches: StagedBatch[] | null;
+  openBatchId: string | null;
+  importNote: string;
+  surfaceBusy: boolean;
 }
+
+/**
+ * The only part of this store anything outside this file may write. `bag` is in
+ * the set so Access history and Import fill fields the SHARED bag declares and
+ * a lock takes both through `wipeSecretState`, not a second rule.
+ */
+export type LockerSurfacePatch = Partial<
+  Pick<
+    LockerVaultState,
+    | "accessError"
+    | "accessWindow"
+    | "bag"
+    | "importBatches"
+    | "importNote"
+    | "openBatchId"
+    | "surfaceBusy"
+  >
+>;
 
 function initialState(): LockerVaultState {
   return {
@@ -127,6 +146,25 @@ function initialState(): LockerVaultState {
     masked: false,
     credentialId: null,
     busy: false,
+    accessWindow: null,
+    accessError: "",
+    importBatches: null,
+    openBatchId: null,
+    importNote: "",
+    surfaceBusy: false,
+  };
+}
+
+/** What a lock takes from Access history and Import. Their secret-bearing
+ *  halves ride the bag's own wipe; these are the companions. */
+function lockedSurfaceState(): LockerSurfacePatch {
+  return {
+    accessWindow: null,
+    accessError: "",
+    importBatches: null,
+    openBatchId: null,
+    importNote: "",
+    surfaceBusy: false,
   };
 }
 
@@ -152,6 +190,13 @@ export function subscribeLockerVault(notify: () => void): () => void {
 
 export function readLockerVault(): LockerVaultState {
   return state;
+}
+
+/** The one door `locker-surfaces.ts` writes through — typed to that slice so it
+ *  can never reach the session, the permits or the wipe. `readLockerVault()` is
+ *  the matching half, and there is deliberately no general setter. */
+export function setLockerSurfaceState(patch: LockerSurfacePatch): void {
+  set(patch);
 }
 
 /** Test seam. Production never resets — a process restart is the only reset,
@@ -236,6 +281,7 @@ export function lockNow(): void {
     stale: false,
     permitError: "",
     reauth: false,
+    ...lockedSurfaceState(),
   });
 }
 

@@ -7,11 +7,10 @@
 // `react-native` import here: `locker-band.test.ts` asserts these tables
 // directly and `LockerBand.tsx` renders them unchanged.
 //
-// AND THE SHEET'S OTHER HALF — the surfaces this seat cannot perform. Import
-// and Export are custodian surfaces (SURFACES.md) and Companion runs in a
-// browser extension; none of them has a door on a phone. They are drawn as
-// rows that say where the act happens rather than as controls that would go
-// grey, because a disabled Import teaches that Import is broken.
+// The sheet's other half names where each row's act happens. Companion is
+// permanently `elsewhere` — it runs in a browser extension, beside the page —
+// and its row still leads somewhere, because a greyed row would teach that
+// Companion is broken rather than that it lives in the browser.
 
 import {
   SURFACE_META,
@@ -144,11 +143,12 @@ const SHEET_ICONS: Readonly<Record<LockerMoreRowKey, string>> = {
   trash: "Trash",
 };
 
-/** The two surfaces this seat performs. Everything else in the sheet is a
- *  surface with an honest account of where it lives (SURFACES.md's seat
- *  column: Import and Export are custodian, Companion is the extension). */
+/** The four surfaces this seat performs. What is left is Companion, and its row
+ *  carries an honest account of where it lives rather than a count. */
 const REACHED_HERE: ReadonlySet<LockerMoreRowKey> = new Set([
   "access",
+  "export",
+  "import",
   "trash",
 ]);
 
@@ -178,9 +178,7 @@ export type LockerMoreScreen = Extract<
   "LockerAccess" | "LockerTrash" | "LockerSurface"
 >;
 
-/** Exhaustive: a row without a route fails typecheck, not at tap. Every row
- *  leads somewhere — the three `elsewhere` surfaces share one screen that
- *  states what they are and where the act happens. */
+/** Exhaustive: a row without a route fails typecheck, not at tap. */
 export function resolveLockerMoreRoute(
   key: LockerMoreRowKey
 ): LockerMoreScreen {

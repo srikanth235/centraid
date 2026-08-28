@@ -1,3 +1,4 @@
+import { decodeTextContent } from "@centraid/blueprints/apps/notes/format";
 import type { ReplicaRow } from "@centraid/client/replica/native";
 
 export interface NativeNote {
@@ -9,6 +10,9 @@ export interface NativeNote {
   pinned: boolean;
   trashed: boolean;
   updatedAt: string;
+  createdAt: string;
+  bodyContentId: string;
+  purgeAt?: string;
   sourceVaultId?: string;
   canWrite: boolean;
   raw: ReplicaRow;
@@ -19,28 +23,6 @@ export interface NativeNote {
 export interface NativeNoteReference {
   link: ReplicaRow;
   anchor?: ReplicaRow;
-}
-
-function decodeBody(uri: unknown): string {
-  if (typeof uri !== "string" || !uri.startsWith("data:")) return "";
-  const comma = uri.indexOf(",");
-  if (comma < 0) return "";
-  const meta = uri.slice(0, comma);
-  const payload = uri.slice(comma + 1);
-  try {
-    if (meta.includes(";base64")) {
-      const atobLocal = globalThis.atob;
-      return decodeURIComponent(
-        Array.from(
-          atobLocal(payload),
-          (value) => `%${value.codePointAt(0)!.toString(16).padStart(2, "0")}`
-        ).join("")
-      );
-    }
-    return decodeURIComponent(payload);
-  } catch {
-    return "";
-  }
 }
 
 export function buildNotes(
@@ -67,13 +49,17 @@ export function buildNotes(
         id: scope ? `${scope}:${rawId}` : rawId,
         rawId,
         title: String(row.title ?? "Untitled"),
-        body: decodeBody(content?.content_uri),
+        body: decodeTextContent(content?.content_uri),
         format: String(row.format ?? "markdown"),
         pinned: Number(row.pinned) === 1,
         trashed: row.deleted_at != null,
         updatedAt: String(
           row.updated_at ?? row.created_at ?? new Date(0).toISOString()
         ),
+        createdAt: String(row.created_at ?? ""),
+        bodyContentId:
+          typeof row.body_content_id === "string" ? row.body_content_id : "",
+        ...(typeof row.purge_at === "string" ? { purgeAt: row.purge_at } : {}),
         ...(scope ? { sourceVaultId: scope } : {}),
         canWrite: row.__centraidCanWrite !== false,
         raw: row,

@@ -1,11 +1,7 @@
-// The mounted plane's stamps, read once for every app (#880).
-//
-// The first half asserts the readers themselves. The second half asserts the
-// two screens with no render harness on this seat — Tasks' board and Agenda's
-// event — the way `apps/photos/viewer-read-only-reason.test.ts` already does
-// for the photo viewer: by reading their sources and requiring that the ONE
-// sentence is IMPORTED (never re-typed) and reaches JSX as element children,
-// so a sighted member reads the refusal and not only a screen reader.
+// The mounted plane's stamps, read once for every app (#880). Screens with no
+// render harness on this seat are asserted from their sources: the ONE sentence
+// must be IMPORTED, never re-typed, and reach JSX as element children, so a
+// sighted member reads the refusal and not only a screen reader.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -26,6 +22,7 @@ const source = (relative: string): string =>
   );
 
 const TASKS_SRC = source("apps/tasks/TasksHome.tsx");
+const TASK_ROW_SRC = source("apps/tasks/TaskRow.tsx");
 const AGENDA_SRC = source("apps/agenda/AgendaEvent.tsx");
 const DRIVE_SRC = source("apps/docs/DriveList.tsx");
 const PERSON_SRC = source("apps/people/PersonView.tsx");
@@ -109,7 +106,7 @@ describe("stated once above the route, never one refusing button at a time", () 
   });
 
   it("still offers the hint too, on the controls it withholds", () => {
-    expect(TASKS_SRC).toMatch(
+    expect(TASK_ROW_SRC).toMatch(
       /accessibilityHint=\{[^}]*READ_ONLY_SOURCE_REASON/u
     );
     expect(AGENDA_SRC).toMatch(
@@ -120,9 +117,9 @@ describe("stated once above the route, never one refusing button at a time", () 
   it("withholds the Tasks verbs off the row's own role rather than letting a tap throw", () => {
     // The checkbox refuses, the long-press that files a task is not attached,
     // and the group's move-all is withheld where no row could take it.
-    expect(TASKS_SRC).toMatch(/disabled=\{!writable\}/u);
-    expect(TASKS_SRC).toMatch(
-      /\{\.\.\.\(writable \? \{ onLongPress: \(\) => setMoving\(task\) \} : \{\}\)\}/u
+    expect(TASK_ROW_SRC).toMatch(/disabled=\{!writable\}/u);
+    expect(TASK_ROW_SRC).toMatch(
+      /\{\.\.\.\(writable && onPickUp \? \{ onLongPress: \(\) => onPickUp\(task\) \} : \{\}\)\}/u
     );
     expect(TASKS_SRC).toMatch(/rowCanWrite\(row\)/u);
   });

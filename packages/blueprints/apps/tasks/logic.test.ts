@@ -17,8 +17,10 @@ import {
   catchUpWrites,
   inboxGroup,
   landsToday,
+  logbookGroups,
   nestTaskFamilies,
   reentryBuckets,
+  remindingTasks,
   todayGroups,
   upcomingGroups,
   windowEnd,
@@ -312,5 +314,61 @@ describe("a bounded window says so", () => {
 
   it("names both numbers when it did not", () => {
     expect(windowEnd(data, true)).toStrictEqual({ shown: 1, total: 214 });
+  });
+});
+
+describe("the Logbook holds two outcomes", () => {
+  const rows = [
+    task({ task_id: "open" }),
+    task({
+      task_id: "done",
+      status: "completed",
+      completed_at: "2026-08-20T10:00:00Z",
+    }),
+    task({
+      task_id: "older",
+      status: "completed",
+      completed_at: "2026-08-18T10:00:00Z",
+    }),
+    task({
+      task_id: "released",
+      status: "cancelled",
+      completed_at: "2026-08-19T10:00:00Z",
+    }),
+  ];
+
+  it("separates done from won't do, and keeps the open board out", () => {
+    const groups = logbookGroups(rows);
+    expect(groups.map((group) => group.key)).toStrictEqual(["done", "wont-do"]);
+    expect(groups[0]?.rows.map((row) => row.task_id)).toStrictEqual([
+      "done",
+      "older",
+    ]);
+    expect(groups[1]?.rows.map((row) => row.task_id)).toStrictEqual([
+      "released",
+    ]);
+  });
+
+  it("names no group it has no rows for", () => {
+    expect(logbookGroups([task({ task_id: "open" })])).toStrictEqual([]);
+  });
+});
+
+describe("a reminder needs a moment to count back from", () => {
+  it("keeps the rows that will actually reach a phone", () => {
+    const rows = [
+      task({ task_id: "undated", remind_before_min: 10 }),
+      task({ task_id: "no-lead", due_at: "2026-08-22" }),
+      task({ task_id: "reaches", due_at: "2026-08-22", remind_before_min: 10 }),
+      task({
+        task_id: "closed",
+        status: "completed",
+        due_at: "2026-08-22",
+        remind_before_min: 10,
+      }),
+    ];
+    expect(remindingTasks(rows).map((row) => row.task_id)).toStrictEqual([
+      "reaches",
+    ]);
   });
 });

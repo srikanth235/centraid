@@ -1,5 +1,7 @@
-// Five VIEW destinations max (frame cap); views switch, never push. No
-// Month/Week (<44pt cells on touch → Day); no app-to-app imports either.
+// The phone's bottom band: `BAND_DESTINATIONS` plus More (frame cap, five).
+// ONE table, so the seats cannot disagree over Search or over Month.
+
+import { BAND_DESTINATIONS } from "@centraid/blueprints/apps/agenda/views";
 
 import type { BandOwner } from "../../kit/band/band-owner";
 
@@ -20,12 +22,19 @@ export const AGENDA_BAND_MAX_DESTINATIONS = 5;
 
 export const AGENDA_BAND_CAPSULE_SIZE = 52;
 
+const MORE_ICON = "MoreVert";
+
 export const AGENDA_BAND_DESTINATIONS: readonly AgendaBandDestination[] = [
-  { key: "day", label: "Day", icon: "Clock" },
-  { key: "schedule", label: "Schedule", icon: "List" },
-  { key: "waiting", label: "Waiting on", icon: "Users" },
-  { key: "search", label: "Search", icon: "Search" },
-  { key: "more", label: "More", icon: "MoreVert" },
+  ...BAND_DESTINATIONS.map((destination) => {
+    if (!destination.icon)
+      throw new Error(`No icon for band destination ${destination.id}`);
+    return {
+      key: destination.id as AgendaBandDestinationKey,
+      label: destination.label,
+      icon: destination.icon,
+    };
+  }),
+  { key: "more", label: "More", icon: MORE_ICON },
 ];
 
 export interface AgendaBandCapsule {

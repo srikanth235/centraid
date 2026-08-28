@@ -1,50 +1,68 @@
-/*! governance: allow-repo-hygiene file-size-limit — the native Notes cover keeps its places, its list, its editor and the two origin acts in one focus-contained screen so a write outcome cannot be silently orphaned. */
-// Notes, the native cover (Notes spec §1, §2, rebuilt for #834).
+/*! governance: allow-repo-hygiene file-size-limit — the native Notes cover keeps its places, its list and its one write door in a single focus-contained screen so a write outcome cannot be silently orphaned. */
+// Notes, the native cover (Notes spec §1, §2; #882).
 //
-// WHAT THIS SEAT IS. `handler-reachability.test.ts` files Notes under
-// `WEBVIEW_APPS`, which means its handler dispatch is answered by the WEB
-// source: the phone is not expected to re-dispatch every note command. The
-// name predates #799: there is no WebView host anywhere in this app
-// (`screens/home/catalog.ts` says so), so what stands here is a native cover
-// over the SAME replica the
-// web app reads, drawn to the same spec and sharing its pure logic:
-// `promote` is imported from the blueprint, not re-derived, so first-line
-// promotion cannot mean two things on two seats.
+// WHAT THIS SEAT IS. A native cover over the SAME replica the web app reads,
+// drawn to the same spec and sharing its pure logic: `promote`, `probeAt`, the
+// shelf table, the notebook and tag projections and the version walk are all
+// imported, so no rule means two things on two seats.
 //
-// The two ORIGIN ACTS are the phone's alone. Capture hands off to the frame's
-// own Scan cover, which already owns the camera permission and the on-device
-// review — a second camera flow would be a second thing to keep honest. Voice
-// has no recorder on this seat and says so rather than drawing a button that
-// cannot record.
+// NOTES CLAIMS THE BAND (#882): its four places are `BAND_DESTINATIONS`, and
+// Capture, Voice, Tags, Trash and Version history are ACTS behind More. The
+// navigator has ONE Notes route, so a destination is state, not a pushed entry.
 import { FlashList } from "@shopify/flash-list";
 import React, { useMemo, useState } from "react";
-import { Alert, Modal, Pressable, RefreshControl, View } from "react-native";
+import { Alert, Pressable, RefreshControl, View } from "react-native";
 
 import {
   pendingChangeLabel,
   readPendingOverlay,
 } from "@centraid/blueprints/apps/_shared/pending-overlay";
-import { promote } from "@centraid/blueprints/apps/notes/format";
 import {
-  CAPTURE_CUSTODY,
-  CAPTURE_SCANNER,
-  CAPTURE_WHAT,
+  notebookIdsOfNote,
+  tagsOfNote,
+  unfiledNoteIds,
+} from "@centraid/blueprints/apps/notes/filing";
+import type { NotebookShelf } from "@centraid/blueprints/apps/notes/filing";
+import { promote } from "@centraid/blueprints/apps/notes/format";
+import type { PassageAnchor } from "@centraid/blueprints/apps/notes/powerbox";
+import { sendToTasksPayload } from "@centraid/blueprints/apps/notes/send-to-tasks";
+import {
+  BOOKS,
+  CAPTURE,
+  HISTORY,
+  JOURNAL,
+  SEARCH,
+  TAGS,
+  TRASH,
+  VOICE,
+  notebookIdFrom,
+  notebookShelf,
+} from "@centraid/blueprints/apps/notes/shelves";
+import type { ShelfId } from "@centraid/blueprints/apps/notes/shelves";
+import type { LinkTarget } from "@centraid/blueprints/apps/notes/types";
+import {
   DELETE_NOTE_BODY,
   DELETE_NOTE_TITLE,
   DELETE_NOTE_VERB,
+  DELETE_NOTEBOOK_KEPT,
+  DELETE_NOTEBOOK_VERB,
   EMPTY_DAY_ONE,
+  HISTORY_NEEDS_NOTE,
   JOURNAL_ROW,
-  TRASH_STATUS,
-  VOICE_AUDIO_READABLE,
-  VOICE_NO_TRANSCRIPT_YET,
+  SEARCH_EMPTY,
+  captionFor,
+  deleteNotebookBody,
+  deleteNotebookTitle,
+  notebookDeleted,
+  searchNoMatch,
+  sentToTasks,
+  shelfCopy,
 } from "@centraid/blueprints/apps/notes/view-copy";
 import type { ReplicaValue } from "@centraid/client/replica/native";
 
-import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
-import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -53,21 +71,35 @@ import {
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
-import type { NotesScreenProps } from "../../navigation";
+import type { NotesScreenProps as NotesRouteProps } from "../../navigation";
+import NoteEditor from "./NoteEditor";
+import {
+  NOTES_MORE_ROWS,
+  NOTES_MORE_SHEET,
+  notesBandKeyFor,
+} from "./notes-band";
+import type { NotesBandDestinationKey, NotesPlace } from "./notes-band";
 import type { NativeNote } from "./notes-model";
+import NotesHistory from "./NotesHistory";
 import { styles } from "./NotesHome.styles";
+import {
+  CapturePlace,
+  MoreSheet,
+  NotebooksPlace,
+  TagsPlace,
+  TrashPlace,
+  VoicePlace,
+} from "./NotesPlaces";
+import NotesScreen from "./NotesScreen";
 import { useNotes } from "./useNotes";
 
-/** The places this cover carries. Only a PLACE is a destination; Capture,
- *  Voice and Trash are acts, and they sit behind More. */
-type Place = "library" | "journal" | "search" | "more";
-
-const PLACES: ReadonlyArray<{ id: Place; label: string }> = [
-  { id: "library", label: "Library" },
-  { id: "journal", label: "Journal" },
-  { id: "search", label: "Search" },
-  { id: "more", label: "More" },
-];
+const PLACE_FOR_TAB: Readonly<Record<NotesBandDestinationKey, NotesPlace>> = {
+  library: null,
+  books: BOOKS,
+  journal: JOURNAL,
+  search: SEARCH,
+  more: NOTES_MORE_SHEET,
+};
 
 /** One row of the reading room. The heading is `promote`'s — a note with no
  *  title of its own shows its first line, and the preview picks up below. */
@@ -108,9 +140,7 @@ function NoteRow({
         {new Date(note.updatedAt).toLocaleDateString()}
         {note.references.length ? ` · ${note.references.length} links` : ""}
       </Text>
-      {/* A queued write says where it is, on the row it changed. The kit's
-          own per-row chip left with the interfaces in #831, so the shared
-          overlay reader is read directly here — one derivation, two seats. */}
+      {/* A queued write says where it is, on the row it changed. */}
       {pending ? (
         <Text style={[styles.noteMeta, { color: colors.textFaint }]}>
           {pending}
@@ -122,52 +152,82 @@ function NoteRow({
 
 export default function NotesHome({
   navigation,
-}: NotesScreenProps): React.JSX.Element {
+}: NotesRouteProps): React.JSX.Element {
   const { colors } = useTheme();
   const { session, refresh } = useReplica();
   const state = useNotes();
-  const [place, setPlace] = useState<Place>("library");
-  const [showTrash, setShowTrash] = useState(false);
+  const [place, setPlace] = useState<NotesPlace>(null);
+  const [conceptId, setConceptId] = useState<string>();
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<NativeNote>();
+  const [selectedId, setSelectedId] = useState<string>();
+  const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
-  const editorOpen = creating || selected !== undefined;
+  const shelf: ShelfId = place === NOTES_MORE_SHEET ? null : place;
+  const notebookId = notebookIdFrom(shelf);
   const term = query.trim().toLowerCase();
+  // The LIVE row, never a captured copy: after a restore the chain has a new
+  // head, and a held snapshot would keep History walking the old one.
+  const selected = state.notes.find((note) => note.id === selectedId);
 
-  // JOURNAL IS A PLACE, NEVER AN INTERLEAVE: the marker set leaves the
-  // library, and the Journal place is the only thing that shows it.
+  // JOURNAL IS A PLACE, NEVER AN INTERLEAVE (R-journal): the marker set leaves
+  // the library, the search and the trash, and the Journal place is the only
+  // surface that shows it. Opening one by id still works.
   const visible = useMemo(() => {
     const journal = state.journalNoteIds;
     return state.notes.filter((note) => {
       const isJournal = journal.has(note.rawId);
-      if (place === "journal") return isJournal && !note.trashed;
+      if (place === JOURNAL) return isJournal && !note.trashed;
       if (isJournal) return false;
-      if (showTrash) return note.trashed;
+      if (place === TRASH) return note.trashed;
       if (note.trashed) return false;
-      if (place === "search" && term) {
+      if (
+        notebookId &&
+        !notebookIdsOfNote(note.rawId, state.notebooks).includes(notebookId)
+      )
+        return false;
+      if (
+        conceptId &&
+        !tagsOfNote(note.rawId, state.tagShelves).some(
+          (tag) => tag.concept_id === conceptId
+        )
+      )
+        return false;
+      if (place === SEARCH) {
+        if (!term) return false;
         const shown = promote({ title: note.title, body: note.body });
         return `${shown.heading} ${shown.preview}`.toLowerCase().includes(term);
       }
       return true;
     });
-  }, [place, showTrash, state.journalNoteIds, state.notes, term]);
+  }, [
+    conceptId,
+    notebookId,
+    place,
+    state.journalNoteIds,
+    state.notebooks,
+    state.notes,
+    state.tagShelves,
+    term,
+  ]);
 
   const closeEditor = (): void => {
+    setEditing(false);
     setCreating(false);
-    setSelected(undefined);
+    setSelectedId(undefined);
     setTitle("");
     setBody("");
   };
 
   const openNote = (note: NativeNote): void => {
-    setSelected(note);
+    setSelectedId(note.id);
     setCreating(false);
     setTitle(note.title);
     setBody(note.body);
+    setEditing(true);
   };
 
   const write = async (
@@ -222,7 +282,12 @@ export default function NotesHome({
         })
       : await write(
           "create-note",
-          { title: name, body_text: text || name, format: "markdown" },
+          {
+            title: name,
+            body_text: text || name,
+            format: "markdown",
+            ...(notebookId ? { notebook_id: notebookId } : {}),
+          },
           undefined
         );
     if (changed) closeEditor();
@@ -248,20 +313,70 @@ export default function NotesHome({
     ]);
   };
 
-  const restore = async (): Promise<void> => {
-    if (!selected) return;
-    if (await write("restore-note", { note_id: selected.rawId })) closeEditor();
+  /** A notebook is pure structure: its notes are unfiled, never destroyed,
+   *  and the confirm says how many before it happens. */
+  const confirmDeleteNotebook = (book: NotebookShelf): void => {
+    const orphaned = book.noteIds.length;
+    Alert.alert(
+      deleteNotebookTitle(book.name ?? "Notebook"),
+      `${deleteNotebookBody(orphaned)} ${DELETE_NOTEBOOK_KEPT}`,
+      [
+        { text: "Keep it", style: "cancel" },
+        {
+          text: DELETE_NOTEBOOK_VERB,
+          style: "destructive",
+          onPress: () => {
+            void write(
+              "delete-notebook",
+              { notebook_id: book.notebook_id },
+              undefined
+            ).then((done) => {
+              if (!done) return;
+              postStatus(notebookDeleted(orphaned));
+              if (notebookId === book.notebook_id) setPlace(BOOKS);
+            });
+          },
+        },
+      ]
+    );
   };
 
-  const togglePin = async (): Promise<void> => {
+  const sendToTasks = async (line: number, text: string): Promise<void> => {
     if (!selected) return;
-    if (
-      await write("edit-note", {
-        note_id: selected.rawId,
-        pinned: selected.pinned ? 0 : 1,
-      })
-    )
-      setSelected({ ...selected, pinned: !selected.pinned });
+    const payload = sendToTasksPayload({
+      noteId: selected.rawId,
+      line,
+      text,
+    });
+    // MINTED IN TASKS AND LINKED BACK, never copied: nothing about the line is
+    // stored here afterwards — the point of the gesture is that it LEAVES.
+    const done = await write("send-to-tasks", {
+      title: payload.title,
+      ...(payload.due_at ? { due_at: payload.due_at } : {}),
+      note_id: payload.note_id,
+      exact: payload.exact,
+    });
+    if (done) postStatus(sentToTasks(payload.title));
+  };
+
+  const link = async (
+    target: LinkTarget,
+    anchor: PassageAnchor | null
+  ): Promise<void> => {
+    if (!selected) return;
+    await write("link", {
+      note_id: selected.rawId,
+      target_type: target.type,
+      target_id: target.id,
+      ...(anchor
+        ? {
+            exact: anchor.exact,
+            prefix: anchor.prefix,
+            suffix: anchor.suffix,
+            start: anchor.start,
+          }
+        : {}),
+    });
   };
 
   const pull = async (): Promise<void> => {
@@ -273,26 +388,155 @@ export default function NotesHome({
     }
   };
 
+  const list = (
+    <>
+      <ReplicaStateCard
+        connection={state.connection}
+        error={state.error}
+        unavailableReason={state.unavailableReason}
+        noun="Notes"
+        onRetry={() => void refresh?.()}
+      />
+      {state.connection !== "unavailable" && !state.error ? (
+        <FlashList
+          data={visible}
+          keyExtractor={(note) => note.id}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void pull()}
+            />
+          }
+          renderItem={({ item }) => (
+            <NoteRow note={item} onOpen={() => openNote(item)} />
+          )}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                {place === SEARCH
+                  ? term
+                    ? searchNoMatch(query.trim())
+                    : SEARCH_EMPTY
+                  : EMPTY_DAY_ONE}
+              </Text>
+              {place === JOURNAL ? (
+                <Text style={[styles.emptyBody, { color: colors.textSoft }]}>
+                  {JOURNAL_ROW}
+                </Text>
+              ) : null}
+            </View>
+          }
+        />
+      ) : null}
+    </>
+  );
+
+  const pane = ((): React.JSX.Element => {
+    if (place === NOTES_MORE_SHEET)
+      return <MoreSheet rows={NOTES_MORE_ROWS} onPick={setPlace} />;
+    if (place === BOOKS)
+      return (
+        <NotebooksPlace
+          notebooks={state.notebooks}
+          unfiled={
+            unfiledNoteIds([...state.visibleNoteIds], state.notebooks).length
+          }
+          onOpen={(id) => setPlace(notebookShelf(id))}
+          onCreate={(name) => {
+            if (name.trim())
+              void write("create-notebook", { name: name.trim() }, undefined);
+          }}
+          onRename={(id, name) => {
+            if (name.trim())
+              void write(
+                "rename-notebook",
+                { notebook_id: id, name: name.trim() },
+                undefined
+              );
+          }}
+          onDelete={confirmDeleteNotebook}
+        />
+      );
+    if (place === TAGS)
+      return (
+        <TagsPlace
+          tags={state.tagShelves}
+          {...(conceptId ? { active: conceptId } : {})}
+          onSelect={(id) => {
+            setConceptId(id);
+            setPlace(null);
+          }}
+        />
+      );
+    if (place === TRASH)
+      return (
+        <TrashPlace
+          notes={visible}
+          onRestore={(note) => {
+            void write("restore-note", { note_id: note.rawId }, note);
+          }}
+        />
+      );
+    if (place === HISTORY)
+      return selected ? (
+        <NotesHistory
+          note={selected}
+          chainRows={state.chainRows}
+          unreadable={
+            state.error !== undefined || state.connection === "unavailable"
+          }
+          onRestore={(contentId) => {
+            // RESTORING APPENDS: the chain grows a head, nothing is rewritten.
+            void write("restore-note-version", {
+              note_id: selected.rawId,
+              content_id: contentId,
+            });
+          }}
+        />
+      ) : (
+        <View style={styles.empty}>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            {HISTORY_NEEDS_NOTE}
+          </Text>
+        </View>
+      );
+    if (place === CAPTURE)
+      return <CapturePlace onScan={() => navigation.navigate("Scan")} />;
+    if (place === VOICE) return <VoicePlace />;
+    return list;
+  })();
+
+  const caption = captionFor(shelf);
   return (
-    <TopSafeArea style={[styles.fill, { backgroundColor: colors.bg }]}>
+    <NotesScreen
+      current={notesBandKeyFor(place)}
+      onDestination={(key) => {
+        setPlace(PLACE_FOR_TAB[key]);
+        if (key !== "library") setConceptId(undefined);
+      }}
+      onHome={() => navigation.navigate("Home")}
+    >
       <View style={styles.header}>
-        <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>
-            Notes
+            {place === NOTES_MORE_SHEET ? "More" : shelfCopy(shelf).title}
           </Text>
-          <Text style={[styles.subtitle, { color: colors.textSoft }]}>
-            {place === "journal" ? JOURNAL_ROW : TRASH_STATUS}
-          </Text>
+          {caption ? (
+            <Text style={[styles.subtitle, { color: colors.textSoft }]}>
+              {caption}
+            </Text>
+          ) : null}
         </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="New note"
           onPress={() => {
             setCreating(true);
-            setSelected(undefined);
+            setSelectedId(undefined);
             setTitle("");
             setBody("");
+            setEditing(true);
           }}
           style={styles.iconButton}
         >
@@ -301,42 +545,7 @@ export default function NotesHome({
       </View>
       <ReplicaStatusBar />
 
-      {/* The band's own destinations, drawn as this cover's place row. */}
-      <View style={styles.controls}>
-        {PLACES.map((entry) => (
-          <Pressable
-            key={entry.id}
-            accessibilityRole="button"
-            accessibilityState={{ selected: place === entry.id }}
-            accessibilityLabel={entry.label}
-            onPress={() => {
-              setPlace(entry.id);
-              if (entry.id !== "more") setShowTrash(false);
-            }}
-            style={[
-              styles.chip,
-              {
-                backgroundColor:
-                  place === entry.id ? colors.accentFill : colors.bgElev,
-                borderColor: colors.line,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                {
-                  color: place === entry.id ? colors.textInv : colors.textSoft,
-                },
-              ]}
-            >
-              {entry.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {place === "search" ? (
+      {place === SEARCH ? (
         <View style={styles.controls}>
           <View
             style={[
@@ -357,196 +566,86 @@ export default function NotesHome({
         </View>
       ) : null}
 
-      {place === "more" ? (
-        <View style={styles.empty}>
-          {/* THE TWO ORIGIN ACTS. Capture hands off to the frame's own camera
-              cover; voice has no recorder on this seat and says so. */}
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {CAPTURE_SCANNER}
-          </Text>
-          <Text style={[styles.emptyBody, { color: colors.textSoft }]}>
-            {CAPTURE_WHAT}
-          </Text>
-          <Text style={[styles.emptyBody, { color: colors.textFaint }]}>
-            {CAPTURE_CUSTODY}
-          </Text>
+      {conceptId && place === null ? (
+        <View style={styles.controls}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open the camera"
-            onPress={() => navigation.navigate("Scan")}
-            style={[styles.button, { backgroundColor: colors.accentFill }]}
-          >
-            <Text style={[styles.buttonText, { color: colors.textInv }]}>
-              Open the camera
-            </Text>
-          </Pressable>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {VOICE_NO_TRANSCRIPT_YET}
-          </Text>
-          <Text style={[styles.emptyBody, { color: colors.textSoft }]}>
-            {VOICE_AUDIO_READABLE}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: showTrash }}
-            accessibilityLabel={showTrash ? "Show the library" : "Show trash"}
-            onPress={() => {
-              setShowTrash((value) => !value);
-              setPlace("library");
-            }}
+            accessibilityLabel="Clear the tag filter"
+            onPress={() => setConceptId(undefined)}
             style={[
               styles.chip,
-              { backgroundColor: colors.bgElev, borderColor: colors.line },
+              { backgroundColor: colors.accentFill, borderColor: colors.line },
             ]}
           >
-            <Text style={[styles.chipText, { color: colors.textSoft }]}>
-              Trash
+            <Text style={[styles.chipText, { color: colors.textInv }]}>
+              {`${
+                state.tagShelves.find((tag) => tag.concept_id === conceptId)
+                  ?.label ?? "tag"
+              } ×`}
             </Text>
           </Pressable>
         </View>
-      ) : (
-        <>
-          <ReplicaStateCard
-            connection={state.connection}
-            error={state.error}
-            unavailableReason={state.unavailableReason}
-            noun="Notes"
-            onRetry={() => void refresh?.()}
-          />
-          {state.connection !== "unavailable" && !state.error ? (
-            <FlashList
-              data={visible}
-              keyExtractor={(note) => note.id}
-              contentContainerStyle={styles.list}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={() => void pull()}
-                />
-              }
-              renderItem={({ item }) => (
-                <NoteRow note={item} onOpen={() => openNote(item)} />
-              )}
-              ListEmptyComponent={
-                <View style={styles.empty}>
-                  <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                    {showTrash ? "Trash is empty" : EMPTY_DAY_ONE}
-                  </Text>
-                  <Text style={[styles.emptyBody, { color: colors.textSoft }]}>
-                    {showTrash ? TRASH_STATUS : JOURNAL_ROW}
-                  </Text>
-                </View>
-              }
-            />
-          ) : null}
-        </>
-      )}
+      ) : null}
 
-      <Modal
-        visible={editorOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={closeEditor}
-      >
-        <TopSafeArea
-          accessibilityViewIsModal
-          style={[styles.sheet, { backgroundColor: colors.bg }]}
-        >
-          <View style={styles.modalHeader}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close the note"
-              onPress={closeEditor}
-              style={styles.iconButton}
-            >
-              <Icon name="x" size={23} color={colors.text} />
-            </Pressable>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {creating ? "New note" : selected?.trashed ? "In trash" : "Note"}
-            </Text>
-            {selected && !selected.trashed ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={selected.pinned ? "Unpin" : "Pin"}
-                accessibilityState={{ selected: selected.pinned }}
-                onPress={() => void togglePin()}
-                style={styles.iconButton}
-              >
-                <Icon
-                  name="star"
-                  size={22}
-                  color={selected.pinned ? colors.accent : colors.textFaint}
-                />
-              </Pressable>
-            ) : (
-              <View style={styles.iconButton} />
-            )}
-          </View>
+      {pane}
 
-          <View style={styles.editor}>
-            <TextInput
-              accessibilityLabel="Note title"
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Title"
-              placeholderTextColor={colors.textFaint}
-              style={[styles.title, { color: colors.text }]}
-            />
-            <TextInput
-              accessibilityLabel="Note body"
-              value={body}
-              onChangeText={setBody}
-              multiline
-              placeholder="Write"
-              placeholderTextColor={colors.textFaint}
-              style={[styles.body, { color: colors.text }]}
-            />
-          </View>
-
-          <View style={styles.editorActions}>
-            {selected?.trashed ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Restore this note"
-                onPress={() => void restore()}
-                style={[styles.button, { backgroundColor: colors.accentFill }]}
-              >
-                <Text style={[styles.buttonText, { color: colors.textInv }]}>
-                  Restore
-                </Text>
-              </Pressable>
-            ) : (
-              <>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Save this note"
-                  onPress={() => void save()}
-                  style={[
-                    styles.button,
-                    { backgroundColor: colors.accentFill },
-                  ]}
-                >
-                  <Text style={[styles.buttonText, { color: colors.textInv }]}>
-                    Save
-                  </Text>
-                </Pressable>
-                {selected ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Move this note to trash"
-                    onPress={confirmTrash}
-                    style={[styles.button, { borderColor: colors.danger }]}
-                  >
-                    <Text style={[styles.buttonText, { color: colors.danger }]}>
-                      {DELETE_NOTE_VERB}
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </>
-            )}
-          </View>
-        </TopSafeArea>
-      </Modal>
-    </TopSafeArea>
+      <NoteEditor
+        open={editing && (creating || selected !== undefined)}
+        {...(selected ? { note: selected } : {})}
+        title={title}
+        body={body}
+        tags={selected ? tagsOfNote(selected.rawId, state.tagShelves) : []}
+        notebooks={state.notebooks}
+        filedIn={
+          selected ? notebookIdsOfNote(selected.rawId, state.notebooks) : []
+        }
+        journalNoteIds={state.journalNoteIds}
+        onTitle={setTitle}
+        onBody={setBody}
+        onClose={closeEditor}
+        onSave={() => void save()}
+        onTrash={confirmTrash}
+        onRestore={() => {
+          if (!selected) return;
+          void write("restore-note", { note_id: selected.rawId }).then(
+            (done) => {
+              if (done) closeEditor();
+            }
+          );
+        }}
+        onTogglePin={() => {
+          if (!selected) return;
+          void write("edit-note", {
+            note_id: selected.rawId,
+            pinned: selected.pinned ? 0 : 1,
+          });
+        }}
+        onMove={(target) => {
+          if (!selected) return;
+          // `move-note` with no notebook is the vault's way of saying unfiled.
+          void write("move-note", {
+            note_id: selected.rawId,
+            ...(target ? { notebook_id: target } : {}),
+          });
+        }}
+        onAddTag={(label) => {
+          if (!selected || !label.trim()) return;
+          void write("add-tag", {
+            note_id: selected.rawId,
+            label: label.trim(),
+          });
+        }}
+        onRemoveTag={(tagId) => {
+          // ONE EDGE, never the concept: other notes keep the tag.
+          void write("remove-tag", { tag_id: tagId });
+        }}
+        onSendToTasks={(line, text) => void sendToTasks(line, text)}
+        onOpenHistory={() => {
+          setEditing(false);
+          setPlace(HISTORY);
+        }}
+        onLink={(target, anchor) => void link(target, anchor)}
+      />
+    </NotesScreen>
   );
 }

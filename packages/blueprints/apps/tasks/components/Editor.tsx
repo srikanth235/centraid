@@ -17,6 +17,7 @@ import type { ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
+import { EFFORT_MINUTES, PROMOTION_AT, effortIndex } from "../detail.ts";
 import { dueLabel, isDateOnly } from "../format.ts";
 import type { Project, Task } from "../types.ts";
 import {
@@ -49,10 +50,6 @@ import {
 } from "../view-copy.ts";
 
 import styles from "./Board.module.css";
-
-/** At five children the editor states what the task has become and offers the
- *  promotion. The cap is a discipline, not an apology (§3). */
-const PROMOTION_AT = 5;
 
 function FieldRow({
   label,
@@ -215,10 +212,8 @@ export function Editor(props: EditorProps): ReactNode {
               key={label}
               type="button"
               className="kit-chip"
-              aria-pressed={
-                (task.effort_min ?? 0) === [0, 5, 15, 25, 60][index]
-              }
-              onClick={() => props.onEffort([0, 5, 15, 25, 60][index] ?? 0)}
+              aria-pressed={effortIndex(task) === index}
+              onClick={() => props.onEffort(EFFORT_MINUTES[index] ?? 0)}
             >
               {label}
             </button>
@@ -296,7 +291,7 @@ export function Editor(props: EditorProps): ReactNode {
         ) : null}
       </FieldRow>
 
-      <FieldRow label={FIELDS.where}>
+      <FieldRow label={FIELDS.attached}>
         <div className={styles.chipRow}>
           {(task.attachments ?? []).map((attachment) => (
             <button
@@ -316,7 +311,7 @@ export function Editor(props: EditorProps): ReactNode {
 
       {props.home ? (
         <FieldRow
-          label={FIELDS.landsIn}
+          label={FIELDS.homeVault}
           note={
             <>
               <span>{HOME_VAULT_NOTE_A}</span> <span>{HOME_VAULT_NOTE_B}</span>

@@ -1,6 +1,6 @@
 // Reachability gate (#630): every manifested capability needs a real UI
-// dispatch on each shipped surface, or one of the markings below. A WebView
-// cover runs the same blueprint UI, so a web dispatch counts as mobile.
+// dispatch on each shipped surface, or one of the markings below. Every seat
+// draws its own cover now (#799), so each surface is measured on its own tree.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -32,8 +32,6 @@ const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 const REPO_ROOT = path.resolve(PACKAGE_ROOT, "../..");
 const APPS_ROOT = path.join(PACKAGE_ROOT, "apps");
 const MOBILE_APPS_ROOT = path.join(REPO_ROOT, "apps/mobile/src/apps");
-
-const WEBVIEW_APPS = new Set(["notes"]);
 
 /**
  * Surfaces REMOVED pending a redesign, so they dispatch nothing. The only
@@ -161,7 +159,7 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
 };
 
 // Native covers that render a query's ANSWER without dispatching it: the phone
-// re-states the emitter's joins over replica rows, same contract.
+// runs the emitter's own joins over the replica's transports, same contract.
 const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
   agenda: [
     "upcoming",
@@ -172,7 +170,10 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
   ],
   docs: ["drive", "search", "history"],
   people: ["people", "person", "dashboard", "search", "trash"],
-  locker: ["auth", "items", "item"],
+  // Notes' native session has no named-query seam (#799) — only entity read,
+  // FTS search and write. Every answer here is a SHARED computation run over
+  // those three: `useNotes`, `useNoteVersions`, and the powerbox's picker.
+  notes: ["library", "journal", "note", "link-targets", "search", "history"],
   photos: [
     "library",
     "faces",
@@ -182,21 +183,20 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
     "search",
     // The phone's Backup screen reads the gateway's storage route (#712 B2).
     "storage",
+    // Collections builds its People rail through `buildPeopleShelf`.
+    "people",
   ],
-  tally: ["dashboard", "group"],
   tasks: ["board"],
 };
 
 const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   agenda: ["action.attach", "action.detach"],
   docs: ["action.tag", "action.untag", "action.replace", "query.activity"],
-  // Locker's seven item writes ARE dispatched by the phone (#872 follow-up:
-  // `apps/mobile/src/apps/locker/locker-writes.ts` issues each one). They stay
-  // listed because the SCAN cannot see them: the action names are literals in
-  // the SHARED write builders (`apps/locker/writes.ts`), which is exactly
-  // where the one-computation rule wants them, so the native tree names none
-  // of the seven. `query.search` and `query.trash` left this list in the same
-  // change — the phone's gateway door names those two itself.
+  // The phone DOES issue these eight (`apps/mobile/.../locker-writes.ts`, the
+  // Backup surface included); the scan cannot see them because the names are
+  // literals in the shared builders (`apps/locker/writes.ts`), where the
+  // one-computation rule wants them. No query is listed: the phone's gateway
+  // door names search, trash and access itself.
   locker: [
     "action.add-item",
     "action.edit-item",
@@ -205,12 +205,10 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.purge-item",
     "action.star-item",
     "action.unstar-item",
-    // The #872 surface, same reason as the seven above and one more: the
-    // phone's Locker cover draws the list, the item and the unlock, and does
-    // not yet draw an archive shelf, a duplicate act, a custom-field editor, a
-    // passkey slot or an export. Each is reachable through the Assistant with
-    // the same consent and receipt contract, and each entry dies when the
-    // phone draws its control.
+    "action.export",
+    // Undrawn, not merely unseen: the cover has no archive shelf, duplicate
+    // act, custom-field editor or passkey slot. The Assistant carries each,
+    // and each entry dies when the phone draws its control.
     "action.archive-item",
     "action.unarchive-item",
     "action.duplicate-item",
@@ -219,22 +217,16 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.set-addresses",
     "action.set-passkey",
     "action.clear-passkey",
-    "action.export",
-    "query.access",
   ],
-  photos: ["action.restore-album", "action.tag-asset", "action.untag-asset"],
-  // Tally's writes ARE dispatched by the phone (#873 U3:
-  // `apps/mobile/src/apps/tally/tally-writes.ts` issues every one of them).
-  // They stay listed for exactly the reason Locker's seven do: the SCAN cannot
-  // see them, because the action names are literals in the SHARED write
-  // builders (`apps/tally/writes.ts`), which is where the one-computation rule
-  // wants them, so the native tree names none of them itself.
-  //
-  // `add-receipt-expense` is the exception in the other direction and is NOT
-  // listed: the origin seat's capture flow dispatches it by name through
-  // `apps/mobile/src/lib/upload/media-producer.ts`, which the mobile scan
-  // reads. Every QUERY left this list in the same change — the phone's gateway
-  // door (`apps/mobile/src/apps/tally/tally-gateway.ts`) names all seven.
+  // Attachments are listed read-only on the phone's note: that cover has no
+  // native file picker, and a control that opens nothing is banned.
+  notes: ["action.attach", "action.detach"],
+  photos: ["action.restore-album", "action.untag-asset"],
+  // Dispatched but unseen for the same reason Locker's are (#873 U3:
+  // `tally-writes.ts` over the builders in `apps/tally/writes.ts`).
+  // `add-receipt-expense` is NOT here — the capture flow names it in
+  // `apps/mobile/src/lib/upload/media-producer.ts` — and no query is, because
+  // the phone's gateway door names all seven itself.
   tally: [
     "action.add-expense",
     "action.edit-expense",
@@ -257,19 +249,12 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.materialize-recurring-expense",
     "action.edit-recurring-expense-occurrence",
   ],
-  tasks: [
-    "action.edit",
-    "action.delete",
-    "action.attach",
-    "action.detach",
-    "action.add-tag",
-    "action.remove-tag",
-    "query.search",
-  ],
+  // Same read-only attachments, same missing picker, as Notes above.
+  tasks: ["action.attach", "action.detach"],
 };
 
 const MOBILE_EXCEPTION_RATIONALE =
-  "The native cover links to the always-available Assistant surface, which invokes this manifested handler with the same consent and receipt contract.";
+  "Reached on the phone where the scan cannot see it: either a shared write builder holds the action name, or the cover links to the always-available Assistant surface, which invokes this manifested handler with the same consent and receipt contract.";
 
 /**
  * Source for the "is this name called anywhere" scan. `skipFiles` serves the
@@ -319,10 +304,64 @@ function withoutComments(source: string): string {
     .replace(/\/\*[\s\S]*?\*\//gu, " ");
 }
 
-function hasLiteral(source: string, value: string): boolean {
+/** Words whose parenthesised clause is a condition or a value, not arguments. */
+const NOT_A_CALLEE: ReadonlySet<string> = new Set([
+  "return",
+  "if",
+  "else",
+  "for",
+  "while",
+  "do",
+  "switch",
+  "case",
+  "catch",
+  "typeof",
+  "instanceof",
+  "void",
+  "delete",
+  "await",
+  "yield",
+  "throw",
+  "in",
+  "of",
+  "as",
+  "is",
+]);
+
+/** The request's own `action`/`query` field, reaching only its own value. */
+const REQUEST_FIELD = /\b(?:action|query)[\t ]*:[^()[\]{};,]*$/u;
+
+/** The last still-open `(`: a bracket, brace or `;` in the run closes it. */
+const CALL_OPEN =
+  /(?<callee>[A-Za-z0-9_$]*)(?<generic>\]|(?<!=)>)?[\t ]*\([^()[\]{};]*$/u;
+
+/** The right-hand side of an equality test. */
+const COMPARED = /[=!]==?\s*$/u;
+
+/** An argument of a call — the one position that actually dispatches a name. */
+function inArgumentList(before: string): boolean {
+  const open = CALL_OPEN.exec(before);
+  if (!open) return false;
+  if (open.groups?.generic) return true;
+  const callee = open.groups?.callee ?? "";
+  return callee.length > 0 && !NOT_A_CALLEE.has(callee);
+}
+
+/**
+ * A handler is REACHED only where its name is DISPATCHED (#882): as a
+ * request's `action`/`query`, or as an argument of a call. A route key, shelf
+ * id, object key, copy constant or comment repeating it is not a call site.
+ */
+function hasDispatch(source: string, value: string): boolean {
+  const body = withoutComments(source);
   const escaped = value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  // A name in a comment or a disabled block is not a live call site.
-  return new RegExp(`["']${escaped}["']`, "u").test(withoutComments(source));
+  for (const hit of body.matchAll(new RegExp(`["']${escaped}["']`, "gu"))) {
+    const before = body.slice(0, hit.index);
+    // Comparing a route key against the name reads the name; it never sends it.
+    if (COMPARED.test(before)) continue;
+    if (REQUEST_FIELD.test(before) || inArgumentList(before)) return true;
+  }
+  return false;
 }
 
 function handlers(manifest: AppManifest): Array<{ kind: Kind; name: string }> {
@@ -407,12 +446,12 @@ describe("manifest handler reachability", () => {
           DECLARATION_FILES
         );
         return handlers(manifest).filter(({ name }) =>
-          hasLiteral(rendered, name)
+          hasDispatch(rendered, name)
         );
       }
       return handlers(manifest).filter(({ kind, name }) => {
         if (WEB_EXCEPTIONS[`${manifest.id}.${kind}.${name}`]) return false;
-        if (hasLiteral(webSource, name)) return false;
+        if (hasDispatch(webSource, name)) return false;
         // `wireAttachInput` dispatches the conventional `attach` action.
         return !(
           kind === "action" &&
@@ -423,7 +462,10 @@ describe("manifest handler reachability", () => {
     };
 
     test("every web handler is dispatched or explicitly marked", () => {
-      expect(webUnexpected()).toStrictEqual([]);
+      expect(
+        webUnexpected(),
+        `${manifest.id}: draw a web control that dispatches each handler below, or add a WEB_EXCEPTIONS entry saying why the surface never will. A route key, shelf id or copy constant that repeats the name is not a dispatch — the name has to be the request's action/query or an argument of the call.`
+      ).toStrictEqual([]);
     });
 
     const mobileUnexpected = (): Array<{ kind: Kind; name: string }> => {
@@ -431,20 +473,10 @@ describe("manifest handler reachability", () => {
       // cover, and what it still dispatches is reached, not leaked.
       if (awaitingHandoff("mobile", manifest.id))
         return handlers(manifest).filter(({ name }) =>
-          hasLiteral(nativeCover, name)
+          hasDispatch(nativeCover, name)
         );
       return handlers(manifest).filter(({ kind, name }) => {
-        if (WEBVIEW_APPS.has(manifest.id))
-          return (
-            !hasLiteral(webSource, name) &&
-            !WEB_EXCEPTIONS[`${manifest.id}.${kind}.${name}`] &&
-            !(
-              kind === "action" &&
-              name === "attach" &&
-              webSource.includes("wireAttachInput")
-            )
-          );
-        if (hasLiteral(mobileSource, name)) return false;
+        if (hasDispatch(mobileSource, name)) return false;
         if (
           kind === "query" &&
           (NATIVE_QUERY_UI[manifest.id] ?? []).includes(name)
@@ -455,7 +487,10 @@ describe("manifest handler reachability", () => {
     };
 
     test("every mobile handler is dispatched or explicitly marked", () => {
-      expect(mobileUnexpected()).toStrictEqual([]);
+      expect(
+        mobileUnexpected(),
+        `${manifest.id}: draw a native control that dispatches each handler below, or file it — NATIVE_QUERY_UI when the cover renders the answer over the replica's own transports, NATIVE_FALLBACK when the Assistant carries it or a shared write builder holds the name. A route key, shelf id or copy constant that repeats the name is not a dispatch.`
+      ).toStrictEqual([]);
     });
   });
 

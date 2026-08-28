@@ -1,38 +1,50 @@
-// Tasks on the phone (Tasks spec §1–§7; #834). The claimed band's four
-// destinations all live on this ONE screen — the navigator gives Tasks one
-// route. THE ARITHMETIC IS THE WEB APP'S: groups, rules, strings come from
-// `@centraid/blueprints/apps/tasks/*`; this file only draws and dispatches.
-// A FLATLIST, NOT A SCROLLVIEW (no upper bound on rows).
+// Tasks on the phone (Tasks spec §1–§7; #834). EVERY destination — the four
+// band places, the six lenses behind More, the detail place, one project — is a
+// value this file switches on (`tasks-places.ts`); the navigator gives Tasks
+// ONE route.
+// THE ARITHMETIC IS THE WEB APP'S: groups, rules and strings come from
+// `@centraid/blueprints/apps/tasks/*`; this file draws and dispatches.
 // FILING IS A LONG-PRESS AND A DESTINATION; the row's own `sort_order` is
 // carried through `organize-task`, not reset behind manual order.
+// A CHECK-OFF LANDS ON THE ONE STATUS LINE with Undo, never a toast.
 
 import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, Pressable, TextInput, View } from "react-native";
 
-import { readPendingOverlay } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import {
-  dueLabel,
-  metaParts,
-  weekdayName,
-} from "@centraid/blueprints/apps/tasks/format";
+  lensedRows,
+  nextSort,
+  sortGroups,
+  toggleLens,
+  TASKS_SCOPE,
+} from "@centraid/blueprints/apps/tasks/board-view";
+import type {
+  TasksLensKey,
+  TasksSortKey,
+} from "@centraid/blueprints/apps/tasks/board-view";
+import { openCountByProject } from "@centraid/blueprints/apps/tasks/projects";
 import {
-  inboxGroup,
-  isOpen,
-  todayGroups,
-  upcomingGroups,
-} from "@centraid/blueprints/apps/tasks/logic";
-import type { Task, TaskGroup } from "@centraid/blueprints/apps/tasks/types";
+  QUICK_ADD_EMPTY,
+  quickAddFiling,
+  quickAddInput,
+  quickAddReady,
+} from "@centraid/blueprints/apps/tasks/quick-add";
+import type { QuickAddDraft } from "@centraid/blueprints/apps/tasks/quick-add";
 import {
-  DAY_ONE,
+  allowsQuickAdd,
+  showsBoard,
+} from "@centraid/blueprints/apps/tasks/shelves";
+import type { Project, Task } from "@centraid/blueprints/apps/tasks/types";
+import {
+  DONE,
   GROUPS,
-  PENDING_ROW,
-  QUICK_ADD,
-  TODAY_DONE,
-  VAULT_MARKER,
+  UNDO,
+  shelfCopy,
 } from "@centraid/blueprints/apps/tasks/view-copy";
+import { landedTaskId } from "@centraid/blueprints/apps/tasks/writes";
 
-import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import { postStatus } from "../../kit/components/status-line";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import {
   READ_ONLY_SOURCE_REASON,
@@ -40,32 +52,33 @@ import {
 } from "../../kit/replica/row-provenance";
 import { useTheme } from "../../kit/theme";
 import type { TasksScreenProps as TasksRouteProps } from "../../navigation";
-import { TASKS_MORE_ROWS } from "./tasks-band";
-import type { TasksBandDestinationKey } from "./tasks-band";
+import TaskDetail from "./TaskDetail";
+import { isClosed } from "./TaskRow";
+import { TASKS_MORE_LABEL } from "./tasks-band";
+import {
+  findTask,
+  flattenGroups,
+  groupsFor,
+  windowItems,
+} from "./tasks-groups";
+import { bandKeyFor, placeTitle, shelfForPlace } from "./tasks-places";
+import type { TasksPlaceKey } from "./tasks-places";
+import TasksCatchUp from "./TasksCatchUp";
+import TasksDenied from "./TasksDenied";
 import { makeTasksStyles } from "./TasksHome.styles";
+import TasksMoreSheet from "./TasksMoreSheet";
+import TasksPlaceHeader from "./TasksPlaceHeader";
+import TasksProject from "./TasksProject";
+import TasksProjects from "./TasksProjects";
+import TasksQuickAdd from "./TasksQuickAdd";
+import TasksReminders from "./TasksReminders";
+import TasksRows from "./TasksRows";
 import TasksScreen from "./TasksScreen";
+import TasksSearch from "./TasksSearch";
+import TasksToolbar from "./TasksToolbar";
 import { useTasks, useTasksWrite } from "./useTasks";
 
-/** One flat item the list draws: a group header, or a task under it —
- *  virtualization must reach the rows either way. */
-type Item =
-  | { kind: "header"; key: string; group: TaskGroup }
-  | { kind: "task"; key: string; task: Task; child?: boolean };
-
-function flatten(groups: readonly TaskGroup[]): Item[] {
-  return groups.flatMap((group) => [
-    { kind: "header" as const, key: `h:${group.key}`, group },
-    ...group.rows.flatMap((task) => [
-      { kind: "task" as const, key: task.task_id, task },
-      ...(task.children ?? []).map((child) => ({
-        kind: "task" as const,
-        key: child.task_id,
-        task: child,
-        child: true,
-      })),
-    ]),
-  ]);
-}
+const WINDOW_STEP = 50;
 
 export default function TasksHome({
   navigation,
@@ -73,15 +86,29 @@ export default function TasksHome({
   const { colors } = useTheme();
   const styles = useMemo(() => makeTasksStyles(colors), [colors]);
   const board = useTasks();
+  const replica = useReplica();
   const write = useTasksWrite(navigation);
-  const [destination, setDestination] =
-    useState<TasksBandDestinationKey>("today");
-  // ONE CLOCK PER MOUNT, so headers and rows cannot straddle midnight; the
-  // setter is unused by design (a mid-scroll day flip would reshuffle rows).
+  const [place, setPlace] = useState<TasksPlaceKey>("today");
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null);
+  // ONE CLOCK PER MOUNT, so headers and rows cannot straddle midnight.
   const [now, setNow] = useState(() => new Date().toISOString());
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState<QuickAddDraft>(QUICK_ADD_EMPTY);
+  const [lenses, setLenses] = useState<readonly TasksLensKey[]>([]);
+  const [sort, setSort] = useState<TasksSortKey>("priority");
+  const [limit, setLimit] = useState(WINDOW_STEP);
   /** The task a long-press picked up, waiting for somewhere to land. */
   const [moving, setMoving] = useState<Task | null>(null);
+
+  const scopes = useMemo(
+    () =>
+      (replica.scopes ?? []).map((scope) => ({
+        id: scope.vaultId,
+        label: scope.label,
+        canWrite: scope.canWrite,
+      })),
+    [replica.scopes]
+  );
 
   const projectName = useCallback(
     (id: string | null | undefined): string | null =>
@@ -89,49 +116,78 @@ export default function TasksHome({
     [board.projects]
   );
 
-  const groups = useMemo((): TaskGroup[] => {
-    if (destination === "upcoming")
-      return upcomingGroups(board.tasks, now, weekdayName);
-    if (destination === "inbox") {
-      const group = inboxGroup(board.tasks);
-      return group.rows.length > 0 ? [group] : [];
-    }
-    if (destination === "projects" || destination === "more") return [];
-    return todayGroups(board.tasks, now);
-  }, [board.tasks, destination, now]);
+  const shelf = shelfForPlace(place) ?? null;
+  // THE TOOLBAR REACHES ONLY WHERE IT IS DRAWN: off the board a lens is a
+  // hidden filter, and the sort would overrule the Logbook's own order.
+  const rows = useMemo(
+    () => (showsBoard(shelf) ? lensedRows(board.tasks, lenses) : board.tasks),
+    [board.tasks, lenses, shelf]
+  );
 
-  const items = useMemo(() => flatten(groups), [groups]);
+  const groups = useMemo(() => {
+    const found = groupsFor({
+      place,
+      tasks: rows,
+      now,
+      projectName: (id) => projectName(id) ?? GROUPS.inbox,
+    });
+    if (!found) return null;
+    return showsBoard(shelf) ? sortGroups(found, sort) : found;
+  }, [now, place, projectName, rows, shelf, sort]);
+
+  const items = useMemo(() => (groups ? flattenGroups(groups) : []), [groups]);
+  const shownItems = useMemo(() => windowItems(items, limit), [items, limit]);
 
   const readOnly = useMemo(() => {
-    const rows = items.flatMap((item) =>
+    const held = items.flatMap((item) =>
       item.kind === "task" ? [item.task] : []
     );
-    return rows.length > 0 && rows.every((task) => !rowCanWrite(task));
+    return held.length > 0 && held.every((task) => !rowCanWrite(task));
   }, [items]);
 
-  const complete = useCallback(
-    (task: Task) => {
-      if (!rowCanWrite(task)) return;
+  const setStatus = useCallback(
+    (task: Task, status: Task["status"]) => {
       void write(
         "set-status",
-        { task_id: task.task_id, status: "completed" },
+        { task_id: task.task_id, status },
         task.scope_id
       );
     },
     [write]
   );
 
-  const capture = useCallback(() => {
-    const title = draft.trim();
-    if (!title) return;
-    setDraft("");
-    void write("add", {
-      title,
-      ...(destination === "today" ? { due_at: now.slice(0, 10) } : {}),
-    });
-  }, [destination, draft, now, write]);
+  const toggle = useCallback(
+    (task: Task) => {
+      if (!rowCanWrite(task)) return;
+      if (isClosed(task)) {
+        setStatus(task, "needs-action");
+        return;
+      }
+      setStatus(task, "completed");
+      // Undo IS reopening — the same door the box offers, said in words.
+      postStatus(DONE, {
+        action: { label: UNDO, run: () => setStatus(task, "needs-action") },
+      });
+    },
+    [setStatus]
+  );
 
-  /** File the picked-up task, preserving its own manual order. */
+  const openTask = useCallback((task: Task) => setOpenTaskId(task.task_id), []);
+
+  const capture = useCallback(async (): Promise<void> => {
+    if (!quickAddReady(draft)) return;
+    const filed = draft;
+    setDraft(QUICK_ADD_EMPTY);
+    const outcome = await write(
+      "add",
+      quickAddInput(filed, now),
+      filed.scopeId
+    );
+    const taskId = landedTaskId(outcome);
+    const filing = taskId ? quickAddFiling(filed, taskId) : null;
+    if (filing) await write("organize-task", filing, filed.scopeId);
+  }, [draft, now, write]);
+
   const fileInto = useCallback(
     (projectId: string) => {
       const task = moving;
@@ -150,21 +206,20 @@ export default function TasksHome({
     [moving, write]
   );
 
-  // Pull-to-refresh re-reads the clock too: after midnight, "today" changed.
+  // After midnight, "today" changed: a refresh re-reads the clock too.
   const handleRefresh = useCallback(async (): Promise<void> => {
     setNow(new Date().toISOString());
     await board.refresh();
   }, [board]);
 
-  // Explicit void-discard: RefreshControl neither awaits nor catches, so an
-  // async rejection would be unobservable.
+  // RefreshControl neither awaits nor catches; a rejection would be unseen.
   const onRefresh = useCallback((): void => {
     void handleRefresh();
   }, [handleRefresh]);
 
   const moveAllToToday = useCallback(
-    (rows: readonly Task[]) => {
-      for (const row of rows) {
+    (batch: readonly Task[]) => {
+      for (const row of batch) {
         if (!rowCanWrite(row)) continue;
         void write(
           "edit",
@@ -176,201 +231,170 @@ export default function TasksHome({
     [now, write]
   );
 
-  const renderItem = useCallback(
-    ({ item }: { item: Item }): React.JSX.Element => {
-      if (item.kind === "header") {
-        return (
-          <View style={styles.groupHead}>
-            <Text
-              style={[
-                styles.groupLabel,
-                item.group.attention ? styles.groupLabelAttention : undefined,
-              ]}
-            >
-              {item.group.label}
-            </Text>
-            {item.group.meta ? (
-              <Text style={styles.num}>{item.group.meta}</Text>
-            ) : null}
-            {/* Withheld where no row could take it. */}
-            {item.group.attention &&
-            item.group.rows.some((row) => rowCanWrite(row)) ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={GROUPS.moveAll}
-                onPress={() => moveAllToToday(item.group.rows)}
-                style={styles.headVerb}
-              >
-                <Text style={styles.verbText}>{GROUPS.moveAll}</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        );
-      }
-
-      const { task } = item;
-      // The pending marker is drawn INLINE: one unsettled row in one app is
-      // not yet kit vocabulary.
-      const pending = readPendingOverlay(
-        task as unknown as Record<string, unknown>
-      );
-      const done = task.status === "completed" || task.status === "cancelled";
-      const writable = rowCanWrite(task);
-      const project = projectName(task.project_id);
-      const meta =
-        metaParts({
-          task,
-          now,
-          ...(project ? { projectName: project } : {}),
-        })
-          .map((part) => part.text)
-          .join(" · ") ||
-        (dueLabel(task.due_at, now) ?? "");
-      return (
-        <View
-          style={[
-            styles.rowWrap,
-            item.child ? styles.rowChild : undefined,
-            pending ? styles.rowPending : undefined,
-            moving?.task_id === task.task_id ? styles.rowPicked : undefined,
-          ]}
-        >
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityLabel={task.title}
-            accessibilityState={{ checked: done, disabled: !writable }}
-            accessibilityHint={writable ? undefined : READ_ONLY_SOURCE_REASON}
-            disabled={!writable}
-            onPress={() => complete(task)}
-            style={styles.box}
-          >
-            {done ? <Icon name="Check" size={14} color={colors.text} /> : null}
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={task.title}
-            accessibilityState={{ selected: moving?.task_id === task.task_id }}
-            {...(writable ? { onLongPress: () => setMoving(task) } : {})}
-            style={styles.rowMain}
-          >
-            <Text
-              numberOfLines={1}
-              style={[styles.title, done ? styles.titleDone : undefined]}
-            >
-              {task.title}
-            </Text>
-            {meta ? (
-              <Text numberOfLines={1} style={styles.num}>
-                {meta}
-              </Text>
-            ) : null}
-            {pending ? (
-              <Text numberOfLines={1} style={styles.pendingWords}>
-                {PENDING_ROW}
-              </Text>
-            ) : null}
-          </Pressable>
-          {task.scope_id ? (
-            <Text style={styles.vault}>{VAULT_MARKER}</Text>
-          ) : null}
-        </View>
-      );
-    },
-    [colors.text, complete, moveAllToToday, moving, now, projectName, styles]
+  /** The Inbox's ONE gesture per undecided task; elsewhere the long-press. */
+  const inboxAct = useMemo(
+    () =>
+      place === "inbox"
+        ? {
+            label: GROUPS.file,
+            run: (task: Task) => {
+              setMoving(task);
+              setPlace("projects");
+            },
+          }
+        : undefined,
+    [place]
   );
 
-  const body = ((): React.JSX.Element => {
-    if (destination === "projects") {
-      return (
-        <View style={styles.pane}>
-          {board.projects.map((project) => (
-            <View key={project.project_id} style={styles.projectRow}>
-              <Text style={styles.title}>{project.name}</Text>
-              <Text style={styles.num}>
-                {
-                  board.tasks.filter(
-                    (task) =>
-                      task.project_id === project.project_id && isOpen(task)
-                  ).length
-                }
-              </Text>
-              {moving ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={project.name}
-                  onPress={() => fileInto(project.project_id)}
-                  style={styles.headVerb}
-                >
-                  <Text style={styles.verbText}>{GROUPS.addTask}</Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={project.name}
-                  onPress={() => {
-                    void write("save-section", {
-                      project_id: project.project_id,
-                      name: GROUPS.today,
-                    });
-                  }}
-                  style={styles.headVerb}
-                >
-                  <Text style={styles.verbText}>{GROUPS.today}</Text>
-                </Pressable>
-              )}
-            </View>
-          ))}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={GROUPS.addTask}
-            onPress={() => {
-              void write("save-project", { name: GROUPS.inbox });
-            }}
-            style={styles.primary}
-          >
-            <Text style={styles.primaryText}>{GROUPS.addTask}</Text>
-          </Pressable>
-        </View>
-      );
-    }
+  const boardPlace = groups !== null && showsBoard(shelf);
 
-    if (destination === "more") {
-      return (
-        <View style={styles.pane}>
-          {TASKS_MORE_ROWS.map((row) => (
-            <View key={String(row.shelf)} style={styles.projectRow}>
-              <Icon name={row.icon} size={16} color={colors.textSoft} />
-              <Text style={styles.title}>{row.label}</Text>
-              {row.meta ? <Text style={styles.num}>{row.meta}</Text> : null}
-            </View>
-          ))}
-        </View>
-      );
-    }
+  const rowsList = (
+    <TasksRows
+      place={place}
+      items={shownItems.items}
+      shown={shownItems.shown}
+      total={shownItems.total}
+      now={now}
+      styles={styles}
+      loading={board.loading}
+      dayOne={board.tasks.length === 0}
+      moving={moving}
+      {...(inboxAct ? { act: inboxAct } : {})}
+      projectName={projectName}
+      onToggle={toggle}
+      onOpen={openTask}
+      onPickUp={setMoving}
+      onMoveAll={moveAllToToday}
+      onShowMore={() => setLimit(limit + WINDOW_STEP)}
+      onRefresh={onRefresh}
+    />
+  );
 
-    return (
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.key}
-        renderItem={renderItem}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>
-              {board.tasks.length === 0 ? DAY_ONE : TODAY_DONE}
-            </Text>
-          </View>
-        }
-        contentContainerStyle={styles.listContent}
-        refreshing={board.loading}
-        onRefresh={onRefresh}
-      />
-    );
+  const openProject: Project | undefined = board.projects.find(
+    (project) => project.project_id === openProjectId
+  );
+
+  const projectsPane = openProject ? (
+    <TasksProject
+      project={openProject}
+      sections={board.sections}
+      tasks={board.tasks}
+      now={now}
+      styles={styles}
+      write={write}
+      onBack={() => setOpenProjectId(null)}
+      onToggle={toggle}
+      onOpen={openTask}
+    />
+  ) : (
+    <TasksProjects
+      projects={board.projects}
+      counts={openCountByProject(board.tasks)}
+      scopes={scopes}
+      filing={moving !== null}
+      styles={styles}
+      onOpen={setOpenProjectId}
+      onFile={fileInto}
+      onCreate={(input, scopeId) => {
+        void write("save-project", input, scopeId);
+      }}
+    />
+  );
+
+  const placeBody = ((): React.JSX.Element => {
+    if (place === "projects") return projectsPane;
+    if (place === "more")
+      return <TasksMoreSheet styles={styles} onSelect={setPlace} />;
+    if (place === "search")
+      return (
+        <TasksSearch
+          now={now}
+          styles={styles}
+          onToggle={toggle}
+          onOpen={openTask}
+        />
+      );
+    if (place === "reentry")
+      return (
+        <TasksCatchUp
+          tasks={board.tasks}
+          now={now}
+          styles={styles}
+          write={write}
+          onToggle={toggle}
+          onOpen={openTask}
+        />
+      );
+    if (place === "notify")
+      return (
+        <TasksReminders
+          tasks={board.tasks}
+          now={now}
+          styles={styles}
+          onToggle={toggle}
+          onOpen={openTask}
+        />
+      );
+    return rowsList;
   })();
+
+  const openRow = findTask(board.tasks, openTaskId);
+  const behindMore = bandKeyFor(place) === "more" && place !== "more";
+  const quickAdd =
+    !openRow && !openProject && allowsQuickAdd(shelf) && place !== "more";
+  const refusal = board.error && board.tasks.length === 0 ? board.error : null;
+
+  const body = refusal ? (
+    <TasksDenied
+      receipt={refusal}
+      scope={TASKS_SCOPE}
+      when={now.slice(0, 16).replace("T", " ")}
+      styles={styles}
+    />
+  ) : openRow ? (
+    <TaskDetail
+      task={openRow}
+      now={now}
+      projects={board.projects}
+      styles={styles}
+      backTo={placeTitle(place)}
+      onBack={() => setOpenTaskId(null)}
+      onOpen={openTask}
+      write={write}
+    />
+  ) : (
+    <>
+      {behindMore ? (
+        <TasksPlaceHeader
+          title={placeTitle(place)}
+          backTo={TASKS_MORE_LABEL}
+          onBack={() => setPlace("more")}
+          styles={styles}
+        />
+      ) : null}
+      {boardPlace ? (
+        <TasksToolbar
+          count={shownItems.total}
+          unit={shelfCopy(shelf).unit}
+          lenses={lenses}
+          sort={sort}
+          styles={styles}
+          onLens={(key) => setLenses(toggleLens(lenses, key))}
+          onSort={() => setSort(nextSort(sort))}
+        />
+      ) : null}
+      {placeBody}
+    </>
+  );
 
   return (
     <TasksScreen
-      current={destination}
-      onDestination={setDestination}
+      current={bandKeyFor(place)}
+      onDestination={(key) => {
+        setOpenTaskId(null);
+        setOpenProjectId(null);
+        setPlace(key);
+      }}
       onHome={() => navigation.navigate("Home")}
     >
       <ReplicaStatusBar />
@@ -378,32 +402,16 @@ export default function TasksHome({
         <Text style={styles.readOnly}>{READ_ONLY_SOURCE_REASON}</Text>
       ) : null}
       {body}
-      {/* Capture at the foot: one field + one filled control; it files where
-          the member is looking. */}
-      <View style={styles.capture}>
-        <TextInput
-          accessibilityLabel={QUICK_ADD.add}
-          placeholder={QUICK_ADD.touchPlaceholder}
-          placeholderTextColor={colors.textGhost}
-          value={draft}
-          onChangeText={setDraft}
-          onSubmitEditing={capture}
-          style={styles.captureField}
+      {quickAdd && !refusal ? (
+        <TasksQuickAdd
+          draft={draft}
+          projects={board.projects}
+          scopes={scopes}
+          styles={styles}
+          onDraft={setDraft}
+          onAdd={() => void capture()}
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={QUICK_ADD.add}
-          accessibilityState={{ disabled: draft.trim().length === 0 }}
-          disabled={draft.trim().length === 0}
-          onPress={capture}
-          style={[
-            styles.primary,
-            draft.trim().length === 0 ? styles.primaryOff : undefined,
-          ]}
-        >
-          <Text style={styles.primaryText}>{QUICK_ADD.add}</Text>
-        </Pressable>
-      </View>
+      ) : null}
     </TasksScreen>
   );
 }

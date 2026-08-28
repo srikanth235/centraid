@@ -25,6 +25,7 @@ const EVERY_STRING: string[] = [
   copy.REENTRY_LEAD_B,
   copy.REENTRY_FOOT_A,
   copy.REENTRY_FOOT_B,
+  copy.REENTRY_NONE,
   copy.MISSED_NOTE_A,
   copy.MISSED_NOTE_B,
   copy.ANCHOR_NOTE,
@@ -43,6 +44,9 @@ const EVERY_STRING: string[] = [
   copy.TAGS_NOTE_B,
   copy.HOME_VAULT_NOTE_A,
   copy.HOME_VAULT_NOTE_B,
+  copy.WONT_DO,
+  copy.LIFECYCLE.start,
+  copy.LIFECYCLE.stop,
   copy.PENDING_CHIP,
   copy.PENDING_ROW,
   copy.VAULT_MARKER,
@@ -59,6 +63,10 @@ const EVERY_STRING: string[] = [
   copy.DELETE_CONFIRM.title,
   copy.DELETE_CONFIRM.bodyA,
   copy.DELETE_CONFIRM.bodyB,
+  copy.NEW_PROJECT.note,
+  ...copy.LENSES.map((lens) => lens.label),
+  ...copy.QUICK_ADD_WHEN.map((choice) => choice.label),
+  ...Object.values(copy.SORT_LABELS),
   ...copy.ANCHOR_CARDS.flatMap((card) => [card.head, card.body, card.tag]),
 ];
 
@@ -136,6 +144,20 @@ describe("the copy table", () => {
     expect(copy.ANCHOR_CARDS[1]?.tag).toBe("Watering.");
   });
 
+  it("names every field the detail place draws, one word for one thing", () => {
+    for (const label of Object.values(copy.FIELDS)) {
+      expect(label.length).toBeGreaterThan(0);
+    }
+    expect(new Set(Object.values(copy.FIELDS)).size).toBe(
+      Object.values(copy.FIELDS).length
+    );
+  });
+
+  it("says the two logbook outcomes as outcomes, never as a verdict", () => {
+    expect(copy.DONE).toBe("Done");
+    expect(copy.WONT_DO).toBe("Won't do");
+  });
+
   it("offers four priorities and five efforts, absent by default", () => {
     expect(copy.PRIORITY_CHIPS).toStrictEqual(["None", "Soon", "Next", "Now"]);
     expect(copy.EFFORT_CHIPS[0]).toBe("None");
@@ -150,6 +172,37 @@ describe("the copy table", () => {
     expect(copy.shelfCopy(LOGBOOK).title).toBe("Logbook");
     // A project carries its OWN name in the bar, not the app's.
     expect(copy.shelfCopy(null, "Kitchen").title).toBe("Kitchen");
+  });
+
+  it("names the toolbar's three lenses and its two orders", () => {
+    expect(copy.LENSES.map((lens) => lens.label)).toStrictEqual([
+      "Fits in 30 min",
+      "Mine",
+      "House",
+    ]);
+    expect(copy.SORT_LABELS.priority).toBe("Priority within date");
+    expect(copy.SORT_LABELS.manual).toBe("Manual order");
+  });
+
+  it("counts the board in the place's own unit, singular at one", () => {
+    expect(copy.boardCount(1, "tasks")).toBe("1 task");
+    expect(copy.boardCount(12, "tasks")).toBe("12 tasks");
+  });
+
+  it("offers quick add five Whens, with No date among them", () => {
+    expect(copy.QUICK_ADD_WHEN.map((choice) => choice.label)).toStrictEqual([
+      "Today",
+      "Tomorrow",
+      "This weekend",
+      "Next week",
+      "No date",
+    ]);
+  });
+
+  it("says what a project needs before it can be one", () => {
+    expect(copy.AREAS).toStrictEqual(["Home", "Work"]);
+    expect(copy.NEW_PROJECT.note).toContain("area");
+    expect(copy.SECTIONS.none).toBe("No section");
   });
 
   it("lists the keyboard map the spec draws", () => {

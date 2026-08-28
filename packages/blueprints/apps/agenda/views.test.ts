@@ -1,12 +1,20 @@
-// The view derivations, asserted directly rather than through a rendered
-// tree: where a grid lands when it opens, which day an event is drawn on, what
-// counts as all-day, what a multi-day run does, and who is waiting on whom.
+// The view derivations, asserted directly rather than through a rendered tree.
 
+import type { ReactElement, ReactNode } from "react";
+import { isValidElement } from "react";
 import { describe, expect, it } from "vitest";
 
-import type { AgEvent } from "./types.ts";
+import { appBar } from "./frame.tsx";
+import type { AgEvent, ViewKind } from "./types.ts";
+import { SEARCH_LABEL } from "./view-copy.ts";
 import {
+  BAND_DESTINATIONS,
+  BAND_SEARCH_ID,
   GRID_OPEN_HOUR,
+  POINTER_VIEWS,
+  TOUCH_VIEWS,
+  VIEWS,
+  bandActiveId,
   bucketByDay,
   defaultView,
   findEvent,
@@ -68,7 +76,14 @@ describe("the anchor lands at now, not at midnight", () => {
 });
 
 describe("which views a surface offers", () => {
-  it("falls Month and Week back to Day on touch, and keeps the rest", () => {
+  it("keeps all five on pointer and offers neither Month nor Week on touch", () => {
+    expect(POINTER_VIEWS).toStrictEqual(VIEWS);
+    expect(TOUCH_VIEWS).not.toContain("month");
+    expect(TOUCH_VIEWS).not.toContain("week");
+  });
+
+  it("resolves a POINTER preference the touch seat cannot draw", () => {
+    // Not a destination falling back: nothing the band offers lands here.
     expect(resolveView("month", true)).toBe("day");
     expect(resolveView("week", true)).toBe("day");
     expect(resolveView("waiting", true)).toBe("waiting");
@@ -79,6 +94,65 @@ describe("which views a surface offers", () => {
     expect(defaultView(true)).toBe("day");
     expect(defaultView(false, "week")).toBe("week");
     expect(defaultView(false, "nonsense")).toBe("month");
+  });
+});
+
+function flatten(node: ReactNode): ReactElement[] {
+  if (Array.isArray(node)) return node.flatMap(flatten);
+  if (!isValidElement(node)) return [];
+  const { children } = node.props as { children?: ReactNode };
+  return [node, ...flatten(children)];
+}
+
+function barOffersSearch(compact: boolean): boolean {
+  const contribution = appBar({
+    view: "day",
+    range: "Today",
+    count: 0,
+    compact,
+    onSetView: () => undefined,
+    onToday: () => undefined,
+    onStep: () => undefined,
+    onNew: () => undefined,
+    onSearch: () => undefined,
+  });
+  return flatten(contribution.actions).some(
+    (element) => (element.props as { label?: string }).label === SEARCH_LABEL
+  );
+}
+
+describe("the compact band is the only band", () => {
+  it("offers no destination that draws a different view", () => {
+    for (const destination of BAND_DESTINATIONS) {
+      if (!VIEWS.includes(destination.id as ViewKind)) continue;
+      const view = destination.id as ViewKind;
+      expect(resolveView(view, true), destination.id).toBe(view);
+      expect(bandActiveId(view), destination.id).toBe(view);
+    }
+    expect(
+      BAND_DESTINATIONS.map((destination) => destination.id)
+    ).not.toContain("month");
+  });
+
+  it("lights nothing for a view it does not carry", () => {
+    expect(bandActiveId("month")).toBeUndefined();
+    expect(bandActiveId("week")).toBeUndefined();
+  });
+
+  it("carries Search, which is what lets the bar withdraw its own on compact", () => {
+    // `_shared/app-frame.tsx` withdraws it on the band's promise to carry it.
+    expect(barOffersSearch(false)).toBe(true);
+    expect(barOffersSearch(true)).toBe(false);
+    expect(
+      BAND_DESTINATIONS.some(
+        (destination) => destination.id === BAND_SEARCH_ID
+      ),
+      "compact withdrew Search from the bar and the band does not carry it"
+    ).toBe(true);
+  });
+
+  it("stays inside the frame's cap with More as the fifth", () => {
+    expect(BAND_DESTINATIONS.length).toBeLessThanOrEqual(4);
   });
 });
 

@@ -14,6 +14,7 @@ export interface ChromeSlots {
   calendars: ReactNode;
   /** Layers are NOT calendars — nothing in them can be written to. */
   dayContext: ReactNode;
+  searchField: ReactNode;
   /** Null where the app has nothing to declare — an empty row is chrome. */
   stateRow: ReactNode;
   canvas: ReactNode;
@@ -79,6 +80,8 @@ export function Chrome(props: ChromeProps): ReactNode {
           aria-live="polite"
           hidden
         />
+
+        {props.slots.searchField}
 
         {props.slots.stateRow ? (
           <div className={styles.stateRow}>{props.slots.stateRow}</div>

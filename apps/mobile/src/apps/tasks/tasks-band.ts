@@ -40,6 +40,8 @@ const BAND_ICONS: Readonly<Record<TasksBandDestinationKey, string>> = {
   more: "more-vertical",
 };
 
+export const TASKS_MORE_LABEL = "More";
+
 /** Tasks' five in spec order: web's four destinations plus the sheet. */
 export const TASKS_BAND_DESTINATIONS: readonly TasksBandDestination[] = [
   ...BAND_DESTINATIONS.map((destination) => ({
@@ -47,7 +49,7 @@ export const TASKS_BAND_DESTINATIONS: readonly TasksBandDestination[] = [
     label: destination.label,
     icon: BAND_ICONS[destination.id as TasksBandDestinationKey],
   })),
-  { key: "more", label: "More", icon: BAND_ICONS.more },
+  { key: "more", label: TASKS_MORE_LABEL, icon: BAND_ICONS.more },
 ];
 
 /** The frame's capsule — a frame control, never one of the app's tabs. */

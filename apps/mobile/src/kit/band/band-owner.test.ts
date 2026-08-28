@@ -79,7 +79,6 @@ describe("the band-owner latch", () => {
   });
 
   it("is keyed per app — one answer says nothing about the next app", async () => {
-    // SHELL behaviour: `notes` is an arbitrary next claiming app — why the latch takes an appId.
     writeBandOwner("photos", "host");
     await Store.hydrate(bandOwnerKey("docs"), DEFAULT_BAND_OWNER);
     expect(currentOwner("docs")).toBe("app");
@@ -93,7 +92,8 @@ describe("the band-owner latch", () => {
   });
 
   it("names the claiming apps the settings list offers", () => {
-    // Hand-maintained roster (no "who claimed" channel); notes absent — claims no band.
+    // Hand-maintained roster: no "who claimed" channel exists, so an app that
+    // claims the band (Notes, #882) is only offerable here once listed here.
     expect(BAND_CLAIMING_APPS.map((app) => app.id)).toStrictEqual([
       "photos",
       "docs",
@@ -102,6 +102,7 @@ describe("the band-owner latch", () => {
       "tasks",
       "locker",
       "tally",
+      "notes",
     ]);
     for (const app of BAND_CLAIMING_APPS) {
       expect(app.name.length).toBeGreaterThan(0);

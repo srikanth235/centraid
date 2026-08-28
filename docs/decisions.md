@@ -227,7 +227,7 @@ Applied again 2026-08-20 by [#831](https://github.com/srikanth235/centraid/issue
 
 Restoring a surface is the last step of its rebuild: delete its id from `AWAITING_HANDOFF`, put its rows back on the lists above, and the gates come back on by themselves.
 
-Amended 2026-08-21 by [#834](https://github.com/srikanth235/centraid/issues/834): **Agenda, Notes and Tasks are restored**, web and phone, and that last step is taken — the three ids are out of `AWAITING_HANDOFF` on both surfaces, so only **Tally** is still held back. Their rows are back on `state-honesty`, `shared-css`, `untrusted-rendering` and the accessibility contract, and the phone covers rejoin the virtualization list; Agenda's `day-context` is reached natively (`NATIVE_QUERY_UI`) and Notes' whole manifest through the WebView-app rule, so the rebuild added no `agent-only` withholdings. H-blank retires with the surfaces it described.
+Amended 2026-08-21 by [#834](https://github.com/srikanth235/centraid/issues/834): **Agenda, Notes and Tasks are restored**, web and phone, and that last step is taken — the three ids are out of `AWAITING_HANDOFF` on both surfaces, so only **Tally** is still held back. Their rows are back on `state-honesty`, `shared-css`, `untrusted-rendering` and the accessibility contract, and the phone covers rejoin the virtualization list; Agenda's `day-context` is reached natively (`NATIVE_QUERY_UI`) and Notes' whole manifest through the WebView-app rule, so the rebuild added no `agent-only` withholdings. H-blank retires with the surfaces it described. The WebView-app clause is superseded by [N-band](#the-phones-notes-and-agenda-covers-882): Notes' phone cover is measured on its own tree.
 
 ## People, links and the sharing plane (#821)
 
@@ -285,6 +285,15 @@ Ruled 2026-08-21 by [#834](https://github.com/srikanth235/centraid/issues/834). 
 | **R-shelf-scope** | Agenda's due-task day shelf reads **the member's own scope only**. There is no cross-vault aggregation behind those counts. A shelf that counts other people's work reintroduces "someone should = no one does" — the number goes up, nobody's name is on it, and the shelf stops being a thing anyone acts on. |
 
 Operationally: the Tasks catalogue copy and [blueprint-seats.md](blueprint-seats.md#north-stars) now say Todoist and only Todoist; Notes' three list queries share one journal-marker module and each states its own absence contract; Agenda carries a `day-context` query, four more entities in `CHANGE_TABLES`, and read-only scopes on the flag vocabulary it needs to answer a tier.
+
+## The phone's Notes and Agenda covers (#882)
+
+Ruled 2026-08-28 by [#882](https://github.com/srikanth235/centraid/issues/882), which drew the phone covers the [#834](https://github.com/srikanth235/centraid/issues/834) rebuild left thin.
+
+| Id | Current decision |
+| --- | --- |
+| **N-band** | **Notes claims the phone band.** Its four places — Library, Notebooks, Journal, Search — plus the frame's own More is the cap, and Capture, Voice, Tags, Trash and Version history are acts behind More, never a sixth tab. Ids, labels and order come from the web shelf tables (`apps/notes/shelves.ts`) through `apps/mobile/src/apps/notes/notes-band.ts`, so band, rail and app bar cannot disagree, and `notes` sits on `BAND_CLAIMING_APPS`. The cover dispatches every Notes write natively and answers every named query over the replica session's own three transports, so **`WEBVIEW_APPS` is retired** from `handler-reachability.test.ts` — this **supersedes** the 2026-08-21 amendment's clause reaching Notes' manifest "through the WebView-app rule" ([Surfaces held back for a design handoff](#surfaces-held-back-for-a-design-handoff)), and each surface is now measured on its own tree. What the phone withholds is registered in [design-divergences.md](design-divergences.md#agenda-notes-and-tasks--rebuild-divergences-834). |
+| **A-touchviews** | **Agenda's touch view set is `day` / `schedule` / `waiting`.** Month and Week are absent **by type** — `TouchView` in `apps/agenda/views.ts` does not name them — not coerced at the last moment; `resolveView` stays only as the defence for a stored pointer knob arriving on a touch seat, never as the mechanism. Seven columns at 390px are unreadable, and a destination that silently draws a different view is worse than an absent one. **Search is a band destination on both seats**, from the one `BAND_DESTINATIONS` table the web frame (`apps/agenda/frame.tsx`) and the phone band (`apps/mobile/src/apps/agenda/agenda-band.ts`) both read; the app bar withdraws its own Search on compact precisely because the band carries it. |
 
 ## Tally's remaining engineering asks (#873)
 

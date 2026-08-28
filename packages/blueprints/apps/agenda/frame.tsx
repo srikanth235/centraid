@@ -9,7 +9,6 @@ import {
   countLabel,
 } from "../_shared/app-frame.tsx";
 import type { AppBarBase } from "../_shared/app-frame.tsx";
-import type { BandDestination } from "../_shared/shelves.ts";
 import type {
   InlineAppBarContribution,
   InlineBandClaim,
@@ -24,20 +23,7 @@ import {
   VIEW_LABELS,
   VIEW_UNITS,
 } from "./view-copy.ts";
-import { POINTER_VIEWS, TOUCH_VIEWS } from "./views.ts";
-
-const BAND_ICONS: Readonly<Record<ViewKind, string>> = {
-  month: "Calendar",
-  week: "Calendar",
-  day: "Clock",
-  schedule: "List",
-  waiting: "Users",
-};
-
-/** Compact band destinations are views; the frame enforces its own cap. */
-export const BAND_DESTINATIONS: readonly BandDestination[] = TOUCH_VIEWS.map(
-  (view) => ({ id: view, label: VIEW_LABELS[view], icon: BAND_ICONS[view] })
-);
+import { BAND_DESTINATIONS, POINTER_VIEWS, bandActiveId } from "./views.ts";
 
 export interface AppBarState extends AppBarBase {
   view: ViewKind;
@@ -55,7 +41,7 @@ export function barCount(state: AppBarState): ReactNode {
   return countLabel(state.count, VIEW_UNITS[state.view]);
 }
 
-/** Pointer-only switcher; on compact the band carries the same destinations. */
+/** Pointer-only switcher; on compact the band carries Search too. */
 export function appBar(state: AppBarState): InlineAppBarContribution {
   const disabled = state.newDisabledReason !== undefined;
   const handleToday = state.onToday;
@@ -113,11 +99,11 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
   return { title: state.range, count: barCount(state), actions };
 }
 
-/** Ignored off compact. */
+/** Ignored off compact. Takes the RESOLVED view. */
 export function bandClaim(
   view: ViewKind,
   onSelect: (segment: string) => void,
   onMore: () => void
 ): InlineBandClaim {
-  return claimBand(BAND_DESTINATIONS, view, onSelect, onMore);
+  return claimBand(BAND_DESTINATIONS, bandActiveId(view), onSelect, onMore);
 }

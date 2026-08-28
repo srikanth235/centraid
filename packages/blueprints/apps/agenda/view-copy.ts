@@ -21,6 +21,7 @@ export const VIEW_UNITS: Readonly<Record<ViewKind, string>> = {
 
 export const NEW_EVENT = "New event";
 export const SEARCH_LABEL = "Search agenda";
+export const BAND_SEARCH = "Search";
 export const TODAY = "Today";
 export const PREVIOUS = "Previous";
 export const NEXT = "Next";
