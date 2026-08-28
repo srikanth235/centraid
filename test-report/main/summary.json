@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-28T10:56:33.170Z",
-  "passed": 1436,
+  "generatedAt": "2026-08-28T13:58:51.614Z",
+  "passed": 1453,
   "failed": 0,
   "skipped": 0,
   "skippedTests": 37,
@@ -177,8 +177,8 @@
   ],
   "newFailedCellIds": [],
   "floorSeries": {
-    "coverage:repo-wide:lines": 73.49,
-    "coverage:repo-wide:branches": 62.86,
+    "coverage:repo-wide:lines": 73.25,
+    "coverage:repo-wide:branches": 62.74,
     "coverage:packages/server/src/engine/**:lines": 84.2,
     "coverage:packages/server/src/engine/**:branches": 73.47,
     "coverage:packages/server/src/automation/**:lines": 85.7,
@@ -191,14 +191,14 @@
     "coverage:packages/blueprints/src/**:branches": 83.95,
     "coverage:packages/blueprints/apps/photos/**:lines": 54.42,
     "coverage:packages/blueprints/apps/photos/**:branches": 49.66,
-    "coverage:packages/blueprints/apps/agenda/**:lines": 77.3,
-    "coverage:packages/blueprints/apps/agenda/**:branches": 59.31,
-    "coverage:packages/blueprints/apps/notes/**:lines": 72.1,
-    "coverage:packages/blueprints/apps/notes/**:branches": 53.85,
-    "coverage:packages/blueprints/apps/tasks/**:lines": 60.15,
-    "coverage:packages/blueprints/apps/tasks/**:branches": 45.72,
-    "coverage:packages/blueprints/apps/{_shared,docs,locker,people,tally}/**:lines": 56.87,
-    "coverage:packages/blueprints/apps/{_shared,docs,locker,people,tally}/**:branches": 48.06,
+    "coverage:packages/blueprints/apps/agenda/**:lines": 77.14,
+    "coverage:packages/blueprints/apps/agenda/**:branches": 59.26,
+    "coverage:packages/blueprints/apps/notes/**:lines": 74.06,
+    "coverage:packages/blueprints/apps/notes/**:branches": 55.36,
+    "coverage:packages/blueprints/apps/tasks/**:lines": 65.1,
+    "coverage:packages/blueprints/apps/tasks/**:branches": 51.79,
+    "coverage:packages/blueprints/apps/{_shared,docs,locker,people,tally}/**:lines": 57.16,
+    "coverage:packages/blueprints/apps/{_shared,docs,locker,people,tally}/**:branches": 48.58,
     "coverage:packages/model-runtime/src/**:lines": 72.28,
     "coverage:packages/model-runtime/src/**:branches": 61.64,
     "coverage:packages/model-runtime/automation-handlers/**:lines": 86.29,
@@ -229,8 +229,8 @@
     "coverage:packages/cli/src/**:branches": 90,
     "coverage:apps/mobile/src/lib/**:lines": 66.71,
     "coverage:apps/mobile/src/lib/**:branches": 58.11,
-    "coverage:apps/mobile/src/**/*-model.ts:lines": 89.97,
-    "coverage:apps/mobile/src/**/*-model.ts:branches": 75.9,
+    "coverage:apps/mobile/src/**/*-model.ts:lines": 90.23,
+    "coverage:apps/mobile/src/**/*-model.ts:branches": 76.26,
     "coverage:apps/desktop/src/main/*-core.ts:lines": 98.72,
     "coverage:apps/desktop/src/main/*-core.ts:branches": 91.86,
     "coverage:apps/oauth-worker/src/**:lines": 91.91,
@@ -269,49 +269,49 @@
     {
       "kind": "coverage-floor-lag",
       "scope": "packages/blueprints/apps/agenda/**",
-      "value": 77.3,
+      "value": 77.14,
       "floor": 40
     },
     {
       "kind": "coverage-floor-lag",
       "scope": "packages/blueprints/apps/agenda/** (branches)",
-      "value": 59.31,
+      "value": 59.26,
       "floor": 30
     },
     {
       "kind": "coverage-floor-lag",
       "scope": "packages/blueprints/apps/notes/**",
-      "value": 72.1,
+      "value": 74.06,
       "floor": 39
     },
     {
       "kind": "coverage-floor-lag",
       "scope": "packages/blueprints/apps/notes/** (branches)",
-      "value": 53.85,
+      "value": 55.36,
       "floor": 27
     },
     {
       "kind": "coverage-floor-lag",
       "scope": "packages/blueprints/apps/tasks/**",
-      "value": 60.15,
+      "value": 65.1,
       "floor": 37
     },
     {
       "kind": "coverage-floor-lag",
       "scope": "packages/blueprints/apps/tasks/** (branches)",
-      "value": 45.72,
+      "value": 51.79,
       "floor": 25
     },
     {
       "kind": "coverage-floor-lag",
       "scope": "packages/blueprints/apps/{_shared,docs,locker,people,tally}/**",
-      "value": 56.87,
+      "value": 57.16,
       "floor": 41
     },
     {
       "kind": "coverage-floor-lag",
       "scope": "packages/blueprints/apps/{_shared,docs,locker,people,tally}/** (branches)",
-      "value": 48.06,
+      "value": 48.58,
       "floor": 33
     },
     {
