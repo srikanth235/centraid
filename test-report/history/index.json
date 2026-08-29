@@ -1,6 +1,21 @@
 {
-  "updatedAt": "2026-08-28T19:52:37.110Z",
+  "updatedAt": "2026-08-29T13:16:12.421Z",
   "entries": [
+    {
+      "slug": "2026-08-29-33251039421",
+      "date": "2026-08-29",
+      "runId": null,
+      "runUrl": null,
+      "reportPath": "test-report/nightly/runs/2026-08-29-33251039421/",
+      "generatedAt": "2026-08-29T13:15:48.027Z",
+      "passed": 1526,
+      "failed": 37,
+      "skipped": 0,
+      "stale": 1,
+      "cellsFailed": 4,
+      "cellsMissing": 5,
+      "unhandledErrors": 0
+    },
     {
       "slug": "2026-08-28-33196154950",
       "date": "2026-08-28",
