@@ -49,11 +49,11 @@ describe("grant/subject-registry", () => {
   });
 
   test("edit is offered for the one v1 co-contribution type, and no other", () => {
-    // Ruling G-edit (#825): v1 ships edit co-contribution for `tally.group`
-    // only; albums and folders are view-capable and their edit strategy is
-    // deferred. The registry is what the route publishes and what both share
-    // sheets draw pills from, so a wider answer here offers a verb the write
-    // door refuses.
+    // v1 ships edit co-contribution for `tally.group` only (#825). The
+    // registry is what the route publishes and what the share sheets draw
+    // pills from, so a wider answer offers a verb the write door refuses. The
+    // co-contribution list derives from it (#883), so the value is what is
+    // worth asserting.
     expect(
       SHARE_SUBJECT_REGISTRY.filter(
         (entry) => entry.fulfillment.edit !== undefined
@@ -88,8 +88,8 @@ describe("grant/subject-registry", () => {
   });
 
   test("the actable set is the three containers with a declared write surface", () => {
-    // A guard on the guard: were `actable` to be dropped from every route, the
-    // consistency test above would pass vacuously.
+    // A guard on the guard: dropping `actable` everywhere would make the
+    // consistency test above pass vacuously.
     expect([...ACTABLE_CONTAINER_TYPES].sort()).toStrictEqual([
       "core.document",
       "docs.folder",

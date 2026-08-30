@@ -1,16 +1,17 @@
-// The durable replica protocol band (#406). It lives in vault.db so a
-// base-table mutation and its change entry share one SQLite transaction. The
-// per-entity triggers are installed after fresh schema bootstrap by replica/change-log.ts:
-// generating them from the logical registry keeps this DDL independent of the
-// ontology's many primary-key names and also covers live ext tables.
+// The durable replica protocol band (#406), in vault.db so a base-table
+// mutation and its change entry share one transaction. `refreshReplicaTriggers`
+// generates the per-entity triggers from the logical registry, which keeps this
+// DDL free of primary-key names and covers live ext tables.
 
 /**
- * Build-time replica contract epoch. This is intentionally independent of
- * PRAGMA user_version: v0 edits the single fresh schema rung in place, while
- * any incompatible replica wire/trigger change bumps this value and rotates
- * every cursor. It is an invalidation number, not a migration ladder.
+ * Build-time replica contract epoch, deliberately independent of PRAGMA
+ * user_version: any incompatible wire/trigger change bumps it and rotates
+ * every cursor. An invalidation number, not a migration ladder.
  */
-export const REPLICA_SCHEMA_EPOCH = 2;
+// ONE rotation for the whole of #883's schema wave, not one per rung: a seat
+// that re-bootstraps reaches the target shape whether one rung or two produced
+// it, so a second bump would only re-invalidate what is already invalid.
+export const REPLICA_SCHEMA_EPOCH = 3;
 
 export const REPLICA_DDL = `
 CREATE TABLE IF NOT EXISTS replica_meta (
@@ -50,6 +51,14 @@ CREATE TABLE IF NOT EXISTS replica_change (
   row_id          TEXT NOT NULL,
   op              TEXT NOT NULL CHECK (op IN ('insert','update','delete')),
   old_values_json TEXT CHECK (old_values_json IS NULL OR json_valid(old_values_json)),
+  -- Set only on an entry that retention compaction folded OLDER entries of the
+  -- same row into: the op of, and the row state before, the oldest change this
+  -- entry now stands for. NULL means the entry stands for itself, so a reader
+  -- takes op/old_values_json instead. A client whose cursor predates the
+  -- folded entries needs that older state to decide filtered membership; see
+  -- compactSupersededCommits in replica/change-log.ts.
+  prior_op        TEXT CHECK (prior_op IS NULL OR prior_op IN ('insert','update','delete')),
+  prior_old_values_json TEXT CHECK (prior_old_values_json IS NULL OR json_valid(prior_old_values_json)),
   changed_at      TEXT NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_replica_change_epoch_seq

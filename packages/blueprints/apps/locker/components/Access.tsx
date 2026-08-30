@@ -7,6 +7,8 @@
 // is online-only and the screen names the fact it is missing.
 import type { ReactNode } from "react";
 
+import { virtualItemAria } from "../../_shared/virtual-window.ts";
+import { virtualBlockProps } from "../../_shared/VirtualWindow.tsx";
 import {
   accessAt,
   accessMeta,
@@ -29,6 +31,7 @@ import {
 } from "../route-copy.ts";
 import type { LockerAccessEntry } from "../types.ts";
 import { Section } from "./Rows.tsx";
+import { WindowedRows } from "./Windowed.tsx";
 
 import styles from "./Rows.module.css";
 
@@ -103,31 +106,43 @@ export function AccessScreen(props: AccessScreenProps): ReactNode {
               </div>
             }
           >
-            {entries.map((entry) => (
-              <div key={entry.receipt_id} className={styles.rowWrap}>
-                <div className={styles.row}>
-                  <span className={styles.open}>
-                    <span className={styles.title}>{accessVerb(entry)}</span>
-                    <span className={styles.meta}>
-                      {accessMeta(
-                        entry,
-                        entry.item_id
-                          ? (props.titles.get(entry.item_id) ?? entry.item_id)
-                          : null
-                      )}
+            {/* Windowed (#883 C4): the read is 200 receipts by default and
+                2,000 at most, and every reveal in the vault's life writes one.
+                A receipt is a FACT rather than a door, so no block here takes
+                focus — the pin costs nothing and stays anyway, because a row
+                that grows a verb must not have to remember this. */}
+            <WindowedRows className={styles.list} rows={entries}>
+              {(entry, position) => (
+                <li
+                  key={entry.receipt_id}
+                  className={styles.rowWrap}
+                  {...virtualBlockProps(position.index)}
+                  {...virtualItemAria(position.index, position.setSize)}
+                >
+                  <div className={styles.row}>
+                    <span className={styles.open}>
+                      <span className={styles.title}>{accessVerb(entry)}</span>
+                      <span className={styles.meta}>
+                        {accessMeta(
+                          entry,
+                          entry.item_id
+                            ? (props.titles.get(entry.item_id) ?? entry.item_id)
+                            : null
+                        )}
+                      </span>
                     </span>
-                  </span>
-                  {entry.decision === "deny" ? (
-                    <span className={styles.status} data-tone="net">
-                      REFUSED
+                    {entry.decision === "deny" ? (
+                      <span className={styles.status} data-tone="net">
+                        REFUSED
+                      </span>
+                    ) : null}
+                    <span className={`${styles.meta} ${styles.num}`}>
+                      {accessAt(entry.occurred_at)}
                     </span>
-                  ) : null}
-                  <span className={`${styles.meta} ${styles.num}`}>
-                    {accessAt(entry.occurred_at)}
-                  </span>
-                </div>
-              </div>
-            ))}
+                  </div>
+                </li>
+              )}
+            </WindowedRows>
           </Section>
 
           {props.window && entries.length > 0 ? (

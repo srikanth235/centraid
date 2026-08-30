@@ -129,6 +129,7 @@ import {
   closeJournalConversationStores,
   journalConversationStore,
 } from "../journal-stores.js";
+import { unrefTimer } from "../lib/unref-timer.js";
 import {
   resolveAutomationAnchors,
   scopesForAutomationAnchors,
@@ -619,11 +620,9 @@ export interface BuiltGateway {
   extraHandlers: RouteHandler[];
   composedHandler: RouteHandler;
   /**
-   * The `/_centraid-hook/<id>` route (#96), mounted AHEAD of the bearer check
-   * — the shared secret in the request IS the auth. Resolves the slug to its
-   * owning vault across every mounted vault, accepts ingress durably, and
-   * nudges that vault's cursor engine before answering 202. Returns `false`
-   * on a non-matching URL so the host falls through to `composedHandler`.
+   * The `/_centraid-hook/<id>` route (#96), mounted AHEAD of the bearer check —
+   * the shared secret in the request IS the auth. Returns `false` on a
+   * non-matching URL so the host falls through to `composedHandler`.
    */
   webhookHandler: RouteHandler;
   logs: GatewayLogStore;
@@ -858,7 +857,7 @@ export async function buildGateway(
     options.notificationsDoorbellWindowMs ?? 250;
   const notificationsDoorbellWindows = new Map<
     string,
-    { timer: NodeJS.Timeout; pending: boolean }
+    { timer: ReturnType<typeof setTimeout>; pending: boolean }
   >();
   const pendingNotificationsWakes = new Set<string>();
   let requestNotificationsWake: (vaultId: string) => void = (vaultId) => {
@@ -1636,13 +1635,13 @@ export async function buildGateway(
     appId: string
   ): Promise<void> => grantScopesFromDir(plane, appId, bundledAppDir(appId));
 
-  let outboxTimer: NodeJS.Timeout | undefined;
+  let outboxTimer: ReturnType<typeof setTimeout> | undefined;
   const scheduleOutboxSweep = (delayMs: number): void => {
     if (outboxTimer) clearTimeout(outboxTimer);
     outboxTimer = setTimeout(() => {
       void runOutboxSweep();
     }, jitterDelayMs(delayMs));
-    outboxTimer.unref();
+    unrefTimer(outboxTimer);
   };
   const runOutboxSweep = async (): Promise<void> => {
     resourceAccounting.recordBackgroundTimerFire();
@@ -1847,8 +1846,9 @@ export async function buildGateway(
                 laneFor: () => request.lane,
               })?.engine,
             // Read only, and never from the automation's grants: the sole
-            // writer of `enrich_consent` is the journalled
-            // `enrich.record_consent` command inside the vault (#807).
+            // writer of the egress answers is the journalled
+            // `enrich.record_consent` command inside the vault (#807), which
+            // has written them to the one authority plane since #883.
             egressConsent: (egress) =>
               readEnrichConsentForChain(vaultRegistry.current().db.vault, {
                 capability: request.capability,
@@ -1869,7 +1869,7 @@ export async function buildGateway(
                 }).then(() => undefined)
               ).then(resolve, reject);
             });
-            immediate.unref();
+            unrefTimer(immediate);
           });
           trackDetachedAutomationTask(task, `re-arm ${ref}`);
         },
@@ -3143,7 +3143,7 @@ export async function buildGateway(
       fireNotificationsDoorbell(vaultId);
       armNotificationsDoorbellWindow(vaultId);
     }, notificationsDoorbellWindowMs);
-    timer.unref();
+    unrefTimer(timer);
     notificationsDoorbellWindows.set(vaultId, { timer, pending: false });
   };
   const ringNotificationsDoorbell = (vaultId: string): void => {
@@ -3169,7 +3169,11 @@ export async function buildGateway(
 
   provenanceDoorbell = (vaultId, entityTypes) => {
     ringNotificationsDoorbell(vaultId);
-    grantRefreshDoorbell.ring(vaultId);
+    // The commit's entity types are the delivery loop's filter (ruling
+    // V-delivery): a commit that cannot have moved a granted subject wakes
+    // nothing. `undefined` would mean "walk everything", so the hint is passed
+    // through even when it is empty.
+    grantRefreshDoorbell.ring(vaultId, entityTypes ?? []);
     runWithVaultContext({ vaultId }, () =>
       schedulers.get(vaultId)?.nudge(entityTypes)
     );
@@ -3881,9 +3885,16 @@ export async function buildGateway(
             vaultId: plane.boot.vaultId,
             db: plane.db,
             ownerPartyId: plane.boot.ownerPartyId,
+            // The one door (ruling V-writer). The member's own credential: a
+            // share is the member's sentence, and the pack parks anyone else.
+            invoke: (command, input) =>
+              plane.invoke(plane.ownerCredential, {
+                command,
+                input,
+                purpose: "dpv:ServiceProvision",
+              }),
           };
         },
-        host: grantFulfillmentHost,
       })
     ),
     forRoutePrefixes(
@@ -4338,17 +4349,12 @@ export async function buildGateway(
   ];
 
   /*
-   * Gateway-wide operator surfaces (#865 F2). The registry's `admin` tier
-   * splits by vault scope on purpose: the `active` rows (backup/demo) operate
+   * Gateway-wide operator surfaces (#865 F2). The `active` admin rows work
    * inside one vault and already refuse per-request through
-   * `vaultOwnerRefusal`, so they must NOT be blanket-refused here. The
-   * remaining admin rows — resource/diagnostics/storage/logs plus owners —
-   * are gateway-wide reads with no vault context, and those are exactly the
-   * surfaces a proved DEVICE identity never reaches: the tier is enforced at
-   * this dispatch point against the plane `startRuntimeHttpServer` stamped,
-   * so a paired device (or a PWA proxy session that resolves to a device
-   * key) gets a 403 while the loopback bearer (`admin` plane — the owner's
-   * own path) still passes.
+   * `vaultOwnerRefusal`, so they must NOT be blanket-refused here. The rest
+   * have no vault context and are exactly what a proved DEVICE identity never
+   * reaches: judged here against the plane `startRuntimeHttpServer` stamped,
+   * so a paired device gets 403 while the loopback bearer passes.
    */
   const ADMIN_GATEWAY_WIDE_PREFIXES = ROUTE_SECURITY_REGISTRY.filter(
     (row) => row.auth === "admin" && row.vaultScope !== "active"

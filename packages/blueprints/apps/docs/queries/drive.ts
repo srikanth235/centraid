@@ -6,14 +6,22 @@
  */
 
 import {
+  FLAGS_SCHEME_URI,
+  FOLDER_SCHEME_URI,
+  ROOT_FOLDER_NOTATION,
+  STARRED_NOTATION,
+  conceptsInScheme,
+  findConcept,
+  findScheme,
+  findSchemeConcept,
+} from "../../_shared/concept-scheme-kit.ts";
+import {
   readCustodyByContent,
   readLabelsByDocument,
   readSharesByDocument,
 } from "./_shared.ts";
 import type { ConceptRow, SchemeRow, TagRow } from "./_shared.ts";
 
-const FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
-const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 const DOCUMENT_TARGET_TYPE = "core.document";
 
 interface DocumentRow {
@@ -44,11 +52,9 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
     const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
 
-    const scheme = schemeRows.find((s) => s.uri === FOLDER_SCHEME_URI);
-    const schemeConcepts = conceptRows.filter(
-      (c) => scheme && c.scheme_id === scheme.scheme_id
-    );
-    const root = schemeConcepts.find((c) => c.notation === "root");
+    const scheme = findScheme(schemeRows, FOLDER_SCHEME_URI);
+    const schemeConcepts = conceptsInScheme(conceptRows, scheme);
+    const root = findConcept(schemeConcepts, scheme, ROOT_FOLDER_NOTATION);
     const rootFolderId = root?.concept_id ?? null;
 
     const folders = schemeConcepts
@@ -98,17 +104,16 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       };
     }
 
-    // Starred is a flags-scheme tag (#274); no concept, never starred.
-    const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
-    const starredConcept = flagsScheme
-      ? conceptRows.find(
-          (c) =>
-            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
-        )
-      : undefined;
+    // Starred is a flags-scheme tag (#274): no concept, never starred.
+    const starredConcept = findSchemeConcept(
+      schemeRows,
+      conceptRows,
+      FLAGS_SCHEME_URI,
+      STARRED_NOTATION
+    );
 
-    // A share denial returns `null`, not an error — the drive must still
-    // answer while those scopes park for approval (#821).
+    // A share denial returns `null`, not an error: the drive still answers
+    // while those scopes park for approval (#821).
     const windowedIds = [...folderByDoc.keys()];
     const [documentsRes, starTags, tagsByDoc, sharesByDoc] = await Promise.all([
       ctx.vault.read({
@@ -172,8 +177,8 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       ])
     );
 
-    // Blob bytes (#296) leave as same-origin serve URLs so Range and caching
-    // work; data: URIs pass through.
+    // Blob bytes (#296) serve as same-origin URLs so Range and caching work;
+    // data: URIs pass through.
     const srcOf = (c: ContentRow | undefined) =>
       typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}`
@@ -189,7 +194,6 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
         const c = contentById.get(d.current_content_id);
         return {
           document_id: d.document_id,
-          // UI identity is document_id, which survives an edit.
           content_id: d.current_content_id,
           title: d.title,
           media_type: c?.media_type ?? null,

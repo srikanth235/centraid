@@ -47,9 +47,9 @@ export interface ReplicaSnapshotRow {
 }
 
 /**
- * Everything a replica needs before any row lands: identity, the schema epoch
- * and the shape catalog. A single-shot snapshot carries it alongside its rows;
- * a windowed bootstrap takes it from page 1 and streams rows across pages.
+ * Everything a replica needs before any row lands: identity, schema epoch, shape
+ * catalog. A snapshot carries it with its rows; a windowed bootstrap takes it
+ * from page 1.
  */
 export interface ReplicaBootstrapHeader {
   protocolVersion: typeof REPLICA_PROTOCOL_VERSION;
@@ -152,9 +152,8 @@ export interface ReplicaReadRequest {
 }
 
 /**
- * Bounded local equivalent of the vault search plane. Only replica search
- * surfaces whose complete indexed text is present in the shape are eligible;
- * unsupported entities/features fail with a typed OnlineOnlyError.
+ * Bounded local equivalent of the vault search plane. Eligible only where the
+ * shape holds the complete indexed text; anything else fails OnlineOnlyError.
  */
 export interface ReplicaSearchRequest {
   shapeId: string;
@@ -168,6 +167,9 @@ export interface ReplicaSearchRequest {
 export interface ReplicaDependency {
   shapeId: string;
   entity: string;
+  /** The one row this dependency is confined to. ABSENT MEANS THE WHOLE
+   *  ENTITY, which is what the engine emits today (#883). */
+  rowId?: string;
 }
 
 export interface ReplicaRowEnvelope {
@@ -194,7 +196,7 @@ export interface ReplicaSearchWireResult {
 
 export interface ReplicaReadResult {
   rows: ReplicaRow[];
-  /** Local reads have no consent receipt; the cursor makes their origin inspectable. */
+  /** No consent receipt locally; the cursor makes the origin inspectable. */
   receiptId: string;
   dependency: ReplicaDependency;
   coverage?: ReplicaCoverage;
@@ -202,7 +204,7 @@ export interface ReplicaReadResult {
 
 export interface ReplicaSearchResult {
   rows: ReplicaRow[];
-  /** Local searches have no consent receipt; the cursor makes their origin inspectable. */
+  /** No consent receipt locally; the cursor makes the origin inspectable. */
   receiptId: string;
   dependency: ReplicaDependency;
   coverage?: ReplicaCoverage;

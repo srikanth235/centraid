@@ -1,7 +1,15 @@
-// URI copies in vault/people.ts + queries/journal.ts are deliberate.
-export const JOURNAL_SCHEME_URI = "https://centraid.dev/schemes/people-journal";
+import {
+  JOURNAL_ENTRY_NOTATION,
+  JOURNAL_SCHEME_URI,
+  findConcept,
+  findScheme,
+} from "./concept-scheme-kit.ts";
 
-export const JOURNAL_ENTRY_NOTATION = "entry";
+// Re-exported: the kit owns every scheme URI a blueprint names.
+export {
+  JOURNAL_ENTRY_NOTATION,
+  JOURNAL_SCHEME_URI,
+} from "./concept-scheme-kit.ts";
 
 interface SchemeRow {
   scheme_id: string;
@@ -30,8 +38,9 @@ export async function readJournalNoteIds(
     where: [{ column: "uri", op: "eq", value: JOURNAL_SCHEME_URI }],
     purpose,
   });
-  const scheme = ((schemes.rows ?? []) as unknown as SchemeRow[]).find(
-    (row) => row.uri === JOURNAL_SCHEME_URI
+  const scheme = findScheme(
+    (schemes.rows ?? []) as unknown as SchemeRow[],
+    JOURNAL_SCHEME_URI
   );
   if (!scheme) return new Set<string>();
 
@@ -40,10 +49,10 @@ export async function readJournalNoteIds(
     where: [{ column: "scheme_id", op: "eq", value: scheme.scheme_id }],
     purpose,
   });
-  const marker = ((concepts.rows ?? []) as unknown as ConceptRow[]).find(
-    (row) =>
-      row.scheme_id === scheme.scheme_id &&
-      row.notation === JOURNAL_ENTRY_NOTATION
+  const marker = findConcept(
+    (concepts.rows ?? []) as unknown as ConceptRow[],
+    scheme,
+    JOURNAL_ENTRY_NOTATION
   );
   if (!marker) return new Set<string>();
 

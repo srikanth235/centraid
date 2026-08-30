@@ -1,12 +1,13 @@
 // Non-visual business logic; never a second copy of mutable state.
-// `createLogic()` closes over the `state`/`data` app.tsx owns BY REFERENCE
-// (app.tsx mutates their properties, never reassigns the bindings).
+// `createLogic()` closes over app.tsx's `state`/`data` BY REFERENCE: app.tsx
+// mutates their properties and never reassigns the bindings.
 import {
   outcomeMessage,
   runBulk as runBulkBase,
   statusLine,
 } from "@centraid/design/elements";
 
+import { pruneSelection } from "../_shared/selection-engine.ts";
 import { applyFilters } from "./filters.ts";
 import { typeMeta } from "./format.ts";
 import { createMetadata } from "./metadata.ts";
@@ -18,12 +19,12 @@ import { createVersions } from "./versions.ts";
 
 const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 
-/** A WINDOW, not a filter. Exported because the nav rail's count must be the
- *  number this shelf draws (v16 §3). */
+/** A WINDOW, not a filter: the nav rail's count must be the number this shelf
+ *  draws (v16 §3). */
 export const RECENT_WINDOW = 8;
 
 // The gateway stringifies a failed precondition as `"name: column op value"`,
-// so the lookup keys off the substring before ": " or every entry is dead.
+// so the lookup keys off the substring before ": ".
 const FRIENDLY_PREDICATES: Record<string, string> = {
   not_rented_elsewhere:
     "This file is in use elsewhere in your vault (an attachment, a note, an avatar…) — remove it there first.",
@@ -116,7 +117,6 @@ export function createLogic({
     return data.documents.filter((f) => f.trashed);
   }
 
-  // `changed` reads `updated_at`, the date the row PRINTS.
   function compareDocs(a: DriveDoc, b: DriveDoc): number {
     let r = 0;
     if (state.sortKey === "size") r = (a.byte_size ?? 0) - (b.byte_size ?? 0);
@@ -129,7 +129,7 @@ export function createLogic({
           sensitivity: "base",
         }
       );
-    // A no-op while this drive projects ONE vault; dropping it would leave
+    // A no-op while this drive projects ONE vault, but dropping it leaves
     // Owner the one unpressable head.
     else if (state.sortKey === "owner") r = 0;
     else if (state.sortKey === "kind")
@@ -144,7 +144,6 @@ export function createLogic({
     return r * state.sortDir;
   }
 
-  // nav (or search) → type filter → tag filter → sort.
   function currentRows(): DriveDoc[] {
     const { shelf, tag, search } = state;
     const folderId = folderIdFrom(shelf);
@@ -181,8 +180,25 @@ export function createLogic({
     state.selected.clear();
     state.anchorIndex = null;
   }
+  /** The selection AS THE MEMBER CAN SEE IT (#883): the FILTERED set, never the
+   *  whole table, so a shelf change cannot carry off-screen rows into a batch
+   *  write. Pruned in step, so this and the bar's count agree. */
   function selectedDocs(): DriveDoc[] {
-    return data.documents.filter((d) => state.selected.has(d.document_id));
+    return state.visibleRows.filter((d) => state.selected.has(d.document_id));
+  }
+
+  /** Drop keys the current filter no longer shows: a filter change is the only
+   *  thing that can strand a key, and the only thing that recomputes this. */
+  function pruneVisibleSelection(): void {
+    if (state.selected.size === 0) return;
+    const kept = pruneSelection(
+      state.selected,
+      state.visibleRows.map((row) => row.document_id)
+    );
+    if (kept.size === state.selected.size) return;
+    state.selected.clear();
+    for (const key of kept) state.selected.add(key);
+    state.anchorIndex = null;
   }
   function toggleSelect(id: string, index: number, shift: boolean) {
     const sel = state.selected;
@@ -288,7 +304,6 @@ export function createLogic({
     }
   }
 
-  // kit runBulk in this app's voice, with the fixed tail: clear, then refresh.
   const runBulk = (
     ids: string[],
     run: (id: string) => Promise<VaultOutcome | undefined>,
@@ -340,7 +355,6 @@ export function createLogic({
       }
     );
   }
-  /** The bar names its verb from this, so label and press cannot disagree. */
   function selectionAllStarred(): boolean {
     const docs = selectedDocs();
     return docs.length > 0 && docs.every((d) => d.starred);
@@ -446,6 +460,7 @@ export function createLogic({
     clearSelection,
     selectedDocs,
     toggleSelect,
+    pruneVisibleSelection,
     toggleAllVisible,
     openMovePopover,
     openDocMenu,

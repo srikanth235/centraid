@@ -237,7 +237,8 @@ export const PENDING_CHIP = "Saved on this device · queued for the vault";
 export const PENDING_ROW = "not in the vault yet";
 
 export function pendingStatus(writes: number): string {
-  return `${writes} writes are on this device · they settle when the gateway answers`;
+  const noun = writes === 1 ? "write is" : "writes are";
+  return `${writes} ${noun} on this device · they settle when the gateway answers`;
 }
 
 export function staleNotice(at: string): string {

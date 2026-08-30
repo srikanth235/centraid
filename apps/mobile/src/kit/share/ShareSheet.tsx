@@ -23,6 +23,7 @@ import {
 import { listLinks } from "../../lib/replica/links-transport";
 import type { GatewayLink } from "../../lib/replica/links-transport";
 import { Text } from "../components/NativeText";
+import Tappable from "../components/Tappable";
 import TopSafeArea from "../components/TopSafeArea";
 import { useReplicaQuery } from "../hooks/useReplicaQuery";
 import { useReplica } from "../replica/ReplicaProvider";
@@ -221,9 +222,9 @@ export default function ShareSheet({
           <Text style={[styles.title, { color: colors.text }]}>
             Share {noun.toLowerCase()}
           </Text>
-          <Pressable accessibilityRole="button" onPress={onClose}>
+          <Tappable accessibilityLabel="Cancel" onPress={onClose}>
             <Text style={{ color: colors.accent }}>Cancel</Text>
-          </Pressable>
+          </Tappable>
         </View>
 
         <Text style={[styles.note, { color: colors.textSoft }]}>

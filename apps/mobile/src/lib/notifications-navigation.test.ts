@@ -49,11 +49,25 @@ describe(mobileNotificationsDestination, () => {
         })
       )
     ).toStrictEqual({ kind: "outbox", itemId: "item-1" });
-    // An app-scoped notice has no per-app screen to open (#799: no WebView
-    // cover) — it stays on the notice list rather than guessing.
+    // No per-app screen exists to open (#799).
     expect(
       mobileNotificationsDestination(
         notice("app", "tasks", { sourceType: "app", appId: "tasks" })
+      )
+    ).toStrictEqual({ kind: "notifications" });
+  });
+
+  test("a received share stays on the list — there is no route that means it", () => {
+    // Opening Photos on an unrelated grid is a guess, not a destination
+    // (#883 V-notice).
+    expect(
+      mobileNotificationsDestination(
+        notice("share-received", "grant-1", {
+          sourceType: "share",
+          grantId: "grant-1",
+          granterName: "Priya",
+          subjectType: "core.collection",
+        })
       )
     ).toStrictEqual({ kind: "notifications" });
   });

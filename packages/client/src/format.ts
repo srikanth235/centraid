@@ -1,8 +1,9 @@
-// Pure formatting helpers: no DOM, `window`, network, or IPC — deterministic transforms only.
+// Pure formatting helpers: no DOM, network or IPC — deterministic only.
 
 import { formatBytes as sharedFormatBytes } from "@centraid/design";
 
-export type CodeLang = "html" | "js" | "ts" | "css" | "json" | "md" | "other";
+// Callers name a language through `languageHint`/`LANG_DISPLAY`.
+type CodeLang = "html" | "js" | "ts" | "css" | "json" | "md" | "other";
 
 /** Escape &, <, > so source text renders inert. */
 export function escapeHtml(s: string): string {
@@ -20,7 +21,7 @@ export interface TokenClasses {
   com: string;
 }
 
-/** Unscoped `tok-*` defaults, kept for tests/plain hosts. */
+/** Unscoped `tok-*` defaults for tests/plain hosts. */
 export const DEFAULT_TOKEN_CLASSES: TokenClasses = {
   attr: "tok-attr",
   com: "tok-com",
@@ -30,9 +31,9 @@ export const DEFAULT_TOKEN_CLASSES: TokenClasses = {
 };
 
 /**
- * Dependency-free syntax highlighter; emits HTML with per-kind span classes
- * (`classes`, defaulting to `tok-*`). Tokens wrap placeholder control chars
- * first so a later regex can't match injected text; spans swap in at the end.
+ * Emits HTML with per-kind span classes (`classes`, default `tok-*`). Tokens
+ * wrap placeholder control chars first so a later regex cannot match injected
+ * text; spans swap in at the end.
  */
 export function tokenize(
   src: string,

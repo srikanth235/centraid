@@ -124,7 +124,7 @@ describe("tally: groups", () => {
     ).toBe(0);
   });
 
-  test("set_expense_memo writes the canonical annotation; empty note clears it (#310 C6)", () => {
+  test("set_expense_memo writes the canonical annotation, replaces on edit, and clears on empty (#310 C6)", () => {
     const priya = addFriend();
     const gid = out<{ group_id: string }>(
       invoke("tally.create_group", {
@@ -158,6 +158,21 @@ describe("tally: groups", () => {
       )
       .get(xid) as { body_text: string } | undefined;
     expect(memo?.body_text).toBe("Landlord still owes us");
+    out(
+      invoke("tally.set_expense_memo", {
+        expense_id: xid,
+        note: "Landlord paid up",
+      })
+    );
+    expect(
+      (
+        db.vault
+          .prepare(
+            `SELECT body_text FROM knowledge_annotation WHERE target_type = 'tally.expense' AND target_id = ?`
+          )
+          .all(xid) as { body_text: string }[]
+      ).map((row) => row.body_text)
+    ).toStrictEqual(["Landlord paid up"]);
     out(invoke("tally.set_expense_memo", { expense_id: xid, note: "" }));
     expect(
       (

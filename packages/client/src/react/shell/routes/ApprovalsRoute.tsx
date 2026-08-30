@@ -62,8 +62,8 @@ interface Approvals {
   notifications: Awaited<ReturnType<typeof getNotifications>>;
   grants: Awaited<ReturnType<typeof listOutboxGrants>>;
   review: Awaited<ReturnType<typeof getReview>>;
-  /** WIRE shape: `groupGrantsByStore` reshapes at render time, so a revoke
-   *  splices one grant rather than re-deriving the grouping. */
+  /** WIRE shape: `groupGrantsByStore` reshapes at render, so a revoke splices
+   *  one grant rather than re-deriving the grouping. */
   apps: Awaited<ReturnType<typeof vaultApps>>;
   agents: Awaited<ReturnType<typeof listAgents>>;
   /** Read-only here — never re-ask the question. `null` on a gateway older
@@ -80,24 +80,22 @@ async function loadApprovals(reviewLimit: number): Promise<Approvals> {
       vaultApps(),
       listAgents(),
       // `null`, not `[]`: no answers on record and a gateway that cannot be
-      // asked are different facts (#815).
+      // asked are different facts.
       listEnrichEgressConsent().catch(() => null),
     ]);
   return { notifications, grants, review, apps, agents, enrichConsent };
 }
 
-/** Stated in place on the card: never move a member off the sentence they are
- *  deciding about. */
 const DISCARD_CONSEQUENCE = "Nothing will be sent. This can’t be undone.";
 
 // The Notifications route (#306/#308/#647): wire rows map to the screen's DTOs
-// in `approvalsData.ts`, decisions go back over `gateway-client-outbox`. Every
-// irreversible verb confirms IN PLACE beside its row (#815) — no overlay.
+// in `approvalsData.ts`, decisions return over `gateway-client-outbox`. Every
+// irreversible verb confirms IN PLACE beside its row, never in an overlay.
 export default function ApprovalsRoute(): JSX.Element {
   const { showToast, navigate } = useShellActions();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reviewLimit, setReviewLimit] = useState(REVIEW_LIMIT_DEFAULT);
-  // A nonce, not a callback: a repeat press must be a fresh request.
+  // A nonce, not a callback: a repeat press is a fresh request.
   const [reviewAll, setReviewAll] = useState<{ nonce: number } | null>(null);
 
   const [focusOutbox, setFocusOutbox] = useState<{
@@ -105,7 +103,7 @@ export default function ApprovalsRoute(): JSX.Element {
     nonce: number;
   } | null>(null);
 
-  // Rides down to the screen: a refusal belongs beside its item.
+  // Rides down to the screen: a refusal belongs beside its row.
   const [refusal, setRefusal] = useState<{
     itemId: string | null;
     message: string;
@@ -113,7 +111,7 @@ export default function ApprovalsRoute(): JSX.Element {
   } | null>(null);
   const refusals = useRef(0);
 
-  // Stale-while-revalidate (#659): revalidation happens BEHIND the page, so
+  // Stale-while-revalidate (#659): revalidation runs BEHIND the page, so
   // half-edited text, expansions and chips survive.
   const { state, refresh, mutate } = useCachedQuery(
     `approvals:${reviewLimit}`,
@@ -144,8 +142,8 @@ export default function ApprovalsRoute(): JSX.Element {
     return () => clearRouteSignals("approvals");
   }, [navigate]);
 
-  // From the query resolution, never from a render: the bar and the body must
-  // not disagree about the page's state.
+  // From the query resolution, never a render: the bar and the body must not
+  // disagree about the page's state.
   const pending =
     state.status === "ready" ? state.data.notifications.decisions : null;
   // Decisions, plus notices that demand: info severity never blocks.
@@ -188,7 +186,7 @@ export default function ApprovalsRoute(): JSX.Element {
   }, [standing, state.status, waiting]);
 
   /** The row leaves the page the moment the owner decides (#659); `apply` is
-   *  that edit, and a rejection restores the page exactly and says why. */
+   *  that edit, and a rejection restores the page and says why. */
   const runDecision = async (
     id: string,
     action: () => Promise<void>,
@@ -415,8 +413,8 @@ export default function ApprovalsRoute(): JSX.Element {
     );
   }
   if (state.status === "error") {
-    // What failed, what is still safe, one way forward — the shape all six
-    // operational routes take, carrying the gateway's words as a fact.
+    // What failed, what is still safe, one way forward — the shape every
+    // operational route takes, carrying the gateway's words as a fact.
     return (
       <PageScroll>
         <PanelBlock
@@ -457,7 +455,10 @@ export default function ApprovalsRoute(): JSX.Element {
           sourceType:
             notice.detail.sourceType === "automation" ||
             notice.detail.sourceType === "agent" ||
-            notice.detail.sourceType === "app"
+            notice.detail.sourceType === "app" ||
+            // A received share is another person's decision (#883): reading it
+            // as "app" would file it under this vault's own machinery.
+            notice.detail.sourceType === "share"
               ? notice.detail.sourceType
               : "app",
           detailText:
@@ -471,9 +472,13 @@ export default function ApprovalsRoute(): JSX.Element {
               ? notice.detail.automationRef
               : typeof notice.detail.actor === "string"
                 ? notice.detail.actor
-                : typeof notice.detail.gatewayLabel === "string"
-                  ? notice.detail.gatewayLabel
-                  : null,
+                : // Name the sharer: a card about somebody's decision that
+                  // does not name them cannot be acted on.
+                  typeof notice.detail.granterName === "string"
+                  ? notice.detail.granterName
+                  : typeof notice.detail.gatewayLabel === "string"
+                    ? notice.detail.gatewayLabel
+                    : null,
         }))}
         activityTruncated={activityTruncated}
         busyId={busyId}
@@ -496,8 +501,8 @@ export default function ApprovalsRoute(): JSX.Element {
           } else if (typeof notice.detail.enrichDomain === "string") {
             navigate({ kind: "automations" });
           } else if (notice.kind === "gateway-health") {
-            // Legacy rows only (#665): old cards survive in vault.db until
-            // archived and still point at Alerts.
+            // Legacy rows only (#665): old cards survive until archived and
+            // still point at Alerts.
             navigate({ kind: "gateway", tab: "alerts" });
           } else if (typeof appId === "string") {
             navigate({ kind: "app", id: appId });

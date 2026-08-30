@@ -3,18 +3,17 @@ import { describe, expect, it } from "vitest";
 // The band's rules, asserted without a renderer (#834).
 //
 // `tasks-band.ts` is deliberately free of `react-native` imports so the CAP,
-// the ownership latch and the sheet's contents can be checked as values. What
-// this file really guards is that the phone's band and the pointer seats' band
-// are one table: the labels are imported from the blueprint, so a rename there
-// that did not reach here would fail as a mismatch rather than ship as two
-// vocabularies.
+// the ownership latch and the sheet can be checked as values. What this really
+// guards is that the phone's band and the pointer seats' band are one table:
+// a blueprint rename that did not reach here fails as a mismatch rather than
+// shipping as two vocabularies.
 import {
   BAND_DESTINATIONS,
   MORE_SHELVES,
 } from "@centraid/blueprints/apps/tasks/shelves";
 
 import {
-  TASKS_BAND_CAPSULE,
+  BAND_CAPSULE,
   TASKS_BAND_DESTINATIONS,
   TASKS_BAND_MAX_DESTINATIONS,
   TASKS_MORE_ROWS,
@@ -47,8 +46,8 @@ describe("the band Tasks claims", () => {
   });
 
   it("keeps the capsule outside the tab group, always", () => {
-    expect(TASKS_BAND_CAPSULE.inTabGroup).toBe(false);
-    expect(TASKS_BAND_CAPSULE.edge).toBe("leading");
+    expect(BAND_CAPSULE.inTabGroup).toBe(false);
+    expect(BAND_CAPSULE.edge).toBe("leading");
   });
 
   it("resolves to the app's band by default and the host's on request", () => {

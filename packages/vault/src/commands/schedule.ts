@@ -224,7 +224,9 @@ const RESCHEDULE_EVENT: CommandDefinition = {
   preconditions: [
     {
       name: "event_exists_not_cancelled",
-      sql: `SELECT count(*) AS n FROM core_event WHERE event_id = :event_id AND status != 'cancelled'`,
+      sql: `SELECT count(*) AS n FROM core_event
+             WHERE event_id = :event_id AND status != 'cancelled'
+               AND deleted_at IS NULL`,
       column: "n",
       op: "eq",
       value: 1,
@@ -321,7 +323,9 @@ const RESPOND_RSVP: CommandDefinition = {
     },
     {
       name: "event_not_cancelled",
-      sql: `SELECT count(*) AS n FROM core_event WHERE event_id = :event_id AND status != 'cancelled'`,
+      sql: `SELECT count(*) AS n FROM core_event
+             WHERE event_id = :event_id AND status != 'cancelled'
+               AND deleted_at IS NULL`,
       column: "n",
       op: "eq",
       value: 1,
@@ -388,7 +392,9 @@ const CANCEL_EVENT: CommandDefinition = {
   preconditions: [
     {
       name: "event_exists_not_cancelled",
-      sql: `SELECT count(*) AS n FROM core_event WHERE event_id = :event_id AND status != 'cancelled'`,
+      sql: `SELECT count(*) AS n FROM core_event
+             WHERE event_id = :event_id AND status != 'cancelled'
+               AND deleted_at IS NULL`,
       column: "n",
       op: "eq",
       value: 1,
@@ -442,10 +448,135 @@ function cancelEvent(ctx: HandlerCtx): Record<string, unknown> {
   return { event_id: input.event_id, sequence };
 }
 
+/** ~30-day grace before the lifecycle sweep purges — the window every other
+ *  app already carries (#883, ruling O-trash). */
+const EVENT_PURGE_DAYS = 30;
+
+export function eventPurgeAt(now: string): string {
+  const date = new Date(now);
+  date.setUTCDate(date.getUTCDate() + EVENT_PURGE_DAYS);
+  return date.toISOString();
+}
+
+/**
+ * Agenda's delete, which until #883 did not exist: cancelling an event is an
+ * iCalendar STATUS revision that attendees see, not a removal, so a member who
+ * wanted a mistaken entry GONE had nothing to reach for. Ruling O-trash gives
+ * Agenda the same reversible delete its neighbours carry rather than a second
+ * law for one gesture; `cancel_event` keeps its own, different meaning.
+ */
+const DELETE_EVENT: CommandDefinition = {
+  name: "schedule.delete_event",
+  ownerSchema: "schedule",
+  inputSchema: {
+    type: "object",
+    required: ["event_id"],
+    additionalProperties: false,
+    properties: { event_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["event_id", "purge_at"],
+    properties: { event_id: { type: "string" }, purge_at: { type: "string" } },
+  },
+  preconditions: [
+    {
+      name: "event_live",
+      sql: `SELECT count(*) AS n FROM core_event
+             WHERE event_id = :event_id AND deleted_at IS NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "event_trashed",
+      sql: `SELECT count(*) AS n FROM core_event
+             WHERE event_id = :event_id AND deleted_at IS NOT NULL
+               AND purge_at IS NOT NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "once",
+  risk: "medium",
+  handler: (ctx) => {
+    const input = ctx.input as { event_id: string };
+    const purgeAt = eventPurgeAt(ctx.now);
+    ctx.db
+      .prepare(
+        `UPDATE core_event SET deleted_at = ?, purge_at = ?, updated_at = ?
+          WHERE event_id = ?`
+      )
+      .run(ctx.now, purgeAt, ctx.now, input.event_id);
+    ctx.wrote("core.event", input.event_id);
+    ctx.cite({
+      claim: `event ${input.event_id} moved to trash`,
+      entityType: "core.event",
+      entityId: input.event_id,
+    });
+    return { event_id: input.event_id, purge_at: purgeAt };
+  },
+};
+
+const RESTORE_EVENT: CommandDefinition = {
+  name: "schedule.restore_event",
+  ownerSchema: "schedule",
+  inputSchema: {
+    type: "object",
+    required: ["event_id"],
+    additionalProperties: false,
+    properties: { event_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["event_id"],
+    properties: { event_id: { type: "string" } },
+  },
+  preconditions: [
+    {
+      name: "event_trashed",
+      sql: `SELECT count(*) AS n FROM core_event
+             WHERE event_id = :event_id AND deleted_at IS NOT NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "event_live_again",
+      sql: `SELECT count(*) AS n FROM core_event
+             WHERE event_id = :event_id AND deleted_at IS NULL
+               AND purge_at IS NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "idempotent",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as { event_id: string };
+    ctx.db
+      .prepare(
+        `UPDATE core_event SET deleted_at = NULL, purge_at = NULL, updated_at = ?
+          WHERE event_id = ?`
+      )
+      .run(ctx.now, input.event_id);
+    ctx.wrote("core.event", input.event_id);
+    return { event_id: input.event_id };
+  },
+};
+
 export function registerScheduleCommands(gateway: Gateway): void {
   gateway.registerCommand(PROPOSE_EVENT);
   gateway.registerCommand(RESCHEDULE_EVENT);
   gateway.registerCommand(RESPOND_RSVP);
   gateway.registerCommand(CANCEL_EVENT);
+  gateway.registerCommand(DELETE_EVENT);
+  gateway.registerCommand(RESTORE_EVENT);
   registerScheduleOrganizeCommands(gateway);
 }

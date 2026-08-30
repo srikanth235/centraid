@@ -16,7 +16,7 @@ import {
   errorBody,
   failureStreak,
   filterChips,
-  matchesFilter,
+  automationMatchesFilter,
   opsStateFor,
   runRowCopy,
   showingSentence,
@@ -200,9 +200,9 @@ describe("the section heading and the chips", () => {
       "Drafts",
     ]);
     expect(filterChips("failing").filter((chip) => chip.on)).toHaveLength(1);
-    expect(matchesFilter("draft", "drafts")).toBe(true);
-    expect(matchesFilter("active", "failing")).toBe(false);
-    expect(matchesFilter("active", "all")).toBe(true);
+    expect(automationMatchesFilter("draft", "drafts")).toBe(true);
+    expect(automationMatchesFilter("active", "failing")).toBe(false);
+    expect(automationMatchesFilter("active", "all")).toBe(true);
   });
 });
 

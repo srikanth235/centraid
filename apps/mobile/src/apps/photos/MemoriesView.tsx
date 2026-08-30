@@ -5,7 +5,6 @@
 
 import React, { useMemo } from "react";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -18,6 +17,7 @@ import type { TripRoutePoint } from "@centraid/blueprints/apps/photos/trips";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
@@ -286,13 +286,13 @@ export default function MemoriesView({
   return (
     <PhotosScreen current="more">
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityLabel="Back to Photos"
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
         >
           <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
+        </Tappable>
         <Text style={styles.title} numberOfLines={1}>
           Memories
         </Text>

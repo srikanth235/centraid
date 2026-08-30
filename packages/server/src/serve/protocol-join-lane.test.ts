@@ -1,12 +1,11 @@
 /*
  * PROTOCOL JOIN LANE (#839): one `serve()` daemon, N mounted vaults, one iroh
  * client per seat, so every assertion travels the real transport. The laws
- * hold at every N (`CENTRAID_JOIN_SEATS` raises it nightly). A seat is a vault
- * identity plus its device, never a client bundle.
+ * hold at every N (`CENTRAID_JOIN_SEATS` raises it nightly).
  *
- * Topology is ONE gateway with N vaults, never N gateways: a grant resolves its
- * audience through the host gateway's registry, and a cross-host grant parks at
- * `syncing` deliberately (docs/protocol.md); #825 is the follow-up.
+ * ONE gateway with N vaults, never N gateways: a grant resolves its audience
+ * through the host gateway's registry, and a cross-host grant parks at
+ * `syncing` deliberately (docs/protocol.md).
  *
  * The skew test uses SYNTHETIC version integers because the window is a single
  * point, so no legal N−1 client exists to build (#842 W5.3).
@@ -49,14 +48,14 @@ const DEVICE_HEADER = "x-test-device";
 const VAULT_HEADER = "x-centraid-vault";
 const PARKED_PATH = "/centraid/_vault/parked";
 
-/** Three is the floor the laws need: origin, addressed audience, bystander. */
+/** The floor the laws need: origin, addressed audience, bystander. */
 const SEAT_COUNT = Math.max(3, Number(process.env.CENTRAID_JOIN_SEATS ?? 3));
 
 interface Seat {
   readonly label: string;
   readonly vaultId: string;
   readonly plane: VaultPlane;
-  /** The party row in the ORIGIN vault standing for this seat's owner. */
+  /** The party row in the ORIGIN vault for this seat's owner. */
   partyId: string;
   client: TunnelClient;
   connection: Connection;
@@ -101,7 +100,7 @@ async function joinWorld(): Promise<JoinWorld> {
     gatewayDatabase: database,
     token: LOOPBACK_SECRET,
     deviceAccess: {
-      // Same header the iroh forwarder stamps: the REAL QUIC-proved identity.
+      // The header the iroh forwarder stamps: a REAL QUIC-proved identity.
       deviceKeyFor: (req) => {
         const value = req.headers[DEVICE_HEADER];
         return typeof value === "string" ? value : undefined;
@@ -216,7 +215,10 @@ function seedDocument(world: JoinWorld, title: string): string {
 function grantRowCount(world: JoinWorld, subjectId: string): number {
   return (
     world.origin.plane.db.vault
-      .prepare("SELECT COUNT(*) AS n FROM share_grant WHERE subject_id = ?")
+      .prepare(
+        `SELECT COUNT(*) AS n FROM share_authority
+          WHERE subject_id = ? AND principal_kind IN ('person','circle')`
+      )
       .get(subjectId) as { n: number }
   ).n;
 }
@@ -287,18 +289,21 @@ describe("protocol join lane", () => {
 
     const created = await shareDocument(world, documentId, addressed);
     expect(created.status).toBe(201);
+    // No `fulfillmentPass` (V-delivery): the route does not deliver. The share
+    // is HERE by the time the response is written — the WRITE's own doorbell
+    // woke the loop — which the rows below prove over the real transport.
     expect(created.body).toMatchObject({
       outcome: "created",
-      fulfillmentPass: { origin: "mounted" },
       grant: {
         subjectType: "core.document",
         capability: "view",
         revokedAt: null,
         fulfillment: [{ peerVaultId: addressed.vaultId, state: "delivered" }],
+        phrase: "shared",
       },
     });
     expect(documentTitles(addressed)).toStrictEqual(["Trip plan"]);
-    // Addressing is real, not ambient: an unnamed co-hosted vault gets nothing.
+    // Addressing is real, not ambient: an unnamed co-host gets nothing.
     for (const bystander of world.seats.slice(2))
       expect(documentTitles(bystander)).toStrictEqual([]);
 
@@ -358,16 +363,16 @@ describe("protocol join lane", () => {
     });
     expect(documentTitles(severed)).toStrictEqual([]);
 
-    // SEVERED, not idle: the next gesture runs a full pass over the subject,
-    // which a merely dormant grant would ride back into the first seat.
+    // SEVERED, not idle: the next gesture's full pass would ride a merely
+    // dormant grant back into the first seat.
     world.origin.plane.db.vault
       .prepare("UPDATE core_document SET title = ? WHERE document_id = ?")
       .run("Trip plan (final)", documentId);
     expect((await shareDocument(world, documentId, kept)).status).toBe(201);
     expect(documentTitles(kept)).toStrictEqual(["Trip plan (final)"]);
     expect(documentTitles(severed)).toStrictEqual([]);
-    // Removal takes the whole PROJECTION: a content item left behind is an
-    // unreachable copy of bytes the owner took back.
+    // Removal takes the whole PROJECTION: a content item left behind is a
+    // copy of bytes the owner took back.
     const residue = severed.plane.db.vault
       .prepare(
         `SELECT (SELECT COUNT(*) FROM core_document) AS documents,
@@ -430,7 +435,7 @@ describe("protocol join lane", () => {
     ]);
 
     // A parked payload is vault state: it outlives its connection, and a
-    // reconnect re-parks and replays nothing.
+    // reconnect replays nothing.
     await origin.client.close();
     const rejoined = await createTunnelClient({ relays: "disabled" });
     const ownerId = world.enrollments.owners.ownerOf(origin.vaultId);
@@ -463,8 +468,8 @@ describe("protocol join lane", () => {
       (await ask(origin, { method: "GET", target: PARKED_PATH })).body.parked
     ).toStrictEqual([]);
 
-    // Journal denial commits BEFORE vault settlement, so a retry after a crash
-    // in that gap must finish the original denial, never execute.
+    // Journal denial commits BEFORE vault settlement, so a retry crashing in
+    // that gap must finish the denial, never execute.
     const retried = await ask(origin, {
       method: "POST",
       target: `${PARKED_PATH}/${parkedOutcome.invocationId}`,
@@ -488,7 +493,7 @@ describe("protocol join lane", () => {
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
     });
 
-    // N-1 client, refused by the mutual window. Synthetic integers — see header.
+    // N-1 client, refused by the mutual window (synthetic — see header).
     const older = GATEWAY_PROTOCOL_VERSION - 1;
     expect(
       protocolsCompatible({
@@ -530,7 +535,7 @@ describe("protocol join lane", () => {
         version === GATEWAY_PROTOCOL_VERSION ? "connect" : "protocol_mismatch"
       )
     );
-    // A widening bump must move this line deliberately, not by silent fallback.
+    // A widening bump must move this line, never a silent fallback.
     expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(GATEWAY_PROTOCOL_VERSION);
   }, 120_000);
 });

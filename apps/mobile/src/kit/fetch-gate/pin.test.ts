@@ -5,7 +5,6 @@ import {
   isPinned,
   listPinnedContent,
   pinContent,
-  pinnedBytes,
   unpinContent,
 } from "./pin";
 
@@ -73,14 +72,4 @@ describe("pin/unpin", () => {
   });
 });
 
-describe("pinned-byte accounting honesty", () => {
-  test("reports stated-unavailable rather than a fabricated number", () => {
-    const answer = pinnedBytes();
-    expect(answer.status).toBe("unavailable");
-    expect("reason" in answer ? answer.reason.length : 0).toBeGreaterThan(0);
-    // The dishonest failure mode this guards against: a caller reading `0`
-    // and treating it as "nothing is pinned" or "89 bytes" and treating it as
-    // a real budget. Neither numeric shape is present on the answer.
-    expect(answer).not.toHaveProperty("bytes");
-  });
-});
+// Pinned-BYTE accounting is `content-store.ts`, pinned by its own suite.

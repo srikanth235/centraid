@@ -12,8 +12,9 @@
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
+import { insightCsvFilename, insightRollupCsv } from "@centraid/design/blocks";
+
 import type { InsightsSummary } from "../../lib/insights";
-import { csvFilename, insightsCsv } from "./insights-model";
 
 /** What a device with no share sheet at all is told. */
 const NO_SHARE_SHEET =
@@ -31,11 +32,11 @@ export async function shareCsv(
   windowDays: number
 ): Promise<void> {
   if (!(await Sharing.isAvailableAsync())) throw new Error(NO_SHARE_SHEET);
-  const file = new File(Paths.cache, csvFilename(windowDays));
+  const file = new File(Paths.cache, insightCsvFilename(windowDays));
   // The cache keeps the last export until the OS reclaims it, so the write
   // overwrites rather than failing on a second export of the same window.
   file.create({ overwrite: true });
-  file.write(insightsCsv(summary));
+  file.write(insightRollupCsv(summary));
   await Sharing.shareAsync(file.uri, {
     mimeType: "text/csv",
     UTI: "public.comma-separated-values-text",

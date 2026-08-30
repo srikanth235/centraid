@@ -1,3 +1,4 @@
+import { MONTHS, plural } from "@centraid/blueprints/apps/_shared/format-kit";
 // Grouped search hits (Photos §9). KEEP PURE. Omit a group with no data path; never fake.
 // Semantic (#721) is derived, never a gate. Order/cap via `groupSearchHits` (#712); matching stays here.
 import { groupSearchHits } from "@centraid/blueprints/apps/_shared/search-scaffold";
@@ -89,21 +90,6 @@ const STOPWORDS = new Set([
 
 const PER_KIND_CAP = 3;
 
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
 /** `30 July 2026`. Never `toLocaleDateString` — locale must not move printed dates. */
 export function captionDate(iso: string): string {
   const day = Number(iso.slice(8, 10));
@@ -123,10 +109,6 @@ export function queryTokens(query: string): string[] {
 function matchesTokens(name: string, tokens: readonly string[]): boolean {
   const lowered = name.toLowerCase();
   return tokens.some((token) => lowered.includes(token));
-}
-
-function plural(count: number): string {
-  return `${count} photograph${count === 1 ? "" : "s"}`;
 }
 
 interface HitSource extends SearchHitSources {
@@ -157,7 +139,8 @@ const CAPTION_ENTITY: SearchEntity<HitSource, SearchHit> = {
 const SEMANTIC_ENTITY: SearchEntity<HitSource, SearchHit> = {
   key: "semantic",
   label: "semantic",
-  // Ignore `term`: the embedding already decided. Substring re-match would be the token search this row exists to go beyond.
+  // Ignore `term`: the embedding already decided, and a substring re-match is
+  // the token search this row exists to go beyond.
   match: (_term, source) => semanticEntityHits(source),
 };
 
@@ -223,7 +206,7 @@ function personHits(
           key: `person:${id}`,
           kind: "person" as const,
           label: name,
-          sub: `person · ${plural(count)}`,
+          sub: `person · ${plural(count, "photograph")}`,
           meta: `${here.get(id) ?? 0} here`,
           assetIds: [...(seen ?? [])],
           target: {
@@ -274,7 +257,7 @@ function placeHits(
           key: `place:${id}`,
           kind: "place" as const,
           label: placeLabel(place, anchors),
-          sub: `place · ${plural(count)}`,
+          sub: `place · ${plural(count, "photograph")}`,
           meta: `${here.get(id) ?? 0} here`,
           assetIds: reachable.get(id) ?? [],
           target: { screen: "PlacesMap" as const },
@@ -301,7 +284,7 @@ function noLocationHits(
       key: `place:${NO_LOCATION_KEY}`,
       kind: "place",
       label: NO_LOCATION_NAME,
-      sub: `place · ${plural(placeless.length)}`,
+      sub: `place · ${plural(placeless.length, "photograph")}`,
       meta: `${here} here`,
       assetIds: placeless.flatMap((asset) =>
         asset.assetId ? [asset.assetId] : []
@@ -343,7 +326,7 @@ function albumHits(
           key: `album:${id}`,
           kind: "album" as const,
           label: name,
-          sub: `album · ${plural(sizes.get(id) ?? 0)}`,
+          sub: `album · ${plural(sizes.get(id) ?? 0, "photograph")}`,
           meta: "",
           assetIds: members.get(id) ?? [],
           target: {
@@ -385,7 +368,7 @@ function captionHits(
   return hits;
 }
 
-/** One row for the gateway's ranked set (#721). Drop ids the timeline has not loaded. `target` is the strongest match. */
+/** The gateway's ranked set (#721); `target` is the strongest match. */
 function semanticEntityHits(sources: SearchHitSources): SearchHit[] {
   const hits = sources.semanticHits;
   if (!hits?.length) return [];
@@ -407,7 +390,7 @@ function semanticEntityHits(sources: SearchHitSources): SearchHit[] {
       key: "semantic",
       kind: "semantic",
       label: `Photos that look like “${sources.query.trim()}”`,
-      sub: `semantic · ${plural(ranked.length)}`,
+      sub: `semantic · ${plural(ranked.length, "photograph")}`,
       meta: "",
       assetIds: ranked.flatMap((asset) =>
         asset.assetId ? [asset.assetId] : []

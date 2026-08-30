@@ -3,13 +3,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { INSIGHTS_DEFAULT_WINDOW_DAYS } from "@centraid/client/insights-copy";
+
 import type { OpsState } from "../../kit/components/health-line";
 import { GatewayError, resolveGatewayBase } from "../../lib/gateway";
 import { fetchGatewayHealth, fetchInsightsSummary } from "../../lib/insights";
 import type { GatewayHealth, InsightsSummary } from "../../lib/insights";
 import { subscribeVaultLinks } from "../../lib/vault-links";
 import { shareCsv } from "./insights-export";
-import { DEFAULT_WINDOW_DAYS, nothingRan } from "./insights-model";
+import { nothingRan } from "./insights-model";
 import { readWindowPref, writeWindowPref } from "./insights-window-pref";
 
 export type InsightsLoad =
@@ -82,7 +84,7 @@ export function opsStateFor(load: InsightsLoad): OpsState {
 
 export function useInsights(): InsightsController {
   const [load, setLoad] = useState<InsightsLoad>({ kind: "loading" });
-  const [windowDays, setWindowDays] = useState(DEFAULT_WINDOW_DAYS);
+  const [windowDays, setWindowDays] = useState(INSIGHTS_DEFAULT_WINDOW_DAYS);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | undefined>();

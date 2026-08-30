@@ -1,9 +1,10 @@
 // governance: allow-repo-hygiene file-size-limit (#382) the shell root wires
 // every route plus the conversation actions; extracting route wiring is the
-// right follow-up.
+// follow-up.
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -83,6 +84,7 @@ import {
 } from "./routes/conversationScopes.js";
 import GatewayRoute from "./routes/GatewayRoute.js";
 import HomeRoute from "./routes/HomeRoute.js";
+import { releaseHomeTileBlobs } from "./routes/homeTileContent.js";
 import InlineAppRoute from "./routes/InlineAppRoute.js";
 import { inlineAppLoader } from "./routes/inlineApps.js";
 import InsightsRoute from "./routes/InsightsRoute.js";
@@ -134,8 +136,8 @@ import {
 
 import chrome from "./chrome.module.css";
 
-// `showToast` keeps its name (~40 callers) but there is no toast in this shell:
-// every message lands on the one persistent status line (#707).
+// `showToast` keeps its name, but there is no toast in this shell: every
+// message lands on the one persistent status line (#707).
 function makeActions(
   nav: ShellNav,
   openCommandPalette: () => void,
@@ -169,8 +171,7 @@ function shellOpsVerbs(
       };
     case "household":
       return { onCommit: openPairDevice };
-    // Listed rather than defaulted, so a seventh ops page must answer this;
-    // these four claim the bar through `publishRouteVerbs`.
+    // Listed rather than defaulted, so a seventh ops page must answer this.
     case "approvals":
     case "atlas":
     case "connectors":
@@ -214,7 +215,7 @@ function errMsg(err: unknown): string {
 }
 
 // Settings is an overlay, but callers still address `{kind: 'settings'}`: open
-// the dialog and `replace` (not push) home, leaving no history entry.
+// the dialog and `replace` home, leaving no history entry.
 export function SettingsRouteRedirect({
   nav,
   page,
@@ -337,10 +338,10 @@ export default function App({
       }
     })();
   }, []);
-  // Reachability verdict only, never the 5s heartbeat snapshot: that re-rendered
+  // Reachability verdict only, never the 5s heartbeat snapshot: that re-renders
   // the active screen every five seconds (#659).
   const gatewayStatus = useGatewayStatus();
-  // The ONE read of the capability map (C1, docs/platform-gating.md); everything
+  // The ONE read of the capability map (docs/platform-gating.md); everything
   // gated below reads this value, nothing asks the gateway again.
   const { capabilities, resolved: capabilitiesResolved } =
     useGatewayCapabilities();
@@ -410,9 +411,8 @@ export default function App({
     [dropGatewayConnection]
   );
 
-  // Bound once against the live nav (navRef, fed by ShellApp). A gateway (#109)
-  // or vault (#289) change invalidates every gateway-scoped bit of state.
-  useEffect(() => {
+  // BEFORE PAINT: ⌘K must not be swallowed because the effect had not run.
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.key === "[") {
@@ -433,7 +433,12 @@ export default function App({
       }
     };
     document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
+  // Bound once against the live nav (navRef, fed by ShellApp). A gateway (#109)
+  // or vault (#289) change invalidates every gateway-scoped bit of state.
+  useEffect(() => {
     const go = (route: ShellRoute) => (): void =>
       void navRef.current?.navigate(route);
     (window as unknown as { Centraid: unknown }).Centraid = {
@@ -483,10 +488,12 @@ export default function App({
 
     const reScope = (): void => {
       // Every cached answer describes the OLD gateway/vault; a stale row is a
-      // correctness bug, not a slow refresh (#659). The installed set included:
-      // an offline launch must not paint the previous vault's grid.
+      // correctness bug, not a slow refresh (#659) — the installed set too.
       resetQueryCache();
       resetInstalledAppsCache();
+      // Home's mosaic holds `blob:` handles minted against the OLD vault; a
+      // handle pins its bytes until revoked (#883).
+      releaseHomeTileBlobs();
       void refresh();
       navRef.current?.navigate({ kind: "home" });
     };
@@ -498,7 +505,6 @@ export default function App({
       // change runs N re-scopes (#659).
       offGatewayScope?.();
       offVaultScope?.();
-      document.removeEventListener("keydown", onKey);
       window.removeEventListener("centraid:notification-value", enablePush);
       window.removeEventListener("message", onPushMessage);
       navigator.serviceWorker?.removeEventListener(
@@ -512,7 +518,7 @@ export default function App({
 
   // The shell root owns the ledger's row actions: they reach the router (#707).
   // Delete runs a 6s undo window (§3) — the row hides at once, the FK-CASCADE
-  // delete commits only when the window lapses.
+  // delete commits when the window lapses.
   const deleteAssistantConversation = useCallback(
     (id: string) => {
       const target = assistantConversations.conversations.find(
@@ -713,7 +719,7 @@ export default function App({
   );
 
   // Lists VAULTS ONLY (#608, #665), flattened across gateways: a gateway is
-  // transport, so picking a vault elsewhere switches both pointers at once.
+  // transport, so picking a vault elsewhere switches both pointers.
   const openVaultSwitcher = useCallback(
     (anchor: DOMRect): void => {
       const activeGatewayId = ownerScopes.gatewayId ?? "";

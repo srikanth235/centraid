@@ -1,27 +1,17 @@
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 /**
- * Tag a note through core.tag_item — a free-form label shared with every
- * other app that tags through the same command (same Tags concept scheme).
- * Idempotent: tagging with a label already on the note just returns the
- * existing edge.
+ * Tag a note through core.tag_item — the Tags concept scheme shared across
+ * apps. Idempotent: a label already on the note returns the existing edge.
  */
 export default async function addTag({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "core.tag_item",
-      input: {
-        subject_type: "knowledge.note",
-        subject_id: String(input.note_id ?? ""),
-        label: String(input.label ?? ""),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "core.tag_item",
+    input: {
+      subject_type: "knowledge.note",
+      subject_id: String(input.note_id ?? ""),
+      label: String(input.label ?? ""),
+    },
+  });
 }

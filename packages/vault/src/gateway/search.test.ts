@@ -1,6 +1,5 @@
-// The search stage: FTS5 shadow tables answer instead of base-table scans,
-// under exactly read's consent posture — plus the two clamps search adds on
-// top (folded-in content consent, indexed-column field masks).
+// The search stage: FTS5 shadow tables under read's consent posture, plus the
+// two clamps search adds (folded-in content consent, field masks).
 
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -130,8 +129,7 @@ describe("search", () => {
          (content_id, media_type, content_uri, sha256, byte_size, title, created_at)
        VALUES (?, 'image/jpeg', ?, ?, 4, 'Same caption', ?)`
       );
-      // Reverse insertion order makes a rowid/implicit-order implementation
-      // observably wrong at LIMIT 1.
+      // Reverse insertion order catches an implicit-order plan at LIMIT 1.
       insert.run(
         "photo-b",
         "data:image/jpeg;base64,Yg==",
@@ -157,7 +155,7 @@ describe("search", () => {
     });
 
     test("a People interaction annotation is searchable through the canonical command layer (issue #450)", () => {
-      // "Everything I wrote about Ravi" — the interaction body must reach search.
+      // The interaction body must reach search.
       const { party_id } = execOut<{ party_id: string }>("people.add_person", {
         display_name: "Ravi",
         cadence_days: 30,
@@ -396,44 +394,12 @@ describe("search", () => {
     });
   });
 
-  describe("home.asset_item surface", () => {
-    test("name and serial match; disposal keeps the row searchable", () => {
-      const insert = db.vault.prepare(
-        `INSERT INTO home_asset_item (item_id, owner_party_id, name, serial_no, disposed_on)
-       VALUES (?, ?, ?, ?, ?)`
-      );
-      insert.run("it-1", boot.ownerPartyId, "Dehumidifier", "SN-9981", null);
-      insert.run(
-        "it-2",
-        boot.ownerPartyId,
-        "Old dehumidifier",
-        null,
-        "2024-01-15"
-      );
-      insert.run("it-3", boot.ownerPartyId, "Toaster", null, null);
-      const byName = gw.search(owner, {
-        entity: "home.asset_item",
-        query: "dehumid",
-        purpose: PURPOSE,
-      });
-      expect(
-        byName.rows
-          .map((r) => r.item_id)
-          .toSorted((a, b) => String(a).localeCompare(String(b)))
-      ).toStrictEqual(["it-1", "it-2"]);
-      const bySerial = gw.search(owner, {
-        entity: "home.asset_item",
-        query: "SN-9981",
-        purpose: PURPOSE,
-      });
-      expect(bySerial.rows.map((r) => r.item_id)).toStrictEqual(["it-1"]);
-    });
-  });
+  // A two-column direct surface keeping disposed rows in the index is covered
+  // by `core.party` and `locker.item` above (#883).
 
   describe("pre-index vaults", () => {
     test("v1→v2 migration backfills existing rows into the index", () => {
-      // Rebuild the index empty, then re-run only the backfill path by
-      // simulating a vault whose base rows predate the shadow tables.
+      // Simulates a vault whose base rows predate the shadow tables.
       createNote("Old note", "archaeology of budgets");
       db.vault.exec(`DELETE FROM fts_knowledge_note`);
       expect(

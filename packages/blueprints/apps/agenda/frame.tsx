@@ -9,6 +9,7 @@ import {
   countLabel,
 } from "../_shared/app-frame.tsx";
 import type { AppBarBase } from "../_shared/app-frame.tsx";
+import { Segmented } from "../_shared/Segmented.tsx";
 import type {
   InlineAppBarContribution,
   InlineBandClaim,
@@ -50,18 +51,15 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
   const actions: ReactNode = (
     <>
       {state.compact ? null : (
-        <fieldset className="kit-seg" aria-label="View">
-          {POINTER_VIEWS.map((view) => (
-            <button
-              key={view}
-              type="button"
-              aria-pressed={state.view === view}
-              onClick={() => state.onSetView(view)}
-            >
-              {VIEW_LABELS[view]}
-            </button>
-          ))}
-        </fieldset>
+        <Segmented
+          label="View"
+          options={POINTER_VIEWS.map((view) => ({
+            key: view,
+            label: VIEW_LABELS[view],
+            pressed: state.view === view,
+            select: () => state.onSetView(view),
+          }))}
+        />
       )}
       <button type="button" className="kit-btn" onClick={handleToday}>
         {TODAY}

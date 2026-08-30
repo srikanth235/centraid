@@ -1,17 +1,13 @@
 /*
- * InsightsStore — transparency + control aggregates over the vault ledger
- * (#514 rewrite; prior #98 / #438).
- *
- * Product promise: everything Centraid saw agents use — priced when we can,
- * marked when we can't — so the owner can control apps and automations.
- *
- * Sources in the vault's `journal.db`:
+ * Aggregates over three sources in the vault's `journal.db` (#514):
  *   · LIVE — `run_summary` (VIEW: finished turns ⋈ conversations)
  *   · COST PROVENANCE — `items.cost_source` ('harness' | 'estimated')
  *   · ARCHIVED — `conversation_digest` rollups after prune (#438)
  *
- * Digests carry totals only (no harness/estimated split); provenance KPIs are
- * live-arm only. `recent` is live-only (archived runs are ≥90d idle).
+ * Digests carry totals only: no harness/estimated split, no failure-cost
+ * column, no per-run timing. So provenance KPIs and `medianRunMs` are live-arm
+ * outright, the daily failed-spend figure is a live-arm floor, and `recent` is
+ * live-only (archived runs are ≥90d idle).
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -56,7 +52,6 @@ export class InsightsStore {
     return this.stmts;
   }
 
-  /** Compute the full Insights payload for a trailing window. */
   summary(
     opts: { windowDays?: number; recentLimit?: number } = {}
   ): InsightsSummary {
@@ -99,6 +94,8 @@ export class InsightsStore {
     }>)
       if (r.app_id !== null) apps.add(r.app_id);
 
+    const medianRunMs = readMedianRunMs(stmts, since);
+
     const harnessReportedCostUsd = round(split.harness_cost ?? 0);
     const estimatedCostUsd = round(split.estimated_cost ?? 0);
     const totalCostUsd = round((k.cost ?? 0) + (kd.cost ?? 0));
@@ -117,6 +114,8 @@ export class InsightsStore {
       appsTouched: apps.size,
       unpricedRuns: k.unpriced ?? 0,
       unreportedRuns: k.unreported ?? 0,
+      // Omitted, not zeroed: no finished run means no typical duration.
+      ...(medianRunMs === undefined ? {} : { medianRunMs }),
     };
 
     const daily = foldDaily(stmts, since);
@@ -156,24 +155,52 @@ export class InsightsStore {
   }
 }
 
+function readMedianRunMs(
+  stmts: InsightsPreparedStatements,
+  since: number
+): number | undefined {
+  const row = stmts.runDurationMedian.get(since) as
+    | { median_ms: number | null }
+    | undefined;
+  const median = row?.median_ms;
+  if (median === undefined || median === null || !Number.isFinite(median))
+    return undefined;
+  return Math.max(0, Math.round(median));
+}
+
 function foldDaily(
   stmts: InsightsPreparedStatements,
   since: number
 ): InsightsDailyPoint[] {
-  const dayBuckets = new Map<
-    string,
-    { tokens: number; cost: number; runs: number }
-  >();
+  interface DayAcc {
+    tokens: number;
+    cost: number;
+    runs: number;
+    failedRuns: number;
+    /** Live arm only. */
+    failedCost: number;
+  }
+  const dayBuckets = new Map<string, DayAcc>();
   const addDay = (
     day: string,
     tokens: number,
     cost: number,
-    runs: number
+    runs: number,
+    failedRuns: number,
+    failedCost: number
   ): void => {
-    const b = dayBuckets.get(day) ?? { tokens: 0, cost: 0, runs: 0 };
+    const b = dayBuckets.get(day) ?? {
+      tokens: 0,
+      cost: 0,
+      runs: 0,
+      failedRuns: 0,
+      failedCost: 0,
+    };
     b.tokens += tokens;
     b.cost += cost;
     b.runs += runs;
+    b.failedRuns += failedRuns;
+    b.failedCost += failedCost;
     dayBuckets.set(day, b);
   };
   for (const d of stmts.daily.all(since) as Array<{
@@ -181,15 +208,26 @@ function foldDaily(
     tokens: number | null;
     cost: number | null;
     runs: number;
+    failed_runs: number | null;
+    failed_cost: number | null;
   }>)
-    addDay(d.day, d.tokens ?? 0, d.cost ?? 0, d.runs);
+    addDay(
+      d.day,
+      d.tokens ?? 0,
+      d.cost ?? 0,
+      d.runs,
+      d.failed_runs ?? 0,
+      d.failed_cost ?? 0
+    );
+  // Archived days contribute a failure COUNT and nothing to failed spend.
   for (const d of stmts.dailyDigest.all(since) as Array<{
     day: string;
     tokens: number | null;
     cost: number | null;
     runs: number;
+    failed_runs: number | null;
   }>)
-    addDay(d.day, d.tokens ?? 0, d.cost ?? 0, d.runs);
+    addDay(d.day, d.tokens ?? 0, d.cost ?? 0, d.runs, d.failed_runs ?? 0, 0);
   return [...dayBuckets.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([date, b]) => ({
@@ -197,6 +235,8 @@ function foldDaily(
       tokens: b.tokens,
       costUsd: round(b.cost),
       runs: b.runs,
+      failedRuns: b.failedRuns,
+      failedCostUsd: round(b.failedCost),
     }));
 }
 

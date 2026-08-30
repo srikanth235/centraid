@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 
 import type { HarnessStatus } from "@centraid/server/engine";
 
+import { unrefTimer } from "../lib/unref-timer.js";
 import { resolveAcpCapabilities } from "./backends/acp/capabilities-cache.js";
 import { lowPriorityCommand } from "./low-priority.js";
 import { readHarnessModels } from "./models/catalog.js";
@@ -233,7 +234,7 @@ async function execVersion(
         reject(new Error("--version timed out"));
       });
     }, VERSION_TIMEOUT_MS);
-    timer.unref?.();
+    unrefTimer(timer);
 
     child.stdout.on("data", (c: Buffer) => stdoutChunks.push(c));
     child.stderr.on("data", (c: Buffer) => stderrChunks.push(c));

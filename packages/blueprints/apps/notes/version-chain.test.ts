@@ -2,6 +2,7 @@
 // restore adds a head and every earlier body is still in the walk afterwards.
 import { describe, expect, test } from "vitest";
 
+import { RELATIONS_SCHEME_URI } from "../_shared/concept-scheme-kit.ts";
 import type { VaultRow } from "./filing.ts";
 import {
   noteVersionChain,
@@ -9,7 +10,7 @@ import {
   revisesConceptId,
 } from "./version-chain.ts";
 
-const SCHEMES = [{ scheme_id: "s-rel", uri: "urn:duaility:relations" }];
+const SCHEMES = [{ scheme_id: "s-rel", uri: RELATIONS_SCHEME_URI }];
 const CONCEPTS = [
   { concept_id: "c-revises", scheme_id: "s-rel", notation: "revises" },
   { concept_id: "c-other", scheme_id: "s-rel", notation: "mentions" },

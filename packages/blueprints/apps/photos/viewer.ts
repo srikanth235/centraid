@@ -1,6 +1,6 @@
 // Everything the viewer/slideshow/editor stage knows WITHOUT a DOM. Copy here
 // is FINAL, and no user-visible string names a storage noun for a scope.
-import { isAudioAsset, isVideoAsset } from "./format.ts";
+import { clock, isAudioAsset, isVideoAsset } from "./format.ts";
 import {
   PHOTOS_VIDEO_STATUS,
   photosOriginalNotFetched,
@@ -17,7 +17,7 @@ export function labelsVisible(barWidth: number): boolean {
 
 export const FIT = 1;
 
-// Discrete rungs, not a pinch factor: every step must be pointer-reachable.
+// Discrete rungs, not a pinch factor: every step is pointer-reachable.
 export const ZOOM_STEPS: readonly number[] = [FIT, 1.5, 2, 2.4, 3, 4];
 
 export function isZoomed(scale: number): boolean {
@@ -34,7 +34,7 @@ export function zoomOut(scale: number): number {
   return below;
 }
 
-// Rounds HERE so the string and the transform can never disagree.
+// Rounds HERE so the string and the transform cannot disagree.
 export function zoomReadout(scale: number): string {
   return `${Math.round(scale * 100)}% · drag to pan`;
 }
@@ -89,11 +89,7 @@ export function videoKindLabel(asset: Asset): string {
   return parts.join(" · ");
 }
 
-export function clock(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds));
-  const minutes = Math.floor(total / 60);
-  return `${minutes}:${String(total % 60).padStart(2, "0")}`;
-}
+export { clock } from "./format.ts";
 
 export function trackFraction(elapsed: number, duration: number): number {
   if (Number.isNaN(duration) || duration <= 0) return 0;
@@ -129,8 +125,8 @@ function takenDate(asset: Asset): string | null {
   });
 }
 
-// Lineage is read, never assumed (#711): an edited copy is dated the day it was
-// SAVED, so its `captured_at` is not a capture date.
+// Lineage is read, never assumed (#711): an edited copy's `captured_at` is its
+// SAVE date, not a capture date.
 export function editorSourceLine(asset: Asset, source?: Asset | null): string {
   if (asset.source_asset_id) {
     const resolved =
@@ -197,7 +193,7 @@ const ORIGIN_PARAGRAPHS: Record<string, (gatewayName: string) => string> = {
 
 export function originParagraph(asset: Asset, gatewayName: string): string {
   const line = ORIGIN_PARAGRAPHS[String(asset.custody_state ?? "")];
-  // No row, no claim: the blob sweep may not have run yet.
+  // No row, no claim: the blob sweep may not have run.
   if (!line)
     return `Where the original is kept has not been checked yet — ${gatewayName} works that out on its own schedule.`;
   return line(gatewayName);
@@ -222,7 +218,7 @@ export const PHONE_ACTIONS = [
 ] as const;
 export type PhoneActionId = (typeof PHONE_ACTIONS)[number];
 
-// `copy` names a DESTINATION, never `Share`; `copyActionLabel` may override it.
+// `copy` names a DESTINATION, never `Share`; `copyActionLabel` overrides it.
 export const ACTION_LABELS: Readonly<
   Record<ViewerActionId | PhoneActionId, string>
 > = {

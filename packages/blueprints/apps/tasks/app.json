@@ -177,7 +177,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["schedule.task"]
     },
     {
       "name": "set-status",
@@ -212,7 +212,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["schedule.task"]
     },
     {
       "name": "delete",
@@ -243,7 +243,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["schedule.task"]
     },
     {
       "name": "edit",
@@ -315,7 +315,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["schedule.task"]
     },
     {
       "name": "save-project",
@@ -341,7 +341,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["schedule.project"]
     },
     {
       "name": "save-section",
@@ -366,7 +366,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["schedule.section"]
     },
     {
       "name": "organize-task",
@@ -397,7 +397,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["schedule.task"]
     },
     {
       "name": "attach",
@@ -452,7 +452,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.attachment", "core.content_item"]
     },
     {
       "name": "detach",
@@ -483,7 +483,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.attachment"]
     },
     {
       "name": "add-tag",
@@ -518,7 +518,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
     },
     {
       "name": "remove-tag",
@@ -549,7 +549,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.tag"]
     }
   ],
   "queries": [

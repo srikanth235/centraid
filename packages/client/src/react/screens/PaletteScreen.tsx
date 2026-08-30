@@ -5,6 +5,7 @@ import type { IconName } from "@centraid/design";
 
 import type { PaletteBridgeProps, PaletteRowDTO } from "../screen-contracts.js";
 import AppMark from "../ui/AppMark.js";
+import ShellModal from "../ui/ShellModal.js";
 
 import styles from "./PaletteScreen.module.css";
 
@@ -167,7 +168,11 @@ export default function PaletteScreen({
         }
       }}
     >
-      <dialog open className={styles.root} aria-label="Command palette">
+      <ShellModal
+        layer="inline"
+        className={styles.root}
+        label="Command palette"
+      >
         <div className={styles.inputrow}>
           <span className={styles.searchIcon} aria-hidden="true">
             <svg
@@ -266,7 +271,7 @@ export default function PaletteScreen({
           <span className={styles.kbd}>esc</span>
           <span>close</span>
         </div>
-      </dialog>
+      </ShellModal>
     </div>
   );
 }

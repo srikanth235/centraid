@@ -99,7 +99,7 @@ There is no remote URL+token connection path and no SSH-routed connect (the SSH 
 Agents often work in git worktrees (including under `.claude/worktrees/`).
 
 1. **Install** — each worktree needs its own `bun install` (do not assume root `node_modules` is visible unless you deliberately symlink — prefer install).
-2. **Build** — run `bun run build` (or filtered turbo) so `dist/` exists for packages that resolve compiled output.
+2. **Build** — run `bun run build` (or filtered turbo) so `dist/` exists for packages that resolve compiled output. This bites inside one worktree too: `@centraid/server/engine` (and `@centraid/vault` from the server) resolve to `dist/`, so an engine- or vault-side source edit is invisible to an in-process `serve()` test until `bun run --cwd packages/<pkg> build` re-emits it.
 3. **Do not share** writable `gw-data/`, Electron `userData`, or SQLite vault dirs across concurrent agents.
 4. **Symlinks** — if you symlink `node_modules` for speed, rebuild native addons for the active platform; pairing Docker flows may fetch platform-specific `@number0/iroh` binaries (see `tests/agent-e2e-pairing/AGENTS.md`).
 5. **Seed data** — optional; use a dedicated `--data-dir` and vault create rather than copying a live vault (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).

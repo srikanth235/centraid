@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); social owns the whole conversation-and-card loop (5 commands with their contracts), so it is large by design.
+// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); social owns the whole conversation loop, so it is large by design.
 // Social domain commands (§07): the domain resolves raw addresses to parties
 // (never a duplicate person per channel) and owns conversation state. The
 // message state machine — draft → sent → delivered → read | failed — moves
@@ -10,8 +10,7 @@
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { sha256Hex } from "../ids.js";
-import { replaceMemo } from "./annotations.js";
-import { setStarred, starredExistsSql } from "./flags.js";
+import { bindContactReach } from "./contact-reach.js";
 import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
@@ -23,6 +22,9 @@ function actorPartyId(ctx: HandlerCtx): string {
   if (!owner?.owner_party_id) throw new Error("vault has no owner");
   return owner.owner_party_id;
 }
+
+/** `:scheme` as the channel axis names it — `tel` is `phone` on a channel. */
+const REACH_KIND_OF_SCHEME_SQL = `CASE :scheme WHEN 'tel' THEN 'phone' ELSE :scheme END`;
 
 const RESOLVE_IDENTITY: CommandDefinition = {
   name: "social.resolve_identity",
@@ -56,10 +58,18 @@ const RESOLVE_IDENTITY: CommandDefinition = {
       value: 1,
     },
     {
-      // A handle already bound to a *different* party is an identity fork.
+      // A handle bound to a DIFFERENT party is an identity fork. Asked of
+      // BOTH stores: reach lives in channels, claimed handles in the
+      // register, and half the forks hide in whichever is not consulted.
       name: "handle_not_claimed_elsewhere",
-      sql: `SELECT count(*) AS n FROM core_party_identifier
-             WHERE scheme = :scheme AND value = :value AND party_id != :party_id`,
+      sql: `SELECT (
+              (SELECT count(*) FROM core_party_identifier
+                WHERE scheme = :scheme AND value = :value
+                  AND party_id != :party_id)
+              + (SELECT count(*) FROM social_contact_channel
+                  WHERE kind = ${REACH_KIND_OF_SCHEME_SQL} AND value = :value
+                    AND party_id != :party_id)
+            ) AS n`,
       column: "n",
       op: "eq",
       value: 0,
@@ -68,8 +78,14 @@ const RESOLVE_IDENTITY: CommandDefinition = {
   postconditions: [
     {
       name: "identifier_bound",
-      sql: `SELECT count(*) AS n FROM core_party_identifier
-             WHERE scheme = :scheme AND value = :value AND party_id = :party_id`,
+      sql: `SELECT (
+              (SELECT count(*) FROM core_party_identifier
+                WHERE scheme = :scheme AND value = :value
+                  AND party_id = :party_id)
+              + (SELECT count(*) FROM social_contact_channel
+                  WHERE kind = ${REACH_KIND_OF_SCHEME_SQL} AND value = :value
+                    AND party_id = :party_id)
+            ) AS n`,
       column: "n",
       op: "eq",
       value: 1,
@@ -87,36 +103,49 @@ function resolveIdentity(ctx: HandlerCtx): Record<string, unknown> {
     value: string;
     label?: string;
   };
-  const existing = ctx.db
-    .prepare(
-      "SELECT identifier_id FROM core_party_identifier WHERE scheme = ? AND value = ?"
-    )
-    .get(input.scheme, input.value) as { identifier_id: string } | undefined;
-  if (!existing) {
-    const identifierId = ctx.newId();
-    const hasPrimary = ctx.db
+  // Email and phone are REACH and bind as channels; a claimed handle is an
+  // identity KEY in the register (#883). One call decides which.
+  const channelId = bindContactReach(ctx.db, {
+    channelId: ctx.newId(),
+    partyId: input.party_id,
+    scheme: input.scheme,
+    value: input.value,
+    label: input.label ?? null,
+    provenanceJson: JSON.stringify({ source: "social.resolve_identity" }),
+    now: ctx.now,
+  });
+  if (channelId === null) {
+    const existing = ctx.db
       .prepare(
-        "SELECT 1 AS x FROM core_party_identifier WHERE party_id = ? AND scheme = ? AND is_primary = 1"
+        "SELECT identifier_id FROM core_party_identifier WHERE scheme = ? AND value = ?"
       )
-      .get(input.party_id, input.scheme);
-    ctx.db
-      .prepare(
-        `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, label, is_primary, verified_at, valid_from, valid_to)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL)`
-      )
-      .run(
-        identifierId,
-        input.party_id,
-        input.scheme,
-        input.value,
-        input.label ?? null,
-        hasPrimary ? 0 : 1,
-        ctx.now
-      );
-    ctx.wrote("core.party_identifier", identifierId);
-  }
-  // Backfill identity without rewriting the messages (§03 social.message):
-  // the raw handle stays for audit; the party reference is what resolution adds.
+      .get(input.scheme, input.value) as { identifier_id: string } | undefined;
+    if (!existing) {
+      const identifierId = ctx.newId();
+      const hasPrimary = ctx.db
+        .prepare(
+          "SELECT 1 AS x FROM core_party_identifier WHERE party_id = ? AND scheme = ? AND is_primary = 1"
+        )
+        .get(input.party_id, input.scheme);
+      ctx.db
+        .prepare(
+          `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, label, is_primary, verified_at, valid_from, valid_to)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL)`
+        )
+        .run(
+          identifierId,
+          input.party_id,
+          input.scheme,
+          input.value,
+          input.label ?? null,
+          hasPrimary ? 0 : 1,
+          ctx.now
+        );
+      ctx.wrote("core.party_identifier", identifierId);
+    }
+  } else ctx.wrote("social.contact_channel", channelId);
+  // Backfill identity without rewriting the messages: the raw handle stays
+  // for audit.
   const participants = ctx.db
     .prepare(
       "UPDATE social_thread_participant SET party_id = ? WHERE handle = ? AND party_id IS NULL"
@@ -209,8 +238,7 @@ function draftMessage(ctx: HandlerCtx): Record<string, unknown> {
       )
       .run(threadId, input.channel ?? "dm", input.subject ?? null, ctx.now);
     ctx.wrote("social.thread", threadId);
-    // A self-thread (owner messaging themselves — a note to self) is one
-    // participant, not a UNIQUE(thread_id, party_id) collision.
+    // A self-thread is one participant, not a UNIQUE collision.
     for (const partyId of new Set([
       sender,
       input.recipient_party_id as string,
@@ -314,8 +342,8 @@ const SEND_MESSAGE: CommandDefinition = {
     },
   ],
   idempotency: "once",
-  // Tier 3 semantic egress (#306): a send is the one thing structure
-  // cannot verify — loud on purpose, parks for every non-owner caller.
+  // Tier 3 semantic egress (#306): structure cannot verify a send, so it
+  // parks for every non-owner caller.
   risk: "high",
   confirm: true,
   handler: sendMessage,
@@ -344,130 +372,9 @@ function sendMessage(ctx: HandlerCtx): Record<string, unknown> {
   return { message_id: input.message_id, delivery: "sent" };
 }
 
-const UPDATE_CARD: CommandDefinition = {
-  name: "social.update_card",
-  ownerSchema: "social",
-  inputSchema: {
-    type: "object",
-    required: ["party_id"],
-    additionalProperties: false,
-    properties: {
-      party_id: { type: "string", minLength: 1 },
-      nickname: { type: "string" },
-      // Display label only (vCard ORG + TITLE). The employment claim itself
-      // is a core.link (works-for) asserted via core.link_entities — the
-      // card never carries the relationship (#274).
-      org_title: { type: "string" },
-      // The contract keeps its `note` input; storage is the caller's memo
-      // annotation on the canonical core.party (#274) — "everything
-      // I've written about Ravi" is one query. Empty string clears it.
-      note: { type: "string" },
-      // The contract keeps its `favorite` input; storage is a starred tag on
-      // the canonical core.party (#274) — the same star every surface
-      // rendering this person reads.
-      favorite: { type: "integer", minimum: 0, maximum: 1 },
-    },
-  },
-  outputSchema: {
-    type: "object",
-    required: ["card_id"],
-    properties: { card_id: { type: "string" } },
-  },
-  preconditions: [
-    {
-      name: "party_exists",
-      sql: "SELECT count(*) AS n FROM core_party WHERE party_id = :party_id",
-      column: "n",
-      op: "eq",
-      value: 1,
-    },
-  ],
-  postconditions: [
-    {
-      name: "card_decorates_party",
-      sql: "SELECT count(*) AS n FROM social_contact_card WHERE party_id = :party_id",
-      column: "n",
-      op: "eq",
-      value: 1,
-    },
-    {
-      // A non-empty note reads back as an annotation on the party; an empty
-      // one as its absence; an untouched note binds NULL and passes.
-      name: "note_reflected_as_annotation",
-      sql: `SELECT (CASE WHEN :note IS NULL THEN 1
-                 WHEN :note = '' THEN NOT EXISTS(SELECT 1 FROM knowledge_annotation
-                        WHERE target_type = 'core.party' AND target_id = :party_id)
-                 ELSE EXISTS(SELECT 1 FROM knowledge_annotation
-                        WHERE target_type = 'core.party' AND target_id = :party_id
-                          AND body_text = :note) END) AS n`,
-      column: "n",
-      op: "eq",
-      value: 1,
-    },
-    {
-      // favorite=1 reads back as a starred tag on the party, favorite=0 as
-      // its absence; an untouched favorite binds NULL and passes trivially.
-      name: "favorite_reflected_as_flag",
-      sql: `SELECT (CASE WHEN :favorite IS NULL THEN 1
-                 WHEN :favorite = 1 THEN ${starredExistsSql("core.party", ":party_id")}
-                 ELSE NOT ${starredExistsSql("core.party", ":party_id")} END) AS n`,
-      column: "n",
-      op: "eq",
-      value: 1,
-    },
-  ],
-  idempotency: "idempotent",
-  risk: "low",
-  handler: updateCard,
-};
-
-function updateCard(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as {
-    party_id: string;
-    nickname?: string;
-    org_title?: string;
-    note?: string;
-    favorite?: number;
-  };
-  const existing = ctx.db
-    .prepare("SELECT card_id FROM social_contact_card WHERE party_id = ?")
-    .get(input.party_id) as { card_id: string } | undefined;
-  let cardId: string;
-  if (existing) {
-    cardId = existing.card_id;
-    ctx.db
-      .prepare(
-        `UPDATE social_contact_card SET
-           nickname = COALESCE(?, nickname),
-           org_title = COALESCE(?, org_title),
-           vcard_rev = ?
-         WHERE card_id = ?`
-      )
-      .run(input.nickname ?? null, input.org_title ?? null, ctx.now, cardId);
-  } else {
-    cardId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO social_contact_card (card_id, party_id, nickname, org_title, vcard_rev)
-         VALUES (?, ?, ?, ?, ?)`
-      )
-      .run(
-        cardId,
-        input.party_id,
-        input.nickname ?? null,
-        input.org_title ?? null,
-        ctx.now
-      );
-  }
-  if (input.note !== undefined) {
-    replaceMemo(ctx, "core.party", input.party_id, input.note);
-  }
-  if (input.favorite !== undefined) {
-    setStarred(ctx, "core.party", input.party_id, input.favorite === 1);
-  }
-  ctx.wrote("social.contact_card", cardId);
-  return { card_id: cardId };
-}
+// There is deliberately no card command (#883): the role line and nickname
+// belong to `people.edit_person`, the note to `people.add_note`, the favourite
+// to `people.star_person`. A second writer is how two copies disagree.
 
 const MARK_THREAD_READ: CommandDefinition = {
   name: "social.mark_thread_read",
@@ -554,6 +461,5 @@ export function registerSocialCommands(gateway: Gateway): void {
   gateway.registerCommand(RESOLVE_IDENTITY);
   gateway.registerCommand(DRAFT_MESSAGE);
   gateway.registerCommand(SEND_MESSAGE);
-  gateway.registerCommand(UPDATE_CARD);
   gateway.registerCommand(MARK_THREAD_READ);
 }

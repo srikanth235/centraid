@@ -22,10 +22,9 @@ export type Credential =
       /** Intersected with the agent's durable grants, which stay the cap. */
       scopeClamp?: readonly ExecutionScopeSpec[];
       /**
-       * The L2 owner this turn acts ON BEHALF OF (#599 decision 7). The host
-       * resolves ownership and passes the one bit the vault enforces: such an
-       * agent must fail a write exactly where that owner would. Absent caps
-       * nothing (a scheduler-fired automation has no request scope).
+       * The L2 owner this turn acts ON BEHALF OF (#599). The host resolves
+       * ownership; the vault enforces one bit — such an agent must fail a
+       * write exactly where that owner would. Absent caps nothing.
        */
       onBehalfOfOwner?: { ownerId: string; mayAct: boolean };
     }
@@ -34,9 +33,8 @@ export type Credential =
 export type Risk = "low" | "medium" | "high";
 
 /**
- * Purposes are off the critical path (#306 decision 4): a request naming none
- * journals this. The vocabulary and `consent.policy` rules stay for the day
- * sharing reintroduces a genuine second party.
+ * Purposes are off the critical path (#306): a request naming none journals
+ * this. The vocabulary stays for the day sharing brings a second party.
  */
 export const DEFAULT_PURPOSE = "dpv:ServiceProvision";
 
@@ -270,6 +268,16 @@ export interface HandlerBlobs {
   has: (sha256: string) => boolean;
 }
 
+/** `grantId` names the standing answer the entry is ABOUT (#883). */
+export interface HandlerReceipt {
+  grantId: string | null;
+  action: string;
+  objectType: string;
+  objectId: string | null;
+  decision: "allow" | "deny";
+  detail?: Record<string, unknown>;
+}
+
 export interface HandlerCtx {
   db: DatabaseSync;
   identity: Identity;
@@ -280,6 +288,13 @@ export interface HandlerCtx {
   newId: () => string;
   wrote: (entityType: string, entityId: string) => void;
   cite: (citation: Citation) => void;
+  /**
+   * ONE receipt of this handler's own, beside the invocation's (#883). Queued
+   * like `cite`, never written here: journal.db is outside the vault
+   * transaction, so a receipt written in-handler would survive a rolled-back
+   * write and claim an authority the vault never granted.
+   */
+  receipt: (receipt: HandlerReceipt) => void;
   /**
    * Derivatives without revelation (#293 decision 5): the plaintext never
    * crosses the command boundary. Only cells declared in `unseals` resolve,

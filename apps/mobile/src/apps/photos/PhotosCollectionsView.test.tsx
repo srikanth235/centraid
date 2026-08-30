@@ -3,9 +3,8 @@
 //     display fold, never a filter.
 //  2. Tapping the title still navigates after a fold/unfold.
 //
-// The `···` chip and its menu live in `PhotosHome.test.tsx` now (#712); this
-// file only owns the state those commands act on, driven through a `useState`
-// wrapper standing in for `PhotosHome.tsx`'s lifted `collapsed` state.
+// The `···` chip and its menu belong to `PhotosHome.test.tsx` (#712); this
+// file owns only the state those commands act on.
 import React, { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -203,7 +202,8 @@ vi.mock(
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-/** Stands in for `PhotosHome.tsx`, which owns `collapsed`; its toggle mirrors `PhotosHome`'s own Set add/delete shape, so tests exercise the real contract. */
+/** Stands in for `PhotosHome.tsx`, which owns `collapsed`; the toggle mirrors
+ *  its Set add/delete shape, so tests exercise the real contract. */
 function Harness({
   navigate,
   initialCollapsed,
@@ -290,10 +290,8 @@ describe("Collections' per-section collapse", () => {
     container = undefined;
   });
 
-  // This view has no header row of its own: the `···` chip and its Show All /
-  // Collapse All menu belong to `PhotosHome.tsx`'s header, scoped to the
-  // Collections destination; see `PhotosHome.test.tsx`'s "the header's
-  // trailing control is destination-scoped" tests for them.
+  // No header row of its own: the `···` chip and its Show All / Collapse All
+  // menu are covered by `PhotosHome.test.tsx`.
 
   it("a collapsed section keeps its heading and count, and drops its rail", () => {
     render();
@@ -382,6 +380,28 @@ describe("Collections' per-section collapse", () => {
     expect(container!.textContent).not.toContain(
       "No photographs at Lake Tahoe yet."
     );
+  });
+
+  // A coordinate pair is not a name (#816): the rail says what the shelf and
+  // the map say, never the digits the row happens to carry.
+  it("labels a place whose only name is its coordinates as unnamed, never the digits", () => {
+    const [tahoe] = makePhotosFixture("place-tagged").assets;
+    mocks.assets = [tahoe];
+    mocks.places = [
+      {
+        place_id: "place-tahoe",
+        name: "39.0968, -120.0324",
+        geo_lat: 39.096_8,
+        geo_lng: -120.032_4,
+      },
+    ];
+    act(() => {
+      root = createRoot(container!);
+      root.render(<Harness navigate={vi.fn<(...args: unknown[]) => void>()} />);
+    });
+
+    expect(container!.textContent).toContain("A place with no name yet");
+    expect(container!.textContent).not.toContain("39.0968, -120.0324");
   });
 
   // #721 — Videos opens the same `PhotoStateView` filter door as Favorites.

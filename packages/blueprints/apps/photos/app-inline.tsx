@@ -7,7 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, PHOTOS_READ_TABLES_LIST } from "./app-root.tsx";
-import pendingProjection from "./pending-projection.ts";
+import { photosPendingProjection as pendingProjection } from "./pending-projection.ts";
 import duplicatesQuery from "./queries/duplicates.ts";
 import enrichmentStatusQuery from "./queries/enrichment-status.ts";
 import facesQuery from "./queries/faces.ts";

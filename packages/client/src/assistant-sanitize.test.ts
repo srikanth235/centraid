@@ -1,10 +1,9 @@
 /* oxlint-disable no-script-url -- the whole point of these tests is to feed the
    renderer dangerous `javascript:` URLs and prove they are rejected. */
-// Adversarial sanitization tests for the rich-answer renderer (#420).
-// Model output is UNTRUSTED and injected via dangerouslySetInnerHTML,
-// so these prove the SECURITY CONTRACT in assistant-rich.ts holds across the
-// link / image / table / ref-chip / code paths. Every case asserts that no live
-// script or dangerous scheme survives into the output.
+// Adversarial sanitization tests for the rich-answer renderer (#420). Model
+// output is UNTRUSTED and injected via dangerouslySetInnerHTML, so these prove
+// the SECURITY CONTRACT in assistant-rich.ts holds across the link / image /
+// table / ref-chip / code paths: no live script or dangerous scheme survives.
 import { describe, expect, it } from "vitest";
 
 import { richAnswerHtml } from "./assistant-rich.js";
@@ -106,7 +105,7 @@ describe("renderer sanitization — tables & ref chips & code", () => {
 
   it("escapes markup smuggled through a ref-chip label", () => {
     const html = richAnswerHtml(
-      "@[<img src=x onerror=alert(1)>](ref:home.asset_item/abc)"
+      "@[<img src=x onerror=alert(1)>](ref:locker.item/abc)"
     );
     const host = assertInert(html);
     expect(host.querySelector(".asstRef img")).toBeNull();

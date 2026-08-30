@@ -3,6 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { assertSha } from "@centraid/vault";
 import type { BlobTransferCoordinator } from "@centraid/vault";
 
+import { unrefTimer } from "../lib/unref-timer.js";
+
 /** Blob-scoped custody stream: no all-vault backlog/status disclosure. */
 export async function openBlobCustodyEvents(input: {
   req: IncomingMessage;
@@ -29,7 +31,7 @@ export async function openBlobCustodyEvents(input: {
   let again = false;
   let last = "";
   let unsubscribe = (): void => undefined;
-  let heartbeat: NodeJS.Timeout | undefined = undefined;
+  let heartbeat: ReturnType<typeof setTimeout> | undefined = undefined;
   const close = (): void => {
     if (closed) return;
     closed = true;
@@ -75,7 +77,7 @@ export async function openBlobCustodyEvents(input: {
   heartbeat = setInterval(() => {
     if (!closed) res.write(": keepalive\n\n");
   }, 15_000);
-  heartbeat.unref();
+  unrefTimer(heartbeat);
   req.once("close", close);
   res.once("close", close);
   await publish();

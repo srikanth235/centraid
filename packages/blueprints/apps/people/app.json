@@ -25,10 +25,8 @@
       { "schema": "schedule", "table": "task", "verbs": "read" },
       { "schema": "tally", "table": "obligation", "verbs": "read" },
       { "schema": "social", "table": "contact_channel", "verbs": "read" },
-      { "schema": "social", "table": "circle_member", "verbs": "read" },
       { "schema": "share", "table": "party_vault_binding", "verbs": "read" },
-      { "schema": "share", "table": "circle_grant", "verbs": "read" },
-      { "schema": "share", "table": "commons_member_state", "verbs": "read" },
+      { "schema": "share", "table": "authority", "verbs": "read" },
       { "schema": "share", "table": "commons_invitation", "verbs": "read" },
       { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
       {
@@ -96,7 +94,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.party", "core.tag", "people.profile"]
     },
     {
       "name": "edit-person",
@@ -122,7 +120,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.party", "outbox.item", "people.profile"]
     },
     {
       "name": "set-cadence",
@@ -145,7 +143,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["people.profile"]
     },
     {
       "name": "trash-person",
@@ -167,7 +165,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["people.profile"]
     },
     {
       "name": "restore-person",
@@ -189,7 +187,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["people.profile"]
     },
     {
       "name": "undo-person",
@@ -212,7 +210,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.entity_revision", "core.party", "people.profile"]
     },
     {
       "name": "log-interaction",
@@ -236,7 +234,14 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.activity",
+        "core.concept",
+        "core.concept_scheme",
+        "core.link",
+        "knowledge.annotation",
+        "people.profile"
+      ]
     },
     {
       "name": "star-person",
@@ -256,7 +261,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.party",
+        "core.tag"
+      ]
     },
     {
       "name": "unstar-person",
@@ -276,7 +286,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.party",
+        "core.tag"
+      ]
     },
     {
       "name": "move-person",
@@ -299,7 +314,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.party", "core.tag"]
     },
     {
       "name": "add-note",
@@ -322,7 +337,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["knowledge.annotation"]
     },
     {
       "name": "add-task",
@@ -345,7 +360,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.link",
+        "schedule.task"
+      ]
     },
     {
       "name": "toggle-task",
@@ -365,7 +385,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["schedule.task"]
     },
     {
       "name": "add-important-date",
@@ -390,7 +410,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.party", "outbox.item", "people.important_date"]
     },
     {
       "name": "toggle-reminder",
@@ -410,7 +430,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["people.important_date"]
     },
     {
       "name": "add-relationship",
@@ -436,7 +456,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.link",
+        "core.party"
+      ]
     },
     {
       "name": "add-gift",
@@ -459,7 +484,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.link",
+        "schedule.task"
+      ]
     },
     {
       "name": "toggle-gift",
@@ -479,7 +509,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["schedule.task"]
     },
     {
       "name": "add-debt",
@@ -504,7 +534,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["tally.friend", "tally.obligation"]
     },
     {
       "name": "settle-debt",
@@ -524,7 +554,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["tally.obligation"]
     },
     {
       "name": "create-list",
@@ -544,7 +574,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.concept", "core.concept_scheme"]
     },
     {
       "name": "rename-list",
@@ -567,7 +597,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.concept"]
     },
     {
       "name": "delete-list",
@@ -587,7 +617,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.concept"]
     },
     {
       "name": "add-journal-entry",
@@ -611,7 +641,13 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.content_item",
+        "core.tag",
+        "knowledge.note"
+      ]
     },
     {
       "name": "save-contact-channel",
@@ -642,7 +678,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["outbox.item", "social.contact_channel"]
     },
     {
       "name": "delete-contact-channel",
@@ -664,7 +700,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["outbox.item", "social.contact_channel"]
     },
     {
       "name": "undo-contact-channel",
@@ -687,7 +723,11 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.entity_revision",
+        "outbox.item",
+        "social.contact_channel"
+      ]
     },
     {
       "name": "merge-people",
@@ -710,7 +750,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.party",
+        "core.party_identifier",
+        "people.profile",
+        "social.contact_channel"
+      ]
     }
   ],
   "queries": [

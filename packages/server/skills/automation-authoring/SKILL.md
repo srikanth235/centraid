@@ -72,15 +72,15 @@ Rules for editing `automation.json`:
 
   (`outbox.*` entities cannot be watched — a drain's own receipts would re-fire the automation; validation rejects them.)
 
-- **Condition triggers** — fire when a row matches a data-state window. Declare `{ "kind": "condition", "entity": "<schema>.<table>", "where": [{ "column", "op", "value" }], "every": "<5-field cron>" }`. On the `every` gate (omit it for the default `*/5 * * * *`, every five minutes) the host runs the declared consented read under the automation's grant and fires **once per row it has not seen before** — row-content dedup: a row that changes fires again, one that merely stays matched does not. The `op` is one of: `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `is-null`, `not-null`, `within-days`, `within-next-days`. This makes "due in N days" a fire without wall-clock guesswork — the time semantics live in the data, the trigger just watches the window. Example — "invoice due in 3 days":
+- **Condition triggers** — fire when a row matches a data-state window. Declare `{ "kind": "condition", "entity": "<schema>.<table>", "where": [{ "column", "op", "value" }], "every": "<5-field cron>" }`. On the `every` gate (omit it for the default `*/5 * * * *`, every five minutes) the host runs the declared consented read under the automation's grant and fires **once per row it has not seen before** — row-content dedup: a row that changes fires again, one that merely stays matched does not. The `op` is one of: `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `is-null`, `not-null`, `within-days`, `within-next-days`. This makes "due in N days" a fire without wall-clock guesswork — the time semantics live in the data, the trigger just watches the window. Example — "task due in 3 days":
 
   ```json
   {
     "kind": "condition",
-    "entity": "business.invoice",
+    "entity": "schedule.task",
     "where": [
-      { "column": "status", "op": "eq", "value": "open" },
-      { "column": "due_date", "op": "within-next-days", "value": 3 }
+      { "column": "status", "op": "eq", "value": "needs-action" },
+      { "column": "due_at", "op": "within-next-days", "value": 3 }
     ],
     "every": "0 8 * * *"
   }

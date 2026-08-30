@@ -3,14 +3,11 @@
 // NEVER stored — they are derived at read time from expenses and settlements
 // (the balance engine lives in the queries). Only the ground facts persist.
 //
-// A friend is a canonical core.party (kind='person'), the same person spine
-// People and every other surface use; `tally_friend` is the bare enrolment
-// marker — a party is "a friend in Tally". The avatar hue is NOT stored here
-// (#441): it lived twice, once here and once on people_profile, both
-// 1:1 on the same party, free to disagree. One hue per party now: Tally reads
-// people_profile's hue when the party is also a CRM contact, else derives a
-// stable one from the party id. The owner is the implicit `me`
-// (core_vault.owner_party_id) and never gets a tally_friend row.
+// A friend is a canonical core.party, the same person spine every surface
+// uses; `tally_friend` is the bare enrolment marker. The avatar hue is NOT
+// stored here (#441) — ONE hue per party: `people_profile`'s when the party is
+// also a CRM contact, else derived from the party id. The owner is the
+// implicit `me` and never gets a `tally_friend` row.
 //
 // A group IS an audience — and the vault already has exactly one audience
 // mechanism, social.circle (the #274 decision that circles deliberately stay
@@ -69,9 +66,12 @@
 
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
-// Canonical receipt capture is a forward migration as well as part of the
-// fresh schema. The receipt owns the claimed content item; reviewed OCR rows
-// stay structured and each line allocation is explicit rather than inferred.
+// `tally_expense_receipt` is RETIRED (#883): a receipt is the `role='receipt'`
+// `core_attachment` on the expense. Rung seven migrates the rows onto the
+// spine, rebuilds `tally_expense_line_item` so its `receipt_id` names an
+// attachment, and drops the table; it is still created here because rung one
+// is history. A typed line belongs to the EXPENSE, so a "By line" division
+// needs no photo.
 export const TALLY_RECEIPT_DDL = `
 CREATE TABLE IF NOT EXISTS tally_expense_receipt (
   receipt_id  TEXT PRIMARY KEY,

@@ -1,5 +1,12 @@
 {
   "_comment": "Growth-only corpus manifest for the backup-format archaeology lane (umbrella #842 W1.4). `formats` lists every backup snapshot format the corpus covers; it MUST include every string in packages/backup manifest READABLE_SNAPSHOT_FORMATS so a format bump forces a new corpus member. Never remove a format. `expectedCensus` is the plaintext census a sealed-then-restored member must show. NOTE: today's format ('centraid-snapshot/2') is pre-release and the only readable AND writable format, so the lane seals a live member and restores it with today's code. When the format graduates to maintaining backward read-compat across a bump, a member for the older format is added here (as frozen bytes or a size-bounded fixture) and kept forever.",
   "formats": ["centraid-snapshot/2"],
-  "expectedCensus": { "party": 3, "content": 2, "media": 2, "receipt": 2 }
+  "expectedCensus": {
+    "party": 3,
+    "content": 2,
+    "media": 2,
+    "receipt": 2,
+    "authority": 3,
+    "reach": 2
+  }
 }

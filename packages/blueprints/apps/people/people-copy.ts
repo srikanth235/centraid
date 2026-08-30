@@ -36,7 +36,7 @@ export const FILTER_CHIPS = [
 
 const LINK_CHIP_IDS: readonly string[] = ["linked", "unlinked"];
 
-/** Unreadable link facts DROP the chips: empty would read as "nobody". */
+/** Unreadable link facts DROP the chips: empty reads as "nobody". */
 export function filterChips(
   linksAvailable: boolean
 ): readonly { id: string; label: string }[] {
@@ -180,7 +180,7 @@ export const STATUS = {
     truncated
       ? `${linked} vaults across ${people} people shown · ${toLink} to link · ${due} to reconnect · ${starred} starred`
       : `${linked} vaults across ${people} people · ${toLink} to link · ${due} to reconnect · ${starred} starred`,
-  /** The roster's app-bar meta on a pointer surface. */
+  /** Roster app-bar meta on a pointer surface. */
   barLinked: (linked: number, people: number) =>
     `${linked} of ${people} linked`,
   touch: (people: number, due: number) => `${people} people · ${due} overdue`,
@@ -221,8 +221,6 @@ export const REFUSALS = {
   failed: "That write did not land.",
   readFailed: "The vault is out of reach.",
 } as const;
-
-export const CONSENT_TITLE = "No vault access yet.";
 
 export const LABELS = {
   star: (name: string) => `Star ${name}`,

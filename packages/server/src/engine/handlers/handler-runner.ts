@@ -6,7 +6,10 @@ import type { LogEntry } from "../data/log-store.js";
 import type { AppRef } from "../types.js";
 import type { VaultBridge, VaultOp } from "./vault-bridge.js";
 import { sharedWorkerAdmission } from "./worker-admission.js";
-import type { WorkerAdmission } from "./worker-admission.js";
+import type {
+  WorkerAdmission,
+  WorkerAdmissionClass,
+} from "./worker-admission.js";
 import {
   WorkerPool,
   workerPoolSizeFromEnv,
@@ -17,7 +20,7 @@ function resolveWorkerFile(): string {
   const here = import.meta.dirname;
   const jsPath = path.join(here, "..", "worker", "runner.js");
   if (existsSync(jsPath)) return jsPath;
-  // tsx: no .js from src/; its loader reaches spawned Workers.
+  // tsx: no .js from src/; its loader reaches Workers.
   return path.join(here, "..", "worker", "runner.ts");
 }
 
@@ -25,7 +28,7 @@ const WORKER_FILE = resolveWorkerFile();
 
 export const HANDLER_WORKER_FILE = WORKER_FILE;
 
-/** Lazy — import must not spawn threads (#404). */
+/** Lazy: import must not spawn threads (#404). */
 let sharedWorkerPoolInstance: WorkerPool | undefined;
 function sharedWorkerPool(): WorkerPool {
   if (!sharedWorkerPoolInstance) {
@@ -49,10 +52,12 @@ export interface RunHandlerOptions {
   onWrite?: (tables: string[]) => void;
   /** Absent ⇒ `ctx.vault.*` fails closed: `VAULT_UNAVAILABLE`. */
   vault?: VaultBridge;
-  /** Host-mounted; this layer must not depend on a runtime host. */
+  /** Host-mounted; must not need a host. */
   timeModuleUrl?: string;
   admission?: WorkerAdmission;
+  admissionClass?: WorkerAdmissionClass;
   pool?: WorkerPool;
+  declaredWrites?: readonly string[];
 }
 
 export interface HandlerOutcome {
@@ -67,9 +72,9 @@ export async function runHandler(
   opts: RunHandlerOptions
 ): Promise<HandlerOutcome> {
   const admission = opts.admission ?? sharedWorkerAdmission();
-  // Gate the spawn (#351): fail before another thread exists.
+  // Gate the spawn (#351): fail before a thread.
   try {
-    await admission.acquire();
+    await admission.acquire(opts.admissionClass);
   } catch (error) {
     return {
       ok: false,
@@ -108,7 +113,7 @@ export async function runHandler(
 
   return await new Promise<HandlerOutcome>((resolve) => {
     let resolved = false;
-    let timeoutHandle: NodeJS.Timeout | undefined;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const finish = (outcome: HandlerOutcome) => {
       if (resolved) return;
       resolved = true;
@@ -116,7 +121,8 @@ export async function runHandler(
       if (timeoutHandle) clearTimeout(timeoutHandle);
       if (opts.onWrite && opts.handlerKind !== "query" && outcome.ok) {
         try {
-          opts.onWrite([]);
+          // Declared tables name `_changes`; `[]` still says it acted (#883).
+          opts.onWrite([...(opts.declaredWrites ?? [])]);
         } catch {
           /* must not change the outcome */
         }

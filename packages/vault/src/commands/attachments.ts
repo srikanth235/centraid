@@ -1,7 +1,8 @@
 // Attachments (core §01): pin a file to a canonical row via a polymorphic
 // edge (core_attachment.target_type/target_id) onto core_content_item.
 // Exactly one source per call: staged_sha (#296), data_uri, or content_id
-// (#272). The edge counts as a GC reference (media.ts CONTENT_REFERENCES).
+// (#272). The edge counts as a GC reference: `core_attachment.content_id` is
+// the first entry of the ONE content-reference list (#883).
 
 import {
   MAX_INLINE_DATA_URI_CHARS,
@@ -12,8 +13,8 @@ import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 
 /**
- * Logical name → PK column. Physical table is the logical name with the dot
- * underscored. Also an allow-list: unknown subject_type is refused, never SQL.
+ * Logical name → PK column; the physical table underscores the dot. Also an
+ * allow-list: an unknown subject_type is refused, never turned into SQL.
  */
 const SUBJECT_PK: Record<string, string> = {
   "core.event": "event_id",
@@ -25,19 +26,11 @@ const SUBJECT_PK: Record<string, string> = {
   "social.message": "message_id",
   "health.vital": "vital_id",
   "finance.recurring_series": "series_id",
-  "business.client": "client_id",
-  "business.project": "project_id",
-  "business.invoice": "invoice_id",
-  "home.asset_item": "item_id",
   "media.asset": "asset_id",
-  // Locker is byte-bearing (#872, GAPS §3.3 #8): a passport scan or a recovery
-  // sheet belongs beside the item it documents, and the attachment spine
-  // already exists — so this is one allow-list entry, not a second attach
-  // command. HONEST BOUNDARY: the bytes ride the content spine like any other
-  // file and are NOT sealed. The sealed class is a COLUMN class; there is no
-  // sealed blob today, so a locker attachment is protected by the vault file,
-  // not by the reveal gate, and Locker's copy has to say so rather than imply
-  // an attachment is as guarded as a password.
+  // Locker is byte-bearing (#872): one allow-list entry, not a second attach
+  // command. HONEST BOUNDARY — the bytes ride the content spine and are NOT
+  // sealed. Sealing is a COLUMN class, so a locker attachment is protected by
+  // the vault file, not the reveal gate, and Locker's copy must say so.
   "locker.item": "item_id",
 };
 
@@ -93,7 +86,7 @@ const ATTACH: CommandDefinition = {
       value: 1,
     },
     {
-      // Inline door is for SMALL payloads (#296): the journal records every input.
+      // The inline door is for SMALL payloads: the journal records every input.
       name: "within_size_cap",
       sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
       column: "n",
@@ -147,7 +140,7 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
   };
   const pk = SUBJECT_PK[input.subject_type];
   if (!pk) throw new Error(`cannot attach to ${input.subject_type}`);
-  // Table and pk both come from the trusted map — allow-list lookup, never caller SQL.
+  // Table and pk come from the trusted map, never from caller text.
   const table = input.subject_type.replace(".", "_");
   const subject = ctx.db
     .prepare(`SELECT count(*) AS n FROM ${table} WHERE ${pk} = ?`)
@@ -251,7 +244,7 @@ const DETACH: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Edge gone. Content item is canonical/deduped — detach never touches it.
+      // The content item is canonical and deduped; detach never touches it.
       name: "attachment_removed",
       sql: "SELECT count(*) AS n FROM core_attachment WHERE attachment_id = :attachment_id",
       column: "n",

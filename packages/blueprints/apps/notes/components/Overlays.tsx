@@ -1,34 +1,20 @@
-// The three things that stand OVER a Notes route: the `[[` powerbox, the
-// confirms, and the compact band's overflow sheet (Notes spec §1, §5, §7).
+// The two things that stand OVER a Notes route: the `[[` powerbox and the
+// confirms (Notes spec §5, §7). The band's overflow sheet is the ONE shared
+// `_shared/MoreSheet.tsx` (#883 B9).
 //
-// Both modals are real `<dialog>` elements opened with `showModal()`, so the
-// platform owns the focus trap, the Escape key and the return of focus to
-// whatever opened them — a hand-rolled overlay gets one of those three right
-// and the member finds out about the other two with a keyboard.
-import { useEffect, useRef } from "react";
+// Both are the kit modal's TOP layer, which is `showModal()`: the platform
+// owns the focus trap, Escape and the inert background, and the kit hands
+// focus back. A hand-rolled overlay gets one of those right and the member
+// finds out about the others with a keyboard.
 import type { ReactNode } from "react";
 
+import { KitModal } from "../../_shared/KitModal.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import { groupTargets } from "../powerbox.ts";
-import { MORE_SHELVES } from "../shelves.ts";
-import type { ShelfId } from "../shelves.ts";
 import type { LinkTarget } from "../types.ts";
-import { POWERBOX_FOOT, shelfCopy } from "../view-copy.ts";
+import { POWERBOX_FOOT } from "../view-copy.ts";
 
 import styles from "./Overlays.module.css";
-
-/** Open and close a `<dialog>` in step with a prop, and never leave one open
- *  behind a route change. */
-function useModal(open: boolean): React.RefObject<HTMLDialogElement | null> {
-  const ref = useRef<HTMLDialogElement | null>(null);
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
-  return ref;
-}
 
 export interface PowerboxProps {
   open: boolean;
@@ -42,20 +28,19 @@ export interface PowerboxProps {
 }
 
 /**
- * The powerbox: one ranked list across seven kinds, with the kind as its own
- * column. A 620px panel under a pointer; the same list as a bottom sheet on
- * touch, which is the stylesheet's decision and not a second component.
+ * One ranked list across seven kinds, the kind its own column. Panel under a
+ * pointer, bottom sheet on touch — the stylesheet's decision, not a second
+ * component.
  */
 export function Powerbox(props: PowerboxProps): ReactNode {
-  const ref = useModal(props.open);
   const groups = groupTargets(props.targets);
   return (
-    <dialog
-      ref={ref}
+    <KitModal
+      layer="top"
+      open={props.open}
       className={styles.powerbox}
-      aria-label="Link to something in your vault"
-      onClose={props.onClose}
-      onCancel={props.onClose}
+      label="Link to something in your vault"
+      onDismiss={props.onClose}
     >
       <div className={styles.sigil}>
         <span aria-hidden="true">[[</span>
@@ -95,7 +80,7 @@ export function Powerbox(props: PowerboxProps): ReactNode {
       </div>
       {/* The locker's absence is a SENTENCE, not a hole to be noticed. */}
       <p className={styles.foot}>{POWERBOX_FOOT}</p>
-    </dialog>
+    </KitModal>
   );
 }
 
@@ -113,14 +98,13 @@ export interface ConfirmProps {
 }
 
 export function Confirm(props: ConfirmProps): ReactNode {
-  const ref = useModal(props.open);
   return (
-    <dialog
-      ref={ref}
+    <KitModal
+      layer="top"
+      open={props.open}
       className={styles.confirm}
-      aria-label={props.title}
-      onClose={props.onClose}
-      onCancel={props.onClose}
+      label={props.title}
+      onDismiss={props.onClose}
     >
       <h2 className={styles.confirmTitle}>{props.title}</h2>
       {props.lines.map((line) => (
@@ -140,40 +124,6 @@ export function Confirm(props: ConfirmProps): ReactNode {
           {props.verb}
         </button>
       </div>
-    </dialog>
-  );
-}
-
-export interface MoreSheetProps {
-  shelf: ShelfId;
-  onSelect: (shelf: ShelfId) => void;
-  onClose: () => void;
-}
-
-/** The band's sixth slot. Only a PLACE is in the band; Capture, Voice, Tags,
- *  Trash and Version history are acts, so they live here. */
-export function MoreSheet(props: MoreSheetProps): ReactNode {
-  return (
-    // A non-modal `<dialog>`: the sheet stands over the band without taking
-    // the page hostage — the member can still see where they were.
-    <dialog open className={styles.sheet} aria-label="More in Notes">
-      {MORE_SHELVES.map((shelf) => (
-        <button
-          key={String(shelf)}
-          type="button"
-          className={`kit-plain-btn ${styles.sheetRow}`}
-          aria-current={props.shelf === shelf ? "page" : undefined}
-          onClick={() => {
-            props.onSelect(shelf);
-            props.onClose();
-          }}
-        >
-          {shelfCopy(shelf).title}
-        </button>
-      ))}
-      <button type="button" className="kit-btn" onClick={props.onClose}>
-        Close
-      </button>
-    </dialog>
+    </KitModal>
   );
 }

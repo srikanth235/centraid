@@ -19,6 +19,8 @@ vi.mock(import("../../lib/gateway") as Promise<unknown>, () => ({
   requireGatewayBase: () => Promise.resolve("http://127.0.0.1:9"),
 }));
 
+import { insightCsvFilename, insightRollupCsv } from "@centraid/design/blocks";
+
 import { healthLineFor } from "../../kit/components/health-line";
 import type {
   GatewayHealth,
@@ -26,9 +28,7 @@ import type {
   InsightsActivityRow,
 } from "../../lib/insights";
 import {
-  csvFilename,
-  gatewayFacts,
-  insightsCsv,
+  mobileGatewayFacts,
   insightsHealth,
   nothingRan,
   originActivityHealth,
@@ -105,7 +105,7 @@ function healthOf(over: Partial<GatewayHealth> = {}): GatewayHealth {
 
 describe("the gateway facts", () => {
   it("reports only what the health snapshot measures", () => {
-    const facts = gatewayFacts(healthOf());
+    const facts = mobileGatewayFacts(healthOf());
     expect(facts.map((fact) => fact.key)).toStrictEqual([
       "uptime",
       "memory",
@@ -125,7 +125,7 @@ describe("the gateway facts", () => {
     });
     expect(unhealthyComponents(sick)).toBe("outbox");
     expect(unhealthyComponents(healthOf())).toBeUndefined();
-    const components = gatewayFacts(sick).find(
+    const components = mobileGatewayFacts(sick).find(
       (fact) => fact.key === "components"
     );
     expect(components?.value).toBe("1 of 2 healthy");
@@ -133,18 +133,19 @@ describe("the gateway facts", () => {
     expect(components?.note).toBe("Not healthy: outbox.");
     // A healthy gateway carries no caveat at all.
     expect(
-      gatewayFacts(healthOf()).find((fact) => fact.key === "components")?.note
+      mobileGatewayFacts(healthOf()).find((fact) => fact.key === "components")
+        ?.note
     ).toBeUndefined();
   });
 
   it("never invents a disk figure or a shared-compute roster", () => {
-    const labels = gatewayFacts(healthOf()).map((fact) => fact.key);
+    const labels = mobileGatewayFacts(healthOf()).map((fact) => fact.key);
     expect(labels).not.toContain("disk");
     expect(labels).not.toContain("compute shared");
   });
 
   it("adds the latency facts only when the gateway reports them", () => {
-    const facts = gatewayFacts(
+    const facts = mobileGatewayFacts(
       healthOf({
         metrics: {
           eventLoopLagP99Ms: 4.2,
@@ -160,7 +161,7 @@ describe("the gateway facts", () => {
   });
 
   it("lets the component count be the one fact that can be bad news", () => {
-    const facts = gatewayFacts(
+    const facts = mobileGatewayFacts(
       healthOf({
         components: [
           { component: "storage", errorCount: 0, status: "ok" },
@@ -245,24 +246,38 @@ describe("empty and export", () => {
 
   it("exports the numbers the chart is drawn from, in the chart's order", () => {
     expect(
-      insightsCsv(
+      insightRollupCsv(
         summaryOf({
           daily: [
-            { costUsd: 1.5, date: "2026-08-12", runs: 3, tokens: 400 },
-            { costUsd: 0, date: "2026-08-13", runs: 0, tokens: 0 },
+            {
+              costUsd: 1.5,
+              date: "2026-08-12",
+              failedCostUsd: 0.5,
+              failedRuns: 1,
+              runs: 3,
+              tokens: 400,
+            },
+            {
+              costUsd: 0,
+              date: "2026-08-13",
+              failedCostUsd: 0,
+              failedRuns: 0,
+              runs: 0,
+              tokens: 0,
+            },
           ],
         })
       )
     ).toBe(
       [
-        "date,runs,tokens,cost_usd",
-        "2026-08-12,3,400,1.5000",
-        "2026-08-13,0,0,0.0000",
+        "date,runs,failed_runs,tokens,cost_usd,failed_cost_usd",
+        "2026-08-12,3,1,400,1.5000,0.5000",
+        "2026-08-13,0,0,0,0.0000,0.0000",
       ].join("\n")
     );
   });
 
   it("names the file after the window it holds", () => {
-    expect(csvFilename(90)).toBe("centraid-analytics-90d.csv");
+    expect(insightCsvFilename(90)).toBe("centraid-analytics-90d.csv");
   });
 });

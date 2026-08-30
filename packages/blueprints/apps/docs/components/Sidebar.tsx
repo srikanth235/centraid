@@ -2,7 +2,7 @@
 // storage footprint.
 //
 // NO SHELF NAVIGATION LIVES HERE — no All / Recent / Starred, no Trash row.
-// The shelf strip (components/ShelfStrip.tsx) carries all six shelves, and a
+// The shelf strip (`_shared/ShelfStrip.tsx`) carries all six shelves, and a
 // second navigation for the same destinations is exactly what spec §1.7
 // refuses. What this region holds is the folder list, whose rename / share /
 // delete affordances have no other home yet, and the footprint.

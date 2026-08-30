@@ -109,6 +109,7 @@ export interface WireTallyGroup {
   parties: WireRow[];
   expenses: WireRow[];
   splits: WireRow[];
+  payers: WireRow[];
   settlements: WireRow[];
   recurring: WireRow[];
   exceptions: WireRow[];

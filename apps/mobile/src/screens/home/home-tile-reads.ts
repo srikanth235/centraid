@@ -9,20 +9,20 @@
 // Two separate bounds are at work, and only one of them used to hold:
 //
 //  - Every read carries an explicit `limit`, because an unbounded read
-//    silently defaults to 1000 rows (packages/client/src/replica/query.ts).
+//    silently defaults to 1000 rows
+//    (packages/client/src/replica/read-plan.ts).
 //  - A limit bounds the ANSWER. It bounds the WORK only where the mounted
-//    reader can page inside SQLite (lib/replica/replica-read-pushdown.ts):
-//    every `where` clause must push, and an ordered read additionally needs a
-//    disclosed, type-uniform order column, an exposed scalar primary key, and
-//    an entity that carries no content hash — equal bytes in two scopes
-//    collapse into one badged row, so a per-scope page could drop the
-//    duplicate that supplies a badge.
+//    reader can carry it into SQLite (lib/replica/multi-vault-reader.ts). The
+//    compiled plan expresses the whole read grammar, so the remaining
+//    exception is dedupe's: an entity that carries a content hash collapses
+//    equal bytes from several vaults into one badged row AFTER the statement,
+//    so its limit is not pushed and the whole matching set is read.
 //
 // `media.asset`, `core.document` and `knowledge.note` each clear that bar:
-// single-column TEXT keys, TEXT order columns, no `sha256`. `core.content_item`
-// does NOT — it is the content-hashed entity — which is why the document and
-// note BODIES are fetched by id (`idFilter`) rather than ordered: an id filter
-// pushes as a predicate and costs the ids asked for, with or without a page.
+// no `sha256`. `core.content_item` does NOT — it is the content-hashed entity
+// — which is why the document and note BODIES are fetched by id (`idFilter`)
+// rather than ordered: an id filter pushes as a predicate and costs the ids
+// asked for, with or without a page.
 import type { NativeReadRequest } from "../../lib/replica/native-session";
 
 export const HOME_TILE_LIMITS = {

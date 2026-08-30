@@ -85,13 +85,17 @@
   display: flex;
   gap: var(--sp-gutter);
   margin-bottom: var(--sp-gutter);
-  /* Timeline windowing without a virtualization lib: the browser skips
-     layout/paint/decode for rows that are off-screen and remembers each row's
-     real height once measured (the `auto` keyword), so scrolling a deep
-     library stays cheap and the scrollbar stays stable. Progressive — ignored
-     where unsupported, where the `loading="lazy"` tiles still defer bytes. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 160px;
+  /* NO `content-visibility` HERE (#883 C4). It was standing in for
+     virtualization — the browser skipped layout and paint for off-screen rows
+     while every one of them stayed a node — and the timeline is properly
+     windowed now (`Timeline.tsx`, `_shared/VirtualWindow.tsx`), so the rows in
+     the document are the rows on screen plus an overscan.
+     Keeping it would make the window WRONG rather than redundant: with
+     `contain-intrinsic-size` a mounted row that has not yet been painted
+     reports the placeholder size instead of its packed height, and the spacers
+     either side are computed from the packed height. The two would disagree by
+     exactly the rows in the overscan, and the scrollbar would drift on every
+     flick. The gutter above is the whole rule now. */
 }
 
 /* ---- album detail's own Remove (Tile.tsx `extras` — see its header) ---- */

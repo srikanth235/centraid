@@ -3,6 +3,7 @@ import type { JSX } from "react";
 
 import type { HarnessCardDTO, HarnessKind } from "../screen-contracts.js";
 import { openConfirm } from "../shell/confirm.js";
+import { Button } from "../ui/index.js";
 
 import styles from "./SettingsHarnessesScreen.module.css";
 
@@ -63,9 +64,10 @@ export default function HarnessLadder({
           return (
             <span className={styles.ladderMember} key={kind}>
               {card?.title ?? kind}
-              <button
-                type="button"
-                aria-label={`Move ${card?.title ?? kind} earlier for ${label}`}
+              <Button
+                variant="quiet"
+                size="chrome"
+                ariaLabel={`Move ${card?.title ?? kind} earlier for ${label}`}
                 disabled={index === 0}
                 onClick={() => {
                   const next = [...activeLadder];
@@ -77,10 +79,11 @@ export default function HarnessLadder({
                 }}
               >
                 ↑
-              </button>
-              <button
-                type="button"
-                aria-label={`Move ${card?.title ?? kind} later for ${label}`}
+              </Button>
+              <Button
+                variant="quiet"
+                size="chrome"
+                ariaLabel={`Move ${card?.title ?? kind} later for ${label}`}
                 disabled={index === activeLadder.length - 1}
                 onClick={() => {
                   const next = [...activeLadder];
@@ -92,16 +95,17 @@ export default function HarnessLadder({
                 }}
               >
                 ↓
-              </button>
-              <button
-                type="button"
-                aria-label={`Remove ${card?.title ?? kind} from ${label} failover`}
+              </Button>
+              <Button
+                variant="quiet"
+                size="chrome"
+                ariaLabel={`Remove ${card?.title ?? kind} from ${label} failover`}
                 onClick={() =>
                   onSetLadder(activeLadder.filter((entry) => entry !== kind))
                 }
               >
                 ×
-              </button>
+              </Button>
             </span>
           );
         })

@@ -19,8 +19,12 @@ import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
-import { makeMultiplexReplicaRouteHandler } from "./multiplex-replica-routes.js";
+import {
+  MAX_MOUNT_REBOOTSTRAP_NOTICES,
+  makeMultiplexReplicaRouteHandler,
+} from "./multiplex-replica-routes.js";
 import type { MultiplexReplicaRouteOptions } from "./multiplex-replica-routes.js";
+import { SseSubscriberCap } from "./sse-cap.js";
 
 const logger = {
   info: () => undefined,
@@ -37,7 +41,7 @@ class MockResponse extends EventTarget {
   body = "";
   writableEnded = false;
   destroyed = false;
-  /** What Node has queued for a client that is not reading (SseStream's bound). */
+  /** What Node has queued for a client that is not reading. */
   writableLength = 0;
   onWrite?: (chunk: string) => void;
   readonly #listeners = new Map<string, Set<() => void>>();
@@ -179,7 +183,7 @@ function cursorsFor(body: string, vaultId: string): ReplicaCursor[] {
     .map((frame) => frame.data as ReplicaCursor);
 }
 
-/** Log entries a mounted phone has yet to see; the rows themselves stay absent. */
+/** Log entries a mounted phone has yet to see; rows stay absent. */
 function backlog(plane: VaultPlane, count: number, prefix: string): number[] {
   return Array.from(
     { length: count },
@@ -209,8 +213,7 @@ describe("multiplex replica route", () => {
       ...familyState.watermark,
       schemaEpoch: familyState.schemaEpoch,
     });
-    // Ownership of the family vault ends while the phone is offline — the
-    // ownership analogue of a grant removal.
+    // Ownership of the family vault ends while the phone is offline.
     f.enrollments.owners.removeVault(f.family!.boot.vaultId);
     const req = request(streamPath([f.personal, f.family!]), f.deviceId);
     const res = new MockResponse();
@@ -231,8 +234,8 @@ describe("multiplex replica route", () => {
   });
 
   test("a multi-page backlog drains without waiting for the heartbeat", async () => {
-    // A heartbeat far longer than the test: every page after the first can only
-    // arrive because the route re-projected immediately on `hasMore`.
+    // A heartbeat longer than the test: every page after the first arrives
+    // only because the route re-projected on `hasMore`.
     const f = await fixture({
       heartbeatMs: 600_000,
       limit: 1,
@@ -277,8 +280,8 @@ describe("multiplex replica route", () => {
     const familyEpoch = currentReplicaLogState(f.family!.db.vault).watermark
       .epoch;
     expect(personalEpoch).not.toBe(familyEpoch);
-    // Each mount advances through its own log, one page at a time, and no frame
-    // ever carries the other vault's epoch.
+    // Each mount advances through its own log, and no frame carries the other
+    // vault's epoch.
     expect(cursorsFor(res.body, f.personal.boot.vaultId)).toStrictEqual(
       personalSeqs.map((seq) => ({ epoch: personalEpoch, seq }))
     );
@@ -295,8 +298,8 @@ describe("multiplex replica route", () => {
     const personalCursor = currentReplicaLogState(
       f.personal.db.vault
     ).watermark;
-    // The family cursor this phone last persisted, then that vault moves on and
-    // retention prunes past it while the phone is offline.
+    // The cursor this phone persisted, then that vault moves on and retention
+    // prunes past it while the phone is offline.
     const stale = currentReplicaLogState(f.family!.db.vault).watermark;
     backlog(f.family!, 2, "pruned");
     pruneReplicaChanges(f.family!.db.vault, {
@@ -327,8 +330,8 @@ describe("multiplex replica route", () => {
 
     await f.handler(req, res as unknown as ServerResponse);
 
-    // One scoped rebootstrap for the pruned vault, named by its own reason —
-    // and only one, because that mount stops projecting for the connection.
+    // One scoped rebootstrap for the pruned vault, and only one: that mount
+    // stops projecting for the connection.
     expect(
       scopeFrames(res.body).filter((frame) => frame.event === "rebootstrap")
     ).toStrictEqual([
@@ -338,11 +341,66 @@ describe("multiplex replica route", () => {
         data: expect.objectContaining({ reason: "retention" }),
       },
     ]);
-    // The healthy mount drained every page regardless.
     expect(
       cursorsFor(res.body, f.personal.boot.vaultId).map((cursor) => cursor.seq)
     ).toStrictEqual(personalSeqs);
     expect(cursorsFor(res.body, f.family!.boot.vaultId)).toStrictEqual([]);
+  });
+
+  test("a mount whose shapes changed is told a bounded number of times, then errors", async () => {
+    // #883 D1: the cursor cannot advance while the shape set disagrees, so a
+    // branch that `continue`d without going terminal re-emits the same frame
+    // every pass. The phone acts on the FIRST frame; past a small bound it is
+    // not listening and the mount stops.
+    const f = await fixture({ heartbeatMs: 5 });
+    const state = currentReplicaLogState(f.personal.db.vault);
+    const req = request(
+      `/centraid/_gateway/replica/changes?${new URLSearchParams({
+        mounts: JSON.stringify([
+          {
+            vaultId: f.personal.boot.vaultId,
+            cursor: state.watermark,
+            // A baseline this vault cannot produce.
+            shapeIds: ["a-shape-this-vault-does-not-have"],
+          },
+        ]),
+      })}`,
+      f.deviceId
+    );
+    const res = new MockResponse();
+    res.onWrite = () => {
+      if (scopeFrames(res.body).some((frame) => frame.event === "error"))
+        req.emit("close");
+    };
+    backlog(f.personal, 1, "shape-changed");
+
+    await f.handler(req, res as unknown as ServerResponse);
+
+    const frames = scopeFrames(res.body);
+    expect(
+      frames.filter((frame) => frame.event === "rebootstrap")
+    ).toHaveLength(MAX_MOUNT_REBOOTSTRAP_NOTICES);
+    // The terminal frame is the D1 vocabulary's `error`, scoped to this mount.
+    expect(frames.at(-1)).toStrictEqual({
+      vaultId: f.personal.boot.vaultId,
+      event: "error",
+      data: expect.objectContaining({ reason: "rebootstrap-unacknowledged" }),
+    });
+  });
+
+  test("a saturated gateway refuses a radio before opening a stream", async () => {
+    const f = await fixture({ subscriberCap: new SseSubscriberCap(0) });
+    const req = request(streamPath([f.personal]), f.deviceId);
+    const res = new MockResponse();
+
+    await f.handler(req, res as unknown as ServerResponse);
+
+    expect(res.statusCode).toBe(503);
+    // 503 + Retry-After and NOT one byte of stream: a refusal is not a frame.
+    expect(res.body).not.toContain("event: scope");
+    expect(JSON.parse(res.body)).toStrictEqual(
+      expect.objectContaining({ error: "sse_capacity" })
+    );
   });
 
   test("a phone that stops reading is dropped instead of buffered", async () => {
@@ -355,8 +413,8 @@ describe("multiplex replica route", () => {
     backlog(f.personal, 3, "stalled");
     const req = request(mounted, f.deviceId);
     const res = new MockResponse();
-    // The socket already holds more than the bounded writer's ceiling: the
-    // phone has stopped draining. Raw `res.write` would queue on top of it.
+    // Over the bounded writer's ceiling: the phone stopped draining, and raw
+    // `res.write` would queue on top.
     res.writableLength = 4 * 1024 * 1024;
 
     await f.handler(req, res as unknown as ServerResponse);
@@ -397,8 +455,7 @@ describe("multiplex replica route", () => {
       ...familyState.watermark,
       schemaEpoch: familyState.schemaEpoch,
     });
-    // Ownership of the family vault ends while the phone is offline — the
-    // ownership analogue of a grant removal.
+    // Ownership of the family vault ends while the phone is offline.
     f.enrollments.owners.removeVault(f.family!.boot.vaultId);
     const req = request(streamPath([f.personal, f.family!]), f.deviceId);
     const res = new MockResponse();

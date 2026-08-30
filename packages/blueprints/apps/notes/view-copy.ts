@@ -62,7 +62,9 @@ export function sentToTasks(title: string): string {
 }
 
 export function pendingStatus(queued: number): string {
-  return `${queued} writes queued on this device · they settle when the gateway answers`;
+  const noun = queued === 1 ? "write" : "writes";
+  const pronoun = queued === 1 ? "it settles" : "they settle";
+  return `${queued} ${noun} queued on this device · ${pronoun} when the gateway answers`;
 }
 
 export const CONFLICT_TITLE = "Two devices changed this passage";

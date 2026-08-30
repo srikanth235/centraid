@@ -1,14 +1,9 @@
-// Home cold start (#880). The springboard fires nine reads the moment the app
-// opens, three of them "the newest N". Before the mounted reader could page an
-// ordered read inside SQLite, each of those three selected every row of its
-// entity out of every attached vault and sorted 50,000 payloads in JavaScript
-// to show twelve — the `limit` bounded the answer and nothing else.
-//
-// These tests hold the tile reads against the real reader over a four-scope
-// fixture and read the SQL back off the driver. What they pin is not "the
-// numbers are small" but the SHAPE of the work: a per-scope `ORDER BY … LIMIT`
-// on the ordered tiles, a pushed `IN` predicate on the body lookups, and a row
-// count that tracks the page rather than the library.
+// Home cold start (#880, #883 D1). Nine reads fire at open, three of them "the
+// newest N". These hold the tile reads against the real reader over a
+// four-scope fixture and read the SQL back off the driver, pinning the SHAPE of
+// the work: one composed statement per read that orders and limits the union of
+// every attached vault, a pushed `IN` on body lookups, and a page that crosses
+// the driver at `limit`, not `limit x scopes`.
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -248,22 +243,18 @@ function household(): Household {
   return { driver, reader: new MultiVaultReplicaReader(driver, scopes) };
 }
 
-/** The canonical page statement: the only read that carries an `ORDER BY`. */
-function pagedRead(driver: RecordingDriver): { sql: string; rows: number } {
-  const paged = driver.reads.filter((read) =>
-    read.sql.includes("ORDER BY json_extract")
-  );
-  expect(paged).toHaveLength(1);
-  return paged[0]!;
-}
-
-function rowReads(driver: RecordingDriver): Array<{
+/** The composed page: the one statement a read compiles its grammar into. */
+function pageReads(driver: RecordingDriver): Array<{
   sql: string;
   rows: number;
 }> {
-  return driver.reads.filter((read) =>
-    read.sql.includes("r.payload_json, r.oversized_json")
-  );
+  return driver.reads.filter((read) => read.sql.includes("AS verdict"));
+}
+
+function onePage(driver: RecordingDriver): { sql: string; rows: number } {
+  const pages = pageReads(driver);
+  expect(pages).toHaveLength(1);
+  return pages[0]!;
 }
 
 describe("Home tile reads", () => {
@@ -296,18 +287,21 @@ describe("Home tile reads", () => {
 
     const page = await reader.read(tile.appId, tile.request);
 
-    // Proof first: the reader refuses an ordered page unless one aggregate
-    // pass shows the order column type-uniform and disclosed everywhere.
-    expect(
-      driver.reads.some((read) => read.sql.includes("AS order_withheld"))
-    ).toBe(true);
-    const paged = pagedRead(driver);
+    const paged = onePage(driver);
+    // Escalating rows lead the page, then the caller's own key.
     expect(paged.sql).toContain(
-      `ORDER BY json_extract(r.payload_json, '$.${tile.column}') DESC`
+      `ORDER BY (verdict = 0) ASC, json_extract(payload_json, '$.${tile.column}') DESC`
     );
-    // Per SCOPE, not across the union: one wrapped arm per attached vault.
-    expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(SCOPES.length);
-    expect(paged.rows).toBe(tile.limit * SCOPES.length);
+    // The refusal guards ride the same pass: the order column has to be
+    // type-uniform and disclosed across EVERY attached vault, not merely on
+    // the page, and that is a window column rather than a second statement.
+    expect(paged.sql).toContain("order_oversized");
+    expect(paged.sql).toContain("order_straddle");
+    // One arm per attached vault, one page across their union.
+    expect(paged.sql.match(/UNION ALL/gu)).toHaveLength(SCOPES.length - 1);
+    expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
+    // The page is the answer: nothing is fetched only to be discarded.
+    expect(paged.rows).toBe(tile.limit);
 
     expect(page.rows).toHaveLength(tile.limit);
     // Four scopes share one day sequence, so the global newest `limit` rows
@@ -319,23 +313,22 @@ describe("Home tile reads", () => {
     reader.close();
   });
 
-  test("an unordered tile read is still one bounded page per scope", async () => {
+  test("an unordered tile read is one bounded page over the union", async () => {
     const { driver, reader } = household();
 
     const page = await reader.read("tasks", HOME_TILE_READS.tasks);
 
-    const rows = rowReads(driver);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.sql.match(/LIMIT \?/gu)).toHaveLength(SCOPES.length);
-    expect(rows[0]!.rows).toBe(HOME_TILE_LIMITS.tasks * SCOPES.length);
+    const paged = onePage(driver);
+    expect(paged.sql.match(/LIMIT \?/gu)).toHaveLength(1);
+    expect(paged.rows).toBe(HOME_TILE_LIMITS.tasks);
     expect(page.rows).toHaveLength(HOME_TILE_LIMITS.tasks);
     reader.close();
   });
 
-  // `core.content_item` carries `sha256`, so the reader may NOT page it across
-  // scopes — a per-scope page could drop the duplicate that supplies a source
-  // badge. The body lookup is bounded by its pushed predicate instead, which
-  // is why the tiles fetch bodies by id rather than ordering this entity.
+  // `core.content_item` carries `sha256`, so no limit may be carried into a
+  // cross-scope read of it: the collapse runs after the statement and could
+  // drop the duplicate supplying a source badge. Tiles fetch bodies by id
+  // instead, bounded by the pushed predicate.
   test("the document body lookup costs the ids it asks for", async () => {
     const { driver, reader } = household();
     const ids = Array.from({ length: 12 }, (_, index) =>
@@ -349,15 +342,16 @@ describe("Home tile reads", () => {
       idFilter("core.content_item", "content_id", ids)
     );
 
-    const rows = rowReads(driver);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.sql).toContain(
-      "json_extract(r.payload_json, '$.content_id')"
-    );
-    expect(rows[0]!.sql).not.toContain("LIMIT ?");
+    const paged = onePage(driver);
+    expect(paged.sql).toContain("json_extract(payload_json, '$.content_id')");
+    // The read still says it could not carry the caller's limit, rather than
+    // quietly costing the entity (`mounted-read-scoping.ts`).
+    expect(page.degraded?.map((entry) => entry.fallback)).toStrictEqual([
+      "content-hash-badges",
+    ]);
     // One scope holds these ids; the other three answer with nothing. The
     // whole entity is 2,000 rows.
-    expect(rows[0]!.rows).toBe(ids.length);
+    expect(paged.rows).toBe(ids.length);
     expect(page.rows).toHaveLength(ids.length);
     reader.close();
   });

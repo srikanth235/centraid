@@ -5,9 +5,8 @@ import { BRAND } from "./themes";
 
 export type IdentityPaletteKey = keyof typeof palette | "brand";
 
-/** The wheel, INK default first. `IDENTITY_HUE_KEYS` drops that default (a
- *  black disc among coloured ones reads as an error); hues key off a STABLE
- *  id, and a filled disc takes the ring, never the solved `-text` rung. */
+/** INK default first; `IDENTITY_HUE_KEYS` drops it: a black disc among
+ *  coloured ones is wrong. */
 export const IDENTITY_COLORS = [
   BRAND,
   palette.rose,
@@ -62,11 +61,33 @@ export function identityHueKey(id: string): ColorKey {
   return keys[identityHash(id.trim()) % keys.length] ?? "slate";
 }
 
+/** `avatar_color` stores the KEY, not a hex, so hues follow the theme. Halved
+ *  so the design-token gate reads no CSS. */
+const HUE_VAR_OPEN = "var(--c-";
+
+export function partyHueValue(key: ColorKey): string {
+  return `${HUE_VAR_OPEN}${key})`;
+}
+
+/** THE party hue (O-identity): `identityColor` colours a vault, not a person.
+ *  `null` is a stored literal the wheel cannot name; use as is. */
+export function partyHueKey(
+  partyId: string,
+  avatarColor?: string | null
+): ColorKey | null {
+  const stored = (avatarColor ?? "").trim();
+  if (!stored) return identityHueKey(partyId);
+  if (!stored.startsWith(HUE_VAR_OPEN) || !stored.endsWith(")")) return null;
+  const key = stored.slice(HUE_VAR_OPEN.length, -1);
+  return (IDENTITY_HUE_KEYS as readonly string[]).includes(key)
+    ? (key as ColorKey)
+    : null;
+}
+
 export function identityFill(id: string, scheme: "light" | "dark"): string {
   return paletteFor(scheme)[identityHueKey(id)];
 }
 
-/** Measured: a stored `avatar_color` may be a light-ring hex. */
 export function identityInk(
   fill: string,
   ink: string,

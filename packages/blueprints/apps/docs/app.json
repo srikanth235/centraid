@@ -70,7 +70,14 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.content_derivative",
+        "core.content_item",
+        "core.document",
+        "core.tag"
+      ]
     },
     {
       "name": "rename",
@@ -93,7 +100,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.document"]
     },
     {
       "name": "move",
@@ -116,7 +123,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.document",
+        "core.tag"
+      ]
     },
     {
       "name": "trash",
@@ -138,7 +150,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.document"]
     },
     {
       "name": "restore",
@@ -160,7 +172,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.document"]
     },
     {
       "name": "star",
@@ -182,7 +194,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.document",
+        "core.tag"
+      ]
     },
     {
       "name": "unstar",
@@ -204,7 +221,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.document",
+        "core.tag"
+      ]
     },
     {
       "name": "tag",
@@ -227,7 +249,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
     },
     {
       "name": "untag",
@@ -249,7 +271,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.tag"]
     },
     {
       "name": "edit",
@@ -273,7 +295,13 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.content_item",
+        "core.document",
+        "core.link"
+      ]
     },
     {
       "name": "replace",
@@ -298,7 +326,13 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.content_item",
+        "core.document",
+        "core.link"
+      ]
     },
     {
       "name": "restore-version",
@@ -321,7 +355,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.document",
+        "core.link"
+      ]
     },
     {
       "name": "create-folder",
@@ -344,7 +383,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.concept", "core.concept_scheme"]
     },
     {
       "name": "rename-folder",
@@ -367,7 +406,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.concept"]
     },
     {
       "name": "delete-folder",
@@ -389,7 +428,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.concept"]
     }
   ],
   "queries": [

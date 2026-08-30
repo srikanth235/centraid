@@ -1,43 +1,43 @@
+import {
+  ACTION_PURPOSE,
+  actionInput,
+  deniedResult,
+  runVaultAction,
+} from "../../_shared/action-kit.ts";
+
 /**
  * Send one checklist line to Tasks (#834).
  *
  * TWO COMMANDS, ONE SPINE. `schedule.add_task` mints the canonical task row —
- * the SAME row Tasks' board, Agenda's due shelf and the home tile read — and
- * `core.link_entities` puts an edge back to the note so the task can say where
- * it came from. Notes writes nothing of its own: there is no "sent" flag on
- * the line and no note-side copy of the task, because a second store of
- * task-ness is exactly the parallel mini-system this projection exists to
- * prevent.
+ * the same one the board, the due shelf and the home tile read — and
+ * `core.link_entities` adds the backlink. Notes stores nothing of its own: no
+ * "sent" flag, no note-side copy, because a second store of task-ness is the
+ * parallel mini-system this projection exists to prevent.
  *
- * The link is best-effort ON PURPOSE. If the task landed and only the edge
- * failed, the commitment still exists and is visible in the room that owns it;
- * refusing the whole write over a missing backlink would lose the member's
- * intent to keep a decoration. The outcome says which happened.
+ * The backlink is best-effort on purpose, so it swallows its own failure in
+ * the kit's `settle` step: a task that landed is a real commitment, and
+ * refusing the write over a missing decoration loses the member's intent.
  */
 export default async function sendToTasks({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
+  const input = actionInput(body);
   const title = String(input.title ?? "").trim();
   const noteId = String(input.note_id ?? "");
-  if (!title) {
-    return {
-      status: 200,
-      body: { status: "denied", reason: "A task needs a title." },
-    };
-  }
-  try {
-    const outcome = (await ctx.vault.invoke({
+  if (!title) return deniedResult("A task needs a title.");
+  return runVaultAction(
+    ctx,
+    {
       command: "schedule.add_task",
       input: {
         title,
-        // Undated unless the line carried a date. An undated task never
-        // touches Today and never reaches the calendar grid.
+        // Undated unless the line carried one; an undated task never reaches
+        // Today or the calendar grid.
         ...(input.due_at ? { due_at: String(input.due_at) } : {}),
       },
-      purpose: "dpv:ServiceProvision",
-    })) as { status?: string; output?: { task_id?: string } };
-
-    const taskId = outcome?.output?.task_id;
-    if (outcome?.status === "executed" && taskId && noteId) {
+    },
+    async (outcome) => {
+      const taskId = (outcome.output as { task_id?: string } | undefined)
+        ?.task_id;
+      if (outcome.status !== "executed" || !taskId || !noteId) return;
       const exact = String(input.exact ?? "");
       await ctx.vault
         .invoke({
@@ -50,16 +50,9 @@ export default async function sendToTasks({ body, ctx }: HandlerArgs) {
             relation: "references",
             ...(exact ? { selector: { exact, prefix: "", suffix: "" } } : {}),
           },
-          purpose: "dpv:ServiceProvision",
+          purpose: ACTION_PURPOSE,
         })
         .catch(() => undefined);
     }
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  );
 }

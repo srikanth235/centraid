@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { armConfirm } from "@centraid/design/elements";
 
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
+import { KitModal } from "../../_shared/KitModal.tsx";
 import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { SAVED_TO_MY_VAULT } from "../../_shared/shared-copy.ts";
 import { RAIL_NOTES, RAIL_TABS } from "../document-copy.ts";
@@ -351,14 +352,14 @@ export function Details({
         aria-label="Dismiss details"
         onClick={onClose}
       />
-      <dialog
-        open
+      <KitModal
+        layer="inline"
         className={styles.details}
-        aria-modal="true"
-        aria-label="Document details"
+        ariaModal
+        label="Document details"
       >
         {body}
-      </dialog>
+      </KitModal>
     </>
   );
 }

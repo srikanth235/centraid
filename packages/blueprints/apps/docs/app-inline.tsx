@@ -7,7 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
-import pendingProjection from "./pending-projection.ts";
+import { docsPendingProjection as pendingProjection } from "./pending-projection.ts";
 import activityQuery from "./queries/activity.ts";
 import driveQuery from "./queries/drive.ts";
 import historyQuery from "./queries/history.ts";

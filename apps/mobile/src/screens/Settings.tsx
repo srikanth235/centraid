@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
+import Tappable from "../kit/components/Tappable";
 import { family, radii, spacing, t, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import {
@@ -40,6 +41,7 @@ import {
 } from "../lib/phone-link";
 import type { TunnelStatus } from "../lib/phone-link";
 import type { SettingsScreenProps } from "../navigation";
+import AccessSection from "./settings/AccessSection";
 import AppearanceSection from "./settings/AppearanceSection";
 import AppLockSection from "./settings/AppLockSection";
 import BandSection from "./settings/BandSection";
@@ -250,14 +252,14 @@ export default function SettingsScreen({
     // that reads better.
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityRole="button"
           accessibilityLabel="Back to home"
           hitSlop={10}
           onPress={() => navigation.getParent()?.goBack()}
         >
           <Icon name="arrow-left" size={26} color={colors.text} />
-        </Pressable>
+        </Tappable>
         <Text style={styles.title}>Settings</Text>
       </View>
 
@@ -273,6 +275,11 @@ export default function SettingsScreen({
             it sits under Vault because it is a fact ABOUT the vault, and above
             the device/link sections that are facts about this phone. */}
         <EnrichmentSection />
+        {/* The one dashboard over standing answers (#883, ruling V-dashboard):
+            the same rows, grouping and words as the desktop's Settings →
+            Access, rendered for this seat. It sits under the vault's own facts
+            and above the facts about this phone. */}
+        <AccessSection />
         <BandSection />
 
         <SettingsSection label="Desktop link">

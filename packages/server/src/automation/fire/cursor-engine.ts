@@ -5,6 +5,7 @@
  * a virtual source computed on read.
  */
 
+import { unrefTimer } from "../../lib/unref-timer.js";
 import type { Trigger } from "../manifest/manifest.js";
 import type { Row } from "../scaffold/app.js";
 import { floorMinute, readCronCursor } from "./cron-cursor.js";
@@ -219,9 +220,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       this.boundary = undefined;
       this.tick();
       this.interval = setInterval(() => this.tick(), 60_000);
-      this.interval.unref?.();
+      unrefTimer(this.interval);
     }, delay);
-    this.boundary.unref?.();
+    unrefTimer(this.boundary);
   }
 
   async stop(): Promise<void> {
@@ -255,7 +256,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         if (selected) this.processSafely(registration, at);
       }
     }, this.nudgeDelayMs);
-    this.nudgeTimer.unref?.();
+    unrefTimer(this.nudgeTimer);
   }
 
   private processSafely(registration: CursorRegistration, at: Date): void {

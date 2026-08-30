@@ -74,5 +74,3 @@ export const photosPendingProjection = definePendingProjection({
       pendingPatch("media.asset", input.entity_id, input),
   },
 });
-
-export default photosPendingProjection;

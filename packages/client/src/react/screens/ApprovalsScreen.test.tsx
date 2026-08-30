@@ -13,10 +13,10 @@ import {
   noticeSpanPhrase,
   outboundLabel,
 } from "../shell/routes/approvalsPhrasing.js";
-// The surface's presentation rules moved out of the component with the v11
-// pass (#815) — the phrasings to `approvalsPhrasing`, the store ledger's
-// revoked-row bookkeeping to `privacyStores` — and this suite keeps exercising
-// them beside the screen they are the contract for.
+// Presentation rules live outside the component — phrasings in
+// `approvalsPhrasing`, the store ledger's revoked-row bookkeeping in
+// `privacyStores` (#815) — and this suite exercises them beside the screen
+// they are the contract for.
 import ApprovalsScreen from "./ApprovalsScreen.js";
 import type {
   ApprovalsActivityRowDTO,
@@ -87,7 +87,7 @@ const scopeRow: ApprovalsScopeRequestRowDTO = {
   requestId: "r1",
   appId: "invoicer",
   purpose: "dpv:ServiceProvision",
-  scopeSummary: "business.invoice (act)",
+  scopeSummary: "schedule.task (act)",
   requestedAgo: "1h ago",
 };
 
@@ -709,7 +709,7 @@ describe("screens/ApprovalsScreen", () => {
         })
       );
       click(el, "Review");
-      expect(el.textContent).toContain("business.invoice (act)");
+      expect(el.textContent).toContain("schedule.task (act)");
       expect(() => findButton(el, "Approve the wider access")).not.toThrow();
       click(el, "Deny");
       expect(el.textContent).toContain(

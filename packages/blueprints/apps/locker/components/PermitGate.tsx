@@ -20,6 +20,7 @@
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
+import { KitModal } from "../../_shared/KitModal.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import {
   LOCK_PLACEHOLDER,
@@ -116,7 +117,7 @@ export interface ConfirmProps {
 export function Confirm(props: ConfirmProps): ReactNode {
   return (
     <div className={styles.overlay}>
-      <dialog open className={styles.panel} aria-label={props.title}>
+      <KitModal layer="inline" className={styles.panel} label={props.title}>
         <p className={styles.panelTitle}>{props.title}</p>
         <p className={styles.panelBody}>{props.body}</p>
         <div className={styles.panelActs}>
@@ -136,7 +137,7 @@ export function Confirm(props: ConfirmProps): ReactNode {
             {props.label}
           </button>
         </div>
-      </dialog>
+      </KitModal>
     </div>
   );
 }

@@ -1,7 +1,7 @@
-// governance: allow-repo-hygiene file-size-limit S3+S4+S5 of one invocation — contract / precondition / ACID boundary / evidence are one non-splittable transaction bracket, already carved from gateway.ts
+// governance: allow-repo-hygiene file-size-limit S3+S4+S5 of one invocation — contract, precondition, ACID boundary and evidence are one transaction bracket
 // S3 + S4 + S5 for one already-consented invocation: contract, preconditions
 // recorded before anything mutates, the ACID boundary with postcondition
-// rollback, then evidence. Split from gateway.ts for size only.
+// rollback, then evidence.
 
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
@@ -52,6 +52,7 @@ import type {
   CommandDefinition,
   ConditionSpec,
   HandlerCtx,
+  HandlerReceipt,
   Identity,
   InvokeOutcome,
   InvokeRequest,
@@ -142,7 +143,7 @@ export function pkColumn(vault: DatabaseSync, physical: string): string {
 /**
  * THE one place a hard delete end-dates live links (#272): no delete command
  * carries its own sweep, and soft deletes keep theirs. Swept ids join `writes`
- * so S5 stamps them; the link row survives with `valid_to` set.
+ * so S5 stamps them; the link row survives with `valid_to`.
  */
 export function sweepDanglingLinks(
   vault: DatabaseSync,
@@ -302,8 +303,8 @@ export function insertInvocation(
 }
 
 /**
- * Runs BEFORE any handler. Commit repair repeats it only as a corruption
- * guard: a conflict found there already left an unaudited write.
+ * BEFORE any handler. Commit repair repeats it only as a corruption guard: a
+ * conflict found there already left an unaudited write.
  */
 export function assertInvocationIdentity(
   db: VaultDb,
@@ -576,11 +577,13 @@ export function runContractAndExecute(
 
   const writes: { entityType: string; entityId: string }[] = [];
   const citations: Citation[] = [];
+  // Queued, flushed after the canonical COMMIT.
+  const handlerReceipts: HandlerReceipt[] = [];
   const registered = commands.get(command.name);
   if (!registered)
     return denyContract("handler missing", { stage: "execution" });
   const handler = registered.handler;
-  // Receipted as column names, never values (#293).
+  // Receipted as column names, never values.
   const unsealed = new Set<string>();
   // Handlers mint ids in a fixed order, so indexing the seed reproduces the
   // sequence. The shape stays UUIDv7-compatible; only ordering is traded away.
@@ -603,6 +606,7 @@ export function runContractAndExecute(
     newId,
     wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
     cite: (citation) => citations.push(citation),
+    receipt: (receipt) => handlerReceipts.push(receipt),
     unseal: (entityType, entityId, column) => {
       const cell = `${entityType}.${column}`;
       if (!registered.unseals.includes(cell)) {
@@ -831,6 +835,19 @@ export function runContractAndExecute(
     : finalizeOrdinaryInvocationCommit(db, invocationId, {
         deferSettlement: options.deferCommitSettlement,
       });
+  // After the write they describe is durable and after the invocation's, so
+  // the stream reads in the order facts became true.
+  for (const receipt of handlerReceipts)
+    writeReceipt(db.journal, {
+      grantId: receipt.grantId,
+      invocationId,
+      action: receipt.action,
+      objectType: receipt.objectType,
+      objectId: receipt.objectId,
+      purpose,
+      decision: receipt.decision,
+      ...(receipt.detail ? { detail: receipt.detail } : {}),
+    });
   // Strictly post-journal-commit, so every provenance row is readable first.
   // Best-effort: a thrown host callback must not fail a committed write.
   try {

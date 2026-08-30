@@ -1,11 +1,11 @@
-// S1 — Identity: who is calling? Every caller authenticates as a row
-// (consent.app.signing_key, consent.agent, consent.device). No credential, no
-// path to data. An unknown caller is dropped at transport: there is no
-// grantee to receipt against, so nothing enters the model — not even a
-// denial row.
+// S1 — Identity: every caller authenticates as an enrolled row. An unknown
+// caller is dropped at transport, with no grantee to receipt against, so
+// nothing enters the model — not even a denial row.
 
 import type { DatabaseSync } from "node:sqlite";
 
+import type { DeviceTrust } from "../grant/device-trust.js";
+import { deviceTrustScalarSql } from "../grant/device-trust.js";
 import type { Credential, Identity } from "./types.js";
 import { GatewayError } from "./types.js";
 
@@ -19,34 +19,40 @@ interface AgentRow {
   party_id: string;
   status: string;
 }
-interface DeviceRow {
+interface DeviceIdentityRow {
   device_id: string;
   owner_party_id: string;
   public_key: string;
-  trust: string;
 }
+
+interface DeviceRow extends DeviceIdentityRow {
+  /** Undefined when the plane holds no answer about this device. */
+  trust: DeviceTrust | undefined;
+}
+
+// Two FACTS (#883) — key match and what the member let this device do —
+// read in ONE statement: this runs per invocation against a tighten-only
+// first-paint budget. `device-trust.ts` owns the mapping.
+const DEVICE_IDENTITY_SQL = `SELECT device_id, owner_party_id, public_key,
+    ${deviceTrustScalarSql("consent_device.device_id")} AS trust
+  FROM consent_device WHERE device_id = ?`;
 
 function deviceRow(
   vault: DatabaseSync,
   deviceId: string,
   deviceKey: string
 ): DeviceRow {
-  const row = vault
-    .prepare(
-      "SELECT device_id, owner_party_id, public_key, trust FROM consent_device WHERE device_id = ?"
-    )
-    .get(deviceId) as DeviceRow | undefined;
+  const row = vault.prepare(DEVICE_IDENTITY_SQL).get(deviceId) as
+    | (DeviceIdentityRow & { trust: DeviceTrust | null })
+    | undefined;
   if (!row || row.public_key !== deviceKey || row.trust === "revoked") {
     throw new GatewayError("identity", "unknown caller");
   }
-  return row;
+  // NULL is "no answer at all", never `revoked`.
+  return { ...row, trust: row.trust ?? undefined };
 }
 
-/**
- * Resolve a credential to an Identity or drop it. Signature verification is
- * v0 key-equality against the enrolled row; upgrading to real request
- * signatures only changes this function.
- */
+/** v0 key-equality; real request signatures change only this function. */
 export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
   if (cred.kind === "app") {
     const row = vault
@@ -71,7 +77,7 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
     };
   }
   if (cred.kind === "agent") {
-    // Session binding: an autonomous agent principal rides an enrolled device's key.
+    // An autonomous agent principal rides an enrolled device's key.
     const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
     const row = vault
       .prepare(
@@ -92,7 +98,6 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
         : {}),
     };
   }
-  // Owner-direct: an enrolled device belonging to the vault owner.
   const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
   const owner = vault
     .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")

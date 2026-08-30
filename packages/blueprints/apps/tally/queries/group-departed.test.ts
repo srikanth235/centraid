@@ -24,6 +24,13 @@ const ROWS: Record<string, Array<Record<string, unknown>>> = {
       spent_on: "2026-08-01",
     },
   ],
+  "tally.expense_payer": [
+    {
+      expense_id: "expense-before-departure",
+      party_id: "party-departed",
+      paid_minor: 900,
+    },
+  ],
   "tally.expense_split": [
     {
       expense_id: "expense-before-departure",

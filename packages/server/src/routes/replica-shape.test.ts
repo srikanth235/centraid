@@ -141,9 +141,9 @@ describe("replica-shape suite", () => {
     vault.db.vault
       .prepare(
         `INSERT INTO consent_device
-         (device_id, owner_party_id, name, public_key, trust, enrolled_at)
+         (device_id, owner_party_id, name, public_key, enrolled_at)
        VALUES ('credential-device', ?, 'Credential device', 'public-never-replicate',
-               'full', '2026-07-15T00:00:00.000Z')`
+               '2026-07-15T00:00:00.000Z')`
       )
       .run(vault.boot.ownerPartyId);
     vault.db.vault
@@ -584,6 +584,86 @@ describe("replica-shape suite", () => {
     ).toBeUndefined();
   });
 
+  test("a temporal fingerprint after one write reads one row, not the entity (#883 C2)", async () => {
+    // Any write to the entity misses the cache, and only two kinds of row can
+    // have moved: one the log says was written, and one whose recorded
+    // transition has passed. The rest keep the membership they had.
+    const vault = await plane();
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [
+        {
+          schema: "schedule",
+          table: "task",
+          verbs: "read",
+          rowFilter: [{ column: "due_at", op: "within-next-days", value: 30 }],
+        },
+      ],
+    });
+    const insert = vault.db.vault.prepare(
+      `INSERT INTO schedule_task
+         (task_id, owner_party_id, title, status, priority, due_at)
+       VALUES (?, ?, 'Scheduled', 'needs-action', 0, '2026-07-20T00:00:00.000Z')`
+    );
+    for (let index = 0; index < 200; index += 1) {
+      insert.run(`bulk-${index}`, vault.boot.ownerPartyId);
+    }
+    const access = { canWrite: true, rememberDevice: true, appId: "planner" };
+    const now = "2026-07-10T00:00:00.000Z";
+    // First build pays for the whole entity and retains its membership.
+    const first = buildReplicaShapes(vault.db.vault, access, now)[0]!;
+
+    insert.run("bulk-late", vault.boot.ownerPartyId);
+    appendReplicaChange(vault.db.vault, {
+      entity: "schedule.task",
+      rowId: "bulk-late",
+      op: "insert",
+    });
+
+    // Count the MEMBERSHIP PROBES `alternativeMatches` runs per candidate row
+    // — the per-row cost the incremental path exists to avoid. Executed, not
+    // prepared, so the count must come from the statement itself.
+    let probes = 0;
+    const original = vault.db.vault.prepare.bind(vault.db.vault);
+    Object.defineProperty(vault.db.vault, "prepare", {
+      configurable: true,
+      value: ((sql: string) => {
+        const statement = original(sql);
+        if (!/SELECT 1 AS matched FROM "schedule_task"/u.test(sql))
+          return statement;
+        return new Proxy(statement, {
+          get(target, property, receiver) {
+            const value = Reflect.get(target, property, receiver) as unknown;
+            if (property !== "get" || typeof value !== "function") return value;
+            return (...args: unknown[]) => {
+              probes += 1;
+              return (value as (...rest: unknown[]) => unknown).apply(
+                target,
+                args
+              );
+            };
+          },
+        });
+      }) as typeof vault.db.vault.prepare,
+    });
+    let second;
+    try {
+      second = buildReplicaShapes(vault.db.vault, access, now)[0]!;
+    } finally {
+      Object.defineProperty(vault.db.vault, "prepare", {
+        configurable: true,
+        value: original,
+      });
+    }
+
+    expect(second.shapeId).not.toBe(first.shapeId);
+    // …without re-testing all 201 rows to find out.
+    expect(
+      probes,
+      "the fingerprint re-tested the whole entity after a single-row write"
+    ).toBeLessThan(20);
+  });
+
   test("omits an unrelated filtered delete without rebootstrap or row-id disclosure", async () => {
     const vault = await plane();
     vault.approveGrant("planner", {
@@ -844,8 +924,7 @@ describe("replica-shape suite", () => {
 
     vault.start();
     // The first sweep is deferred one immediate off the mount critical path
-    // (#659) — it must still RUN, just not inside start(). Queueing
-    // behind it is what "shortly after startup" means now.
+    // (#659): it must still RUN, just not inside start().
     await new Promise<void>((resolve) => {
       setImmediate(resolve);
     });
@@ -857,9 +936,8 @@ describe("replica-shape suite", () => {
 
   test("the photos grant yields a self-contained shape a native client can render from", async () => {
     const vault = await plane();
-    // The photos app's read surface (#419): a native client renders the
-    // whole library — assets, their bytes' metadata, derivatives, albums, faces,
-    // places, tags — entirely from the replica, no online round trip.
+    // The photos read surface (#419): a native client renders the whole
+    // library from the replica, with no online round trip.
     vault.approveGrant("photos", {
       purpose: "dpv:ServiceProvision",
       scopes: [
@@ -883,7 +961,6 @@ describe("replica-shape suite", () => {
       wire.entities.map((entity) => [entity.entity, entity])
     );
 
-    // Every entity a native Photos client needs is present in the one shape.
     for (const entity of [
       "media.asset",
       "core.content_item",
@@ -897,7 +974,6 @@ describe("replica-shape suite", () => {
       expect(byEntity.has(entity), `shape is missing ${entity}`).toBe(true);
     }
 
-    // First-class asset state (#419) rides on media.asset itself.
     const asset = byEntity.get("media.asset")!;
     expect(asset.columns).toStrictEqual(
       expect.arrayContaining([
@@ -907,13 +983,11 @@ describe("replica-shape suite", () => {
         "captured_at",
       ])
     );
-    // The bytes' identity/metadata rides on core.content_item.
     const content = byEntity.get("core.content_item")!;
     expect(content.columns).toStrictEqual(
       expect.arrayContaining(["sha256", "media_type", "byte_size", "title"])
     );
-    // Derivatives (thumb/preview/poster + inline phash/thumbhash) carry the
-    // variant and its inline text or CAS sha.
+    // Derivatives carry the variant and its inline text or CAS sha.
     const derivative = byEntity.get("core.content_derivative")!;
     expect(derivative.columns).toStrictEqual(
       expect.arrayContaining(["variant", "text_content", "sha256"])
@@ -976,10 +1050,9 @@ describe("replica-shape suite", () => {
       ])
     );
 
-    // Column sets document the consent surface (mirrors the photos assertions
-    // above). The native Docs drive builds its rows and its offline title search
-    // from exactly these columns; the native Agenda materializes recurrence from
-    // core.event and RSVPs from schedule.attendee.
+    // Column sets ARE the consent surface: native Docs builds its rows and
+    // offline title search from exactly these, and Agenda materializes
+    // recurrence from core.event and RSVPs from schedule.attendee.
     expect(docsByEntity.get("core.document")!.columns).toStrictEqual(
       expect.arrayContaining([
         "document_id",

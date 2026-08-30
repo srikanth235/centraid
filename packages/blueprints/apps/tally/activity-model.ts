@@ -1,3 +1,4 @@
+import { DAY_MS } from "../_shared/format-kit.ts";
 // Activity's two folds: which day a row belongs to, and where the window ends.
 //
 // NEITHER TOUCHES A FIGURE. The feed arrives interleaved and newest-first from
@@ -33,7 +34,7 @@ const BUCKET_LABEL: Readonly<Record<DayBucketKey, string>> = {
 function previousDay(dayKey: string): string {
   const stamp = Date.parse(`${dayKey}T00:00:00.000Z`);
   if (Number.isNaN(stamp)) return "";
-  return new Date(stamp - 86_400_000).toISOString().slice(0, 10);
+  return new Date(stamp - DAY_MS).toISOString().slice(0, 10);
 }
 
 /** Which heading a dated row sits under. A row with no date at all is

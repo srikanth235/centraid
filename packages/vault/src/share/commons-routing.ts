@@ -34,7 +34,7 @@ export interface CommonsCommandRoute {
 /**
  * Key vocabulary for the conformance test: a new command that grows a
  * `group_id` cannot quietly skip the rail. Scoped by owner schema on purpose:
- * `home.update_item` and `outbox.decide` also carry `item_id`.
+ * `locker.save_item` and `outbox.decide` also carry `item_id`.
  */
 export interface CommonsContainerKey {
   ownerSchema: string;

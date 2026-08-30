@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { plural } from "@centraid/blueprints/apps/_shared/format-kit";
+
 import {
   AUTOMATIONS_EMPTY_ACTION,
   AUTOMATIONS_EMPTY_BODY,
@@ -54,7 +56,7 @@ const CHIP_LABEL: Record<ChipId, string> = {
 
 const CHIP_ORDER: readonly ChipId[] = ["all", "failing", "paused", "drafts"];
 
-// Same words mobile's Automations screen says, so they live in shared copy (#805).
+// Shared copy: mobile's Automations screen says the same words (#805).
 const EMPTY_TITLE = AUTOMATIONS_EMPTY_TITLE;
 const EMPTY_BODY = AUTOMATIONS_EMPTY_BODY;
 const EMPTY_ACTION = AUTOMATIONS_EMPTY_ACTION;
@@ -70,10 +72,6 @@ const LOADING_NOTE = SKELETON_NOTE;
 /** Suggestions are a curated slice of the TEMPLATE CATALOGUE — nothing watches
  *  what a member does by hand, and the note must not claim otherwise. */
 const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
 
 /** Day and month only: a year reads as an archive entry. */
 function dayLabel(ms: number): string {

@@ -3,8 +3,10 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+// `clock` comes through REAL: stubbing it would copy the rule under test.
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- the typed `import()` form pulls `apps/` into this program's `rootDir: ./src` and fails typecheck (TS6059); apps are typechecked by tsconfig.apps.json.
-vi.mock("../apps/photos/format.js", () => ({
+vi.mock("../apps/photos/format.js", async (importOriginal) => ({
+  clock: ((await importOriginal()) as { clock: (s: number) => string }).clock,
   isVideoAsset: (asset: Record<string, unknown>) =>
     asset.kind === "video" ||
     String(asset.media_type ?? "").startsWith("video/"),
@@ -26,10 +28,14 @@ const observers: FakeObserver[] = [];
 const mutationCallbacks: MutationCallback[] = [];
 let mutationCallback: MutationCallback | undefined;
 
-/** Fires every live MutationObserver, as a real attribute change would. */
-function flushMutations(): void {
+/** Fires the one delegated MutationObserver with the record a real attribute
+ *  change on `target` would deliver (#883). */
+function flushMutations(target?: Element): void {
+  const records = target
+    ? ([{ type: "attributes", target }] as unknown as MutationRecord[])
+    : [];
   for (const fire of mutationCallbacks.slice())
-    fire([], {} as MutationObserver);
+    fire(records, {} as MutationObserver);
 }
 
 describe("Photos next-screen media loading", () => {
@@ -80,7 +86,7 @@ describe("Photos next-screen media loading", () => {
       "../apps/photos/media-observer.js"
     );
     const scrollPane = document.createElement("div");
-    scrollPane.style.overflowY = "auto";
+    scrollPane.dataset.mediaRoot = "";
     const tile = document.createElement("div");
     const image = document.createElement("img");
     tile.append(image);
@@ -107,9 +113,9 @@ describe("Photos next-screen media loading", () => {
     expect(observers[0]?.unobserve).toHaveBeenCalledWith(image);
   });
 
-  // A relative `/centraid/_vault/blobs/…` path is the gateway only on the served
-  // path; in the shell it resolves to the SPA's index.html. The staged value must
-  // never reach `src` while the authorizer claims that reference (#708).
+  // A relative `/centraid/_vault/blobs/…` path is the gateway only on the
+  // served path; in the shell it is the SPA's index.html. The staged value
+  // must never reach `src` while the authorizer claims it (#708).
   test("holds the staged promotion while the shell authorizes a vault path", async () => {
     const { observeNextScreen } = await importFixture(
       "../apps/photos/media-observer.js"
@@ -132,7 +138,7 @@ describe("Photos next-screen media loading", () => {
 
     image.dataset.prefetchSrc = "blob:mock/1";
     delete image.dataset.blobPending;
-    flushMutations();
+    flushMutations(image);
 
     expect(image.getAttribute("src")).toBe("blob:mock/1");
     expect(Object.hasOwn(image.dataset, "prefetchSrc")).toBe(false);
@@ -154,7 +160,7 @@ describe("Photos next-screen media loading", () => {
     expect(image.getAttribute("src")).toBeNull();
 
     delete image.dataset.blobPending;
-    flushMutations();
+    flushMutations(image);
 
     expect(image.getAttribute("src")).toBe("/centraid/_vault/blobs/photo");
   });
@@ -237,7 +243,7 @@ describe("Photos next-screen media loading", () => {
       document.createElement("div"),
     ];
     const tiles = roots.map((root) => {
-      root.style.overflowY = "auto";
+      root.dataset.mediaRoot = "";
       const tile = document.createElement("div");
       const image = document.createElement("img");
       tile.append(image);
@@ -289,7 +295,7 @@ describe("Photos next-screen media loading", () => {
     const { gridSrc } = await importFixture("../apps/photos/media.js");
 
     // `thumb_uri` lands only once the preview backstop writes the derivative
-    // row, so every photo sits here after import; null builds no `<img>` at all.
+    // row; null builds no `<img>` at all.
     expect(
       gridSrc({
         content_uri: "/centraid/_vault/blobs/original-photo",
@@ -333,7 +339,7 @@ describe("Photos next-screen media loading", () => {
     );
   });
 
-  // A "0:00" chip on a still reads as a video that will not play (#708).
+  // A "0:00" chip on a still reads as a video (#708).
   test("never stamps a duration on a still photo", async () => {
     const { durationLabel, fillTileMedia } = await importFixture(
       "../apps/photos/media.js"
@@ -386,10 +392,10 @@ describe("Photos next-screen media loading", () => {
     expect(tile.classList.contains("is-placeholder")).toBe(true);
   });
 
-  // The authorizer resolves a blob reference in the scope named by the element's
-  // nearest `data-scope`. Content ids collide across scopes by design, so an
-  // unstamped audience tile renders a different photo, not a 404 — the stamp must
-  // land before the media element exists so it covers `data-prefetch-src` (#599).
+  // The authorizer resolves a blob reference in the scope of the nearest
+  // `data-scope`. Content ids collide across scopes, so an unstamped audience
+  // tile renders a different photo, not a 404 — the stamp must land before the
+  // media element exists (#599).
   test("stamps the owning scope on every tile it paints for an audience", async () => {
     const { fillTileMedia } = await importFixture("../apps/photos/media.js");
 

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type { IconName } from "@centraid/design";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { isWebHost } from "../../host-platform.js";
+import SettingsAccessScreen from "../../screens/SettingsAccessScreen.js";
 import SettingsAppearanceScreen from "../../screens/SettingsAppearanceScreen.js";
 import SettingsEnrichmentScreen from "../../screens/SettingsEnrichmentScreen.js";
 import SettingsHarnessesScreen from "../../screens/SettingsHarnessesScreen.js";
@@ -12,6 +13,7 @@ import SettingsProfileScreen from "../../screens/SettingsProfileScreen.js";
 import SettingsVaultScreen from "../../screens/SettingsVaultScreen.js";
 import Icon from "../../ui/Icon.js";
 import PanelBlock from "../../ui/PanelBlock.js";
+import ShellModal from "../../ui/ShellModal.js";
 import { useShellActions } from "../actions.js";
 import { disconnectConfirmCopy } from "../gatewayRegistry.js";
 import { openPrompt } from "../prompt.js";
@@ -19,6 +21,11 @@ import { PageEmpty, PageLoading } from "../status.js";
 import { useAsyncData } from "../useAsyncData.js";
 import { useShellCapabilities } from "../useCapabilities.js";
 import { loadSelfProfile, saveSelfProfile } from "./profileData.js";
+import {
+  accessReader,
+  accessRegistryReader,
+  loadAccessLens,
+} from "./settingsAccessData.js";
 import {
   loadActiveVaultData,
   loadSettingsStamp,
@@ -47,11 +54,12 @@ import styles from "./SettingsRoute.module.css";
 
 // Settings — a category rail beside one page at a time. Pairing a phone lives
 // in the account menu; component health and logs belong to `GatewayScreen`, so
-// two "Gateway" surfaces never share a name over unrelated pages.
+// two "Gateway" surfaces never share a name.
 
 export type SettingsPageId =
   | "appearance"
   | "vault"
+  | "access"
   | "harnesses"
   | "enrichment";
 
@@ -59,16 +67,15 @@ interface PageDef {
   id: SettingsPageId;
   label: string;
   icon: IconName;
-  /** Three words, on the NAV ROW: a rail that names only its pages makes a
-   *  member open them to find where a setting lives. */
+  /** Three words, on the NAV ROW: a rail that names only its pages makes the
+   *  member open each one to find where a setting lives. */
   subtitle: string;
 }
 
 /*
- * Mark rules: no two rows share a glyph; a row wears the glyph its subject
- * wears elsewhere (`Cpu` for harnesses, `DESTINATION_MARKS.data` for Vault);
- * neighbours must be distinguishable at 15px; and a glyph the shell spends as
- * a VERB (`Eye`) is never available for a category.
+ * Mark rules: no two rows share a glyph; a row wears the glyph its subject wears
+ * elsewhere; neighbours stay distinguishable at 15px; and a glyph the shell
+ * spends as a VERB (`Eye`) is never available for a category.
  */
 const PAGES: readonly PageDef[] = [
   {
@@ -84,6 +91,13 @@ const PAGES: readonly PageDef[] = [
     subtitle: "Name, colour, copies",
   },
   {
+    // ACCESS, not "Sharing": harnesses and own devices are not shares (#883).
+    id: "access",
+    label: "Access",
+    icon: "Key",
+    subtitle: "Who may reach what",
+  },
+  {
     id: "harnesses",
     label: "Agents",
     icon: "Cpu",
@@ -96,12 +110,12 @@ const PAGES: readonly PageDef[] = [
     subtitle: "What is read, and where",
   },
 ];
-// Four pages, deliberately (#807): a page nothing routes to is not a page.
-// Profile and Appearance are ONE page, keeping the `appearance` id so old deep
-// links land; `resolveSettingsPage` collapses unknown ids onto the first page.
+// Five pages: a page nothing routes to is not a page. Profile and Appearance
+// are ONE page, keeping the `appearance` id so old deep links land;
+// `resolveSettingsPage` collapses unknown ids onto the first page.
 
 // EVERY PAGE AUTO-SAVES, so the note is the modal's, never a per-page badge.
-// Destructive acts are not edits: they keep their verbs and confirms.
+// Destructive acts are not edits: they keep their verbs.
 const AUTO_SAVED_NOTE = "Auto-saved";
 
 function isSettingsPageId(id: string | undefined): id is SettingsPageId {
@@ -122,8 +136,7 @@ export interface SettingsRouteProps {
   initialPage?: string;
   onClose?: () => void;
   /** The UNGUARDED act (#665): the primitive is connection-wide, so the confirm
-   *  lives here where the siblings are known by name. Resolves `true` once the
-   *  connection is gone. */
+   *  lives here, where the siblings are known by name. */
   onDisconnectVault: (gatewayId: string) => Promise<boolean>;
 }
 
@@ -163,8 +176,8 @@ export default function SettingsRoute({
   const def = PAGES.find((p) => p.id === page);
   const { showToast, navigate, confirm } = useShellActions();
   // Scoped to the ACTIVE vault (#382). `vaultNonce` re-fetches after a save and
-  // on any vault/gateway broadcast: switching vaults with this page open must
-  // re-seed the form, never edit the wrong vault.
+  // on any vault/gateway broadcast: switching vaults with this page open
+  // re-seeds the form rather than editing the wrong vault.
   const [vaultNonce, setVaultNonce] = useState(0);
   const activeVault = useAsyncData(loadActiveVaultData, [vaultNonce]);
   const refreshVault = (): void => setVaultNonce((n) => n + 1);
@@ -209,6 +222,14 @@ export default function SettingsRoute({
       name: input.name,
     });
   };
+
+  /* Rows come from the replica through People's scope; the per-locus revoke
+     sentences come from the grant registry, in the vault's own words (#883). */
+  const loadAccess = useCallback(
+    async () =>
+      loadAccessLens(await accessReader(), await accessRegistryReader()),
+    []
+  );
 
   const thisDeviceState = useAsyncData(loadThisDeviceData, []);
   const thisDevice =
@@ -271,13 +292,13 @@ export default function SettingsRoute({
         role="presentation"
         onClick={() => onClose?.()}
       />
-      <dialog
-        open
-        ref={dialogRef}
+      <ShellModal
+        layer="inline"
+        dialogRef={dialogRef}
         className={styles.settingsShell}
-        aria-modal="true"
-        aria-label="Settings"
-        data-testid="settings-dialog"
+        ariaModal
+        label="Settings"
+        data={{ "data-testid": "settings-dialog" }}
       >
         {/* The modal's own bar, not a heading in the scrolling page: the note
             stays readable and the close target never scrolls away. */}
@@ -347,6 +368,8 @@ export default function SettingsRoute({
                     automations={capabilities.automations}
                   />
                 </>
+              ) : page === "access" ? (
+                <SettingsAccessScreen load={loadAccess} />
               ) : page === "harnesses" ? (
                 <SettingsHarnessesScreen
                   loadStatus={() => loadHarnesses()}
@@ -417,7 +440,7 @@ export default function SettingsRoute({
             {stamp.status === "ready" ? stamp.data : "Centraid"}
           </span>
         </footer>
-      </dialog>
+      </ShellModal>
     </>
   );
 }

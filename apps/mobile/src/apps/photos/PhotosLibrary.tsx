@@ -9,6 +9,7 @@ import { Alert, Modal, Pressable, View } from "react-native";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
+import Tappable from "../../kit/components/Tappable";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { gridImageProps } from "../../kit/media/grid-image";
 import { imageSource } from "../../kit/media/media-source";
@@ -51,9 +52,8 @@ type AlbumRow = {
 };
 
 /**
- * One album tile. Memoized and hoisted out of the screen body so a state change
- * anywhere on the page (refresh flag, dialog open, pin hydration) does not
- * re-render — and re-decode the cover of — every album in the grid.
+ * Memoized and hoisted out of the screen body so a state change anywhere on the
+ * page does not re-render — and re-decode the cover of — every album.
  */
 const AlbumCard = memo(
   ({
@@ -350,7 +350,7 @@ export default function PhotosLibrary({
             <Text style={[styles.section, { color: colors.textSoft }]}>
               Your library
             </Text>
-            <Pressable
+            <Tappable
               accessibilityLabel="Open favorite photos"
               accessibilityRole="button"
               onPress={() =>
@@ -363,8 +363,8 @@ export default function PhotosLibrary({
                 meta={`${counts.favorites}`}
                 colors={colors}
               />
-            </Pressable>
-            <Pressable
+            </Tappable>
+            <Tappable
               accessibilityLabel="Open archived photos"
               accessibilityRole="button"
               onPress={() =>
@@ -377,8 +377,8 @@ export default function PhotosLibrary({
                 meta={`${counts.archived}`}
                 colors={colors}
               />
-            </Pressable>
-            <Pressable
+            </Tappable>
+            <Tappable
               accessibilityLabel="Open photo trash"
               accessibilityRole="button"
               onPress={() =>
@@ -391,8 +391,8 @@ export default function PhotosLibrary({
                 meta={`${counts.deleted} · vault purge policy`}
                 colors={colors}
               />
-            </Pressable>
-            <Pressable
+            </Tappable>
+            <Tappable
               accessibilityLabel="Review proposed people"
               accessibilityRole="button"
               onPress={() => navigation.navigate("FaceReview")}
@@ -403,8 +403,8 @@ export default function PhotosLibrary({
                 meta={`${faceCounts.people} people · ${faceCounts.proposals} proposals`}
                 colors={colors}
               />
-            </Pressable>
-            <Pressable
+            </Tappable>
+            <Tappable
               accessibilityLabel="Review possible duplicate photos"
               accessibilityRole="button"
               onPress={() => navigation.navigate("DuplicateReview")}
@@ -415,8 +415,8 @@ export default function PhotosLibrary({
                 meta={`${counts.duplicates} similarity hints`}
                 colors={colors}
               />
-            </Pressable>
-            <Pressable
+            </Tappable>
+            <Tappable
               accessibilityLabel="Open photo places map"
               accessibilityRole="button"
               onPress={() => navigation.navigate("PlacesMap")}
@@ -427,7 +427,7 @@ export default function PhotosLibrary({
                 meta={`${places.rows.length} saved places`}
                 colors={colors}
               />
-            </Pressable>
+            </Tappable>
             <Text style={[styles.section, { color: colors.textSoft }]}>
               Albums
             </Text>
@@ -438,7 +438,7 @@ export default function PhotosLibrary({
             <Text style={[styles.section, { color: colors.textSoft }]}>
               Backup &amp; storage
             </Text>
-            <Pressable
+            <Tappable
               accessibilityLabel="Open backup health"
               accessibilityRole="button"
               onPress={() =>
@@ -453,11 +453,10 @@ export default function PhotosLibrary({
                 meta="Rules, queue, errors, storage policy"
                 colors={colors}
               />
-            </Pressable>
-            <Pressable
+            </Tappable>
+            <Tappable
               accessibilityLabel="Free offline thumbnail vault"
               accessibilityRole="button"
-              accessibilityState={{ disabled: !pinsHydrated || freeing }}
               disabled={!pinsHydrated || freeing}
               onPress={freeSpace}
             >
@@ -473,7 +472,7 @@ export default function PhotosLibrary({
                 }
                 colors={colors}
               />
-            </Pressable>
+            </Tappable>
           </View>
         }
       />

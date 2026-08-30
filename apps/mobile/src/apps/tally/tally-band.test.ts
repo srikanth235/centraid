@@ -9,9 +9,9 @@
 //     the slot; a badge on it is what the spec forbids outright, so nothing in
 //     the destination shape can hold a number.
 //  3. THE CAP IS FIVE, and it is enforced rather than assumed.
-//  4. EVERY MORE ROW LEADS SOMEWHERE, and Export is the one that leads to the
-//     screen that says where the act happens — because its door is on the
-//     custodian seat and a greyed control would teach that it is broken.
+//  4. EVERY MORE ROW LEADS SOMEWHERE. Export's door is on the custodian seat,
+//     so it leads to a screen saying where the act happens; a greyed control
+//     would teach that it is broken.
 
 import { describe, expect, it } from "vitest";
 
@@ -22,7 +22,7 @@ import {
 } from "@centraid/blueprints/apps/tally/shelves";
 
 import {
-  TALLY_BAND_CAPSULE,
+  BAND_CAPSULE,
   TALLY_BAND_DESTINATIONS,
   TALLY_BAND_MAX_DESTINATIONS,
   TALLY_MORE_ROWS,
@@ -68,7 +68,7 @@ describe("Tally's band", () => {
     expect(band.owner).toBe("app");
     if (band.owner !== "app") throw new Error("expected the app's band");
     expect(band.destinations).toHaveLength(5);
-    expect(band.capsule).toStrictEqual(TALLY_BAND_CAPSULE);
+    expect(band.capsule).toStrictEqual(BAND_CAPSULE);
   });
 
   it("draws only the frame's capsule when the host owns the band", () => {
@@ -76,8 +76,8 @@ describe("Tally's band", () => {
   });
 
   it("keeps the capsule out of the tab group — it is a frame control", () => {
-    expect(TALLY_BAND_CAPSULE.inTabGroup).toBe(false);
-    expect(TALLY_BAND_CAPSULE.edge).toBe("leading");
+    expect(BAND_CAPSULE.inTabGroup).toBe(false);
+    expect(BAND_CAPSULE.edge).toBe("leading");
   });
 });
 

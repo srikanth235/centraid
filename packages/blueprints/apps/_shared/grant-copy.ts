@@ -1,10 +1,9 @@
-// One home for the grant sentences both seats print (#825). The AFTER-revoke
-// sentence is NOT here — the route derives it per delivered copy and returns
-// it as `message`; render that verbatim.
+// Grant sentences both seats print (#825). The AFTER-revoke sentence is not
+// here: the route derives it per copy and returns `message` — render it as is.
 
 import type {
   GrantCapability,
-  GrantDelivery,
+  GrantPhrase,
   GrantReach,
 } from "./grant-plane.ts";
 
@@ -27,21 +26,19 @@ export function groupContributionNote(
     : null;
 }
 
-export function deliveryLabel(delivery: GrantDelivery): string {
-  switch (delivery) {
-    case "awaiting_channel":
-      return "Invitation pending";
-    case "syncing":
-      return "Sending";
-    case "delivered":
-      return "Delivered";
-    case "remove_sent":
-      return "Removal sent";
-    case "removed":
-      return "Removed";
-    case "none":
-      return "Not sent yet";
-  }
+/**
+ * Sentence-cases the vault's own phrase (#883, ruling V-phrases) — never a
+ * label table re-derived from fulfillment rows. Unconfirmed `withdrawn` reads
+ * as asked, not completed. No phrase on the wire gives `null`.
+ */
+export function grantStandingLabel(grant: {
+  phrase?: GrantPhrase;
+  confirmed?: boolean;
+}): string | null {
+  if (!grant.phrase) return null;
+  if (grant.phrase === "withdrawn")
+    return grant.confirmed === true ? "Withdrawn" : "Withdrawal asked";
+  return grant.phrase.charAt(0).toUpperCase() + grant.phrase.slice(1);
 }
 
 export function reachLabel(reach: GrantReach): string {
@@ -98,14 +95,33 @@ export function alreadyGrantedOutcome(audienceLabel: string): string {
   return `Already shared with ${audienceLabel}`;
 }
 
-/** The route answers `exists` and changes nothing; widening means revoke and
- *  re-grant, which transiently deletes the audience's copy. */
-export function capabilityUnchangedOutcome(
+/* A standing answer is never edited in place (#883, ruling V-table): a change
+ * is a withdrawal then a new grant, so the audience's copy is asked back. The
+ * confirm says so first; the action is worded as the change, not the mechanism. */
+
+export function changeAccessConfirmTitle(
   audienceLabel: string,
-  standing: GrantCapability
+  capability: GrantCapability
 ): string {
-  const noun = standing === "edit" ? "editing" : "viewing";
-  return `Already shared with ${audienceLabel} for ${noun}; changing access is not offered yet — revoke and share again to change it.`;
+  return capability === "edit"
+    ? `Let ${audienceLabel} edit this?`
+    : `Limit ${audienceLabel} to viewing?`;
+}
+
+export function changeAccessConfirmBody(noun: string): string {
+  return `The ${noun} is withdrawn and shared again at the new access, so their vault is asked to remove its copy and is sent a fresh one.`;
+}
+
+export const CHANGE_ACCESS_ACTION = "Change access";
+export const CHANGE_ACCESS_CANCEL_ACTION = "Leave it as it is";
+
+export function accessChangedOutcome(
+  audienceLabel: string,
+  capability: GrantCapability
+): string {
+  return capability === "edit"
+    ? `${audienceLabel} can now edit it`
+    : `${audienceLabel} can now only see it`;
 }
 
 export function revokeConfirmTitle(audienceLabel: string): string {
@@ -120,15 +136,10 @@ export function revokeConfirmBody(audienceLabel: string, noun: string): string {
 export const REVOKE_CONFIRM_ACTION = "Revoke";
 export const REVOKE_CANCEL_ACTION = "Keep sharing";
 
-/* REFUSED IS NOT UNREACHABLE (#880). A request that never left the device and
- * a gateway that answered no are different facts, and one sentence for both
- * makes an outage read as a refusal — the collapse this repo pins against
- * elsewhere (`apps/mobile/src/apps/tally/tally-store.test.ts`,
- * `docs/mobile-offline.md`). The `_FAILED` / `_UNREADABLE` sentences below are
- * the GATEWAY'S half: it answered, and nothing it said may be replaced with a
- * network story. The `_UNREACHABLE` sentences are the transport's half: no
- * answer exists, so none is put in the gateway's mouth. `grant-door.ts` picks
- * between them; it never guesses, the seat's transport says which happened. */
+/* REFUSED IS NOT UNREACHABLE (#880). `_FAILED`/`_UNREADABLE` are the gateway's
+ * own half: nothing it says may be replaced with a network story.
+ * `_UNREACHABLE` is the transport's half — no answer exists, so none is put in
+ * the gateway's mouth. `grant-door.ts` picks by transport fact. */
 
 export const GRANTS_UNREADABLE = "Shares could not be read.";
 export const GRANTS_UNREACHABLE =
@@ -138,8 +149,24 @@ export const REGISTRY_UNREADABLE = "Shareable items could not be read.";
 export const REGISTRY_UNREACHABLE =
   "Shareable items are unknown — the gateway is out of reach.";
 export const GRANT_FAILED = "The share could not be recorded.";
+/** Only where the route sent no words of its own for its own 202. */
+export const GRANT_AWAITING_CONFIRMATION =
+  "The share is recorded as asked and waits for you to confirm it.";
 export const GRANT_UNREACHABLE =
   "The share was not sent — the gateway is out of reach.";
 export const REVOKE_FAILED = "The share could not be revoked.";
 export const REVOKE_UNREACHABLE =
   "The revoke was not sent — the gateway is out of reach.";
+
+/* HELD, NOT LOST (#883): a seat that holds the intent durably tells a
+ * different truth from `_UNREACHABLE` above, which recorded nothing. Built
+ * from the wire's own `on its way` rather than a fourth word for the state. */
+
+function phraseLabel(phrase: GrantPhrase): string {
+  // Null only where the wire carried no phrase; a named one always labels.
+  return grantStandingLabel({ phrase }) ?? phrase;
+}
+
+export const GRANT_QUEUED = `${phraseLabel("on its way")} — this device is offline, so the share is held here and sent when the gateway is reachable.`;
+
+export const REVOKE_QUEUED = `${phraseLabel("on its way")} — this device is offline, so the withdrawal is held here and sent when the gateway is reachable.`;

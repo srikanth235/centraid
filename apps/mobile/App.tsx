@@ -1,6 +1,5 @@
-// Direct sub-path imports: the barrel re-exports weights Metro cannot resolve.
-// Stay at Instrument Sans 400 / 600 — a face the ramp cannot name diverges
-// from the shared registry.
+// Direct sub-paths: the barrel re-exports weights Metro cannot resolve.
+// Stay at Instrument Sans 400/600: an unnamed face diverges from the registry.
 import InstrumentSans_400Regular from "@expo-google-fonts/instrument-sans/400Regular/InstrumentSans_400Regular.ttf";
 import InstrumentSans_600SemiBold from "@expo-google-fonts/instrument-sans/600SemiBold/InstrumentSans_600SemiBold.ttf";
 import { NavigationContainer } from "@react-navigation/native";
@@ -21,7 +20,6 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
-// Lazy screens: evaluated on first navigation, not at app start.
 import {
   AssistantScreen,
   AssistantFullScreen,
@@ -46,11 +44,18 @@ import {
   SettingsNavigator,
   TallyNavigator,
 } from "./navigators";
+// Side-effect import: registers Photos as the frame's camera-roll target.
+import "./src/apps/photos/camera-roll-target";
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
 import ErrorBoundary from "./src/ErrorBoundary";
 import { Text } from "./src/kit/components/NativeText";
+import { postStatus } from "./src/kit/components/status-line";
 import StatusLine from "./src/kit/components/StatusLine";
+import {
+  hydrateOfflineContent,
+  hydratePinnedContent,
+} from "./src/kit/fetch-gate";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
 import FrameProbe from "./src/kit/perf/FrameProbe";
 import {
@@ -69,21 +74,25 @@ import {
   useAppearance,
   useTheme,
 } from "./src/kit/theme";
+import { useCameraRollWatcher } from "./src/lib/camera-roll/useCameraRollWatcher";
 import { NotificationCoordinator } from "./src/lib/notifications";
 import { hydrateProfile, isOnboarded } from "./src/lib/profile";
 import { MOBILE_COMPATIBILITY_WALL_COPY } from "./src/lib/replica/mobile-gateway-compatibility-core";
+import {
+  clearResyncNotice,
+  subscribeResyncNotice,
+} from "./src/lib/replica/resync-notice";
 import { useUploadReconciliation } from "./src/lib/upload/boot";
 import { rootNavigationRef } from "./src/navigation";
 import type { RootStackParamList } from "./src/navigation";
 import HomeScreen from "./src/screens/Home";
 import OnboardingScreen from "./src/screens/Onboarding";
 
-// Fonts are not part of this hold — see the `onboarded === null` gate.
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* noop */
 });
 
-// Foregrounded notifications must still surface — the OS otherwise swallows them (#14).
+// Foregrounded notifications must still surface; the OS swallows them (#14).
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
@@ -95,19 +104,37 @@ Notifications.setNotificationHandler({
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 
-// `fullScreenModal`, not `modal` — the iOS card sheet never fills the screen.
+// `fullScreenModal`, not `modal`: the iOS card sheet never fills.
 const COVER_OPTIONS = {
   animation: "fade",
   presentation: "fullScreenModal",
 } as const;
 
 function UploadReconciliation(): null {
-  const { session } = useReplica();
+  const { session, gatewayBase, vaultId } = useReplica();
   useUploadReconciliation(session);
+  // Watcher lives beside the drain, not in Photos (#883 C6): what a sweep does
+  // is Photos'; when one may run is the frame's.
+  useCameraRollWatcher(
+    session && gatewayBase
+      ? { session, gatewayBase, ...(vaultId ? { vaultId } : {}) }
+      : undefined
+  );
+  // The frame, not a screen, tells the member about a re-sync: it outlives
+  // whichever screen started it (#883 C6).
+  useEffect(
+    () =>
+      subscribeResyncNotice((notice) => {
+        if (!notice) return;
+        postStatus(`${notice.headline} ${notice.detail}`);
+        clearResyncNotice();
+      }),
+    []
+  );
   return null;
 }
 
-/** Suppress the expected unpaired message; only a genuine open failure raises the bar. */
+/** Only a genuine open failure raises the bar. */
 function ReplicaErrorBanner(): React.JSX.Element | null {
   const { compatibility, error, ready } = useReplica();
   const { colors } = useTheme();
@@ -206,22 +233,25 @@ export default function App(): React.JSX.Element | null {
   const scheme = resolveScheme(useAppearance(), useColorScheme());
   const { colors } = resolveTheme(scheme);
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
-  // Tuple dropped on purpose — splash does not wait on fonts (see `onReady`).
+  // Tuple dropped: splash does not wait on fonts (see `onReady`).
   useFonts({
     InstrumentSans_400Regular,
     InstrumentSans_600SemiBold,
   });
 
   useEffect(() => {
-    // Do not sequence appearance behind profile — first paint would wait on two trips.
+    // Not sequenced behind profile: first paint would wait on two trips.
     void hydrateAppearance();
     void hydrateProfile().then(() => setOnboarded(isOnboarded()));
-    // From an effect: touches a native module; nothing before first paint depends on it.
+    // Both are read synchronously on the render path (#883 C6).
+    void hydratePinnedContent();
+    void hydrateOfflineContent();
+    // From an effect: touches a native module; first paint does not need it.
     configurePhotoImageCache();
   }, []);
 
-  // #659: lift splash on profile hydrate, not fonts — a `!fontsLoaded` gate
-  // blanks every cold start to avoid a brief typeface swap.
+  // Lift splash on profile hydrate, not fonts: a `!fontsLoaded` gate blanks
+  // every cold start (#659).
   const onReady = useCallback(async () => {
     if (onboarded !== null) {
       await SplashScreen.hideAsync().catch(() => {

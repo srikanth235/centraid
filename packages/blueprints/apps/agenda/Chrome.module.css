@@ -15,10 +15,9 @@
 .shell {
   composes: kit-app-shell from global;
   --agenda-rail: 232px;
-  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED. Every row that spans the
-     pane reads it, so the rail's first label and the canvas's first column
-     start from the same edge. */
-  --agenda-margin: var(--page-margin);
+  /* THE PAGE MARGIN IS THE SYSTEM'S (#883). Every row that spans the pane
+     reads `--page-margin`, so the rail's first label and the canvas's first
+     column start from the same edge as every other app's. */
   display: flex;
   flex: 1;
   min-width: 0;
@@ -41,7 +40,7 @@
   inline-size: var(--agenda-rail);
   min-inline-size: 0;
   border-inline-end: 1px solid var(--line);
-  padding: var(--agenda-margin) var(--sp-4);
+  padding: var(--page-margin) var(--sp-4);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -106,7 +105,7 @@
 }
 
 .banner {
-  margin: var(--sp-3) var(--agenda-margin) 0;
+  margin: var(--sp-3) var(--page-margin) 0;
 }
 
 /* The second control row: what is true about this read right now — offline,
@@ -117,7 +116,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--agenda-margin);
+  padding: var(--sp-3) var(--page-margin);
   border-block-end: 1px solid var(--line);
   font: var(--t-small);
   color: var(--text-soft);

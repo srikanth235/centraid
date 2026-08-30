@@ -2,6 +2,8 @@
 
 import { monitorEventLoopDelay } from "node:perf_hooks";
 
+import { unrefTimer } from "../lib/unref-timer.js";
+
 const NS_PER_MS = 1_000_000;
 
 export interface GatewayPerformanceSnapshot {
@@ -47,7 +49,7 @@ function milliseconds(nanoseconds: number): number {
 export class GatewayPerformanceMonitor {
   private readonly histogram: EventLoopDelayHistogramLike;
   private readonly resolutionMs: number;
-  private timer?: NodeJS.Timeout;
+  private timer?: ReturnType<typeof setTimeout>;
   private readonly sampleIntervalMs: number;
   private lastWindow = { ...EMPTY_WINDOW };
   private peakP99Ms = 0;
@@ -127,7 +129,7 @@ export class GatewayPerformanceMonitor {
 
   private scheduleWindowEnd(delayMs: number): void {
     this.timer = setTimeout(() => this.finishWindow(), delayMs);
-    this.timer.unref();
+    unrefTimer(this.timer);
   }
 
   private readWindow(): typeof EMPTY_WINDOW {

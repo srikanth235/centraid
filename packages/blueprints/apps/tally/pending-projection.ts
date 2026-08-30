@@ -217,5 +217,3 @@ export const tallyPendingProjection = definePendingProjection({
       pendingPatch("tally.recurring_expense", input.template_id, input),
   },
 });
-
-export default tallyPendingProjection;

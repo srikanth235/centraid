@@ -3,7 +3,13 @@
 
 import { BAND_DESTINATIONS } from "@centraid/blueprints/apps/agenda/views";
 
+import { BAND_CAPSULE } from "../../kit/band/band-capsule";
+import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
+
+// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5).
+export { BAND_CAPSULE } from "../../kit/band/band-capsule";
+export type { BandCapsule } from "../../kit/band/band-capsule";
 
 export type AgendaBandDestinationKey =
   | "day"
@@ -20,8 +26,6 @@ export interface AgendaBandDestination {
 
 export const AGENDA_BAND_MAX_DESTINATIONS = 5;
 
-export const AGENDA_BAND_CAPSULE_SIZE = 52;
-
 const MORE_ICON = "MoreVert";
 
 export const AGENDA_BAND_DESTINATIONS: readonly AgendaBandDestination[] = [
@@ -37,32 +41,19 @@ export const AGENDA_BAND_DESTINATIONS: readonly AgendaBandDestination[] = [
   { key: "more", label: "More", icon: MORE_ICON },
 ];
 
-export interface AgendaBandCapsule {
-  label: "Home";
-  icon: "Home";
-  size: number;
-}
-
-/** Frame control, never an app tab; stays even when the band is handed back. */
-export const AGENDA_BAND_CAPSULE: AgendaBandCapsule = {
-  label: "Home",
-  icon: "Home",
-  size: AGENDA_BAND_CAPSULE_SIZE,
-};
-
 export type AgendaBandModel =
-  | { owner: "host"; capsule: AgendaBandCapsule }
+  | { owner: "host"; capsule: BandCapsule }
   | {
       owner: "app";
-      capsule: AgendaBandCapsule;
+      capsule: BandCapsule;
       destinations: readonly AgendaBandDestination[];
     };
 
 export function resolveAgendaBand(owner: BandOwner): AgendaBandModel {
-  if (owner !== "app") return { owner: "host", capsule: AGENDA_BAND_CAPSULE };
+  if (owner !== "app") return { owner: "host", capsule: BAND_CAPSULE };
   return {
     owner: "app",
-    capsule: AGENDA_BAND_CAPSULE,
+    capsule: BAND_CAPSULE,
     destinations: AGENDA_BAND_DESTINATIONS.slice(
       0,
       AGENDA_BAND_MAX_DESTINATIONS

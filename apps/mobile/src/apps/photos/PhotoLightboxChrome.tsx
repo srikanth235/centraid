@@ -10,6 +10,7 @@ import type { EdgeInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import type { ThemeColors } from "../../kit/theme";
 import { styles } from "./PhotoLightbox.styles";
 import { SLIDESHOW_ACTION, VIEWER_CHROME_INSET } from "./viewer-model";
@@ -201,7 +202,7 @@ export function ViewerStatusLine({
         {text}
       </Text>
       {actionLabel ? (
-        <Pressable
+        <Tappable
           accessibilityLabel={actionLabel}
           accessibilityRole="button"
           hitSlop={10}
@@ -210,7 +211,7 @@ export function ViewerStatusLine({
           <Text style={[styles.statusAction, { color: colors.link }]}>
             {actionLabel}
           </Text>
-        </Pressable>
+        </Tappable>
       ) : null}
     </View>
   );

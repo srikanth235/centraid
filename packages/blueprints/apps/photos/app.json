@@ -110,7 +110,13 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.content_derivative",
+        "core.content_item",
+        "core.place",
+        "media.asset",
+        "media.asset_phash"
+      ]
     },
     {
       "name": "update-asset",
@@ -136,7 +142,13 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.content_item",
+        "core.tag",
+        "media.asset"
+      ]
     },
     {
       "name": "delete-asset",
@@ -158,7 +170,12 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.collection",
+        "core.collection_entry",
+        "core.content_item",
+        "media.asset"
+      ]
     },
     {
       "name": "restore",
@@ -180,7 +197,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.content_item", "media.asset"]
     },
     {
       "name": "purge-asset",
@@ -202,7 +219,13 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.collection",
+        "core.collection_entry",
+        "core.content_item",
+        "media.asset",
+        "media.face_region"
+      ]
     },
     {
       "name": "create-album",
@@ -224,7 +247,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.collection"]
     },
     {
       "name": "rename-album",
@@ -247,7 +270,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.collection"]
     },
     {
       "name": "set-album-cover",
@@ -270,7 +293,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.collection"]
     },
     {
       "name": "delete-album",
@@ -292,7 +315,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.collection", "core.collection_entry"]
     },
     {
       "name": "restore-album",
@@ -315,7 +338,11 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": [
+        "core.collection",
+        "core.collection_entry",
+        "core.entity_revision"
+      ]
     },
     {
       "name": "add-to-album",
@@ -338,7 +365,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.collection", "core.collection_entry"]
     },
     {
       "name": "remove-from-album",
@@ -361,7 +388,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.collection", "core.collection_entry"]
     },
     {
       "name": "answer-face",
@@ -388,7 +415,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["media.face_region"]
     },
     {
       "name": "set-place",
@@ -411,7 +438,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["media.asset"]
     },
     {
       "name": "name-place",
@@ -438,7 +465,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.place"]
     },
     {
       "name": "tag-asset",
@@ -461,7 +488,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
     },
     {
       "name": "untag-asset",
@@ -483,7 +510,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["core.tag"]
     },
     {
       "name": "request-enrichment",
@@ -505,7 +532,7 @@
           "reason": { "type": "string" }
         }
       },
-      "writes": []
+      "writes": ["enrich.request", "share.authority"]
     }
   ],
   "queries": [

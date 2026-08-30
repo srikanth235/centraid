@@ -8,8 +8,6 @@
  * 'off' | 'local' | 'model'); the toolbar's "Detect faces now" only
  * fires when it isn't 'off' — when it is, the UI says so plainly rather
  * than showing a button that would silently no-op.
- *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
 
 interface RawPolicy {

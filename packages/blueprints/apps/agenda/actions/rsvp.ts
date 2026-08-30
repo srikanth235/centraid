@@ -1,29 +1,20 @@
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 /**
- * Record an RSVP — the first boundary's one real state machine (RFC 5545
- * PARTSTAT). The vault refuses responses from parties never invited and
- * responses to cancelled events; those arrive here as `failed` outcomes.
+ * Record an RSVP (RFC 5545 PARTSTAT). The vault refuses one from a party never
+ * invited, or to a cancelled event; both arrive as `failed`.
  */
 export default async function rsvp({
   body,
   ctx,
 }: HandlerArgs): Promise<ActionResult> {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "schedule.respond_rsvp",
-      input: {
-        event_id: String(input.event_id ?? ""),
-        party_id: String(input.party_id ?? ""),
-        partstat: String(input.partstat ?? ""),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "schedule.respond_rsvp",
+    input: {
+      event_id: String(input.event_id ?? ""),
+      party_id: String(input.party_id ?? ""),
+      partstat: String(input.partstat ?? ""),
+    },
+  });
 }

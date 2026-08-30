@@ -120,7 +120,7 @@ describe("vault-routes.atlas", () => {
     plane.db.vault
       .prepare(
         `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, is_primary, valid_from)
-       VALUES ('id1','p1','email','ravi@example.com',1,?)`
+       VALUES ('id1','p1','url','https://ravi.example',1,?)`
       )
       .run(now);
     plane.db.vault

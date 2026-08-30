@@ -1,18 +1,9 @@
-/** Restore a soft-deleted expense, including its preserved splits. */
+import { runVaultAction } from "../../_shared/action-kit.ts";
+
 export default async function restoreExpense({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as { expense_id?: unknown };
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "tally.restore_expense",
-      input: { expense_id: input.expense_id },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "tally.restore_expense",
+    input: { expense_id: input.expense_id },
+  });
 }

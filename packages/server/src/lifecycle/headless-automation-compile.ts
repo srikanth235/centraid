@@ -20,6 +20,7 @@ import type {
 import type * as TypeImport_4y0tle from "@centraid/server/engine";
 
 import { journalConversationStore } from "../journal-stores.js";
+import { unrefTimer } from "../lib/unref-timer.js";
 import { AUTOMATION_ANCHOR_ENTITY } from "./automation-anchor-scopes.js";
 import type { ResolvedAutomationAnchor } from "./automation-anchor-scopes.js";
 
@@ -310,7 +311,7 @@ export async function runHeadlessAutomationCompile(
     () => store.refreshTurnLock(conversationId, lockToken),
     60_000
   );
-  lockLeaseHeartbeat.unref?.();
+  unrefTimer(lockLeaseHeartbeat);
   try {
     const conversation = store.getConversation(conversationId);
     if (!conversation)

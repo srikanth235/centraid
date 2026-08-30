@@ -1,6 +1,6 @@
-// Unit tests for the assistant rich-answer renderer (#420) against its
-// default class names; the React shell's assistantRich.test.ts covers the same
-// surface through the shell's scoped CSS-module class map.
+// Unit tests for the assistant rich-answer renderer (#420) against its default
+// class names; assistantRich.test.ts covers the same surface through the
+// shell's scoped CSS-module class map.
 import { describe, expect, it, vi } from "vitest";
 
 import { hydrateRefs, richAnswerHtml, wireCodeCopy } from "./assistant-rich.js";
@@ -27,11 +27,9 @@ describe(richAnswerHtml, () => {
   });
 
   it("renders a ref chip for an entity reference", () => {
-    const html = richAnswerHtml(
-      "See @[Groceries](ref:home.asset_item/abc123)."
-    );
+    const html = richAnswerHtml("See @[Groceries](ref:locker.item/abc123).");
     expect(html).toContain("asstRef");
-    expect(html).toContain('data-ref-type="home.asset_item"');
+    expect(html).toContain('data-ref-type="locker.item"');
     expect(html).toContain('data-ref-id="abc123"');
     expect(html).toContain("Groceries");
   });
@@ -188,7 +186,7 @@ describe(hydrateRefs, () => {
   it("resolves chips to live card titles via the injected resolver", async () => {
     const host = document.createElement("div");
     host.innerHTML = richAnswerHtml(
-      "See @[Placeholder](ref:home.asset_item/abc123)."
+      "See @[Placeholder](ref:locker.item/abc123)."
     );
     const resolveRefs = vi
       .fn<ResolveRefsTestSeam>()
@@ -199,7 +197,7 @@ describe(hydrateRefs, () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(resolveRefs).toHaveBeenCalledWith([
-      { type: "home.asset_item", id: "abc123" },
+      { type: "locker.item", id: "abc123" },
     ]);
     const chip = host.querySelector<HTMLElement>(".asstRef");
     expect(chip?.textContent).toBe("Groceries");
@@ -208,7 +206,7 @@ describe(hydrateRefs, () => {
 
   it("marks a missing ref rather than silently leaving it", async () => {
     const host = document.createElement("div");
-    host.innerHTML = richAnswerHtml("@[X](ref:home.asset_item/gone).");
+    host.innerHTML = richAnswerHtml("@[X](ref:locker.item/gone).");
     hydrateRefs(host, {
       resolveRefs: vi
         .fn<ResolveRefsTestSeam>()

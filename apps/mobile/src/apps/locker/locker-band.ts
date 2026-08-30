@@ -27,8 +27,16 @@ import {
 } from "@centraid/blueprints/apps/locker/shelves";
 import type { ShelfId } from "@centraid/blueprints/apps/locker/shelves";
 
+import { BAND_CAPSULE } from "../../kit/band/band-capsule";
+import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 import type { LockerStackParamList } from "../../navigation";
+
+// THE FRAME'S CAPSULE (#883 B5): one component, one constant, one geometry,
+// in `kit/band/band-capsule.ts`. Re-exported here because this band's view
+// and its tests read the model through this module's path.
+export { BAND_CAPSULE } from "../../kit/band/band-capsule";
+export type { BandCapsule } from "../../kit/band/band-capsule";
 
 export type LockerBandDestinationKey =
   | "items"
@@ -47,8 +55,6 @@ export interface LockerBandDestination {
 /** The frame band's cap, hence a claiming app's: five, the fifth being More. */
 export const LOCKER_BAND_MAX_DESTINATIONS = 5;
 
-export const LOCKER_BAND_CAPSULE_SIZE = 52;
-
 const MORE_ICON = "more-vertical";
 
 /** The four the blueprint declares, then the sheet. */
@@ -64,29 +70,11 @@ export const LOCKER_BAND_DESTINATIONS: readonly LockerBandDestination[] = [
   { key: "more", label: "More", icon: MORE_ICON },
 ];
 
-/** The frame's capsule — a frame control, never a sixth tab of the app's. */
-export interface LockerBandCapsule {
-  label: "Home";
-  icon: "Home";
-  size: number;
-  edge: "leading";
-  /** `false` is the whole reason it is not a sixth tab. */
-  inTabGroup: false;
-}
-
-export const LOCKER_BAND_CAPSULE: LockerBandCapsule = {
-  label: "Home",
-  icon: "Home",
-  size: LOCKER_BAND_CAPSULE_SIZE,
-  edge: "leading",
-  inTabGroup: false,
-};
-
 export type ResolvedLockerBand =
   | {
       owner: "app";
       destinations: readonly LockerBandDestination[];
-      capsule: LockerBandCapsule;
+      capsule: BandCapsule;
     }
   | { owner: "host" };
 
@@ -100,7 +88,7 @@ export function resolveLockerBand(owner: BandOwner): ResolvedLockerBand {
   return {
     owner: "app",
     destinations: LOCKER_BAND_DESTINATIONS,
-    capsule: LOCKER_BAND_CAPSULE,
+    capsule: BAND_CAPSULE,
   };
 }
 

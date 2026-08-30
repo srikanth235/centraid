@@ -7,10 +7,10 @@
 
 .shell {
   composes: kit-app-shell from global;
-  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED. Every row that spans the
-     pane reads it, so the toolbar, the banners, the rail and the set line up
-     on one edge instead of each adding its own inset. */
-  --content-margin: var(--sp-5);
+  /* THE PAGE MARGIN IS THE SYSTEM'S (#883). Every row that spans the pane
+     reads `--page-margin`, so the toolbar, the banners, the rail and the set
+     line up on one edge instead of each adding its own inset — and on the same
+     edge as every other app, which an app-local `--sp-5` could not promise. */
 }
 
 /* Notes' identity is SLATE, and it is declared exactly once — in `app.json`'s
@@ -63,17 +63,17 @@
   align-items: center;
   gap: var(--sp-2);
   min-height: var(--h-control);
-  padding: var(--sp-2) var(--content-margin);
+  padding: var(--sp-2) var(--page-margin);
 }
 
 .banner {
-  margin: 0 var(--content-margin) var(--sp-2);
+  margin: 0 var(--page-margin) var(--sp-2);
 }
 
 /* The Search route's own field — the route's first block, not chrome above
    every other route. */
 .field {
-  margin: var(--sp-3) var(--content-margin) 0;
+  margin: var(--sp-3) var(--page-margin) 0;
   font: var(--t-reading);
   color: var(--text);
   background: var(--bg-elev);
@@ -88,7 +88,7 @@
 .caption {
   font: var(--t-annot-label);
   color: var(--text-faint);
-  padding: var(--sp-3) var(--content-margin);
+  padding: var(--sp-3) var(--page-margin);
   margin: 0;
 }
 

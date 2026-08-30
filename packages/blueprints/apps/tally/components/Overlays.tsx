@@ -1,17 +1,15 @@
 // What stands OVER the room: the band's More sheet, the confirms, and the
-// small sheets that mint a friend, a group or a member.
+// sheets that mint a friend, a group or a member.
 //
 // ONE OVERLAY AT A TIME, and it is a value — `Overlay` in `compose-state.ts`.
-// Two confirms on screen at once would be two questions with one answer
-// between them, and a sheet over a confirm would put the way out behind the
-// thing it was opened from.
+// Two confirms at once would be two questions with one answer between them,
+// and a sheet over a confirm puts the way out behind what opened it.
 //
-// THE COMPOSING SHEETS LIVE IN THEIR OWN FILE and this one dispatches to them,
-// because the four that hold FIELDS are a different kind of thing from the
-// three that only hold a question — and the union that names them is what
-// keeps "one at a time" true by construction rather than by care.
+// The composing sheets — those with FIELDS — live in their own file; the union
+// that names them keeps "one at a time" true by construction, not by care.
 import type { ReactNode } from "react";
 
+import { MoreSheet } from "../../_shared/MoreSheet.tsx";
 import { NUDGE_BODY, NUDGE_COMMIT, nudgeTitle } from "../compose-copy.ts";
 import type { Overlay } from "../compose-state.ts";
 import { moreMeta } from "../route-copy.ts";
@@ -25,6 +23,8 @@ import {
   LEAVE_BODY,
   LEAVE_BODY_2,
   LEAVE_TITLE,
+  MORE_FOOT,
+  MORE_TITLE,
   NUDGE_PARKED,
   REMOVE_BODY,
   UNARCHIVE_BODY,
@@ -35,7 +35,7 @@ import {
   removeTitle,
 } from "../view-copy.ts";
 import { ComposeSheets } from "./ComposeSheets.tsx";
-import { Confirm, MoreSheet } from "./Panels.tsx";
+import { Confirm } from "./Panels.tsx";
 
 export type { Overlay } from "../compose-state.ts";
 
@@ -60,13 +60,20 @@ export function Overlays(props: OverlaysProps): ReactNode {
 
   if (open.kind === "more") {
     return (
+      // THE DOCKED SHEET, not a top-layer modal (#883, ruling O-sheet). An
+      // overflow OF the band stands inside the app pane above where the band
+      // renders; a modal would take the platform's top layer over the very
+      // chrome it overflows.
       <MoreSheet
+        label={MORE_TITLE}
+        title={MORE_TITLE}
         rows={MORE_SHELVES.map((id) => ({
-          id: String(id),
-          name: shelfLabel(id),
-          meta: moreMeta(id),
-          open: () => props.onNavigate(id),
+          key: String(id),
+          label: shelfLabel(id),
+          note: moreMeta(id),
+          select: () => props.onNavigate(id),
         }))}
+        footer={MORE_FOOT}
         closeLabel={VERBS.close}
         onClose={props.onClose}
       />
@@ -74,9 +81,8 @@ export function Overlays(props: OverlaysProps): ReactNode {
   }
 
   if (open.kind === "leave") {
-    // THE §6 SENTENCE, IN TWO PARTS. It renders as one paragraph and one
-    // trailing line, so a member reads the handoff's copy unaltered; holding
-    // it as two literals is what keeps each of them a single claim.
+    // The §6 sentence in two parts — one paragraph, one trailing line — so
+    // each literal stays a single claim.
     return (
       <Confirm
         title={LEAVE_TITLE}

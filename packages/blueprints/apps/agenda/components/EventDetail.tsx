@@ -1,10 +1,6 @@
 // The detail panel — a column BESIDE the canvas, never over it, so the next
 // row can be reached without dismissing the description first.
 //
-// It carries the four things an event is asked about: what it is, who is
-// coming (and the member's own RSVP), what is held about it, and the two
-// verbs — Edit, and Ask to cancel.
-//
 // PARKED CANCEL IS A STATE, NOT AN ERROR. Cancelling is medium-risk, so the
 // vault HOLDS the ask for the owner instead of executing it. The event stays
 // on the agenda, this panel says exactly what is held, and the way on is
@@ -15,6 +11,7 @@
 import type { ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
+import { Segmented } from "../../_shared/Segmented.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import type { RsvpAnswer } from "../edits.ts";
 import { eventTitle, fmtTime } from "../format.ts";
@@ -157,18 +154,17 @@ export function EventDetail(props: EventDetailProps): ReactNode {
       {mine ? (
         <section className={styles.rsvp} aria-label={RSVP_QUESTION}>
           <h3 className={styles.sectionLabel}>{RSVP_QUESTION}</h3>
-          <fieldset className="kit-seg" aria-label={RSVP_QUESTION}>
-            {(Object.keys(RSVP_LABELS) as RsvpAnswer[]).map((answer) => (
-              <button
-                key={answer}
-                type="button"
-                aria-pressed={mine.partstat === answer}
-                onClick={() => props.onRsvp(mine.party_id, answer)}
-              >
-                {RSVP_LABELS[answer]}
-              </button>
-            ))}
-          </fieldset>
+          <Segmented
+            label={RSVP_QUESTION}
+            options={(Object.keys(RSVP_LABELS) as RsvpAnswer[]).map(
+              (answer) => ({
+                key: answer,
+                label: RSVP_LABELS[answer],
+                pressed: mine.partstat === answer,
+                select: () => props.onRsvp(mine.party_id, answer),
+              })
+            )}
+          />
         </section>
       ) : null}
 

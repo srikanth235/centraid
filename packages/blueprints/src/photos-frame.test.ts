@@ -26,6 +26,9 @@ import { describe, expect, it } from "vitest";
 const app = (rel: string): string =>
   pathToFileURL(path.resolve(import.meta.dirname, "../apps/photos", rel)).href;
 
+const shared = (rel: string): string =>
+  pathToFileURL(path.resolve(import.meta.dirname, "../apps/_shared", rel)).href;
+
 interface Scope {
   id: string;
   label: string;
@@ -60,7 +63,8 @@ interface ToolbarProps {
   onStepTileSize?: (delta: number) => void;
 }
 interface StripProps {
-  shelf: string | null;
+  shelves: readonly Shelf[];
+  current: string | null;
   onSelect: (id: string | null) => void;
   narrow?: boolean;
 }
@@ -84,7 +88,8 @@ const { appBar, barCount } = (await import(app("frame.tsx"))) as {
   barCount: (state: AppBarState) => ReactNode;
 };
 
-const { ShelfStrip } = (await import(app("components/ShelfStrip.tsx"))) as {
+// The strip is the ONE shared component now (#883 B9), not a Photos file.
+const { ShelfStrip } = (await import(shared("ShelfStrip.tsx"))) as {
   ShelfStrip: ComponentType<StripProps>;
 };
 const { ToolbarView } = (await import(app("components/Toolbar.tsx"))) as {
@@ -143,8 +148,11 @@ function toolbar(overrides: Partial<ToolbarProps> = {}): string {
   );
 }
 
-const strip = (props: StripProps): string =>
-  renderToStaticMarkup(createElement(ShelfStrip, props));
+/** Photos' own shelf table into the shared strip; no sub-state to fold. */
+const strip = (props: Omit<StripProps, "shelves">): string =>
+  renderToStaticMarkup(
+    createElement(ShelfStrip, { ...props, shelves: SHELVES })
+  );
 
 describe("the shelf strip", () => {
   it("draws the seven shelves in order — no Sharing place (#726)", () => {
@@ -160,7 +168,7 @@ describe("the shelf strip", () => {
   });
 
   it("carries exactly one current tab, and carries it on the tab itself", () => {
-    const html = strip({ shelf: FAVORITES, onSelect: () => {} });
+    const html = strip({ current: FAVORITES, onSelect: () => {} });
     expect([...html.matchAll(/data-current="true"/gu)]).toHaveLength(1);
     expect([...html.matchAll(/aria-selected="true"/gu)]).toHaveLength(1);
     expect(html).toContain('role="tablist"');
@@ -168,14 +176,14 @@ describe("the shelf strip", () => {
   });
 
   it("lights the Library tab at the app's root", () => {
-    const html = strip({ shelf: null, onSelect: () => {} });
+    const html = strip({ current: null, onSelect: () => {} });
     const upToCurrent = html.slice(0, html.indexOf('data-current="true"'));
     expect(upToCurrent.match(/role="tab"/gu) ?? []).toHaveLength(1);
   });
 
   it("keeps shelf labels quiet and leaves counts to the overflow sheet", () => {
     const html = strip({
-      shelf: null,
+      current: null,
       onSelect: () => {},
     });
     expect(html).not.toContain("tabCount");
@@ -183,9 +191,9 @@ describe("the shelf strip", () => {
   });
 
   it("takes the compact rung from the pane's own width, not a viewport", () => {
-    expect(strip({ shelf: null, onSelect: () => {}, narrow: true })).toContain(
-      'data-narrow="true"'
-    );
+    expect(
+      strip({ current: null, onSelect: () => {}, narrow: true })
+    ).toContain('data-narrow="true"');
   });
 });
 
@@ -264,8 +272,7 @@ describe("the toolbar row", () => {
   });
 
   it("holds exactly one rung, and says which one it is", () => {
-    // The range has ends rather than wrapping: at XS the group says `1 of 4`,
-    // at L it says `4 of 4`, and one segment is pressed in each case.
+    // The range has ends rather than wrapping.
     const first = toolbar({ tileSize: 0, onStepTileSize: () => {} });
     expect(first).toContain('aria-label="Tile size 1 of 4"');
     expect([...first.matchAll(/aria-pressed="true"/gu)]).toHaveLength(1);
@@ -317,9 +324,7 @@ describe("the shelf route", () => {
 
 describe("the vault filter reads the record, never a name", () => {
   it("marks any scope but the member's own as shared", () => {
-    // Renaming changes nothing in EITHER direction: a shared place called
-    // "Beach pics" is still shared, and a personal one called "Sharing" is
-    // still only theirs.
+    // Renaming changes nothing in EITHER direction.
     expect(isSharedScope(scope("s", "Beach pics", false))).toBe(true);
     expect(isSharedScope(scope("h", "Sharing", false))).toBe(true);
     expect(isSharedScope(scope("o", "Sharing", true))).toBe(false);

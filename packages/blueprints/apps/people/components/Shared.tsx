@@ -1,14 +1,16 @@
-// ONE ROW AND ONE SECTION FOR THE WHOLE APP: a screen picks recipes, it never
-// describes a row; geometry lives once in `shared.module.css`. Every
-// member-supplied string passes through `displayText` (`_shared/untrusted.ts`)
-// — React escapes text nodes, but only `displayText` strips the invisible
-// control characters that let one label impersonate another.
+// ONE ROW AND ONE SECTION FOR THE WHOLE APP: a screen picks recipes, geometry
+// lives once in `shared.module.css`. Member strings pass through
+// `displayText`, which strips the invisible control characters that let one
+// label impersonate another.
 import type { CSSProperties, ReactNode } from "react";
 
-import { identityHueKey } from "@centraid/design";
+import { partyHueKey, partyHueValue } from "@centraid/design";
 
 import { Avatar } from "../../_shared/Avatar.tsx";
+import { KitModal } from "../../_shared/KitModal.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
+import { virtualItemAria } from "../../_shared/virtual-window.ts";
+import { virtualBlockProps } from "../../_shared/VirtualWindow.tsx";
 import { LABELS } from "../people-copy.ts";
 
 import styles from "./shared.module.css";
@@ -24,9 +26,8 @@ export interface AvatarSubject {
 
 export type LinkState = "linked" | "unlinked" | "unknown";
 
-/** Size comes from `--pe-avatar-size` on the ROW, never a JS branch; the ring
- *  is one OUTLINE in `.avatarRing`, since a border grows the box. `unknown`
- *  draws nothing — never a "not linked" ring. */
+/** Size comes from `--pe-avatar-size` on the ROW; the ring is an OUTLINE,
+ *  since a border grows the box. `unknown` draws nothing. */
 export function PersonAvatar({
   person,
   link = "unknown",
@@ -34,8 +35,10 @@ export function PersonAvatar({
   person: AvatarSubject;
   link?: LinkState;
 }): ReactNode {
-  const fill =
-    person.avatar_color ?? `var(--c-${identityHueKey(person.party_id)})`;
+  // ONE party-hue resolver (#883, ruling O-identity); the wheel place is keyed
+  // by the stable party id, so a rename never moves someone.
+  const hueKey = partyHueKey(person.party_id, person.avatar_color);
+  const fill = hueKey ? partyHueValue(hueKey) : (person.avatar_color ?? "");
   return (
     <span className={styles.avatarRing} data-link={link}>
       <Avatar
@@ -47,7 +50,7 @@ export function PersonAvatar({
   );
 }
 
-/** 44×44; stops propagation so it never opens the person. */
+/** Stops propagation, so it never opens the person. */
 export function StarButton({
   name,
   starred,
@@ -96,15 +99,16 @@ export interface RowProps {
   sub?: string;
   subNumeric?: boolean;
   meta?: string;
-  /** The meta fact is a consequence (overdue, a duplicate). */
+  /** The meta fact is a consequence (overdue, duplicate). */
   metaNet?: boolean;
   /** A row with no handler is not a button. */
   onOpen?: () => void;
   trailing?: ReactNode;
   star?: ReactNode;
+  /** True index and total of a windowed set, never the mounted count. */
+  position?: { index: number; setSize: number };
 }
 
-/** Avatar · main · meta · verbs · star, always in this order. */
 export function Row(props: RowProps): ReactNode {
   const name = displayText(props.name);
   const body = (
@@ -125,8 +129,20 @@ export function Row(props: RowProps): ReactNode {
       ) : null}
     </>
   );
+  const position = props.position;
+  // A windowed row is a real `li`, and the row element ITSELF rather than a
+  // wrapper, so `.row:last-child` still means the last row.
+  const Box = position ? "li" : "div";
   return (
-    <div className={styles.row}>
+    <Box
+      className={styles.row}
+      {...(position
+        ? {
+            ...virtualBlockProps(position.index),
+            ...virtualItemAria(position.index, position.setSize),
+          }
+        : {})}
+    >
       {props.avatar ? (
         <PersonAvatar
           person={props.avatar}
@@ -155,11 +171,11 @@ export function Row(props: RowProps): ReactNode {
       ) : null}
       {props.trailing}
       {props.star}
-    </div>
+    </Box>
   );
 }
 
-/** `quiet` is for a removal that must not compete with the row's name. */
+/** `quiet`: a removal that must not compete with the row's name. */
 export function Verb({
   label,
   quiet = false,
@@ -351,7 +367,7 @@ export function Field({
   );
 }
 
-/** Only for acts no reverse write can undo; else use the status line. */
+/** Only for acts no reverse write can undo. */
 export function ConfirmPanel({
   title,
   body,
@@ -375,12 +391,13 @@ export function ConfirmPanel({
         aria-label={cancelLabel}
         onClick={onCancel}
       />
-      {/* Native `<dialog open>`, in the app's scrim not the top layer. */}
-      <dialog
-        open
+      {/* The kit modal in its INLINE layer: the app's own scrim, not the
+          platform's top layer. */}
+      <KitModal
+        layer="inline"
         className={styles.confirmPanel}
-        aria-modal="true"
-        aria-label={displayText(title)}
+        ariaModal
+        label={displayText(title)}
       >
         <h2 className={styles.confirmTitle}>{displayText(title)}</h2>
         <p className={styles.confirmBody}>{displayText(body)}</p>
@@ -396,7 +413,7 @@ export function ConfirmPanel({
             {verb}
           </button>
         </div>
-      </dialog>
+      </KitModal>
     </div>
   );
 }

@@ -51,9 +51,18 @@ export function storedSchema(
   };
 }
 
-/** Decode one stored row without adding a mounted-scope identity prefix. */
+export type StoredReplicaRowValues = Pick<
+  StoredReplicaRow,
+  | "row_id"
+  | "payload_json"
+  | "oversized_json"
+  | "has_unavailable_fields"
+  | "server_version"
+>;
+
+/** Decode without adding a mounted-scope identity prefix. */
 export function storedReplicaEnvelope(
-  row: StoredReplicaRow,
+  row: StoredReplicaRowValues,
   extra: ReplicaRow = {}
 ): ReplicaRowEnvelope {
   return {
@@ -68,8 +77,7 @@ export function storedReplicaEnvelope(
   };
 }
 
-/** Add mounted-vault provenance after canonical rows and that vault's outbox
- * have been composed in their native (unprefixed) identity domain. */
+/** Runs only after rows and outbox compose in their unprefixed domain. */
 export function replicaScopeEnvelope(
   scope: MountedReplicaScope,
   row: ReplicaRowEnvelope
@@ -90,17 +98,17 @@ export function replicaScopeEnvelope(
 }
 
 /**
- * Collapse equal bytes while retaining one internally-consistent source row.
- *
- * The canonical row supplies both its payload id and `__centraidScopeId`.
- * Prefer a writable source when one exists, then union badges separately. This
- * prevents an id from vault A being sent to writable vault B merely because B
- * was another provenance badge on the same sha.
+ * Collapse equal bytes into ONE consistent source row: payload id and
+ * `__centraidScopeId` come from the same vault, so A's id never reaches
+ * writable B merely because B badged the same sha. `mountOrder` picks that row
+ * and orders badges; omit it to keep first-seen, which federated search wants
+ * because it composes hits one scope at a time (#883 D1).
  */
 export function dedupeReplicaRowsByContent(
-  rows: readonly ReplicaRowEnvelope[]
+  rows: readonly ReplicaRowEnvelope[],
+  mountOrder: readonly string[] = []
 ): ReplicaRowEnvelope[] {
-  const deduped = new Map<string, ReplicaRowEnvelope>();
+  const groups = new Map<string, ReplicaRowEnvelope[]>();
   for (const row of rows) {
     const values = row.values;
     const hash =
@@ -108,55 +116,67 @@ export function dedupeReplicaRowsByContent(
       stringValue(values.content_sha256) ??
       stringValue(values.blob_sha256);
     const key = hash ? `sha256:${hash}` : `row:${row.rowId}`;
-    const current = deduped.get(key);
-    if (!current) {
-      deduped.set(key, row);
-      continue;
-    }
-    const primary =
-      current.values[REPLICA_CAN_WRITE] !== true &&
-      row.values[REPLICA_CAN_WRITE] === true
-        ? row
-        : current;
-    const scopeIds = uniqueStrings(
-      current.values[REPLICA_SCOPE_IDS],
-      row.values[REPLICA_SCOPE_IDS]
-    );
-    const scopeLabels = uniqueStrings(
-      current.values[REPLICA_SCOPE_LABELS],
-      row.values[REPLICA_SCOPE_LABELS]
-    );
-    const writableScopeIds = uniqueStrings(
-      current.values[REPLICA_WRITABLE_SCOPE_IDS],
-      row.values[REPLICA_WRITABLE_SCOPE_IDS]
-    );
-    const merged: ReplicaRowEnvelope = {
-      ...primary,
-      values: {
-        ...primary.values,
-        [REPLICA_SCOPE_IDS]: scopeIds,
-        [REPLICA_SCOPE_LABELS]: scopeLabels,
-        [REPLICA_WRITABLE_SCOPE_IDS]: writableScopeIds,
-        [REPLICA_CAN_WRITE]: writableScopeIds.length > 0,
-      },
-    };
-    const currentRank = numericValue(current.values._rank);
-    const rowRank = numericValue(row.values._rank);
-    if (currentRank !== undefined || rowRank !== undefined) {
-      const best =
-        rowRank !== undefined &&
-        (currentRank === undefined || rowRank < currentRank)
-          ? row
-          : current;
-      merged.values._rank = Math.min(
-        currentRank ?? Number.POSITIVE_INFINITY,
-        rowRank ?? Number.POSITIVE_INFINITY
-      );
-      merged.values._snippet = best.values._snippet ?? "";
-    }
-    deduped.set(key, merged);
+    const group = groups.get(key);
+    if (group) group.push(row);
+    else groups.set(key, [row]);
   }
-  return [...deduped.values()];
+  // A group keeps its FIRST member's position, so collapsing never reorders.
+  return [...groups.values()].map((group) =>
+    collapseSources(group, mountOrder)
+  );
+}
+
+function collapseSources(
+  group: readonly ReplicaRowEnvelope[],
+  mountOrder: readonly string[]
+): ReplicaRowEnvelope {
+  const first = group[0]!;
+  if (group.length === 1) return first;
+  const rank = (row: ReplicaRowEnvelope): number => {
+    const id = row.values[REPLICA_SCOPE_ID];
+    const at = typeof id === "string" ? mountOrder.indexOf(id) : -1;
+    // An unranked source keeps its arrival position: `sort` is stable.
+    return at === -1 ? Number.MAX_SAFE_INTEGER : at;
+  };
+  const ordered = [...group].sort((left, right) => rank(left) - rank(right));
+  const primary =
+    ordered.find((row) => row.values[REPLICA_CAN_WRITE] === true) ??
+    ordered[0]!;
+  const scopeIds = unionStrings(ordered, REPLICA_SCOPE_IDS);
+  const scopeLabels = unionStrings(ordered, REPLICA_SCOPE_LABELS);
+  const writableScopeIds = unionStrings(ordered, REPLICA_WRITABLE_SCOPE_IDS);
+  const merged: ReplicaRowEnvelope = {
+    ...primary,
+    values: {
+      ...primary.values,
+      [REPLICA_SCOPE_IDS]: scopeIds,
+      [REPLICA_SCOPE_LABELS]: scopeLabels,
+      [REPLICA_WRITABLE_SCOPE_IDS]: writableScopeIds,
+      [REPLICA_CAN_WRITE]: writableScopeIds.length > 0,
+    },
+  };
+  const ranked = ordered
+    .map((row) => ({ row, rank: numericValue(row.values._rank) }))
+    .filter(
+      (entry): entry is { row: ReplicaRowEnvelope; rank: number } =>
+        entry.rank !== undefined
+    );
+  let best = ranked[0];
+  if (best) {
+    for (const entry of ranked) {
+      if (entry.rank < best.rank) best = entry;
+    }
+    merged.values._rank = best.rank;
+    merged.values._snippet = best.row.values._snippet ?? "";
+  }
+  return merged;
+}
+
+function unionStrings(
+  rows: readonly ReplicaRowEnvelope[],
+  column: string
+): string[] {
+  return [...new Set(rows.flatMap((row) => arrayStrings(row.values[column])))];
 }
 
 export function parseStringArray(raw: string): string[] {
@@ -174,10 +194,6 @@ function numericValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
-}
-
-function uniqueStrings(left: unknown, right: unknown): string[] {
-  return [...new Set([...arrayStrings(left), ...arrayStrings(right)])];
 }
 
 function arrayStrings(value: unknown): string[] {

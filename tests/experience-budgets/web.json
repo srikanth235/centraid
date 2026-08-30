@@ -57,16 +57,16 @@
       "status": "measured",
       "volume": "n/a — build artifact, independent of vault size",
       "probe": "scripts/perf/app-weight.mjs --surface web (weighs apps/web/dist produced by `bun run web:build`), run in CI after the web build",
-      "maxTotalBytes": 11010048,
+      "maxTotalBytes": 8730000,
       "maxLargestChunkBytes": 2200000,
       "_provenance": {
-        "at": "2026-08-15",
-        "host": "linux x64 worktree, `bun run web:build` (vite build + precompress)",
-        "observedShippedBytes": 10211472,
-        "observedShippedFiles": 72,
+        "at": "2026-08-28",
+        "host": "linux x64 worktree, `bun run --cwd apps/web build` (vite build + precompress)",
+        "observedShippedBytes": 8083152,
+        "observedShippedFiles": 86,
         "observedLargestChunkBytes": 1995618,
-        "observedLargestChunk": "centraid_web_iroh_bg-*.wasm",
-        "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface web --report` (#781, closing the #587 D21 web gap). The earlier 'a weigh-in here would be a duplicate owner' claim was wrong: perf-budgets.ts shell.maxTransferBytes fences what the BROWSER transfers on the e2e shell journey (compressed, journey-scoped), not what `web:build` ships on disk — the two can diverge by megabytes without either gate noticing the other's regression. Source maps plus the .br/.gz precompress sidecars (19.7 MB together) are excluded as diagnostics/alternate encodings of already-weighed bytes. The Iroh WASM binding ships TWICE (assets/ copy + centraid-worker-iroh.wasm worker copy, 2.0 MB each) — de-duplicating it is the single biggest cut available, and when it lands these ceilings must be re-measured and TIGHTENED. Next largest: pdf.worker.min.mjs 1.30 MB, boot.js 1.24 MB, sqlite3.wasm 865 kB.",
+        "observedLargestChunk": "centraid-worker-iroh.wasm",
+        "note": "MEASURED by `node scripts/perf/app-weight.mjs --surface web --report` (#781, closing the #587 D21 web gap; re-measured and TIGHTENED by #883 C5). The earlier 'a weigh-in here would be a duplicate owner' claim was wrong: perf-budgets.ts shell.maxTransferBytes fences what the BROWSER transfers on the e2e shell journey (compressed, journey-scoped), not what the build ships on disk — the two can diverge by megabytes without either gate noticing the other's regression. Source maps plus the .br/.gz precompress sidecars (17.6 MB together) are excluded as diagnostics/alternate encodings of already-weighed bytes. THE DOUBLE-SHIPPED IROH WASM IS FIXED: the 1,995,618 B binding had two inclusion paths — the page's wasm-bindgen ESM resolving new URL('centraid_web_iroh_bg.wasm', import.meta.url) into a hashed assets/ copy, and scripts/build-iroh-worker.mjs copying the same bytes to public/centraid-worker-iroh.wasm for the CLASSIC service worker, which cannot import ESM. The worker's copy has to keep its unhashed, _headers-pinned path, so the centraid-iroh-wasm-single-copy plugin in apps/web/vite.config.ts rewrites the bindings' default to that same ?v=-stamped URL and the assets/ copy stops being emitted; public/sw.js now treats that path as an immutable shell entry, so a visit that uses both the page transport and the worker pays the 2 MB once. Measured on this host the same day: 10,074,585 B across 87 files before, 8,083,152 B across 86 files after. maxTotalBytes ratcheted 11,010,048 -> 8,730,000 (observed + ~8%). maxLargestChunkBytes is UNCHANGED at 2,200,000 deliberately: the largest single file is still that same 1,995,618 B binary — de-duplication removed a COPY, not weight from the copy that remains — so the existing observed+10% ceiling is still the honest one, and tightening it here would claim a win that did not happen. Next largest: pdf.worker.min.mjs 1.30 MB, boot.js 1.10 MB, sqlite3.wasm 865 kB; pdf.worker is the next real cut.",
         "headroom": "observed + ~8% total; largest chunk + ~10% (mirrors the desktop/mobile seeds)"
       }
     }

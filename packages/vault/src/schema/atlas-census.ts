@@ -111,14 +111,9 @@ export function atlasCensus(
   let kinds = 0;
   let populatedKinds = 0;
 
-  // Grant-plane tables ride the canonical registry (export/replica) but are not
-  // COUNTed on Atlas first paint. Their row counts belong with the graph, which
-  // is already loaded after first paint; the grant surfaces already answer "how
-  // many grants" (#825).
-  const entries = atlasTables().filter(
-    (entry) =>
-      entry.logical !== "share.grant" && entry.logical !== "share.fulfillment"
-  );
+  // Atlas states ROW COUNTS, the grant surfaces LIVE grants: a revoked answer
+  // is history the plane keeps, so the two differ by design (#883).
+  const entries = atlasTables();
   // Counted per FILE, in one compound statement per file, so registering a
   // table costs the census a COUNT(*) scan but never a new statement (#873).
   const countsByFile = {

@@ -10,7 +10,7 @@
 // NOTHING HERE DERIVES A BALANCE. Every `*_minor` argument arrives already
 // folded by `queries/dashboard.ts`; these functions choose a word, an absolute
 // value and a tone. Summing shares here would be a second engine.
-import { fmtMoney, identityHueKey } from "@centraid/design";
+import { fmtMoney, partyHueKey } from "@centraid/design";
 
 import type { Role } from "./types.ts";
 
@@ -19,8 +19,8 @@ import type { Role } from "./types.ts";
  *  NEVER a green: a settled balance is a fact, not a reward. */
 export type FigureTone = "net" | "owed" | "settled";
 
-/** The absolute amount, in the vault's own currency. Direction is carried by
- *  the words beside it, never by a minus sign in front of it. */
+/** The absolute amount; direction is carried by the words beside it, never by
+ *  a minus sign. */
 export function money(
   minor: number | null | undefined,
   currency: string | undefined
@@ -38,8 +38,7 @@ export function figureTone(netMinor: number): FigureTone {
   return netMinor < 0 ? "net" : "owed";
 }
 
-/** Is every balance in this set level? The All-settled state's one question,
- *  asked of figures the queries derived. */
+/** Is every balance in this set level? */
 export function allSettled(nets: readonly number[]): boolean {
   return nets.every((net) => Math.abs(net) < 1);
 }
@@ -88,12 +87,13 @@ export function roleTone(role: Role): FigureTone {
  *  party id. The wheel is the product's, not this app's — the same person is
  *  the same hue in People, Photos and here. */
 export function personHue(partyId: string): string {
-  return `var(--c-${identityHueKey(partyId)}-text)`;
+  // The `-text` rung of the ONE party hue (#883, ruling O-identity) — a
+  // figure's ink, solved against the page, rather than the ring's fill.
+  return `var(--c-${partyHueKey(partyId) ?? "slate"}-text)`;
 }
 
-/** A sentence's worth of parts, joined the way every meta line in this room
- *  joins them. A part the caller does not know DROPS OUT rather than leaving a
- *  dangling separator — which is why the type admits absence at all. */
+/** A part the caller does not know DROPS OUT rather than leaving a dangling
+ *  separator — which is why the type admits absence at all. */
 export function metaSentence(
   parts: readonly (string | false | null | undefined)[]
 ): string {

@@ -77,5 +77,3 @@ export const docsPendingProjection = definePendingProjection({
       pendingPatch("core.concept", input.folder_id, input),
   },
 });
-
-export default docsPendingProjection;

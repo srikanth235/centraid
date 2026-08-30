@@ -1,3 +1,4 @@
+import { DAY_MS } from "../_shared/format-kit.ts";
 // A SCHEDULE IS A SENTENCE, and where it cannot be there is no preview at all
 // (Tally spec §3, §6).
 //
@@ -119,7 +120,7 @@ export function daysUntil(iso: string, nowIso: string): number | null {
   const then = Date.parse(`${iso.slice(0, 10)}T00:00:00.000Z`);
   const now = Date.parse(`${nowIso.slice(0, 10)}T00:00:00.000Z`);
   if (Number.isNaN(then) || Number.isNaN(now)) return null;
-  return Math.round((then - now) / 86_400_000);
+  return Math.round((then - now) / DAY_MS);
 }
 
 /** When an occurrence falls, in words. `null` where the date cannot be read —

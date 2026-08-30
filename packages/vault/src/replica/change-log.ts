@@ -11,18 +11,44 @@ import { replicaUnavailableColumnsOf } from "./unavailable-columns.js";
 export const REPLICA_RETENTION_DAYS = 30;
 export const REPLICA_RETENTION_MAX_ENTRIES = 100_000;
 
+/**
+ * Entities compaction never folds (#883): folding assumes the end state is the
+ * whole signal, but for consent rows the server projects as SHAPE CONTROL the
+ * intermediate transition is the signal. `packages/server` asserts its own set
+ * is covered here.
+ */
+export const REPLICA_COMPACTION_HELD_ENTITIES: readonly string[] = [
+  "consent.app",
+  "consent.app_ext",
+  "consent.access_grant",
+  "consent.grant_scope",
+  "consent.policy",
+];
+
+// A sweep reads at most `excess + MARGIN` oldest entries, capped: work is
+// bounded by the overflow, never the log.
+const REPLICA_COMPACTION_SCAN_CAP = 20_000;
+const REPLICA_COMPACTION_SCAN_MARGIN = 1_000;
+
 export type ReplicaChangeOp = "insert" | "update" | "delete";
 
 export interface ReplicaChangeEntry {
   seq: number;
   epoch: string;
-  /** All trigger rows from one committed gateway transaction share this id. */
   commitId: string;
   entity: string;
   rowId: string;
   op: ReplicaChangeOp;
-  /** Replica-available OLD row state for exact filtered update/delete projection. */
+  /** Replica-available OLD row state, for exact filtered projection. */
   oldValuesJson: string | null;
+  /**
+   * Op of the OLDEST change this entry stands for (`op` unless compaction
+   * folded earlier entries in). "Was this row in my filter at my cursor?"
+   * reads this, not `op`.
+   */
+  priorOp: ReplicaChangeOp;
+  /** Replica-available row state BEFORE the change `priorOp` names. */
+  priorOldValuesJson: string | null;
   changedAt: string;
 }
 
@@ -88,9 +114,8 @@ function triggerSpecs(vault: DatabaseSync): EntityTriggerSpec[] {
   const specs = listVaultEntities(vault).flatMap((logical) => {
     const ref = resolveEntity(logical, vault);
     if (!ref || ref.file !== "vault") return [];
-    // One catalog read per entity supplies both identity and projection
-    // columns. This path runs on fresh schema/ext DDL, so avoiding a second
-    // PRAGMA per table materially reduces cold vault-open work.
+    // One catalog read feeds identity and projection both; a second PRAGMA
+    // per table costs real cold-open time.
     const columns = vault
       .prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`)
       .all() as {
@@ -112,14 +137,13 @@ function triggerSpecs(vault: DatabaseSync): EntityTriggerSpec[] {
       },
     ];
   });
-  // Intent outcomes are protocol metadata rather than an app-grantable
-  // ontology entity, so they deliberately stay out of schema/tables.ts.
+  // Protocol metadata, not a grantable entity: deliberately outside
+  // `listVaultEntities`.
   specs.push({
     logical: "replica.intent",
     physical: "replica_intent_outcome",
     primaryKey: ["intent_id"],
-    // Outcomes are device-scoped protocol metadata rather than app data, so
-    // the generic vault log never snapshots them.
+    // Device-scoped: never snapshotted by the vault log.
     oldValueColumns: [],
   });
   return specs;
@@ -139,8 +163,8 @@ function oldValuesExpression(spec: EntityTriggerSpec): string {
   if (spec.oldValueColumns.length === 0) return `'{}'`;
   const pairs = spec.oldValueColumns.flatMap((column) => [
     sqlString(column),
-    // JSON1 rejects BLOB arguments. Binary cells are intentionally reduced
-    // to null; replica filters over BLOB columns fail closed at shape build.
+    // JSON1 rejects BLOBs, so binary cells reduce to null; replica filters
+    // over them fail closed at shape build.
     `CASE WHEN typeof(old.${quoteIdentifier(column)}) = 'blob' THEN NULL ELSE old.${quoteIdentifier(column)} END`,
   ]);
   return `json_object(${pairs.join(", ")})`;
@@ -207,9 +231,9 @@ function triggerContractMarker(
 }
 
 /**
- * Install or repair the database-level change triggers for all canonical and
- * currently registered live ext tables. The caller owns transaction scope so
- * ext DDL can install its trigger before the schema transaction commits.
+ * Install or repair change triggers for canonical and live ext tables. The
+ * caller owns transaction scope, so ext DDL can install its trigger inside the
+ * schema transaction.
  */
 export function refreshReplicaTriggers(vault: DatabaseSync): void {
   const specs = triggerSpecs(vault);
@@ -235,14 +259,12 @@ export function refreshReplicaTriggers(vault: DatabaseSync): void {
       ddl.push(wanted);
     }
   }
-  // Crossing the JS/native boundary once is substantially cheaper than one
-  // exec per trigger on the fresh-vault path; SQLite still applies the batch
-  // inside the caller-owned transaction.
+  // One JS/native crossing beats one exec per trigger on a fresh vault; the
+  // batch still lands inside the caller's transaction.
   if (ddl.length > 0) vault.exec(ddl.join(";\n"));
-  // SQLite increments schema_version for every table/trigger DDL change. A
-  // persisted match lets ordinary warm opens skip hundreds of PRAGMA and
-  // sqlite_master probes, while any later ext/schema/manual trigger change
-  // invalidates the marker and forces this repair pass again.
+  // SQLite bumps schema_version on every table/trigger DDL change, so a
+  // persisted match lets warm opens skip hundreds of catalog probes; any
+  // later change forces this pass again.
   vault
     .prepare(
       `UPDATE replica_meta SET trigger_schema_version = ? WHERE singleton = 1`
@@ -264,10 +286,8 @@ function meta(vault: DatabaseSync): MetaRow {
 }
 
 /**
- * Add the commit-group columns to databases created before grouped deltas.
- * The repository is still pre-release, but local vaults are long-lived and
- * must not lose their change history merely because this process learned a
- * stronger paging invariant.
+ * Add the commit-group columns in place: a long-lived local vault must not lose
+ * change history to a newly learned paging invariant.
  */
 function ensureReplicaCommitColumns(vault: DatabaseSync): void {
   const metaColumns = new Set(
@@ -294,6 +314,18 @@ function ensureReplicaCommitColumns(vault: DatabaseSync): void {
         WHERE commit_id IS NULL`
     );
   }
+  // Folded-prior columns; NULL is correct on old rows, which stand for
+  // themselves.
+  if (!changeColumns.has("prior_op")) {
+    vault.exec(
+      `ALTER TABLE replica_change ADD COLUMN prior_op TEXT
+         CHECK (prior_op IS NULL OR prior_op IN ('insert','update','delete'))`
+    );
+    vault.exec(
+      `ALTER TABLE replica_change ADD COLUMN prior_old_values_json TEXT
+         CHECK (prior_old_values_json IS NULL OR json_valid(prior_old_values_json))`
+    );
+  }
   vault.exec(
     `CREATE INDEX IF NOT EXISTS idx_replica_change_epoch_commit_seq
        ON replica_change(epoch, commit_id, seq)`
@@ -305,9 +337,8 @@ function ensureReplicaCommitColumns(vault: DatabaseSync): void {
     )
     .get() as { sql: string | null } | undefined;
   if (intentTable?.sql && !intentTable.sql.includes("'conflict'")) {
-    // The status CHECK constraint is part of the old table definition and
-    // SQLite cannot widen CHECK constraints with ALTER TABLE. Rebuild this
-    // small protocol table before triggers are refreshed.
+    // SQLite cannot widen a CHECK with ALTER TABLE; rebuild before the
+    // trigger refresh.
     vault.exec(`
       DROP TRIGGER IF EXISTS trg_replica_replica_intent_outcome_ai;
       DROP TRIGGER IF EXISTS trg_replica_replica_intent_outcome_au;
@@ -358,7 +389,7 @@ export interface ReplicaCommitHandle {
   owner: boolean;
 }
 
-/** Mark the caller's open SQLite transaction so triggers share one group id. */
+/** Mark the caller's transaction so its triggers share one group id. */
 export function beginReplicaCommit(vault: DatabaseSync): ReplicaCommitHandle {
   const current = vault
     .prepare(`SELECT active_commit_id FROM replica_meta WHERE singleton = 1`)
@@ -372,7 +403,6 @@ export function beginReplicaCommit(vault: DatabaseSync): ReplicaCommitHandle {
   return { commitId, owner: true };
 }
 
-/** Clear the transaction marker before the caller commits its write window. */
 export function endReplicaCommit(
   vault: DatabaseSync,
   handle: ReplicaCommitHandle
@@ -386,14 +416,12 @@ export function endReplicaCommit(
 }
 
 function currentSchemaEpoch(vault: DatabaseSync): number {
-  // Do not couple replica compatibility to v0's deliberately single-rung
-  // vault bootstrap. A build bump invalidates cursors without inventing a
-  // compatibility ladder for pre-release replica state.
+  // Deliberately uncoupled from the vault's schema ladder: a build bump
+  // invalidates cursors without one.
   void vault;
   return REPLICA_SCHEMA_EPOCH;
 }
 
-/** Current epoch, retained floor, and stable high-water position. */
 export function currentReplicaLogState(vault: DatabaseSync): ReplicaLogState {
   const row = meta(vault);
   const latest = vault
@@ -410,10 +438,7 @@ export function currentReplicaLogState(vault: DatabaseSync): ReplicaLogState {
   };
 }
 
-/**
- * Initialize the protocol after fresh vault schema bootstrap. A contract change
- * invalidates every derived replica by changing epoch before triggers resume.
- */
+/** A contract change rotates epoch before triggers resume. */
 export function initializeReplicaProtocol(
   vault: DatabaseSync
 ): ReplicaLogState {
@@ -426,9 +451,8 @@ export function initializeReplicaProtocol(
   ) {
     return currentReplicaLogState(vault);
   }
-  // Epoch rotation and the trigger catalog it identifies are one contract
-  // change. A crash may expose neither or both, never a new epoch fed by old
-  // trigger projection rules.
+  // Epoch rotation and its trigger catalog are one contract change: a crash
+  // exposes neither or both, never a new epoch on old ones.
   vault.exec("BEGIN IMMEDIATE");
   try {
     if (contractChanged) {
@@ -450,7 +474,44 @@ export interface AppendReplicaChangeInput {
   changedAt?: string;
 }
 
-/** Append a protocol-only change inside the caller's current transaction. */
+/** Resolves the folded-prior pair, so no caller can forget the COALESCE. */
+const CHANGE_COLUMNS = `seq, epoch, commit_id, entity, row_id, op, old_values_json,
+         COALESCE(prior_op, op) AS prior_op,
+         CASE WHEN prior_op IS NULL THEN old_values_json ELSE prior_old_values_json END
+           AS prior_old_values_json,
+         changed_at`;
+
+// Alias, not interface: only an anonymous shape casts from node:sqlite's
+// `Record<string, SQLOutputValue>`.
+type ChangeRow = {
+  seq: number;
+  epoch: string;
+  commit_id: string;
+  entity: string;
+  row_id: string;
+  op: ReplicaChangeOp;
+  old_values_json: string | null;
+  prior_op: ReplicaChangeOp;
+  prior_old_values_json: string | null;
+  changed_at: string;
+};
+
+function changeEntry(row: ChangeRow): ReplicaChangeEntry {
+  return {
+    seq: row.seq,
+    epoch: row.epoch,
+    commitId: row.commit_id,
+    entity: row.entity,
+    rowId: row.row_id,
+    op: row.op,
+    oldValuesJson: row.old_values_json,
+    priorOp: row.prior_op,
+    priorOldValuesJson: row.prior_old_values_json,
+    changedAt: row.changed_at,
+  };
+}
+
+/** Append a protocol-only change in the caller's transaction. */
 export function appendReplicaChange(
   vault: DatabaseSync,
   input: AppendReplicaChangeInput
@@ -463,20 +524,11 @@ export function appendReplicaChange(
     )
     .run(input.entity, input.rowId, input.op, changedAt);
   const seq = Number(result.lastInsertRowid);
-  return {
-    seq,
-    epoch: meta(vault).epoch,
-    commitId: (
-      vault
-        .prepare("SELECT commit_id FROM replica_change WHERE seq = ?")
-        .get(seq) as { commit_id: string }
-    ).commit_id,
-    entity: input.entity,
-    rowId: input.rowId,
-    op: input.op,
-    oldValuesJson: null,
-    changedAt,
-  };
+  return changeEntry(
+    vault
+      .prepare(`SELECT ${CHANGE_COLUMNS} FROM replica_change WHERE seq = ?`)
+      .get(seq) as ChangeRow
+  );
 }
 
 export interface ReadReplicaChangesOptions {
@@ -484,7 +536,6 @@ export interface ReadReplicaChangesOptions {
   limit?: number;
 }
 
-/** Read one stable, resumable incremental page. */
 export function readReplicaChanges(
   vault: DatabaseSync,
   options: ReadReplicaChangesOptions = {}
@@ -510,42 +561,29 @@ export function readReplicaChanges(
   }
   const rows = vault
     .prepare(
-      `SELECT seq, epoch, commit_id, entity, row_id, op, old_values_json, changed_at
+      `SELECT ${CHANGE_COLUMNS}
          FROM replica_change
         WHERE epoch = ? AND seq > ? AND seq <= ?
         ORDER BY seq
         LIMIT ?`
     )
-    .all(state.epoch, since.seq, state.watermark.seq, limit + 1) as {
-    seq: number;
-    epoch: string;
-    commit_id: string;
-    entity: string;
-    row_id: string;
-    op: ReplicaChangeOp;
-    old_values_json: string | null;
-    changed_at: string;
-  }[];
+    .all(state.epoch, since.seq, state.watermark.seq, limit + 1) as ChangeRow[];
   let pageRows = rows.length > limit ? rows.slice(0, limit) : rows;
   let last = pageRows.at(-1);
   if (last) {
     const groupTail = vault
       .prepare(
-        `SELECT seq, epoch, commit_id, entity, row_id, op, old_values_json, changed_at
+        `SELECT ${CHANGE_COLUMNS}
            FROM replica_change
           WHERE epoch = ? AND commit_id = ? AND seq > ? AND seq <= ?
           ORDER BY seq`
       )
-      .all(state.epoch, last.commit_id, last.seq, state.watermark.seq) as {
-      seq: number;
-      epoch: string;
-      commit_id: string;
-      entity: string;
-      row_id: string;
-      op: ReplicaChangeOp;
-      old_values_json: string | null;
-      changed_at: string;
-    }[];
+      .all(
+        state.epoch,
+        last.commit_id,
+        last.seq,
+        state.watermark.seq
+      ) as ChangeRow[];
     if (groupTail.length > 0) pageRows = [...pageRows, ...groupTail];
     last = pageRows.at(-1);
   }
@@ -558,16 +596,7 @@ export function readReplicaChanges(
       )
       .get(state.epoch, last.seq, state.watermark.seq)
   );
-  const changes = pageRows.map((row) => ({
-    seq: row.seq,
-    epoch: row.epoch,
-    commitId: row.commit_id,
-    entity: row.entity,
-    rowId: row.row_id,
-    op: row.op,
-    oldValuesJson: row.old_values_json,
-    changedAt: row.changed_at,
-  }));
+  const changes = pageRows.map(changeEntry);
   const lastChange = changes.at(-1);
   const next =
     hasMore && lastChange
@@ -589,13 +618,12 @@ export interface BumpReplicaEpochOptions {
   epoch?: string;
 }
 
-/** Invalidate all cursors (backup restore, schema change, or explicit reset). */
 export function bumpReplicaEpoch(
   vault: DatabaseSync,
   options: BumpReplicaEpochOptions
 ): ReplicaLogState {
   const epoch = options.epoch ?? randomUUID();
-  // Validate the same wire restrictions as a cursor before persisting it.
+  // Reject anything a cursor could not carry, before persisting it.
   formatReplicaCursor({ epoch, seq: 0 });
   const now = (options.now ?? new Date()).toISOString();
   vault.exec("BEGIN IMMEDIATE");
@@ -639,11 +667,18 @@ export interface PruneReplicaChangesOptions {
   now?: Date;
   maxAgeMs?: number;
   maxEntries?: number;
+  /**
+   * Overrides `REPLICA_COMPACTION_HELD_ENTITIES`. The gateway owns what counts
+   * as shape control, so it may widen this set; nothing may narrow it.
+   */
+  heldEntities?: readonly string[];
 }
 
 export interface ReplicaPruneResult {
   expired: number;
+  /** Folded into a later entry; the floor does NOT move for these. */
   compacted: number;
+  /** Deleted outright by the count cap; the floor moves past them. */
   overflow: number;
   discardedPriorEpochs: number;
   floor: ReplicaCursor;
@@ -659,7 +694,6 @@ function maxSeq(
   return row.seq ?? 0;
 }
 
-/** Extend a retention cutoff to the end of the commit group it touches. */
 function completeCommitThrough(
   vault: DatabaseSync,
   epoch: string,
@@ -682,7 +716,206 @@ function completeCommitThrough(
   );
 }
 
-/** Apply the smaller of the age/count windows and advance only across deleted prefixes. */
+interface CompactionCandidate {
+  seq: number;
+  commitId: string;
+  key: string;
+  entity: string;
+  rowId: string;
+  op: ReplicaChangeOp;
+  oldValuesJson: string | null;
+  /** Raw column: null means nothing folded yet. */
+  priorOp: ReplicaChangeOp | null;
+  priorOldValuesJson: string | null;
+}
+
+interface FoldedPrior {
+  entity: string;
+  rowId: string;
+  op: ReplicaChangeOp;
+  oldValuesJson: string | null;
+}
+
+/**
+ * Collapse repeated changes to the same row, WITHOUT moving the floor. Sound
+ * because a page ships CURRENT state under last-write-wins
+ * (docs/mobile-offline.md). Two properties must survive: COMMIT ATOMICITY —
+ * drop a group only when EVERY entry in it is superseded, so no page carries
+ * half a transaction; FILTERED MEMBERSHIP — a row leaving a filter projects as
+ * a delete judged from the state BEFORE the oldest change shown, so the
+ * survivor inherits it via `prior_op`/`prior_old_values_json`.
+ */
+function compactSupersededCommits(
+  vault: DatabaseSync,
+  epoch: string,
+  excess: number,
+  heldEntities: ReadonlySet<string>
+): number {
+  const scan = Math.min(
+    REPLICA_COMPACTION_SCAN_CAP,
+    excess + REPLICA_COMPACTION_SCAN_MARGIN
+  );
+  const boundary = vault
+    .prepare(
+      `SELECT seq FROM replica_change WHERE epoch = ? ORDER BY seq LIMIT 1 OFFSET ?`
+    )
+    .get(epoch, scan - 1) as { seq: number } | undefined;
+  // Align the window to a commit edge, or a straddling group is judged on
+  // half its entries.
+  const through = boundary
+    ? completeCommitThrough(vault, epoch, boundary.seq)
+    : maxSeq(
+        vault,
+        `SELECT MAX(seq) AS seq FROM replica_change WHERE epoch = ?`,
+        epoch
+      );
+  if (through <= 0) return 0;
+
+  const candidates = (
+    vault
+      .prepare(
+        `SELECT seq, commit_id, entity, row_id, op, old_values_json,
+                prior_op, prior_old_values_json
+           FROM replica_change
+          WHERE epoch = ? AND seq <= ?
+          ORDER BY seq`
+      )
+      .all(epoch, through) as {
+      seq: number;
+      commit_id: string;
+      entity: string;
+      row_id: string;
+      op: ReplicaChangeOp;
+      old_values_json: string | null;
+      prior_op: ReplicaChangeOp | null;
+      prior_old_values_json: string | null;
+    }[]
+  ).map<CompactionCandidate>((row) => ({
+    seq: row.seq,
+    commitId: row.commit_id,
+    key: `${row.entity}\u0000${row.row_id}`,
+    entity: row.entity,
+    rowId: row.row_id,
+    op: row.op,
+    oldValuesJson: row.old_values_json,
+    priorOp: row.prior_op,
+    priorOldValuesJson: row.prior_old_values_json,
+  }));
+  if (candidates.length === 0) return 0;
+
+  // The newest entry of a row always survives: that keeps the end state
+  // reachable, and folds a delete only if the row was rewritten.
+  const latestStmt = vault.prepare(
+    `SELECT MAX(seq) AS seq FROM replica_change
+      WHERE epoch = ? AND entity = ? AND row_id = ?`
+  );
+  const latest = new Map<string, number>();
+  for (const candidate of candidates) {
+    if (latest.has(candidate.key)) continue;
+    latest.set(
+      candidate.key,
+      (
+        latestStmt.get(epoch, candidate.entity, candidate.rowId) as {
+          seq: number | null;
+        }
+      ).seq ?? candidate.seq
+    );
+  }
+  const superseded = (candidate: CompactionCandidate): boolean =>
+    !heldEntities.has(candidate.entity) &&
+    candidate.seq < (latest.get(candidate.key) ?? candidate.seq);
+
+  const groups = new Map<string, CompactionCandidate[]>();
+  for (const candidate of candidates) {
+    const group = groups.get(candidate.commitId);
+    if (group) group.push(candidate);
+    else groups.set(candidate.commitId, [candidate]);
+  }
+  const dropped = new Set<string>();
+  for (const [commitId, group] of groups) {
+    if (group.every(superseded)) dropped.add(commitId);
+  }
+  if (dropped.size === 0) return 0;
+
+  // One pass in seq order: the first entry folded away for a row owns the
+  // prior its survivor carries, overwriting any already there as older.
+  const pending = new Map<string, FoldedPrior>();
+  const removed: number[] = [];
+  const inherit = vault.prepare(
+    `UPDATE replica_change
+        SET prior_op = ?, prior_old_values_json = ?
+      WHERE epoch = ? AND seq = ?`
+  );
+  const apply = (candidate: CompactionCandidate, prior: FoldedPrior): void => {
+    inherit.run(prior.op, prior.oldValuesJson, epoch, candidate.seq);
+  };
+  for (const candidate of candidates) {
+    if (dropped.has(candidate.commitId)) {
+      removed.push(candidate.seq);
+      const op = candidate.priorOp ?? candidate.op;
+      // An INSERT's prior claims "row did not exist" and is never
+      // inheritable: a cursor above the insert holds the row, and inherited
+      // absence suppresses the delete saying it left the filter.
+      if (op !== "insert" && !pending.has(candidate.key)) {
+        pending.set(candidate.key, {
+          entity: candidate.entity,
+          rowId: candidate.rowId,
+          op,
+          oldValuesJson:
+            candidate.priorOp === null
+              ? candidate.oldValuesJson
+              : candidate.priorOldValuesJson,
+        });
+      }
+      continue;
+    }
+    const prior = pending.get(candidate.key);
+    if (prior) {
+      apply(candidate, prior);
+      pending.delete(candidate.key);
+    }
+  }
+  // Survivors past the window: one exists (all folded entries are superseded)
+  // and is retained (nothing outside the window is removed).
+  const successor = vault.prepare(
+    `SELECT MIN(seq) AS seq FROM replica_change
+      WHERE epoch = ? AND entity = ? AND row_id = ? AND seq > ?`
+  );
+  for (const prior of pending.values()) {
+    const seq = (
+      successor.get(epoch, prior.entity, prior.rowId, through) as {
+        seq: number | null;
+      }
+    ).seq;
+    if (seq === null) continue;
+    inherit.run(prior.op, prior.oldValuesJson, epoch, seq);
+  }
+
+  // Whole groups are contiguous in seq: removals collapse into ranges.
+  const remove = vault.prepare(
+    `DELETE FROM replica_change WHERE epoch = ? AND seq BETWEEN ? AND ?`
+  );
+  let deleted = 0;
+  let start = removed[0]!;
+  let end = start;
+  for (const seq of removed.slice(1)) {
+    if (seq === end + 1) {
+      end = seq;
+      continue;
+    }
+    deleted += Number(remove.run(epoch, start, end).changes);
+    start = seq;
+    end = seq;
+  }
+  deleted += Number(remove.run(epoch, start, end).changes);
+  return deleted;
+}
+
+/**
+ * Age window, then compaction, then whatever the count cap still wants. Only
+ * the first and last move the floor — "start over" versus "still resumable" —
+ * so compaction buys the cap back in entries, not history.
+ */
 export function pruneReplicaChanges(
   vault: DatabaseSync,
   options: PruneReplicaChangesOptions = {}
@@ -703,6 +936,9 @@ export function pruneReplicaChanges(
   const cutoff = new Date(
     (options.now ?? new Date()).getTime() - maxAgeMs
   ).toISOString();
+  const held = new Set(
+    options.heldEntities ?? REPLICA_COMPACTION_HELD_ENTITIES
+  );
   const epoch = meta(vault).epoch;
   let floorCandidate = 0;
   let expired = 0;
@@ -727,8 +963,8 @@ export function pruneReplicaChanges(
       )
     );
     if (ageThrough > 0) {
-      // Delete the whole prefix, not only timestamp matches: floor cursors
-      // may never skip over a retained entry after clock-skewed timestamps.
+      // Whole prefix, not only timestamp matches: under clock skew a floor
+      // cursor may never skip a retained entry.
       expired = Number(
         vault
           .prepare(`DELETE FROM replica_change WHERE epoch = ? AND seq <= ?`)
@@ -745,65 +981,19 @@ export function pruneReplicaChanges(
       }
     ).n;
     if (count > maxEntries) {
-      // Collapse the whole pressured window, not merely the few rows in the
-      // FIFO overflow prefix. The maximum superseded sequence is the exact
-      // invalidation boundary: a client below it may need an intermediate
-      // filtered-membership transition, while a client at/above it has
-      // already consumed every entry we remove. Delete the rest of that
-      // prefix too because rows at/below the new floor are unreachable after
-      // rebootstrap and retaining them would be pure storage waste.
-      const compactionCandidate = maxSeq(
-        vault,
-        `SELECT MAX(older.seq) AS seq
-           FROM replica_change older
-          WHERE older.epoch = ?
-            AND EXISTS (
-              SELECT 1 FROM replica_change newer
-               WHERE newer.epoch = older.epoch
-                 AND newer.entity = older.entity
-                 AND newer.row_id = older.row_id
-                 AND newer.seq > older.seq
-            )`,
-        epoch
-      );
-      const compactionThrough = completeCommitThrough(
+      // Fold FIRST: reclaims count without moving the floor, so a churn-heavy
+      // vault stops paying for hot rows with the history a lagging phone
+      // needs.
+      compacted = compactSupersededCommits(
         vault,
         epoch,
-        compactionCandidate
+        count - maxEntries,
+        held
       );
-      if (compactionThrough > 0) {
-        compacted = Number(
-          vault
-            .prepare(
-              `DELETE FROM replica_change
-                WHERE epoch = ? AND seq <= ?
-                  AND EXISTS (
-                    SELECT 1 FROM replica_change newer
-                     WHERE newer.epoch = replica_change.epoch
-                       AND newer.entity = replica_change.entity
-                       AND newer.row_id = replica_change.row_id
-                       AND newer.seq > replica_change.seq
-                  )`
-            )
-            .run(epoch, compactionThrough).changes
-        );
-        overflow += Number(
-          vault
-            .prepare(`DELETE FROM replica_change WHERE epoch = ? AND seq <= ?`)
-            .run(epoch, compactionThrough).changes
-        );
-        floorCandidate = Math.max(floorCandidate, compactionThrough);
-        count = (
-          vault
-            .prepare(`SELECT COUNT(*) AS n FROM replica_change WHERE epoch = ?`)
-            .get(epoch) as {
-            n: number;
-          }
-        ).n;
-      }
+      count -= compacted;
 
-      // Unique-row pressure can remain after latest-per-row compaction. Trim
-      // only the residual excess, again advancing across a complete prefix.
+      // Unique-row pressure survives compaction. Trim the residue, again
+      // across a complete prefix.
       if (count > maxEntries) {
         const excess = count - maxEntries;
         const countCandidate = (
@@ -818,7 +1008,7 @@ export function pruneReplicaChanges(
           epoch,
           countCandidate
         );
-        overflow += Number(
+        overflow = Number(
           vault
             .prepare(`DELETE FROM replica_change WHERE epoch = ? AND seq <= ?`)
             .run(epoch, countThrough).changes

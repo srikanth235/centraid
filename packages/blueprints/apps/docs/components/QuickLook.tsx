@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
+import { KitModal } from "../../_shared/KitModal.tsx";
 import { STAGE_ACTIONS } from "../document-copy.ts";
 import { fmtBytes, typeMeta } from "../format.ts";
 import type { DocsShareHost } from "../grant-audiences.ts";
@@ -243,12 +244,12 @@ export function QuickLook({
     );
 
   return (
-    <dialog
-      open
+    <KitModal
+      layer="inline"
       className={styles.quick}
-      data-narrow={String(narrow)}
-      aria-modal="true"
-      aria-label="Quick look"
+      data={{ "data-narrow": String(narrow) }}
+      ariaModal
+      label="Quick look"
     >
       {/* The one shared grant sheet; no sharing flow of its own. */}
       {shareHost ? (
@@ -300,6 +301,6 @@ export function QuickLook({
         </span>
       </p>
       {narrow ? <BottomBar actions={phoneActions} /> : null}
-    </dialog>
+    </KitModal>
   );
 }

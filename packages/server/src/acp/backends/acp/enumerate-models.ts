@@ -13,6 +13,7 @@ import { methods } from "@agentclientprotocol/sdk";
 
 import type { HarnessModel } from "@centraid/server/engine";
 
+import { unrefTimer } from "../../../lib/unref-timer.js";
 import { lowPriorityCommand } from "../../low-priority.js";
 import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./connection.js";
 import { planLaunch } from "./launch.js";
@@ -73,7 +74,7 @@ export async function enumerateAcpModels(
     const killTimer = setTimeout(() => {
       if (!child.killed) child.kill("SIGKILL");
     }, KILL_GRACE_MS);
-    killTimer.unref?.();
+    unrefTimer(killTimer);
     await conn.exited;
     clearTimeout(killTimer);
     await removeQuietly(cwd);
@@ -135,7 +136,7 @@ async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
       () => reject(new Error("acp model probe timed out")),
       ms
     );
-    timer.unref?.();
+    unrefTimer(timer);
   });
   try {
     return await Promise.race([work, deadline]);

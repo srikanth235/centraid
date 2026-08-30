@@ -9,7 +9,7 @@ import type {
 import {
   censusStamp,
   countLine,
-  dayLabel,
+  atlasDayLabel,
   defaultSortKey,
   gridColumnsFrom,
   gridRowsFrom,
@@ -213,8 +213,8 @@ describe("screens/atlasScreenModel", () => {
     });
 
     it("names yesterday and dates anything older", () => {
-      expect(dayLabel("2026-07-16", NOW)).toBe("Yesterday");
-      expect(dayLabel("2026-07-01", NOW)).not.toBe("Yesterday");
+      expect(atlasDayLabel("2026-07-16", NOW)).toBe("Yesterday");
+      expect(atlasDayLabel("2026-07-01", NOW)).not.toBe("Yesterday");
     });
   });
 

@@ -9,6 +9,7 @@
 // Nothing here reads a colour: tones are named (`ink` / `net`) and resolved at
 // the call site. A hex here would be a second source of truth.
 
+import { mediaClock } from "@centraid/blueprints/apps/_shared/format-kit";
 // The leaf module, never `kit/fetch-gate`'s barrel: the barrel re-exports
 // `FetchChoice.tsx`, which pulls in `react-native`.
 import {
@@ -128,10 +129,9 @@ export function infoSheetHeight(screenHeight: number): number {
  * A different MODE from the viewer, not the viewer with things switched off:
  * no filmstrip, no info, determinate position (§7.3).
  *
- * A MODEL MUST NOT DESCRIBE CONTROLS THAT DO NOT RENDER — `transports: 1` while
+ * A model must not describe controls that do not render — `transports: 1` while
  * the phone renders none makes model, mark and behaviour three stories (#711).
- * A phone transport is a recorded NON-GOAL; when one is built, `transports`
- * goes to 1 and this note goes away.
+ * A phone transport is a recorded NON-GOAL.
  */
 export const SLIDESHOW = {
   filmstrip: false,
@@ -169,10 +169,9 @@ export function slideshowPosition(
 // What the floating stamp says
 // ───────────────────────────────────────────────────────────────────────────
 
-/** `timeline-engine.ts` flattens a vault row's `title` into `filename`, so a
- *  caption and a file name arrive in one field. A value still SHAPED like a
- *  file name was never captioned, and must stay a last-resort fallback rather
- *  than be promoted to a caption the member never wrote. */
+/** `timeline-engine.ts` flattens `title` into `filename`, so caption and file
+ *  name arrive in one field. A value still SHAPED like a file name was never
+ *  captioned: keep it a last-resort fallback, never a caption. */
 const FILENAME_SHAPED = /\.[a-z0-9]{2,5}$/iu;
 
 export function viewerTitle(input: {
@@ -380,13 +379,10 @@ export function transportSpec(
   return null;
 }
 
-/** ROUNDS, never truncates — the twin of the web viewer's `clock`, and one
- *  recording must not have two lengths across the clients. */
-export function formatMediaClock(seconds: number): string {
-  const whole = Math.max(0, Math.round(seconds));
-  const minutes = Math.floor(whole / 60);
-  return `${minutes}:${String(whole % 60).padStart(2, "0")}`;
-}
+// The ONE clock, not a twin (#883 B5). This file's copy claimed to be "the
+// twin of the web viewer's `clock`" and was not: it had no hours arm, so a
+// 61-minute recording read `61:40` here and `1:01:40` on its own tile.
+export { mediaClock as formatMediaClock } from "@centraid/blueprints/apps/_shared/format-kit";
 
 /** From the RECORD's pixel height — never a filename or codec guess. A height
  *  between rungs reads an honest `NNNp` rather than being promoted. Mirrors the
@@ -411,7 +407,7 @@ export function videoKindLabel(asset: {
   const resolution = videoResolutionLabel(asset);
   if (resolution) parts.push(resolution);
   const duration = Number(asset.durationS);
-  if (duration > 0) parts.push(formatMediaClock(duration));
+  if (duration > 0) parts.push(mediaClock(duration));
   return parts.join(" · ");
 }
 

@@ -1,11 +1,8 @@
 // The band Docs has claimed, rendered (Binding Layer v12 handoff Part 2
 // §"The band"; #821).
 //
-// Two plates in a transparent row — the frame's Home capsule on the frame's
-// neutral page colour, then the app's five destinations as one group on
-// `bgElev` — exactly the anatomy `PhotosBand.tsx` draws and for exactly the
-// reasons its header states at length. The shared plate geometry lives in
-// `kit/band-surface.ts`; this file renders `docs-band.ts` and adds nothing.
+// Anatomy and shared plate geometry: `PhotosBand.tsx` and
+// `kit/band-surface.ts`. This file renders `docs-band.ts` and adds nothing.
 //
 // When the member has handed the band back (`owner === "host"`) the tab group
 // goes and the capsule STAYS — the way home is the one thing an app may never
@@ -26,11 +23,12 @@ import {
   BAND_TOP_GAP,
 } from "../../kit/band-surface";
 import type { BandOwner } from "../../kit/band/band-owner";
+import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { DOCS_BAND_CAPSULE, resolveDocsBand } from "./docs-band";
+import { resolveDocsBand } from "./docs-band";
 import type { DocsBandDestinationKey } from "./docs-band";
 
 /** The group plate's inner gutter and the gap between the two plates — the
@@ -61,18 +59,7 @@ export default function DocsBand({
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={DOCS_BAND_CAPSULE.label}
-          onPress={onHome}
-          style={[styles.capsule, { width: DOCS_BAND_CAPSULE.size }]}
-        >
-          <Icon
-            name={DOCS_BAND_CAPSULE.icon}
-            size={19}
-            color={colors.textSoft}
-          />
-        </Pressable>
+        <BandCapsuleControl onPress={onHome} />
       </View>
     );
   }
@@ -80,14 +67,7 @@ export default function DocsBand({
   const { capsule } = band;
   return (
     <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={capsule.label}
-        onPress={onHome}
-        style={[styles.capsule, { width: capsule.size }]}
-      >
-        <Icon name={capsule.icon} size={19} color={colors.textSoft} />
-      </Pressable>
+      <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
       <View style={styles.group} accessibilityRole="tablist">
         {band.destinations.map((destination) => {
@@ -144,14 +124,6 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: BAND_HEIGHT,
       paddingHorizontal: BAND_INSET,
       paddingTop: BAND_TOP_GAP,
-    },
-    capsule: {
-      alignItems: "center",
-      backgroundColor: colors.bg,
-      borderColor: colors.lineStrong,
-      borderRadius: BAND_RADIUS,
-      borderWidth: BAND_BORDER,
-      justifyContent: "center",
     },
     group: {
       alignItems: "stretch",

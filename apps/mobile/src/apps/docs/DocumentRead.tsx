@@ -39,6 +39,7 @@ import type { MobileDriveDoc } from "./docs-projection";
 import DocsScreen from "./DocsScreen";
 import DocsShelfHeader from "./DocsShelfHeader";
 import { factsRows, readStatus, readSurfaceFor } from "./document-read-model";
+import OfflinePinButton from "./OfflinePinButton";
 import { useDocument } from "./useDocs";
 import { useDocumentText } from "./useDocumentText";
 import { useVersionChain } from "./useVersionChain";
@@ -126,6 +127,7 @@ function ReadingView({
           <Text style={styles.reading}>{body.text ?? ""}</Text>
         )}
         <Button label="Edit" onPress={onEdit} style={styles.editButton} />
+        <OfflinePinButton doc={doc} />
         {status ? <Text style={styles.status}>{status}</Text> : null}
       </View>
     </ScrollView>
@@ -199,6 +201,7 @@ function FactsView({
           nothing can be handed over right now.
         </Text>
       ) : null}
+      <OfflinePinButton doc={doc} />
       <Text style={styles.status}>{FACTS_STATUS}</Text>
     </ScrollView>
   );

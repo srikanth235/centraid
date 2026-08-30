@@ -2,10 +2,12 @@
 // Nav is band/strip, never sidebar/topbar.
 import type { ReactNode } from "react";
 
-import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
-import { CONSENT_TITLE, LABELS } from "./people-copy.ts";
+import { ConsentBanner, NoticeBanner } from "../_shared/AppChrome.tsx";
+import { chromeClass } from "../_shared/chrome-kit.ts";
+import { ShelfStrip } from "../_shared/ShelfStrip.tsx";
+import { LABELS } from "./people-copy.ts";
 import { DESTINATION_SHELVES, originShelf } from "./shelves.ts";
-import type { Shelf, ShelfId } from "./shelves.ts";
+import type { ShelfId } from "./shelves.ts";
 
 import styles from "./Chrome.module.css";
 
@@ -29,9 +31,10 @@ export function Chrome(props: ChromeProps): ReactNode {
   // A callback ref off `props` taints React-compiler reads (#573).
   const { rootRef } = props;
   const current = originShelf(props.shelf);
-  const shellClass = [styles.appRoot, props.consent ? styles.denied : ""]
-    .filter(Boolean)
-    .join(" ");
+  const shellClass = chromeClass(
+    styles.appRoot,
+    props.consent && styles.denied
+  );
 
   return (
     <div
@@ -44,47 +47,42 @@ export function Chrome(props: ChromeProps): ReactNode {
     >
       <div className={styles.main}>
         {props.consent ? (
-          // onFocusRefresh reads id="consentBanner" past its throttle.
-          <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>{CONSENT_TITLE}</strong>{" "}
-            <span>{props.consent.message}</span>
-            <VaultAccessButton />
-          </div>
+          <ConsentBanner
+            message={props.consent.message}
+            className={styles.banner}
+          />
         ) : null}
-        {/* Driven imperatively by logic.ts (`notice`/`readFailed`); rendered once, never reconciled. */}
-        <output
-          id="noticeBanner"
-          className={`kit-banner notice ${styles.banner}`}
-          aria-live="polite"
-          hidden
-        />
+        <NoticeBanner className={styles.banner} />
 
-        {props.bandOwned ? null : (
-          <div
-            className={styles.strip}
-            role="tablist"
-            aria-label={LABELS.destinations}
-          >
-            {DESTINATION_SHELVES.map((entry: Shelf) => {
-              const on = entry.id === current;
-              return (
-                <button
-                  key={entry.label}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  className={styles.tab}
-                  data-current={on ? "true" : "false"}
-                  onClick={() => props.onSelectShelf(entry.id)}
-                >
-                  {entry.label}
-                </button>
-              );
-            })}
-          </div>
+        {/* THE SHARED STRIP (#883). People drew its own until this pass, at
+            the 34px `--h-control` rung and the `--t-body` / `--t-label-on`
+            held pair the v12 handoff pinned. The shared strip's register wins:
+            38px under a pointer, 44px in a narrow pane, `--t-small` /
+            `--t-small-strong`. The two were value-identical at rest (13/19,
+            400) and differed by four pixels of height and one of leading on
+            the selected half — which is less than the cost of a third
+            implementation of a row of tabs.
+
+            NOT RENDERED, rather than hidden, in the two cases that have no
+            business drawing it: the band already carries the same three
+            destinations, and a denied seat collapses to its banner. The
+            stylesheet used to hide the denied case; a region that does not
+            exist beats one that exists invisibly. */}
+        {props.bandOwned || props.consent ? null : (
+          <ShelfStrip
+            shelves={DESTINATION_SHELVES}
+            current={current}
+            onSelect={props.onSelectShelf}
+            narrow={props.narrow}
+            label={LABELS.destinations}
+          />
         )}
 
-        <div className={styles.scroll}>
+        {/* The declared scroll pane (`_shared/VirtualWindow.tsx`
+            SCROLL_HOST_ATTR): a windowed list resolves its scroller by
+            `closest()` rather than by walking ancestors through
+            `getComputedStyle`. One scroller for the whole app, so one stamp. */}
+        <div className={styles.scroll} data-scroll-host="">
           <div className={styles.column}>{props.slots.scroll}</div>
         </div>
       </div>

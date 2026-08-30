@@ -4,12 +4,20 @@
 // tables the rung reads are needed, because `migrate()` starts at
 // user_version 2 and never runs the baseline (which needs openVaultDb's
 // custom SQL functions).
+//
+// The ladder is walked to rung FIVE, not to the top: rung six also reads
+// `enrich_consent` and `consent_device`, which this commons-only fixture does
+// not hold, and stopping keeps the assertions rung three's own shape. Rung six
+// has its own upgrade test (migrate-authority.test.ts).
 import { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, test } from "vitest";
 
 import { openVaultDb } from "../db.js";
 import { migrate, VAULT_MIGRATIONS } from "./migrate.js";
+
+/** Rung three is what this file tests; see the header for why it stops at five. */
+const RUNGS_THROUGH_FIVE = VAULT_MIGRATIONS.slice(0, 5);
 
 const V2_COMMONS_DDL = `
 CREATE TABLE core_party (
@@ -79,24 +87,15 @@ CREATE TABLE sync_connection_credential (
 
 /*
  * One steward and five audience parties, arranged so the rung has to make
- * every decision it can make:
- *   - `circle-family` is NAMED and its live members agree on 'read', so the
- *     grant stays ONE circle-audience grant at 'view';
- *   - `circle-work` is NAMED but carol edits and dave only reads, so no single
- *     circle row could be honest and the grant decomposes into party rows;
- *   - `circle-adhoc` is IMPLICIT — an anonymous roster wrapper — so it always
- *     decomposes, and it grants the same subject twice at different
- *     capabilities, which the live-uniqueness index forbids: the stronger one
- *     must win, deterministically;
- *   - `circle-club` is NAMED and uniform at 'read', but grace REFUSED — a
- *     circle row would keep reaching her through the roster, so the grant
- *     decomposes and only bob gets a party grant;
- *   - `circle-refused` is NAMED and every member refused, so its live grant
- *     decomposes to nothing and deliberately does not migrate;
- *   - erin refused her invitation, dave's only binding is revoked, and frank
- *     has no binding at all — three different reasons the delivery answer
- *     differs from the permission answer.
- * A revoked grant and a 'give'-plane grant are present to be ignored.
+ * every decision it can make: a NAMED circle whose members agree (stays one
+ * circle grant), a NAMED circle with capability variance (decomposes), an
+ * IMPLICIT circle granting one subject twice at different capabilities (always
+ * decomposes, stronger wins), a NAMED uniform circle with one refusal
+ * (decomposes so the refuser is not reached through the roster), and a NAMED
+ * circle every member refused (decomposes to nothing). Erin's refusal, dave's
+ * revoked binding and frank's missing one are three reasons the delivery
+ * answer differs from the permission answer. A revoked grant and a
+ * 'give'-plane grant are present to be ignored.
  */
 function seedV2Vault(db: DatabaseSync): void {
   db.exec("PRAGMA foreign_keys = ON");
@@ -186,11 +185,7 @@ type GrantShape = {
   max_size_bytes: number | null;
 };
 
-/**
- * node:sqlite hands back null-prototype rows; `toStrictEqual` compares
- * prototypes, so every row read in this file is re-shaped as a plain object
- * before it is asserted on.
- */
+/** `toStrictEqual` compares prototypes, and node:sqlite rows have none. */
 function plainRows<T>(rows: readonly T[]): T[] {
   return rows.map((row) => ({ ...row }));
 }
@@ -236,7 +231,7 @@ describe("schema/migrate rung three (issue #825 grant plane)", () => {
     seedV2Vault(db);
     const commonsBefore = commonsSnapshot(db);
 
-    migrate(db, VAULT_MIGRATIONS);
+    migrate(db, RUNGS_THROUGH_FIVE);
 
     expect(
       (db.prepare("PRAGMA user_version").get() as { user_version: number })
@@ -318,9 +313,8 @@ describe("schema/migrate rung three (issue #825 grant plane)", () => {
       },
     ]);
 
-    // Erin and grace refused: a refused invitation was never a standing
-    // permission, so neither has a grant or a delivery row anywhere — not
-    // even through a circle audience, since a refusal forces decomposition.
+    // A refused invitation was never a standing permission, and a refusal
+    // forces decomposition, so neither is reached through a circle either.
     for (const refused of ["party-erin", "party-grace"]) {
       expect(
         db
@@ -330,9 +324,8 @@ describe("schema/migrate rung three (issue #825 grant plane)", () => {
           .get(refused)
       ).toMatchObject({ n: 0 });
     }
-    // The limit case, deliberately: a live named-circle grant EVERY member
-    // refused permits no one and does not migrate. The commons row and the
-    // refusals survive untouched (asserted below) as the record.
+    // A live named-circle grant EVERY member refused permits no one and does
+    // not migrate; the commons row and the refusals survive as the record.
     expect(
       db
         .prepare(
@@ -414,8 +407,7 @@ describe("schema/migrate rung three (issue #825 grant plane)", () => {
         detail: null,
       },
     ]);
-    // Frank has a grant but no binding at all, so there is no vault to name
-    // and absence of a fulfillment row IS "no channel yet".
+    // No binding: absence of a fulfillment row IS "no channel yet".
     expect(
       db
         .prepare(
@@ -436,8 +428,7 @@ describe("schema/migrate rung three (issue #825 grant plane)", () => {
         .get()
     ).toMatchObject({ ids: 6, rows: 6 });
 
-    // Not one commons row moved: commons is the edit-fulfillment strategy
-    // under the grant plane, not a rival record of the same fact.
+    // Commons is the edit-fulfillment strategy, not a rival record.
     expect(commonsSnapshot(db)).toStrictEqual(commonsBefore);
     db.close();
   });
@@ -445,7 +436,7 @@ describe("schema/migrate rung three (issue #825 grant plane)", () => {
   test("the rung leaves no scaffolding behind and is a no-op on replay", () => {
     const db = new DatabaseSync(":memory:");
     seedV2Vault(db);
-    migrate(db, VAULT_MIGRATIONS);
+    migrate(db, RUNGS_THROUGH_FIVE);
     for (const scaffold of ["share_grant_seed", "share_grant_mint"]) {
       expect(
         db
@@ -455,36 +446,26 @@ describe("schema/migrate rung three (issue #825 grant plane)", () => {
       ).toBeUndefined();
     }
     const after = grantShapes(db);
-    migrate(db, VAULT_MIGRATIONS);
+    migrate(db, RUNGS_THROUGH_FIVE);
     expect(grantShapes(db)).toStrictEqual(after);
     db.close();
   });
 
-  test("a fresh vault gets the tables from the baseline and backfills nothing", () => {
+  test("a fresh vault backfills nothing into the plane rung three feeds", () => {
+    // Rung six folds `share_grant` into `share_authority`, so the fresh-file
+    // claim is asserted where the rows land: no commons plane, no share rows.
     const db = openVaultDb();
     expect(
-      db.vault.prepare(`SELECT COUNT(*) AS n FROM share_grant`).get()
+      db.vault
+        .prepare(
+          `SELECT COUNT(*) AS n FROM share_authority
+            WHERE principal_kind IN ('person','circle')`
+        )
+        .get()
     ).toMatchObject({ n: 0 });
     expect(
       db.vault.prepare(`SELECT COUNT(*) AS n FROM share_fulfillment`).get()
     ).toMatchObject({ n: 0 });
-    // The live-uniqueness index and both secondary indexes are real on a
-    // fresh file, not only on the upgrade path.
-    for (const index of [
-      "share_grant_live_audience_subject",
-      "share_grant_subject",
-      "share_grant_audience",
-    ]) {
-      expect(
-        db.vault
-          .prepare(
-            `SELECT COUNT(*) AS n FROM sqlite_master
-              WHERE type = 'index' AND name = ?`
-          )
-          .get(index),
-        index
-      ).toMatchObject({ n: 1 });
-    }
     db.close();
   });
 });

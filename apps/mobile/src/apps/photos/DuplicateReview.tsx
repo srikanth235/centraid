@@ -11,10 +11,11 @@
 // answers the same question a merge would.
 
 import React, { useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert, StyleSheet, View } from "react-native";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import Tappable from "../../kit/components/Tappable";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -27,16 +28,13 @@ import { spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
-import {
-  NO_DOWNLOAD_REASON,
-  batchFavorite,
-  vaultAssets,
-} from "./photos-selection-writes";
+import { batchFavorite, vaultAssets } from "./photos-selection-writes";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { useSelectionDownload } from "./use-photo-download";
 import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
@@ -45,7 +43,7 @@ export default function DuplicateReview({
 }: PhotosScreenProps<"DuplicateReview">): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { session } = useReplica();
+  const { session, online } = useReplica();
   const timeline = usePhotoTimeline();
   const { refreshing, refreshNow } = useReplicaRefresh();
   const [selection, setSelection] = useState(new Set<string>());
@@ -105,6 +103,10 @@ export default function DuplicateReview({
     surfaceWriteOutcome(result);
   };
   const selected = vaultAssets(hints, selection);
+  const downloadHandler = useSelectionDownload({
+    online,
+    targets: () => selected,
+  });
   // One handler for the third selection target, shared by every Photos shelf
   // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
   // refusal grammar cannot drift between them.
@@ -138,7 +140,7 @@ export default function DuplicateReview({
     },
     // Share is one standing grant over one photograph, through the one kit.
     share: share.handler,
-    download: { unavailableReason: NO_DOWNLOAD_REASON },
+    download: downloadHandler,
     // The shelf's whole verb. Same confirm the head's control asks for, so
     // the two ways to reach it cannot mean two different things.
     trash: writeBlockedReason
@@ -153,7 +155,7 @@ export default function DuplicateReview({
     // Photos is no harder to reach than the app's own tabs (§F).
     <PhotosScreen current="more" selection={selectionBar}>
       <View style={styles.header}>
-        <Pressable
+        <Tappable
           accessibilityLabel={selecting ? "Clear selection" : "Back to Photos"}
           accessibilityRole="button"
           onPress={() =>
@@ -165,7 +167,7 @@ export default function DuplicateReview({
             size={selecting ? 22 : 26}
             color={colors.text}
           />
-        </Pressable>
+        </Tappable>
         {selecting ? (
           <Text style={styles.selectionCount} numberOfLines={1}>
             {selection.size} selected

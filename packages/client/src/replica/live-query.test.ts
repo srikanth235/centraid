@@ -44,6 +44,52 @@ describe(LiveQuery, () => {
     query.dispose();
   });
 
+  test("honours a per-row dependency without going quiet on entity-wide ones", async () => {
+    let runs = 0;
+    const query = new LiveQuery(async () => ({
+      value: ++runs,
+      dependencies: [
+        { shapeId: "shape-photos", entity: "core.content_item", rowId: "a" },
+      ],
+    }));
+    await expect(query).resolves.toBe(1);
+
+    query.invalidate({
+      shapeId: "shape-photos",
+      entity: "core.content_item",
+      rowId: "b",
+      source: "canonical",
+    });
+    await turn();
+    expect(runs).toBe(1);
+
+    query.invalidate({
+      shapeId: "shape-photos",
+      entity: "core.content_item",
+      rowId: "a",
+      source: "canonical",
+    });
+    await turn();
+    expect(runs).toBe(2);
+
+    query.invalidate({
+      shapeId: "shape-photos",
+      entity: "core.content_item",
+      source: "canonical",
+    });
+    await turn();
+    expect(runs).toBe(3);
+
+    query.invalidate({
+      shapeId: "other",
+      entity: "other",
+      source: "purge",
+    });
+    await turn();
+    expect(runs).toBe(4);
+    query.dispose();
+  });
+
   test("coalesces invalidations received while one execution is in flight", async () => {
     let release!: () => void;
     let runs = 0;

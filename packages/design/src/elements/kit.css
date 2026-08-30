@@ -815,10 +815,10 @@ button.kit-avatar:focus-visible {
 .kit-seg.stretch {
   display: flex;
 }
-.kit-seg.stretch > button {
+.kit-seg.stretch > .kit-seg-option {
   flex: 1;
 }
-.kit-seg > button {
+.kit-seg > .kit-seg-option {
   font: inherit;
   font-size: var(--t-small-size);
   font-weight: 600;
@@ -834,22 +834,22 @@ button.kit-avatar:focus-visible {
     color var(--dur-1) var(--ease),
     background var(--dur-1) var(--ease);
 }
-.kit-seg > button:hover {
+.kit-seg > .kit-seg-option:hover {
   color: var(--text);
 }
-.kit-seg > button[aria-pressed="true"],
-.kit-seg > button.on {
+.kit-seg > .kit-seg-option[aria-pressed="true"],
+.kit-seg > .kit-seg-option.on {
   background: var(--bg-elev);
   color: var(--text);
   box-shadow:
     var(--shadow-sm, 0 0 0 0.5px var(--line-strong)),
     0 1px 2px var(--scrim);
 }
-:root[data-theme="dark"] .kit-seg > button[aria-pressed="true"],
-:root[data-theme="dark"] .kit-seg > button.on {
+:root[data-theme="dark"] .kit-seg > .kit-seg-option[aria-pressed="true"],
+:root[data-theme="dark"] .kit-seg > .kit-seg-option.on {
   box-shadow: 0 0 0 0.5px var(--line-strong);
 }
-.kit-seg > button:focus-visible {
+.kit-seg > .kit-seg-option:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }

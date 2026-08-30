@@ -429,46 +429,6 @@
   margin: 0;
   text-wrap: pretty;
 }
-/* ---------- The More sheet ---------- */
-
-.sheet {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-.sheetHead {
-  font: var(--t-small-strong);
-  color: var(--text);
-  padding-block-end: var(--sp-1);
-}
-.sheetRow {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  min-block-size: var(--target-min);
-  border: 0;
-  border-block-end: 1px solid var(--line);
-  background: none;
-  text-align: start;
-  inline-size: 100%;
-}
-.sheetName {
-  flex: 1;
-  min-inline-size: 0;
-  font: var(--t-body);
-  color: var(--text);
-}
-.sheetMeta {
-  flex: none;
-  font: var(--t-annot-label);
-  color: var(--text-faint);
-}
-.sheetFoot {
-  font: var(--t-annot-label);
-  color: var(--text-faint);
-  padding-block-start: var(--sp-2);
-}
-
 /* ---------- A refused commit ---------- */
 
 /* The reason a commit cannot fire, standing beside it on the page rather than

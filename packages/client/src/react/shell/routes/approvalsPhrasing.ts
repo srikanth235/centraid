@@ -1,3 +1,5 @@
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
+
 import type {
   NoticeRowDTO,
   ApprovalsNeedsAuthRowDTO,
@@ -96,7 +98,6 @@ export function noticeSeverityLabel(
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
 
 function spanWords(ms: number): string {
   if (ms >= DAY_MS) {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import { cx } from "../../ui/cx.js";
+import ShellModal from "../../ui/ShellModal.js";
 import { iconSvg } from "../iconSvg.js";
 import type { ConnectivityReport } from "./connectFlow-core.js";
 import { runConnectivityTest } from "./connectFlowIO.js";
@@ -69,7 +70,11 @@ export default function TestConnectionModal({
         tabIndex={-1}
         onClick={onClose}
       />
-      <dialog open className={vaultModalStyles.profModal} aria-modal="true">
+      <ShellModal
+        layer="inline"
+        className={vaultModalStyles.profModal}
+        ariaModal
+      >
         <div className={vaultModalStyles.profModalHead}>
           <span
             className={vaultModalStyles.profModalHeadIcon}
@@ -111,7 +116,7 @@ export default function TestConnectionModal({
             Retry
           </button>
         </div>
-      </dialog>
+      </ShellModal>
     </div>
   );
 }

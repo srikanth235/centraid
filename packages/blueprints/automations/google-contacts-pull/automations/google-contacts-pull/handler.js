@@ -57,7 +57,9 @@ function toPartyRow(person) {
         : null,
       bday:
         bday && bday.month && bday.day
-          ? `${bday.year || "--"}-${String(bday.month).padStart(2, "0")}-${String(bday.day).padStart(2, "0")}`
+          ? // vCard yearless form is "--09-05": no year means the "--" prefix
+            // stands in for BOTH the year and its joining dash.
+            `${bday.year ? `${bday.year}-` : "--"}${String(bday.month).padStart(2, "0")}-${String(bday.day).padStart(2, "0")}`
           : null,
       identifiers,
       providerVersion: person.etag || null,

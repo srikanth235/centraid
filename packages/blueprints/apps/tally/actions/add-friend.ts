@@ -1,25 +1,15 @@
-/**
- * tally.add_friend — see app.json for the contract. Consent denials and precondition
- * refusals come back as first-class outcomes the app narrates.
- */
-const KEYS = ["name"];
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** `party_id`/`email`/`phone` enroll a known party, never a second
+ *  `core_party` for one human (#883). */
+const KEYS = ["name", "party_id", "email", "phone"];
 export default async function addFriend({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
+  const input = actionInput(body);
   const cmdInput: Record<string, unknown> = {};
   for (const k of KEYS)
     if (input[k] !== undefined && input[k] !== null) cmdInput[k] = input[k];
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "tally.add_friend",
-      input: cmdInput,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "tally.add_friend",
+    input: cmdInput,
+  });
 }

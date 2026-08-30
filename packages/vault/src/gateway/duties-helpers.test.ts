@@ -1,6 +1,4 @@
 // Direct unit coverage for standing-duty helpers (#545).
-// Imports `duties.ts` by name — admitImportedRow / resolveHandle / revoke /
-// sweepLifecycle pure-ish paths with a bootstrapped vault.
 
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -40,7 +38,6 @@ describe("duties-helpers", () => {
 
   test("admitImportedRow inserts once and dedupes on the external id column", () => {
     const now = new Date().toISOString();
-    // core_event carries ical_uid as its import external id.
     let inserts = 0;
     const first = admitImportedRow(
       db,
@@ -87,16 +84,20 @@ describe("duties-helpers", () => {
     expect(prov.n).toBe(1);
   });
 
-  test("resolveHandle finds a live primary email and ignores expired ones", () => {
+  test("resolveHandle reads reach from channels and identity keys from the register", () => {
     const now = new Date().toISOString();
     const past = "2020-01-01T00:00:00.000Z";
+    // A channel has no validity window: a member DELETES an address they no
+    // longer answer at (#883).
     db.vault
       .prepare(
-        `INSERT INTO core_party_identifier
-         (identifier_id, party_id, scheme, value, label, is_primary, valid_from, valid_to)
-       VALUES (?, ?, 'email', 'priya@example.com', 'home', 1, ?, NULL)`
+        `INSERT INTO social_contact_channel
+         (channel_id, party_id, kind, label, value, normalized_value,
+          is_preferred, created_at, updated_at)
+       VALUES (?, ?, 'email', 'home', 'priya@example.com', 'priya@example.com',
+               1, ?, ?)`
       )
-      .run(uuidv7(), boot.ownerPartyId, now);
+      .run(uuidv7(), boot.ownerPartyId, now, now);
     expect(resolveHandle(db, "email", "priya@example.com")).toBe(
       boot.ownerPartyId
     );
@@ -108,13 +109,15 @@ describe("duties-helpers", () => {
        VALUES (?, 'person', 'Expired', ?, ?, '1.4')`
       )
       .run(other, now, now);
+    // An EXPIRED identity key still reads as expired.
     db.vault
       .prepare(
         `INSERT INTO core_party_identifier
          (identifier_id, party_id, scheme, value, label, is_primary, valid_from, valid_to)
-       VALUES (?, ?, 'email', 'gone@example.com', NULL, 1, ?, ?)`
+       VALUES (?, ?, 'handle', '@gone', NULL, 1, ?, ?)`
       )
       .run(uuidv7(), other, past, past);
+    expect(resolveHandle(db, "handle", "@gone")).toBeNull();
     expect(resolveHandle(db, "email", "gone@example.com")).toBeNull();
     expect(resolveHandle(db, "tel", "+10000000000")).toBeNull();
   });

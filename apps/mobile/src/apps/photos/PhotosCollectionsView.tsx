@@ -9,6 +9,8 @@ import { Image } from "expo-image";
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
+import { readableName } from "@centraid/blueprints/apps/photos/place-map";
+import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
 import { radii } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
@@ -31,7 +33,7 @@ import { usePhotoTimeline } from "./timeline-source";
 
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
 
-/** Two-and-a-bit tiles on the narrowest phone: the cut third says the rail scrolls. */
+/** Two-and-a-bit tiles on the narrowest phone: the cut third says it scrolls. */
 const TILE = 132;
 
 function RailTile({
@@ -177,8 +179,7 @@ export default function PhotosCollectionsView({
 }: {
   navigation: Nav;
   /** SESSION state, and a display fold — never a filter. Owned by
-   *  `PhotosHome.tsx` (#712), which hosts the Show All / Collapse All menu; this
-   *  file keeps no `useState` for it. */
+   *  `PhotosHome.tsx` (#712); this file keeps no `useState` for it. */
   collapsed: ReadonlySet<CollectionSectionKey>;
   onToggleSection: (key: CollectionSectionKey) => void;
 }): React.JSX.Element {
@@ -202,8 +203,8 @@ export default function PhotosCollectionsView({
     "photos",
     useMemo(() => ({ entity: "media.face_region" }), [])
   );
-  // A face row carries a party ID, never a name; `PhotosPeopleView` resolves it
-  // the same way, and the two must not disagree.
+  // A face row carries a party ID, never a name; `PhotosPeopleView` must
+  // resolve it the same way.
   const parties = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
@@ -255,7 +256,11 @@ export default function PhotosCollectionsView({
               {
                 placeId: String(row.place_id),
                 key,
-                name: String(row.name ?? "Place"),
+                // `readableName`, like the shelf and the map: a coordinate
+                // pair is not a name, and must never print as one (#816).
+                name:
+                  readableName(row.name == null ? null : String(row.name)) ??
+                  PLACE_UNNAMED,
               },
             ];
       }),
@@ -274,7 +279,7 @@ export default function PhotosCollectionsView({
     places.rows,
   ]);
 
-  /** Closed key union, so a section with no destination fails to typecheck here.
+  /** Closed key union: a section with no destination fails to typecheck.
    *  Absent `tile` means the HEADING was pressed. */
   const open = (key: CollectionSectionKey, tile?: CollectionTile): void => {
     switch (key) {

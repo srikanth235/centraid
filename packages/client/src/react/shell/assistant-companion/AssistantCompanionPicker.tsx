@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 
+import ShellModal from "../../ui/ShellModal.js";
 import type {
   AssistantCompanionSurface,
   AssistantHarnessOption,
@@ -29,11 +30,11 @@ export default function AssistantCompanionPicker({
   onChange,
 }: AssistantCompanionPickerProps): JSX.Element {
   return (
-    <dialog
-      open
+    <ShellModal
+      layer="inline"
       className={css.picker}
-      data-surface={surface}
-      aria-label="Harness, model and effort"
+      data={{ "data-surface": surface }}
+      label="Harness, model and effort"
     >
       <section
         className={css.pickerSection}
@@ -128,6 +129,6 @@ export default function AssistantCompanionPicker({
           </p>
         )}
       </section>
-    </dialog>
+    </ShellModal>
   );
 }

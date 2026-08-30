@@ -6,7 +6,8 @@
 // refused and empty stay three facts, never one emptiness.
 
 import React, { useMemo } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 
 import {
   accessAt,
@@ -54,10 +55,34 @@ export default function LockerAccessView(
 ): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const entries = props.entries ?? [];
+  // Windowed (#883 C4); these three withhold the LIST, not rows.
+  const listing = !props.offline && !props.error && props.entries !== null;
+  const entries = listing ? (props.entries ?? []) : [];
 
-  return (
-    <ScrollView contentContainerStyle={styles.scroll}>
+  const renderItem = ({
+    item,
+  }: ListRenderItemInfo<LockerAccessEntry>): React.JSX.Element => (
+    <View style={styles.row}>
+      <View style={styles.rowText}>
+        <Text style={styles.rowVerb}>{accessVerb(item)}</Text>
+        <Text style={styles.rowMeta}>
+          {accessMeta(
+            item,
+            item.item_id
+              ? (props.titles.get(item.item_id) ?? item.item_id)
+              : null
+          )}
+        </Text>
+      </View>
+      {item.decision === "deny" ? (
+        <Text style={[styles.rowMark, { color: colors.net }]}>{REFUSED}</Text>
+      ) : null}
+      <Text style={styles.rowAt}>{accessAt(item.occurred_at)}</Text>
+    </View>
+  );
+
+  const head = (
+    <View>
       <View style={styles.head}>
         <Text accessibilityRole="header" style={styles.title}>
           {ACCESS_HEAD}
@@ -84,43 +109,40 @@ export default function LockerAccessView(
       ) : props.entries === null ? (
         <SkeletonRows accessibilityLabel="Reading the receipts" />
       ) : (
-        <>
-          <SectionBlock label={ACCESS_ENTRIES} meta={ACCESS_ENTRIES_META} />
-          {entries.length === 0 ? (
-            <EmptyBlock body={ACCESS_EMPTY_BODY} title={ACCESS_EMPTY} />
-          ) : (
-            entries.map((entry) => (
-              <View key={entry.receipt_id} style={styles.row}>
-                <View style={styles.rowText}>
-                  <Text style={styles.rowVerb}>{accessVerb(entry)}</Text>
-                  <Text style={styles.rowMeta}>
-                    {accessMeta(
-                      entry,
-                      entry.item_id
-                        ? (props.titles.get(entry.item_id) ?? entry.item_id)
-                        : null
-                    )}
-                  </Text>
-                </View>
-                {entry.decision === "deny" ? (
-                  <Text style={[styles.rowMark, { color: colors.net }]}>
-                    {REFUSED}
-                  </Text>
-                ) : null}
-                <Text style={styles.rowAt}>{accessAt(entry.occurred_at)}</Text>
-              </View>
-            ))
-          )}
-          {props.window && entries.length > 0 ? (
-            <Text style={styles.foot}>
-              {accessWindowCopy(entries.length, props.window.truncated)}
-            </Text>
-          ) : null}
-        </>
+        <SectionBlock label={ACCESS_ENTRIES} meta={ACCESS_ENTRIES_META} />
       )}
+    </View>
+  );
 
+  const foot = (
+    <View>
+      {props.window && entries.length > 0 ? (
+        <Text style={styles.foot}>
+          {accessWindowCopy(entries.length, props.window.truncated)}
+        </Text>
+      ) : null}
       <Text style={styles.note}>{ACCESS_WHERE}</Text>
-    </ScrollView>
+    </View>
+  );
+
+  return (
+    <FlatList
+      contentContainerStyle={styles.scroll}
+      data={entries}
+      keyExtractor={(entry) => entry.receipt_id}
+      ListEmptyComponent={
+        listing ? (
+          <EmptyBlock body={ACCESS_EMPTY_BODY} title={ACCESS_EMPTY} />
+        ) : null
+      }
+      ListFooterComponent={foot}
+      ListHeaderComponent={head}
+
+      initialNumToRender={12}
+      maxToRenderPerBatch={12}
+      renderItem={renderItem}
+      windowSize={7}
+    />
   );
 }
 

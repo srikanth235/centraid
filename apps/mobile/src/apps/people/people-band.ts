@@ -10,12 +10,13 @@ import {
   TOUCH_TITLE,
 } from "@centraid/blueprints/apps/people/people-copy";
 
+import { BAND_CAPSULE } from "../../kit/band/band-capsule";
+import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
 
-/** Capsule width (handoff `width:52px`; height from `align-items:stretch`).
- *  Photos states the same number; apps may not import each other
- *  (`check-import-boundaries.ts`). Shared home would be `kit/band-surface.ts`. */
-export const PEOPLE_BAND_CAPSULE_SIZE = 52;
+// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5); only the
+// TYPE is re-exported here.
+export type { BandCapsule } from "../../kit/band/band-capsule";
 
 export type PeopleBandKey = "people" | "touch" | "search";
 
@@ -34,23 +35,6 @@ export const PEOPLE_BAND_DESTINATIONS: readonly PeopleBandDestination[] = [
   { key: "search", label: SEARCH_TITLE, icon: "search" },
 ];
 
-/** Frame control, never an app tab. Mirrors Photos' leading `BandCapsule`. */
-export interface PeopleBandCapsule {
-  label: "Home";
-  icon: "home";
-  size: number;
-  edge: "leading";
-  inTabGroup: false;
-}
-
-export const PEOPLE_BAND_CAPSULE: PeopleBandCapsule = {
-  label: "Home",
-  icon: "home",
-  size: PEOPLE_BAND_CAPSULE_SIZE,
-  edge: "leading",
-  inTabGroup: false,
-};
-
 /**
  * Exactly one band: `host` drops the tab group and keeps the capsule — a claim
  * may never remove the way out (`PeopleBand.tsx`).
@@ -59,7 +43,7 @@ export type ResolvedPeopleBand =
   | {
       owner: "app";
       destinations: readonly PeopleBandDestination[];
-      capsule: PeopleBandCapsule;
+      capsule: BandCapsule;
     }
   | { owner: "host" };
 
@@ -73,6 +57,6 @@ export function resolvePeopleBand(owner: BandOwner): ResolvedPeopleBand {
   return {
     owner: "app",
     destinations: PEOPLE_BAND_DESTINATIONS,
-    capsule: PEOPLE_BAND_CAPSULE,
+    capsule: BAND_CAPSULE,
   };
 }

@@ -34,21 +34,31 @@ describe("service worker cache identity", () => {
     expect(shell.paths()).toContain("/assets/entry-bbb.js");
   });
 
-  test("precaches lazy app chunks that only the entry JS references", async () => {
+  // Install is exactly "the required shell is cached" (#883 C5): the lazy-chunk
+  // crawl runs in activate, so the offline guarantee never waits on it.
+  test("install caches the required shell WITHOUT crawling lazy chunks", async () => {
     const worker = loadWorker({ routes: SHELL_ROUTES });
     await worker.runLifecycle("install");
     const shell = worker.caches.buckets.get(SHELL_CACHE)!;
-    // Relative `assets/…` literals must be normalised to the absolute request
-    // URL the fetch handler will look up, and lazy CSS leaves cached too.
+    expect(shell.paths()).toContain("/assets/entry-bbb.js");
+    expect(shell.paths()).not.toContain("/assets/app-inline-ccc.js");
+  });
+
+  test("activate precaches lazy app chunks that only the entry JS references", async () => {
+    const worker = loadWorker({ routes: SHELL_ROUTES });
+    await worker.runLifecycle("install");
+    await worker.runLifecycle("activate");
+    const shell = worker.caches.buckets.get(SHELL_CACHE)!;
+    // Relative `assets/…` literals normalise to the absolute request URL.
     expect(shell.paths()).toContain("/assets/app-inline-ccc.js");
     expect(shell.paths()).toContain("/assets/app-inline-ccc.css");
   });
 
-  test("install still completes when a lazy chunk is missing", async () => {
+  test("activation still completes when a lazy chunk is missing", async () => {
     const { "/assets/app-inline-ccc.js": _missing, ...routes } = SHELL_ROUTES;
     const worker = loadWorker({ routes });
     await expect(worker.runLifecycle("install")).resolves.toBeUndefined();
-    // The required shell is cached even though the crawl hit a 404.
+    await expect(worker.runLifecycle("activate")).resolves.toBeUndefined();
     const shell = worker.caches.buckets.get(SHELL_CACHE)!;
     expect(shell.paths()).toContain("/assets/entry-bbb.js");
   });
@@ -62,6 +72,8 @@ describe("service worker cache identity", () => {
 });
 
 describe("service worker activation", () => {
+  // No routes: the crawl finds no index to seed from and must NOT open a shell
+  // bucket it has nothing to put in.
   test("deletes caches left behind by a previous version", async () => {
     const worker = loadWorker();
     worker.caches.seed("centraid-shell-v1");
@@ -112,7 +124,6 @@ describe("service worker fetch routing", () => {
       request("/", { mode: "navigate", destination: "document" })
     );
     await expect(response.text()).resolves.toContain("<html>");
-    // Stale-while-revalidate: exactly one background refresh, not a blocking GET.
     expect(worker.fetched.slice(before)).toStrictEqual(["/"]);
   });
 
@@ -151,10 +162,8 @@ describe("service worker fetch routing", () => {
     expect(shell.paths()).toStrictEqual(["/assets/late-ddd.js"]);
   });
 
-  // The iroh WASM binary is loaded by a JS `fetch()`, which carries an EMPTY
-  // destination — the one shape a naive routing bailout skips. It is also
-  // the single biggest asset the app ships (~2 MB), so "never cached" means
-  // re-downloading it every visit (#659).
+  // The iroh WASM loads by JS `fetch()`, whose EMPTY destination is the shape
+  // a naive routing bailout skips — at ~2 MB, once per visit (#659).
   test("caches a JS-initiated /assets fetch, which is how the wasm loads", async () => {
     const worker = loadWorker({
       routes: { "/assets/centraid_web_iroh_bg-abc.wasm": () => html("wasm") },
@@ -169,7 +178,9 @@ describe("service worker fetch routing", () => {
     ]);
   });
 
-  test("serves that wasm from the cache on the next visit, hitting no network", async () => {
+  // No background revalidation for content-addressed entries (#883 C5): a
+  // hashed name changes when its bytes do, so a hit is never stale.
+  test("serves that wasm from the cache on the next visit, hitting no network at all", async () => {
     const worker = loadWorker({
       routes: { "/assets/centraid_web_iroh_bg-abc.wasm": () => html("wasm") },
     });
@@ -179,9 +190,40 @@ describe("service worker fetch routing", () => {
     const before = worker.fetched.length;
     const response = await worker.dispatchFetch(req());
     await expect(response.text()).resolves.toBe("wasm");
-    // One background revalidation, not a blocking re-download of 2 MB.
+    expect(worker.fetched.slice(before)).toStrictEqual([]);
+  });
+
+  // The page loads the WASM from the worker's OWN copy, so this unhashed but
+  // `?v=`-stamped path is on the critical path and must be cacheable (#883 C5).
+  test("caches the versioned worker WASM the page now loads", async () => {
+    const worker = loadWorker({
+      routes: { "/centraid-worker-iroh.wasm": () => html("wasm") },
+    });
+    const req = (): ReturnType<typeof request> =>
+      request(`/centraid-worker-iroh.wasm?v=${VERSION}`, { destination: "" });
+    const response = await worker.dispatchFetch(req());
+    await expect(response.text()).resolves.toBe("wasm");
+    const shell = worker.caches.buckets.get(SHELL_CACHE)!;
+    expect(shell.paths()).toStrictEqual(["/centraid-worker-iroh.wasm"]);
+    const before = worker.fetched.length;
+    await expect(
+      worker.dispatchFetch(req()).then(async (next) => next.text())
+    ).resolves.toBe("wasm");
+    // Immutable behind the SW generation token: no revalidation.
+    expect(worker.fetched.slice(before)).toStrictEqual([]);
+  });
+
+  // A stable MUTABLE path keeps stale-while-revalidate: it changes in place.
+  test("still revalidates a non-hashed shell entry in the background", async () => {
+    const worker = loadWorker({ routes: SHELL_ROUTES });
+    await worker.runLifecycle("install");
+    const before = worker.fetched.length;
+    const response = await worker.dispatchFetch(
+      request("/manifest.webmanifest")
+    );
+    await expect(response.text()).resolves.toBe("/manifest.webmanifest");
     expect(worker.fetched.slice(before)).toStrictEqual([
-      "/assets/centraid_web_iroh_bg-abc.wasm",
+      "/manifest.webmanifest",
     ]);
   });
 
@@ -222,8 +264,7 @@ describe("service worker never-cache rules", () => {
     const worker = loadWorker({
       routes: { "/centraid/_vault/notifications": () => html("{}") },
     });
-    // A programmatic fetch has an empty `destination`; the worker must pass it
-    // through so authenticated gateway JSON never lands in Cache Storage.
+    // An empty `destination` must pass through: gateway JSON is authenticated.
     const response = await worker.dispatchFetch(
       request("/centraid/_vault/notifications", { destination: "" })
     );
@@ -245,7 +286,6 @@ describe("service worker never-cache rules", () => {
     const first = await worker.dispatchFetch(config);
     await expect(first.text()).resolves.toBe('{"gateway":1}');
     const second = await worker.dispatchFetch(config);
-    // The second read came from the network again, not from a cached copy.
     await expect(second.text()).resolves.toBe('{"gateway":2}');
     expect(worker.caches.buckets.get(SHELL_CACHE)?.entries.size ?? 0).toBe(0);
   });

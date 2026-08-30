@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { cx } from "../ui/cx.js";
+import ShellModal from "../ui/ShellModal.js";
 import {
   PRESET_MODES,
   presetHint,
@@ -83,12 +84,12 @@ export default function ResourceCompareDialog({
   return (
     <>
       <div className={styles.backdrop} role="presentation" onClick={onClose} />
-      <dialog
-        open
+      <ShellModal
+        layer="inline"
         className={cx(styles.dialog, styles.dialogWide)}
-        aria-modal="true"
-        aria-label="Compare resource modes"
-        data-testid="resource-compare-dialog"
+        ariaModal
+        label="Compare resource modes"
+        data={{ "data-testid": "resource-compare-dialog" }}
       >
         <div className={styles.head}>
           <div className={styles.headText}>
@@ -199,7 +200,7 @@ export default function ResourceCompareDialog({
             </button>
           </div>
         </div>
-      </dialog>
+      </ShellModal>
     </>
   );
 }

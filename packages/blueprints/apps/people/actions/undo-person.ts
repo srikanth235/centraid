@@ -1,17 +1,9 @@
-/** Apply one stored People pre-mutation snapshot exactly once. */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** A snapshot applies once. */
 export default async function undoPerson({ body, ctx }: HandlerArgs) {
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "people.undo_person",
-      input: (body ?? {}) as Record<string, unknown>,
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  return runVaultAction(ctx, {
+    command: "people.undo_person",
+    input: actionInput(body),
+  });
 }

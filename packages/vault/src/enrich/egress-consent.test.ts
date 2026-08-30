@@ -1,6 +1,5 @@
-// Egress consent (#807) — that a decline stays on record, that a
-// vault-wide answer never silently covers a narrower scope, and that the
-// egress vocabulary is closed.
+// Egress consent (#807): a decline stays on record and a vault-wide answer
+// never covers a narrower scope.
 
 import { describe, expect, test } from "vitest";
 
@@ -120,12 +119,15 @@ describe("enrich egress consent", () => {
 
   test("an egress class outside the vocabulary can never be stored", () => {
     const db = openVaultDb();
+    // The constraint lives in the one authority plane (#883).
     expect(() =>
       db.vault
         .prepare(
-          `INSERT INTO enrich_consent
-             (consent_id, capability, egress, scope_ref, decision, decided_at)
-           VALUES ('c1', 'ocr', 'somewhere-else', '', 'granted', ?)`
+          `INSERT INTO share_authority
+             (authority_id, principal_kind, principal_id, subject_type,
+              subject_id, verb, duration, decision, granted_at)
+           VALUES ('c1', 'harness', 'somewhere-else', 'enrich.scope', '',
+                   'ocr', 'standing', 'granted', ?)`
         )
         .run(T0)
     ).toThrow(/CHECK constraint failed/u);

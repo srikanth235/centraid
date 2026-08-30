@@ -15,18 +15,19 @@
 
 .shell {
   composes: kit-app-shell from global;
-  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED. Every row that spans the
-     pane reads it — the notices, the back row, the tool row, the section heads
-     and the ledger rows all begin on the same edge, and a figure column that
-     drifted by four pixels between two lists is the defect this closes. */
-  --content-margin: 22px;
+  /* THE PAGE MARGIN IS THE SYSTEM'S (#883). Every row that spans the pane
+     reads `--page-margin` — the notices, the back row, the tool row, the
+     section heads and the ledger rows all begin on the same edge, and a figure
+     column that drifted by four pixels between two lists is the defect this
+     closes. The app-local `--content-margin: 22px` that used to stand here was
+     a value the product does not have. */
 }
 
 /* ---------- The rail (§1) ---------- */
 
 /* THE RAIL HAS NO RULES HERE. It is `_shared/NavRail.tsx`, which owns its own
-   232px column, its divider and its row rung, and reads `--content-margin`
-   from the shell element above. One axis decides whether it stands at all:
+   232px column, its divider and its row rung, and reads `--page-margin`
+   from the system. One axis decides whether it stands at all:
    below its own measure the orchestrator passes `null` and the phone's band
    carries the same destinations, so the rail is WITHDRAWN rather than
    squeezed. */
@@ -46,7 +47,7 @@
 
 .banner {
   margin-block: var(--sp-2);
-  margin-inline: var(--content-margin);
+  margin-inline: var(--page-margin);
 }
 
 /* The back row names its DESTINATION, so it is a text control on its own line
@@ -56,7 +57,7 @@
   display: flex;
   align-items: center;
   min-block-size: var(--h-control);
-  padding-inline: var(--content-margin);
+  padding-inline: var(--page-margin);
   padding-block-start: var(--sp-2);
 }
 
@@ -69,7 +70,7 @@
   align-items: center;
   gap: var(--sp-2);
   min-block-size: var(--h-control);
-  padding-inline: var(--content-margin);
+  padding-inline: var(--page-margin);
   padding-block: var(--sp-1);
   overflow-x: auto;
   scrollbar-width: none;
@@ -79,7 +80,7 @@
   flex: 1;
   min-block-size: 0;
   overflow-y: auto;
-  padding-inline: var(--content-margin);
+  padding-inline: var(--page-margin);
   padding-block-end: var(--sp-5);
 }
 

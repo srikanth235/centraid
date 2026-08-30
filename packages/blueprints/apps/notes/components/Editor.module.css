@@ -5,7 +5,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--content-margin) var(--sp-6);
+  padding: var(--sp-3) var(--page-margin) var(--sp-6);
   max-width: 72ch;
 }
 

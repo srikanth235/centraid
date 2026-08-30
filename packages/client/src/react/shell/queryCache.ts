@@ -8,6 +8,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -18,9 +19,9 @@ import { Store } from "./store.js";
 
 // ── surviving a reload ──────────────────────────────────────────────────────
 //
-// Write-through to localStorage is OPT-IN per call site (whether this content
-// may sit in unencrypted browser storage is a judgement only the call site can
-// make), purged by `resetQueryCache()`, and byte-capped.
+// Write-through to localStorage is OPT-IN per call site — only the call site
+// can judge whether the content may sit in unencrypted browser storage —
+// purged by `resetQueryCache()`, and byte-capped.
 
 const PERSIST_NAMESPACE = "queryCache.";
 
@@ -39,9 +40,8 @@ function persistKey(key: string): string {
   return `${PERSIST_NAMESPACE}${key}`;
 }
 
-/** Seeds only a key that never settled here, so it cannot overwrite a fresher
- *  value, and keeps the record's timestamp so `staleAfterMs` measures the
- *  data's age, not the page's. */
+/** Seeds only a key that never settled here, and keeps the record's timestamp
+ *  so `staleAfterMs` measures the data's age, not the page's. */
 function hydrateQuery<T>(
   key: string,
   shape: ((data: T) => T) | undefined
@@ -63,9 +63,9 @@ function readPersisted<T>(key: string): PersistedRecord<T> | undefined {
 function writePersisted<T>(key: string, value: T): void {
   const shape = persisted.get(key);
   const data = shape ? (shape(value) as T) : value;
-  // `JSON.stringify(undefined)` is not a string, so the byte check below would
-  // throw OUTSIDE the settle handler's try, killing the publish that follows and
-  // stranding the key on its hydrated copy forever.
+  // `JSON.stringify(undefined)` is not a string, so the byte check below throws
+  // OUTSIDE the settle handler's try — killing the publish and stranding the
+  // key on its hydrated copy.
   if (data === undefined) {
     Store.remove(persistKey(key));
     return;
@@ -290,5 +290,7 @@ export function useCachedQuery<T>(
     [key, run]
   );
 
-  return { state, refresh, mutate };
+  // REFERENTIALLY STABLE (#883): nothing downstream may move while the data
+  // has not.
+  return useMemo(() => ({ state, refresh, mutate }), [state, refresh, mutate]);
 }

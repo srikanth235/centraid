@@ -1,11 +1,7 @@
 // People's claimed bottom band, rendered (Binding Layer v12 handoff, § Nav).
 //
-// The anatomy is the platform's — TWO PLATES in a TRANSPARENT row, the frame's
-// capsule at the leading edge OUTSIDE the app's tab group — and every shared
-// value (radius, edge, ground, inset, the 2px active rule) comes from
-// `kit/band-surface.ts`, the same module Photos' band reads, so the two claimed
-// bands cannot drift apart. See `PhotosBand.tsx` for the full anatomy argument;
-// this file follows it and adds nothing.
+// Anatomy and every shared value: `PhotosBand.tsx` and `kit/band-surface.ts`,
+// so the claimed bands cannot drift apart.
 //
 // Mobile band tab: icon over label, 2px active rule pinned to the tab's top
 // edge inset 14, `min-width: 44` via `flex:1` fifths of the plate. The active
@@ -26,6 +22,7 @@ import {
   BAND_TOP_GAP,
 } from "../../kit/band-surface";
 import type { BandOwner } from "../../kit/band/band-owner";
+import BandCapsuleControl from "../../kit/band/BandCapsule";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { radii, t, useTheme } from "../../kit/theme";
@@ -63,14 +60,7 @@ export default function PeopleBand({
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Home"
-          onPress={onHome}
-          style={[styles.capsule, { width: 52 }]}
-        >
-          <Icon name="home" size={19} color={colors.textSoft} />
-        </Pressable>
+        <BandCapsuleControl onPress={onHome} />
       </View>
     );
   }
@@ -79,14 +69,7 @@ export default function PeopleBand({
   return (
     <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
       {/* Plate one: the frame's capsule, on the frame's page colour. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={capsule.label}
-        onPress={onHome}
-        style={[styles.capsule, { width: capsule.size }]}
-      >
-        <Icon name={capsule.icon} size={19} color={colors.textSoft} />
-      </Pressable>
+      <BandCapsuleControl capsule={capsule} onPress={onHome} />
 
       {/* Plate two: the app's three destinations, one group on `bgElev`. */}
       <View style={styles.group} accessibilityRole="tablist">
@@ -144,14 +127,6 @@ const makeStyles = (colors: ThemeColors) =>
       minHeight: BAND_HEIGHT,
       paddingHorizontal: BAND_INSET,
       paddingTop: BAND_TOP_GAP,
-    },
-    capsule: {
-      alignItems: "center",
-      backgroundColor: colors.bg,
-      borderColor: colors.lineStrong,
-      borderRadius: BAND_RADIUS,
-      borderWidth: BAND_BORDER,
-      justifyContent: "center",
     },
     group: {
       alignItems: "stretch",

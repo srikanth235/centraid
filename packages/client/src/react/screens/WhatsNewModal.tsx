@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import type { CentraidChangelogRelease } from "../../centraid-api.js";
 import { changelogNotesToHtml } from "../shell/changelogMarkdown.js";
 import { useChangelog } from "../shell/useChangelog.js";
+import ShellModal from "../ui/ShellModal.js";
 
 import styles from "./WhatsNewModal.module.css";
 
@@ -123,11 +124,11 @@ export default function WhatsNewModal({
   return (
     <>
       <div className={styles.backdrop} role="presentation" onClick={onClose} />
-      <dialog
-        open
+      <ShellModal
+        layer="inline"
         className={styles.card}
-        aria-modal="true"
-        aria-label="What's new"
+        ariaModal
+        label="What's new"
       >
         <header className={styles.head}>
           <h2 className={styles.heading}>What&rsquo;s new</h2>
@@ -170,7 +171,7 @@ export default function WhatsNewModal({
             ))
           )}
         </div>
-      </dialog>
+      </ShellModal>
     </>
   );
 }

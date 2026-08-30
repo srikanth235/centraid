@@ -92,12 +92,9 @@ const NETWORK_FLAP_WINDOW_MS = 1_500;
 
 /**
  * Quiet window before a freshness stamp reaches AsyncStorage and the context.
- *
- * A busy multiplex frame advances several scopes' cursors, and this callback
- * used to cost one disk write plus one context rebuild — every `useReplica()`
- * consumer re-rendering — per advance. Matches the change feed's own cursor
- * debounce (native-change-feed.ts): only the newest stamp matters, and losing
- * an unwritten one costs a replay, not data.
+ * Only the newest stamp matters and losing an unwritten one costs a replay,
+ * not data, so a busy frame pays one disk write and one rebuild, not one per
+ * advancing scope (matches native-change-feed.ts).
  */
 const FRESHNESS_COMMIT_WINDOW_MS = 1_000;
 
@@ -140,12 +137,10 @@ export function ReplicaProvider({
     value: ReplicaContextValue;
   }>();
 
-  // Activating a vault outside the mounted four RE-PLANS the mount. A switch is
-  // otherwise only a re-key of the write target, which leaves the Space a
-  // member just opened unreadable until the app is relaunched. The four-scope
-  // cap (docs/mobile-offline.md) bounds what is open at once, not which vaults
-  // a member may open, so the honest response to activating the fifth is to
-  // rebuild the set around it.
+  // Activating a vault outside the mounted four RE-PLANS the mount: a bare
+  // re-key of the write target leaves the Space just opened unreadable until
+  // relaunch. The four-scope cap (docs/mobile-offline.md) bounds what is open
+  // at once, not which vaults a member may open.
   const remountedFor = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (
@@ -162,10 +157,9 @@ export function ReplicaProvider({
     // mid-mount, or gone from the manifest — must not spin the mount forever.
     if (remountedFor.current === activeVaultId) return;
     remountedFor.current = activeVaultId;
-    // Retract the published session BEFORE the teardown: consumers read `ready`
-    // and stop issuing reads, so an in-flight read cannot land on a facade that
-    // is closing. Durable outboxes are per-vault SQLite files, so the swap is
-    // open/close — no queued write is at risk.
+    // Retract the published session BEFORE the teardown: consumers read
+    // `ready` and stop, so no read lands on a closing facade. Outboxes are
+    // per-vault SQLite files, so no queued write is at risk.
     setBuilt(undefined);
     setMountNonce((current) => current + 1);
   }, [activeVaultId, built, gatewayKey]);
@@ -181,8 +175,8 @@ export function ReplicaProvider({
     let flushFreshness = async (): Promise<void> => undefined;
     const looseDrivers: Array<{ close: () => void }> = [];
     // Every mid-mount update goes through here: a torn-down mount publishes
-    // nothing, and a mount whose gateway key has moved on never overwrites the
-    // one that replaced it.
+    // nothing, and a mount whose gateway key has moved on never overwrites its
+    // successor.
     const publish: PublishReplicaValue = (patch) => {
       if (cancelled) return;
       setBuilt((current) =>
@@ -356,6 +350,12 @@ export function ReplicaProvider({
               isNetworkWorkAllowed: nativeSyncAllowed,
               bootstrapWindow: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
               progressiveBootstrap: true,
+              // A vault the member does not steward is one a queued write may
+              // have to wait for somebody at, so its pending rows carry a
+              // steward label from admission (`steward-label.ts`). `personal`
+              // is the founding marker; an older cache omits it and reads as
+              // their own, which is the answer that promises nothing.
+              ...(scope.personal === false ? { steward: {} } : {}),
               onBootstrapProgress: (progress) =>
                 bootstrap.report(scope, progress),
               // Out of room parks this scope's feed; the phone, not the vault,
@@ -485,9 +485,9 @@ export function ReplicaProvider({
             // MUST settle: an unconditional settle is what stops a pull that
             // never lands from pinning "Syncing recent changes…" on screen.
             //
-            // A pull the transfer rules refused is NOT a landed pull: `.then(()
-            // => true)` used to read the refusal as freshness and paint the
-            // settled, silent `current` over data that was never fetched.
+            // A pull the transfer rules refused is NOT a landed pull: reading
+            // the refusal as freshness paints a settled, silent `current` over
+            // data that was never fetched.
             const policyBlocked = outcome?.policyBlocked === true;
             const landed = outcome !== undefined && !policyBlocked;
             await refreshCoverage();

@@ -6,7 +6,13 @@
 // are two separate plates in a transparent row with an 8pt seam and no
 // enclosing plate. That boundary is why the capsule is not a sixth tab.
 
+import { BAND_CAPSULE } from "../../kit/band/band-capsule";
+import type { BandCapsule } from "../../kit/band/band-capsule";
 import type { BandOwner } from "../../kit/band/band-owner";
+
+// The frame's capsule lives in `kit/band/band-capsule.ts` (#883 B5).
+export { BAND_CAPSULE } from "../../kit/band/band-capsule";
+export type { BandCapsule } from "../../kit/band/band-capsule";
 
 export type BandDestinationKey = "library" | "collections" | "search" | "more";
 
@@ -19,10 +25,6 @@ export interface BandDestination {
 /** The frame's own cap; the fifth is More. */
 export const BAND_MAX_DESTINATIONS = 5;
 
-/** The capsule plate's WIDTH; its height comes from the row's stretch, so it
- *  matches the tab group's plate rather than being independently square. 44 is
- *  the floor no target may go under. */
-export const BAND_CAPSULE_SIZE = 52;
 export const TARGET_MIN = 44;
 
 // §G — plate geometry and the opacity rule live in `kit/band-surface.ts`: Home's
@@ -97,23 +99,6 @@ export function resolveMoreRowRoute(key: PhotosMoreRowKey): MoreRowRoute {
 // mobile shares web's `shell.bandOwner.*` key rather than keeping a twin.
 // NOTHING is re-exported from here: this file only consumes the type, so it
 // stays free of storage imports and its rules assert as plain values.
-
-export interface BandCapsule {
-  label: "Home";
-  icon: "home";
-  size: number;
-  edge: "leading";
-  /** `false` is the whole reason it does not read as a sixth tab. */
-  inTabGroup: false;
-}
-
-export const BAND_CAPSULE: BandCapsule = {
-  label: "Home",
-  icon: "home",
-  size: BAND_CAPSULE_SIZE,
-  edge: "leading",
-  inTabGroup: false,
-};
 
 /** Exactly ONE exists at a time. */
 export type ResolvedBand =

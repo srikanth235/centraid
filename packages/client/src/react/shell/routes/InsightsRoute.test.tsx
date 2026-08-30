@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { insightRollupCsv } from "@centraid/design/blocks";
+
 import { row as automationRow } from "../../../gateway-client-contract-fixtures.js";
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type { ShellActions } from "../actions.js";
@@ -37,18 +39,14 @@ vi.mock(import("../actions.js") as Promise<unknown>, () => ({
 }));
 
 let InsightsRoute: typeof TypeImport_f807xh.default;
-let insightsCsv: typeof TypeImport_f807xh.insightsCsv;
 let uptimeLine: typeof TypeImport_f807xh.uptimeLine;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
 describe("InsightsRoute suite", () => {
   beforeEach(async () => {
-    ({
-      default: InsightsRoute,
-      insightsCsv,
-      uptimeLine,
-    } = await import("./InsightsRoute.js"));
+    ({ default: InsightsRoute, uptimeLine } =
+      await import("./InsightsRoute.js"));
     getInsightsSummary.mockReset();
     listAutomations.mockReset();
     getGatewayHealth.mockReset();
@@ -92,7 +90,16 @@ describe("InsightsRoute suite", () => {
       costUsd: number;
       automationName?: string;
     }>,
-    daily: [{ costUsd: 0.1, date: "2026-06-08", runs: 2, tokens: 1000 }],
+    daily: [
+      {
+        costUsd: 0.1,
+        date: "2026-06-08",
+        failedCostUsd: 0,
+        failedRuns: 0,
+        runs: 2,
+        tokens: 1000,
+      },
+    ],
     generatedAt: Date.UTC(2026, 5, 10),
     kpis: {
       appsTouched: 7,
@@ -340,8 +347,8 @@ describe("InsightsRoute suite", () => {
 
   describe("InsightsRoute helpers", () => {
     it("exports the numbers the chart is drawn from", () => {
-      expect(insightsCsv(summary)).toBe(
-        "date,runs,tokens,cost_usd\n2026-06-08,2,1000,0.1000"
+      expect(insightRollupCsv(summary)).toBe(
+        "date,runs,failed_runs,tokens,cost_usd,failed_cost_usd\n2026-06-08,2,0,1000,0.1000,0.0000"
       );
     });
 

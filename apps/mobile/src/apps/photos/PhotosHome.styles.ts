@@ -1,5 +1,5 @@
-// Photos' home layout. Colour-taking (a factory over `ThemeColors`) because
-// the head's hairline and the scroll region's ground are colour decisions.
+// Colour-taking (a factory over `ThemeColors`): the head's hairline and the
+// scroll region's ground are colour decisions.
 
 import { StyleSheet } from "react-native";
 
@@ -12,7 +12,7 @@ import {
 } from "../../kit/band-surface";
 import { family, pageMargin, t, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
-import { BAND_CAPSULE_SIZE } from "./photos-band";
+import { BAND_CAPSULE } from "./photos-band";
 
 /** Same gap as the band's own two plates (`PhotosBand.tsx`'s `PLATE_GAP`). */
 const SELECTION_PLATE_GAP = 8;
@@ -68,7 +68,7 @@ export const makeStyles = (colors: ThemeColors) =>
       borderRadius: BAND_RADIUS,
       borderWidth: BAND_BORDER,
       justifyContent: "center",
-      width: BAND_CAPSULE_SIZE,
+      width: BAND_CAPSULE.size,
     },
     selectionCountPlate: {
       alignItems: "center",

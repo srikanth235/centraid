@@ -35,7 +35,6 @@ import { Store } from "../../storage";
 import { makeStyles } from "./AlbumDetail.styles";
 import { usePhotoGrantEntry } from "./photo-grants";
 import {
-  NO_DOWNLOAD_REASON,
   batchAddToAlbum,
   batchFavorite,
   batchTrash,
@@ -45,6 +44,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { useSelectionDownload } from "./use-photo-download";
 import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
@@ -249,6 +249,10 @@ export default function AlbumDetail({
     }
   };
   const selectedVaultAssets = vaultAssets(assets, selection);
+  const downloadHandler = useSelectionDownload({
+    online: replica.online,
+    targets: () => selectedVaultAssets,
+  });
   // One handler for the third selection target, shared by every Photos shelf
   // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
   // refusal grammar cannot drift between them.
@@ -329,7 +333,7 @@ export default function AlbumDetail({
       : { unavailableReason: writeBlockedReason! },
     // Share is one standing grant over one photograph, through the one kit.
     share: share.handler,
-    download: { unavailableReason: NO_DOWNLOAD_REASON },
+    download: downloadHandler,
     trash: canChangeAlbum
       ? {
           run: () =>

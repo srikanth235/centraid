@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { JSX } from "react";
 
 import { cx } from "../../ui/cx.js";
+import ShellModal from "../../ui/ShellModal.js";
 import { iconSvg } from "../iconSvg.js";
 import type { ConnectFlowProps } from "./ConnectFlow.js";
 import ConnectTicketPanel, {
@@ -59,7 +60,11 @@ export default function ConnectFlowModal({
         tabIndex={-1}
         onClick={onCancel}
       />
-      <dialog open className={vaultModalStyles.profModal} aria-modal="true">
+      <ShellModal
+        layer="inline"
+        className={vaultModalStyles.profModal}
+        ariaModal
+      >
         <div className={vaultModalStyles.profModalHead}>
           <span
             className={vaultModalStyles.profModalHeadIcon}
@@ -85,7 +90,7 @@ export default function ConnectFlowModal({
             onDone={onDone}
           />
         </div>
-      </dialog>
+      </ShellModal>
     </div>
   );
 }

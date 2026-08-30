@@ -21,12 +21,14 @@ import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
 import { readPendingOverlay } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
 import { useBandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
+import Tappable from "../../kit/components/Tappable";
 import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
@@ -72,7 +74,6 @@ interface AgendaDay {
   due: DueRow[];
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const dayKeyOf = (row: AgendaDay): string => row.key;
 /** One shared identity for "nothing to list": a fresh `[]` per render would
  *  make FlatList re-diff a list it already knows is empty. */
@@ -296,20 +297,20 @@ export default function AgendaHome({
             </Text>
           </View>
           <View style={styles.headerActions}>
-            <Pressable
+            <Tappable
               accessibilityRole="button"
               accessibilityLabel="Go to today"
               onPress={() => setAnchor(new Date())}
             >
               <Icon name="Clock" size={21} color={colors.text} />
-            </Pressable>
-            <Pressable
+            </Tappable>
+            <Tappable
               accessibilityRole="button"
               accessibilityLabel="New event"
               onPress={() => setCreateOpen(true)}
             >
               <Icon name="Plus" size={24} color={colors.text} />
-            </Pressable>
+            </Tappable>
           </View>
         </View>
 
@@ -326,7 +327,7 @@ export default function AgendaHome({
               placeholderTextColor={colors.textFaint}
               style={[styles.searchInput, { color: colors.text }]}
             />
-            <Pressable
+            <Tappable
               accessibilityRole="button"
               accessibilityLabel="Close search"
               onPress={() => {
@@ -335,7 +336,7 @@ export default function AgendaHome({
               }}
             >
               <Icon name="X" size={17} color={colors.textSoft} />
-            </Pressable>
+            </Tappable>
           </View>
         ) : null}
 

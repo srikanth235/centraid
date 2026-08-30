@@ -457,17 +457,18 @@ describe("backup/recover", () => {
       expect(
         restoredDb
           .prepare(
-            `SELECT r.expense_id, d.text_content,
+            `SELECT r.target_id AS expense_id, d.text_content,
                     count(DISTINCT l.line_item_id) AS line_count,
                     count(a.party_id) AS allocation_count
-               FROM tally_expense_receipt r
+               FROM core_attachment r
                JOIN core_content_derivative d
                  ON d.content_id = r.content_id AND d.variant = 'text'
-               JOIN tally_expense_line_item l ON l.receipt_id = r.receipt_id
+               JOIN tally_expense_line_item l ON l.receipt_id = r.attachment_id
                JOIN tally_expense_line_allocation a
                  ON a.line_item_id = l.line_item_id
-              WHERE r.receipt_id = ?
-              GROUP BY r.expense_id, d.text_content`
+              WHERE r.attachment_id = ? AND r.target_type = 'tally.expense'
+                AND r.role = 'receipt'
+              GROUP BY r.target_id, d.text_content`
           )
           .get(a.receiptId)
       ).toMatchObject({

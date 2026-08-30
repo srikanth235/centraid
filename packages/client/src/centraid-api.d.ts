@@ -444,12 +444,12 @@ export interface CentraidHarnessesStatus {
 // panel streams the turn directly, so nothing here translates it over IPC.
 
 /**
- * One persisted chat session — the session id is also the chat window id.
- * Sessions list RPCs return these sorted by `updatedAt` desc.
+ * One persisted conversation — the conversation id is also its window id.
+ * Conversation list RPCs return these sorted by `updatedAt` desc.
  */
 export interface CentraidConversationSummary {
   id: string;
-  /** App the chat was opened from; `null` for chats started from the shell. */
+  /** App the conversation was opened from; `null` when started from the shell. */
   originAppId: string | null;
   title: string;
   /** Harness kind that owns `harnessSessionId`. */
@@ -512,7 +512,7 @@ export interface CentraidConversationHistoryRetryAttempt {
 }
 
 /**
- * Coarse-grained persisted shape per message in a chat session. `fromArchive`
+ * Coarse-grained persisted shape per item in a conversation. `fromArchive`
  * marks a message rehydrated from a custody-gated-pruned segment (#438) —
  * read-only cold history the surface renders with a "from the archive"
  * affordance and no feedback/regenerate controls.
@@ -658,9 +658,9 @@ export interface CentraidCloneTemplateResult {
   webhooks: CentraidMintedWebhook[];
 }
 
-// The in-process builder protocol's persisted-message + event types retired
-// with the unified chat (#141): the builder + the app-view
-// data chat now stream the gateway's native `TurnStreamEvent` directly (see
+// The in-process builder protocol's persisted-item + event types retired
+// with the unified conversation ledger (#141): the builder + the app-view
+// data panel now stream the gateway's native `TurnStreamEvent` directly (see
 // `renderer/gateway-client-conversation.ts`).
 
 /** A phone paired over the iroh tunnel (#263). */
@@ -1059,8 +1059,8 @@ interface CentraidApi {
   // owns the catalog (`GET /centraid/_templates`) + clone orchestration
   // (`POST /centraid/_apps/_clone`).
 
-  // App chat (turn streaming + history) moved to the renderer's direct HTTP
-  // client (`renderer/gateway-client-conversation.ts`) under the unified-chat pivot
+  // App conversations (turn streaming + history) moved to the renderer's direct
+  // HTTP client (`renderer/gateway-client-conversation.ts`) under the unified pivot
   // (#141): the panel streams `/centraid/<appId>/_turn` SSE
   // itself and reads/writes history over `/_centraid-conversations` — no IPC.
 
@@ -1104,6 +1104,8 @@ export interface CentraidInsightsKpis {
   appsTouched: number;
   unpricedRuns: number;
   unreportedRuns: number;
+  /** p50 run wall clock (ms). ABSENT when no run finished in the window. */
+  medianRunMs?: number;
 }
 
 /** One day of the consumption chart. `date` is `YYYY-MM-DD` (UTC). */
@@ -1112,6 +1114,9 @@ export interface CentraidInsightsDailyPoint {
   tokens: number;
   costUsd: number;
   runs: number;
+  failedRuns: number;
+  /** Floor: archived days carry a failure count but no failure-cost split. */
+  failedCostUsd: number;
 }
 
 /** One row of the "by source" breakdown. Chat / build collapse to kind keys. */
@@ -1866,12 +1871,15 @@ declare global {
     appsTouched: number;
     unpricedRuns: number;
     unreportedRuns: number;
+    medianRunMs?: number;
   }
   interface CentraidInsightsDailyPoint {
     date: string;
     tokens: number;
     costUsd: number;
     runs: number;
+    failedRuns: number;
+    failedCostUsd: number;
   }
   interface CentraidInsightsSourceRow {
     key: string;

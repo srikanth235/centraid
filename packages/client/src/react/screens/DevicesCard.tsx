@@ -20,9 +20,9 @@ import styles from "./HouseholdScreen.module.css";
 
 // Devices roster (#392, #726; v9 #765). People-first: a device is always
 // somebody's. "Revoke device" is the only removal verb — removing the PERSON
-// is host-custody (`owners-routes.ts`), never a device-token client.
-// "Add someone" (#726) mints a NEW person then the SAME `DevicePairPanel`
-// as "Pair a device". Data lives in `useDeviceRoster` (frame is above outlet).
+// is host-custody (`owners-routes.ts`), never a device-token client. "Add
+// someone" (#726) mints a NEW person then the SAME `DevicePairPanel` as "Pair
+// a device". Data lives in `useDeviceRoster`.
 
 const POLL_MS = 15_000;
 
@@ -96,21 +96,21 @@ export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
       .then((list) => {
         if (mountedRef.current) setOwners(list);
       })
-      // A roster the gateway won't serve is not fatal: devices still name
-      // their people, so the page degrades to device-derived groups.
+      // A roster the gateway won't serve is not fatal: the page degrades to
+      // device-derived groups.
       .catch(() => undefined);
     void loadWorkStatus?.()
       .then((depth) => {
         if (mountedRef.current) setWorkDepth(depth);
       })
-      // Poll failures are transient; retain the last successful work figure.
+      // Poll failures are transient; keep the last good work figure.
       .catch(() => undefined);
   }, [loadDevices, loadOwners, loadWorkStatus]);
 
   useEffect(() => {
     mountedRef.current = true;
     refresh();
-    // Suspended while the tab is hidden and caught up on return (#659).
+    // Suspended while the tab is hidden, caught up on return (#659).
     const stop = startVisibilityTicker(refresh, POLL_MS);
     return () => {
       mountedRef.current = false;
@@ -123,10 +123,9 @@ export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
       device: GroupedDevice,
       confirmLastDevice?: string
     ): Promise<void> => {
-      // Hardware revoke: every enrollment it holds goes. Chained rather than
-      // `Promise.all`: the gateway refuses the enrollment that would strand
-      // the owner's last device for a vault, and that refusal must surface
-      // before the rest are dropped.
+      // Hardware revoke: every enrollment it holds goes. Chained, not
+      // `Promise.all`: the gateway refuses the enrollment that would strand the
+      // owner's last device for a vault, and that refusal must surface first.
       await device.enrollmentIds.reduce(
         (chain, enrollmentId) =>
           chain.then(async () => {
@@ -187,8 +186,8 @@ export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
     [devices, owners]
   );
 
-  // `isSelf` is set by the device making the request; an admin caller sees no
-  // such row, so the first group (already sorted self-first) stands in.
+  // `isSelf` is set by the requesting device; an admin caller sees no such row,
+  // so the first group (already sorted self-first) stands in.
   const self = groups.find((group) => group.isSelf) ?? groups[0];
   const others = groups.filter((group) => group !== self);
   return {
@@ -213,6 +212,9 @@ export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
 export interface DevicesCardProps {
   roster: DeviceRoster;
   now: number;
+  /** What revoking a device can promise, in the VAULT'S words (#883). Absent
+   *  when the wire did not say — never written by this surface. */
+  boundaryPromise?: string;
   onCreateTicket?: (
     input?: GatewayDeviceTicketInput
   ) => Promise<GatewayDeviceTicket>;
@@ -223,6 +225,7 @@ export interface DevicesCardProps {
 export default function DevicesCard({
   roster,
   now,
+  boundaryPromise,
   onCreateTicket,
   pairing = false,
   onPairingChange,
@@ -287,6 +290,12 @@ export default function DevicesCard({
             space.
           </NoteBlock>
         </>
+      ) : null}
+
+      {boundaryPromise ? (
+        <NoteBlock>
+          <span data-testid="device-boundary-promise">{boundaryPromise}</span>
+        </NoteBlock>
       ) : null}
 
       {roster.hasWork ? (

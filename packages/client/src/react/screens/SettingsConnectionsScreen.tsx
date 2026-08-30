@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { plural } from "@centraid/blueprints/apps/_shared/format-kit";
+
 import { ASSIST_HANDOFF_EVENT } from "../../assist-oauth-events.js";
 import type { AssistHandoffResult } from "../../assist-oauth-events.js";
 import {
@@ -26,6 +28,7 @@ import PanelBlock from "../ui/PanelBlock.js";
 import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
+import ShellModal from "../ui/ShellModal.js";
 import { ConnectorBrandGlyph } from "./connectorBrandMarks.js";
 
 import styles from "./SettingsConnectionsScreen.module.css";
@@ -273,10 +276,6 @@ function isLapsed(row: ConnectionRowDTO): boolean {
 /** Copy joins two sentences; a gateway note may or may not end in a stop. */
 function sentence(text: string): string {
   return /[.!?]$/u.test(text.trim()) ? text.trim() : `${text.trim()}.`;
-}
-
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
 }
 
 /** The row's explanatory second line: who, how, and when it last worked. */
@@ -1645,12 +1644,12 @@ export default function SettingsConnectionsScreen({
             if (e.target === e.currentTarget) setSheet({ kind: "closed" });
           }}
         >
-          <dialog
-            open
+          <ShellModal
+            layer="inline"
             className={styles.sheet}
-            aria-modal="true"
-            aria-labelledby="connector-sheet-title"
-            data-testid="connector-sheet"
+            ariaModal
+            labelledBy="connector-sheet-title"
+            data={{ "data-testid": "connector-sheet" }}
           >
             {sheet.kind === "picker" ? (
               <>
@@ -2070,7 +2069,7 @@ export default function SettingsConnectionsScreen({
                 </div>
               </>
             )}
-          </dialog>
+          </ShellModal>
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
-// Pin STATE is durable. Pin BYTES accounting is NOT wired: `pinnedBytes()`
-// returns `unavailable` on purpose — a fabricated 0 would be read as a budget.
+// Pin state and its bytes are both durable (#883 C6). `unavailable` is not a
+// stand-in for zero: a device with no durable directory reporting 0 bytes
+// reads as a budget.
 
 import { Store } from "../../storage";
 
@@ -57,12 +58,3 @@ export function listPinnedContent(): readonly ContentRef[] {
 export type PinnedBytesAnswer =
   | { status: "known"; bytes: number }
   | { status: "unavailable"; reason: string };
-
-/** Always `unavailable` today — a function so the first byte source changes this body. */
-export function pinnedBytes(): PinnedBytesAnswer {
-  return {
-    reason:
-      "pinned-byte accounting is not wired to on-disk storage yet — pin state above is real, byte totals are not",
-    status: "unavailable",
-  };
-}

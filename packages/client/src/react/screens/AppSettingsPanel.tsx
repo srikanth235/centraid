@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties, JSX } from "react";
+import type { CSSProperties, JSX, ReactNode } from "react";
 
 import type { IconName } from "@centraid/design";
 
@@ -11,10 +11,11 @@ import type {
 import AppMark from "../ui/AppMark.js";
 import { cx } from "../ui/cx.js";
 import { Icon, IconButton } from "../ui/index.js";
+import ShellModal from "../ui/ShellModal.js";
+import { Segmented } from "./settings-controls.js";
 
 import a11y from "../styles/a11y.module.css";
 import appSettingsCss from "../styles/appSettings.module.css";
-import segCss from "../styles/seg.module.css";
 import swatchCss from "../styles/swatch.module.css";
 import styles from "./AppSettingsPanel.module.css";
 
@@ -84,25 +85,17 @@ function KnobControl({
       </div>
     );
   }
+  const labels: Partial<Record<string, ReactNode>> = {};
+  for (const option of knob.options) labels[option.value] = option.label;
   return (
-    <div
-      className={cx(segCss.seg, styles.paneSeg)}
-      role="tablist"
-      aria-label={knob.label}
-    >
-      {knob.options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          role="tab"
-          aria-selected={o.value === value}
-          data-active={String(o.value === value)}
-          onClick={() => pick(o.value)}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      className={styles.paneSeg}
+      ariaLabel={knob.label}
+      options={knob.options.map((o) => o.value)}
+      selected={value}
+      onSelect={pick}
+      labels={labels}
+    />
   );
 }
 
@@ -282,6 +275,38 @@ export default function AppSettingsPanel(
     color: snap.iconColor ?? "var(--text)",
     ...(snap.iconShadow ? { boxShadow: snap.iconShadow } : {}),
   };
+  const visibleTabs = TABS.filter((t) => {
+    if (t.id === "vault") return snap.vaultVisible;
+    // Same rule as the vault tab above: a tab the gateway cannot serve is
+    // absent, never present-and-empty.
+    if (t.id === "automations") return automationsVisible;
+    // Same rule again: an app whose data shape has no enrichment capabilities
+    // gets no Enrichment tab (#807).
+    if (t.id === "enrichment") return Boolean(onMountEnrichment);
+    return true;
+  });
+  const tabLabels: Partial<Record<Tab, ReactNode>> = {};
+  for (const t of visibleTabs) {
+    const badge =
+      t.id === "automations"
+        ? snap.automationsBadge
+        : t.id === "vault"
+          ? snap.vaultBadge
+          : null;
+    tabLabels[t.id] = (
+      <>
+        <span
+          className={styles.settingsTabGlyph}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
+          dangerouslySetInnerHTML={{ __html: TAB_GLYPH[t.id] }}
+        />
+        <span>{t.label}</span>
+        {badge != null && badge > 0 && (
+          <span className={styles.settingsTabBadge}>{badge}</span>
+        )}
+      </>
+    );
+  }
 
   return (
     <>
@@ -290,10 +315,10 @@ export default function AppSettingsPanel(
         role="presentation"
         onClick={onClose}
       />
-      <dialog
-        open
+      <ShellModal
+        layer="inline"
         className={styles.settingsPanel}
-        aria-label="App settings"
+        label="App settings"
         style={panelStyle}
       >
         <div className={styles.settingsHeader}>
@@ -326,41 +351,14 @@ export default function AppSettingsPanel(
         </div>
 
         <div className={styles.settingsTabsWrap}>
-          <div className={cx(segCss.seg, styles.settingsTabs)}>
-            {TABS.map((t) => {
-              if (t.id === "vault" && !snap.vaultVisible) return null;
-              // Same rule as the vault tab above: a tab the gateway cannot
-              // serve is absent, never present-and-empty.
-              if (t.id === "automations" && !automationsVisible) return null;
-              // Same rule again: an app whose data shape has no enrichment
-              // capabilities gets no Enrichment tab (#807).
-              if (t.id === "enrichment" && !onMountEnrichment) return null;
-              const badge =
-                t.id === "automations"
-                  ? snap.automationsBadge
-                  : t.id === "vault"
-                    ? snap.vaultBadge
-                    : null;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  data-active={String(tab === t.id)}
-                  onClick={() => setTab(t.id)}
-                >
-                  <span
-                    className={styles.settingsTabGlyph}
-                    // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-                    dangerouslySetInnerHTML={{ __html: TAB_GLYPH[t.id] }}
-                  />
-                  <span>{t.label}</span>
-                  {badge != null && badge > 0 && (
-                    <span className={styles.settingsTabBadge}>{badge}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <Segmented
+            className={styles.settingsTabs}
+            ariaLabel="App settings sections"
+            options={visibleTabs.map((t) => t.id)}
+            selected={tab}
+            onSelect={setTab}
+            labels={tabLabels}
+          />
         </div>
 
         <div className={styles.settingsPane} hidden={tab !== "appearance"}>
@@ -521,7 +519,7 @@ export default function AppSettingsPanel(
             </div>
           )}
         </div>
-      </dialog>
+      </ShellModal>
     </>
   );
 }

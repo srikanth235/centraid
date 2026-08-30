@@ -597,6 +597,30 @@ describe("issue #679 user-facing quality gates", () => {
   });
 
   test("T2: every shipped app action declares consent and an inherited side-effect class", async () => {
+    // THE SEAM MOVED, THE SEAM DID NOT GO (#883 B2). Until the action kit
+    // landed, every one of the 131 handlers spelled `ctx.vault.invoke` itself,
+    // so "contains `ctx.vault`" and "reaches the consent-recording command
+    // seam" were the same sentence. They are not any more: a handler now hands
+    // its one typed command to `runVaultAction(ctx, …)` and the kit makes the
+    // call. Reading the old string off a handler that dispatches through the
+    // kit would fail an action that is MORE governed than before.
+    //
+    // So the rule is a disjunction with the indirection nailed shut. A handler
+    // passes by reaching the seam directly, or by importing the kit AND calling
+    // `runVaultAction(` — and the kit itself is asserted, once, to route
+    // through `ctx.vault`. A handler that does neither still fails, and an
+    // emptied kit fails everything at once rather than making every handler
+    // vacuously compliant.
+    const actionKitFile = "packages/blueprints/apps/_shared/action-kit.ts";
+    const actionKitImport = /_shared\/action-kit(?:\.tsx?)?["']/u;
+    const actionKitSource = await readFile(
+      path.join(root, actionKitFile),
+      "utf8"
+    );
+    expect(
+      actionKitSource,
+      `${actionKitFile} no longer dispatches through ctx.vault — the action kit is the seam every handler now inherits, so an indirection that stopped calling the vault would silently un-govern all of them`
+    ).toContain("ctx.vault.invoke(");
     const files: string[] = [];
     for await (const file of glob("packages/blueprints/**/app.json", {
       cwd: root,
@@ -634,9 +658,11 @@ describe("issue #679 user-facing quality gates", () => {
         );
         const source = await readFile(path.join(root, actionFile), "utf8");
         expect(
-          source,
-          `${actionFile} bypasses the consent-recording vault command seam`
-        ).toContain("ctx.vault");
+          source.includes("ctx.vault") ||
+            (actionKitImport.test(source) &&
+              source.includes("runVaultAction(")),
+          `${actionFile} bypasses the consent-recording vault command seam: it neither calls ctx.vault itself nor dispatches through ${actionKitFile}'s runVaultAction`
+        ).toBe(true);
       })
     );
   });

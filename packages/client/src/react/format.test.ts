@@ -9,6 +9,7 @@ import {
   INTEGRATION_HUES,
   insK,
   insKindLabel,
+  insDuration,
   insUsd,
   relativeTime,
 } from "./format.js";
@@ -34,6 +35,19 @@ describe("insK / insUsd / insKindLabel", () => {
   it("exposes integration hues for known names", () => {
     expect(INTEGRATION_HUES.Slack).toBe("violet");
     expect(INTEGRATION_HUES.GitHub).toBe("slate");
+  });
+});
+
+describe(insDuration, () => {
+  it("keeps a sub-second run in ms rather than calling it 0s", () => {
+    expect(insDuration(0)).toBe("0 ms");
+    expect(insDuration(420)).toBe("420 ms");
+    expect(insDuration(1400)).toBe("1s");
+    expect(insDuration(95_000)).toBe("1m 35s");
+    expect(insDuration(120_000)).toBe("2m");
+    expect(insDuration(3 * 3_600_000 + 25 * 60_000)).toBe("3h 25m");
+    expect(insDuration(-1)).toBe("—");
+    expect(insDuration(Number.NaN)).toBe("—");
   });
 });
 

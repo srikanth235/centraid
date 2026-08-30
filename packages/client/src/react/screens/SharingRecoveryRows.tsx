@@ -1,5 +1,7 @@
 import type { JSX } from "react";
 
+import { DAY_MS } from "@centraid/blueprints/apps/_shared/format-kit";
+
 import type {
   CommonsRecoveryGrant,
   CommonsRecoveryOutcome,
@@ -16,8 +18,6 @@ import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
 import deviceStyles from "./DevicesCard.module.css";
 import styles from "./SharingCard.module.css";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Busy-row identity for one concern. Exported because the caller runs the
  *  action and therefore owns the busy state these rows read. */

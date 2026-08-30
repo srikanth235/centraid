@@ -1,34 +1,24 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); Tally owns the whole expense-splitting write surface — friends, groups, membership, expenses with resolved splits, and settlements — so it is one file by design.
+// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); Tally's write surface is one file by design.
 // Tally commands (schema `tally`): the expense-splitting write surface. A
-// friend is a canonical core.party (kind='person') plus a tally_friend row
-// for the avatar hue; the owner is the implicit `me` and never a friend. A
-// group is an AUDIENCE (#310): a social.circle carrying the name
-// and the membership, decorated by a tally_group row with the emoji icon +
-// colour (owner always a member). An expense stores its
-// resolved splits (one tally_expense_split per participant) — the command
-// re-validates server-side that the shares sum to the amount and that every
-// participant and the payer are group members, so a projection can't smuggle
-// an unbalanced or out-of-group split past the vault. A settlement is a real
-// cash payment that pays balances down; balances themselves are never stored.
+// friend is a canonical core.party plus a tally_friend row; the owner is the
+// implicit `me` and never a friend. A group is an AUDIENCE (#310) — a
+// social.circle carrying name and membership, decorated by tally_group. An
+// expense stores its RESOLVED splits, re-validated server-side so a projection
+// cannot smuggle an unbalanced or out-of-group split past the vault. Balances
+// are never stored; a settlement is a real cash payment that pays them down.
 //
-// Every write is a typed command, consent-checked and receipted, all risk low
-// (money is recorded, not moved). Deleting a group is refused while it still
-// holds expenses; removing a member is refused while they are on the ledger.
-//
-// The finance bridge (#310): Tally is a lens over shared money, not
-// a second ledger. A settlement the owner is party to IS the owner's money
-// moving, so settle_up emits a core_transaction on the auto-provisioned
-// "Tally settlements" cash account (external_id `tally:settlement:<id>` keeps
-// replays idempotent) and stamps the settlement's txn_id. Third-party
-// settlements (friend pays friend) touch no owner account and stay tally-only
-// ground facts. When the bank already imported the movement, tally.bind_txn
-// adopts the existing canonical row instead — the Studio paid_txn_id pattern:
-// bind, don't duplicate.
+// The finance bridge (#310): Tally is a lens over shared money, not a second
+// ledger. A settlement the owner is party to IS the owner's money moving, so
+// settle_up emits a core_transaction on the "Tally settlements" account
+// (external_id `tally:settlement:<id>` keeps replays idempotent). Third-party
+// settlements touch no owner account. When the bank already imported the
+// movement, tally.bind_txn adopts that row — bind, don't duplicate.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { replaceMemo } from "./annotations.js";
+import { bindContactReach, partyForReach } from "./contact-reach.js";
 import { writeExtractedText } from "./enrich.js";
 import {
   loadEntityRevision,
@@ -49,6 +39,7 @@ import type {
 import {
   LINE_ITEM_SCHEMA,
   PAYER_SCHEMA,
+  RECEIPT_ATTACHMENT_SQL,
   SPLIT_METHOD_SCHEMA,
   SPLIT_PARAMS_SCHEMA,
   SPLIT_SCHEMA,
@@ -71,8 +62,7 @@ function circleOf(ctx: HandlerCtx, groupId: string): string {
   return row.circle_id;
 }
 
-/** Add one party to a circle, idempotently. Membership is a WRITE — it is
- * provenance-stamped (and demo-registered) like any other row. */
+/** Idempotent. Membership is a WRITE: provenance-stamped like any row. */
 function addCircleMember(
   ctx: HandlerCtx,
   circleId: string,
@@ -97,9 +87,8 @@ function addCircleMember(
 
 const GROUP_EXISTS_SQL =
   "SELECT count(*) AS n FROM tally_group WHERE group_id = :group_id";
-// An omitted optional input binds as NULL (gateway/contract.ts), so the
-// group-less 1:1 expense (GAPS #4) passes this precondition by having no group
-// to check rather than by the precondition being dropped.
+// An omitted optional input binds as NULL, so a group-less 1:1 expense passes
+// this precondition with no group to check, not by dropping it.
 const GROUP_EXISTS_IF_NAMED_SQL = `SELECT CASE WHEN :group_id IS NULL THEN 1 ELSE
     (SELECT count(*) FROM tally_group WHERE group_id = :group_id) END AS n`;
 const EXPENSE_EXISTS_SQL =
@@ -241,9 +230,8 @@ function restoreExpenseSnapshot(
   );
   for (const split of snapshot.splits)
     insert.run(expenseId, split.party_id, split.share_minor);
-  // Snapshots recorded before multi-payer expenses carry no payer set; the
-  // degenerate single-payer row is restated from the restored `paid_by` so the
-  // fold never sees an expense nobody paid for.
+  // A snapshot with no payer set is restated from the restored `paid_by`, so
+  // the fold never sees an expense nobody paid for.
   ctx.db
     .prepare("DELETE FROM tally_expense_payer WHERE expense_id = ?")
     .run(expenseId);
@@ -298,10 +286,10 @@ function restoreExpenseLines(
         allocation.share_minor,
         ctx.now
       );
-      ctx.wrote(
-        "tally.expense_line_allocation",
-        `${line.line_item_id}:${allocation.party_id}`
-      );
+      // Not `ctx.wrote()`, as in `writePayers`: consumers resolve a write
+      // through `pkColumn`, which here is `line_item_id` alone, so a composite
+      // `<line>:<party>` key would be unaddressable (#883). The line item's
+      // own id is the marker, stamped above.
     }
   }
 }
@@ -323,9 +311,8 @@ function baseCurrency(ctx: HandlerCtx): string {
 }
 
 /**
- * Find-or-create the owner's "Tally settlements" cash account — the canonical
- * pool settle_up's emitted transactions post against. One per vault, minted
- * lazily on the first owner-party settlement.
+ * The canonical pool settle_up's transactions post against: one per vault,
+ * minted lazily on the first owner-party settlement.
  */
 function settlementAccountId(ctx: HandlerCtx, ownerId: string): string {
   const existing = ctx.db
@@ -369,10 +356,9 @@ interface ResolvedFx {
 }
 
 /**
- * Resolve FX for a NEWLY minted expense. There is no rate provider and the
- * vault works with none: a cross-currency expense must arrive with its rate,
- * its source, and the date that rate was effective, and the settlement amount
- * must reproduce from them exactly.
+ * There is no rate provider and the vault works with none: a cross-currency
+ * expense arrives with its rate, source and effective date, and the settlement
+ * amount must reproduce from them exactly.
  */
 function resolveNewExpenseFx(
   ctx: HandlerCtx,
@@ -510,14 +496,33 @@ const ADD_FRIEND: CommandDefinition = {
     additionalProperties: false,
     properties: {
       name: { type: "string", minLength: 1 },
+      /** An existing person the member picked. Enrolled, never re-minted. */
+      party_id: { type: "string", minLength: 1 },
+      /** An address the vault may already know this person by. */
+      email: { type: "string", minLength: 3 },
+      phone: { type: "string", minLength: 3 },
     },
   },
   outputSchema: {
     type: "object",
-    required: ["party_id"],
-    properties: { party_id: { type: "string" } },
+    required: ["party_id", "reused_party"],
+    properties: {
+      party_id: { type: "string" },
+      /** True when an existing `core_party` was enrolled rather than minted. */
+      reused_party: { type: "boolean" },
+    },
   },
-  preconditions: [],
+  preconditions: [
+    {
+      name: "named_party_exists",
+      sql: `SELECT CASE WHEN :party_id IS NULL THEN 1
+              ELSE (SELECT count(*) FROM core_party
+                     WHERE party_id = :party_id AND kind = 'person') END AS n`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
   postconditions: [
     {
       name: "friend_created",
@@ -530,30 +535,73 @@ const ADD_FRIEND: CommandDefinition = {
   idempotency: "once",
   risk: "low",
   handler: (ctx) => {
-    // The avatar hue is no longer stored on the friend row (#441) —
-    // one hue per party, read from people_profile or derived from party_id.
-    const input = ctx.input as { name: string };
-    const partyId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-         VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?, ?)`
-      )
-      .run(partyId, input.name, ctx.now, ctx.now, ONTOLOGY_VERSION);
-    ctx.wrote("core.party", partyId);
-    const friendId = ctx.newId();
-    ctx.db
-      .prepare(
-        "INSERT INTO tally_friend (friend_id, party_id, created_at) VALUES (?, ?, ?)"
-      )
-      .run(friendId, partyId, ctx.now);
-    ctx.wrote("tally.friend", friendId);
+    // THE EXISTING-PARTY BRANCH (#883). Minting unconditionally would give
+    // one human two parties, and the avatar hue derives from the party id, so
+    // "one hue per party" depends on enrolling rather than minting.
+    //
+    // Three ways in, none of them guessing. A NAME IS NEVER A KEY: two people
+    // are called Ann, and folding them on a string is worse than a duplicate.
+    // `party_id` enrolls as picked; `email`/`phone` resolve through the ONE
+    // dedupe module (`contact-reach.ts`), a miss minting and BINDING the
+    // address so the next caller gets the hit this one did not; neither mints.
+    const input = ctx.input as {
+      name: string;
+      party_id?: string;
+      email?: string;
+      phone?: string;
+    };
+    const reach = input.email
+      ? { scheme: "email", value: input.email }
+      : input.phone
+        ? { scheme: "tel", value: input.phone }
+        : null;
+    const found =
+      input.party_id ??
+      (reach
+        ? partyForReach(ctx.db, reach.scheme, reach.value, ctx.now)
+        : null);
+    const partyId = found ?? ctx.newId();
+    if (!found) {
+      ctx.db
+        .prepare(
+          `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
+           VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?, ?)`
+        )
+        .run(partyId, input.name, ctx.now, ctx.now, ONTOLOGY_VERSION);
+      ctx.wrote("core.party", partyId);
+      if (reach) {
+        const channelId = ctx.newId();
+        const bound = bindContactReach(ctx.db, {
+          channelId,
+          now: ctx.now,
+          partyId,
+          scheme: reach.scheme,
+          value: reach.value,
+        });
+        if (bound) ctx.wrote("social.contact_channel", bound);
+      }
+    }
+    // Already a friend: the enrollment stands and nothing is written twice.
+    const enrolled = ctx.db
+      .prepare("SELECT friend_id FROM tally_friend WHERE party_id = ?")
+      .get(partyId) as { friend_id: string } | undefined;
+    if (!enrolled) {
+      const friendId = ctx.newId();
+      ctx.db
+        .prepare(
+          "INSERT INTO tally_friend (friend_id, party_id, created_at) VALUES (?, ?, ?)"
+        )
+        .run(friendId, partyId, ctx.now);
+      ctx.wrote("tally.friend", friendId);
+    }
     ctx.cite({
-      claim: `"${input.name}" added to Tally`,
+      claim: found
+        ? `"${input.name}" enrolled in Tally`
+        : `"${input.name}" added to Tally`,
       entityType: "core.party",
       entityId: partyId,
     });
-    return { party_id: partyId };
+    return { party_id: partyId, reused_party: found !== null };
   },
 };
 
@@ -596,9 +644,7 @@ const CREATE_GROUP: CommandDefinition = {
       member_ids: string[];
     };
     const owner = ownerPartyId(ctx);
-    // The group IS an audience: a social.circle carries the name and the
-    // membership; tally_group decorates it with the icon and colour (issue
-    // #310 S4). Circles are UNIQUE(owner, name) — a clash is a real clash.
+    // Circles are UNIQUE(owner, name), so a clash is a real clash.
     const clash = ctx.db
       .prepare(
         "SELECT 1 AS x FROM social_circle WHERE owner_party_id = ? AND name = ?"
@@ -817,8 +863,8 @@ const DELETE_GROUP: CommandDefinition = {
     ctx.db
       .prepare("DELETE FROM tally_settlement WHERE group_id = ?")
       .run(groupId);
-    // The decoration goes first (it FKs the circle), then the circle and
-    // its membership — the group owned its audience, so it leaves with it.
+    // Decoration first (it FKs the circle), then the circle and membership:
+    // the group owned its audience, so it leaves with it.
     ctx.db.prepare("DELETE FROM tally_group WHERE group_id = ?").run(groupId);
     ctx.db
       .prepare("DELETE FROM social_circle_member WHERE circle_id = ?")
@@ -978,10 +1024,11 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
     {
       name: "receipt_expense_created",
       sql: `SELECT count(*) AS n
-              FROM tally_expense_receipt r
-              JOIN tally_expense e ON e.expense_id = r.expense_id
-             WHERE e.expense_id = :expense_id
-               AND r.receipt_id = :receipt_id`,
+              FROM core_attachment a
+              JOIN tally_expense e ON e.expense_id = a.target_id
+             WHERE a.target_type = 'tally.expense' AND a.role = 'receipt'
+               AND e.expense_id = :expense_id
+               AND a.attachment_id = :receipt_id`,
       column: "n",
       op: "eq",
       value: 1,
@@ -1024,17 +1071,11 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
     writePayers(ctx, expenseId, groupId, payers, allowed);
     writeSplits(ctx, expenseId, groupId, amountMinor, input.splits, allowed);
 
-    const receiptId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO tally_expense_receipt
-          (receipt_id, expense_id, content_id, created_at)
-         VALUES (?, ?, ?, ?)`
-      )
-      .run(receiptId, expenseId, minted.contentId, ctx.now);
-    ctx.wrote("tally.expense_receipt", receiptId);
+    // ONE row for the receipt (#883): the attachment on the expense IS the
+    // receipt, and the returned `receipt_id` is the attachment's. An app-local
+    // receipt table would be a second answer to a core question.
     ctx.wrote("core.content_item", minted.contentId);
-    const attachmentId = ctx.newId();
+    const receiptId = ctx.newId();
     ctx.db
       .prepare(
         `INSERT INTO core_attachment
@@ -1042,8 +1083,8 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
            created_at)
          VALUES (?, 'tally.expense', ?, ?, 'receipt', 1, ?)`
       )
-      .run(attachmentId, expenseId, minted.contentId, ctx.now);
-    ctx.wrote("core.attachment", attachmentId);
+      .run(receiptId, expenseId, minted.contentId, ctx.now);
+    ctx.wrote("core.attachment", receiptId);
     writeExtractedText(ctx, minted.contentId, input.ocr_text);
     writeLineItems(
       ctx,
@@ -1126,8 +1167,7 @@ const EDIT_EXPENSE: CommandDefinition = {
         `SELECT e.group_id, e.original_amount_minor, e.original_currency,
                 e.settlement_currency, e.rate_scaled, e.rate_scale,
                 e.rate_source, e.rate_date,
-                (SELECT r.receipt_id FROM tally_expense_receipt r
-                  WHERE r.expense_id = e.expense_id) AS receipt_id
+                (${RECEIPT_ATTACHMENT_SQL}) AS receipt_id
            FROM tally_expense e WHERE e.expense_id = ?`
       )
       .get(input.expense_id) as
@@ -1144,10 +1184,9 @@ const EDIT_EXPENSE: CommandDefinition = {
         }
       | undefined;
     if (!existing) throw new Error("expense not found");
-    // Preserve live FX provenance unless the caller supplies a rate set.
-    // FX keys must stay declared on the input schema: an undeclared key is
-    // stripped, and every edit then collapses cross-currency rows to identity
-    // base currency.
+    // Preserve live FX provenance unless the caller supplies a rate set. FX
+    // keys must stay DECLARED on the input schema: an undeclared key is
+    // stripped, collapsing cross-currency rows to the base currency.
     const base = baseCurrency(ctx);
     const hasFxInput =
       input.original_amount_minor !== undefined ||
@@ -1290,8 +1329,8 @@ const EDIT_EXPENSE: CommandDefinition = {
       input.splits,
       allowed
     );
-    // Re-typed lines keep whatever photo the expense already had, so editing a
-    // receipt-backed expense by line does not orphan its receipt.
+    // Re-typed lines keep the expense's photo, so an edit by line does not
+    // orphan its receipt.
     if (input.line_items)
       writeLineItems(
         ctx,
@@ -1349,11 +1388,9 @@ const DELETE_EXPENSE: CommandDefinition = {
   idempotency: "once",
   risk: "low",
   handler: (ctx) => {
-    // Reversible grace-window trash (#441), not an instant hard delete.
-    // Splits stay put — the balance engine already ignores them once the expense
-    // drops out of the deleted_at IS NULL window, and the sweep cascades them at
-    // purge (tally_expense_split ON DELETE CASCADE) along with cleaning the
-    // expense's polymorphic references (its memo annotation among them).
+    // Reversible grace-window trash (#441), not a hard delete. Splits stay
+    // put: the balance engine ignores them once the expense leaves the
+    // `deleted_at IS NULL` window, and the sweep cascades them at purge.
     const expenseId = String((ctx.input as { expense_id: string }).expense_id);
     const revision = recordExpenseRevision(ctx, expenseId, "trash");
     ctx.db
@@ -1521,9 +1558,8 @@ const SETTLE_UP: CommandDefinition = {
     const paidOn = input.paid_on ?? ctx.now.slice(0, 10);
     const amount = Math.round(input.amount_minor);
 
-    // The finance bridge: when the owner is a party to the payment, their
-    // money actually moved — emit the canonical transaction and bind it.
-    // Friend-to-friend settlements touch no owner pool and stay tally-only.
+    // The owner's money actually moved: emit the canonical transaction and
+    // bind it. Friend-to-friend settlements touch no owner pool.
     const meId = ownerPartyId(ctx);
     let txnId: string | null = null;
     if (input.from_party === meId || input.to_party === meId) {
@@ -1675,9 +1711,8 @@ const SET_EXPENSE_MEMO: CommandDefinition = {
   idempotency: "idempotent",
   risk: "low",
   handler: (ctx) => {
-    // The owner's remark about an expense is entity-scoped meaning (issue
-    // #310 C6): knowledge.annotation on the canonical row, the same memo
-    // People and Social write — never a prose column.
+    // The owner's remark is entity-scoped meaning (#310): a
+    // knowledge.annotation, never a prose column.
     const input = ctx.input as { expense_id: string; note: string };
     replaceMemo(ctx, "tally.expense", input.expense_id, input.note);
     ctx.wrote("tally.expense", input.expense_id);

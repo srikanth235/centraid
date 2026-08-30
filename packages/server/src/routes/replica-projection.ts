@@ -70,7 +70,7 @@ export interface ReplicaChangeBatchWire {
   changes: ReplicaChangeWire[];
   outcomes?: ReplicaIntentOutcomeWire[];
   hasMore?: boolean;
-  /** Current shape ids let transports detect trust/expiry changes. */
+  /** Lets transports detect trust/expiry changes. */
   shapeIds: string[];
 }
 
@@ -81,7 +81,7 @@ export interface ReplicaDoorbellChange {
   rowId: string;
   op: ReplicaChangeEntry["op"];
   changedAt: string;
-  /** Exact authorized shapes affected by this opaque wake-up. */
+  /** The authorized shapes this opaque wake-up affects. */
   shapeIds: string[];
 }
 
@@ -92,10 +92,14 @@ export interface ReplicaProjectedPage {
   rebootstrapReason?: "shape-changed";
 }
 
-// Any of these rows can change which entities, predicates or columns a
-// client is entitled to retain. Advancing past one as ordinary data would
-// leave a stale local shape behind, so the transport requires a bootstrap.
-const SHAPE_CONTROL_ENTITIES = new Set([
+// These rows change what a client may retain: advancing past one as ordinary
+// data leaves a stale local shape behind.
+//
+// The verdict below reads the ENTRY, not the row's end state: a grant that
+// went active, revoked, then active again must force a bootstrap for the
+// middle transition too. Retention compaction therefore may not fold these
+// entries away — `REPLICA_COMPACTION_HELD_ENTITIES` covers exactly this set.
+export const SHAPE_CONTROL_ENTITIES = new Set([
   "consent.app",
   "consent.app_ext",
   "consent.access_grant",
@@ -214,7 +218,7 @@ function currentRow(
   key: string,
   rowId: string
 ): Record<string, unknown> | undefined {
-  // Table/key come from a closed set of consent tables, never from the wire.
+  // Table/key come from a closed set of consent tables, never the wire.
   return preparedStatement(
     db,
     `SELECT * FROM "${table}" WHERE "${key}" = ?`
@@ -307,20 +311,13 @@ interface CoalescedChange {
 
 export interface ReplicaProjectionOptions {
   /**
-   * Doorbell-only: the caller sends `doorbell` and drops `batch.changes`
-   * (the multiplex plane, where each vault's rows travel over its own lane).
-   * Row visibility and the wire row id are still computed per shape — the
-   * doorbell cannot be built without them — but the shaped `values` copy and
-   * the retained change map are skipped. Doorbell entries, cursors, shape ids
-   * and every rebootstrap trigger are identical to the full mode.
+   * The caller sends `doorbell` and drops `batch.changes` (the multiplex plane,
+   * where each vault's rows travel over its own lane). Visibility and the wire
+   * row id are still computed; only the shaped `values` copy is skipped.
    */
   doorbellOnly?: boolean;
 }
 
-/**
- * What the projection needs from a changed row: the wire row id under this
- * shape, plus the wire payload when the caller will actually send rows.
- */
 interface ShapedChangeRow {
   rowId: string;
   wire?: ReplicaRowWire;
@@ -337,16 +334,15 @@ function shapedChangeRow(
     const wire = shapeReplicaRow(shape, entity, row, nowMs);
     return wire ? { rowId: wire.rowId, wire } : undefined;
   }
-  // Same predicate + field-mask pass `shapeReplicaRow` runs, stopping before
-  // it copies the visible columns into a `values` object nobody reads here.
+  // `shapeReplicaRow`'s predicate + field-mask pass, minus the `values` copy.
   return replicaRowColumns(shape, entity, row, nowMs)
     ? { rowId: replicaWireRowId(shape, entity, row.rowId) }
     : undefined;
 }
 
 /**
- * Project one stable metadata page through current consent. The SQLite read
- * transaction pins the log watermark and all changed-row reads together.
+ * One stable metadata page through current consent: the read transaction pins
+ * the watermark and every changed-row read together.
  */
 export function projectReplicaPage(
   db: DatabaseSync,
@@ -457,13 +453,17 @@ export function projectReplicaPage(
         { op: ReplicaChangeEntry["op"]; shapeIds: string[] }
       >();
       for (const shape of interested) {
+        // The PRIOR pair, never `first.op`/`first.oldValuesJson`: compaction
+        // may have folded older entries into `first`, and membership at the
+        // client's cursor is decided by the state before the OLDEST change
+        // `first` stands for (#883 C6). An unfolded entry reports itself.
         const previous =
-          first.op === "insert"
+          first.priorOp === "insert"
             ? { known: true }
             : replicaHistoricalRowState(
                 shape,
                 last.entity,
-                first.oldValuesJson
+                first.priorOldValuesJson
               );
         if (!previous.known) return rebootstrap();
         const shaped = row
@@ -485,8 +485,8 @@ export function projectReplicaPage(
               };
           changes.set(changeKey(shape.shapeId, last.entity, last.rowId), wire);
         }
-        // A row no longer visible to this shape projects as a delete however
-        // the log recorded it; a visible one keeps the log's own op.
+        // A row no longer visible projects as a delete however the log
+        // recorded it; a visible one keeps the log's own op.
         const projectedOp = shaped ? last.op : "delete";
         const affectedKey = `${rowId}\u0000${projectedOp}`;
         const wake = affected.get(affectedKey) ?? {

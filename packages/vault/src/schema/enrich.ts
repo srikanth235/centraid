@@ -2,7 +2,28 @@
 // model. Deliberately small — derived data lands in tables the ontology
 // already has (knowledge_annotation, core_tag, media_face_region,
 // core_content_derivative); this migration only adds what no existing table
-// carries:
+// carries.
+//
+// WHAT THIS FILE CREATES, in full — three things, not one:
+//
+//   1. TEN TABLES and their indexes, in `ENRICH_DDL` — `media_asset_phash`,
+//      `media_memory`, `media_memory_member`, `enrich_policy`,
+//      `enrich_embedding`, `enrich_derivation`, `enrich_request`,
+//      `media_face_cluster`, `enrich_policy_rule` and `enrich_consent`. One
+//      bullet each below, in the order that carries the argument for the
+//      shape rather than the order the DDL declares.
+//   2. GUARDED SEED ROWS, in the same DDL and all four written the same way —
+//      `INSERT … SELECT … WHERE NOT EXISTS … AND EXISTS (SELECT 1 FROM
+//      core_vault)`, so a fresh, not-yet-bootstrapped file gets none of them
+//      and bootstrap never collides with a backfill. They are the `photos`
+//      and `docs` rows of `enrich_policy`, and the `vision` and `doctype`
+//      rows of `core_concept_scheme` — which is the one table this file
+//      writes to WITHOUT creating (the ontology already has it).
+//   3. TWO EXPORTED CONSTANTS beneath the DDL, `VISION_SCHEME_URI` and
+//      `DOCTYPE_SCHEME_URI`, so the publishers that mint concepts under those
+//      schemes name them from here rather than spelling the URI again.
+//
+// The bullets:
 //
 //   - `media_asset_phash` — the Tier-0 perceptual hash (#299),
 //     producer-agnostic like thumbs: the client canvas computes a dHash
@@ -23,10 +44,9 @@
 //     that a model upgrade is a BACKFILL, never a migration: re-derive the
 //     rows whose parsed version is below the current one and let the UNIQUE
 //     (target_type, target_id, model) key hold both generations meanwhile.
-//     There is deliberately NO `model_version` column — SQLite's ADD COLUMN
-//     cannot be written re-runnably (see the sidecar argument above), so the
-//     column would have cost a rebuild across media_face_region's live FK to
-//     express something a parseable key already expresses exactly.
+//     There is deliberately NO `model_version` column: it would cost a
+//     rebuild across media_face_region's live FK (the sidecar argument above)
+//     to express what a parseable key already expresses.
 //
 //     There is likewise no content-hash column, because re-derivation is
 //     ALREADY content-stable: a row targets an entity whose content item
@@ -42,16 +62,13 @@
 //     media_face_region, core_content_derivative) — because the missing fact
 //     was never the content, it was the PRODUCER.
 //
-//     WHY IT HAS TO EXIST. `enrich_embedding` can answer "which model wrote
-//     this row?" only because its uniqueness key happens to carry `model`; no
-//     other derived table does, and none can grow one (SQLite's ADD COLUMN
-//     cannot be written re-runnably — the sidecar argument above). So before
-//     this table, a gateway that upgraded its OCR model had no query for "the
-//     text regions the old model produced": the backfill selector would have
-//     had to guess, or re-derive the whole library on every restart. One
-//     stamp per (target, variant) turns the E1 convention — a model id is
-//     `"<name>@<version>"`, see `enrich/model-id.ts` — into a selector that
-//     works for EVERY capability, not just embeddings.
+//     WHY IT HAS TO EXIST. Only `enrich_embedding` can answer "which model
+//     wrote this row?", because its uniqueness key carries `model`; no other
+//     derived table does, and none can grow one (the sidecar argument above).
+//     Without a stamp, a gateway upgrading its OCR model has no selector for
+//     "the text regions the old model produced" short of re-deriving the
+//     library. One stamp per (target, variant) makes the `"<name>@<version>"`
+//     convention a selector for EVERY capability.
 //
 //     ONE STAMP PER (target_type, target_id, variant, profile), enforced by
 //     UNIQUE and written by `enrich/derivation.ts`'s upsert. Two stamps for one
@@ -66,16 +83,11 @@
 //     generations, but they keep them in `enrich_embedding`, where the old
 //     vectors still answer searches while the new ones fill in.)
 //
-//     WIDENING THAT KEY NEEDED NO REBUILD, and could not have had one: SQLite
-//     cannot alter a UNIQUE table constraint in place, and a rebuild here
-//     would cross the same live FKs the sidecar argument above names. It costs
-//     nothing because this is the pre-release, single-rung, edit-in-place
-//     schema described under `enrich_policy` below — the base rung is edited
-//     and a file written by an older shape is re-created, never migrated
-//     (`schema/migrate.ts`, docs/decisions.md). The one thing that DOES have
-//     to hold across the edit is the call site: `profile` defaults to
-//     'built-in' and every existing stamp writer names no profile, so their
-//     rows and reads are byte-identical to what they were.
+//     THAT KEY IS WIDENED IN PLACE, never rebuilt: SQLite cannot alter a
+//     UNIQUE constraint, and a rebuild would cross the same live FKs. It is
+//     free under the edit-in-place schema below, provided the call site holds
+//     — `profile` defaults to 'built-in', so a writer that names no profile
+//     reads and writes exactly as before.
 //
 //     `payload_json` is an OPTIONAL, small, JSON-valid echo of what was
 //     derived — a region count, a confidence, the variant's byte size — for
@@ -108,18 +120,11 @@
 //     updateEnrichSettings on every owner change, seeded at bootstrap and
 //     backfilled below for vaults that predate this table.
 //
-//     TIER RENAME (#712): `off|local|model` became
-//     `off|device|gateway` — see `packages/server/src/automation/fire/enrich-gate.ts`
-//     for the axis and `packages/vault/src/enrich/policy.ts` for the
-//     COMPAT read-time mapping of legacy stored values. The CHECK below
-//     keeps accepting the legacy tokens: this is a pre-release,
-//     single-rung, edit-in-place schema (`schema/migrate.ts`), so an
-//     already-created `enrich_policy` table keeps whatever CHECK it was
-//     created with regardless of what this DDL text says now, and a
-//     legacy value already sitting in such a row must stay a legal SELECT
-//     forever — only application code translates it. Nothing in this
-//     runtime writes the legacy tokens; the CHECK simply refuses to be the
-//     thing that turns an old row unreadable.
+//     The tier axis is `off|device|gateway` (#712); `enrich/policy.ts` maps
+//     the legacy `local|model` tokens at read time. The CHECK below keeps
+//     ACCEPTING those tokens: under the edit-in-place schema an existing
+//     table keeps the CHECK it was created with, so a legacy value already in
+//     a row must stay a legal SELECT. Nothing writes them.
 //   - `enrich_policy_rule` — the scoped policy cascade (#807). The tier
 //     mirror above answers ONE question per domain ("how far may photos
 //     enrichment run"), which cannot say "faces on for Photos but off for the
@@ -138,7 +143,12 @@
 //     per-item "use provider X just this once" override can never widen egress
 //     by itself. Egress class is a fact about the ENGINE (`on-device` — the
 //     member's own devices; `gateway` — their own infrastructure; `provider` —
-//     a third party), the same axis `enrich-gate.ts` documents.
+//     a third party), the same axis `enrich-gate.ts` documents. This table is
+//     HISTORY: rung six (#883) folds its rows into the one authority plane as
+//     `harness`-principal rows and drops it, so the baseline still creates it
+//     only because the rung must have the same table to read on both paths.
+//     The live shape is `schema/authority.ts`; the accessors are unchanged
+//     (`enrich/egress-consent.ts`).
 //   - the `vision` and `doctype` concept schemes — machine-tag vocabularies
 //     (#299). Concepts are created on demand by the tag publisher.
 //     Fresh vaults seed the schemes at bootstrap; the guarded inserts below
@@ -181,40 +191,28 @@
 //     group identity, not on when the shutter fired. Nothing here fabricates
 //     a date for an asset that carries none.
 //
-//     DETERMINISTIC IDS. `memory_id` is a readable composite string derived
-//     from the kind plus the grouping's own stable key — `otd:<day_key>` for
-//     on-this-day, `trip:<first away day>` for a trip (a calendar day can
-//     start at most one trip), `similar:<lowest asset_id in the group>` for a
-//     similar-moment group (the same "lowest id is the identity" rule
-//     `clusters.ts` already uses for `cluster_id`). No `randomblob`, no
-//     wall-clock: the same input data always mints the same ids, which is
-//     what makes "drop every row and reinsert" a safe, byte-stable rebuild
-//     rather than a churny one. `computed_at` is the one column that is NOT
-//     part of any id or equality check — it is an audit timestamp, stamped
-//     from the sweep's injected clock, and stability tests hold it fixed
-//     across runs precisely because it carries no grouping information.
+//     DETERMINISTIC IDS. `memory_id` composes the kind with the grouping's
+//     own stable key — `otd:<day_key>`, `trip:<first away day>` (a day starts
+//     at most one trip), `similar:<lowest asset_id>` (the same "lowest id is
+//     the identity" rule as `cluster_id`). No `randomblob`, no wall-clock, so
+//     "drop every row and reinsert" is byte-stable. `computed_at` is the one
+//     column outside every id and equality check — an audit timestamp only.
 //   - `media_face_cluster` (#724 W5, "Faces"): the THIRD rebuildable
 //     projection in this file, same mold as the two above — recomputed
 //     wholesale by `enrich/face-clusters.ts` on the standing sweep, derived,
 //     never authored, safe to drop and rebuild from `media_face_region` +
 //     `enrich_embedding` alone.
 //
-//     PARTY-ANCHORED: IDENTITY IS NOT IN THIS TABLE. A person in this vault is
-//     a `core_party` row, and the only two columns that ever name one are
-//     `media_face_region.party_id` (the enricher's candidate, or the owner's
-//     word once confirmed) and `.confirmed_by_party_id` (who said so). A
-//     cluster id here is the opposite kind of fact: an EPHEMERAL grouping of
-//     faces nobody has named yet, which exists so a People shelf has something
-//     to offer the member as "name this one" — and which vanishes the moment
-//     they do, because the regions then carry a party and leave the unnamed
-//     pool. A cluster id is therefore never stored on a region, never rendered
-//     as a person, and never compared across runs for anything but display
-//     stability; the identity lives one table over and outlives every rebuild.
+//     PARTY-ANCHORED: IDENTITY IS NOT IN THIS TABLE. Only
+//     `media_face_region.party_id` and `.confirmed_by_party_id` ever name a
+//     person. A cluster id is the opposite kind of fact — an EPHEMERAL
+//     grouping of faces nobody has named, offered to the member as "name this
+//     one" and gone once they do. Never stored on a region, never rendered as
+//     a person, never compared across runs except for display stability.
 //
-//     Deterministic ids, same rule as the two projections above: a group's
-//     `cluster_id` is the LOWEST `region_id` in it, so unchanged membership
-//     never shuffles the id a shelf is displaying and a rebuild is byte-stable.
-//     `computed_at` is the one column outside every id and equality check.
+//     Deterministic ids, same rule as above: a group's `cluster_id` is the
+//     LOWEST `region_id` in it, so unchanged membership never shuffles the id
+//     a shelf displays.
 
 export const ENRICH_DDL = `
 CREATE TABLE IF NOT EXISTS media_asset_phash (

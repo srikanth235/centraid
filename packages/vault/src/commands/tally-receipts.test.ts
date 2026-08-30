@@ -102,26 +102,24 @@ describe("Tally receipt capture", () => {
     expect(
       db.vault
         .prepare(
-          `SELECT expense_id, content_id FROM tally_expense_receipt
-            WHERE receipt_id = ?`
+          `SELECT target_id, content_id, role, is_primary FROM core_attachment
+            WHERE attachment_id = ?`
         )
         .get(created.receipt_id)
     ).toMatchObject({
-      expense_id: created.expense_id,
-      content_id: created.content_id,
-    });
-    expect(
-      db.vault
-        .prepare(
-          `SELECT content_id, role, is_primary FROM core_attachment
-            WHERE target_type = 'tally.expense' AND target_id = ?`
-        )
-        .get(created.expense_id)
-    ).toMatchObject({
+      target_id: created.expense_id,
       content_id: created.content_id,
       role: "receipt",
       is_primary: 1,
     });
+    expect(
+      db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM core_attachment
+            WHERE target_type = 'tally.expense' AND target_id = ?`
+        )
+        .get(created.expense_id)
+    ).toMatchObject({ n: 1 });
     expect(
       db.vault
         .prepare(

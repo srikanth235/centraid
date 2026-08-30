@@ -20,6 +20,8 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { INSIGHTS_WINDOW_PREF_KEY } from "@centraid/client/insights-copy";
+
 import { resolveTheme } from "../../kit/theme";
 import type { GatewayHealth, InsightsSummary } from "../../lib/insights";
 import type { InsightsScreenProps } from "../../navigation";
@@ -30,7 +32,6 @@ import {
   styleOf,
 } from "../../test/react-native-stub";
 import InsightsScreen from "./Insights";
-import { WINDOW_PREF_KEY } from "./insights-window-pref";
 
 vi.mock(import("react-native"), async () => {
   const stub = await import("../../test/react-native-stub");
@@ -133,7 +134,16 @@ function summaryOf(over: Partial<InsightsSummary> = {}): InsightsSummary {
     byEffort: [{ costUsd: 2, effort: "high", runs: 60, tokens: 100 }],
     byHarness: [{ costUsd: 2, harness: "claude-code", runs: 60, tokens: 100 }],
     byModel: [],
-    daily: [{ costUsd: 2, date: "2026-08-13", runs: 60, tokens: 100 }],
+    daily: [
+      {
+        costUsd: 2,
+        date: "2026-08-13",
+        failedCostUsd: 0,
+        failedRuns: 0,
+        runs: 60,
+        tokens: 100,
+      },
+    ],
     generatedAt: ANCHOR,
     kpis: {
       appsTouched: 2,
@@ -388,7 +398,7 @@ describe(InsightsScreen, () => {
     expect(wire.prefs).toHaveBeenCalledWith(
       expect.stringContaining("/_centraid-user/prefs"),
       expect.objectContaining({
-        body: JSON.stringify({ patch: { [WINDOW_PREF_KEY]: 7 } }),
+        body: JSON.stringify({ patch: { [INSIGHTS_WINDOW_PREF_KEY]: 7 } }),
         method: "PUT",
       })
     );
@@ -396,7 +406,7 @@ describe(InsightsScreen, () => {
 
   it("opens on the window the member last chose, wherever they chose it", async () => {
     wire.prefs.mockResolvedValue({
-      prefs: { [WINDOW_PREF_KEY]: 90 },
+      prefs: { [INSIGHTS_WINDOW_PREF_KEY]: 90 },
     } as never);
     const container = await render();
     expect(wire.summary).toHaveBeenLastCalledWith(90);
@@ -410,7 +420,7 @@ describe(InsightsScreen, () => {
     press(labelled(container, "Export CSV"));
     await settle();
     expect(wire.write).toHaveBeenCalledWith(
-      "date,runs,tokens,cost_usd\n2026-08-13,60,100,2.0000"
+      "date,runs,failed_runs,tokens,cost_usd,failed_cost_usd\n2026-08-13,60,0,100,2.0000,0.0000"
     );
     expect(wire.share).toHaveBeenCalledWith(
       "file:///cache/centraid-analytics-30d.csv",

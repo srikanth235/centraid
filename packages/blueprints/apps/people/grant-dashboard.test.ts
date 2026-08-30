@@ -26,6 +26,9 @@ function grant(overrides: Partial<GrantRecord> = {}): GrantRecord {
     grantedBy: "party-owner",
     maxSizeBytes: null,
     fulfillment: [],
+    // The vault's own words for where it stands (ruling V-phrases).
+    phrase: "on its way",
+    reason: "no vault has been addressed for it yet",
     ...overrides,
   };
 }
@@ -43,6 +46,8 @@ function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),
     revoke: () => Promise.resolve({ ok: true, message: "no longer shared" }),
+    changeCapability: () =>
+      Promise.resolve({ ok: true, outcome: "created" as const }),
     ...overrides,
   };
 }
@@ -104,9 +109,8 @@ describe("reading one person's standing grants", () => {
   });
 
   test("a gateway nothing reached is absent, not refused and not empty", async () => {
-    // `unavailable` is the dashboard's absent variant: the section draws no
-    // count and no rows, so a phone off the network cannot read as "nothing is
-    // shared with Priya" or as a vault that said no.
+    // `unavailable` draws no count and no rows, so a phone off the network
+    // cannot read as "nothing is shared" or as a vault that said no.
     const state = await readPartyGrants(
       stubDoor({
         forParty: () =>

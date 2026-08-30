@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import { richAnswerHtml } from "./assistantRich.js";
 
-// `vi.mock` is hoisted above the import by vitest, so the stub lands first.
+// `vi.mock` is hoisted above the import, so the stub lands first.
 vi.mock(import("../../../gateway-client.js"), () => ({
   resolveAssistantRefs: vi.fn<typeof TypeImport_1gl5zx7.resolveAssistantRefs>(),
 }));
@@ -24,11 +24,9 @@ describe(richAnswerHtml, () => {
   });
 
   it("renders a ref chip for an entity reference", () => {
-    const html = richAnswerHtml(
-      "See @[Groceries](ref:home.asset_item/abc123)."
-    );
+    const html = richAnswerHtml("See @[Groceries](ref:locker.item/abc123).");
     expect(html).toContain("asstRef");
-    expect(html).toContain('data-ref-type="home.asset_item"');
+    expect(html).toContain('data-ref-type="locker.item"');
     expect(html).toContain('data-ref-id="abc123"');
     expect(html).toContain("Groceries");
   });

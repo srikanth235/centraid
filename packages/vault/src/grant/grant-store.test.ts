@@ -107,8 +107,8 @@ describe("grant/grant-store", () => {
     const now = nowIso();
     const party = addParty(db, "Nila", now);
 
-    // locker.item is shareable in the closure vocabulary but deliberately
-    // absent from the subject registry: secrets are not offered as grants.
+    // Shareable in the closure vocabulary, deliberately absent from the
+    // subject registry: secrets are not offered as grants.
     expect(() =>
       createShareGrant(db, {
         audience: { kind: "party", id: party },
@@ -132,9 +132,15 @@ describe("grant/grant-store", () => {
       })
     ).toThrow(/no fulfillment strategy answers media.asset x edit/u);
 
-    // The refusal recorded nothing.
+    // Counted over the SHARE lens: the same table also holds the device row
+    // bootstrap wrote for this seat (#883).
     expect(
-      db.prepare("SELECT COUNT(*) AS n FROM share_grant").get()
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM share_authority
+            WHERE principal_kind IN ('person','circle')`
+        )
+        .get()
     ).toMatchObject({ n: 0 });
   });
 
@@ -144,8 +150,7 @@ describe("grant/grant-store", () => {
     const now = nowIso();
     const party = addParty(db, "Meera", now);
     const subjectId = uuidv7();
-    // `tally.group`, because the repeat below asks at `edit` and that is the
-    // one subject type v1 offers edit for (#825, ruling G-edit).
+    // `tally.group` is the one subject type v1 offers `edit` for (#825).
     const first = createShareGrant(db, {
       audience: { kind: "party", id: party },
       subjectType: "tally.group",
@@ -163,22 +168,33 @@ describe("grant/grant-store", () => {
       grantedAt: "2030-01-01T00:00:00.000Z",
       grantedBy: originBoot.ownerPartyId,
     });
-    expect(again.outcome).toBe("exists");
+    // `conflict`, not `exists` (#883): a DIFFERENT verb is not the same
+    // sentence twice, and answering with the standing grant would report
+    // "already shared" for an ask that was refused.
+    expect(again.outcome).toBe("conflict");
     expect(again.grantId).toBe(first.grantId);
     // The standing decision is untouched — no silent capability upgrade.
     expect(again.grant.capability).toBe("view");
     expect(
-      db.prepare("SELECT COUNT(*) AS n FROM share_grant").get()
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM share_authority
+            WHERE principal_kind IN ('person','circle')`
+        )
+        .get()
     ).toMatchObject({ n: 1 });
 
-    // The index is real, not merely respected by this store.
+    // The index is real, not merely respected by this store — and it keys on
+    // the VERB, so the rival row below restates the standing answer rather
+    // than raising the capability.
     expect(() =>
       db
         .prepare(
-          `INSERT INTO share_grant
-             (grant_id, audience_kind, audience_id, subject_type, subject_id,
-              capability, granted_at, revoked_at, granted_by, max_size_bytes)
-           VALUES (?, 'party', ?, 'tally.group', ?, 'edit', ?, NULL, ?, NULL)`
+          `INSERT INTO share_authority
+             (authority_id, principal_kind, principal_id, subject_type,
+              subject_id, verb, duration, decision, granted_at, granted_by)
+           VALUES (?, 'person', ?, 'tally.group', ?, 'view', 'standing',
+                   'granted', ?, ?)`
         )
         .run(uuidv7(), party, subjectId, now, originBoot.ownerPartyId)
     ).toThrow(/UNIQUE/u);
@@ -243,7 +259,7 @@ describe("grant/grant-store", () => {
       revokeShareGrant(db, { grantId: "absent", revokedAt: now }).outcome
     ).toBe("absent");
 
-    // Revoked rows are outside the live-uniqueness index: re-granting inserts.
+    // Revoked rows are outside the live-uniqueness index.
     const again = createShareGrant(db, {
       audience: { kind: "party", id: party },
       subjectType: "core.document",
@@ -357,7 +373,7 @@ describe("grant/grant-store", () => {
       state: "syncing",
       updatedAt: "2032-02-02T00:00:00.000Z",
       detail: "channel opened",
-      // Nothing has reached the peer yet, so there is nothing to remember.
+      // Nothing has reached the peer, so there is nothing to remember.
       deliveredAt: null,
     });
     const delivered = setFulfillmentState(db, {
@@ -369,10 +385,8 @@ describe("grant/grant-store", () => {
     expect(delivered.detail).toBeNull();
     expect(delivered.deliveredAt).toBe("2032-03-03T00:00:00.000Z");
 
-    // #846 P1: the delivery memory outlives the freshness reading. A pass that
-    // cannot reach the peer drops the row back to `syncing` — honestly, the
-    // audience copy may now be stale — but the peer still HOLDS the subject,
-    // and revocation reads this rather than the state.
+    // #846: the delivery memory outlives the freshness reading. An unreachable
+    // pass drops to `syncing`, but the peer still HOLDS the subject.
     expect(
       setFulfillmentState(db, {
         grantId: grant.grantId,
@@ -382,8 +396,7 @@ describe("grant/grant-store", () => {
         detail: "peer vault is not reachable from this host",
       }).deliveredAt
     ).toBe("2032-03-03T00:00:00.000Z");
-    // Re-delivery keeps the FIRST instant: the question is "has this peer ever
-    // held it", not "when was it last refreshed" (that is `updated_at`).
+    // Re-delivery keeps the FIRST instant: "has this peer ever held it".
     expect(
       setFulfillmentState(db, {
         grantId: grant.grantId,
@@ -392,8 +405,7 @@ describe("grant/grant-store", () => {
         updatedAt: "2032-05-05T00:00:00.000Z",
       }).deliveredAt
     ).toBe("2032-03-03T00:00:00.000Z");
-    // A settled removal is the one thing that clears it: the peer verifiably
-    // does not hold the subject any more.
+    // A settled removal is the one thing that clears it.
     expect(
       setFulfillmentState(db, {
         grantId: grant.grantId,

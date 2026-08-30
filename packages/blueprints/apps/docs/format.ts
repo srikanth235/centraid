@@ -1,9 +1,19 @@
 import { formatBytes } from "@centraid/design";
 
+import { custodyMeta, decodeDataUri } from "../_shared/format-kit.ts";
 import { safeDocumentUrl } from "../_shared/untrusted.ts";
 import type { CustodyInfo, DocFields, TypeMeta } from "./types.ts";
 
-// Token-layer `formatBytes`, never `@centraid/design/elements` — Metro pulls this into the phone bundle; elements is DOM-only.
+// The drive's trash clock, the custody table and the inline-prose decoder are
+// the format kit's (#883 B4), re-exported so each seat has one import path.
+export {
+  custodyMeta,
+  decodeDataUri,
+  purgeCountdown,
+} from "../_shared/format-kit.ts";
+
+// Token-layer `formatBytes`: Metro pulls this into the phone bundle, and
+// `@centraid/design/elements` is DOM-only.
 export const fmtBytes = (n: number | null | undefined): string =>
   !n || !Number.isFinite(Number(n)) || n < 0 ? "—" : formatBytes(n);
 
@@ -34,15 +44,6 @@ export function fmtFull(iso: string | null | undefined): string {
   } catch {
     return String(iso).slice(0, 10);
   }
-}
-
-export function purgeCountdown(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
-  if (Number.isNaN(days)) return "";
-  if (days <= 0) return "purges today";
-  if (days === 1) return "purges tomorrow";
-  return `purges in ${days} days`;
 }
 
 /** Four glyphs across eight kinds — eight lookalike outlines make the row's leading edge harder to scan. */
@@ -196,7 +197,7 @@ function kindFromName(name: string): KindId | null {
   return KIND_BY_EXTENSION[name.slice(dot + 1).toLowerCase()] ?? null;
 }
 
-/** Media type first, filename second — never reverse. `name` is the kind's own word ("PDF", 96px column). */
+/** Media type first, filename second — never reverse. */
 export function typeMeta(
   mediaType: string | null | undefined,
   name?: string | null
@@ -210,26 +211,6 @@ export function typeMeta(
 // Lockstep with edit_document (`media_type LIKE 'text/%'`). Else Replace-file.
 export function isTextKind(doc: DocFields): boolean {
   return /^text\//iu.test(String(doc.media_type ?? ""));
-}
-
-// Only door: CSP blocks `fetch()` of `data:` (`connect-src` is `'self'`; only `img-src` allows `data:`). Small text never rewrites to a blob (#296). Base64 via TextDecoder, never `atob()` alone.
-export function decodeDataUri(uri: string | null | undefined): string | null {
-  const s = String(uri ?? "");
-  if (!s.startsWith("data:")) return null;
-  const comma = s.indexOf(",");
-  if (comma < 0) return null;
-  const meta = s.slice(0, comma);
-  const payload = s.slice(comma + 1);
-  try {
-    if (meta.includes(";base64")) {
-      const binary = atob(payload);
-      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-      return new TextDecoder("utf-8").decode(bytes);
-    }
-    return decodeURIComponent(payload);
-  } catch {
-    return null;
-  }
 }
 
 /** Inline `data:` prose (#296). Null for non-text or `blob:` (editor owns that fetch). */
@@ -299,22 +280,10 @@ export function tintBg(cv: string, pct: number): string {
   return `color-mix(in oklab, var(${fillVar(cv)}) ${pct}%, transparent)`;
 }
 
-// No empty-state copy here — that lives in view-copy/view-state/EmptyState; a sixth answer would drag `AppState` into a pure module.
+// No empty-state copy here — it lives in view-copy/view-state/EmptyState.
 
-const CUSTODY_META: Record<string, CustodyInfo> = {
-  "local-only": { label: "On this device only", tone: "warn" },
-  replicated: { label: "Backed up", tone: "ok" },
-  "remote-only": { label: "Only in the cloud", tone: "warn" },
-  missing: { label: "Missing — needs attention", tone: "danger" },
-};
-
-export function custodyMeta(
-  state: string | null | undefined
-): CustodyInfo | null {
-  return (state ? CUSTODY_META[state] : undefined) ?? null;
-}
-
-// Row mark for exceptions only: `local-only` (loss) and `missing` (integrity). Norms (`replicated`/`remote-only`/`pending-offsite`) get nothing.
+// Row mark for exceptions only: `local-only` (loss) and `missing` (integrity).
+// Norms get nothing.
 const CUSTODY_ROW_EXCEPTIONS: ReadonlySet<string> = new Set([
   "local-only",
   "missing",
@@ -324,7 +293,7 @@ export function custodyRowMark(
   state: string | null | undefined
 ): CustodyInfo | null {
   if (!state || !CUSTODY_ROW_EXCEPTIONS.has(state)) return null;
-  return CUSTODY_META[state] ?? null;
+  return custodyMeta(state);
 }
 
 const ACTIVITY_LABELS: Record<string, string> = {

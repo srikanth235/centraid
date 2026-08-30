@@ -1,12 +1,14 @@
 // Egress consent for enrichment (#807). Orthogonal to policy: selecting an
 // engine cannot write a consent row. A decline is a record, not an absence.
-// Storage, not the gate.
+// Storage, not the gate. The record is a row of the ONE authority table: the
+// egress class is the `harness` principal, the scope the subject, the
+// capability the verb (#883).
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso, uuidv7 } from "../ids.js";
 
-/** Fact about the ENGINE. Same axis as enrich-gate.ts. */
+/** A fact about the ENGINE, same axis as `decideEnrichmentGate`. */
 export const ENRICH_EGRESS_CLASSES = [
   "on-device",
   "gateway",
@@ -16,7 +18,6 @@ export type EnrichEgressClass = (typeof ENRICH_EGRESS_CLASSES)[number];
 
 export type EnrichConsentDecision = "granted" | "declined";
 
-/** `scopeRef` is `''` when the answer covers the vault. */
 export interface EnrichConsentRecord {
   capability: string;
   egress: EnrichEgressClass;
@@ -29,7 +30,6 @@ export interface EnrichConsentRecord {
 export interface EnrichConsentKey {
   capability: string;
   egress: EnrichEgressClass;
-  /** Omit (or `''`) for the vault-wide answer. */
   scopeRef?: string;
 }
 
@@ -38,6 +38,9 @@ export interface EnrichConsentInput extends EnrichConsentKey {
   receiptId?: string;
   now?: string;
 }
+
+/** `''` is this whole vault. */
+const ENRICH_SUBJECT_TYPE = "enrich.scope";
 
 interface ConsentRow {
   capability: string;
@@ -59,46 +62,80 @@ function toRecord(row: ConsentRow): EnrichConsentRecord {
   };
 }
 
-/** Replace any previous answer for the same key. Caller owns the transaction. */
+const CONSENT_SELECT = `SELECT verb AS capability, principal_id AS egress,
+    subject_id AS scope_ref, decision AS decision,
+    granted_at AS decided_at, receipt_id AS receipt_id
+  FROM share_authority
+  WHERE principal_kind = 'harness' AND subject_type = '${ENRICH_SUBJECT_TYPE}'
+    AND revoked_at IS NULL`;
+
+/**
+ * Replace any previous answer for the same key; the caller owns the
+ * transaction. An authority row is immutable except `revoked_at`, so a CHANGED
+ * answer revokes and re-writes rather than editing in place, which could not
+ * be audited; an IDENTICAL one only refreshes the receipt pointer (#883).
+ */
 export function recordEnrichConsent(
   vault: DatabaseSync,
   input: EnrichConsentInput
 ): void {
+  const scopeRef = input.scopeRef ?? "";
+  const now = input.now ?? nowIso();
+  const receiptId = input.receiptId ?? null;
+  const standing = readEnrichConsent(vault, input);
+  if (standing?.decision === input.decision) {
+    vault
+      .prepare(
+        `UPDATE share_authority SET receipt_id = ?
+          WHERE principal_kind = 'harness' AND principal_id = ?
+            AND subject_type = ? AND subject_id = ? AND verb = ?
+            AND revoked_at IS NULL`
+      )
+      .run(
+        receiptId,
+        input.egress,
+        ENRICH_SUBJECT_TYPE,
+        scopeRef,
+        input.capability
+      );
+    return;
+  }
   vault
     .prepare(
-      `INSERT INTO enrich_consent
-         (consent_id, capability, egress, scope_ref, decision, decided_at,
-          receipt_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (capability, egress, scope_ref) DO UPDATE SET
-         decision = excluded.decision,
-         decided_at = excluded.decided_at,
-         receipt_id = excluded.receipt_id`
+      `UPDATE share_authority SET revoked_at = ?
+        WHERE principal_kind = 'harness' AND principal_id = ?
+          AND subject_type = ? AND subject_id = ? AND verb = ?
+          AND revoked_at IS NULL`
+    )
+    .run(now, input.egress, ENRICH_SUBJECT_TYPE, scopeRef, input.capability);
+  vault
+    .prepare(
+      `INSERT INTO share_authority
+         (authority_id, principal_kind, principal_id, subject_type, subject_id,
+          verb, duration, expires_at, decision, granted_at, granted_by,
+          revoked_at, receipt_id)
+       VALUES (?, 'harness', ?, ?, ?, ?, 'standing', NULL, ?, ?, NULL, NULL, ?)`
     )
     .run(
       uuidv7(),
-      input.capability,
       input.egress,
-      input.scopeRef ?? "",
+      ENRICH_SUBJECT_TYPE,
+      scopeRef,
+      input.capability,
       input.decision,
-      input.now ?? nowIso(),
-      input.receiptId ?? null
+      now,
+      receiptId
     );
 }
 
-/**
- * Answer on record, or `null` when never asked at that scope. Not a cascade:
- * a vault-wide answer does not silently cover a narrower scope.
- */
+/** Not a cascade: a vault-wide answer never covers a narrower scope. */
 export function readEnrichConsent(
   vault: DatabaseSync,
   key: EnrichConsentKey
 ): EnrichConsentRecord | null {
   const row = vault
     .prepare(
-      `SELECT capability, egress, scope_ref, decision, decided_at, receipt_id
-         FROM enrich_consent
-        WHERE capability = ? AND egress = ? AND scope_ref = ?`
+      `${CONSENT_SELECT} AND verb = ? AND principal_id = ? AND subject_id = ?`
     )
     .get(key.capability, key.egress, key.scopeRef ?? "") as
     | ConsentRow
@@ -110,10 +147,30 @@ export function listEnrichConsent(vault: DatabaseSync): EnrichConsentRecord[] {
   return (
     vault
       .prepare(
-        `SELECT capability, egress, scope_ref, decision, decided_at, receipt_id
-           FROM enrich_consent
-          ORDER BY decided_at DESC, capability, egress, scope_ref`
+        `${CONSENT_SELECT}
+          ORDER BY granted_at DESC, verb, principal_id, subject_id`
       )
       .all() as unknown as ConsentRow[]
   ).map(toRecord);
+}
+
+/** The row id a receipt and the command's provenance stamp cite. */
+export function readEnrichConsentId(
+  vault: DatabaseSync,
+  key: EnrichConsentKey
+): string | undefined {
+  const row = vault
+    .prepare(
+      `SELECT authority_id FROM share_authority
+        WHERE principal_kind = 'harness' AND principal_id = ?
+          AND subject_type = ? AND subject_id = ? AND verb = ?
+          AND revoked_at IS NULL`
+    )
+    .get(
+      key.egress,
+      ENRICH_SUBJECT_TYPE,
+      key.scopeRef ?? "",
+      key.capability
+    ) as { authority_id: string } | undefined;
+  return row?.authority_id;
 }

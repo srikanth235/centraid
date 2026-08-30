@@ -13,23 +13,13 @@ import {
   VAULT_MIGRATIONS,
   VaultSchemaAheadError,
 } from "./migrate.js";
+import {
+  columnNames,
+  EDITABLE_DOMAIN_TABLES,
+  userVersionOf,
+} from "./migrate.test-helpers.js";
 import { listVaultEntities, resolveEntity } from "./tables.js";
 import { touchUpdatedAt } from "./updated-at.js";
-
-function userVersionOf(file: string): number {
-  const raw = new DatabaseSync(file);
-  const row = raw.prepare("PRAGMA user_version").get() as {
-    user_version: number;
-  };
-  raw.close();
-  return row.user_version;
-}
-
-function columnNames(db: DatabaseSync, table: string): string[] {
-  return (
-    db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
-  ).map((column) => column.name);
-}
 
 describe("schema/migrate", () => {
   test("ontology contract version stamps 1.4 (issue #450 canonical consolidation)", () => {
@@ -72,32 +62,12 @@ describe("schema/migrate", () => {
 
   test("editable domain rows expose and maintain updated_at consistently", () => {
     const db = openVaultDb();
-    const editableDomainTables = [
-      "people_profile",
-      "people_important_date",
-      "social_contact_card",
-      "tally_friend",
-      "tally_group",
-      "tally_expense",
-      "tally_expense_split",
-      "tally_expense_receipt",
-      "tally_expense_line_item",
-      "tally_expense_line_allocation",
-      "tally_settlement",
-      "tally_obligation",
-      "home_asset_item",
-      "home_warranty",
-      "home_maintenance_plan",
-      "home_utility_meter",
-      "home_meter_reading",
-      "business_client",
-      "business_project",
-      "business_time_entry",
-      "business_invoice",
-      "business_invoice_line",
-    ] as const;
-
-    for (const table of editableDomainTables) {
+    // Every domain table that carries `updated_at`, including the thirteen
+    // rung seven gave a trigger to (#883, ruling O-updated) — the tables the
+    // ruling names were exactly the ones a member could edit and watch the
+    // stamp stand still. `social_contact_card`, `tally_expense_receipt` and the
+    // ten home/business tables left the ontology in that same rung.
+    for (const table of EDITABLE_DOMAIN_TABLES) {
       const columns = db.vault.prepare(`PRAGMA table_info(${table})`).all() as {
         name: string;
       }[];
@@ -144,9 +114,8 @@ describe("schema/migrate", () => {
 
   test("migrations are idempotent via user_version", () => {
     const db = openVaultDb();
-    // openVaultDb already migrated; user_version must land exactly on the top
-    // of the ladder, and re-running migrate() against an already-migrated
-    // handle must be a no-op (proven directly below).
+    // openVaultDb already migrated: user_version lands exactly on the top of
+    // the ladder.
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
@@ -176,20 +145,20 @@ describe("schema/migrate", () => {
   });
 
   test("fresh vaults apply the composed baseline plus every rung above it", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(5);
+    expect(VAULT_MIGRATIONS).toHaveLength(7);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(5);
+    expect(version.user_version).toBe(7);
     for (const table of [
       "locker_auth_credential",
       "core_entity_revision",
-      "tally_expense_receipt",
       "social_contact_channel",
       "notifications_notice",
       "share_circle_grant",
-      "share_grant",
+      "share_authority",
+      "share_delivery_config",
       "share_fulfillment",
     ]) {
       expect(
@@ -208,6 +177,18 @@ describe("schema/migrate", () => {
         )
         .get()
     ).toBeUndefined();
+    // Rung six drops what it supersedes on the fresh path too (#883).
+    for (const dropped of ["share_grant", "enrich_consent"]) {
+      expect(
+        db.vault
+          .prepare(
+            `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`
+          )
+          .get(dropped),
+        dropped
+      ).toBeUndefined();
+    }
+    expect(columnNames(db.vault, "consent_device")).not.toContain("trust");
     db.close();
   });
 
@@ -243,12 +224,10 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  // Issue #821 rung two. The v1 shape is spelled out here verbatim rather than
-  // reconstructed from the current DDL: the point of the test is a file this
-  // build did NOT create, and the runner is left untouched so the rung is
-  // exercised exactly as a real upgrade would exercise it. Only the two tables
-  // the rung touches are needed — `migrate()` starts at user_version 1, so the
-  // baseline rung (which needs openVaultDb's custom SQL functions) never runs.
+  // Rung two (#821). The v1 shape is verbatim rather than reconstructed from
+  // the current DDL: the point is a file this build did NOT create. Only the
+  // two tables the rung touches are needed — `migrate()` starts at
+  // user_version 1, so the baseline rung never runs.
   const V1_PEOPLE_DDL = `
 CREATE TABLE core_party (
   party_id     TEXT PRIMARY KEY,
@@ -309,19 +288,17 @@ ${touchUpdatedAt("people_profile", "profile_id")}
     const before = readAll();
 
     // Stops at rung two: this file holds only the two people tables, and rung
-    // three reads the commons plane. The grant rung has its own upgrade test
-    // (migrate-share-grant.test.ts) with the shape it needs.
+    // three reads the commons plane.
     migrate(db, VAULT_MIGRATIONS.slice(0, 2));
 
     expect(
       (db.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version
     ).toBe(2);
-    // Every column of every pre-existing row survives the rebuild unchanged,
-    // trash pair included.
+    // Every column of every pre-existing row survives the rebuild.
     expect(readAll()).toStrictEqual(before);
 
-    // The relaxed floor is now real, and negatives are still refused.
+    // The relaxed floor is real; negatives are still refused.
     db.exec(
       `INSERT INTO core_party (party_id, kind, display_name)
        VALUES ('party-never', 'person', 'Never')`
@@ -420,40 +397,48 @@ ${touchUpdatedAt("people_profile", "profile_id")}
     db.close();
   });
 
-  test("the composed rung includes receipt line-item storage", () => {
+  test("receipt line items hang off the attachment spine, not an app-local table", () => {
     const db = openVaultDb();
-    expect(columnNames(db.vault, "tally_expense_receipt")).toStrictEqual(
-      expect.arrayContaining([
-        "receipt_id",
-        "expense_id",
-        "content_id",
-        "created_at",
-        "updated_at",
-      ])
-    );
+    // A receipt is the `role='receipt'` attachment on the expense (#883); typed
+    // lines belong to the EXPENSE, and their `receipt_id` names an attachment.
+    expect(
+      db.vault
+        .prepare(
+          `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tally_expense_receipt'`
+        )
+        .get()
+    ).toBeUndefined();
     expect(columnNames(db.vault, "tally_expense_line_item")).toStrictEqual(
       expect.arrayContaining([
         "line_item_id",
+        "expense_id",
         "receipt_id",
         "kind",
         "amount_minor",
         "sort_order",
       ])
     );
+    const foreignKeys = db.vault
+      .prepare(`PRAGMA foreign_key_list(tally_expense_line_item)`)
+      .all() as { table: string; from: string; on_delete: string }[];
+    const receiptFk = foreignKeys.find((fk) => fk.from === "receipt_id");
+    expect(receiptFk?.table).toBe("core_attachment");
+    // SET NULL, not CASCADE: a by-line division is legal without a photo.
+    expect(receiptFk?.on_delete).toBe("SET NULL");
     db.close();
   });
 
   test("the orphan-grace tombstone table exists on a fresh vault (issue #439 R4)", () => {
     const db = openVaultDb();
-    // `blob_orphan` is plumbing (like blob_replica/blob_access), not a registered
-    // logical entity, so the registry sweep above cannot cover it — assert directly.
+    // `blob_orphan` is plumbing, not a registered entity, so the registry sweep
+    // above cannot cover it.
     const row = db.vault
       .prepare(
         `SELECT name FROM sqlite_master WHERE type='table' AND name='blob_orphan'`
       )
       .get() as { name: string } | undefined;
     expect(row?.name).toBe("blob_orphan");
-    // first_orphaned_at must be present; a valid row round-trips as INTEGER ms.
+    // A valid row round-trips as INTEGER ms.
     db.vault
       .prepare(
         `INSERT INTO blob_orphan (sha256, first_orphaned_at) VALUES (?, ?)`
@@ -484,8 +469,7 @@ ${touchUpdatedAt("people_profile", "profile_id")}
         )
         .run()
     ).toThrow(/CHECK/u);
-    // people_profile.cadence_days floors at 0, not 1 (#821): zero is the
-    // storable "never reach out", negative days are still refused.
+    // Floors at 0, not 1 (#821): zero is a storable "never reach out".
     const now = new Date().toISOString();
     db.vault
       .prepare(

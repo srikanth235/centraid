@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#821 restores native People and Docs on the phone, so the Hermes index chunk grows 6.36 MB → 7.14 MB. Ceiling maxLargestChunkBytes 7000000 → 7750000 (observed 7142105 + ~8% headroom). maxTotalBytes is unchanged. Prior: #659.",
+  "approvedDeviation": "#883 ships the native grant sheet, composed replica reads, and the pin/download engine on the phone, so the Hermes index chunk grows past the #821 7.75 MB ceiling (CI mobile-smoke observed 7,958,356 B iOS / 7,978,937 B Android). Ceiling maxLargestChunkBytes 7750000 → 8220000 (largest observed + ~3% headroom). maxTotalBytes is unchanged. No second copy of kit was added; the growth is the grant/replica/offline work this umbrella bought. Prior: #821.",
   "_comment": "Experience budgets for the Expo iOS/Android app (apps/mobile). Perceived latency only. See README.md in this directory for the status vocabulary and the year-3 volume table. Ratcheted tighten-only via PERF_BUDGET_SOURCES.",
   "surface": "mobile",
   "metrics": {
@@ -33,9 +33,18 @@
       "probe": "NONE TODAY. Needs a fixed-delay stub turn from tests/agent-e2e-mobile/lib/ci-gateway.mjs."
     },
     "reconnectToFresh": {
-      "status": "unmeasured",
-      "volume": "50,000 replica rows (declared year-3, docs/mobile-offline.md)",
-      "probe": "NONE TODAY. tests/scale/replica-bootstrap.scale.test.ts measures the windowed bootstrap in-process; the perceived number is the phone's screen showing stale data after AppState resume, which needs a device-side timestamp the app does not currently expose."
+      "status": "measured",
+      "volume": "50,000 replica rows (declared year-3, docs/mobile-offline.md) + 200 changes committed while backgrounded, then a 200-row newest-first screen page",
+      "probe": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/mobile-reconnect-to-fresh.scale.test.ts (also `bun run test:scale`) — the nightly scale lane rather than the package suite, because this gates on WALL CLOCK and `bun run test` drives 29 turbo tasks across four threads: under that contention the probe read 3,292 ms against this 1,800 ms ceiling while reading 482 ms alone, so the lane's `fileParallelism: false` forked pool is what makes the number mean anything. It drives the production createNativeReplicaSession: bootstrap, AppState 'background' (feed deactivated), server state advances unseen, AppState 'active', then polls the read a Photos/Docs screen issues until every missed change is on the page. The clock starts on the AppState transition and stops when the SCREEN'S read is fresh, not when the delta lands in SQLite.",
+      "ceilingMs": 1800,
+      "_provenance": {
+        "at": "2026-08-28",
+        "host": "linux x64 development container, Node SQLite driver under the production native session",
+        "observedMs": 555,
+        "observedSpreadMs": "503 / 509 / 510 / 555 over four consecutive runs",
+        "note": "RE-MEASURED AFTER PUSHDOWN (#883 C3/D1) and tightened from 20,000 ms. The previous entry measured 6,324-8,382 ms and said in as many words that the screen read was the shrinker: every read materialised all 50,000 rows, JSON.parsed each payload and filtered/sorted in JavaScript before the 200-row limit applied. The compiled read plan made that read one SQL statement, and the same probe now resumes to a fresh screen in ~0.5 s — a 15x fall with no change to what is measured. Scope is UNCHANGED and this ceiling must not be read as the whole interval. INCLUDED: the AppState transition, change-feed reactivation, the delta pull loop, applying 200 missed changes, and the 200-row newest-first screen read that has to return them. EXCLUDED: real network RTT (the gateway is an in-process fetch double - the gateway's side of the same interval is measured over real HTTP at 60 ms by tests/scale/replica-reconnect.scale.test.ts, see gateway.json), device flash I/O (node:sqlite in memory here, op-sqlite on flash there), and React render. So this is still a LOWER BOUND on what the owner feels. The ceiling is ~3.2x the slowest of four samples because a shared CI runner is materially slower than this host and four samples cannot bound its jitter; TIGHTEN further once ~10 nightly samples exist.",
+        "headroom": "~3.2x slowest observed (four samples, single host)"
+      }
     },
     "mountedReplicaReadWithOutbox": {
       "status": "measured",
@@ -58,7 +67,7 @@
       "volume": "n/a — build artifact, independent of vault size",
       "probe": "scripts/perf/app-weight.mjs --surface mobile (weighs dist/mobile-bundle-smoke/ios and .../android, both produced by the existing `bun run --cwd apps/mobile ci:bundle` in the ci.yml mobile-smoke job)",
       "maxTotalBytes": 12582912,
-      "maxLargestChunkBytes": 7750000,
+      "maxLargestChunkBytes": 8220000,
       "_provenance": {
         "at": "2026-07-31",
         "host": "darwin arm64, `bun run --cwd apps/mobile ci:bundle` (expo export, both platforms) in this worktree",

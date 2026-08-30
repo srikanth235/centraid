@@ -7,9 +7,12 @@
 //
 // The matching happens server-side over fields the payload never returns, and
 // the results are the same secret-free row the list draws.
+//
+// WINDOWED (#883 C4): two letters can match it all.
 
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
+import type { ListRenderItemInfo } from "react-native";
 
 import {
   SEARCH_MATCHED,
@@ -42,11 +45,14 @@ export default function LockerSearchView(
   const [term, setTerm] = useState(props.term);
   const results = props.results;
 
-  return (
-    <ScrollView
-      contentContainerStyle={styles.scroll}
-      keyboardShouldPersistTaps="handled"
-    >
+  const renderItem = ({
+    item,
+  }: ListRenderItemInfo<LockerRowData>): React.JSX.Element => (
+    <LockerRow row={item} onOpen={props.onOpen} />
+  );
+
+  const head = (
+    <View>
       <View style={styles.field}>
         <TextInput
           accessibilityLabel={SEARCH_PLACEHOLDER}
@@ -68,21 +74,26 @@ export default function LockerSearchView(
       <Text style={styles.note}>{SEARCH_NOTE}</Text>
 
       {results === null ? null : (
-        <View>
-          <SectionBlock
-            label={SEARCH_RESULTS}
-            meta={`${String(results.length)} ${SEARCH_MATCHED}`}
-          />
-          {results.map((row) => (
-            <LockerRow
-              key={lockerRowKey(row)}
-              row={row}
-              onOpen={props.onOpen}
-            />
-          ))}
-        </View>
+        <SectionBlock
+          label={SEARCH_RESULTS}
+          meta={`${String(results.length)} ${SEARCH_MATCHED}`}
+        />
       )}
-    </ScrollView>
+    </View>
+  );
+
+  return (
+    <FlatList
+      contentContainerStyle={styles.scroll}
+      data={results ?? []}
+      keyboardShouldPersistTaps="handled"
+      keyExtractor={lockerRowKey}
+      ListHeaderComponent={head}
+      initialNumToRender={12}
+      maxToRenderPerBatch={12}
+      renderItem={renderItem}
+      windowSize={7}
+    />
   );
 }
 

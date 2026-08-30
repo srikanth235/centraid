@@ -119,22 +119,22 @@ describe("ingest", () => {
       sort_name: "Kumar, Ravi",
       birth_date: "1988-03-12",
     });
+    // A vCard's EMAIL and TEL are REACH and land on the channel store; the
+    // register keeps identity keys, of which this card carries none (#883).
     const ids = db.vault
       .prepare(
-        "SELECT scheme, value, is_primary FROM core_party_identifier WHERE party_id = ? ORDER BY scheme"
+        `SELECT kind, normalized_value AS value, is_preferred AS is_primary
+           FROM social_contact_channel WHERE party_id = ? ORDER BY kind`
       )
       .all(ravi.party_id);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect(ids.map((row) => ({ ...row }))).toStrictEqual([
-      { scheme: "email", value: "ravi@example.com", is_primary: 1 },
-      { scheme: "tel", value: "+919876543210", is_primary: 1 },
+      { kind: "email", value: "ravi@example.com", is_primary: 1 },
+      { kind: "phone", value: "+919876543210", is_primary: 1 },
     ]);
   });
 
   test("vCard re-import resolves handles to the existing party — never a duplicate person", () => {
     gw.importVcards(owner, VCF);
-    // Same person exported by a different app: same email, new phone.
     const again = [
       "BEGIN:VCARD",
       "FN:R. Kumar (work)",
@@ -148,7 +148,7 @@ describe("ingest", () => {
       .prepare(`SELECT count(*) AS n FROM core_party WHERE kind='person'`)
       .get() as { n: number };
     expect(people.n).toBe(3); // owner + Ravi + Meera, no fourth
-    // The new phone backfilled onto the existing party, non-primary.
+    // Backfilled onto the existing party, non-primary.
     const ravi = db.vault
       .prepare(
         `SELECT party_id FROM core_party WHERE display_name = 'Ravi Kumar'`
@@ -156,7 +156,9 @@ describe("ingest", () => {
       .get() as { party_id: string };
     const tels = db.vault
       .prepare(
-        `SELECT value, is_primary FROM core_party_identifier WHERE party_id = ? AND scheme='tel' ORDER BY value`
+        `SELECT normalized_value AS value, is_preferred AS is_primary
+           FROM social_contact_channel WHERE party_id = ? AND kind = 'phone'
+          ORDER BY value`
       )
       .all(ravi.party_id);
     expect(tels.map((row) => ({ ...row }))).toStrictEqual([

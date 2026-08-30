@@ -1,10 +1,18 @@
-// The reading room (Notes spec §5): the card, the row, and their two arrangements.
-// Every surface reads `promote()`, so none can disagree what a note is called.
-// Nothing here notifies, counts unread, or keeps a streak.
+// The reading room (Notes spec §5): every surface reads `promote()`, so none
+// can disagree what a note is called.
+import { useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
+import { uniformModel, virtualItemAria } from "../../_shared/virtual-window.ts";
+import {
+  useMeasuredBlockHeight,
+  useScrollHost,
+  useVirtualWindow,
+  virtualBlockProps,
+  VirtualSpacer,
+} from "../../_shared/VirtualWindow.tsx";
 import {
   ageLabel,
   placeholderLabel,
@@ -16,7 +24,6 @@ import type { LibraryView, Note } from "../types.ts";
 
 import styles from "./Library.module.css";
 
-/** Everything a card and a row both need. */
 interface NoteProps {
   note: Note;
   onOpen: (noteId: string) => void;
@@ -24,7 +31,7 @@ interface NoteProps {
   search?: string;
 }
 
-/** Sized by the surface's own `--target-min`, never a media query. */
+/** Sized by `--target-min`, never a media query. */
 function Pin({ note, onTogglePin }: Pick<NoteProps, "note" | "onTogglePin">) {
   const pinned = note.pinned === 1;
   return (
@@ -43,7 +50,7 @@ function Pin({ note, onTogglePin }: Pick<NoteProps, "note" | "onTogglePin">) {
   );
 }
 
-/** Content type is STATED per kind, not three identical empty cards. */
+/** Content type is stated per kind, not one blank card for all three. */
 function Placeholder({ kind }: { kind: "screenshot" | "link-only" | "audio" }) {
   return (
     <div className={styles.placeholder} data-kind={kind}>
@@ -52,7 +59,6 @@ function Placeholder({ kind }: { kind: "screenshot" | "link-only" | "audio" }) {
   );
 }
 
-/** Age · notebook · marks. */
 function Foot({ note }: { note: Note }): ReactNode {
   const tally = tallyLabel(note.check);
   const notebook = (note.notebook_names ?? [])[0];
@@ -81,7 +87,7 @@ export function NoteCard({ note, onOpen, onTogglePin, search }: NoteProps) {
         <span
           className={styles.title}
           data-untitled={String(shown.untitled)}
-          // Member text (imports, share targets) — sanitised at the render boundary.
+          // Member text — sanitised at the render boundary.
         >
           {displayText(shown.heading)}
         </span>
@@ -100,11 +106,29 @@ export function NoteCard({ note, onOpen, onTogglePin, search }: NoteProps) {
   );
 }
 
-export function NoteRow({ note, onOpen, onTogglePin, search }: NoteProps) {
+export function NoteRow({
+  note,
+  onOpen,
+  onTogglePin,
+  search,
+  position,
+}: NoteProps & {
+  /** The row IS the list item, never a wrapper around it. */
+  position?: { index: number; setSize: number };
+}) {
   const shown = promote(note);
   const meta = search && note.snippet ? note.snippet : shown.preview;
+  const Box = position ? "li" : "div";
   return (
-    <div className={styles.row}>
+    <Box
+      className={styles.row}
+      {...(position
+        ? {
+            ...virtualBlockProps(position.index),
+            ...virtualItemAria(position.index, position.setSize),
+          }
+        : {})}
+    >
       <button
         type="button"
         className={`kit-plain-btn ${styles.rowOpen}`}
@@ -120,7 +144,7 @@ export function NoteRow({ note, onOpen, onTogglePin, search }: NoteProps) {
       </span>
       <Pin note={note} onTogglePin={onTogglePin} />
       <PendingWriteActions row={note} onEdit={() => onOpen(note.note_id)} />
-    </div>
+    </Box>
   );
 }
 
@@ -130,13 +154,12 @@ export interface NoteSetProps {
   onOpen: (noteId: string) => void;
   onTogglePin: (note: Note) => void;
   search?: string;
-  /** Empty-set stand-in once the read has landed. */
+  /** Shown once the read has landed, never while loading. */
   empty?: ReactNode;
-  /** Window-end line when the projection has more. */
   foot?: ReactNode;
 }
 
-/** Both arrangements say the same things; width changes columns and measure, never type size. */
+/** Width changes columns and measure, never type size. */
 export function NoteSet({
   notes,
   view,
@@ -147,11 +170,11 @@ export function NoteSet({
   foot,
 }: NoteSetProps): ReactNode {
   if (notes.length === 0) return <>{empty}</>;
-  return (
-    <>
-      <div className={view === "cards" ? styles.cards : styles.rows}>
-        {notes.map((note) =>
-          view === "cards" ? (
+  if (view === "cards") {
+    return (
+      <>
+        <div className={styles.cards}>
+          {notes.map((note) => (
             <NoteCard
               key={note.note_id}
               note={note}
@@ -159,18 +182,71 @@ export function NoteSet({
               onTogglePin={onTogglePin}
               {...(search ? { search } : {})}
             />
-          ) : (
-            <NoteRow
-              key={note.note_id}
-              note={note}
-              onOpen={onOpen}
-              onTogglePin={onTogglePin}
-              {...(search ? { search } : {})}
-            />
-          )
-        )}
-      </div>
+          ))}
+        </div>
+        {foot}
+      </>
+    );
+  }
+  return (
+    <>
+      <WindowedRows
+        notes={notes}
+        onOpen={onOpen}
+        onTogglePin={onTogglePin}
+        {...(search ? { search } : {})}
+      />
       {foot}
     </>
+  );
+}
+
+/** Replaced by the first measurement. */
+const ROW_RUNG_FALLBACK = 44;
+
+/**
+ * The row arrangement, windowed (#883 C4).
+ *
+ * THE CARD ARRANGEMENT IS NOT WINDOWED — a stated gap. `.cards` packs with
+ * `auto-fill`/`minmax`, so the browser owns the column count a per-block
+ * height would need. Deriving it in JS copies the CSS packing rule and drifts
+ * when the minmax changes; reading it back from the DOM (children grouped by
+ * `offsetTop`) is the shape a follow-up takes.
+ */
+function WindowedRows({
+  notes,
+  onOpen,
+  onTogglePin,
+  search,
+}: {
+  notes: readonly Note[];
+  onOpen: (noteId: string) => void;
+  onTogglePin: (note: Note) => void;
+  search?: string;
+}): ReactNode {
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const scrollRef = useScrollHost(listRef);
+  const rowHeight = useMeasuredBlockHeight(listRef, ROW_RUNG_FALLBACK);
+  const model = useMemo(
+    () => uniformModel(notes.length, rowHeight),
+    [notes.length, rowHeight]
+  );
+  const slice = useVirtualWindow({ model, scrollRef, listRef });
+
+  return (
+    <ul className={styles.rows} ref={listRef}>
+      <VirtualSpacer height={slice.padStart} as="li" />
+      {notes.slice(slice.start, slice.end).map((note, offset) => (
+        <NoteRow
+          key={note.note_id}
+          note={note}
+          position={{ index: slice.start + offset, setSize: notes.length }}
+          onOpen={onOpen}
+          onTogglePin={onTogglePin}
+          {...(search ? { search } : {})}
+        />
+      ))}
+      <VirtualSpacer height={slice.padEnd} as="li" />
+    </ul>
   );
 }

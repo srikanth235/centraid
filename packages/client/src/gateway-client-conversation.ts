@@ -1,7 +1,8 @@
 /*
  * governance: allow-repo-hygiene file-size-limit (#567) one browser-safe conversation transport owns the route DTOs and SSE parser together so wire additions cannot drift between request and stream handling
  *
- * Renderer-side chat transport over direct HTTP (#141), no desktop relay. SSE
+ * Renderer-side conversation transport over direct HTTP (#141), no desktop
+ * relay. SSE
  * uses fetch + a ReadableStream reader, never `EventSource`: a turn needs a
  * POST body and the Bearer header.
  */
@@ -70,7 +71,7 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export interface StreamTurnInput {
   conversationId: string;
   message: string;
-  /** Absent = builder chat; 'ask' takes the vault register (#286). */
+  /** Absent = the builder conversation; 'ask' takes the vault register (#286). */
   register?: "ask" | "build";
   /** Does not mutate the device default. */
   harnessKind?: string;
@@ -79,14 +80,14 @@ export interface StreamTurnInput {
   attachments?: ConversationAttachmentRef[];
   /** Recorded as `turns.retry_of`, which collapses the pair into a pager. */
   retryOf?: string;
-  /** A fresh UUID per user send, REUSED on every resend of that message, so a
-   *  retry replays the recorded turn instead of double-running it (#420). */
+  /** Fresh per user send, REUSED on every resend, so a retry replays the
+   *  recorded turn instead of double-running it (#420). */
   idempotencyKey?: string;
   /** Every provider approved so far must ride EACH resend (#567). */
   providerConsent?: string | string[];
   additionalDirectories?: string[];
   workspaceKind?: "vault-data" | "app" | "draft";
-  /** A conversation is pinned to exactly ONE vault for its whole life (#599). */
+  /** A conversation is pinned to ONE vault for its whole life (#599). */
   scopeId?: string;
 }
 

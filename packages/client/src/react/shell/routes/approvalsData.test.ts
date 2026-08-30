@@ -189,12 +189,12 @@ describe(buildScopeRequestRow, () => {
       purpose: "dpv:ServiceProvision",
       scopes: [
         { schema: "core", verbs: "read" },
-        { schema: "business", table: "invoice", verbs: "act" },
+        { schema: "schedule", table: "task", verbs: "act" },
       ],
       requestedAt: new Date().toISOString(),
     };
     expect(buildScopeRequestRow(row).scopeSummary).toBe(
-      "core (read), business.invoice (act)"
+      "core (read), schedule.task (act)"
     );
   });
 });
@@ -460,7 +460,7 @@ describe("what the frame says about Notifications", () => {
   });
 });
 
-// The egress-consent ledger's rows (#807).
+// Egress-consent ledger rows (#807).
 describe(buildEnrichConsentRow, () => {
   it("reads an answer back as one line, refusals stated as plainly as grants", () => {
     const declined = buildEnrichConsentRow({

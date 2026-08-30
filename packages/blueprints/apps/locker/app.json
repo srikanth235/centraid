@@ -300,7 +300,15 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.tag",
+        "locker.item",
+        "locker.item_alias",
+        "locker.item_field",
+        "locker.item_history"
+      ]
     },
     {
       "name": "edit-item",
@@ -396,7 +404,14 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.tag",
+        "locker.item",
+        "locker.item_alias",
+        "locker.item_history"
+      ]
     },
     {
       "name": "trash-item",
@@ -427,7 +442,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["locker.item"]
     },
     {
       "name": "restore-item",
@@ -458,7 +473,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["locker.item"]
     },
     {
       "name": "purge-item",
@@ -489,7 +504,12 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.tag",
+        "locker.item"
+      ]
     },
     {
       "name": "star-item",
@@ -520,7 +540,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
     },
     {
       "name": "unstar-item",
@@ -551,7 +571,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["core.concept", "core.concept_scheme", "core.tag"]
     },
     {
       "name": "archive-item",
@@ -582,7 +602,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["locker.item", "locker.item_history"]
     },
     {
       "name": "unarchive-item",
@@ -613,7 +633,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["locker.item", "locker.item_history"]
     },
     {
       "name": "duplicate-item",
@@ -644,7 +664,15 @@
           }
         }
       },
-      "writes": []
+      "writes": [
+        "core.concept",
+        "core.concept_scheme",
+        "core.tag",
+        "locker.item",
+        "locker.item_address",
+        "locker.item_field",
+        "locker.item_history"
+      ]
     },
     {
       "name": "set-field",
@@ -697,7 +725,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["locker.item_field"]
     },
     {
       "name": "remove-field",
@@ -732,7 +760,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["locker.item_field"]
     },
     {
       "name": "set-addresses",
@@ -781,7 +809,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["locker.item_address"]
     },
     {
       "name": "set-passkey",
@@ -831,7 +859,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["locker.item_passkey"]
     },
     {
       "name": "clear-passkey",
@@ -862,7 +890,7 @@
           }
         }
       },
-      "writes": []
+      "writes": ["locker.item_passkey"]
     },
     {
       "name": "export",

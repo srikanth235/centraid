@@ -81,5 +81,3 @@ export const notesPendingProjection = definePendingProjection({
     },
   },
 });
-
-export default notesPendingProjection;

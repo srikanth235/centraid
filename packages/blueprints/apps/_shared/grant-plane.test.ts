@@ -1,15 +1,9 @@
-// The grant plane's reading law (#825).
-//
-// Three claims, and they are the ones that keep a sheet from lying about a
-// share:
-//
-//  1. ABSENT IS NEVER EMPTY. A grant addressed to nobody, a vault that has
-//     never reached a person, and a severed link answer three different
-//     tokens — none of them is allowed to arrive wearing another's clothes.
-//  2. THE REGISTRY DECIDES THE VERBS. `edit` exists only where the gateway's
-//     declared registry answers it; an unreadable registry offers nothing
-//     rather than everything.
-//  3. THE WIRE IS UNTRUSTED. A drifted row is dropped, never half-rendered.
+// The grant plane's reading law (#825, #883): absent is never empty, the
+// registry decides the verbs, the wire is untrusted, and the vault says where
+// a grant stands. Each test below is the statement of one of them.
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, test } from "vitest";
 
 import {
@@ -17,14 +11,15 @@ import {
   channelReach,
   defaultCapability,
   drawableCapability,
-  grantDelivery,
+  GRANT_LOCI,
+  GRANT_PHRASES,
   grantOverSubject,
   grantRequestFor,
   liveGrants,
-  offersCapability,
   parseChannel,
   parseGrant,
   parseGrants,
+  parseLoci,
   parseSubjectOffers,
   subjectNoun,
 } from "./grant-plane.ts";
@@ -54,6 +49,109 @@ const WIRE_GRANT = {
 function grant(overrides: Partial<GrantRecord> = {}): GrantRecord {
   return { ...parseGrant(WIRE_GRANT)!, ...overrides };
 }
+
+describe("the vault's own words", () => {
+  /** A source scan, not an import: blueprints cannot import `@centraid/vault`
+   *  (Node-only), which is why `GRANT_PHRASES` is mirrored here at all. */
+  test("the phrase union is exactly the vault's, in the vault's order", () => {
+    const source = readFileSync(
+      path.resolve(import.meta.dirname, "../../../vault/src/grant/phrases.ts"),
+      "utf8"
+    );
+    const declaration = /const GRANT_PHRASES = \[(?<body>[^\]]*)\]/u.exec(
+      source
+    );
+    const vaultPhrases = [
+      ...(declaration?.groups?.body ?? "").matchAll(/"(?<phrase>[^"]+)"/gu),
+    ].map((match) => match.groups!.phrase!);
+    expect(vaultPhrases.length).toBeGreaterThan(0);
+    expect([...GRANT_PHRASES]).toStrictEqual(vaultPhrases);
+  });
+
+  test("the locus union is exactly the vault's three", () => {
+    // Same reason as the phrases: a fourth locus in the vault must not be
+    // silently unparseable here.
+    const source = readFileSync(
+      path.resolve(
+        import.meta.dirname,
+        "../../../vault/src/grant/authority-registry.ts"
+      ),
+      "utf8"
+    );
+    const declaration = /export type EnforcementLocus =(?<body>[^;]*);/u.exec(
+      source
+    );
+    const vaultLoci = [
+      ...(declaration?.groups?.body ?? "").matchAll(/"(?<locus>[a-z]+)"/gu),
+    ].map((match) => match.groups!.locus!);
+    expect(vaultLoci.length).toBeGreaterThan(0);
+    expect([...GRANT_LOCI].toSorted()).toStrictEqual(vaultLoci.toSorted());
+  });
+
+  test("the locus and its promise ride the wire, or nothing is claimed", () => {
+    const carried = parseGrant({
+      ...WIRE_GRANT,
+      locus: "remote",
+      promise: "their vault is asked to remove its copy",
+    });
+    expect(carried?.locus).toBe("remote");
+    expect(carried?.promise).toBe("their vault is asked to remove its copy");
+
+    // A wire that said nothing leaves both absent — a surface may not promise
+    // on the vault's behalf.
+    const silent = parseGrant({ ...WIRE_GRANT, locus: "elsewhere" });
+    expect(silent?.locus).toBeUndefined();
+    expect(silent?.promise).toBeUndefined();
+
+    expect(
+      parseLoci({ boundary: "refused at the door", remote: "" })
+    ).toStrictEqual({
+      boundary: "refused at the door",
+    });
+    expect(parseLoci(null)).toStrictEqual({});
+  });
+
+  test("the phrase and its reason ride the wire; a drifted phrase is unstated", () => {
+    const standing = parseGrant({
+      ...WIRE_GRANT,
+      phrase: "shared",
+      reason: "the vault it addresses is holding it",
+    });
+    expect(standing?.phrase).toBe("shared");
+    expect(standing?.reason).toBe("the vault it addresses is holding it");
+
+    // A word this seat does not know is NOT rounded to a neighbouring one: the
+    // three phrases are not interchangeable, so the row simply does not say.
+    const drifted = parseGrant({ ...WIRE_GRANT, phrase: "half-shared" });
+    expect(drifted?.phrase).toBeUndefined();
+    expect(drifted?.grantId).toBe("grant-1");
+    // And a wire that said nothing at all leaves both unstated.
+    expect(parseGrant(WIRE_GRANT)?.phrase).toBeUndefined();
+    expect(parseGrant(WIRE_GRANT)?.reason).toBeNull();
+  });
+
+  test("a withdrawal is asked until the audience confirms it", () => {
+    const asked = parseGrant({
+      ...WIRE_GRANT,
+      revokedAt: "2026-08-02T10:00:00.000Z",
+      phrase: "withdrawn",
+      confirmed: false,
+      reason: "a vault holding a copy has been asked to remove it",
+    });
+    expect(asked?.confirmed).toBe(false);
+    const settled = parseGrant({
+      ...WIRE_GRANT,
+      revokedAt: "2026-08-02T10:00:00.000Z",
+      phrase: "withdrawn",
+      confirmed: true,
+    });
+    expect(settled?.confirmed).toBe(true);
+    // Absent is not `false`: unstated and "not yet confirmed" are two facts.
+    expect(
+      parseGrant({ ...WIRE_GRANT, phrase: "withdrawn" })?.confirmed
+    ).toBeUndefined();
+  });
+});
 
 describe("parsing the grant wire", () => {
   test("a complete grant survives with its delivery rows", () => {
@@ -110,25 +208,6 @@ describe("parsing the grant wire", () => {
 });
 
 describe("absent is never empty", () => {
-  test("no delivery row is its own answer, not a failed delivery", () => {
-    expect(grantDelivery(grant({ fulfillment: [] }))).toBe("none");
-  });
-
-  test("a grant half delivered and half waiting reads as still owed", () => {
-    const mixed = grant({
-      fulfillment: [
-        { peerVaultId: "a", state: "delivered", updatedAt: "", detail: null },
-        {
-          peerVaultId: "b",
-          state: "awaiting_channel",
-          updatedAt: "",
-          detail: null,
-        },
-      ],
-    });
-    expect(grantDelivery(mixed)).toBe("awaiting_channel");
-  });
-
   test("never reached, invited and severed are three different facts", () => {
     expect(channelReach(parseChannel(null))).toBe("never-reached");
     expect(channelReach(parseChannel({ state: "invited" }))).toBe("invited");
@@ -154,13 +233,15 @@ describe("what the registry offers", () => {
   ]);
 
   test("edit is offered only where a strategy answers it", () => {
-    expect(offersCapability(offers, "tally.group", "edit")).toBe(true);
-    expect(offersCapability(offers, "core.document", "edit")).toBe(false);
+    expect(capabilitiesFor(offers, "tally.group")).toStrictEqual([
+      "view",
+      "edit",
+    ]);
+    expect(capabilitiesFor(offers, "core.document")).toStrictEqual(["view"]);
   });
 
   test("a subject the registry does not name is refused, not defaulted open", () => {
     expect(capabilitiesFor(offers, "locker.item")).toStrictEqual([]);
-    expect(offersCapability(offers, "locker.item", "view")).toBe(false);
   });
 
   test("the noun comes from the placement registry, never the wire spelling", () => {

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX, KeyboardEvent, ReactNode } from "react";
 
 import type { ConversationAttachmentRef } from "../../../gateway-client.js";
+import Button from "../../ui/Button.js";
 import Icon from "../../ui/Icon.js";
+import ShellModal from "../../ui/ShellModal.js";
 import {
   assistantConsequence,
   assistantWorkingLine,
@@ -229,8 +231,8 @@ export default function AssistantCompanion({
           onClick={() => setOpen(false)}
         />
       ) : null}
-      <dialog
-        open
+      <ShellModal
+        layer="inline"
         className={[
           css.panel,
           className,
@@ -238,8 +240,8 @@ export default function AssistantCompanion({
         ]
           .filter(Boolean)
           .join(" ")}
-        data-surface={surface}
-        aria-label="Assistant companion"
+        data={{ "data-surface": surface }}
+        label="Assistant companion"
       >
         <header className={css.head}>
           <Icon name="Sparkle" size={26} />
@@ -267,13 +269,13 @@ export default function AssistantCompanion({
           <div className={css.contextRow}>
             <span className={css.contextChip}>
               <span>Reading {contextLabel}</span>
-              <button
-                type="button"
-                aria-label="Remove page context"
+              <Button
+                variant="quiet"
+                ariaLabel="Remove page context"
                 onClick={() => setContextIncluded(false)}
               >
                 <Icon name="X" size={12} />
-              </button>
+              </Button>
             </span>
           </div>
         ) : null}
@@ -310,13 +312,13 @@ export default function AssistantCompanion({
               {attachments.map((attachment) => (
                 <span className={css.attachmentChip} key={attachment.id}>
                   <span>{attachment.label}</span>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${attachment.label}`}
+                  <Button
+                    variant="quiet"
+                    ariaLabel={`Remove ${attachment.label}`}
                     onClick={() => onRemoveAttachment(attachment.id)}
                   >
                     <Icon name="X" size={11} />
-                  </button>
+                  </Button>
                 </span>
               ))}
             </div>
@@ -363,6 +365,7 @@ export default function AssistantCompanion({
                   {ATTACHMENT_SOURCES.map(([source, label]) => (
                     <button
                       key={source}
+                      className={css.attachmentMenuItem}
                       type="button"
                       role="menuitem"
                       onClick={() => {
@@ -450,17 +453,16 @@ export default function AssistantCompanion({
                 value={linkDraft}
                 onChange={(event) => setLinkDraft(event.currentTarget.value)}
               />
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                label="Add link"
                 disabled={!linkDraft.trim()}
                 onClick={() => {
                   onRequestAttachment("link", linkDraft.trim());
                   setLinkDraft("");
                   setLinkEntryOpen(false);
                 }}
-              >
-                Add link
-              </button>
+              />
             </div>
           ) : null}
           <p
@@ -472,7 +474,7 @@ export default function AssistantCompanion({
             {assistantConsequence(resolved, attachments.length)}
           </p>
         </div>
-      </dialog>
+      </ShellModal>
     </>
   );
 }

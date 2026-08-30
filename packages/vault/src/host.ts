@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit pre-existing debt (553 lines before issue #352 touched it for enrich-policy mirroring); splitting is a separate cleanup, not bundled into this feature change
+// governance: allow-repo-hygiene file-size-limit pre-existing debt; splitting is a separate cleanup, not bundled into a feature change
 // Host-integration helpers (§12): run a vault across restarts without storing credentials. v0 identity is key-equality.
 
 import { enrollAgent, enrollApp } from "./bootstrap.js";
@@ -24,8 +24,16 @@ export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
 
   const device = db.vault
     .prepare(
-      `SELECT device_id, public_key FROM consent_device
-        WHERE owner_party_id = ? AND trust = 'full' ORDER BY enrolled_at LIMIT 1`
+      // Full trust is an authority answer (#883), so the owner's recovery
+      // device joins the device-kind row that carries it.
+      `SELECT d.device_id AS device_id, d.public_key AS public_key
+         FROM consent_device d
+         JOIN share_authority a
+           ON a.principal_kind = 'device' AND a.principal_id = d.device_id
+          AND a.subject_type = 'core.vault' AND a.subject_id = ''
+          AND a.revoked_at IS NULL AND a.decision = 'granted'
+          AND a.verb = 'edit'
+        WHERE d.owner_party_id = ? ORDER BY d.enrolled_at LIMIT 1`
     )
     .get(vaultRow.owner_party_id) as
     | { device_id: string; public_key: string }
@@ -92,7 +100,7 @@ export function readVaultPresentation(db: VaultDb): VaultPresentation {
   };
 }
 
-/** Personal vault (gateway default when unnamed). Marker is settings, not creation order/name — UUIDv7 "oldest" is the household vault. */
+/** Personal vault (the default when unnamed). The marker is settings, not creation order — UUIDv7 "oldest" is the household vault. */
 export function readVaultPersonal(db: VaultDb): boolean {
   return readVaultSettings(db).personal === true;
 }
@@ -279,7 +287,7 @@ export function lookupAppByName(
   };
 }
 
-/** Enroll once under host-side name. Re-register returns the existing row. `displayName` self-heals onto `consent_app.display_name` without minting a second identity. */
+/** Enroll once under the host-side name; re-register returns the existing row. `displayName` self-heals without minting a second identity. */
 export function ensureAppEnrolled(
   db: VaultDb,
   name: string,

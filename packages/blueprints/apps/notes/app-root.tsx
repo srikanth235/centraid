@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505/#834); every screen's BODY lives in its own component under ./components, and what is left here is the routing, the reads and the frame contributions.
+// governance: allow-repo-hygiene file-size-limit — the app's whole orchestration is one React tree by design (#505/#834).
 // Notes — the query-free React tree (#505, rebuilt for #834).
 //
 // This file decides WHICH screen; each screen decides what it looks like
@@ -20,13 +20,14 @@ import {
 } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
+import { MoreSheet } from "../_shared/MoreSheet.tsx";
 import { SearchScaffold } from "../_shared/SearchScaffold.tsx";
 import { libraryReachability } from "../_shared/view-state-kit.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { Editor } from "./components/Editor.tsx";
 import { NoteSet } from "./components/Library.tsx";
-import { Confirm, MoreSheet, Powerbox } from "./components/Overlays.tsx";
+import { Confirm, Powerbox } from "./components/Overlays.tsx";
 import {
   HistoryRoute,
   NotebooksRoute,
@@ -66,6 +67,7 @@ import {
   TRASH,
   VOICE,
   isEditing,
+  MORE_SHELVES,
   notebookIdFrom,
   shelfFromSegment,
   showsViewToggle,
@@ -88,6 +90,7 @@ import {
   historyStatus,
   pendingStatus,
   searchNoMatch,
+  shelfCopy,
 } from "./view-copy.ts";
 
 import styles from "./Chrome.module.css";
@@ -898,10 +901,21 @@ export function Root({
           rail,
           scroll,
           overlays,
+          // The band's sixth slot, drawn by the ONE shared sheet (#883 B9).
+          // Only a PLACE is in the band; Capture, Voice, Tags, Trash and
+          // Version history are acts, so they live here.
           moreSheet: moreOpen ? (
             <MoreSheet
-              shelf={shelf}
-              onSelect={go}
+              label="More in Notes"
+              rows={MORE_SHELVES.map((entry) => ({
+                key: String(entry),
+                label: shelfCopy(entry).title,
+                ...(entry === shelf ? { current: true } : {}),
+                select: () => {
+                  go(entry);
+                  setMoreOpen(false);
+                },
+              }))}
               onClose={() => setMoreOpen(false)}
             />
           ) : null,

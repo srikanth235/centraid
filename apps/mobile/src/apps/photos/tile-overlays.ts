@@ -1,6 +1,7 @@
 // The tile's four overlay slots — selection, vault, kind, state — and nothing
 // else (§4.4). A fifth slot is chrome inside the grid, which §18 forbids.
 
+import { mediaClock } from "@centraid/blueprints/apps/_shared/format-kit";
 import { photosPurgeNote } from "@centraid/blueprints/apps/photos/shared-copy";
 
 import type { Rung } from "./photos-rungs";
@@ -61,15 +62,10 @@ export function vaultMarkFor(
 
 export const KIND_MIN_RUNG: Rung = 1; // S
 
-/** `1:04`, `12:07`, `1:02:03` — tabular mono, so a column of them lines up. */
-export function formatDuration(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds));
-  const s = total % 60;
-  const m = Math.floor(total / 60) % 60;
-  const h = Math.floor(total / 3600);
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
-}
+// `1:04`, `12:07`, `1:02:03` — tabular mono, so a column of them lines up.
+// The arithmetic is the kit's (#883 B5): a tile badge and a viewer transport
+// state the same recording's length, so they cannot own two of it.
+export { mediaClock as formatDuration } from "@centraid/blueprints/apps/_shared/format-kit";
 
 export function kindOverlay(asset: PhotoAsset, rung: Rung): string | undefined {
   if (rung < KIND_MIN_RUNG) return undefined;
@@ -79,7 +75,7 @@ export function kindOverlay(asset: PhotoAsset, rung: Rung): string | undefined {
   if (asset.kind !== "video") return undefined;
   return asset.durationS === undefined
     ? undefined
-    : formatDuration(asset.durationS);
+    : mediaClock(asset.durationS);
 }
 
 // ── Slot 4: state ──────────────────────────────────────────────────────────
@@ -87,10 +83,9 @@ export function kindOverlay(asset: PhotoAsset, rung: Rung): string | undefined {
 // ONE slot, two registers, never both at once: a MARK for custody, or a LINE of
 // mono. Never a fill, never a red dot, never a vanishing tile (§14).
 //
-// THE CUSTODY TRIPLE COLLAPSES TO A BINARY HERE: `local-only` takes the mark,
-// the other two say nothing. Annotating the steady state is a mark that fires
-// on everything — no information, one line of type per photograph, the
-// chrome-inside-the-grid §18 forbids. So does the web tile (`media.ts`).
+// The custody triple collapses to a binary: `local-only` takes the mark, the
+// other two say nothing. Marking the steady state fires on everything — no
+// information, and the chrome-inside-the-grid §18 forbids (also `media.ts`).
 
 /** Copy is final (§4.4). About THIS tile's own bytes, which is the whole bar
  *  for entry into this slot. */
@@ -100,17 +95,15 @@ export const STATE_COULD_NOT_DECODE = "could not decode";
  *  than shrinking the mark. */
 export const CUSTODY_MIN_RUNG: Rung = 1; // S
 
-/** Deliberately the shape hundreds of millions of people already know — an
- *  unlabelled glyph earns its silence by being familiar, not clever. */
+/** An unlabelled glyph earns its silence by being familiar, not clever. */
 export const CUSTODY_ICON = "CloudOff";
 
 /** The glyph is decorative by the icon contract (DESIGN.md:449), so the meaning
  *  reaches a screen reader through the tile's own label instead. */
 export const CUSTODY_LABEL = "not backed up";
 
-/** Days from now, never negative, rounded UP so hours left still read as a day;
- *  `undefined` when the date is missing or unreadable, because an invented
- *  countdown is worse than none. Mirrors the web's `queries/library.ts`. */
+/** Never negative, rounded UP so hours left still read as a day; `undefined`
+ *  when unreadable, since an invented countdown is worse than none. */
 export function purgeInDays(
   purgeAt: string | undefined,
   now: number = Date.now()
@@ -126,24 +119,18 @@ export function purgeNote(days: number): string {
 }
 
 /**
- * AT MOST ONE of two forms — the exclusion is the design decision made
- * structural, so a line and a mark cannot collide at the tile's foot and the
- * handoff's one-note-per-tile shape (proto:4004-4020) survives. It is also
- * right on the merits: every case producing a LINE is one where custody is not
- * the actionable fact.
+ * AT MOST ONE of two forms, structurally: a line and a mark cannot collide at
+ * the tile's foot, and one-note-per-tile (proto:4004-4020) survives. Every case
+ * producing a LINE is one where custody is not the actionable fact.
  */
 export type StateOverlay =
   | {
       form: "line";
       text: string;
       /**
-       * `net` takes the `--net` role for the text AND a 1px `--net` border;
-       * `seam` takes `--seam` for the text alone; `normal` is one quiet mono
-       * line on the page colour.
-       *
-       * `seam` is the expiring register (#765) — "not yet, and not wrong" — so
-       * a purge countdown never borrows `--net` and paints a shelf of ordinary
-       * trashed photographs as an alarm.
+       * `net` is text plus a 1px `--net` border; `seam` is text alone; `normal`
+       * is one quiet mono line. `seam` is the expiring register (#765), so a
+       * purge countdown never borrows `--net` and alarms a whole trash shelf.
        */
       tone: "normal" | "net" | "seam";
     }

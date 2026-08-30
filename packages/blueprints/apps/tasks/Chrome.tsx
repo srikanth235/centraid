@@ -5,8 +5,14 @@
 // slots, same shape as docs/photos Chrome.
 import type { ReactNode } from "react";
 
+import {
+  AskMount,
+  ChromeToolbar,
+  ConsentBanner,
+  ScrollHost,
+} from "../_shared/AppChrome.tsx";
+import { chromeClass } from "../_shared/chrome-kit.ts";
 import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
-import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
 
 import styles from "./Chrome.module.css";
 
@@ -27,13 +33,11 @@ export interface ChromeProps {
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
-  const shellClass = [
+  const shellClass = chromeClass(
     styles.shell,
-    props.narrow ? styles.isNarrow : "",
-    props.consent ? styles.denied : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    props.narrow && styles.isNarrow,
+    props.consent && styles.denied
+  );
 
   return (
     <div className={shellClass} data-tasks-root data-density="comfortable">
@@ -45,39 +49,27 @@ export function Chrome(props: ChromeProps): ReactNode {
 
       <main className={styles.main}>
         {props.consent ? (
-          // `id="consentBanner"` is the onFocusRefresh hook for a denied→recovered
-          // flip; without it a refocus after a grant is throttled and never retried (#505).
-          <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>No vault access yet.</strong>{" "}
-            <span>{props.consent.message}</span>
-            <VaultAccessButton />
-          </div>
+          <ConsentBanner
+            message={props.consent.message}
+            className={styles.banner}
+          />
         ) : null}
 
         {props.slots.notices}
 
-        {props.slots.toolbar ? (
-          <div
-            className={styles.toolbar}
-            role="toolbar"
-            aria-label="Tasks view"
-          >
-            {props.slots.toolbar}
-          </div>
-        ) : null}
+        <ChromeToolbar className={styles.toolbar} label="Tasks view">
+          {props.slots.toolbar}
+        </ChromeToolbar>
 
-        <div className={styles.scroll}>
-          {props.loading ? (
-            <div className={styles.skeleton} aria-hidden="true">
-              <LoadingSkeleton rows={6} />
-            </div>
-          ) : (
-            props.slots.scroll
-          )}
-        </div>
-        {/* kitAsk mount (#834): without this node the descriptor's kitAsk
-            config is real and unreachable. */}
-        <div className={styles.askMount} data-ask-mount />
+        <ScrollHost
+          className={styles.scroll}
+          loading={props.loading}
+          skeletonClassName={styles.skeleton}
+          skeleton={<LoadingSkeleton rows={6} />}
+        >
+          {props.slots.scroll}
+        </ScrollHost>
+        <AskMount className={styles.askMount} />
       </main>
 
       {props.slots.overlays}

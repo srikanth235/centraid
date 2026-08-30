@@ -17,8 +17,6 @@ export interface CatalogTemplate {
   iconKey: string;
   version: string;
   kind?: "app" | "automation";
-  /* `installed` and `vault` are deliberately NOT mirrored: they existed for the
-     install/consent sheet, which no longer renders. */
   emoji?: string;
   category?: string;
   triggerKind?: "cron" | "webhook" | "data" | "condition";
@@ -40,12 +38,17 @@ export interface InsightsKpis {
   appsTouched: number;
   unpricedRuns: number;
   unreportedRuns: number;
+  /** p50 run wall clock (ms). ABSENT when no run finished in the window. */
+  medianRunMs?: number;
 }
 export interface InsightsDailyPoint {
   date: string;
   tokens: number;
   costUsd: number;
   runs: number;
+  failedRuns: number;
+  /** Floor: archived days carry a failure count but no failure-cost split. */
+  failedCostUsd: number;
 }
 export interface InsightsSourceRow {
   key: string;
@@ -310,10 +313,7 @@ export interface AutomationsOverviewBridgeProps {
   loadData: () => Promise<AuOverviewData>;
   onOpenAutomation: (ref: string) => void;
   onOpenRun: (automationId: string, runId: string) => void;
-  /**
-   * "New automation" is NOT here: it is the page's filled commit and lives in
-   * the app bar (#765). A screen that also drew it would show two of one commit.
-   */
+  /** "New automation" is the app bar's filled commit, not a screen's (#765). */
   onBrowseTemplates: () => void;
   loadSuggestions?: () => Promise<AuOverviewSuggestionDTO[]>;
   onUseSuggestion?: (templateId: string) => void;

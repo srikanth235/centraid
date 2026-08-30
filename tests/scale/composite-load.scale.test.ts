@@ -79,6 +79,7 @@ interface CeilingFile {
       ceilingThroughputFactor: number;
       ceilingWorstLaneP95Ms: number;
     };
+    refSearchUnderComposition: { ceilingP95Ms: number };
   };
 }
 
@@ -166,6 +167,14 @@ describe("composite-load.scale", () => {
       ceilings.metrics.compositeLoadFactor.ceilingThroughputFactor;
     const ceilingWorstLaneP95Ms =
       ceilings.metrics.compositeLoadFactor.ceilingWorstLaneP95Ms;
+    // #883 C2 item 4. The worst-lane ceiling only ever fences whichever lane
+    // happens to be slowest, so the READ lane the blob-reference CTE work
+    // touches gets its own number rather than hiding behind the write lane's.
+    const ceilingRefSearchP95Ms =
+      ceilings.metrics.refSearchUnderComposition.ceilingP95Ms;
+    const refSearch = () =>
+      factors.find((entry) => entry.lane === "browse")?.compositeP95 ??
+      Number.NaN;
 
     const gateway = await bootCompositeGateway("composite-load-");
     onTestFinished(() => gateway.close());
@@ -259,6 +268,7 @@ describe("composite-load.scale", () => {
       inProcess.missed === AUTOMATIONS &&
       throughputFactor <= ceilingThroughputFactor &&
       worstByP95.compositeP95 <= ceilingWorstLaneP95Ms &&
+      refSearch() <= ceilingRefSearchP95Ms &&
       withinDrift;
 
     console.log("\n========== COMPOSITE LOAD ==========");
@@ -311,6 +321,12 @@ describe("composite-load.scale", () => {
           budget: ceilingWorstLaneP95Ms,
         },
         {
+          name: "ref-search p95 under composition",
+          value: refSearch(),
+          unit: "ms",
+          budget: ceilingRefSearchP95Ms,
+        },
+        {
           name: `worst per-lane latency factor (${worstByFactor.lane}, reported not gated)`,
           value: worstByFactor.factor,
           unit: "x",
@@ -339,6 +355,10 @@ describe("composite-load.scale", () => {
       ],
     });
 
+    expect(
+      refSearch(),
+      `ref-search p95 under composition: ${refSearch()} ms vs ceiling ${ceilingRefSearchP95Ms} ms`
+    ).toBeLessThanOrEqual(ceilingRefSearchP95Ms);
     expect(compositeTally.transportErrors).toStrictEqual([]);
     expect(soloTally.transportErrors).toStrictEqual([]);
     expect(

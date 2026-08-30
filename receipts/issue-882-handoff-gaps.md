@@ -64,6 +64,23 @@ on `export: "export"` and `route="access"` while the phone dispatched neither.
 
 ## What changed
 
+Checklist echo so each `- [x]` item is cited here as `receipt-per-issue` requires
+(the slices below already describe the work; this list is the substring
+crosswalk, landed from PR 886 after #882 merged to main with the citations
+only in the Checklist).
+
+- A task opens on the phone, and the recurrence anchor can be set from it
+- Every row in the Tasks More sheet navigates; Anytime, All, Search, Logbook, Catch up and Reminders are reachable on the phone
+- Quick add offers When, Where, Priority and Lands-in, and states where the task lands
+- The Tasks lens and sort toolbar is drawn, and scrolls horizontally at 390px without pushing the first task off-screen
+- A project opens to its sections; New project asks for an area and a home vault instead of writing a literal name
+- An overdue due date on a phone row carries the attention tone; priority rides the row
+- Notes draws Notebooks, Tags and History as places on the phone; a version can be restored there
+- Agenda's compact band offers no destination that resolves to a different view, and the phone and web bands are generated from one table
+- Locker's Access history, Import and Export read the doors #873 landed, or still say where the act happens — never a dead control
+- `handler-reachability.test.ts` matches dispatch shapes, and fails when a handler is only named by a route key or a copy constant
+- `docs/design-divergences.md` carries the Tasks and Notes phone-scope rows, or those rows are gone because the gap is closed
+
 ### Slice A — the Tasks detail place (`d7c8a0577`)
 
 A row could be completed or long-pressed to file, never opened. The detail is a

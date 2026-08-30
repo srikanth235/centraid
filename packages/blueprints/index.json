@@ -5,7 +5,7 @@
       "id": "agenda",
       "name": "Agenda",
       "desc": "Your calendar, projected from the vault.",
-      "colorKey": "indigo",
+      "colorKey": "forest",
       "iconKey": "Calendar",
       "version": "0.4.1"
     },
@@ -13,7 +13,7 @@
       "id": "tasks",
       "name": "Tasks",
       "desc": "A Todoist-depth task manager over your vault's canonical tasks.",
-      "colorKey": "teal",
+      "colorKey": "ochre",
       "iconKey": "Check",
       "version": "0.3.1"
     },
@@ -21,7 +21,7 @@
       "id": "people",
       "name": "People",
       "desc": "Your circle, remembered — a personal CRM that keeps light records on the people you care about and nudges you to stay in touch.",
-      "colorKey": "rose",
+      "colorKey": "violet",
       "iconKey": "Users",
       "version": "0.1.1"
     },
@@ -29,7 +29,7 @@
       "id": "notes",
       "name": "Notes",
       "desc": "Write, file and pin notes over your vault's canonical content.",
-      "colorKey": "forest",
+      "colorKey": "slate",
       "iconKey": "Book",
       "version": "0.4.1"
     },
@@ -37,7 +37,7 @@
       "id": "photos",
       "name": "Photos",
       "desc": "The library you own, wherever the bytes live.",
-      "colorKey": "ochre",
+      "colorKey": "amber",
       "iconKey": "Camera",
       "version": "0.4.0"
     },
@@ -45,7 +45,7 @@
       "id": "docs",
       "name": "Docs",
       "desc": "A drive for your important documents — filed, downloadable, restorable.",
-      "colorKey": "slate",
+      "colorKey": "teal",
       "iconKey": "Folder",
       "version": "0.1.0"
     },
@@ -53,7 +53,7 @@
       "id": "locker",
       "name": "Locker",
       "desc": "Everything, locked up — a password manager for logins, cards, notes and secrets, with Watchtower and a generator.",
-      "colorKey": "indigo",
+      "colorKey": "rose",
       "iconKey": "Lock",
       "version": "0.3.0"
     },
@@ -61,7 +61,7 @@
       "id": "tally",
       "name": "Tally",
       "desc": "Split, settled — track shared expenses across groups and friends, see who owes whom, and settle up.",
-      "colorKey": "forest",
+      "colorKey": "indigo",
       "iconKey": "Receipt",
       "version": "0.3.0"
     },

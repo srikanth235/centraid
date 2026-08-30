@@ -9,7 +9,6 @@ import { nextOccurrence } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
-import { cleanupPolyRefs } from "../schema/poly-refs.js";
 
 const ADD_TASK: CommandDefinition = {
   name: "schedule.add_task",
@@ -26,8 +25,7 @@ const ADD_TASK: CommandDefinition = {
       effort_min: { type: "integer", minimum: 1 },
       parent_task_id: { type: "string", minLength: 1 },
       rrule: { type: "string", minLength: 1 },
-      // Minutes before due_at the reminder scheduler should fire — meaningless
-      // without a due_at, same posture as rrule.
+      // Meaningless without a due_at, same posture as rrule.
       remind_before_min: { type: "integer", minimum: 0 },
     },
   },
@@ -38,14 +36,14 @@ const ADD_TASK: CommandDefinition = {
   },
   preconditions: [
     {
-      // One level of nesting, Things-style: a subtask's parent must exist,
-      // still be open, and itself be top-level. Optional inputs bind as
-      // NULL, so a plain top-level add passes trivially.
+      // One level of nesting: a subtask's parent must exist, be open, and be
+      // top-level. Optional inputs bind as NULL, so a top-level add passes.
       name: "parent_open_and_top_level",
       sql: `SELECT CASE WHEN :parent_task_id IS NULL THEN 1
                    ELSE (SELECT count(*) FROM schedule_task
                           WHERE task_id = :parent_task_id
                             AND parent_task_id IS NULL
+                            AND deleted_at IS NULL
                             AND status IN ('needs-action','in-process'))
               END AS n`,
       column: "n",
@@ -53,9 +51,8 @@ const ADD_TASK: CommandDefinition = {
       value: 1,
     },
     {
-      // A recurring task needs an anchor date — rrule advances due_at on
-      // completion, so a rule with nothing to advance is refused up front
-      // rather than silently never recurring.
+      // rrule advances due_at on completion, so a rule with nothing to
+      // advance is refused rather than silently never recurring.
       name: "rrule_requires_due_at",
       sql: "SELECT (:rrule IS NULL OR :due_at IS NOT NULL) AS n",
       column: "n",
@@ -134,8 +131,7 @@ const SET_TASK_STATUS: CommandDefinition = {
     additionalProperties: false,
     properties: {
       task_id: { type: "string", minLength: 1 },
-      // The full VTODO lifecycle — reopening a completed task is a status
-      // move like any other; history stays in provenance, not the row.
+      // Reopening is a status move like any other; history is provenance.
       status: {
         type: "string",
         enum: ["needs-action", "in-process", "completed", "cancelled"],
@@ -148,16 +144,17 @@ const SET_TASK_STATUS: CommandDefinition = {
     properties: {
       task_id: { type: "string" },
       status: { type: "string" },
-      // Only present when completing a task whose rrule still has a next
-      // hit — the freshly spawned sibling occurrence.
+      // Only when completing a task whose rrule has a next hit.
       next_task_id: { type: "string" },
       next_due_at: { type: "string" },
     },
   },
   preconditions: [
     {
+      // A trashed task is refused until restored, or purged (#883).
       name: "task_exists",
-      sql: "SELECT count(*) AS n FROM schedule_task WHERE task_id = :task_id",
+      sql: `SELECT count(*) AS n FROM schedule_task
+             WHERE task_id = :task_id AND deleted_at IS NULL`,
       column: "n",
       op: "eq",
       value: 1,
@@ -165,8 +162,7 @@ const SET_TASK_STATUS: CommandDefinition = {
   ],
   postconditions: [
     {
-      // completed_at is not an independent fact: it exists iff the status
-      // says completed. Anything else rolls back.
+      // `completed_at` exists iff the status says completed.
       name: "status_and_completion_stamp_agree",
       sql: `SELECT count(*) AS n FROM schedule_task
              WHERE task_id = :task_id AND status = :status
@@ -176,9 +172,8 @@ const SET_TASK_STATUS: CommandDefinition = {
       value: 1,
     },
     {
-      // Optional binding, same idiom as edit_task: wasn't asked for (no
-      // next occurrence spawned) passes trivially; asked for means the
-      // sibling really exists, open, due exactly where the rule put it.
+      // Not asked for passes trivially; asked for means the sibling exists,
+      // open, due exactly where the rule put it.
       name: "next_occurrence_spawned_open",
       sql: `SELECT CASE WHEN :next_task_id IS NULL THEN 1
                    ELSE (SELECT count(*) FROM schedule_task
@@ -309,20 +304,17 @@ const EDIT_TASK: CommandDefinition = {
       task_id: { type: "string", minLength: 1 },
       title: { type: "string", minLength: 1 },
       description: { type: "string", minLength: 1 },
-      // Clearing a note is an explicit intent, not a magic empty string —
-      // description sets, clear_description removes; sending both is refused.
+      // Explicit intent, not a magic empty string: both together is refused.
       clear_description: { type: "boolean", const: true },
       due_at: { type: "string", minLength: 1 },
-      // Clearing a due date is an explicit intent, not a magic empty
-      // string — due_at sets, clear_due removes; sending both is refused.
+      // due_at sets, clear_due removes; both together is refused.
       clear_due: { type: "boolean", const: true },
       priority: { type: "integer", minimum: 0, maximum: 9 },
       effort_min: { type: "integer", minimum: 1 },
       remind_before_min: { type: "integer", minimum: 0 },
-      // Same set/clear-are-exclusive idiom as due_at.
       clear_remind: { type: "boolean", const: true },
       rrule: { type: "string", minLength: 1 },
-      // Same idiom again: rrule sets, clear_rrule stops the series.
+      // rrule sets, clear_rrule stops the series.
       clear_rrule: { type: "boolean", const: true },
     },
   },
@@ -333,8 +325,10 @@ const EDIT_TASK: CommandDefinition = {
   },
   preconditions: [
     {
+      // A trashed task is refused until restored, or purged (#883).
       name: "task_exists",
-      sql: "SELECT count(*) AS n FROM schedule_task WHERE task_id = :task_id",
+      sql: `SELECT count(*) AS n FROM schedule_task
+             WHERE task_id = :task_id AND deleted_at IS NULL`,
       column: "n",
       op: "eq",
       value: 1,
@@ -368,9 +362,8 @@ const EDIT_TASK: CommandDefinition = {
       value: 1,
     },
     {
-      // A repeating task still needs its due_at once the edit lands — either
-      // it already had one, or this same call is setting one (or clearing
-      // the reminder that would otherwise depend on it too).
+      // A repeating task still needs a due_at once the edit lands: either it
+      // had one, or this call sets one.
       name: "rrule_edit_keeps_a_due_at",
       sql: `SELECT CASE WHEN :rrule IS NULL THEN 1
                    ELSE (SELECT CASE WHEN :due_at IS NOT NULL THEN 1
@@ -385,8 +378,7 @@ const EDIT_TASK: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Each field either wasn't asked for, or now reads back exactly as
-      // sent. Optional inputs bind as NULL so untouched fields pass.
+      // Optional inputs bind as NULL, so untouched fields pass.
       name: "edits_applied",
       sql: `SELECT (
               (SELECT CASE WHEN :title IS NULL THEN 1
@@ -497,8 +489,10 @@ const DELETE_TASK: CommandDefinition = {
   },
   preconditions: [
     {
+      // A trashed task is refused until restored, or purged (#883).
       name: "task_exists",
-      sql: "SELECT count(*) AS n FROM schedule_task WHERE task_id = :task_id",
+      sql: `SELECT count(*) AS n FROM schedule_task
+             WHERE task_id = :task_id AND deleted_at IS NULL`,
       column: "n",
       op: "eq",
       value: 1,
@@ -506,9 +500,10 @@ const DELETE_TASK: CommandDefinition = {
   ],
   postconditions: [
     {
-      name: "task_and_subtasks_gone",
+      name: "task_and_subtasks_trashed",
       sql: `SELECT count(*) AS n FROM schedule_task
-             WHERE task_id = :task_id OR parent_task_id = :task_id`,
+             WHERE (task_id = :task_id OR parent_task_id = :task_id)
+               AND deleted_at IS NULL`,
       column: "n",
       op: "eq",
       value: 0,
@@ -519,36 +514,106 @@ const DELETE_TASK: CommandDefinition = {
   handler: deleteTask,
 };
 
-function purgeTask(ctx: HandlerCtx, taskId: string): void {
+/** The grace window Docs, Photos, Locker, People and Tally carry (#883). */
+const TASK_PURGE_DAYS = 30;
+
+export function taskPurgeAt(now: string): string {
+  const date = new Date(now);
+  date.setUTCDate(date.getUTCDate() + TASK_PURGE_DAYS);
+  return date.toISOString();
+}
+
+/**
+ * Reversible for the grace window, then the sweep deletes the row and cleans
+ * its poly-refs — the two-step every other app's delete is (#883). The
+ * poly-ref cleanup deliberately does NOT run here: an annotation on a trashed
+ * task must come back with it, or restore means nothing.
+ */
+function trashTask(ctx: HandlerCtx, taskId: string): void {
   ctx.db
     .prepare(
-      "UPDATE home_maintenance_plan SET current_task_id = NULL WHERE current_task_id = ?"
+      `UPDATE schedule_task SET deleted_at = ?, purge_at = ?
+        WHERE task_id = ? AND deleted_at IS NULL`
     )
-    .run(taskId);
-  cleanupPolyRefs(ctx.db, ctx.now, "schedule.task", taskId);
-  ctx.db.prepare("DELETE FROM schedule_task WHERE task_id = ?").run(taskId);
+    .run(ctx.now, taskPurgeAt(ctx.now), taskId);
   ctx.wrote("schedule.task", taskId);
 }
 
 function deleteTask(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { task_id: string };
   const children = ctx.db
-    .prepare("SELECT task_id FROM schedule_task WHERE parent_task_id = ?")
+    .prepare(
+      "SELECT task_id FROM schedule_task WHERE parent_task_id = ? AND deleted_at IS NULL"
+    )
     .all(input.task_id) as { task_id: string }[];
-  for (const child of children) purgeTask(ctx, child.task_id);
-  purgeTask(ctx, input.task_id);
+  for (const child of children) trashTask(ctx, child.task_id);
+  trashTask(ctx, input.task_id);
   ctx.cite({
-    claim: `task ${input.task_id} removed with ${children.length} subtasks`,
+    claim: `task ${input.task_id} moved to trash with ${children.length} subtasks`,
     entityType: "schedule.task",
     entityId: input.task_id,
   });
   return { task_id: input.task_id, removed: 1 + children.length };
 }
 
-/** Register the schedule domain's task commands on a gateway. */
+const RESTORE_TASK: CommandDefinition = {
+  name: "schedule.restore_task",
+  ownerSchema: "schedule",
+  inputSchema: {
+    type: "object",
+    required: ["task_id"],
+    additionalProperties: false,
+    properties: { task_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["task_id", "restored"],
+    properties: {
+      task_id: { type: "string" },
+      restored: { type: "integer" },
+    },
+  },
+  preconditions: [
+    {
+      name: "task_trashed",
+      sql: `SELECT count(*) AS n FROM schedule_task
+             WHERE task_id = :task_id AND deleted_at IS NOT NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "task_live_again",
+      sql: `SELECT count(*) AS n FROM schedule_task
+             WHERE task_id = :task_id AND deleted_at IS NULL`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "idempotent",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as { task_id: string };
+    // Subtasks trashed WITH the parent come back with it; one trashed on its
+    // own does not — restore undoes the gesture that was made.
+    const restored = ctx.db
+      .prepare(
+        `UPDATE schedule_task SET deleted_at = NULL, purge_at = NULL
+          WHERE (task_id = ? OR parent_task_id = ?) AND deleted_at IS NOT NULL`
+      )
+      .run(input.task_id, input.task_id);
+    ctx.wrote("schedule.task", input.task_id);
+    return { task_id: input.task_id, restored: Number(restored.changes) };
+  },
+};
+
 export function registerTaskCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_TASK);
   gateway.registerCommand(SET_TASK_STATUS);
   gateway.registerCommand(EDIT_TASK);
   gateway.registerCommand(DELETE_TASK);
+  gateway.registerCommand(RESTORE_TASK);
 }

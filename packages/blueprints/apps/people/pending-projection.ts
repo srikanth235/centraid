@@ -109,5 +109,3 @@ export const peoplePendingProjection = definePendingProjection({
       pendingPatch("core.party", input.source_party_id, input),
   },
 });
-
-export default peoplePendingProjection;

@@ -1,32 +1,16 @@
-/**
- * Replace a document's bytes (any media type) through
- * core.replace_document_content — the "Replace file…" door for scanned
- * PDFs, images and anything edit.js can't touch structurally. Bytes arrive
- * staged (#296) or as a small inline data: URI, same door upload.js
- * uses. Mints a new content item, records the `revises` link, and repoints
- * the wrapper's current version; title is an optional partial update.
- * Refuses trashed documents. Risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
+/** Bytes arrive staged (#296) or as a small inline data: URI. */
 export default async function replace({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "core.replace_document_content",
-      input: {
-        document_id: String(input.document_id ?? ""),
-        ...(input.staged_sha == null
-          ? { data_uri: String(input.data_uri ?? "") }
-          : { staged_sha: String(input.staged_sha) }),
-        ...(input.title == null ? {} : { title: String(input.title) }),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "core.replace_document_content",
+    input: {
+      document_id: String(input.document_id ?? ""),
+      ...(input.staged_sha == null
+        ? { data_uri: String(input.data_uri ?? "") }
+        : { staged_sha: String(input.staged_sha) }),
+      ...(input.title == null ? {} : { title: String(input.title) }),
+    },
+  });
 }

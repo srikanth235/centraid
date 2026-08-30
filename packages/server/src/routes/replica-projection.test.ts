@@ -5,11 +5,19 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { currentReplicaLogState } from "@centraid/vault";
+import {
+  currentReplicaLogState,
+  pruneReplicaChanges,
+  REPLICA_COMPACTION_HELD_ENTITIES,
+} from "@centraid/vault";
 
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
-import { projectReplicaPage, replicaShapeIds } from "./replica-projection.js";
+import {
+  projectReplicaPage,
+  replicaShapeIds,
+  SHAPE_CONTROL_ENTITIES,
+} from "./replica-projection.js";
 import type { ReplicaProjectedPage } from "./replica-projection.js";
 
 const logger = {
@@ -21,7 +29,7 @@ const cleanups: Array<() => Promise<void> | void> = [];
 
 const access = { canWrite: true, rememberDevice: true, appId: "planner" };
 
-/** Everything the doorbell-only mode promises to leave untouched. */
+/** What doorbell-only leaves untouched. */
 function doorbellFacts(page: ReplicaProjectedPage): unknown {
   return {
     doorbell: page.doorbell,
@@ -56,11 +64,6 @@ describe("replica projection doorbell-only mode", () => {
     return opened;
   }
 
-  /**
-   * One page that exercises every branch the two modes share: a visible
-   * upsert, an oversized deferred field, a row that leaves the consent filter
-   * (projected as a delete), and a row that was never visible at all.
-   */
   async function mixedPage(): Promise<{
     vault: VaultPlane;
     since: ReturnType<typeof currentReplicaLogState>["watermark"];
@@ -135,10 +138,8 @@ describe("replica projection doorbell-only mode", () => {
 
     expect(doorbellFacts(doorbellOnly)).toStrictEqual(doorbellFacts(full));
     expect(doorbellOnly.doorbell.length).toBeGreaterThan(0);
-    // The whole point: no shaped row survives the doorbell-only walk.
     expect(doorbellOnly.batch.changes).toStrictEqual([]);
     expect(JSON.stringify(doorbellOnly)).not.toContain("Updated");
-    // The full mode still ships them, upsert and projected delete alike.
     expect(full.batch.changes).toStrictEqual([
       expect.objectContaining({
         op: "upsert",
@@ -164,8 +165,7 @@ describe("replica projection doorbell-only mode", () => {
 
   test("a consent change still rebootstraps identically in both modes", async () => {
     const { vault, since } = await mixedPage();
-    // A grant widened inside the page is a shape-control change: neither mode
-    // may advance past it as ordinary data.
+    // Shape control: neither mode may advance past it as data.
     vault.approveGrant("planner", {
       purpose: "dpv:ServiceProvision",
       scopes: [{ schema: "schedule", table: "event", verbs: "read" }],
@@ -185,5 +185,202 @@ describe("replica projection doorbell-only mode", () => {
     expect(full.rebootstrapReason).toBe("shape-changed");
     expect(doorbellFacts(doorbellOnly)).toStrictEqual(doorbellFacts(full));
     expect(doorbellOnly.doorbell).toStrictEqual([]);
+  });
+});
+
+/**
+ * RETENTION COMPACTION IS REPLAY-EQUIVALENT (#883 C6). The hard case: a row
+ * leaving a filter projects as a DELETE decided from the state before the
+ * oldest shown change — the very entry churn supersedes.
+ */
+describe("replica projection under retention compaction", () => {
+  afterEach(async () => {
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
+  });
+
+  const CHURN = 20;
+
+  async function churnedVault(): Promise<{
+    vault: VaultPlane;
+    since: ReturnType<typeof currentReplicaLogState>["watermark"];
+    base: ReplicaState;
+  }> {
+    const dir = await tempDir(`replica-compaction-${crypto.randomUUID()}-`);
+    const vault = openVaultPlane({
+      bootstrap: true,
+      dir,
+      logger,
+      enableWalShipper: false,
+    });
+    cleanups.push(
+      () => fs.rm(dir, { recursive: true, force: true }),
+      () => vault.stop()
+    );
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [
+        {
+          schema: "schedule",
+          table: "task",
+          verbs: "read",
+          rowFilter: [{ column: "status", op: "eq", value: "needs-action" }],
+          fieldMask: ["title", "description"],
+        },
+      ],
+    });
+    // Consent settles before the replayed window; a grant change inside it
+    // would rebootstrap instead.
+    const granted = currentReplicaLogState(vault.db.vault).watermark;
+    const insert = vault.db.vault.prepare(
+      `INSERT INTO schedule_task
+         (task_id, owner_party_id, title, description, status, priority)
+       VALUES (?, ?, ?, ?, 'needs-action', 0)`
+    );
+    for (const id of ["hot-a", "hot-b", "leaver", "doomed"])
+      insert.run(id, vault.boot.ownerPartyId, id, "seed");
+    const since = currentReplicaLogState(vault.db.vault).watermark;
+    const base = replay(vault, granted);
+
+    const retitle = vault.db.vault.prepare(
+      `UPDATE schedule_task SET title = ? WHERE task_id = ?`
+    );
+    const restatus = vault.db.vault.prepare(
+      `UPDATE schedule_task SET status = ? WHERE task_id = ?`
+    );
+    for (let index = 0; index < CHURN; index += 1) {
+      retitle.run(`hot-a ${index}`, "hot-a");
+      retitle.run(`hot-b ${index}`, "hot-b");
+    }
+    // Leaves the filter, then keeps changing: the superseded transition is
+    // what compaction must not lose.
+    restatus.run("completed", "leaver");
+    retitle.run("leaver later", "leaver");
+    retitle.run("hot-a last", "hot-a");
+    vault.db.vault
+      .prepare(`DELETE FROM schedule_task WHERE task_id = 'doomed'`)
+      .run();
+    return { vault, since, base };
+  }
+
+  /** In order, last write wins (docs/mobile-offline.md). */
+  type ReplicaState = Map<string, { values: unknown; version: number }>;
+
+  function replay(
+    vault: VaultPlane,
+    since: ReturnType<typeof currentReplicaLogState>["watermark"],
+    base: ReplicaState = new Map()
+  ): ReplicaState {
+    const rows: ReplicaState = new Map(base);
+    let cursor = since;
+    for (let page = 0; page < 200; page += 1) {
+      // Small on purpose: a folded entry and its survivor must be able to
+      // straddle a page boundary.
+      const projected = projectReplicaPage(vault.db.vault, access, cursor, 3);
+      expect(projected.rebootstrapReason).toBeUndefined();
+      for (const change of projected.batch.changes) {
+        const key = `${change.shapeId}/${change.entity}/${change.rowId}`;
+        const version =
+          change.op === "delete" ? change.rowVersion : (change.rowVersion ?? 0);
+        const held = rows.get(key);
+        if (held && held.version > version) continue;
+        if (change.op === "delete") rows.delete(key);
+        else rows.set(key, { values: change.values, version });
+      }
+      if (!projected.batch.hasMore) break;
+      cursor = projected.batch.to;
+    }
+    return rows;
+  }
+
+  /** The bytes two replays must agree on. */
+  function snapshot(rows: ReplicaState): string {
+    return JSON.stringify(
+      [...rows.entries()]
+        .sort(([left], [right]) => (left < right ? -1 : 1))
+        .map(([key, row]) => [key, row.values])
+    );
+  }
+
+  /** The SAME vault the baseline replay read: row ids are per-vault HMACs. */
+  function compact(vault: VaultPlane, since: { seq: number }): void {
+    // One entry over the cap: compaction clears the pressure by itself, so
+    // the count trim never runs and the floor stays put.
+    const entries = (
+      vault.db.vault
+        .prepare(`SELECT COUNT(*) AS n FROM replica_change`)
+        .get() as { n: number }
+    ).n;
+    const result = pruneReplicaChanges(vault.db.vault, {
+      maxEntries: entries - 1,
+    });
+    expect(result.compacted).toBeGreaterThan(CHURN);
+    expect(result.overflow).toBe(0);
+    expect(result.floor.seq).toBeLessThanOrEqual(since.seq);
+  }
+
+  test("a catch-up replay lands byte-identical with and without compaction", async () => {
+    const { vault, since, base } = await churnedVault();
+    const expected = snapshot(replay(vault, since, base));
+
+    compact(vault, since);
+
+    expect(snapshot(replay(vault, since, base))).toStrictEqual(expected);
+    expect(expected).toContain("hot-a last");
+    expect(expected).not.toContain("leaver");
+    expect(expected).not.toContain("doomed");
+  });
+
+  test("rowVersion is unchanged by compaction, because a row's last entry never folds", async () => {
+    const { vault, since } = await churnedVault();
+    // rowVersion IS the newest change seq, and that entry never folds.
+    const versions = (): unknown[] =>
+      projectReplicaPage(vault.db.vault, access, since, 1_000)
+        .batch.changes.map((change) => change.rowVersion)
+        .sort((left, right) => Number(left) - Number(right));
+    const expected = versions();
+
+    compact(vault, since);
+
+    expect(versions()).toStrictEqual(expected);
+  });
+
+  test("SABOTAGE: stripping the folded prior loses the filter-exit delete", async () => {
+    const { vault, since, base } = await churnedVault();
+    const expected = snapshot(replay(vault, since, base));
+    compact(vault, since);
+    // The bug this prevents: fold, keep the latest, forget the prior.
+    vault.db.vault.exec(
+      `UPDATE replica_change SET prior_op = NULL, prior_old_values_json = NULL`
+    );
+
+    const sabotaged = snapshot(replay(vault, since, base));
+
+    expect(sabotaged).not.toStrictEqual(expected);
+    expect(sabotaged).toContain("leaver");
+  });
+
+  test("SABOTAGE: dropping a row's last entry strands a deleted row", async () => {
+    const { vault, since, base } = await churnedVault();
+    const expected = snapshot(replay(vault, since, base));
+    compact(vault, since);
+    vault.db.vault.exec(
+      `DELETE FROM replica_change WHERE op = 'delete' AND row_id = 'doomed'`
+    );
+
+    const sabotaged = snapshot(replay(vault, since, base));
+
+    expect(sabotaged).not.toStrictEqual(expected);
+    expect(sabotaged).toContain("doomed");
+  });
+
+  test("every shape-control entity is held out of compaction", () => {
+    // One verdict, one owner: the projection decides, compaction holds all.
+    expect(
+      [...SHAPE_CONTROL_ENTITIES].filter(
+        (entity) => !REPLICA_COMPACTION_HELD_ENTITIES.includes(entity)
+      )
+    ).toStrictEqual([]);
   });
 });

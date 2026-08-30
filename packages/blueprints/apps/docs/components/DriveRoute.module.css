@@ -10,3 +10,12 @@
   font: var(--t-small);
   color: var(--text-soft);
 }
+
+/* A WINDOWED set is a real `<ul>` (`_shared/VirtualWindow.tsx`): the browser's
+   own marker and indent come off it, and the rows keep the whole rhythm they
+   already had as siblings in a plain box. */
+.rowList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

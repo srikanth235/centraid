@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit pre-existing cohesive SQLite regression suite; decomposition is outside issue #417
+// governance: allow-repo-hygiene file-size-limit cohesive SQLite regression suite; decomposition is outside issue #417
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { beforeAll, describe, expect, test } from "vitest";
@@ -101,7 +101,14 @@ describe("sqlite-store", () => {
             {
               entity: "core.event",
               primaryKey: "event_id",
-              columns: ["event_id", "summary", "description", "status"],
+              // Local search only honours columns the shape carries.
+              columns: [
+                "event_id",
+                "summary",
+                "description",
+                "status",
+                "deleted_at",
+              ],
             },
           ],
         },
@@ -138,6 +145,7 @@ describe("sqlite-store", () => {
             summary: "Quarterly budget review",
             description: "Bring the forecast",
             status: "confirmed",
+            deleted_at: null,
           },
         },
       ],
@@ -166,8 +174,7 @@ describe("sqlite-store", () => {
         });
         expect(store.catalog()).toStrictEqual([]);
         // sqlite-wasm hands back null-prototype rows; spreading compares the
-        // column data (which is the contract) without asserting the driver's
-        // prototype.
+        // column data, the contract, not the driver's prototype.
         expect(
           db
             .exec({
@@ -215,6 +222,40 @@ describe("sqlite-store", () => {
           durability: "durable",
         });
         expect(store.catalog()).toStrictEqual(snapshot().shapes);
+      } finally {
+        store.close();
+      }
+    });
+
+    test("a read pinned to one primary-key row confines its dependency to that row", () => {
+      const { store } = openStore();
+      try {
+        store.bootstrap(snapshot());
+        const pinned = store.read({
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          where: [{ column: "event_id", op: "eq", value: "event-2" }],
+        });
+        expect(pinned.rows).toHaveLength(1);
+        expect(pinned.dependency).toStrictEqual({
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-2",
+        });
+        expect(
+          store.read({
+            shapeId: "shape-agenda",
+            entity: "core.event",
+            where: [{ column: "status", op: "eq", value: "open" }],
+          }).dependency
+        ).toStrictEqual({ shapeId: "shape-agenda", entity: "core.event" });
+        expect(
+          store.read({
+            shapeId: "shape-agenda",
+            entity: "core.event",
+            where: [{ column: "event_id", op: "eq", value: "event-9" }],
+          }).dependency
+        ).toStrictEqual({ shapeId: "shape-agenda", entity: "core.event" });
       } finally {
         store.close();
       }

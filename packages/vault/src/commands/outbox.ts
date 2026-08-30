@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit the outbox lifecycle is one closed set — stage/decide/record_result validate each other’s risk + state invariants (#306)
+// governance: allow-repo-hygiene file-size-limit the outbox lifecycle is one closed set validating each other's risk and state invariants (#306)
 // The outbox commands (#306): external writes as artifacts. `stage` is INERT;
 // `decide` is the owner's act on the thing itself; `record_result` is one
 // drain's receipt. The read-only ceiling on connector fires (#304) stands.
@@ -7,6 +7,7 @@ import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { sha256Hex } from "../ids.js";
 import { resolveEntity } from "../schema/tables.js";
+import { partyForReach } from "./contact-reach.js";
 
 /** The vault owner's party id. */
 function ownerPartyId(ctx: HandlerCtx): string {
@@ -17,15 +18,10 @@ function ownerPartyId(ctx: HandlerCtx): string {
   return owner.owner_party_id;
 }
 
-/** Resolve a wire address (email, phone, handle) to a live party, if known. */
+/** Reach lives on channels and identity keys in the register; one call asks
+ *  both, so an address the member typed in People resolves too (#883). */
 function partyForAddress(ctx: HandlerCtx, value: string): string | null {
-  const row = ctx.db
-    .prepare(
-      `SELECT party_id FROM core_party_identifier
-        WHERE value = ? AND (valid_to IS NULL OR valid_to > ?) LIMIT 1`
-    )
-    .get(value, ctx.now) as { party_id: string } | undefined;
-  return row?.party_id ?? null;
+  return partyForReach(ctx.db, null, value, ctx.now);
 }
 
 /** The wire shape a staged external call must fit (placeholders, no tokens). */
@@ -435,11 +431,10 @@ function recordResult(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /**
- * Publish one drained, message-shaped item into the social spine:
- * sha-deduped body content, thread per (connection, target), participants =
- * owner + resolved recipient (never a duplicate person per channel),
- * external_id `outbox:<item_id>` so a replay finds the published row.
- * Returns null for non-message artifacts (no `body`/`text` string).
+ * Publish one drained, message-shaped item into the social spine: sha-deduped
+ * body, thread per (connection, target), participants owner + resolved
+ * recipient, `external_id` `outbox:<item_id>` so a replay finds the row.
+ * Returns null for non-message artifacts.
  */
 function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
   const item = ctx.db

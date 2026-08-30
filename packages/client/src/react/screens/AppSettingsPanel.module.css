@@ -106,7 +106,7 @@
    frames its strip with a hairline and tints it against the glass rather
    than sitting on --bg-sunken, its tabs run 11.5px, and each button holds a
    glyph + badge row where seg's are text-only.
-   Scoped through .settingsTabsWrap so these outrank `.seg button` whatever
+   Scoped through .settingsTabsWrap so these outrank `.segOption` whatever
    the import order — the same rule-1 escape `.paneSeg` uses below. */
 .settingsTabs {
   border: 0.5px solid var(--line);

@@ -5,19 +5,23 @@
  * never a toast.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 
 import { NOBODY_TO_SHARE_WITH } from "./grant-audiences.ts";
 import {
+  accessChangedOutcome,
   alreadyGrantedOutcome,
   audienceNotKnown,
+  CHANGE_ACCESS_ACTION,
+  CHANGE_ACCESS_CANCEL_ACTION,
   capabilityLabel,
-  capabilityUnchangedOutcome,
-  deliveryLabel,
+  changeAccessConfirmBody,
+  changeAccessConfirmTitle,
   GRANT_SHEET_TITLE,
   GRANTS_UNREACHABLE,
   GRANTS_UNREADABLE,
+  grantStandingLabel,
   grantedOutcome,
   groupContributionNote,
   nothingSharedYet,
@@ -39,7 +43,6 @@ import {
   channelReach,
   defaultCapability,
   drawableCapability,
-  grantDelivery,
   grantOverSubject,
   grantRequestFor,
   liveGrants,
@@ -52,6 +55,8 @@ import type {
   GrantRecord,
   GrantSubject,
 } from "./grant-plane.ts";
+import { KitModal } from "./KitModal.tsx";
+import { Segmented } from "./Segmented.tsx";
 
 import styles from "./GrantSheet.module.css";
 
@@ -60,7 +65,6 @@ export interface GrantSheetProps {
   onClose: () => void;
   audiences: readonly GrantAudienceOption[];
   subjects?: readonly GrantSubject[];
-  /** Object-first entry. */
   subject?: GrantSubject;
   audienceId?: string;
   onStatus: (message: string) => void;
@@ -80,12 +84,11 @@ function subjectTitle(subject: GrantSubject): string {
 export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   // Once per mount: a fresh door every render would re-read on every keystroke.
   const door = useMemo(() => props.door ?? webGrantDoor(), [props.door]);
-  const dialogRef = useRef<HTMLDialogElement>(null);
   // `null` = unread. Empty registry is "cannot be shared" — do not paint that early.
   const [registry, setRegistry] = useState<SubjectRegistry | null>(null);
   const [audienceId, setAudienceId] = useState(props.audienceId ?? "");
   const [subjectId, setSubjectId] = useState("");
-  // `null` = unchosen; capability is derived at render, not in an effect.
+  // `null` = unchosen.
   const [picked, setPicked] = useState<GrantCapability | null>(null);
   const [standing, setStanding] = useState<GrantRecord[] | null>(null);
   // `undefined` until a read answers. `null` would paint "Not reached yet" for one frame.
@@ -94,6 +97,7 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<GrantRecord | null>(null);
+  const [changeConfirm, setChangeConfirm] = useState(false);
 
   const audience =
     props.audiences.find((option) => option.id === audienceId) ??
@@ -117,6 +121,7 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
       setBusy(false);
       setRefusal(null);
       setConfirming(null);
+      setChangeConfirm(false);
       setPicked(null);
       setAudienceId(props.audienceId ?? "");
       setSubjectId("");
@@ -129,8 +134,7 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     };
   }, [props.open, props.audienceId, door]);
 
-  // Reach is about the person, not the door. Object-first still names
-  // someone, so it still owes a reach read (`forSubject` cannot answer one).
+  // Reach is about the person: object-first still owes a reach read.
   useEffect(() => {
     if (!props.open) return;
     if (!pinnedType && !audienceKey) return;
@@ -187,17 +191,8 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     };
   }, [props.open, pinnedType, pinnedId, audienceKind, audienceKey, door]);
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog || !props.open) return;
-    dialog.showModal?.();
-    return () => {
-      if (dialog.open) dialog.close();
-    };
-  }, [props.open]);
-
   // Open on the standing capability — do not propose a downgrade or a widen.
-  // Derived at render; an effect writing it back would be a second source of truth.
+  // An effect writing it back would be a second source of truth.
   const alreadyStanding =
     subject && standing
       ? grantOverSubject(
@@ -246,6 +241,12 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     : audienceNotKnown(audience?.label ?? "this audience");
   const showStanding = audienceKnown && rows.length > 0;
   const reach = channelReach(channel);
+  // The standing answer this submit would replace. Same verb is not a change:
+  // the route reads that back.
+  const changing =
+    alreadyStanding && alreadyStanding.capability !== capability
+      ? alreadyStanding
+      : undefined;
   const cannotShare =
     !audience ||
     !subject ||
@@ -256,6 +257,12 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
 
   const submit = async (): Promise<void> => {
     if (!audience || !subject || cannotShare) return;
+    // No in-place change of verb (ruling V-table): posting it would be refused.
+    // Ask first — the change costs the audience their copy while it runs.
+    if (changing) {
+      setChangeConfirm(true);
+      return;
+    }
     setBusy(true);
     setRefusal(null);
     const outcome = await door.create(
@@ -266,12 +273,38 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
       setRefusal(outcome.message);
       return;
     }
+    // A held share (#883) reads "on its way", never as the granted outcome: no
+    // vault has been asked about it yet.
     props.onStatus(
-      outcome.outcome === "exists_other_capability"
-        ? capabilityUnchangedOutcome(audience.label, outcome.standing)
+      outcome.outcome === "awaiting_confirmation" ||
+        outcome.outcome === "queued"
+        ? outcome.message
         : outcome.outcome === "exists"
           ? alreadyGrantedOutcome(audience.label)
           : grantedOutcome(audience.label, capability)
+    );
+    props.onClose();
+  };
+
+  const changeAccess = async (): Promise<void> => {
+    if (!audience || !subject || !changing) return;
+    setBusy(true);
+    setRefusal(null);
+    const outcome = await door.changeCapability(
+      changing.grantId,
+      grantRequestFor(audience, subject, capability)
+    );
+    setBusy(false);
+    setChangeConfirm(false);
+    if (!outcome.ok) {
+      setRefusal(outcome.message);
+      return;
+    }
+    props.onStatus(
+      outcome.outcome === "awaiting_confirmation" ||
+        outcome.outcome === "queued"
+        ? outcome.message
+        : accessChangedOutcome(audience.label, capability)
     );
     props.onClose();
   };
@@ -318,17 +351,40 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
         </button>
       </div>
     </div>
+  ) : changeConfirm && changing && audience ? (
+    <div className={styles.confirm}>
+      <h2>{changeAccessConfirmTitle(audience.label, capability)}</h2>
+      <p className={styles.confirmBody}>
+        {changeAccessConfirmBody(subjectNoun(changing.subjectType))}
+      </p>
+      <div className="kit-modal-foot">
+        <button
+          type="button"
+          className="kit-btn"
+          onClick={() => setChangeConfirm(false)}
+        >
+          {CHANGE_ACCESS_CANCEL_ACTION}
+        </button>
+        <button
+          type="button"
+          className="kit-btn primary"
+          disabled={busy}
+          onClick={() => void changeAccess()}
+        >
+          {CHANGE_ACCESS_ACTION}
+        </button>
+      </div>
+    </div>
   ) : null;
 
   return (
-    <dialog
-      ref={dialogRef}
+    <KitModal
+      layer="top"
+      open={props.open}
       className="kit-modal-back"
-      aria-modal="true"
-      onCancel={(event) => {
-        event.preventDefault();
-        props.onClose();
-      }}
+      label={GRANT_SHEET_TITLE}
+      ariaModal
+      onDismiss={props.onClose}
     >
       <button
         type="button"
@@ -409,18 +465,15 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
               {/* Fieldset carries the group's accessible name; the section would repeat it. */}
               <section className={styles.step}>
                 <p className={styles.eyebrow}>Access</p>
-                <fieldset className="kit-seg" aria-label="Access">
-                  {capabilities.map((candidate) => (
-                    <button
-                      key={candidate}
-                      type="button"
-                      aria-pressed={capability === candidate}
-                      onClick={() => setPicked(candidate)}
-                    >
-                      {capabilityLabel(candidate)}
-                    </button>
-                  ))}
-                </fieldset>
+                <Segmented
+                  label="Access"
+                  options={capabilities.map((candidate) => ({
+                    key: candidate,
+                    label: capabilityLabel(candidate),
+                    pressed: capability === candidate,
+                    select: () => setPicked(candidate),
+                  }))}
+                />
                 {contributionNote ? (
                   <p className={styles.note}>{contributionNote}</p>
                 ) : null}
@@ -446,13 +499,21 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                               ? audienceLabelFor(grant, props.audiences)
                               : subjectNoun(grant.subjectType)}
                           </span>
+                          {/* The vault's own phrase and its own reason, both
+                              verbatim (ruling V-phrases). An unanswered wire
+                              prints the capability alone. */}
                           <span
                             className={styles.standingMeta}
-                            data-delivery={grantDelivery(grant)}
+                            data-phrase={grant.phrase ?? "unstated"}
                           >
-                            {capabilityLabel(grant.capability)} ·{" "}
-                            {deliveryLabel(grantDelivery(grant))}
+                            {capabilityLabel(grant.capability)}
+                            {grantStandingLabel(grant)
+                              ? ` · ${grantStandingLabel(grant)}`
+                              : ""}
                           </span>
+                          {grant.reason ? (
+                            <span className={styles.note}>{grant.reason}</span>
+                          ) : null}
                         </span>
                         <button
                           type="button"
@@ -483,13 +544,17 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                 disabled={cannotShare}
                 onClick={() => void submit()}
               >
-                {busy ? "Sharing…" : GRANT_SHEET_TITLE}
+                {busy
+                  ? "Sharing…"
+                  : changing
+                    ? CHANGE_ACCESS_ACTION
+                    : GRANT_SHEET_TITLE}
               </button>
             </div>
           </>
         )}
       </div>
-    </dialog>
+    </KitModal>
   );
 }
 

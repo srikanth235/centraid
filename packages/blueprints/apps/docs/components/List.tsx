@@ -4,6 +4,8 @@ import type { CSSProperties, MouseEvent } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
+import { virtualItemAria } from "../../_shared/virtual-window.ts";
+import { virtualBlockProps } from "../../_shared/VirtualWindow.tsx";
 import { WINDOW_FAILED } from "../drive-copy.ts";
 import { fmtBytes, fmtDate, typeMeta } from "../format.ts";
 import { I, KIND_ICONS } from "../icons.ts";
@@ -36,13 +38,13 @@ export function ListRow({
   onToggleSelect,
   onOpenMenu,
   onRestore,
+  position,
 }: {
   doc: DriveDoc;
   index: number;
   selectedIds: Set<string>;
   /** Selection is a MODE (§4.1). Off, the row draws no box at all. */
   selecting: boolean;
-  /** Who this document belongs to, as the drive can answer it. */
   owner: DriveOwner;
   narrow: boolean;
   search: string;
@@ -55,6 +57,10 @@ export function ListRow({
   onToggleSelect: (id: string, index: number, shift: boolean) => void;
   onOpenMenu: (anchor: HTMLElement, doc: DriveDoc) => void;
   onRestore: (doc: DriveDoc) => void;
+  /** Position in a WINDOWED set (`_shared/VirtualWindow.tsx`). Present only
+   *  when the drive is windowing, and then the row IS the list item — never a
+   *  wrapper around it, so `.row:last-child` still means the last row. */
+  position?: { setSize: number };
 }) {
   const m = typeMeta(doc.media_type, doc.title);
   const selected = selectedIds.has(doc.document_id);
@@ -63,11 +69,18 @@ export function ListRow({
   // The row's ONE state slot (§4.1). The ladder decides which of the five
   // things it may say; this row only supplies what it has read.
   const rowState = rowStateFor(doc, { trashed, offline });
+  const Box = position ? "li" : "div";
   return (
-    <div
+    <Box
       className={styles.row}
       data-selected={String(selected)}
       data-narrow={String(narrow)}
+      {...(position
+        ? {
+            ...virtualBlockProps(index),
+            ...virtualItemAria(index, position.setSize),
+          }
+        : {})}
     >
       {/* THE ROW BODY SELECTS ON ONE CLICK AND OPENS ON TWO. That is the
           handoff's rule, verbatim: "A single click SELECTS and raises the
@@ -91,18 +104,13 @@ export function ListRow({
         aria-label={`Select ${title}`}
         aria-pressed={selected}
         onClick={(e) => onToggleSelect(doc.document_id, index, e.shiftKey)}
-        // A DOUBLE CLICK OPENS THE DOCUMENT ON THE STAGE, not the reading
-        // route. One click picks the row, two open it — the gesture pair every
-        // file browser a member has already used trains them on, and the thing
-        // that opens is the document itself, full-bleed, with its properties
-        // beside it.
+        // One click picks the row, two open the document on the stage — not
+        // the reading route.
         onDoubleClick={() => onOpenQuick(doc.document_id)}
       />
       {/* The box appears once something IS selected, never before (the
-          handoff's `showBox: !!sel`). It used to stand on every row of every
-          drive whether or not anybody was selecting anything — a permanent
-          empty control at the leading edge of the one thing the member came to
-          read, and a column of them down the whole set. */}
+          handoff's `showBox: !!sel`): a permanent empty control at the leading
+          edge of what the member came to read is a column of noise. */}
       {selecting ? (
         <Checkbox
           cls={styles.check!}
@@ -115,21 +123,11 @@ export function ListRow({
         />
       ) : null}
       {/* THE KIND MARK — THE KIND'S GLYPH, FOR EVERY KIND, WITH NO EXCEPTION
-          FOR PICTURES. This slot used to fork: a real thumbnail where the
-          bytes were an image or a video poster, the kind's line glyph
-          everywhere else. That made the leading edge of the drive two
-          different things at once — a column of ink marks with photographs cut
-          into it — and the mark stopped being readable as a mark. It is a
-          KIND mark; a kind is what it says. The document itself is one double
-          click away on the stage, at the size a picture is worth looking at.
-
-          Drawn on nothing at all, the way the handoff draws its row icons
-          (`docRowsBlock`'s `iconCss` is a colour and a display mode — no
-          background, no radius). Before either of those it was a tinted square
-          with `DOC`/`PDF`/`XLS` stamped in it: a filename extension in a
-          badge, repeating the Kind column that then stood two fields to the
-          right. That column is gone as well now, and this mark is what
-          carries the kind on the row. */}
+          FOR PICTURES. A thumbnail here would make the drive's leading edge a
+          column of ink marks with photographs cut into it, and the mark would
+          stop reading as a mark; the document itself is one double click away
+          on the stage. Drawn on nothing at all — no background, no radius, the
+          way the handoff draws its row icons. */}
       <button
         type="button"
         className={styles.badge}
@@ -264,7 +262,7 @@ export function ListRow({
           </button>
         )}
       </div>
-    </div>
+    </Box>
   );
 }
 
@@ -277,13 +275,9 @@ const COLUMNS: readonly { key: SortKey; label: string; cls: string }[] = [
 ];
 
 /**
- * The head row — and the drive's SORT CONTROL, which is the same thing.
- *
- * The sort is not a button up in the toolbar, three regions away from the
- * columns it orders. A member who wants this set by size looks at the word
- * "Size" and presses it; that is the whole
- * interaction, and it is the one the handoff draws. The arrow rides the active
- * column, so where the order comes from and what it is are one reading.
+ * The head row IS the drive's sort control — never a toolbar button three
+ * regions from the columns it orders. The arrow rides the active column, so
+ * where the order comes from and what it is are one reading.
  */
 export function ListHead({
   rows,
@@ -297,7 +291,6 @@ export function ListHead({
 }: {
   rows: DriveDoc[];
   selectedIds: Set<string>;
-  /** Selection mode — the select-all box exists only inside it. */
   selecting: boolean;
   onToggleAll: (rows: DriveDoc[], allSelected: boolean) => void;
   sortKey: SortKey;
@@ -305,7 +298,6 @@ export function ListHead({
   sortDir: 1 | -1;
   /** Sort by this column; pressing the active one reverses it. */
   onSortBy: (key: SortKey) => void;
-  /** Open the named-orders menu, anchored to its own trailing button. */
   onOpenSortMenu: (anchor: HTMLElement) => void;
 }) {
   const allSel =
@@ -371,12 +363,8 @@ export function WindowFoot({
   onShowMore,
 }: {
   driveWindow: number;
-  /**
-   * The read for the rows BEYOND the fetched window came back failed (§4.1
-   * rung 1). Only then may the window say so: a window still in flight says
-   * nothing at all, because "could not be fetched" about a read that is still
-   * running is a sentence the app would have had to invent.
-   */
+  /** Only a FAILED read for the rows beyond the window may say so (§4.1 rung
+   *  1); a window still in flight says nothing at all. */
   failed?: boolean;
   onShowMore: () => Promise<void> | void;
 }) {

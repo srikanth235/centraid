@@ -1,20 +1,32 @@
-// One-screen media lookahead: swap staged `data-prefetch-src` into `src` a
-// viewport before view. Pure imperative DOM (src/photos-media.test.ts).
+// One-screen lookahead: swap staged `data-prefetch-src` into `src` a viewport
+// before view (src/photos-media.test.ts).
+//
+// Observer budget (#883): one IntersectionObserver per scroll root plus ONE
+// MutationObserver, for both "auth landed" and "tile detached". Per-image
+// observers and `getComputedStyle` root walks cost a style recalc per photo.
 import { VAULT_BLOB_PATH } from "../_shared/untrusted.ts";
 
-/**
- * Stamp the shell's inline blob authorizer sets while vault-blob auth is in
- * flight. Blueprints never depend on the client package, so this literal is
- * the whole interface (`inline-blob-images.ts` repeats it). On the served
- * iframe path no authorizer is installed — promote immediately.
- */
+/** Mirrors the shell's authorizer stamp; blueprints cannot import the client. */
 export const BLOB_PENDING_ATTR = "data-blob-pending";
 
+/** `rootMargin` expands only the observer's OWN root, so the lookahead reaches
+ *  a screen ahead only when rooted in the pane that actually scrolls. */
+export const MEDIA_ROOT_ATTR = "data-media-root";
+
+const MEDIA_ROOT_SELECTOR = `[${MEDIA_ROOT_ATTR}]`;
+
+/** Save-Data narrows the lookahead to the visible rect; skipping staging
+ *  instead would load the whole library on that connection. */
+const LOOKAHEAD_MARGIN = "100% 0px";
+const SAVE_DATA_MARGIN = "0px";
+
 let viewportObserver: IntersectionObserver | undefined;
-const rootObservers = new WeakMap<Element, IntersectionObserver>();
+/** Keyed by margin too: Save-Data changes it. */
+const rootObservers = new Map<Element, Map<string, IntersectionObserver>>();
 const observerByImage = new WeakMap<HTMLElement, IntersectionObserver>();
-const promotionWatchers = new WeakMap<HTMLElement, MutationObserver>();
-let detachedMediaObserver: MutationObserver | undefined;
+const staged = new Set<HTMLImageElement>();
+const held = new Set<HTMLImageElement>();
+let domWatcher: MutationObserver | undefined;
 
 function releaseIntersection(img: HTMLElement): void {
   observerByImage.get(img)?.unobserve(img);
@@ -23,11 +35,8 @@ function releaseIntersection(img: HTMLElement): void {
 
 function stopObserving(img: HTMLElement): void {
   releaseIntersection(img);
-  const watcher = promotionWatchers.get(img);
-  if (watcher) {
-    watcher.disconnect();
-    promotionWatchers.delete(img);
-  }
+  staged.delete(img as HTMLImageElement);
+  held.delete(img as HTMLImageElement);
   delete img.dataset.prefetchSrc;
 }
 
@@ -36,11 +45,8 @@ function applyPending(img: HTMLImageElement, pending: string): void {
   img.src = pending;
 }
 
-/**
- * Hold a raw vault path until the authorizer hands over `blob:` or clears
- * its stamp. Off the gateway origin the path falls through to SPA `index.html`
- * and the tile paints a permanent placeholder if `src` is set too soon.
- */
+/** Off the gateway origin a raw vault path falls through to SPA `index.html`,
+ *  so `src` set before `blob:` lands paints a permanent placeholder. */
 function promote(img: HTMLImageElement): void {
   const pending = img.dataset.prefetchSrc;
   if (!pending) {
@@ -58,65 +64,64 @@ function promote(img: HTMLImageElement): void {
 }
 
 function holdForAuthorization(img: HTMLImageElement, pending: string): void {
-  if (promotionWatchers.has(img)) return;
-  if (typeof MutationObserver !== "function") {
-    // Nothing can tell us when the swap lands — paint the raw path.
+  if (held.has(img)) return;
+  if (!ensureDomWatcher()) {
     applyPending(img, pending);
     return;
   }
-  const watcher = new MutationObserver(() => {
-    promote(img);
-  });
-  promotionWatchers.set(img, watcher);
-  watcher.observe(img, {
-    attributes: true,
-    attributeFilter: ["data-prefetch-src", BLOB_PENDING_ATTR],
-  });
+  held.add(img);
 }
 
-function scrollRootFor(img: HTMLElement): HTMLElement | null {
-  for (
-    let node = img.parentElement;
-    node && node !== document.documentElement;
-  ) {
-    const style = getComputedStyle(node);
-    if (/(?:auto|scroll|overlay)/u.test(`${style.overflow} ${style.overflowY}`))
-      return node;
-    node = node.parentElement;
-  }
-  return null;
+function scrollRootFor(img: HTMLElement): Element | null {
+  return img.closest(MEDIA_ROOT_SELECTOR);
 }
 
-function createObserver(root: Element | null): IntersectionObserver {
+function createObserver(
+  root: Element | null,
+  rootMargin: string
+): IntersectionObserver {
   return new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         const target = entry.target as HTMLImageElement;
-        // Drop the viewport slot; leave `data-prefetch-src` — `promote` may still wait on auth.
+        // Leave `data-prefetch-src`: `promote` may still wait on auth.
         releaseIntersection(target);
         promote(target);
       }
     },
-    // Expand the ACTUAL scroll root. A viewport-rooted observer is still clipped by #scrollPane/.picker-grid.
-    { root, rootMargin: "100% 0px" }
+    { root, rootMargin }
   );
 }
 
-function observerFor(root: HTMLElement | null): IntersectionObserver {
-  if (!root) return (viewportObserver ??= createObserver(null));
-  let observer = rootObservers.get(root);
+function observerFor(
+  root: Element | null,
+  rootMargin: string
+): IntersectionObserver {
+  if (!root) return (viewportObserver ??= createObserver(null, rootMargin));
+  let byMargin = rootObservers.get(root);
+  if (!byMargin) {
+    byMargin = new Map();
+    rootObservers.set(root, byMargin);
+  }
+  let observer = byMargin.get(rootMargin);
   if (!observer) {
-    observer = createObserver(root);
-    rootObservers.set(root, observer);
+    observer = createObserver(root, rootMargin);
+    byMargin.set(rootMargin, observer);
   }
   return observer;
 }
 
-function ensureDetachedCleanup(): void {
-  if (detachedMediaObserver || typeof MutationObserver !== "function") return;
-  detachedMediaObserver = new MutationObserver((records) => {
+function ensureDomWatcher(): MutationObserver | undefined {
+  if (domWatcher) return domWatcher;
+  if (typeof MutationObserver !== "function") return undefined;
+  domWatcher = new MutationObserver((records) => {
     for (const record of records) {
+      if (record.type === "attributes") {
+        const target = record.target as HTMLImageElement;
+        if (held.has(target)) promote(target);
+        continue;
+      }
       for (const node of record.removedNodes) {
         if (!(node instanceof Element)) continue;
         if (node.matches("img[data-prefetch-src]"))
@@ -129,28 +134,49 @@ function ensureDetachedCleanup(): void {
       }
     }
   });
-  detachedMediaObserver.observe(document.documentElement, {
+  domWatcher.observe(document.documentElement, {
     childList: true,
     subtree: true,
+    attributes: true,
+    attributeFilter: ["data-prefetch-src", BLOB_PENDING_ATTR],
   });
+  return domWatcher;
 }
 
 export function stopNextScreenObservation(img: HTMLImageElement): void {
   stopObserving(img);
 }
 
+/** The observers are module singletons; the app root calls this on unmount. */
+export function stopMediaObservation(): void {
+  for (const img of staged) releaseIntersection(img);
+  staged.clear();
+  held.clear();
+  viewportObserver?.disconnect();
+  viewportObserver = undefined;
+  for (const byMargin of rootObservers.values())
+    for (const observer of byMargin.values()) observer.disconnect();
+  rootObservers.clear();
+  domWatcher?.disconnect();
+  domWatcher = undefined;
+}
+
 export function observeNextScreen(img: HTMLImageElement, src: string): void {
   stopObserving(img);
-  const connection = (navigator as { connection?: { saveData?: boolean } })
-    .connection;
-  const saveData = connection?.saveData === true;
-  if (saveData || typeof IntersectionObserver !== "function") {
+  if (typeof IntersectionObserver !== "function") {
     img.src = src;
     return;
   }
-  ensureDetachedCleanup();
+  const connection = (navigator as { connection?: { saveData?: boolean } })
+    .connection;
+  const saveData = connection?.saveData === true;
+  ensureDomWatcher();
   img.dataset.prefetchSrc = src;
-  const observer = observerFor(scrollRootFor(img));
+  staged.add(img);
+  const observer = observerFor(
+    scrollRootFor(img),
+    saveData ? SAVE_DATA_MARGIN : LOOKAHEAD_MARGIN
+  );
   observerByImage.set(img, observer);
   observer.observe(img);
 }

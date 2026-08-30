@@ -1,25 +1,11 @@
-/**
- * Star a document through core.star_document: one flags-scheme tag on the
- * canonical content item (#274) — the same star Photos' favorite
- * writes, so "Starred" means one thing across every surface. Idempotent;
- * refuses trashed documents (restore first). Risk low.
- */
+import { actionInput, runVaultAction } from "../../_shared/action-kit.ts";
+
 export default async function starHandler({ body, ctx }: HandlerArgs) {
-  const input = (body ?? {}) as Record<string, unknown>;
-  try {
-    const outcome = await ctx.vault.invoke({
-      command: "core.star_document",
-      input: {
-        document_id: String(input.document_id ?? ""),
-      },
-      purpose: "dpv:ServiceProvision",
-    });
-    return { status: 200, body: outcome };
-  } catch (error) {
-    const e = error as { code?: string; message?: string };
-    return {
-      status: 200,
-      body: { status: "denied", reason: e.message, code: e.code },
-    };
-  }
+  const input = actionInput(body);
+  return runVaultAction(ctx, {
+    command: "core.star_document",
+    input: {
+      document_id: String(input.document_id ?? ""),
+    },
+  });
 }

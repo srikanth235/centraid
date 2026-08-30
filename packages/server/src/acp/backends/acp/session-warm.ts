@@ -17,6 +17,7 @@ import type { Readable, Writable } from "node:stream";
 import { methods } from "@agentclientprotocol/sdk";
 import type { PromptCapabilities } from "@agentclientprotocol/sdk";
 
+import { unrefTimer } from "../../../lib/unref-timer.js";
 import type { AcpConnectionOwner } from "./connection.js";
 
 const IDLE_MS = 120_000;
@@ -27,7 +28,7 @@ async function bounded<T>(promise: Promise<T>): Promise<T | undefined> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<undefined>((resolve) => {
     timer = setTimeout(() => resolve(undefined), DISPOSE_TIMEOUT_MS);
-    timer.unref?.();
+    unrefTimer(timer);
   });
   return Promise.race([promise, timeout]).finally(() => {
     if (timer) clearTimeout(timer);
@@ -122,7 +123,7 @@ export function putWarmSlot(
     }, IDLE_MS),
   };
   // Don't keep the event loop alive solely for idle eviction.
-  entry.timer.unref?.();
+  unrefTimer(entry.timer);
   pool.set(key, entry);
   if (pool.size > MAX_WARM_SLOTS) {
     const oldest = [...pool.values()]

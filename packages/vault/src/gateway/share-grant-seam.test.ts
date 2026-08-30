@@ -70,8 +70,8 @@ function docsSeat() {
   return { ...seat, folderId, documentId };
 }
 
-/** v1's one EDIT subject. A group carries its own circle, so a commons over it
- *  must name that circle's EXACT roster — the audience joins the group first. */
+/** v1's one EDIT subject. A commons over a group must name that circle's
+ *  EXACT roster, so the audience joins the group first. */
 function tallySeat() {
   const seat = ownerSeat(registerTallyCommands);
   return {
@@ -142,8 +142,8 @@ function audienceAgent(
   return { partyId: agent.partyId, credential };
 }
 
-/** A Tally group commons across two real vaults: v1's one edit subject, so a
- *  member's own-seat write has a real rail to ride. */
+/** A Tally group commons across two real vaults, so a member's own-seat
+ *  write has a real rail to ride. */
 function tallyCommonsHome() {
   const home = household();
   const now = nowIso();
@@ -270,10 +270,14 @@ describe("where an audience's edit is actually enforced", () => {
       grantedBy: fixture.home.originBoot.ownerPartyId,
     });
 
-    // share_grant rows never project; own-seat writes have no grant plane.
+    // Counted over the SHARE lens: the audience seat has device-kind rows of
+    // its own that are not shares (#883).
     expect(
       fixture.home.audience.vault
-        .prepare("SELECT COUNT(*) AS n FROM share_grant")
+        .prepare(
+          `SELECT COUNT(*) AS n FROM share_authority
+            WHERE principal_kind IN ('person','circle')`
+        )
         .get()
     ).toMatchObject({ n: 0 });
 

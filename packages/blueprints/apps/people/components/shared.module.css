@@ -31,6 +31,15 @@
   padding-block: var(--sp-1);
   border-block-end: 1px solid var(--line);
 }
+/* A WINDOWED set is a real `<ul>` (`_shared/VirtualWindow.tsx`), so the list
+   needs the browser's own marker and indent taken off it — the rows carry the
+   whole visual rhythm and a bullet column would shift every one of them. */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 .row:last-child {
   border-block-end: none;
 }

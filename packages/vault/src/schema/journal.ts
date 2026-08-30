@@ -9,15 +9,11 @@
 // S4). Append-only is a contract enforced by the gateway (no UPDATE path),
 // not a trigger.
 //
-// The FILE carries a second band this module does not own: the runtime's
-// conversation ledger (conversations, turns, items, attachments,
-// automation_state, run_summary — the old standalone transcripts.db, folded
-// in because both bands share the append-heavy, derived-growth profile that
-// keeps vault.db small). That band is declared in app-engine
-// (`CONVERSATION_LEDGER_DDL`), created idempotently on open, MUTABLE (turns
-// finish, CASCADE deletes), and never stamps `PRAGMA user_version` — the
-// version ladder below governs the audit band alone. The append-only
-// contract in this header applies only to the audit tables.
+// The FILE carries a second band this module does not own: the conversation
+// ledger, declared in app-engine (`CONVERSATION_LEDGER_DDL`), created
+// idempotently on open, MUTABLE, and never stamping `PRAGMA user_version`.
+// The ladder below and this header's append-only contract govern the audit
+// band alone.
 
 export const JOURNAL_DDL = `
 CREATE TABLE consent_provenance (
@@ -125,4 +121,14 @@ CREATE TABLE journal_archive_manifest (
 ) STRICT;
 CREATE INDEX idx_archive_manifest_stream_time ON journal_archive_manifest(stream, to_time);
 CREATE INDEX idx_archive_manifest_prev_manifest ON journal_archive_manifest(prev_manifest_id);
+`;
+
+/**
+ * Journal rung two (#883): the stream is read by TIME far more often than by
+ * entity, and the entity and chain indexes leave every such read a full scan.
+ * `IF NOT EXISTS`, so a fresh file reaches a stamped file's shape.
+ */
+export const JOURNAL_PROVENANCE_TIME_INDEX_DDL = `
+CREATE INDEX IF NOT EXISTS idx_provenance_occurred_at
+  ON consent_provenance(occurred_at);
 `;

@@ -12,6 +12,10 @@ An umbrella issue is worked by one **root agent** that owns the plan; sub-agents
 - **The root integrates.** After each slice lands, the root re-checks the seams — cross-slice links, anchors, contracts, and tests spanning slices — before dispatching dependents. Correctness failures live at the seams, and only the root sees them.
 - The worker/verifier split, isolation defaults, and iteration caps below apply to every sub-agent.
 
+### A slice exits on its lanes' gates, not on its own files
+
+Adopted by [#883](https://github.com/srikanth235/centraid/issues/883), from the [#834](https://github.com/srikanth235/centraid/issues/834) lesson. A slice's exit condition is the **repo-wide gate for every lane its tree participates in** — at minimum the root `bun run lint` and the whole `test` suite of the package it edits — never the subset of files it happened to touch. A sub-agent that runs only its own files' tests hands the root a green report over a red repo, and the failure then surfaces at the integration sweep, several slices away from the change that caused it. **Repo-wide reds surface inside the slice that caused them.** This is the exit condition, not an extra step: G2's "do not run the full suite in parallel" governs sibling agents' saves, not a slice's own exit.
+
 ## G2 — Parallel work norms
 
 ### Do not run the full suite when agents run in parallel
