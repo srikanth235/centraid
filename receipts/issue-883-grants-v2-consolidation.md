@@ -2163,6 +2163,11 @@ Round after `5924b7f82` (required CI red on that squash):
   tests now record the call's outcome instead; the down-only budget
   tightened 785 → 783.
 
+- SonarCloud quality gate: new reliability C from typescript:S6959
+  (`reduce()` without an initial value in
+  `multi-vault-provenance.ts` collapseSources). Replaced with a typed
+  min walk so an empty group cannot throw.
+
 - Knip duplicate exports: pending-projection default+named, agenda
   `POINTER_VIEWS` aliasing `VIEWS`, photos `DEFAULT_ZOOM` aliasing
   `DEFAULT_RUNG`.
@@ -2199,7 +2204,8 @@ server/vault/blueprints typecheck, previously red timer suites green,
 web+desktop Vite production builds. Schema-export ratchet re-pinned
 after the entity-catalog extract; export walk unchanged. Hygiene
 `toHaveBeenCalled` 785 → 783; pin/download and camera-roll tests assert
-recorded outcomes.
+recorded outcomes. Sonar S6959: collapseSources min-rank is a typed
+walk, not a no-init `reduce`.
 
 ### Change-set paths
 

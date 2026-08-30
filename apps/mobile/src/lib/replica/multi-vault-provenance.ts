@@ -157,12 +157,16 @@ function collapseSources(
   };
   const ranked = ordered
     .map((row) => ({ row, rank: numericValue(row.values._rank) }))
-    .filter((entry) => entry.rank !== undefined);
-  if (ranked.length > 0) {
-    const best = ranked.reduce((left, right) =>
-      right.rank! < left.rank! ? right : left
+    .filter(
+      (entry): entry is { row: ReplicaRowEnvelope; rank: number } =>
+        entry.rank !== undefined
     );
-    merged.values._rank = best.rank!;
+  let best = ranked[0];
+  if (best) {
+    for (const entry of ranked) {
+      if (entry.rank < best.rank) best = entry;
+    }
+    merged.values._rank = best.rank;
     merged.values._snippet = best.row.values._snippet ?? "";
   }
   return merged;
