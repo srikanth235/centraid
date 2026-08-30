@@ -622,9 +622,10 @@ export async function runFlow(slug, fn) {
   // The HTTP lane stays for a tokenless embedded host that already grants host
   // custody to loopback.
   const mintPairingTicket = async (gatewayUrl, gatewayToken) => {
-    const dataDir =
-      process.env.CENTRAID_MOBILE_GATEWAY_DATA_DIR ??
-      process.env.MAESTRO_GATEWAY_DATA_DIR;
+    // CI's tokenless fixture gateway deliberately exposes the loopback ticket
+    // endpoint; the daemon data-dir/CLI pairing path is reserved for local
+    // gateway runs and is not equivalent to this embedded test host.
+    const dataDir = process.env.MAESTRO_GATEWAY_DATA_DIR;
     if (dataDir) {
       const cli = path.join(REPO_ROOT, "packages/server/dist/cli/cli.js");
       const port = new URL(gatewayUrl).port;
