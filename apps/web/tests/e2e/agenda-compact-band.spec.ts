@@ -204,7 +204,13 @@ async function mount(
       `<body><div id="root"></div></body>`
   );
   await page.addScriptTag({ content: js });
-  await page.waitForSelector('nav[data-band="app"]', { timeout: 15_000 });
+  // Each layout has its OWN arrival signal: compact claims the band, pointer
+  // draws the rail. Waiting for the band in both hangs the pointer mount —
+  // that layout never claims one, which is the very swap this test asserts.
+  await page.waitForSelector(
+    compact ? 'nav[data-band="app"]' : 'aside[aria-label="Agenda rail"]',
+    { timeout: 15_000 }
+  );
 }
 
 test("Agenda's compact band offers Search, never Month, and lands where it says", async ({

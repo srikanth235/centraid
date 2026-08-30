@@ -5,6 +5,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+import { SERVICE_WORKER_VERSION } from "../../src/sw-version.js";
 import { installHarnessControlTransport } from "./control-transport.js";
 import { enforceTiming, perfBudgets } from "./perf-budgets.js";
 
@@ -504,10 +505,13 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
   page,
 }) => {
   await page.goto("/");
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.register("/sw.js");
+  // The shell's own stamped script URL (iroh-transport.ts), not a bare
+  // `/sw.js`: a second script URL on one scope installs a SECOND worker whose
+  // crawl and claim land inside the very window this test is timing.
+  await page.evaluate(async (url) => {
+    await navigator.serviceWorker.register(url);
     await navigator.serviceWorker.ready;
-  });
+  }, `/sw.js?v=${SERVICE_WORKER_VERSION}`);
   await expect
     .poll(() =>
       page.evaluate(() => navigator.serviceWorker.controller !== null)
