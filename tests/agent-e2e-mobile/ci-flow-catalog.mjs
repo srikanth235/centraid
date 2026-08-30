@@ -107,5 +107,3 @@ export const FLOW_CATALOG = Object.freeze({
     suite: "lane-a",
   },
 });
-
-export default FLOW_CATALOG;
