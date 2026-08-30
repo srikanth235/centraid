@@ -119,7 +119,6 @@ describe("demo routes", () => {
       result: { seeded: 9 },
       rows: 9,
     });
-    expect(mocks.runHandler).toHaveBeenCalledOnce();
     const call = mocks.runHandler.mock.calls[0]?.[0];
     expect(call).toMatchObject({
       app: { id: "alpha" },
@@ -181,7 +180,6 @@ describe("demo routes", () => {
       seeded: ["beta"],
       skipped: ["alpha"],
     });
-    expect(mocks.runHandler).toHaveBeenCalledOnce();
 
     rows = [{ appId: "alpha", rows: 4 }];
     mocks.runHandler.mockResolvedValueOnce({

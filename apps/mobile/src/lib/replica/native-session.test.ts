@@ -383,12 +383,15 @@ describe(createNativeReplicaSession, () => {
         json(page({ epoch: "replica-1", seq: 1 }))
       )
       .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })))
-      .on("/replica/bootstrap", async () => {
-        await new Promise((resolve) => {
-          setTimeout(resolve, 40);
-        });
-        throw new Error("stale walk superseded");
-      })
+      .on(
+        "/replica/bootstrap",
+        (): Promise<Response> =>
+          new Promise((_resolve, reject) => {
+            setTimeout(() => {
+              reject(new Error("stale walk superseded"));
+            }, 40);
+          })
+      )
       .on("/replica/bootstrap", () =>
         json(page({ epoch: "replica-1", seq: 4 }, { rows: [seeded] }))
       )

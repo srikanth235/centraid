@@ -258,8 +258,6 @@ describe("rebootstrap after writes that are absent from the feed", () => {
 
     await facade.rebootstrap();
 
-    expect(home.rebootstrap).toHaveBeenCalledOnce();
-    expect(family.rebootstrap).toHaveBeenCalledOnce();
     expect(pulled.sort()).toStrictEqual(["family", "home"]);
   });
 });

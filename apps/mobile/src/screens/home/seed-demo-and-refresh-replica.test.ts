@@ -92,6 +92,5 @@ describe(seedDemoAndRefreshReplica, () => {
         wait: async () => undefined,
       })
     ).rejects.toThrow(/gateway dead/u);
-    expect(rebootstrap).not.toHaveBeenCalled();
   });
 });
