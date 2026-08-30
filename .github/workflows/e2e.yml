@@ -385,6 +385,7 @@ jobs:
           exit 1
       - run: node scripts/test-report/prepare.mjs
       - name: Run iOS Maestro lane ${{ matrix.lane }}
+        if: matrix.lane == 'a'
         env:
           MAESTRO_PLATFORM: ios
           MOBILE_E2E_EMBEDDED: "1"
@@ -396,13 +397,196 @@ jobs:
             node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
             node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
             node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
-          else
-            node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
-            node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
-            node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
-            node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
           fi
           exit "$ec"
+      - name: Run lane B — Photos grid frame probe
+        id: lane_b_scroll_frames
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+        run: node tests/agent-e2e-mobile/flows/scroll-frames.mjs
+      - name: Start lane B — Photos functionality budget
+        if: matrix.lane == 'b'
+        run: date +%s > "$RUNNER_TEMP/centraid-lane-b-photos-start"
+      - name: Run lane B — Photos permissions
+        id: lane_b_photos_permissions
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+        run: node tests/agent-e2e-mobile/flows/photos-permissions.mjs
+      - name: Run lane B — Photos library
+        id: lane_b_photos_library
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/photos-library.mjs
+      - name: Run lane B — Photos viewer
+        id: lane_b_photos_viewer
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/photos-viewer.mjs
+      - name: Run lane B — Photos search
+        id: lane_b_photos_search
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/photos-search.mjs
+      - name: Run lane B — Photos select and write
+        id: lane_b_photos_select_write
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/photos-select-write.mjs
+      - name: Check lane B — Photos functionality budget
+        id: lane_b_photos_budget
+        if: always() && matrix.lane == 'b'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          elapsed=$(( $(date +%s) - $(cat "$RUNNER_TEMP/centraid-lane-b-photos-start") ))
+          echo "Photos functionality suite: ${elapsed}s / 480s budget"
+          test "$elapsed" -lt 480
+      - name: Run lane B — Places
+        id: lane_b_places
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+        run: node tests/agent-e2e-mobile/flows/places-seat.mjs
+      - name: Start lane B — Home app functionality budget
+        if: matrix.lane == 'b'
+        run: date +%s > "$RUNNER_TEMP/centraid-lane-b-home-start"
+      - name: Run lane B — Docs
+        id: lane_b_docs
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+        run: node tests/agent-e2e-mobile/flows/docs-drive.mjs
+      - name: Run lane B — Agenda
+        id: lane_b_agenda
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/agenda-week.mjs
+      - name: Run lane B — Notes
+        id: lane_b_notes
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/notes-library.mjs
+      - name: Run lane B — Tasks
+        id: lane_b_tasks
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/tasks-board.mjs
+      - name: Run lane B — People
+        id: lane_b_people
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/people-roster.mjs
+      - name: Run lane B — Tally
+        id: lane_b_tally
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/tally-derived.mjs
+      - name: Run lane B — Locker
+        id: lane_b_locker
+        if: matrix.lane == 'b'
+        continue-on-error: true
+        env:
+          MAESTRO_PLATFORM: ios
+          MOBILE_E2E_EMBEDDED: "1"
+          MAESTRO_REUSE_PAIRED_STATE: "1"
+        run: node tests/agent-e2e-mobile/flows/locker-gate.mjs
+      - name: Check lane B — Home app functionality budget
+        id: lane_b_home_budget
+        if: always() && matrix.lane == 'b'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          elapsed=$(( $(date +%s) - $(cat "$RUNNER_TEMP/centraid-lane-b-home-start") ))
+          echo "Home app functionality suite: ${elapsed}s / 720s budget"
+          test "$elapsed" -lt 720
+      - name: Aggregate lane B functionality results
+        if: always() && matrix.lane == 'b'
+        run: |
+          set -euo pipefail
+          {
+            echo "## iOS lane B functionality"
+            echo ""
+            echo "| Journey | Result |"
+            echo "| --- | --- |"
+            echo "| Photos grid frame probe | ${{ steps.lane_b_scroll_frames.outcome }} |"
+            echo "| Photos permissions | ${{ steps.lane_b_photos_permissions.outcome }} |"
+            echo "| Photos library | ${{ steps.lane_b_photos_library.outcome }} |"
+            echo "| Photos viewer | ${{ steps.lane_b_photos_viewer.outcome }} |"
+            echo "| Photos search | ${{ steps.lane_b_photos_search.outcome }} |"
+            echo "| Photos select and write | ${{ steps.lane_b_photos_select_write.outcome }} |"
+            echo "| Places | ${{ steps.lane_b_places.outcome }} |"
+            echo "| Docs | ${{ steps.lane_b_docs.outcome }} |"
+            echo "| Agenda | ${{ steps.lane_b_agenda.outcome }} |"
+            echo "| Notes | ${{ steps.lane_b_notes.outcome }} |"
+            echo "| Tasks | ${{ steps.lane_b_tasks.outcome }} |"
+            echo "| People | ${{ steps.lane_b_people.outcome }} |"
+            echo "| Tally | ${{ steps.lane_b_tally.outcome }} |"
+            echo "| Locker | ${{ steps.lane_b_locker.outcome }} |"
+            echo "| Photos budget | ${{ steps.lane_b_photos_budget.outcome }} |"
+            echo "| Home apps budget | ${{ steps.lane_b_home_budget.outcome }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "${{ steps.lane_b_scroll_frames.outcome }}" = success
+          test "${{ steps.lane_b_photos_permissions.outcome }}" = success
+          test "${{ steps.lane_b_photos_library.outcome }}" = success
+          test "${{ steps.lane_b_photos_viewer.outcome }}" = success
+          test "${{ steps.lane_b_photos_search.outcome }}" = success
+          test "${{ steps.lane_b_photos_select_write.outcome }}" = success
+          test "${{ steps.lane_b_places.outcome }}" = success
+          test "${{ steps.lane_b_docs.outcome }}" = success
+          test "${{ steps.lane_b_agenda.outcome }}" = success
+          test "${{ steps.lane_b_notes.outcome }}" = success
+          test "${{ steps.lane_b_tasks.outcome }}" = success
+          test "${{ steps.lane_b_people.outcome }}" = success
+          test "${{ steps.lane_b_tally.outcome }}" = success
+          test "${{ steps.lane_b_locker.outcome }}" = success
+          test "${{ steps.lane_b_photos_budget.outcome }}" = success
+          test "${{ steps.lane_b_home_budget.outcome }}" = success
       - name: Remove sensitive pairing diagnostics
         if: always()
         run: |
