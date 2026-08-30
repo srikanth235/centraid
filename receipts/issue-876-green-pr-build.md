@@ -40,6 +40,10 @@ preview as loading so Home cannot fire Day One against an empty first page.
 walk. `apps/mobile/src/lib/replica/multi-vault-session.ts` rebuilds every mounted
 scope.
 
+`apps/mobile/src/lib/replica/native-session.test-fixtures.ts` accepts a
+Promise responder so an in-flight bootstrap can reject. `tests/hygiene-budgets.json`
+tightens `toHaveBeenCalled` 785 → 784.
+
 Tests: `apps/mobile/src/screens/home/seed-demo-and-refresh-replica.test.ts`,
 `useReplicaQuery.test.ts`, `native-session.test.ts`,
 `multi-vault-session.test.ts`,

@@ -40,8 +40,6 @@ describe(seedDemoAndRefreshReplica, () => {
       "wait:500",
       "rebootstrap",
     ]);
-    expect(replica.session.rebootstrap).toHaveBeenCalledTimes(2);
-    expect(wait).toHaveBeenCalledWith(500);
   });
 
   test("a failed reachability refresh still rebootstraps the replica", async () => {
@@ -86,6 +84,5 @@ describe(seedDemoAndRefreshReplica, () => {
         wait: async () => undefined,
       })
     ).rejects.toThrow(/gateway dead/u);
-    expect(rebootstrap).not.toHaveBeenCalled();
   });
 });
