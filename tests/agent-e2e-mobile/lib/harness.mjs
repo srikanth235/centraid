@@ -126,7 +126,23 @@ const COMMAND_TIMEOUT_MS = 30_000;
 const XCRUN_TIMEOUT_MS = 90_000;
 const MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024;
 const MAESTRO_DRIVER_STARTUP_TIMEOUT_MS = 180_000;
+const GATEWAY_REQUEST_TIMEOUT_MS = 30_000;
 const DETACHED = process.platform !== "win32";
+
+async function fetchGateway(url, options, operation) {
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(GATEWAY_REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    const detail =
+      error?.name === "TimeoutError"
+        ? `exceeded its ${GATEWAY_REQUEST_TIMEOUT_MS}ms timeout`
+        : `failed: ${error?.message ?? error}`;
+    throw new Error(`${operation} ${detail}`, { cause: error });
+  }
+}
 
 function killTree(child, signal) {
   try {
@@ -379,6 +395,11 @@ async function readJunitSummary(reportFile, { required }) {
       `Maestro JUnit report contains no test cases: ${reportFile}`
     );
   }
+  if (required && (summary.failures > 0 || summary.skipped > 0)) {
+    throw new Error(
+      `Maestro JUnit report contains ${summary.failures} failure(s) and ${summary.skipped} skipped test(s): ${reportFile}`
+    );
+  }
   return summary;
 }
 
@@ -601,7 +622,9 @@ export async function runFlow(slug, fn) {
   // The HTTP lane stays for a tokenless embedded host that already grants host
   // custody to loopback.
   const mintPairingTicket = async (gatewayUrl, gatewayToken) => {
-    const dataDir = process.env.MAESTRO_GATEWAY_DATA_DIR;
+    const dataDir =
+      process.env.CENTRAID_MOBILE_GATEWAY_DATA_DIR ??
+      process.env.MAESTRO_GATEWAY_DATA_DIR;
     if (dataDir) {
       const cli = path.join(REPO_ROOT, "packages/server/dist/cli/cli.js");
       const port = new URL(gatewayUrl).port;
@@ -639,7 +662,7 @@ export async function runFlow(slug, fn) {
       }
       return parsed.ticket;
     }
-    const ticketResponse = await fetch(
+    const ticketResponse = await fetchGateway(
       `${gatewayUrl.replace(/\/+$/u, "")}/centraid/_gateway/devices/ticket`,
       {
         method: "POST",
@@ -650,7 +673,8 @@ export async function runFlow(slug, fn) {
         body: JSON.stringify({
           ttlMinutes: 5,
         }),
-      }
+      },
+      "gateway pairing ticket request"
     );
     const ticketResult = await ticketResponse.json().catch(() => ({}));
     if (
@@ -689,10 +713,17 @@ export async function runFlow(slug, fn) {
     clearState: false
 ${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${fillSampleContent ? fillSampleContentFlow(requiredLauncher) : ""}`,
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}`,
         "reuse-paired-gateway"
       );
+      if (fillSampleContent) {
+        await ctx.run(
+          `appId: ${state.appId}
+---
+${fillSampleContentFlow(requiredLauncher)}`,
+          "fill-sample-content"
+        );
+      }
       await markPairedFixtureReady();
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
       return;
@@ -762,7 +793,6 @@ ${retryableTapCommands("Enter Centraid")}
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
     timeout: 30000
-${fillSampleContent ? fillSampleContentFlow(requiredLauncher) : ""}
 `,
       "configure-gateway",
       {
@@ -770,6 +800,14 @@ ${fillSampleContent ? fillSampleContentFlow(requiredLauncher) : ""}
         sensitive: true,
       }
     );
+    if (fillSampleContent) {
+      await ctx.run(
+        `appId: ${state.appId}
+---
+${fillSampleContentFlow(requiredLauncher)}`,
+        "fill-sample-content"
+      );
+    }
     await markPairedFixtureReady();
     ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
   };
@@ -791,9 +829,11 @@ ${fillSampleContent ? fillSampleContentFlow(requiredLauncher) : ""}
     const headers = gatewayToken
       ? { authorization: `Bearer ${gatewayToken}` }
       : {};
-    const statusResponse = await fetch(`${base}/centraid/_vault/demo`, {
-      headers,
-    });
+    const statusResponse = await fetchGateway(
+      `${base}/centraid/_vault/demo`,
+      { headers },
+      `${appId} demo status request`
+    );
     const status = await statusResponse.json().catch(() => ({}));
     if (!statusResponse.ok || !Array.isArray(status?.apps))
       throw new Error(
@@ -821,9 +861,10 @@ ${fillSampleContent ? fillSampleContentFlow(requiredLauncher) : ""}
       ctx.note(`${appId} demo already present (${current.rows} rows)`);
       return;
     }
-    const seededResponse = await fetch(
+    const seededResponse = await fetchGateway(
       `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
-      { headers, method: "POST" }
+      { headers, method: "POST" },
+      `${appId} demo seed request`
     );
     const seeded = await seededResponse.json().catch(() => ({}));
     if (!seededResponse.ok)
@@ -849,10 +890,11 @@ ${fillSampleContent ? fillSampleContentFlow(requiredLauncher) : ""}
     const headers = gatewayTokenForDemos
       ? { authorization: `Bearer ${gatewayTokenForDemos}` }
       : {};
-    const seededResponse = await fetch(`${base}/centraid/_vault/demo`, {
-      headers,
-      method: "POST",
-    });
+    const seededResponse = await fetchGateway(
+      `${base}/centraid/_vault/demo`,
+      { headers, method: "POST" },
+      "mobile demo fixture request"
+    );
     const result = await seededResponse.json().catch(() => ({}));
     if (!seededResponse.ok || result?.ok !== true)
       throw new Error(
@@ -876,9 +918,10 @@ ${fillSampleContent ? fillSampleContentFlow(requiredLauncher) : ""}
     const headers = gatewayToken
       ? { authorization: `Bearer ${gatewayToken}` }
       : {};
-    const response = await fetch(
+    const response = await fetchGateway(
       `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
-      { headers, method: "DELETE" }
+      { headers, method: "DELETE" },
+      `${appId} demo purge request`
     );
     const result = await response.json().catch(() => ({}));
     if (!response.ok)
@@ -916,7 +959,16 @@ ${LAUNCHER_RECOVERY}`,
     error = caughtError;
   }
   const elapsedMs = Date.now() - t0;
-  const pass = !error && result?.pass !== false;
+  const pass = !error && result?.pass === true && reportPaths.length > 0;
+  const verdictResult = pass
+    ? result
+    : {
+        ...(result && typeof result === "object" ? result : {}),
+        pass: false,
+        notes:
+          result?.notes ??
+          "Flow did not return an explicit pass result after executing a Maestro chunk.",
+      };
 
   await writeFlowVerdict({
     repoRoot: REPO_ROOT,
@@ -925,7 +977,7 @@ ${LAUNCHER_RECOVERY}`,
     elapsedMs,
     error,
     notes,
-    result,
+    result: verdictResult,
     metadata: {
       platform: state.platform,
       udid: state.udid,

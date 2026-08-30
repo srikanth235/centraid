@@ -194,16 +194,23 @@ export async function runMobileSuite({
     );
     await fs.rm(prerequisiteFile, { force: true });
     const flowStartedAt = performance.now();
-    const child = await childRunner(flow.file, {
-      timeoutMs: remainingMs,
-      env: {
-        ...environment,
-        MOBILE_E2E_PREREQUISITE_FILE: prerequisiteFile,
-        ...(flow.reusePairedState
-          ? { MAESTRO_REUSE_PAIRED_STATE: "1" }
-          : { MAESTRO_REUSE_PAIRED_STATE: "0" }),
-      },
-    });
+    let child;
+    let childRunnerError;
+    try {
+      child = await childRunner(flow.file, {
+        timeoutMs: remainingMs,
+        env: {
+          ...environment,
+          MOBILE_E2E_PREREQUISITE_FILE: prerequisiteFile,
+          ...(flow.reusePairedState
+            ? { MAESTRO_REUSE_PAIRED_STATE: "1" }
+            : { MAESTRO_REUSE_PAIRED_STATE: "0" }),
+        },
+      });
+    } catch (error) {
+      childRunnerError = error;
+      child = { code: 1, timedOut: false };
+    }
     const elapsedMs = performance.now() - flowStartedAt;
     const prerequisite = await readPrerequisite(prerequisiteFile);
     const identityMatches =
@@ -214,21 +221,27 @@ export async function runMobileSuite({
       : child.code === 0
         ? "success"
         : "failure";
-    let reason;
-    let failureClass = child.timedOut
+    let reason = childRunnerError
+      ? `child runner failed: ${childRunnerError.message ?? childRunnerError}`
+      : undefined;
+    let failureClass = childRunnerError
       ? "infrastructure"
-      : child.code !== 0
-        ? prerequisite
-          ? "product_assertion"
-          : "prerequisite"
-        : undefined;
-    let phase = child.timedOut
+      : child.timedOut
+        ? "infrastructure"
+        : child.code !== 0
+          ? prerequisite
+            ? "product_assertion"
+            : "prerequisite"
+          : undefined;
+    let phase = childRunnerError
       ? "execution"
-      : child.code !== 0
-        ? prerequisite
-          ? "assertion"
-          : "fixture_or_pairing"
-        : undefined;
+      : child.timedOut
+        ? "execution"
+        : child.code !== 0
+          ? prerequisite
+            ? "assertion"
+            : "fixture_or_pairing"
+          : undefined;
     if (status === "success" && !identityMatches) {
       status = "failure";
       reason = prerequisite

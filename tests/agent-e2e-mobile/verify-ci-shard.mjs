@@ -28,6 +28,13 @@ const standalone = {
   sharing: "tests/agent-e2e-mobile/flows/sharing-invite.mjs",
   "photos-frames": "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
 };
+const runtimeSlugs = {
+  "cold-start": "mobile-cold-start",
+  "native-v0-resilience": "native-v0-resilience",
+  "volume-proof": "mobile-volume-proof",
+  "scroll-frames": "mobile-scroll-frames",
+};
+const runtimeSlug = (flow) => runtimeSlugs[flow] ?? flow;
 const elapsedMs = Math.max(
   0,
   Date.now() - Number(process.env.MOBILE_E2E_SHARD_STARTED_AT ?? Date.now())
@@ -125,7 +132,12 @@ if (shard === "all") {
   for (const flow of expected) {
     try {
       await fs.access(
-        path.join(repoRoot, "artifacts", "e2e", `${flow}-${platform}.json`)
+        path.join(
+          repoRoot,
+          "artifacts",
+          "e2e",
+          `${runtimeSlug(flow)}-${platform}.json`
+        )
       );
     } catch {
       missing.push(flow);
@@ -156,7 +168,8 @@ const runEntries = await fs
 const missing = [];
 for (const flow of expected) {
   const candidates = runEntries.filter(
-    (entry) => entry.isDirectory() && entry.name.startsWith(`${flow}-`)
+    (entry) =>
+      entry.isDirectory() && entry.name.startsWith(`${runtimeSlug(flow)}-`)
   );
   const verdicts = await Promise.all(
     candidates.map((entry) =>

@@ -57,6 +57,32 @@ test("a missing pairing prerequisite blocks dependent flows", async () => {
   assert.equal(result.results[0].phase, "fixture_or_pairing");
 });
 
+test("a child-runner exception becomes structured infrastructure evidence", async () => {
+  const { root, environment } = await fixture();
+  const result = await runMobileSuite({
+    suite: "child-runner-error",
+    budgetMs: 10_000,
+    flows: [{ name: "bootstrap", file: "/bootstrap.mjs" }],
+    environment,
+    repoRoot: root,
+    runnerTemp: environment.RUNNER_TEMP,
+    failProcess: false,
+    childRunner: async () => {
+      throw new Error("driver could not be started");
+    },
+  });
+  assert.deepEqual(
+    result.results.map(({ status }) => status),
+    ["failure"]
+  );
+  assert.equal(result.results[0].failureClass, "infrastructure");
+  assert.equal(result.results[0].phase, "execution");
+  assert.match(result.results[0].reason, /driver could not be started/u);
+  await fs.access(
+    path.join(root, "artifacts/e2e-suites/ios-child-runner-error.json")
+  );
+});
+
 test("a ready-only marker cannot establish a paired fixture", async () => {
   const { root, environment } = await fixture();
   const result = await runMobileSuite({
