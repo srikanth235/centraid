@@ -685,10 +685,17 @@ export async function runFlow(slug, fn) {
     clearState: false
 ${LAUNCHER_RECOVERY}- extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}`,
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}`,
         "reuse-paired-gateway"
       );
+      if (fillSampleContent) {
+        await ctx.run(
+          `appId: ${state.appId}
+---
+${FILL_SAMPLE_IF_DAYONE}`,
+          "fill-sample-content"
+        );
+      }
       await markPairedFixtureReady();
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
       return;
@@ -778,10 +785,17 @@ ${retryableTapCommands("Enter Centraid")}
 # so the next tap never uses coordinates captured before that layout shift.
 - extendedWaitUntil:
     visible: "${HOME_READY_MARKER}"
-    timeout: 30000
-${fillSampleContent ? FILL_SAMPLE_IF_DAYONE : ""}`,
+    timeout: 30000`,
       "complete-onboarding"
     );
+    if (fillSampleContent) {
+      await ctx.run(
+        `appId: ${state.appId}
+---
+${FILL_SAMPLE_IF_DAYONE}`,
+        "fill-sample-content"
+      );
+    }
     await markPairedFixtureReady();
     ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
   };

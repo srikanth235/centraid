@@ -36,9 +36,13 @@ ${retryableTapCommands("Library")}
 - tapOn:
     text: "${currentMonth}.*"
 - assertVisible: "All"
+# The All/Months/Years control is permanent by design. The card tap returns to
+# the live All grid, whose date header is uppercase while the month card was
+# title case; this proves the transition without asserting a control that is
+# intentionally still mounted.
 - extendedWaitUntil:
-    notVisible: "All"
-    timeout: 7000
+    visible: "${currentMonth.toUpperCase()}"
+    timeout: 15000
 - takeScreenshot: photos-library-drilldown
 `,
     "library-drilldown"
